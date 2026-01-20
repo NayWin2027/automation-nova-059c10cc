@@ -18,6 +18,8 @@ serve(async (req) => {
 
     const formData = await req.formData();
     const file = formData.get("file") as File;
+    const language = formData.get("language") as string || "my";
+    const languageName = formData.get("languageName") as string || "BURMESE";
 
     if (!file) {
       return new Response(
@@ -26,7 +28,7 @@ serve(async (req) => {
       );
     }
 
-    console.log("Received file:", file.name, "Size:", file.size);
+    console.log("Received file:", file.name, "Size:", file.size, "Language:", languageName);
 
     // Convert file to base64
     const arrayBuffer = await file.arrayBuffer();
@@ -45,11 +47,24 @@ serve(async (req) => {
         mp4: "video/mp4",
         webm: "video/webm",
         ogg: "audio/ogg",
+        flac: "audio/flac",
+        aac: "audio/aac",
+        wma: "audio/x-ms-wma",
+        mkv: "video/x-matroska",
+        avi: "video/x-msvideo",
+        mov: "video/quicktime",
       };
       mimeType = mimeMap[ext || ""] || "audio/mp3";
     }
 
     console.log("Using MIME type:", mimeType);
+
+    // Build transcription prompt based on selected language
+    const transcriptionPrompt = `Please transcribe all the spoken words in this audio/video file accurately. 
+The audio is in ${languageName}. 
+Return ONLY the transcription text in ${languageName} without any additional commentary, formatting, or translation.
+If there are multiple speakers, indicate speaker changes with line breaks.
+Transcribe exactly what is spoken - do not translate or summarize.`;
 
     // Use Gemini for transcription via multimodal
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -66,7 +81,7 @@ serve(async (req) => {
             content: [
               {
                 type: "text",
-                text: "Please transcribe all the spoken words in this audio/video file accurately. Return ONLY the transcription text without any additional commentary or formatting. If the audio is in Burmese, transcribe in Burmese. If it's in English or other languages, transcribe in that language.",
+                text: transcriptionPrompt,
               },
               {
                 type: "image_url",
@@ -85,14 +100,14 @@ serve(async (req) => {
       
       if (response.status === 429) {
         return new Response(
-          JSON.stringify({ error: "Rate limit exceeded" }),
+          JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       
       if (response.status === 402) {
         return new Response(
-          JSON.stringify({ error: "Payment required" }),
+          JSON.stringify({ error: "Payment required. Please add credits." }),
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }

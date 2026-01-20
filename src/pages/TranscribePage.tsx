@@ -1,9 +1,112 @@
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, Download, Lock, Play, Home, Diamond, Settings, Loader2, Copy, Check } from "lucide-react";
+import { ChevronLeft, Download, Lock, Play, Home, Diamond, Settings, Loader2, Copy, Check, X, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 
 type ApiMode = "app" | "own";
+
+const LANGUAGES = [
+  { code: "my", name: "BURMESE" },
+  { code: "en", name: "ENGLISH" },
+  { code: "ja", name: "JAPANESE" },
+  { code: "ko", name: "KOREAN" },
+  { code: "zh-CN", name: "CHINESE (SIMPLIFIED)" },
+  { code: "zh-TW", name: "CHINESE (TRADITIONAL)" },
+  { code: "th", name: "THAI" },
+  { code: "vi", name: "VIETNAMESE" },
+  { code: "hi", name: "HINDI" },
+  { code: "id", name: "INDONESIAN" },
+  { code: "ms", name: "MALAY" },
+  { code: "fr", name: "FRENCH" },
+  { code: "de", name: "GERMAN" },
+  { code: "es", name: "SPANISH" },
+  { code: "it", name: "ITALIAN" },
+  { code: "ru", name: "RUSSIAN" },
+  { code: "pt", name: "PORTUGUESE" },
+  { code: "ar", name: "ARABIC" },
+  { code: "tr", name: "TURKISH" },
+  { code: "bn", name: "BENGALI" },
+  { code: "pa", name: "PUNJABI" },
+  { code: "te", name: "TELUGU" },
+  { code: "mr", name: "MARATHI" },
+  { code: "ta", name: "TAMIL" },
+  { code: "ur", name: "URDU" },
+  { code: "gu", name: "GUJARATI" },
+  { code: "kn", name: "KANNADA" },
+  { code: "ml", name: "MALAYALAM" },
+  { code: "tl", name: "FILIPINO" },
+  { code: "km", name: "KHMER" },
+  { code: "lo", name: "LAO" },
+  { code: "af", name: "AFRIKAANS" },
+  { code: "sq", name: "ALBANIAN" },
+  { code: "am", name: "AMHARIC" },
+  { code: "hy", name: "ARMENIAN" },
+  { code: "az", name: "AZERBAIJANI" },
+  { code: "eu", name: "BASQUE" },
+  { code: "be", name: "BELARUSIAN" },
+  { code: "bs", name: "BOSNIAN" },
+  { code: "bg", name: "BULGARIAN" },
+  { code: "ca", name: "CATALAN" },
+  { code: "hr", name: "CROATIAN" },
+  { code: "cs", name: "CZECH" },
+  { code: "da", name: "DANISH" },
+  { code: "nl", name: "DUTCH" },
+  { code: "et", name: "ESTONIAN" },
+  { code: "fi", name: "FINNISH" },
+  { code: "gl", name: "GALICIAN" },
+  { code: "ka", name: "GEORGIAN" },
+  { code: "el", name: "GREEK" },
+  { code: "he", name: "HEBREW" },
+  { code: "hu", name: "HUNGARIAN" },
+  { code: "is", name: "ICELANDIC" },
+  { code: "ga", name: "IRISH" },
+  { code: "kk", name: "KAZAKH" },
+  { code: "ky", name: "KYRGYZ" },
+  { code: "lv", name: "LATVIAN" },
+  { code: "lt", name: "LITHUANIAN" },
+  { code: "mk", name: "MACEDONIAN" },
+  { code: "mg", name: "MALAGASY" },
+  { code: "mt", name: "MALTESE" },
+  { code: "mn", name: "MONGOLIAN" },
+  { code: "ne", name: "NEPALI" },
+  { code: "no", name: "NORWEGIAN" },
+  { code: "fa", name: "PERSIAN" },
+  { code: "pl", name: "POLISH" },
+  { code: "ro", name: "ROMANIAN" },
+  { code: "sr", name: "SERBIAN" },
+  { code: "si", name: "SINHALA" },
+  { code: "sk", name: "SLOVAK" },
+  { code: "sl", name: "SLOVENIAN" },
+  { code: "so", name: "SOMALI" },
+  { code: "sw", name: "SWAHILI" },
+  { code: "sv", name: "SWEDISH" },
+  { code: "tg", name: "TAJIK" },
+  { code: "uk", name: "UKRAINIAN" },
+  { code: "uz", name: "UZBEK" },
+  { code: "zu", name: "ZULU" },
+  { code: "xh", name: "XHOSA" },
+  { code: "yo", name: "YORUBA" },
+  { code: "ig", name: "IGBO" },
+  { code: "ha", name: "HAUSA" },
+  { code: "ceb", name: "CEBUANO" },
+  { code: "jw", name: "JAVANESE" },
+  { code: "su", name: "SUNDANESE" },
+];
+
+const CREDIT_TIERS = [
+  { duration: "UNDER 5 MINUTES", credits: 4 },
+  { duration: "UNDER 10 MINUTES", credits: 8 },
+  { duration: "UNDER 15 MINUTES", credits: 12 },
+  { duration: "UNDER 20 MINUTES", credits: 16 },
+];
 
 export default function TranscribePage() {
   const navigate = useNavigate();
@@ -13,6 +116,9 @@ export default function TranscribePage() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcription, setTranscription] = useState<string>("");
   const [copied, setCopied] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState("my");
+  const [selectedCreditTier, setSelectedCreditTier] = useState<number | null>(null);
+  const [ownApiKey, setOwnApiKey] = useState("");
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -28,16 +134,34 @@ export default function TranscribePage() {
       }
       setSelectedFile(file);
       setTranscription("");
+      setSelectedCreditTier(null);
+    }
+  };
+
+  const handleCancelFile = () => {
+    setSelectedFile(null);
+    setTranscription("");
+    setSelectedCreditTier(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   };
 
   const handleTranscribe = async () => {
     if (!selectedFile) return;
+    if (apiMode === "app" && selectedCreditTier === null) {
+      toast.error("Credit tier ရွေးပါ။");
+      return;
+    }
 
     setIsTranscribing(true);
     try {
       const formData = new FormData();
       formData.append("file", selectedFile);
+      formData.append("language", selectedLanguage);
+      
+      const languageName = LANGUAGES.find(l => l.code === selectedLanguage)?.name || "BURMESE";
+      formData.append("languageName", languageName);
 
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/transcribe`,
@@ -51,10 +175,10 @@ export default function TranscribePage() {
       );
 
       if (response.status === 429) {
-        throw new Error("Rate limit ကျော်သွားပါပြီ။");
+        throw new Error("Rate limit ကျော်သွားပါပြီ။ ခဏစောင့်ပြီး ပြန်စမ်းပါ။");
       }
       if (response.status === 402) {
-        throw new Error("Credits ကုန်သွားပါပြီ။");
+        throw new Error("Credits ကုန်သွားပါပြီ။ Credits ဝယ်ပါ။");
       }
 
       const data = await response.json();
@@ -75,6 +199,8 @@ export default function TranscribePage() {
     toast.success("ကူးယူပြီးပါပြီ!");
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const canStartTranscription = selectedFile && (apiMode === "own" || selectedCreditTier !== null);
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -116,23 +242,67 @@ export default function TranscribePage() {
           </button>
         </div>
 
+        {/* Own API Key Input */}
+        {apiMode === "own" && (
+          <div className="glass-card p-4 animate-fade-in">
+            <label className="text-2xs text-muted-foreground tracking-wider uppercase mb-2 block">
+              Enter Your API Key
+            </label>
+            <Input
+              type="password"
+              placeholder="sk-xxxxxxxxxxxxxxxx"
+              value={ownApiKey}
+              onChange={(e) => setOwnApiKey(e.target.value)}
+              className="bg-card border-border/50 text-xs h-9"
+            />
+            <p className="text-2xs text-muted-foreground mt-2">
+              OpenAI, Google AI, or other compatible API key
+            </p>
+          </div>
+        )}
+
         {/* Quota Card */}
-        <div className="glass-card p-3">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-2xs text-muted-foreground tracking-wider uppercase">App Quota (Today)</p>
-              <p className="text-lg font-bold text-neon-green mt-0.5">0 / 0 Used</p>
-            </div>
-            <div className="text-right">
-              <p className="text-2xs text-muted-foreground tracking-wider uppercase">Class</p>
-              <p className="text-xs font-semibold text-foreground mt-0.5">GUEST MODE</p>
+        {apiMode === "app" && (
+          <div className="glass-card p-3">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-2xs text-muted-foreground tracking-wider uppercase">App Quota (Today)</p>
+                <p className="text-lg font-bold text-neon-green mt-0.5">0 / 0 Used</p>
+              </div>
+              <div className="text-right">
+                <p className="text-2xs text-muted-foreground tracking-wider uppercase">Class</p>
+                <p className="text-xs font-semibold text-foreground mt-0.5">GUEST MODE</p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Transcribe Section */}
         <div className="glass-card p-4">
           <h2 className="text-sm font-bold tracking-wider mb-4">TRANSCRIBE MEDIA</h2>
+
+          {/* Language Selection */}
+          <div className="mb-4">
+            <label className="text-2xs text-muted-foreground tracking-wider uppercase mb-2 block">
+              SELECT LANGUAGE
+            </label>
+            <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
+              <SelectTrigger className="w-full bg-card border-border/50 text-xs h-9">
+                <SelectValue placeholder="Select language" />
+              </SelectTrigger>
+              <SelectContent className="max-h-[300px] bg-card border-border/50">
+                {LANGUAGES.map((lang) => (
+                  <SelectItem 
+                    key={lang.code} 
+                    value={lang.code}
+                    className="text-xs"
+                  >
+                    {lang.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
           {/* Upload Zone */}
           <input
@@ -143,49 +313,103 @@ export default function TranscribePage() {
             className="hidden"
           />
 
-          <div
-            onClick={() => fileInputRef.current?.click()}
-            className="upload-zone p-6 flex flex-col items-center cursor-pointer transition-all"
-          >
-            <div className="w-12 h-12 rounded-xl bg-card flex items-center justify-center mb-3 shadow-lg">
-              <Download className="w-5 h-5 text-primary" />
-            </div>
-            <p className="text-xs font-medium text-foreground">
-              {selectedFile ? selectedFile.name : "SELECT VIDEO OR AUDIO"}
-            </p>
-            {selectedFile && (
-              <p className="text-2xs text-muted-foreground mt-1">
-                {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-              </p>
-            )}
-          </div>
-
-          {/* Transcribe Button */}
-          {selectedFile && (
-            <button
-              onClick={handleTranscribe}
-              disabled={isTranscribing}
-              className="w-full mt-4 py-2.5 rounded-full bg-primary text-primary-foreground text-xs font-medium flex items-center justify-center gap-2 disabled:opacity-50 transition-all hover:scale-[1.02] active:scale-[0.98]"
+          {!selectedFile ? (
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              className="upload-zone p-6 flex flex-col items-center cursor-pointer transition-all"
             >
-              {isTranscribing ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  Transcribing...
-                </>
-              ) : (
-                <>
-                  <Play className="w-3.5 h-3.5" />
-                  Start Transcription
-                </>
+              <div className="w-12 h-12 rounded-xl bg-card flex items-center justify-center mb-3 shadow-lg">
+                <Download className="w-5 h-5 text-primary" />
+              </div>
+              <p className="text-xs font-medium text-foreground">SELECT VIDEO OR AUDIO</p>
+            </div>
+          ) : (
+            <div className="space-y-4 animate-fade-in">
+              {/* Selected File Card */}
+              <div className="upload-zone p-4 flex flex-col items-center relative">
+                <p className="text-2xs text-neon-cyan tracking-wider uppercase mb-1">SELECTED FILE</p>
+                <p className="text-xs font-bold text-foreground text-center break-all px-4">
+                  {selectedFile.name.toUpperCase()}
+                </p>
+                <p className="text-2xs text-muted-foreground mt-1">
+                  {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                </p>
+              </div>
+
+              {/* Credit Tier Selection - Only show for APP API */}
+              {apiMode === "app" && (
+                <div>
+                  <p className="text-2xs text-muted-foreground tracking-wider uppercase mb-3">
+                    SELECT CREDIT TIER (DURATION)
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {CREDIT_TIERS.map((tier, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setSelectedCreditTier(index)}
+                        className={`p-3 rounded-xl border transition-all text-center ${
+                          selectedCreditTier === index
+                            ? "border-neon-cyan bg-neon-cyan/10"
+                            : "border-border/50 bg-card/50 hover:border-border"
+                        }`}
+                      >
+                        <p className="text-2xs text-muted-foreground">{tier.duration}</p>
+                        <p className={`text-sm font-bold mt-1 ${
+                          selectedCreditTier === index ? "text-neon-cyan" : "text-foreground"
+                        }`}>
+                          {tier.credits} Credits
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
-            </button>
+
+              {/* Start Transcription Button */}
+              <button
+                onClick={handleTranscribe}
+                disabled={isTranscribing || !canStartTranscription}
+                className={`w-full py-3 rounded-full text-xs font-medium flex items-center justify-center gap-2 transition-all ${
+                  canStartTranscription
+                    ? "bg-primary text-primary-foreground hover:scale-[1.02] active:scale-[0.98]"
+                    : "bg-muted text-muted-foreground cursor-not-allowed"
+                }`}
+              >
+                {isTranscribing ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Transcribing...
+                  </>
+                ) : !canStartTranscription ? (
+                  <>
+                    <Play className="w-3.5 h-3.5" />
+                    Tool Disabled
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-3.5 h-3.5" />
+                    Start Transcription
+                  </>
+                )}
+              </button>
+
+              {/* Cancel Button */}
+              <button
+                onClick={handleCancelFile}
+                className="w-full py-2 rounded-full border border-border/50 text-2xs font-medium text-muted-foreground hover:text-foreground hover:border-border transition-all"
+              >
+                CANCEL & RESET
+              </button>
+            </div>
           )}
 
-          {/* How to use button */}
-          <button className="w-full mt-3 py-2 rounded-full border border-border/50 text-2xs font-medium text-primary flex items-center justify-center gap-2 hover:bg-secondary/50 transition-colors">
-            <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-            HOW TO USE TRANSCRIPT MASTER
-          </button>
+          {/* How to use button - Only show when no file */}
+          {!selectedFile && (
+            <button className="w-full mt-3 py-2 rounded-full border border-border/50 text-2xs font-medium text-primary flex items-center justify-center gap-2 hover:bg-secondary/50 transition-colors">
+              <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+              HOW TO USE TRANSCRIPT MASTER
+            </button>
+          )}
         </div>
 
         {/* Transcription Result */}
