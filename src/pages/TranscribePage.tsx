@@ -128,8 +128,9 @@ export default function TranscribePage() {
         toast.error("Audio သို့မဟုတ် Video ဖိုင်သာ ရွေးပါ။");
         return;
       }
-      if (file.size > 25 * 1024 * 1024) {
-        toast.error("ဖိုင်အရွယ်အစား 25MB ထက်မကျော်ရပါ။");
+      // Limit to 8MB to avoid edge function memory issues
+      if (file.size > 8 * 1024 * 1024) {
+        toast.error("ဖိုင်အရွယ်အစား 8MB ထက်မကျော်ရပါ။ ဖိုင်ကို compress လုပ်ပြီး ထပ်စမ်းပါ။");
         return;
       }
       setSelectedFile(file);
@@ -180,13 +181,19 @@ export default function TranscribePage() {
       if (response.status === 402) {
         throw new Error("Credits ကုန်သွားပါပြီ။ Credits ဝယ်ပါ။");
       }
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Transcription မအောင်မြင်ပါ။ ဖိုင်သေးသေးနဲ့ ထပ်စမ်းပါ။");
+      }
 
       const data = await response.json();
       if (data.error) throw new Error(data.error);
+      if (!data.text) throw new Error("Transcription ရလဒ် မရှိပါ။");
 
       setTranscription(data.text);
       toast.success("Transcription အောင်မြင်ပါသည်!");
     } catch (error) {
+      console.error("Transcription error:", error);
       toast.error(error instanceof Error ? error.message : "Transcription မအောင်မြင်ပါ။");
     } finally {
       setIsTranscribing(false);
