@@ -94,8 +94,21 @@ async function waitForFileProcessing(apiKey: string, fileName: string): Promise<
   throw new Error("File processing timeout");
 }
 
-async function transcribeWithGemini(apiKey: string, fileUri: string, languageName: string): Promise<string> {
-  const transcriptionPrompt = `Please transcribe all the spoken words in this audio/video file accurately. 
+async function transcribeWithGemini(apiKey: string, fileUri: string, mimeType: string, languageName: string): Promise<string> {
+  // Special prompt for Burmese - native transcription with correct spelling
+  const isBurmese = languageName.toUpperCase() === "BURMESE";
+  
+  const transcriptionPrompt = isBurmese
+    ? `ဤ audio/video ဖိုင်ထဲရှိ ပြောဆိုချက်အားလုံးကို တိကျစွာ ဗမာစာဖြင့် ရေးချပါ။
+
+လိုအပ်ချက်များ:
+- ဗမာစကားပြော ကို ဗမာစာဖြင့် မှန်ကန်စွာ ရေးပါ
+- စာလုံးပေါင်း သတ်ပုံ မှန်ကန်ရမည်
+- ဘာသာပြန်ခြင်း၊ အနှစ်ချုပ်ခြင်း မလုပ်ပါနဲ့
+- ပြောသည့်အတိုင်း အတိအကျ ရေးပါ
+- Speaker ပြောင်းရင် line break ခံပါ
+- ဗမာစာသာ ပြန်ပေးပါ၊ English မပါစေနဲ့`
+    : `Please transcribe all the spoken words in this audio/video file accurately. 
 The audio is in ${languageName}. 
 Return ONLY the transcription text in ${languageName} without any additional commentary, formatting, or translation.
 If there are multiple speakers, indicate speaker changes with line breaks.
@@ -115,7 +128,7 @@ Transcribe exactly what is spoken - do not translate or summarize.`;
             { text: transcriptionPrompt },
             {
               file_data: {
-                mime_type: "audio/mpeg",
+                mime_type: mimeType,
                 file_uri: fileUri,
               },
             },
@@ -124,7 +137,7 @@ Transcribe exactly what is spoken - do not translate or summarize.`;
       ],
       generationConfig: {
         temperature: 0.1,
-        maxOutputTokens: 8192,
+        maxOutputTokens: 16384,
       },
     }),
   });
@@ -222,7 +235,7 @@ serve(async (req) => {
     }
     
     // Transcribe with Gemini
-    const transcription = await transcribeWithGemini(apiKey, fileUri, languageName);
+    const transcription = await transcribeWithGemini(apiKey, fileUri, mimeType, languageName);
 
     return new Response(
       JSON.stringify({ text: transcription }),
