@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Mic,
   FileText,
@@ -23,8 +24,7 @@ const tools = [
     title: "Transcribe",
     description: "အသံဖိုင်မှ စာသားပြောင်းရန်။",
     gradient: "cyan" as const,
-    systemPrompt:
-      "You are an audio transcription assistant. Help users transcribe and understand audio content. Respond in Burmese when the user writes in Burmese.",
+    route: "/transcribe",
   },
   {
     id: "story",
@@ -109,9 +109,20 @@ const tools = [
   },
 ];
 
+type Tool = (typeof tools)[number];
+
 const Index = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"home" | "premium" | "settings">("home");
-  const [selectedTool, setSelectedTool] = useState<(typeof tools)[0] | null>(null);
+  const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
+
+  const handleToolClick = (tool: Tool) => {
+    if (tool.route) {
+      navigate(tool.route);
+    } else {
+      setSelectedTool(tool);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -146,7 +157,7 @@ const Index = () => {
               title={tool.title}
               description={tool.description}
               gradient={tool.gradient}
-              onClick={() => setSelectedTool(tool)}
+              onClick={() => handleToolClick(tool)}
             />
           ))}
         </div>
