@@ -128,9 +128,13 @@ export default function TranscribePage() {
         toast.error("Audio သို့မဟုတ် Video ဖိုင်သာ ရွေးပါ။");
         return;
       }
-      // Limit to 8MB to avoid edge function memory issues
-      if (file.size > 8 * 1024 * 1024) {
-        toast.error("ဖိုင်အရွယ်အစား 8MB ထက်မကျော်ရပါ။ ဖိုင်ကို compress လုပ်ပြီး ထပ်စမ်းပါ။");
+      
+      // Different size limits for different API modes
+      const maxSize = apiMode === "own" ? 100 * 1024 * 1024 : 8 * 1024 * 1024;
+      const maxSizeLabel = apiMode === "own" ? "100MB" : "8MB";
+      
+      if (file.size > maxSize) {
+        toast.error(`ဖိုင်အရွယ်အစား ${maxSizeLabel} ထက်မကျော်ရပါ။ ${apiMode === "app" ? "ဖိုင်ကို compress လုပ်ပြီး ထပ်စမ်းပါ။" : ""}`);
         return;
       }
       setSelectedFile(file);
@@ -154,6 +158,10 @@ export default function TranscribePage() {
       toast.error("Credit tier ရွေးပါ။");
       return;
     }
+    if (apiMode === "own" && !ownApiKey.trim()) {
+      toast.error("Google AI API Key ထည့်ပါ။");
+      return;
+    }
 
     setIsTranscribing(true);
     try {
@@ -164,16 +172,23 @@ export default function TranscribePage() {
       const languageName = LANGUAGES.find(l => l.code === selectedLanguage)?.name || "BURMESE";
       formData.append("languageName", languageName);
 
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/transcribe`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: formData,
-        }
-      );
+      // Use different endpoints based on API mode
+      const endpoint = apiMode === "own" 
+        ? `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/transcribe-google`
+        : `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/transcribe`;
+
+      // Add API key for own mode
+      if (apiMode === "own") {
+        formData.append("apiKey", ownApiKey.trim());
+      }
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: formData,
+      });
 
       if (response.status === 429) {
         throw new Error("Rate limit ကျော်သွားပါပြီ။ ခဏစောင့်ပြီး ပြန်စမ်းပါ။");
@@ -183,7 +198,7 @@ export default function TranscribePage() {
       }
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || "Transcription မအောင်မြင်ပါ။ ဖိုင်သေးသေးနဲ့ ထပ်စမ်းပါ။");
+        throw new Error(errorData.error || "Transcription မအောင်မြင်ပါ။");
       }
 
       const data = await response.json();
@@ -207,7 +222,7 @@ export default function TranscribePage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const canStartTranscription = selectedFile && (apiMode === "own" || selectedCreditTier !== null);
+  const canStartTranscription = selectedFile && (apiMode === "own" ? ownApiKey.trim() : selectedCreditTier !== null);
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -253,18 +268,26 @@ export default function TranscribePage() {
         {apiMode === "own" && (
           <div className="glass-card p-4 animate-fade-in">
             <label className="text-2xs text-muted-foreground tracking-wider uppercase mb-2 block">
-              Enter Your API Key
+              Enter Your Google AI API Key
             </label>
             <Input
               type="password"
-              placeholder="sk-xxxxxxxxxxxxxxxx"
+              placeholder="AIza..."
               value={ownApiKey}
               onChange={(e) => setOwnApiKey(e.target.value)}
               className="bg-card border-border/50 text-xs h-9"
             />
             <p className="text-2xs text-muted-foreground mt-2">
-              OpenAI, Google AI, or other compatible API key
+              Google AI Studio မှ API Key ရယူပါ။ <span className="text-neon-green">100MB</span> အထိ upload လုပ်နိုင်ပါသည်။
             </p>
+            <a 
+              href="https://aistudio.google.com/apikey" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-2xs text-primary hover:underline mt-1 block"
+            >
+              → Google AI Studio မှာ API Key ရယူရန်
+            </a>
           </div>
         )}
 
