@@ -20,6 +20,12 @@ export default {
         '2xs': ['0.625rem', { lineHeight: '0.875rem' }],
       },
       colors: {
+        neon: {
+          cyan: "hsl(var(--neon-cyan))",
+          green: "hsl(var(--neon-green))",
+          rose: "hsl(var(--neon-rose))",
+          amber: "hsl(var(--neon-amber))",
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
