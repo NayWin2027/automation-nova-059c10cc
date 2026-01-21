@@ -8,3 +8,9 @@ verify_jwt = false
 
 [functions.transcribe-google]
 verify_jwt = false
+
+[functions.gemini-tts]
+verify_jwt = false
+
+[functions.creator-ai]
+verify_jwt = false

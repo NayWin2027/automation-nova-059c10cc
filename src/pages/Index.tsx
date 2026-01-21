@@ -94,8 +94,7 @@ const tools = [
     title: "Creator",
     description: "မီဒီယာစီမံမှ ဖန်တီးရန်။",
     gradient: "amber" as const,
-    systemPrompt:
-      "You are a creative content assistant. Help users brainstorm and create various types of media content. Respond in Burmese when the user writes in Burmese.",
+    route: "/creator",
   },
   {
     id: "downloader",
