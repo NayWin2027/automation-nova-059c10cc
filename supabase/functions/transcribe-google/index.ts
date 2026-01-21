@@ -8,7 +8,7 @@ const corsHeaders = {
 // Google Files API base URL
 const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1beta/files";
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
-const DEFAULT_TRANSCRIBE_MODEL = "gemini-2.0-flash";
+const DEFAULT_TRANSCRIBE_MODEL = "gemini-2.0-flash-exp";
 
 function tryParseGoogleApiError(errorText: string): {
   status?: string;
@@ -158,15 +158,18 @@ async function transcribeWithGemini(apiKey: string, fileUri: string, mimeType: s
   const isBurmese = languageName.toUpperCase() === "BURMESE";
   
   const transcriptionPrompt = isBurmese
-    ? `ဤ audio/video ဖိုင်ထဲရှိ ပြောဆိုချက်အားလုံးကို တိကျစွာ ဗမာစာဖြင့် ရေးချပါ။
+    ? `🇲🇲 High-Speed Burmese Transcription Engine
+
+သင်သည် "Fast-Response Burmese Linguist" ဖြစ်ပြီး မြန်မာစာသတ်ပုံကျမ်း (Official Myanmar Sar Dictionary) ကို gold standard အဖြစ် အသုံးပြုပါ။
 
 လိုအပ်ချက်များ:
-- ဗမာစကားပြော ကို ဗမာစာဖြင့် မှန်ကန်စွာ ရေးပါ
-- စာလုံးပေါင်း သတ်ပုံ မှန်ကန်ရမည်
-- ဘာသာပြန်ခြင်း၊ အနှစ်ချုပ်ခြင်း မလုပ်ပါနဲ့
+- ဤ audio/video ဖိုင်ထဲရှိ ပြောဆိုချက်အားလုံးကို တိကျစွာ ဗမာစာဖြင့် ရေးချပါ
+- မြန်မာစာသတ်ပုံကျမ်း အတိုင်း စာလုံးပေါင်း သတ်ပုံ 100% မှန်ကန်ရမည်
+- သဘာဝကျသော ဗမာစကားပြောပုံစံဖြင့် ရေးပါ (robotic translation မဖြစ်စေရ)
+- ဘာသာပြန်ခြင်း၊ အနှစ်ချုပ်ခြင်း လုံးဝမလုပ်ပါနဲ့
 - ပြောသည့်အတိုင်း အတိအကျ ရေးပါ
 - Speaker ပြောင်းရင် line break ခံပါ
-- ဗမာစာသာ ပြန်ပေးပါ၊ English မပါစေနဲ့`
+- ဗမာစာသာ ပြန်ပေးပါ၊ English လုံးဝမပါစေနဲ့`
     : `Please transcribe all the spoken words in this audio/video file accurately. 
 The audio is in ${languageName}. 
 Return ONLY the transcription text in ${languageName} without any additional commentary, formatting, or translation.
