@@ -5,8 +5,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Gemini TTS endpoint
+// Gemini TTS endpoint - using the correct model name
 const GEMINI_TTS_API = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent";
+
+// Alternative models to try if the primary one fails
+const ALTERNATIVE_TTS_MODELS = [
+  "gemini-2.0-flash-exp",
+  "gemini-1.5-flash"
+];
 
 serve(async (req) => {
   // Handle CORS preflight
