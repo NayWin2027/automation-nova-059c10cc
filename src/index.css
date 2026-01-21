@@ -187,4 +187,38 @@
     content: '';
     @apply w-1 h-4 rounded-full bg-primary;
   }
+
+  /* Jewel gradient classes for Creator */
+  .jewel-sapphire {
+    background: linear-gradient(135deg, hsl(217 91% 60%) 0%, hsl(230 80% 50%) 100%);
+  }
+
+  .jewel-diamond {
+    background: linear-gradient(135deg, hsl(200 100% 95%) 0%, hsl(210 100% 85%) 100%);
+  }
+
+  .jewel-gold {
+    background: linear-gradient(135deg, hsl(45 100% 60%) 0%, hsl(35 100% 50%) 100%);
+  }
+
+  .jewel-ruby {
+    background: linear-gradient(135deg, hsl(350 80% 55%) 0%, hsl(340 75% 45%) 100%);
+  }
+
+  .jewel-emerald {
+    background: linear-gradient(135deg, hsl(160 84% 39%) 0%, hsl(145 70% 35%) 100%);
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 2px;
+  }
 }

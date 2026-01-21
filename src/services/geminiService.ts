@@ -231,3 +231,49 @@ export function playWithWebSpeech(text: string, languageCode: string = 'en-US'):
   utterance.lang = languageCode;
   speechSynthesis.speak(utterance);
 }
+
+// Generate story/content using Creator AI
+export async function generateStory(prompt: string, apiKey?: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke<{ text?: string; error?: string }>('creator-ai', {
+      body: { prompt, apiKey, type: 'text' }
+    });
+
+    if (error) {
+      console.error('generateStory error:', error);
+      throw new Error(error.message || 'Story generation failed');
+    }
+
+    if (data?.error) {
+      throw new Error(data.error);
+    }
+
+    return data?.text || null;
+  } catch (err) {
+    console.error('generateStory error:', err);
+    throw err;
+  }
+}
+
+// Generate thumbnail/image using Creator AI
+export async function generateThumbnail(prompt: string, apiKey?: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke<{ image?: string; error?: string }>('creator-ai', {
+      body: { prompt, apiKey, type: 'image' }
+    });
+
+    if (error) {
+      console.error('generateThumbnail error:', error);
+      throw new Error(error.message || 'Image generation failed');
+    }
+
+    if (data?.error) {
+      throw new Error(data.error);
+    }
+
+    return data?.image || null;
+  } catch (err) {
+    console.error('generateThumbnail error:', err);
+    throw err;
+  }
+}
