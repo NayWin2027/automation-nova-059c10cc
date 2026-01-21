@@ -8,6 +8,65 @@ const corsHeaders = {
 // Google Files API base URL
 const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1beta/files";
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
+const DEFAULT_TRANSCRIBE_MODEL = "gemini-2.0-flash";
+
+function tryParseGoogleApiError(errorText: string): {
+  status?: string;
+  code?: number;
+  message?: string;
+  retryDelaySeconds?: number;
+  quotaLimitZero?: boolean;
+} {
+  try {
+    const parsed = JSON.parse(errorText);
+    const err = parsed?.error;
+    const message = typeof err?.message === "string" ? err.message : undefined;
+    const retryDelay = err?.details?.find((d: any) => typeof d?.retryDelay === "string")?.retryDelay as
+      | string
+      | undefined;
+    const retryDelaySeconds = retryDelay?.endsWith("s") ? Number(retryDelay.slice(0, -1)) : undefined;
+
+    return {
+      status: err?.status,
+      code: typeof err?.code === "number" ? err.code : undefined,
+      message,
+      retryDelaySeconds: Number.isFinite(retryDelaySeconds) ? retryDelaySeconds : undefined,
+      quotaLimitZero: message ? /limit:\s*0/.test(message) : false,
+    };
+  } catch {
+    return {};
+  }
+}
+
+async function preflightGenerateCheck(apiKey: string): Promise<void> {
+  // Minimal request to detect invalid key / disabled billing-quota BEFORE uploading large files.
+  const response = await fetch(`${GOOGLE_AI_API}/${DEFAULT_TRANSCRIBE_MODEL}:generateContent?key=${apiKey}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: "ping" }] }],
+      generationConfig: { temperature: 0, maxOutputTokens: 1 },
+    }),
+  });
+
+  if (response.ok) return;
+
+  const errorText = await response.text();
+  const info = tryParseGoogleApiError(errorText);
+  console.error("Gemini preflight error:", response.status, errorText);
+
+  if (response.status === 429) {
+    if (info.quotaLimitZero) {
+      // Common case: API key is valid but free-tier quota is 0 (billing/quota not enabled).
+      throw new Error("GOOGLE_QUOTA_NOT_ENABLED");
+    }
+    throw new Error("RATE_LIMIT");
+  }
+  if (response.status === 403 || response.status === 401) {
+    throw new Error("API_KEY_INVALID");
+  }
+  throw new Error(`PREFLIGHT_FAILED:${response.status}`);
+}
 
 async function uploadToGoogleFiles(apiKey: string, file: File, mimeType: string): Promise<string> {
   console.log("Uploading file to Google Files API...", file.name, file.size, mimeType);
@@ -116,7 +175,7 @@ Transcribe exactly what is spoken - do not translate or summarize.`;
 
   console.log("Sending transcription request to Gemini...");
 
-  const response = await fetch(`${GOOGLE_AI_API}/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+  const response = await fetch(`${GOOGLE_AI_API}/${DEFAULT_TRANSCRIBE_MODEL}:generateContent?key=${apiKey}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -145,12 +204,14 @@ Transcribe exactly what is spoken - do not translate or summarize.`;
   if (!response.ok) {
     const errorText = await response.text();
     console.error("Gemini API error:", response.status, errorText);
+    const info = tryParseGoogleApiError(errorText);
     
     if (response.status === 429) {
+      if (info.quotaLimitZero) throw new Error("GOOGLE_QUOTA_NOT_ENABLED");
       throw new Error("RATE_LIMIT");
     }
     if (response.status === 403 || response.status === 401) {
-      throw new Error("API Key မမှန်ပါ သို့မဟုတ် permission မရှိပါ။");
+      throw new Error("API_KEY_INVALID");
     }
     
     throw new Error(`Transcription failed: ${response.status}`);
@@ -221,6 +282,12 @@ serve(async (req) => {
 
     console.log("Processing file:", file.name, "Size:", file.size, "bytes");
 
+    // Preflight to avoid wasting time uploading big files when the key has no quota/billing.
+    // (For small files, skip to avoid an extra request.)
+    if (file.size >= 8 * 1024 * 1024) {
+      await preflightGenerateCheck(apiKey);
+    }
+
     const mimeType = getMimeType(file);
     
     // Upload file to Google Files API
@@ -250,6 +317,23 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error: "Rate limit ကျော်သွားပါပြီ။ ခဏစောင့်ပြီး ပြန်စမ်းပါ။" }),
         { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (errorMessage === "GOOGLE_QUOTA_NOT_ENABLED") {
+      return new Response(
+        JSON.stringify({
+          error:
+            "Google AI API quota မဖွင့်ထားသေးတာ (သို့) Billing မဖွင့်ထားသေးတာကြောင့် request limit = 0 ဖြစ်နေပါတယ်။ Google AI Studio ထဲမှာ Gemini API ကို enable + billing/quota ထည့်ပြီးမှ ပြန်စမ်းပါ။",
+        }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (errorMessage === "API_KEY_INVALID") {
+      return new Response(
+        JSON.stringify({ error: "API Key မမှန်ပါ (သို့) permission မရှိပါ။" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
     
