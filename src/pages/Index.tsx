@@ -77,8 +77,7 @@ const tools = [
     title: "AI Voice",
     description: "စာသားမှ အသံထုတ်ရန်။",
     gradient: "emerald" as const,
-    systemPrompt:
-      "You are a text-to-speech consultant. Help users prepare text for voice synthesis, including pronunciation guides and voice direction notes. Respond in Burmese when the user writes in Burmese.",
+    route: "/voice",
   },
   {
     id: "subgen",
