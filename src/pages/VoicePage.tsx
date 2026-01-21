@@ -1,8 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
-import { generateSpeech, playPCM } from '@/services/geminiService';
+import { ArrowLeft, Globe, ChevronDown } from 'lucide-react';
+import { generateSpeech, playPCM, setTTSLanguage } from '@/services/geminiService';
 import { BottomNav } from '@/components/BottomNav';
+import { languages, getDefaultLanguage } from '@/data/languages';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 type SubStyle = 'GOLD' | 'BLUE' | 'RUBY' | 'DIAMOND' | 'EMERALD';
 
@@ -12,6 +20,7 @@ interface HistoryItem {
   voice: string;
   audio: string;
   timestamp: number;
+  language?: string;
 }
 
 const VoicePage: React.FC = () => {
@@ -23,6 +32,9 @@ const VoicePage: React.FC = () => {
   const [apiType, setApiType] = useState<'app' | 'own'>('app');
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('master_voice_api_key') || '');
   const [activeTab, setActiveTab] = useState<"home" | "premium" | "settings">("home");
+  const [selectedLanguage, setSelectedLanguage] = useState(() => 
+    localStorage.getItem('master_voice_language') || getDefaultLanguage()
+  );
   
   const [showOptions, setShowOptions] = useState(false);
   const [proSubtitles, setProSubtitles] = useState(false);
@@ -48,6 +60,11 @@ const VoicePage: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('master_voice_history_v2', JSON.stringify(history));
   }, [history]);
+
+  useEffect(() => {
+    localStorage.setItem('master_voice_language', selectedLanguage);
+    setTTSLanguage(selectedLanguage);
+  }, [selectedLanguage]);
 
   const handleCheckWordCount = () => {
     if (!text.trim()) {
@@ -145,7 +162,7 @@ const VoicePage: React.FC = () => {
       const selectedVoiceObj = voices.find(v => v.name === voiceName) || voices[0];
       const actualVoiceValue = selectedVoiceObj.value;
 
-      const pcmData = await generateSpeech(text, actualVoiceValue, apiType === 'own' ? apiKey : undefined, performance);
+      const pcmData = await generateSpeech(text, actualVoiceValue, apiType === 'own' ? apiKey : undefined, performance, selectedLanguage);
       if (pcmData) {
         setResultAudio(pcmData);
         
@@ -257,6 +274,35 @@ const VoicePage: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Language Selector - 80+ Languages */}
+        <div className="bg-white/5 backdrop-blur-2xl rounded-[28px] p-5 border border-white/10 space-y-3 shadow-xl">
+          <div className="flex items-center gap-2 px-1">
+            <Globe className="w-4 h-4 text-primary" />
+            <h4 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">SELECT LANGUAGE (80+ OPTIONS)</h4>
+          </div>
+          <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
+            <SelectTrigger className="w-full bg-white/5 border-white/10 rounded-2xl h-12 text-foreground">
+              <SelectValue placeholder="Select language">
+                {languages.find(l => l.code === selectedLanguage)?.name} ({languages.find(l => l.code === selectedLanguage)?.nativeName})
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent className="max-h-[300px] bg-background border-white/10">
+              {languages.map((lang) => (
+                <SelectItem 
+                  key={lang.code} 
+                  value={lang.code}
+                  className="cursor-pointer hover:bg-white/10"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold">{lang.name}</span>
+                    <span className="text-muted-foreground text-xs">({lang.nativeName})</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
         {/* 3. Script Input */}
         <div className="bg-white/5 backdrop-blur-2xl rounded-[28px] p-5 border border-white/10 space-y-3 shadow-xl">

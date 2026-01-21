@@ -6,27 +6,36 @@ interface TTSResponse {
   useClientTTS?: boolean;
   text?: string;
   voiceName?: string;
+  languageCode?: string;
   error?: string;
 }
 
 // Store for tracking if speech synthesis is being used
 let isUsingWebSpeech = false;
+let currentLanguageCode = 'en-US';
+
+export function setTTSLanguage(langCode: string) {
+  currentLanguageCode = langCode;
+}
 
 export async function generateSpeech(
   text: string,
   voiceName: string,
   apiKey?: string,
-  performance?: string
+  performance?: string,
+  languageCode?: string
 ): Promise<string | null> {
   try {
     isUsingWebSpeech = false;
+    const lang = languageCode || currentLanguageCode;
     
     const { data, error } = await supabase.functions.invoke<TTSResponse>('gemini-tts', {
       body: {
         text,
         voiceName,
         apiKey,
-        performance: performance || 'PROFESSIONAL'
+        performance: performance || 'PROFESSIONAL',
+        languageCode: lang
       }
     });
 
@@ -41,10 +50,10 @@ export async function generateSpeech(
 
     // Check if we should use client-side TTS (App API mode)
     if (data?.useClientTTS) {
-      console.log('Using client-side Web Speech API for TTS');
+      console.log('Using client-side Web Speech API for TTS with language:', lang);
       isUsingWebSpeech = true;
-      // Return the text as a marker - we'll speak it directly
-      return `WEBSPEECH:${text}`;
+      // Return the text with language marker
+      return `WEBSPEECH:${lang}:${text}`;
     }
 
     return data?.audio || null;
@@ -57,8 +66,10 @@ export async function generateSpeech(
 export async function playPCM(base64Audio: string): Promise<AudioBufferSourceNode> {
   // Check if this is Web Speech marker
   if (base64Audio.startsWith('WEBSPEECH:')) {
-    const text = base64Audio.substring('WEBSPEECH:'.length);
-    return await playWithWebSpeechAndGetDuration(text);
+    const parts = base64Audio.substring('WEBSPEECH:'.length).split(':');
+    const lang = parts[0];
+    const text = parts.slice(1).join(':');
+    return await playWithWebSpeechAndGetDuration(text, lang);
   }
   
   const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
@@ -113,7 +124,7 @@ export async function playPCM(base64Audio: string): Promise<AudioBufferSourceNod
 }
 
 // Play text using Web Speech API and return a fake source node with duration
-async function playWithWebSpeechAndGetDuration(text: string): Promise<AudioBufferSourceNode> {
+async function playWithWebSpeechAndGetDuration(text: string, languageCode: string = 'en-US'): Promise<AudioBufferSourceNode> {
   return new Promise((resolve, reject) => {
     if (!('speechSynthesis' in window)) {
       reject(new Error('Web Speech API not supported'));
@@ -127,17 +138,38 @@ async function playWithWebSpeechAndGetDuration(text: string): Promise<AudioBuffe
     utterance.rate = 1.0;
     utterance.pitch = 1.0;
     utterance.volume = 1.0;
+    utterance.lang = languageCode;
     
-    // Try to find best voice
-    const voices = speechSynthesis.getVoices();
-    if (voices.length > 0) {
-      // Prefer female or default voice
-      const preferredVoice = voices.find(v => 
-        v.lang.includes('en') && v.name.toLowerCase().includes('female')
-      ) || voices.find(v => v.default) || voices[0];
-      if (preferredVoice) {
-        utterance.voice = preferredVoice;
+    // Wait for voices to load and find matching voice
+    const setVoice = () => {
+      const voices = speechSynthesis.getVoices();
+      if (voices.length > 0) {
+        // Try to find exact match
+        let preferredVoice = voices.find(v => v.lang === languageCode);
+        
+        // Try partial match (e.g., "en" matches "en-US")
+        if (!preferredVoice) {
+          const baseLang = languageCode.split('-')[0];
+          preferredVoice = voices.find(v => v.lang.startsWith(baseLang));
+        }
+        
+        // Fallback to default
+        if (!preferredVoice) {
+          preferredVoice = voices.find(v => v.default) || voices[0];
+        }
+        
+        if (preferredVoice) {
+          utterance.voice = preferredVoice;
+          console.log('[WebSpeech] Using voice:', preferredVoice.name, preferredVoice.lang);
+        }
       }
+    };
+    
+    // Set voice immediately if available, otherwise wait
+    if (speechSynthesis.getVoices().length > 0) {
+      setVoice();
+    } else {
+      speechSynthesis.onvoiceschanged = setVoice;
     }
     
     // Create a fake audio context to return a source node with duration
@@ -159,7 +191,7 @@ async function playWithWebSpeechAndGetDuration(text: string): Promise<AudioBuffe
     
     utterance.onstart = () => {
       startTime = Date.now();
-      console.log('[WebSpeech] Started speaking');
+      console.log('[WebSpeech] Started speaking in:', languageCode);
     };
     
     utterance.onend = () => {
@@ -186,7 +218,7 @@ async function playWithWebSpeechAndGetDuration(text: string): Promise<AudioBuffe
 }
 
 // Play text using Web Speech API directly (for App API mode)
-export function playWithWebSpeech(text: string): void {
+export function playWithWebSpeech(text: string, languageCode: string = 'en-US'): void {
   if (!('speechSynthesis' in window)) {
     console.error('Web Speech API not supported');
     return;
@@ -196,5 +228,6 @@ export function playWithWebSpeech(text: string): void {
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.rate = 1.0;
   utterance.pitch = 1.0;
+  utterance.lang = languageCode;
   speechSynthesis.speak(utterance);
 }
