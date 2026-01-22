@@ -12,6 +12,9 @@ interface TranslationProgress {
   lastIndex: number;
   lastTranslatedText: string;
   chunkHistory?: Record<number, string>;
+  // For accurate counting: how many source characters were processed for each chunk start index.
+  // (Needed because the last chunk can be smaller than 50,000, and output limits can shorten a chunk.)
+  chunkLengths?: Record<number, number>;
 }
 
 const LANGUAGES = [
@@ -262,9 +265,11 @@ const NovelTransPage: React.FC = () => {
         fileName: currentDisplayName, 
         lastIndex: 0, 
         lastTranslatedText: "", 
-        chunkHistory: {} 
+         chunkHistory: {},
+         chunkLengths: {}
   };
   const history = savedProgress.chunkHistory || {};
+  const chunkLengths = savedProgress.chunkLengths || {};
   const historyKeys = Object.keys(history).map(Number).sort((a, b) => a - b);
   
   const canGoBack = historyKeys.some(k => k < startIndex);
@@ -314,9 +319,11 @@ const NovelTransPage: React.FC = () => {
         fileName: progressLabel, 
         lastIndex: 0, 
         lastTranslatedText: "", 
-        chunkHistory: {} 
+        chunkHistory: {},
+        chunkLengths: {}
     };
     const currentHistory = currentProgress.chunkHistory || {};
+    const currentChunkLengths = currentProgress.chunkLengths || {};
 
     const nextKey = Object.keys(currentHistory).map(Number).sort((a,b)=>a-b).find(k => k > startIndex);
     
@@ -336,15 +343,16 @@ const NovelTransPage: React.FC = () => {
           return startIndex + estimatedIncrement;
         })();
 
-        await generateContent(newIndex, currentHistory, progressKey, progressLabel, isFileMode);
+         await generateContent(newIndex, currentHistory, currentChunkLengths, progressKey, progressLabel, isFileMode);
     } else {
-        await generateContent(startIndex, currentHistory, progressKey, progressLabel, isFileMode);
+         await generateContent(startIndex, currentHistory, currentChunkLengths, progressKey, progressLabel, isFileMode);
     }
   };
 
   const generateContent = async (
     indexToUse: number,
     currentHistory: Record<number, string>,
+    currentChunkLengths: Record<number, number>,
     progressKey: string,
     progressLabel: string,
     isFileMode: boolean
@@ -413,12 +421,14 @@ PREVIOUS CONTEXT (For continuity):
                 }
             }
 
-            const updatedHistory = { ...currentHistory, [indexToUse]: result };
+             const updatedHistory = { ...currentHistory, [indexToUse]: result };
+             const updatedChunkLengths = { ...currentChunkLengths, [indexToUse]: incrementAmount };
             const newProgress: TranslationProgress = {
                 fileName: progressLabel,
                 lastIndex: indexToUse,
                 lastTranslatedText: result,
-                chunkHistory: updatedHistory 
+                 chunkHistory: updatedHistory,
+                 chunkLengths: updatedChunkLengths
             };
             
             const updatedProgressData = { ...progressData, [progressKey]: newProgress };
@@ -481,6 +491,33 @@ PREVIOUS CONTEXT (For continuity):
   };
 
   const isOwnKeyMissing = apiType === 'own' && !apiKey.trim();
+
+  // Accurate progress counters (avoid showing 50,000 when file is smaller, and keep counts exact)
+  const countHasTextSource = novelText.trim().length > 0;
+  const countIsChunkTextMode = inputMode === 'PASTE' || (inputMode === 'UPLOAD' && countHasTextSource);
+  const countTotalChars = countIsChunkTextMode ? charCount : 0;
+  const countTranslatedChars = (() => {
+    if (!countIsChunkTextMode || countTotalChars <= 0) return 0;
+    if (historyKeys.length === 0) return 0;
+
+    // Use stored chunk lengths when available (exact), otherwise fall back to deterministic chunk sizing.
+    const furthestEnd = historyKeys.reduce((maxEnd, k) => {
+      const lenFromStore = chunkLengths[k];
+      const inferredLen = Math.max(0, Math.min(CHUNK_SIZE, countTotalChars - k));
+      const end = k + (typeof lenFromStore === 'number' ? lenFromStore : inferredLen);
+      return Math.max(maxEnd, end);
+    }, 0);
+
+    return Math.min(countTotalChars, furthestEnd);
+  })();
+
+  const progressNumerator = countIsChunkTextMode ? countTranslatedChars : startIndex;
+  const progressDenominatorLabel = countIsChunkTextMode
+    ? countTotalChars.toLocaleString()
+    : (charCount > 0 ? charCount.toLocaleString() : 'FILE');
+  const progressPercent = countIsChunkTextMode
+    ? (countTotalChars > 0 ? Math.min(100, (countTranslatedChars / countTotalChars) * 100) : 0)
+    : (charCount > 0 ? Math.min(100, (startIndex / charCount) * 100) : 0);
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -574,10 +611,10 @@ PREVIOUS CONTEXT (For continuity):
             <div className="bg-slate-900/50 rounded-2xl p-4 border border-white/10 space-y-2">
                 <div className="flex justify-between items-end">
                     <p className="text-[8px] font-black text-amber-300 uppercase tracking-widest">TRANSLATION PROGRESS</p>
-                    <span className="text-[9px] font-black text-white">{startIndex.toLocaleString()} / {charCount > 0 ? charCount.toLocaleString() : 'FILE'}</span>
+                     <span className="text-[9px] font-black text-white">{progressNumerator.toLocaleString()} / {progressDenominatorLabel}</span>
                 </div>
                 <div className="w-full h-2 bg-black/40 rounded-full overflow-hidden border border-white/5">
-                    <div className="h-full bg-gradient-to-r from-amber-500 to-yellow-300 transition-all duration-700 shadow-[0_0_15px_#f59e0b]" style={{ width: `${charCount > 0 ? Math.min(100, (startIndex / charCount) * 100) : 0}%` }}></div>
+                     <div className="h-full bg-gradient-to-r from-amber-500 to-yellow-300 transition-all duration-700 shadow-[0_0_15px_#f59e0b]" style={{ width: `${progressPercent}%` }}></div>
                 </div>
             </div>
 
@@ -741,7 +778,7 @@ PREVIOUS CONTEXT (For continuity):
            <div className="flex justify-between items-center px-4 gold-glass p-2 rounded-xl flex-wrap gap-2">
               <h3 className="text-[9px] font-black text-amber-400 uppercase tracking-widest flex items-center gap-2 mr-auto">
                   <div className="w-1.5 h-1.5 bg-amber-500 rounded-full shadow-[0_0_5px_#f59e0b]"></div>
-                  TRANSLATED: {startIndex.toLocaleString()} / {charCount.toLocaleString()} CHARS
+                   TRANSLATED: {progressNumerator.toLocaleString()} / {progressDenominatorLabel} CHARS
               </h3>
               <span className="text-[8px] font-bold text-slate-400 ml-2">
                 (PAGE: {translated.length.toLocaleString()} chars)
