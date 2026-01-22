@@ -277,3 +277,31 @@ export async function generateThumbnail(prompt: string, apiKey?: string): Promis
     throw err;
   }
 }
+
+// Translate text for Novel Translator
+export async function translateText(
+  prompt: string,
+  targetLang: string,
+  apiKey?: string,
+  fileData?: { data: string; mimeType: string }
+): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke<{ text?: string; error?: string }>('novel-translate', {
+      body: { prompt, targetLang, apiKey, fileData }
+    });
+
+    if (error) {
+      console.error('translateText error:', error);
+      throw new Error(error.message || 'Translation failed');
+    }
+
+    if (data?.error) {
+      throw new Error(data.error);
+    }
+
+    return data?.text || null;
+  } catch (err) {
+    console.error('translateText error:', err);
+    throw err;
+  }
+}
