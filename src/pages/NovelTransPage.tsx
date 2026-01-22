@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { translateText } from '../services/geminiService';
 import { BottomNav } from '@/components/BottomNav';
+import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist';
+import PdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
 
 type InputMode = 'UPLOAD' | 'PASTE';
 type NovelTone = 'WUXIA' | 'ROMANTIC' | 'CLASSIC' | 'MODERN' | 'FANTASY';
@@ -67,6 +69,30 @@ const NovelTransPage: React.FC = () => {
   const MAX_INPUT_CHARS = 350000; 
   const CHUNK_SIZE = 50000; 
 
+  // Configure PDF.js worker (Vite-friendly)
+  GlobalWorkerOptions.workerSrc = PdfWorker;
+
+  const extractTextFromPdf = async (selectedFile: File): Promise<string> => {
+    const buffer = await selectedFile.arrayBuffer();
+    const pdf = await getDocument({ data: buffer }).promise;
+    const totalPages = pdf.numPages;
+
+    let text = '';
+    for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const content = await page.getTextContent();
+      const pageText = (content.items as any[])
+        .map((item) => (typeof item?.str === 'string' ? item.str : ''))
+        .filter(Boolean)
+        .join(' ');
+
+      if (pageText.trim()) text += pageText + '\n\n';
+      if (text.length >= MAX_INPUT_CHARS) break;
+    }
+
+    return text.slice(0, MAX_INPUT_CHARS).trim();
+  };
+
   useEffect(() => {
     localStorage.setItem('master_novel_api_key', apiKey);
   }, [apiKey]);
@@ -119,23 +145,61 @@ const NovelTransPage: React.FC = () => {
       const selectedFile = e.target.files[0];
       setFile(selectedFile);
       setTranslated('');
-      setCharCount(selectedFile.size);
 
+      const ext = selectedFile.name.split('.').pop()?.toLowerCase();
+      const isPdf = selectedFile.type === 'application/pdf' || ext === 'pdf';
+
+      const restoreProgress = () => {
+        if (progressData[selectedFile.name]) {
+          const saved = progressData[selectedFile.name];
+          setStartIndex(saved.lastIndex);
+          if (saved.lastTranslatedText) setTranslated(saved.lastTranslatedText);
+        } else {
+          setStartIndex(0);
+        }
+      };
+
+      // Best-effort: extract text from PDF client-side so translation ALWAYS uses the actual file content.
+      if (isPdf) {
+        setLoading(true);
+        setFileBase64(null);
+        extractTextFromPdf(selectedFile)
+          .then((text) => {
+            if (!text) {
+              // If the PDF has no extractable text (scanned images), fall back to old base64 mode.
+              throw new Error('PDF text extraction returned empty');
+            }
+            setNovelText(text);
+            setCharCount(text.length);
+            restoreProgress();
+          })
+          .catch(async (err) => {
+            console.error('[NovelTrans] PDF extract failed, fallback to file mode:', err);
+            // Fallback: keep previous behavior (send file to backend)
+            setNovelText('');
+            setCharCount(selectedFile.size);
+            const reader = new FileReader();
+            reader.onload = (event) => {
+              const result = event.target?.result as string;
+              const base64 = result.split(',')[1];
+              setFileBase64(base64);
+              restoreProgress();
+            };
+            reader.readAsDataURL(selectedFile);
+          })
+          .finally(() => setLoading(false));
+        return;
+      }
+
+      // Non-PDF: keep existing base64 file workflow
+      setNovelText('');
+      setCharCount(selectedFile.size);
       const reader = new FileReader();
       reader.onload = (event) => {
         const result = event.target?.result as string;
         const base64 = result.split(',')[1];
         setFileBase64(base64);
-        
-        if (progressData[selectedFile.name]) {
-          const saved = progressData[selectedFile.name];
-          setStartIndex(saved.lastIndex);
-          if (saved.lastTranslatedText) {
-             setTranslated(saved.lastTranslatedText);
-          }
-        } else {
-          setStartIndex(0);
-        }
+        restoreProgress();
       };
       reader.readAsDataURL(selectedFile);
     }
@@ -182,8 +246,11 @@ const NovelTransPage: React.FC = () => {
   };
 
   const handleTranslate = async () => {
-    const isFileMode = !!(inputMode === 'UPLOAD' && fileBase64);
-    const isPasteMode = inputMode === 'PASTE' && novelText.trim().length > 0;
+    // We may have text even in UPLOAD mode (e.g., extracted from PDF).
+    const hasTextSource = novelText.trim().length > 0;
+    const isChunkTextMode = inputMode === 'PASTE' || (inputMode === 'UPLOAD' && hasTextSource);
+    const isFileMode = !!(inputMode === 'UPLOAD' && fileBase64 && !hasTextSource);
+    const isPasteMode = isChunkTextMode;
 
     if (!isFileMode && !isPasteMode) {
       alert("ဝတ္ထုစာသား (သို့) ဖိုင် အရင်ထည့်သွင်းပေးပါ။");
@@ -213,10 +280,14 @@ const NovelTransPage: React.FC = () => {
     }
     
     if (currentHistory[startIndex]) {
-        const cachedText = currentHistory[startIndex];
-        const estimatedIncrement = cachedText.length < 5000 ? Math.ceil(cachedText.length * 1.5) : CHUNK_SIZE;
-        const newIndex = startIndex + estimatedIncrement;
-        
+        // Deterministic paging for text-based sources: next chunk is always +CHUNK_SIZE.
+        // (This fixes “ဘယ်က အခန်းဆက်လဲ မသိ” issues caused by estimating from translated length.)
+        const newIndex = isChunkTextMode ? (startIndex + CHUNK_SIZE) : (() => {
+          const cachedText = currentHistory[startIndex];
+          const estimatedIncrement = cachedText.length < 5000 ? Math.ceil(cachedText.length * 1.5) : CHUNK_SIZE;
+          return startIndex + estimatedIncrement;
+        })();
+
         await generateContent(newIndex, currentHistory, currentFileName, isFileMode);
     } else {
         await generateContent(startIndex, currentHistory, currentFileName, isFileMode);
@@ -263,8 +334,14 @@ IMPORTANT RULES:
 PREVIOUS CONTEXT (For continuity):
 "...${contextTranslated}"`;
 
+        const hasTextSource = novelText.trim().length > 0;
+        const isChunkTextMode = inputMode === 'PASTE' || (inputMode === 'UPLOAD' && hasTextSource);
+        const sourceChunk = isChunkTextMode
+          ? novelText.substring(indexToUse, indexToUse + CHUNK_SIZE)
+          : '';
+
         const result = await translateText(
-            instruction + (inputMode === 'PASTE' ? `\n\nCONTENT TO TRANSLATE:\n${novelText.substring(indexToUse, indexToUse + CHUNK_SIZE)}` : ""), 
+            instruction + (isChunkTextMode ? `\n\nCONTENT TO TRANSLATE:\n${sourceChunk}` : ""), 
             targetLang, 
             apiType === 'own' ? apiKey : undefined,
             isFileMode ? { data: fileBase64!, mimeType: file?.type || 'application/pdf' } : undefined
@@ -274,7 +351,7 @@ PREVIOUS CONTEXT (For continuity):
             setTranslated(result);
             
             let incrementAmount = CHUNK_SIZE;
-            if (inputMode === 'PASTE') {
+            if (isChunkTextMode) {
                 incrementAmount = Math.min(CHUNK_SIZE, charCount - indexToUse);
             } else {
                 if (result.length < 4000) {
