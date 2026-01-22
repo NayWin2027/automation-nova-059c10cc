@@ -35,25 +35,32 @@ serve(async (req) => {
       const systemInstruction = `You are a professional novel translator. Your task is to translate novels with literary quality while maintaining the original style, character names consistency, and narrative flow. 
 
 CRITICAL RULES:
-1. Output ONLY the translation - no explanations, no meta-commentary
-2. Maintain consistent character names throughout
-3. Preserve the author's writing style and tone
-4. Translate dialogue naturally in the target language
-5. Keep paragraph structure intact`;
+1. READ THE ATTACHED PDF/DOCUMENT FIRST - extract all text content from it
+2. Output ONLY the translation - no explanations, no meta-commentary
+3. Maintain consistent character names throughout
+4. Preserve the author's writing style and tone
+5. Translate dialogue naturally in the target language
+6. Keep paragraph structure intact
+7. If a file is attached, translate the ACTUAL CONTENT from the file, not placeholder text`;
 
       const parts: Array<{ text?: string; inline_data?: { mime_type: string; data: string } }> = [];
       
-      // Add file data if provided
+      // Add file data if provided - MUST come first so AI reads it
       if (fileData && fileData.data) {
+        console.log('[Novel Translate] Attaching file, mimeType:', fileData.mimeType, 'data length:', fileData.data.length);
         parts.push({
           inline_data: {
             mime_type: fileData.mimeType || 'application/pdf',
             data: fileData.data
           }
         });
+        // Add explicit instruction to read the file
+        parts.push({ 
+          text: `IMPORTANT: I have attached a PDF/document file above. Please READ and EXTRACT all the text content from this attached file first, then translate that content according to the following instructions:\n\n${prompt}` 
+        });
+      } else {
+        parts.push({ text: prompt });
       }
-      
-      parts.push({ text: prompt });
 
       const geminiResponse = await fetch(apiUrl, {
         method: 'POST',
