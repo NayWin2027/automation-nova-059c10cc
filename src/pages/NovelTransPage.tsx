@@ -72,6 +72,13 @@ const NovelTransPage: React.FC = () => {
   // Configure PDF.js worker (Vite-friendly)
   GlobalWorkerOptions.workerSrc = PdfWorker;
 
+  const makeFileKey = (f: File) => `${f.name}::${f.size}::${f.lastModified}`;
+
+  const clearAllHistory = () => {
+    setProgressData({});
+    localStorage.removeItem('master_novel_progress_v3');
+  };
+
   const extractTextFromPdf = async (selectedFile: File): Promise<string> => {
     const buffer = await selectedFile.arrayBuffer();
     const pdf = await getDocument({ data: buffer }).promise;
@@ -143,21 +150,23 @@ const NovelTransPage: React.FC = () => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
-      setFile(selectedFile);
+
+      // IMPORTANT: When a new file is uploaded, ALWAYS start a fresh run.
+      // This prevents continuing old history (especially when the filename is the same).
+      clearAllHistory();
+      setAutoDrive(false);
+      setIsAutoDriving(false);
+      setAutoIteration(0);
+      sessionStartRef.current = 0;
+      sessionProcessedRef.current = 0;
+      setCooldownSeconds(0);
+      setStartIndex(0);
       setTranslated('');
+
+      setFile(selectedFile);
 
       const ext = selectedFile.name.split('.').pop()?.toLowerCase();
       const isPdf = selectedFile.type === 'application/pdf' || ext === 'pdf';
-
-      const restoreProgress = () => {
-        if (progressData[selectedFile.name]) {
-          const saved = progressData[selectedFile.name];
-          setStartIndex(saved.lastIndex);
-          if (saved.lastTranslatedText) setTranslated(saved.lastTranslatedText);
-        } else {
-          setStartIndex(0);
-        }
-      };
 
       // Best-effort: extract text from PDF client-side so translation ALWAYS uses the actual file content.
       if (isPdf) {
@@ -171,7 +180,6 @@ const NovelTransPage: React.FC = () => {
             }
             setNovelText(text);
             setCharCount(text.length);
-            restoreProgress();
           })
           .catch(async (err) => {
             console.error('[NovelTrans] PDF extract failed, fallback to file mode:', err);
@@ -183,7 +191,6 @@ const NovelTransPage: React.FC = () => {
               const result = event.target?.result as string;
               const base64 = result.split(',')[1];
               setFileBase64(base64);
-              restoreProgress();
             };
             reader.readAsDataURL(selectedFile);
           })
@@ -199,7 +206,6 @@ const NovelTransPage: React.FC = () => {
         const result = event.target?.result as string;
         const base64 = result.split(',')[1];
         setFileBase64(base64);
-        restoreProgress();
       };
       reader.readAsDataURL(selectedFile);
     }
@@ -213,9 +219,16 @@ const NovelTransPage: React.FC = () => {
   };
 
   // HISTORY NAVIGATION LOGIC
-  const currentFileName = file?.name || "PastedText";
-  const savedProgress = progressData[currentFileName] || { 
-        fileName: currentFileName, 
+  const currentProgressKey = inputMode === 'UPLOAD'
+    ? (file ? makeFileKey(file) : 'UPLOAD_NO_FILE')
+    : 'PastedText';
+
+  const currentDisplayName = inputMode === 'UPLOAD'
+    ? (file?.name || 'No File')
+    : 'PastedText';
+
+  const savedProgress = progressData[currentProgressKey] || { 
+        fileName: currentDisplayName, 
         lastIndex: 0, 
         lastTranslatedText: "", 
         chunkHistory: {} 
@@ -261,9 +274,13 @@ const NovelTransPage: React.FC = () => {
 
     setLoading(true);
 
-    const currentFileName = file?.name || "PastedText";
-    const currentProgress = progressData[currentFileName] || { 
-        fileName: currentFileName, 
+    const progressKey = inputMode === 'UPLOAD'
+      ? (file ? makeFileKey(file) : 'UPLOAD_NO_FILE')
+      : 'PastedText';
+    const progressLabel = inputMode === 'UPLOAD' ? (file?.name || 'No File') : 'PastedText';
+
+    const currentProgress = progressData[progressKey] || { 
+        fileName: progressLabel, 
         lastIndex: 0, 
         lastTranslatedText: "", 
         chunkHistory: {} 
@@ -288,13 +305,19 @@ const NovelTransPage: React.FC = () => {
           return startIndex + estimatedIncrement;
         })();
 
-        await generateContent(newIndex, currentHistory, currentFileName, isFileMode);
+        await generateContent(newIndex, currentHistory, progressKey, progressLabel, isFileMode);
     } else {
-        await generateContent(startIndex, currentHistory, currentFileName, isFileMode);
+        await generateContent(startIndex, currentHistory, progressKey, progressLabel, isFileMode);
     }
   };
 
-  const generateContent = async (indexToUse: number, currentHistory: Record<number, string>, currentFileName: string, isFileMode: boolean) => {
+  const generateContent = async (
+    indexToUse: number,
+    currentHistory: Record<number, string>,
+    progressKey: string,
+    progressLabel: string,
+    isFileMode: boolean
+  ) => {
       if (apiType === 'own' && !apiKey.trim()) {
           setAutoDrive(false);
           setIsAutoDriving(false);
@@ -361,13 +384,13 @@ PREVIOUS CONTEXT (For continuity):
 
             const updatedHistory = { ...currentHistory, [indexToUse]: result };
             const newProgress: TranslationProgress = {
-                fileName: currentFileName,
+                fileName: progressLabel,
                 lastIndex: indexToUse,
                 lastTranslatedText: result,
                 chunkHistory: updatedHistory 
             };
             
-            const updatedProgressData = { ...progressData, [currentFileName]: newProgress };
+            const updatedProgressData = { ...progressData, [progressKey]: newProgress };
             setProgressData(updatedProgressData);
             localStorage.setItem('master_novel_progress_v3', JSON.stringify(updatedProgressData));
             
@@ -408,6 +431,7 @@ PREVIOUS CONTEXT (For continuity):
 
   const reset = () => {
     if(!window.confirm("Progress အားလုံးကို ဖျက်ပစ်မှာ သေချာပါသလား?")) return;
+    clearAllHistory();
     setFile(null);
     setFileBase64(null);
     setNovelText('');
@@ -542,7 +566,27 @@ PREVIOUS CONTEXT (For continuity):
                       <p className="text-[7px] font-black text-amber-300 uppercase tracking-widest">ACTIVE FILE</p>
                       <p className="text-xs font-black text-white truncate">{file.name}</p>
                   </div>
-                  <button onClick={() => {setFile(null); setFileBase64(null);}} className="w-8 h-8 rounded-lg bg-rose-500/20 text-rose-400 flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all">×</button>
+                   <button
+                     onClick={() => {
+                       // Clearing the active upload should not keep old history running.
+                       clearAllHistory();
+                       setAutoDrive(false);
+                       setIsAutoDriving(false);
+                       setAutoIteration(0);
+                       sessionStartRef.current = 0;
+                       sessionProcessedRef.current = 0;
+                       setCooldownSeconds(0);
+                       setFile(null);
+                       setFileBase64(null);
+                       setNovelText('');
+                       setTranslated('');
+                       setCharCount(0);
+                       setStartIndex(0);
+                     }}
+                     className="w-8 h-8 rounded-lg bg-rose-500/20 text-rose-400 flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all"
+                   >
+                     ×
+                   </button>
                </div>
             )}
 
