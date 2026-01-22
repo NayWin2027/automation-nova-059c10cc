@@ -68,8 +68,7 @@ const tools = [
     title: "Novel Trans",
     description: "ဝတ္ထုရည်များ ဘာသာပြန်ရန်။",
     gradient: "cyan" as const,
-    systemPrompt:
-      "You are a literary translator specializing in novels and long-form content. Help users translate novels while preserving style and literary elements. Respond in Burmese when the user writes in Burmese.",
+    route: "/novel",
   },
   {
     id: "voice",
