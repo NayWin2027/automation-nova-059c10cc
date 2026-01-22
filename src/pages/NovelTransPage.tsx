@@ -69,8 +69,13 @@ const NovelTransPage: React.FC = () => {
     return saved ? JSON.parse(saved) : {};
   });
 
-  const MAX_INPUT_CHARS = 350000; 
-  const CHUNK_SIZE = 50000; 
+  const MAX_INPUT_CHARS = 350000;
+  // IMPORTANT:
+  // - SESSION_MAX_CHARS: safety cap for auto-drive to avoid burning credits too fast.
+  // - STEP_SIZE: how many source chars we request per translation call.
+  //   Using 50,000 as a single request can exceed output limits and causes "fake 100%" progress.
+  const SESSION_MAX_CHARS = 50000;
+  const STEP_SIZE = 12000;
 
   // Configure PDF.js worker (Vite-friendly)
   GlobalWorkerOptions.workerSrc = PdfWorker;
@@ -143,7 +148,7 @@ const NovelTransPage: React.FC = () => {
     if (keys.length === 0) return false;
 
     const furthestEnd = keys.reduce((maxEnd, k) => {
-      const inferredLen = Math.max(0, Math.min(CHUNK_SIZE, total - k));
+      const inferredLen = Math.max(0, Math.min(STEP_SIZE, total - k));
       const len = typeof lens[k] === 'number' ? lens[k]! : inferredLen;
       return Math.max(maxEnd, k + len);
     }, 0);
@@ -164,7 +169,7 @@ const NovelTransPage: React.FC = () => {
     }
 
     // STOP CONDITION 2: 50K chars processed in this session
-    if (autoDrive && sessionProcessedRef.current >= 50000) {
+    if (autoDrive && sessionProcessedRef.current >= SESSION_MAX_CHARS) {
       setIsAutoDriving(false);
       setAutoDrive(false);
       setCooldownSeconds(300);
@@ -353,11 +358,11 @@ const NovelTransPage: React.FC = () => {
     }
     
     if (currentHistory[startIndex]) {
-        // Deterministic paging for text-based sources: next chunk is always +CHUNK_SIZE.
+        // Deterministic paging for text-based sources: next chunk is always +STEP_SIZE.
         // (This fixes “ဘယ်က အခန်းဆက်လဲ မသိ” issues caused by estimating from translated length.)
-        const newIndex = isChunkTextMode ? (startIndex + CHUNK_SIZE) : (() => {
+        const newIndex = isChunkTextMode ? (startIndex + STEP_SIZE) : (() => {
           const cachedText = currentHistory[startIndex];
-          const estimatedIncrement = cachedText.length < 5000 ? Math.ceil(cachedText.length * 1.5) : CHUNK_SIZE;
+          const estimatedIncrement = cachedText.length < 5000 ? Math.ceil(cachedText.length * 1.5) : STEP_SIZE;
           return startIndex + estimatedIncrement;
         })();
 
@@ -417,7 +422,7 @@ PREVIOUS CONTEXT (For continuity):
         const hasTextSource = novelText.trim().length > 0;
         const isChunkTextMode = inputMode === 'PASTE' || (inputMode === 'UPLOAD' && hasTextSource);
         const sourceChunk = isChunkTextMode
-          ? novelText.substring(indexToUse, indexToUse + CHUNK_SIZE)
+          ? novelText.substring(indexToUse, indexToUse + STEP_SIZE)
           : '';
 
         // Hard guard: never call the model when there's no remaining source text.
@@ -443,10 +448,10 @@ PREVIOUS CONTEXT (For continuity):
         if (result) {
             setTranslated(result);
             
-            let incrementAmount = CHUNK_SIZE;
+            let incrementAmount = STEP_SIZE;
             if (isChunkTextMode) {
                 const total = novelText.length;
-                incrementAmount = Math.max(0, Math.min(CHUNK_SIZE, total - indexToUse));
+                incrementAmount = Math.max(0, Math.min(STEP_SIZE, total - indexToUse));
             } else {
                 if (result.length < 4000) {
                     incrementAmount = Math.max(Math.ceil(result.length * 1.5), 500); 
@@ -537,7 +542,7 @@ PREVIOUS CONTEXT (For continuity):
     // Use stored chunk lengths when available (exact), otherwise fall back to deterministic chunk sizing.
     const furthestEnd = historyKeys.reduce((maxEnd, k) => {
       const lenFromStore = chunkLengths[k];
-      const inferredLen = Math.max(0, Math.min(CHUNK_SIZE, countTotalChars - k));
+      const inferredLen = Math.max(0, Math.min(STEP_SIZE, countTotalChars - k));
       const end = k + (typeof lenFromStore === 'number' ? lenFromStore : inferredLen);
       return Math.max(maxEnd, end);
     }, 0);
@@ -606,7 +611,7 @@ PREVIOUS CONTEXT (For continuity):
                         { title: "STEP 1: SOURCE", desc: "ဘာသာပြန်လိုသော ဝတ္ထုဖိုင် (PDF/EPUB) ကို Upload တင်ပါ (သို့) စာသားများကို Paste လုပ်ပါ။" },
                         { title: "STEP 2: STYLE", desc: "Novel Style တွင် မိမိလိုချင်သော ပုံစံ (ဥပမာ - Modern စကားပြော) ကို ရွေးချယ်ပါ။" },
                         { title: "STEP 3: MEMORY", desc: "ဇာတ်ကောင်အမည်များ မှန်ကန်စေရန် Glossary တွင် 'English Name = မြန်မာအမည်' ပုံစံဖြင့် ထည့်သွင်းပါ။" },
-                        { title: "STEP 4: ACTION", desc: "Start Translation ကို နှိပ်ပါ။ (တစ်ခါပြန်လျှင် စာလုံးရေ ၅၀,၀၀၀ ခန့် ရပါသည်)။ Auto-Drive ဖွင့်ထားပါက ၅၀,၀၀၀ ပြည့်တိုင်း (သို့) ၂ မိနစ်ကြာတိုင်း ၅ မိနစ် ခေတ္တရပ်ပါမည်။" }
+                        { title: "STEP 4: ACTION", desc: "Start Translation ကို နှိပ်ပါ။ (တစ်ခါပြန်လျှင် စာလုံးရေ ~၁၂,၀၀၀ ခန့်)။ Auto-Drive ဖွင့်ထားပါက session အတွင်း စုစုပေါင်း ၅၀,၀၀၀ chars (သို့) ၂ မိနစ် ပြည့်ရင် ၅ မိနစ် ခေတ္တရပ်ပါမည်။" }
                     ].map((s, i) => (
                         <div key={i} className="flex gap-4 items-start group">
                             <div className="w-8 h-8 rounded-xl jewel-surface bg-gradient-to-br from-amber-700 to-amber-900 border border-white/10 flex items-center justify-center text-[10px] font-black text-white shadow-lg group-hover:scale-110 transition-transform">
@@ -844,7 +849,7 @@ PREVIOUS CONTEXT (For continuity):
                {splitView && inputMode === 'PASTE' && (
                    <div className="p-6 bg-slate-900/80 rounded-[32px] border border-white/5 relative overflow-hidden group">
                        <div className="absolute top-4 left-6 text-[8px] font-black text-amber-500 uppercase tracking-widest">ORIGINAL</div>
-                       <p className="text-[11px] leading-[1.8] font-medium text-slate-400 whitespace-pre-wrap mt-6">{novelText.substring(Math.max(0, startIndex - CHUNK_SIZE), startIndex)}</p>
+                        <p className="text-[11px] leading-[1.8] font-medium text-slate-400 whitespace-pre-wrap mt-6">{novelText.substring(Math.max(0, startIndex - STEP_SIZE), startIndex)}</p>
                    </div>
                )}
 
