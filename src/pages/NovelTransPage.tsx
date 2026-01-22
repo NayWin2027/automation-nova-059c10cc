@@ -741,8 +741,11 @@ PREVIOUS CONTEXT (For continuity):
            <div className="flex justify-between items-center px-4 gold-glass p-2 rounded-xl flex-wrap gap-2">
               <h3 className="text-[9px] font-black text-amber-400 uppercase tracking-widest flex items-center gap-2 mr-auto">
                   <div className="w-1.5 h-1.5 bg-amber-500 rounded-full shadow-[0_0_5px_#f59e0b]"></div>
-                  TRANSLATED: {(startIndex + CHUNK_SIZE > charCount ? charCount : startIndex + CHUNK_SIZE).toLocaleString()} / {charCount.toLocaleString()} CHARS
+                  TRANSLATED: {startIndex.toLocaleString()} / {charCount.toLocaleString()} CHARS
               </h3>
+              <span className="text-[8px] font-bold text-slate-400 ml-2">
+                (PAGE: {translated.length.toLocaleString()} chars)
+              </span>
               <div className="flex gap-2">
                 <button 
                   onClick={handlePrevious} 
