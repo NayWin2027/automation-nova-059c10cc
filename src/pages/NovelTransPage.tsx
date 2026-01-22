@@ -118,34 +118,65 @@ const NovelTransPage: React.FC = () => {
     }
   }, [cooldownSeconds]);
 
+  // Check if all content has been translated
+  const isTranslationComplete = () => {
+    const hasTextSource = novelText.trim().length > 0;
+    const isChunkTextMode = inputMode === 'PASTE' || (inputMode === 'UPLOAD' && hasTextSource);
+    
+    if (isChunkTextMode && charCount > 0) {
+      // For text mode: complete when startIndex + CHUNK_SIZE >= charCount
+      return (startIndex + CHUNK_SIZE) >= charCount;
+    }
+    return false;
+  };
+
   // Auto-Drive Loop Effect
   useEffect(() => {
     let timer: number;
-    if (inputMode === 'PASTE' && startIndex >= charCount && charCount > 0 && autoDrive) {
-        setIsAutoDriving(false);
-        setAutoDrive(false);
-        alert("Novel Translation Completed!");
-        return;
+    
+    // STOP CONDITION 1: All content translated - COMPLETE STOP
+    if (autoDrive && isTranslationComplete()) {
+      setIsAutoDriving(false);
+      setAutoDrive(false);
+      alert("✅ ဘာသာပြန်ခြင်း ပြီးဆုံးပါပြီ! (Translation Complete!)");
+      return;
     }
 
-    if (autoDrive && (sessionProcessedRef.current >= 50000)) {
+    // STOP CONDITION 2: 50K chars processed in this session
+    if (autoDrive && sessionProcessedRef.current >= 50000) {
+      setIsAutoDriving(false);
+      setAutoDrive(false);
+      setCooldownSeconds(300);
+      sessionStartRef.current = 0;
+      sessionProcessedRef.current = 0;
+      return;
+    }
+
+    // STOP CONDITION 3: 2 minutes continuous running
+    if (autoDrive && sessionStartRef.current > 0) {
+      const elapsed = Date.now() - sessionStartRef.current;
+      if (elapsed >= 120000) {
         setIsAutoDriving(false);
+        setAutoDrive(false);
         setCooldownSeconds(300);
         sessionStartRef.current = 0;
         sessionProcessedRef.current = 0;
         return;
+      }
     }
 
+    // Continue auto-driving if conditions are met
     if (autoDrive && !loading && translated && cooldownSeconds === 0) {
-        setIsAutoDriving(true);
-        timer = window.setTimeout(() => {
-            handleTranslate();
-        }, 3000); 
+      setIsAutoDriving(true);
+      timer = window.setTimeout(() => {
+        handleTranslate();
+      }, 3000);
     } else if (cooldownSeconds > 0) {
-        setIsAutoDriving(false);
+      setIsAutoDriving(false);
     }
+    
     return () => clearTimeout(timer);
-  }, [translated, autoDrive, loading, startIndex, charCount, cooldownSeconds, inputMode]);
+  }, [translated, autoDrive, loading, startIndex, charCount, cooldownSeconds, inputMode, novelText]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -402,16 +433,18 @@ PREVIOUS CONTEXT (For continuity):
                 if (sessionStartRef.current === 0) sessionStartRef.current = now;
 
                 sessionProcessedRef.current += incrementAmount;
-                const elapsedTime = now - sessionStartRef.current;
                 
-                const isDataLimit = sessionProcessedRef.current >= 50000;
-                const isTimeLimit = elapsedTime >= 120000;
-
-                if (isDataLimit || isTimeLimit) {
-                    setCooldownSeconds(300);
+                // Check if translation is complete (all content translated)
+                const nextChunkStart = indexToUse + incrementAmount;
+                const isComplete = isChunkTextMode && nextChunkStart >= charCount;
+                
+                if (isComplete) {
+                    // COMPLETE STOP - Don't continue, don't set cooldown
+                    setAutoDrive(false);
                     setIsAutoDriving(false);
                     sessionStartRef.current = 0;
                     sessionProcessedRef.current = 0;
+                    setTimeout(() => alert("✅ ဘာသာပြန်ခြင်း ပြီးဆုံးပါပြီ! (Translation Complete!)"), 100);
                 } else {
                     setAutoIteration(prev => prev + 1);
                 }
@@ -708,7 +741,7 @@ PREVIOUS CONTEXT (For continuity):
            <div className="flex justify-between items-center px-4 gold-glass p-2 rounded-xl flex-wrap gap-2">
               <h3 className="text-[9px] font-black text-amber-400 uppercase tracking-widest flex items-center gap-2 mr-auto">
                   <div className="w-1.5 h-1.5 bg-amber-500 rounded-full shadow-[0_0_5px_#f59e0b]"></div>
-                  TOTAL- {startIndex.toLocaleString()} CHARS
+                  TRANSLATED: {(startIndex + CHUNK_SIZE > charCount ? charCount : startIndex + CHUNK_SIZE).toLocaleString()} / {charCount.toLocaleString()} CHARS
               </h3>
               <div className="flex gap-2">
                 <button 
