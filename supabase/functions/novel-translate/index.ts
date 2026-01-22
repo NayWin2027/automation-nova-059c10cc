@@ -73,6 +73,21 @@ CRITICAL RULES:
       if (!geminiResponse.ok) {
         const errorText = await geminiResponse.text();
         console.error('[Novel Translate] Gemini API error:', errorText);
+        
+        // Handle 429 rate limit specifically
+        if (geminiResponse.status === 429) {
+          const errorData = JSON.parse(errorText);
+          const retryDelay = errorData?.error?.details?.find((d: any) => d['@type']?.includes('RetryInfo'))?.retryDelay || '60s';
+          return new Response(
+            JSON.stringify({ 
+              error: `API Quota ပြည့်သွားပါပြီ။ ${retryDelay} စောင့်ပြီး ပြန်ကြိုးစားပါ သို့မဟုတ် App API mode သို့ပြောင်းပါ။`,
+              errorCode: 'QUOTA_EXCEEDED',
+              retryAfter: retryDelay
+            }),
+            { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
         throw new Error(`Gemini API error: ${geminiResponse.status}`);
       }
 
