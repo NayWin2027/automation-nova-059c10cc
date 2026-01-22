@@ -125,12 +125,30 @@ const NovelTransPage: React.FC = () => {
   const isTranslationComplete = () => {
     const hasTextSource = novelText.trim().length > 0;
     const isChunkTextMode = inputMode === 'PASTE' || (inputMode === 'UPLOAD' && hasTextSource);
-    
-    if (isChunkTextMode && charCount > 0) {
-      // For text mode: complete when startIndex + CHUNK_SIZE >= charCount
-      return (startIndex + CHUNK_SIZE) >= charCount;
-    }
-    return false;
+
+    if (!isChunkTextMode) return false;
+    const total = novelText.length;
+    if (total <= 0) return false;
+
+    // Determine completion from stored chunk progress (not from startIndex).
+    // This prevents "complete" showing before the first run and avoids running past EOF.
+    const progressKey = inputMode === 'UPLOAD'
+      ? (file ? makeFileKey(file) : 'UPLOAD_NO_FILE')
+      : 'PastedText';
+
+    const p = progressData[progressKey];
+    const history = p?.chunkHistory || {};
+    const lens = p?.chunkLengths || {};
+    const keys = Object.keys(history).map(Number).sort((a, b) => a - b);
+    if (keys.length === 0) return false;
+
+    const furthestEnd = keys.reduce((maxEnd, k) => {
+      const inferredLen = Math.max(0, Math.min(CHUNK_SIZE, total - k));
+      const len = typeof lens[k] === 'number' ? lens[k]! : inferredLen;
+      return Math.max(maxEnd, k + len);
+    }, 0);
+
+    return furthestEnd >= total;
   };
 
   // Auto-Drive Loop Effect
@@ -402,6 +420,19 @@ PREVIOUS CONTEXT (For continuity):
           ? novelText.substring(indexToUse, indexToUse + CHUNK_SIZE)
           : '';
 
+        // Hard guard: never call the model when there's no remaining source text.
+        // This prevents "fiction" hallucinations after reaching end-of-file.
+        const totalSourceChars = isChunkTextMode ? novelText.length : 0;
+        if (isChunkTextMode && totalSourceChars > 0 && (!sourceChunk || sourceChunk.trim().length === 0)) {
+          setAutoDrive(false);
+          setIsAutoDriving(false);
+          sessionStartRef.current = 0;
+          sessionProcessedRef.current = 0;
+          setStartIndex(totalSourceChars);
+          setTimeout(() => alert("✅ ဘာသာပြန်ခြင်း ပြီးဆုံးပါပြီ! (Translation Complete!)"), 50);
+          return;
+        }
+
         const result = await translateText(
             instruction + (isChunkTextMode ? `\n\nCONTENT TO TRANSLATE:\n${sourceChunk}` : ""), 
             targetLang, 
@@ -414,7 +445,8 @@ PREVIOUS CONTEXT (For continuity):
             
             let incrementAmount = CHUNK_SIZE;
             if (isChunkTextMode) {
-                incrementAmount = Math.min(CHUNK_SIZE, charCount - indexToUse);
+                const total = novelText.length;
+                incrementAmount = Math.max(0, Math.min(CHUNK_SIZE, total - indexToUse));
             } else {
                 if (result.length < 4000) {
                     incrementAmount = Math.max(Math.ceil(result.length * 1.5), 500); 
@@ -436,7 +468,9 @@ PREVIOUS CONTEXT (For continuity):
             localStorage.setItem('master_novel_progress_v3', JSON.stringify(updatedProgressData));
             
             setStartIndex(indexToUse);
-            setCharCount(prev => Math.max(prev, indexToUse + incrementAmount));
+             // IMPORTANT: In text-chunk mode, charCount must remain the true source total.
+             // Only advance the counter for legacy file-mode estimation.
+             if (!isChunkTextMode) setCharCount(prev => Math.max(prev, indexToUse + incrementAmount));
             
             if (autoDrive) {
                 const now = Date.now();
@@ -446,7 +480,7 @@ PREVIOUS CONTEXT (For continuity):
                 
                 // Check if translation is complete (all content translated)
                 const nextChunkStart = indexToUse + incrementAmount;
-                const isComplete = isChunkTextMode && nextChunkStart >= charCount;
+                const isComplete = isChunkTextMode && nextChunkStart >= novelText.length;
                 
                 if (isComplete) {
                     // COMPLETE STOP - Don't continue, don't set cooldown
@@ -495,7 +529,7 @@ PREVIOUS CONTEXT (For continuity):
   // Accurate progress counters (avoid showing 50,000 when file is smaller, and keep counts exact)
   const countHasTextSource = novelText.trim().length > 0;
   const countIsChunkTextMode = inputMode === 'PASTE' || (inputMode === 'UPLOAD' && countHasTextSource);
-  const countTotalChars = countIsChunkTextMode ? charCount : 0;
+  const countTotalChars = countIsChunkTextMode ? novelText.length : 0;
   const countTranslatedChars = (() => {
     if (!countIsChunkTextMode || countTotalChars <= 0) return 0;
     if (historyKeys.length === 0) return 0;
