@@ -1,14 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { generateStory } from '@/services/geminiService';
+import { generateStory, generateThumbnail } from '@/services/geminiService';
 import { BottomNav } from '@/components/BottomNav';
-
-interface Character {
-  id: string;
-  name: string;
-  type: 'Protagonist' | 'Antagonist' | 'Supporting' | 'Extra';
-}
 
 const LANGUAGES = [
   "BURMESE", "ENGLISH", "JAPANESE", "KOREAN", "CHINESE (SIMPLIFIED)", 
@@ -27,230 +21,103 @@ const LANGUAGES = [
   "TAJIK", "UKRAINIAN", "UZBEK", "ZULU", "XHOSA", "YORUBA", "IGBO"
 ];
 
-const GENRES = [
-  'HORROR', 'LOVE', 'MORAL STORY', 'DETECTIVE (CRIME)', 'MYSTERY', 'FANTASY',
-  'SCI-FI', 'DRAMA', 'COMEDY', 'SATIRE', 'ADVENTURE', 'ACTION',
-  'HISTORICAL FICTION', 'PSYCHOLOGICAL THRILLER', 'MYTHOLOGY', 'FOLKLORE',
-  'SLICE OF LIFE', 'DYSTOPIAN', 'EROTIC ROMANCE'
+const CATEGORIES = [
+  "EDUCATION", "TECHNOLOGY", "HISTORY", "HEALTH", "BUSINESS", "STARTUP", 
+  "FINANCE", "MOTIVATION", "LIFESTYLE", "TRAVEL", "FOOD", "MOVIES", 
+  "MUSIC", "SPORTS", "RELATIONSHIP", "NEWS", "CAREER", "MARKETING", 
+  "GAMING", "AI", "STORYTELLING", "PHILOSOPHY", "GENERAL KNOWLEDGE"
 ];
 
-const ENDING_STYLES = [
-  "HAPPY ENDING", "SAD ENDING", "CLIFFHANGER", "PLOT TWIST", "MORAL LESSON", "AMBIGUOUS", "TRAGIC"
-];
-
-const POVS = [
-  'First Person (I - ကိုယ်တိုင်ပြော)', 
-  'Third Person Limited (ဇာတ်လိုက်စိတ်ကိုပဲသိသူ)', 
-  'Third Person Omniscient (ဘုရားအမြင်/အကုန်သိ)'
-];
-
-const ATMOSPHERES = ['Dark (21+ Explicit)', 'Suspenseful', 'Cheerful', 'Romantic', 'Mysterious', 'Tense', 'Whimsical', 'Melancholic', 'Erotic/Sensual'];
-
-const PACING = [
-  'Slow (ဇာတ်အေး/အဖွဲ့များ)', 
-  'Balanced (ပုံမှန်)', 
-  'Fast (ဇာတ်မြန်)', 
-  'Rapid (အလွန်မြန်/Action)'
-];
-
-const STORY_PHASES = [
-  { id: 'INTRO', label: 'INTRO / PROLOGUE (နောက်ခံ/နိဒါန်း)' },
-  { id: 'RISING', label: 'NORMAL CHAPTER (ဇာတ်လမ်းဆင်)' },
-  { id: 'CLIMAX', label: 'CLIMAX (ဇာတ်ရှိန်အမြင့်ဆုံး)' },
-  { id: 'FALLING', label: 'FALLING ACTION (ဖြေရှင်းခန်း)' },
-  { id: 'ENDING', label: 'ENDING (နိဂုံး)' }
-];
-
-const PLOT_FOCUS = [
-  { id: 'ATMOSPHERE', label: 'ATMOSPHERE' },
-  { id: 'ACTION', label: 'ACTION' },
-  { id: 'TWIST', label: 'PLOT TWIST' },
-  { id: 'MYSTERY', label: 'MYSTERY' },
-  { id: 'EMOTIONAL', label: 'EMOTIONAL' },
-  { id: 'DIALOGUE', label: 'DIALOGUE' },
-  { id: 'PASSION', label: 'PASSION/ROMANCE' }
-];
+const FINE_TUNE_GROUPS = {
+  "GROUP A: နောက်ခံ": [
+    { label: "အသုံးပြုပုံ", value: "USAGE" },
+    { label: "သမိုင်း", value: "HISTORY" },
+    { label: "ခေတ်ကာလ", value: "ERA" }
+  ],
+  "GROUP B: အဓိက": [
+    { label: "နမူနာများ", value: "EXAMPLES" },
+    { label: "ပြဿနာ", value: "PROBLEM" },
+    { label: "ပုဂ္ဂိုလ်များ", value: "FIGURES" },
+    { label: "အငြင်းပွားဖွယ်", value: "CONTROVERSIAL" }
+  ],
+  "GROUP C: အကြံပြုချက်": [
+    { label: "အမှားများ", value: "MISTAKES" },
+    { label: "အောင်မြင်မှု", value: "SUCCESS" },
+    { label: "မှတ်တိုင်များ", value: "MILESTONES" },
+    { label: "ပရိသတ်", value: "AUDIENCE" }
+  ],
+  "GROUP D: နိဂုံး": [
+    { label: "သင်ခန်းစာ", value: "LESSON" },
+    { label: "လက်တွေ့", value: "PRACTICAL" },
+    { label: "အနာဂတ်", value: "FUTURE" },
+    { label: "မှတ်သားဖွယ်", value: "TAKEAWAYS" }
+  ]
+};
 
 const CreatorPage: React.FC = () => {
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<"home" | "premium" | "settings">("home");
   const [apiType, setApiType] = useState<'app' | 'own'>('app');
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('master_story_api_key') || '');
-  const [title, setTitle] = useState('');
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('master_creator_api_key') || '');
   const [language, setLanguage] = useState('BURMESE');
-  const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
-  const [authorStyle, setAuthorStyle] = useState<'master' | 'custom' | 'modern'>('master');
-  const [customAuthor, setCustomAuthor] = useState('');
-  const [targetCharCount, setTargetCharCount] = useState(3);
-  const [characters, setCharacters] = useState<Character[]>([]);
+  const [category, setCategory] = useState('EDUCATION');
+  const [topic, setTopic] = useState('');
+  const [contentType, setContentType] = useState<'TEXT' | 'VIDEO SCRIPT'>('VIDEO SCRIPT');
+  const [voice, setVoice] = useState<'MALE' | 'FEMALE'>('MALE');
+  const [withImage, setWithImage] = useState(false);
+  const [seoViral, setSeoViral] = useState(true);
+  const [flowControl, setFlowControl] = useState<'Punchy' | 'Detailed'>('Punchy');
+  const [selectedChips, setSelectedChips] = useState<string[]>([]);
   
-  // Advanced Settings
-  const [creativity, setCreativity] = useState(90);
-  const [endingStyle, setEndingStyle] = useState('HAPPY ENDING');
-  const [pov, setPov] = useState(POVS[1]);
-  const [atmosphere, setAtmosphere] = useState('Suspenseful');
-  const [pace, setPace] = useState(PACING[1]);
-  
-  // Phase & Focus
-  const [storyPhase, setStoryPhase] = useState('INTRO');
-  const [selectedFocus, setSelectedFocus] = useState<string[]>(['ATMOSPHERE']);
-
-  // Story Management
-  const [storySegments, setStorySegments] = useState<string[]>([]);
-  const [currentSegmentIndex, setCurrentSegmentIndex] = useState(-1);
+  const [result, setResult] = useState('');
+  const [generatedImg, setGeneratedImg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    localStorage.setItem('master_story_api_key', apiKey);
+    localStorage.setItem('master_creator_api_key', apiKey);
   }, [apiKey]);
 
-  const toggleGenre = (genre: string) => {
-    if (selectedGenres.includes(genre)) {
-      setSelectedGenres(selectedGenres.filter(g => g !== genre));
-    } else if (selectedGenres.length < 3) {
-      setSelectedGenres([...selectedGenres, genre]);
-    }
-  };
-
-  const toggleFocus = (focusId: string) => {
-    if (selectedFocus.includes(focusId)) {
-      setSelectedFocus(prev => prev.filter(f => f !== focusId));
-    } else {
-      setSelectedFocus(prev => [...prev, focusId]);
-    }
-  };
-
-  const addCharacter = (type: 'Protagonist' | 'Antagonist' | 'Supporting' | 'Extra') => {
-    const newChar: Character = {
-      id: Math.random().toString(36).substr(2, 9),
-      name: '',
-      type
-    };
-    setCharacters([...characters, newChar]);
-  };
-
-  const removeCharacter = (id: string) => {
-    setCharacters(characters.filter(c => c.id !== id));
-  };
-
-  const handleRandomize = () => {
-    const randomGenre = GENRES[Math.floor(Math.random() * GENRES.length)];
-    const randomAtmosphere = ATMOSPHERES[Math.floor(Math.random() * ATMOSPHERES.length)];
-    const randomPace = PACING[Math.floor(Math.random() * PACING.length)];
-    const randomEnding = ENDING_STYLES[Math.floor(Math.random() * ENDING_STYLES.length)];
-    
-    setSelectedGenres([randomGenre]);
-    setAtmosphere(randomAtmosphere);
-    setPace(randomPace);
-    setEndingStyle(randomEnding);
-    setCreativity(Math.floor(Math.random() * 20) + 80); 
+  const toggleChip = (val: string) => {
+    setSelectedChips(prev => prev.includes(val) ? prev.filter(c => c !== val) : [...prev, val]);
   };
 
   const handleGenerate = async () => {
-    if (!title) return alert("Novel Title ထည့်သွင်းပေးပါ။");
-    if (apiType === 'own' && !apiKey) return alert("API Key ထည့်ပေးပါ။");
-    
+    if (!topic) return;
     setLoading(true);
-    
-    const previousContext = storySegments.length > 0 
-      ? storySegments[storySegments.length - 1].slice(-3500) 
-      : "Start of the story. No events yet.";
-
-    // Logic for Modern Burmese
-    const styleInstruction = authorStyle === 'modern' 
-      ? "STRICT RULE: Write in MODERN SPOKEN BURMESE (စကားပြောဟန်). Do NOT use literary particles like 'သည်', '၏', '၍'. Use natural conversation markers. Tone should be realistic, like a Netflix series script." 
-      : `Write in the style of ${authorStyle === 'custom' ? customAuthor : 'a World-Class Literary Master'}. Use rich metaphors and poetic descriptions.`;
-
-    // Logic for Dark/Mature
-    const isMature = atmosphere.includes('Dark') || atmosphere.includes('Erotic') || selectedGenres.includes('EROTIC ROMANCE');
-    
-    const atmosphereInstruction = isMature
-      ? `Atmosphere: ${atmosphere}. 
-         MODE: 21+ ADULT PREMIUM NOVEL (အပြာဝတ္ထု).
-         STRICT INSTRUCTIONS:
-         1. Write with UNFILTERED, VIVID, and EXPLICIT detail (ကွင်းကွင်းကွက်ကွက်).
-         2. Focus heavily on raw physical sensations, lust, anatomy, and intimate interactions.
-         3. Do not hold back. Write like a best-selling Erotic Thriller or R-Rated Movie script.
-         4. Be bold and descriptive about the body and the act. Use sensory words (smell, touch, sweat, breath).` 
-      : `Atmosphere: ${atmosphere}.`;
-
-    // Organize Cast
-    const protagonists = characters.filter(c => c.type === 'Protagonist').map(c => c.name).join(', ');
-    const antagonists = characters.filter(c => c.type === 'Antagonist').map(c => c.name).join(', ');
-    const supporting = characters.filter(c => c.type === 'Supporting').map(c => c.name).join(', ');
-    const extras = characters.filter(c => c.type === 'Extra').map(c => c.name).join(', ');
-
-    const prompt = `
-      CONTEXT: The story so far: "${previousContext}"
-      
-      TASK: Write the NEXT PART (${storyPhase}) of this premium novel.
-      
-      METADATA:
-      - Title: ${title}
-      - Language: ${language} (Must be high quality)
-      - Genres: ${selectedGenres.join(', ')}
-      - Style: ${styleInstruction}
-      - POV: ${pov}
-      - Pace: ${pace}
-      - ${atmosphereInstruction}
-      
-      CAST & DYNAMICS:
-      - PROTAGONISTS (Main Focus): ${protagonists}
-      - ANTAGONISTS (Conflict): ${antagonists}
-      - SUPPORTING (Sub-plots/Aid): ${supporting} (Weave them in naturally to support the main plot)
-      - EXTRAS (Background): ${extras} (Use these to create a realistic, living world. e.g., Villagers gossiping, students laughing, workers shouting. Make the environment feel populated and real.)
-      
-      FOCUS ELEMENTS: ${selectedFocus.join(', ')}.
-      
-      PREMIUM WRITING GUIDELINES:
-      1. **Show, Don't Tell**: Don't say "he was angry". Describe his trembling hands and flushed face.
-      2. **Sensory Details**: Include smells, sounds, temperature, and textures.
-      3. **Realistic Interaction**: Characters must interact logically with each other and the "Extras". The world must not revolve solely around the protagonist; it should feel like a real place.
-      4. **Length & Depth**: Write a comprehensive, detailed chapter.
-      
-      INSTRUCTIONS:
-      - If phase is INTRO: Establish the setting, weather, and world history before diving into dialogue.
-      - If phase is CLIMAX: High stakes, fast pacing, emotional peak.
-      - Output strictly in ${language}.
-    `;
-
+    setResult('');
+    setGeneratedImg(null);
     try {
-      const result = await generateStory(prompt, apiType === 'own' ? apiKey : undefined);
-      if (result) {
-        setStorySegments(prev => [...prev, result]);
-        setCurrentSegmentIndex(prev => prev + 1); 
+      const prompt = `
+        Task: Create a high-quality ${contentType} in ${language} language.
+        Category: ${category}
+        Main Topic: ${topic}
+        Fine-tune Directives: ${selectedChips.join(', ')}
+        Narrative Flow Style: ${flowControl === 'Punchy' ? 'Extremely direct, viral hooks, minimal fluff' : 'Detailed, explanatory, thorough coverage'}
+        Creator Voice Perspective: ${voice}
+        ${seoViral ? "Include Viral SEO optimization, trending keywords, and engaging hashtags." : ""}
         
-        if (storyPhase === 'INTRO') setStoryPhase('RISING');
+        STRICT RULES:
+        1. If language is BURMESE, use natural spoken/conversational style (စကားပြောဟန်).
+        2. Format: ${contentType === 'VIDEO SCRIPT' ? 'Scene-by-scene script with visual cues' : 'Structured blog post with headings'}.
+        3. No meta-talk. Only output the final content result.
+      `;
+      
+      const response = await generateStory(prompt, apiType === 'own' ? apiKey : undefined);
+      setResult(response || '');
+
+      if (withImage) {
+        const imagePrompt = `A professional cinematic ${category} thumbnail for: ${topic}. Style: Vivid, Neon, High-contrast, Visual masterpiece. No text overlay.`;
+        const imgResult = await generateThumbnail(imagePrompt, apiType === 'own' ? apiKey : undefined);
+        if (imgResult) {
+          setGeneratedImg(imgResult);
+        }
       }
-      setTimeout(() => document.getElementById('story-result')?.scrollIntoView({ behavior: 'smooth' }), 100);
+
     } catch (e) {
-      alert("Error occurred. Please check API Key.");
+      console.error(e);
+      alert("Generation failed. Please try again.");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const downloadTxt = () => {
-    const fullStory = storySegments.join("\n\n*** NEXT CHAPTER ***\n\n");
-    const blob = new Blob(['\uFEFF' + fullStory], { type: 'text/plain;charset=utf-8' });
-    const element = document.createElement("a");
-    element.href = URL.createObjectURL(blob);
-    element.download = `${title.replace(/\s+/g, '_')}_Masterpiece.txt`;
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
-  };
-
-  const currentText = currentSegmentIndex >= 0 && storySegments[currentSegmentIndex] 
-    ? storySegments[currentSegmentIndex] 
-    : "";
-
-  const getCharColor = (type: string) => {
-    switch(type) {
-      case 'Protagonist': return 'bg-blue-600 text-white';
-      case 'Antagonist': return 'bg-rose-600 text-white';
-      case 'Supporting': return 'bg-amber-600 text-white';
-      case 'Extra': return 'bg-slate-600 text-slate-200';
-      default: return 'bg-slate-700';
     }
   };
 
@@ -264,290 +131,245 @@ const CreatorPage: React.FC = () => {
         >
           <ArrowLeft className="w-4 h-4 text-foreground" />
         </button>
-        <h1 className="text-sm font-bold tracking-wider text-foreground">MASTER NOVELIST</h1>
+        <h1 className="text-sm font-bold tracking-wider text-foreground">CREATOR</h1>
       </header>
 
-      <main className="px-4 space-y-5 animate-in fade-in duration-500 max-w-2xl mx-auto">
-        
-        {/* 1. API Switcher */}
-        <div className="flex bg-secondary/60 backdrop-blur-3xl p-1 rounded-2xl border border-border/50 shadow-xl">
+      <main className="px-4 space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-700">
+        {/* API Switcher */}
+        <div className="flex bg-secondary/90 backdrop-blur-xl p-1 rounded-xl border border-border/50 shadow-2xl max-w-[260px] mx-auto">
           <button 
             onClick={() => setApiType('app')} 
-            className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${apiType === 'app' ? 'jewel-sapphire text-white shadow-lg' : 'text-muted-foreground'}`}
+            className={`flex-1 py-2 rounded-lg font-black text-[8px] uppercase tracking-widest transition-all ${apiType === 'app' ? 'jewel-sapphire text-white shadow-lg' : 'text-muted-foreground'}`}
           >
-            APP SHARED API 🔒
+            APP API 🔒
           </button>
           <button 
             onClick={() => setApiType('own')} 
-            className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all ${apiType === 'own' ? 'jewel-sapphire text-white shadow-lg' : 'text-muted-foreground'}`}
+            className={`flex-1 py-2 rounded-lg font-black text-[8px] uppercase tracking-widest transition-all ${apiType === 'own' ? 'jewel-diamond text-blue-950' : 'text-muted-foreground'}`}
           >
-            YOUR OWN API
+            OWN API
           </button>
         </div>
 
         {apiType === 'own' && (
-          <div className="bg-card rounded-[24px] p-4 border border-primary/20 space-y-2 shadow-inner animate-in zoom-in-95">
+          <div className="bg-secondary/40 rounded-xl p-2 border border-border/50 space-y-1 max-w-sm mx-auto animate-in zoom-in-95 duration-300">
+            <h4 className="text-[6px] font-black text-muted-foreground uppercase tracking-widest ml-1">GEMINI API KEY</h4>
             <input 
               type="password" 
               value={apiKey} 
               onChange={(e) => setApiKey(e.target.value)} 
-              placeholder="Paste your private key here..." 
-              className="w-full bg-background/40 border border-primary/20 rounded-xl p-3 text-xs font-bold text-foreground outline-none focus:ring-1 focus:ring-primary" 
+              placeholder="Paste Private Key..." 
+              className="w-full bg-background/60 border border-border/50 rounded-lg p-2 text-[10px] font-bold text-foreground outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/50" 
             />
           </div>
         )}
 
-        {/* 3. Main Master Novelist Card */}
-        <div className="bg-card rounded-[36px] p-6 md:p-8 space-y-8 border border-border/50 shadow-[0_0_80px_rgba(0,0,0,0.8)] relative overflow-hidden">
-          
-          <div className="text-center space-y-1 relative z-10">
-            <h2 className="text-2xl font-black uppercase tracking-tighter text-foreground drop-shadow-lg">MASTER NOVELIST</h2>
-            <p className="text-[9px] font-black text-primary uppercase tracking-[0.4em] opacity-80">PREMIUM STORY ENGINE</p>
+        <div className="bg-card rounded-[32px] p-5 space-y-5 border border-border/50 shadow-xl relative overflow-hidden">
+          {/* Header Section */}
+          <div className="flex justify-between items-center px-1">
+            <div className="space-y-0.5">
+              <h2 className="text-xl font-black tracking-tighter text-foreground">CREATOR <span className="text-primary">MASTER</span></h2>
+              <p className="text-[8px] font-black text-muted-foreground uppercase tracking-[0.3em]">AI CONTENT FACTORY</p>
+            </div>
+            <div className="w-10 h-10 rounded-xl jewel-gold flex items-center justify-center shadow-xl shadow-amber-900/40">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </div>
           </div>
 
-          {/* Novel Title */}
-          <div className="space-y-2">
-            <label className="text-[9px] font-black text-primary uppercase tracking-widest ml-1 drop-shadow-sm">NOVEL TITLE</label>
-            <input 
-              type="text" 
-              value={title} 
-              onChange={e => setTitle(e.target.value)} 
-              placeholder="The Eternal Saga..." 
-              className="w-full bg-background/40 border border-border/50 focus:border-primary/50 rounded-[20px] p-4 text-sm font-bold text-foreground outline-none transition-all placeholder:text-muted-foreground shadow-inner" 
-            />
-          </div>
-
-          {/* Language */}
-          <div className="space-y-2">
-            <label className="text-[9px] font-black text-primary uppercase tracking-widest ml-1 drop-shadow-sm">WRITING LANGUAGE</label>
-            <div className="relative">
+          {/* Basic Config */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <label className="text-[7px] font-black text-muted-foreground uppercase tracking-widest ml-1">LANGUAGE</label>
               <select 
                 value={language} 
                 onChange={e => setLanguage(e.target.value)} 
-                className="w-full bg-background/40 border border-border/50 rounded-[20px] p-4 text-[10px] font-black text-foreground uppercase outline-none focus:ring-1 focus:ring-primary appearance-none cursor-pointer shadow-inner"
+                className="w-full bg-secondary/60 border border-border/50 rounded-xl p-3 text-[10px] font-black text-foreground outline-none focus:ring-1 focus:ring-primary uppercase cursor-pointer"
               >
-                {LANGUAGES.map(l => <option key={l} value={l} className="bg-background">{l}</option>)}
+                {LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
               </select>
-              <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground">▼</div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[7px] font-black text-muted-foreground uppercase tracking-widest ml-1">CATEGORY</label>
+              <select 
+                value={category} 
+                onChange={e => setCategory(e.target.value)} 
+                className="w-full bg-secondary/60 border border-border/50 rounded-xl p-3 text-[10px] font-black text-foreground outline-none focus:ring-1 focus:ring-primary uppercase cursor-pointer"
+              >
+                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
             </div>
           </div>
 
-          {/* Genres */}
-          <div className="space-y-3">
+          {/* Topic Input */}
+          <div className="space-y-1.5">
             <div className="flex justify-between items-center px-1">
-              <label className="text-[9px] font-black text-primary uppercase tracking-widest drop-shadow-sm">STORY GENRES</label>
-              <button onClick={handleRandomize} className="text-[12px] hover:scale-110 transition-transform text-primary" title="Random Inspiration Dice">🎲</button>
+              <label className="text-[7px] font-black text-muted-foreground uppercase tracking-widest">TOPIC DESCRIPTION</label>
+              <span className="text-[7px] font-black text-primary/50">{topic.length}/2500</span>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {GENRES.map(genre => (
-                <button 
-                  key={genre} 
-                  onClick={() => toggleGenre(genre)} 
-                  className={`px-4 py-2 rounded-xl text-[8px] font-black transition-all border ${selectedGenres.includes(genre) ? 'jewel-sapphire border-transparent text-white shadow-lg' : 'bg-background/40 border-border/50 text-muted-foreground hover:text-foreground'}`}
-                >
-                  {genre}
-                </button>
-              ))}
-            </div>
+            <textarea 
+              value={topic}
+              onChange={e => setTopic(e.target.value)}
+              placeholder="Ex: Why reading books daily is important for your future success..."
+              className="w-full h-28 bg-secondary/40 border border-border/50 rounded-[24px] p-4 text-[12px] font-medium text-foreground outline-none focus:ring-1 focus:ring-primary transition-all placeholder:text-muted-foreground/50 resize-none shadow-inner"
+            />
           </div>
 
-          {/* Author Style */}
-          <div className="space-y-3">
-            <label className="text-[9px] font-black text-primary uppercase tracking-widest ml-1 drop-shadow-sm">WRITING STYLE</label>
-            <div className="grid grid-cols-2 gap-2">
-              <button 
-                onClick={() => setAuthorStyle('master')} 
-                className={`py-4 rounded-[20px] font-black text-[8px] uppercase border transition-all ${authorStyle === 'master' ? 'jewel-sapphire text-white border-transparent shadow-lg' : 'bg-background/40 text-muted-foreground border-border/50'}`}
-              >
-                MASTER STORYTELLER
-              </button>
-              <button 
-                onClick={() => setAuthorStyle('modern')} 
-                className={`py-4 rounded-[20px] font-black text-[8px] uppercase border transition-all ${authorStyle === 'modern' ? 'jewel-emerald text-white border-transparent shadow-lg' : 'bg-background/40 text-muted-foreground border-border/50'}`}
-              >
-                MODERN (စကားပြော)
-              </button>
-            </div>
-          </div>
-
-          {/* Character Cast */}
-          <div className="bg-muted/30 rounded-[32px] p-6 space-y-4 border border-border/50 shadow-inner">
-            <div className="flex justify-between items-center">
-              <h4 className="text-[10px] font-black text-primary uppercase tracking-widest">CHARACTER CAST & EXTRAS</h4>
-              <div className="flex items-center gap-2">
-                <span className="text-[7px] font-black text-muted-foreground uppercase">TOTAL:</span>
-                <input 
-                  type="number" 
-                  value={targetCharCount} 
-                  onChange={e => setTargetCharCount(parseInt(e.target.value) || 0)} 
-                  className="w-10 h-8 bg-background/60 border border-border/50 rounded-lg text-center text-[10px] font-black text-primary outline-none" 
-                />
-              </div>
+          {/* Fine-Tune Section */}
+          <div className="space-y-4 bg-muted/30 p-4 rounded-[24px] border border-border/50 shadow-inner">
+            <div className="space-y-0.5">
+              <h3 className="text-[9px] font-black text-primary uppercase tracking-[0.2em] flex items-center gap-2">
+                <div className="w-1.5 h-3 bg-primary rounded-full"></div> FINE-TUNE
+              </h3>
             </div>
             
-            <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => addCharacter('Protagonist')} className="py-2.5 rounded-xl bg-blue-600/10 border border-blue-500/20 text-[8px] font-black text-blue-300 uppercase hover:bg-blue-600/20 transition-all">+ PROTAGONIST (ဇာတ်လိုက်)</button>
-              <button onClick={() => addCharacter('Antagonist')} className="py-2.5 rounded-xl bg-rose-600/10 border border-rose-500/20 text-[8px] font-black text-rose-300 uppercase hover:bg-rose-600/20 transition-all">+ ANTAGONIST (ဗီလိန်)</button>
-              <button onClick={() => addCharacter('Supporting')} className="py-2.5 rounded-xl bg-amber-600/10 border border-amber-500/20 text-[8px] font-black text-amber-300 uppercase hover:bg-amber-600/20 transition-all">+ SUPPORTING (ဇာတ်ပို့)</button>
-              <button onClick={() => addCharacter('Extra')} className="py-2.5 rounded-xl bg-slate-600/10 border border-slate-500/20 text-[8px] font-black text-slate-300 uppercase hover:bg-slate-600/20 transition-all">+ EXTRA (ဖြတ်လျှောက်)</button>
-            </div>
-
-            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-              {characters.map(char => (
-                <div key={char.id} className="flex items-center gap-2 bg-background/40 p-3 rounded-xl border border-border/50 animate-in slide-in-from-left-2">
-                  <span className={`px-2 py-1 rounded-lg text-[6px] font-black uppercase shadow-md tracking-wider w-20 text-center ${getCharColor(char.type)}`}>{char.type}</span>
-                  <input 
-                    type="text" 
-                    value={char.name} 
-                    onChange={(e) => setCharacters(characters.map(c => c.id === char.id ? {...c, name: e.target.value} : c))} 
-                    placeholder={char.type === 'Extra' ? "Group Name (e.g. Villagers)" : "Character Name..."} 
-                    className="flex-1 bg-transparent border-none focus:ring-0 text-[10px] font-bold text-foreground placeholder:text-muted-foreground" 
-                  />
-                  <button onClick={() => removeCharacter(char.id)} className="w-6 h-6 rounded-full hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors text-sm">×</button>
+            <div className="space-y-3">
+              {Object.entries(FINE_TUNE_GROUPS).map(([group, chips]) => (
+                <div key={group} className="space-y-1.5">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <div className="w-1.5 h-[1px] bg-border"></div>
+                    <p className="text-[6px] font-black text-muted-foreground uppercase tracking-widest">{group}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {chips.map(chip => (
+                      <button
+                        key={chip.value}
+                        onClick={() => toggleChip(chip.value)}
+                        className={`px-2.5 py-1.5 rounded-lg text-[6px] font-black uppercase tracking-tighter transition-all border shrink-0 ${selectedChips.includes(chip.value) ? 'jewel-sapphire text-white border-transparent shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'bg-secondary/40 border-border/50 text-muted-foreground hover:text-foreground'}`}
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               ))}
-              {characters.length === 0 && <p className="text-center text-[8px] text-muted-foreground font-bold py-2">NO CHARACTERS ADDED</p>}
             </div>
           </div>
 
-          {/* Advanced Controls */}
-          <div className="space-y-4 pt-2 bg-muted/20 p-4 rounded-[24px] border border-border/50">
-            <h3 className="text-[10px] font-black text-amber-400 uppercase tracking-widest text-center border-b border-border/50 pb-2 mb-2">PREMIUM CONTROLS</h3>
-            
-            <div className="space-y-2">
-              <label className="text-[9px] font-black text-primary uppercase tracking-widest ml-1">CREATIVITY ({creativity}%)</label>
-              <input 
-                type="range" 
-                min="0" 
-                max="100" 
-                value={creativity} 
-                onChange={e => setCreativity(parseInt(e.target.value))} 
-                className="w-full h-2 bg-background/40 rounded-lg appearance-none cursor-pointer accent-primary" 
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-[7px] font-black text-muted-foreground uppercase tracking-widest ml-1">ENDING STYLE</label>
-                <select value={endingStyle} onChange={e => setEndingStyle(e.target.value)} className="w-full bg-background/40 border border-border/50 rounded-xl p-3 text-[9px] font-bold text-foreground outline-none">
-                  {ENDING_STYLES.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[7px] font-black text-muted-foreground uppercase tracking-widest ml-1">POV (ရှုထောင့်)</label>
-                <select value={pov} onChange={e => setPov(e.target.value)} className="w-full bg-background/40 border border-border/50 rounded-xl p-3 text-[9px] font-bold text-foreground outline-none">
-                  {POVS.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[7px] font-black text-muted-foreground uppercase tracking-widest ml-1">ATMOSPHERE</label>
-                <select value={atmosphere} onChange={e => setAtmosphere(e.target.value)} className="w-full bg-background/40 border border-border/50 rounded-xl p-3 text-[9px] font-bold text-foreground outline-none">
-                  {ATMOSPHERES.map(a => <option key={a} value={a}>{a}</option>)}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[7px] font-black text-muted-foreground uppercase tracking-widest ml-1">STORY PACE (အသွားအလာ)</label>
-                <select value={pace} onChange={e => setPace(e.target.value)} className="w-full bg-background/40 border border-border/50 rounded-xl p-3 text-[9px] font-bold text-foreground outline-none">
-                  {PACING.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
-              </div>
+          {/* Narrative Flow Control */}
+          <div className="space-y-1.5">
+            <label className="text-[7px] font-black text-muted-foreground uppercase tracking-widest ml-1">AI NARRATIVE FLOW</label>
+            <div className="grid grid-cols-2 gap-2 p-1 bg-muted/30 rounded-xl border border-border/50">
+              <button 
+                onClick={() => setFlowControl('Punchy')} 
+                className={`py-2 rounded-lg text-[8px] font-black uppercase transition-all flex flex-col items-center gap-0.5 ${flowControl === 'Punchy' ? 'jewel-ruby text-white shadow-lg' : 'text-muted-foreground'}`}
+              >
+                <span>PUNCHY & VIRAL</span>
+              </button>
+              <button 
+                onClick={() => setFlowControl('Detailed')} 
+                className={`py-2 rounded-lg text-[8px] font-black uppercase transition-all flex flex-col items-center gap-0.5 ${flowControl === 'Detailed' ? 'jewel-sapphire text-white shadow-lg' : 'text-muted-foreground'}`}
+              >
+                <span>DEEP & DETAILED</span>
+              </button>
             </div>
           </div>
 
-          {/* Story Phase & Focus Controls */}
-          <div className="space-y-4 pt-2 bg-muted/20 p-4 rounded-[24px] border border-border/50">
-            <h3 className="text-[10px] font-black text-cyan-400 uppercase tracking-widest text-center border-b border-border/50 pb-2 mb-2">PHASE & FOCUS</h3>
-            
-            {/* Phase Selector */}
-            <div className="space-y-2">
-              <label className="text-[7px] font-black text-muted-foreground uppercase tracking-widest ml-1">CURRENT STORY PHASE</label>
-              <div className="grid grid-cols-1 gap-2">
-                {STORY_PHASES.map(p => (
-                  <button 
-                    key={p.id} 
-                    onClick={() => setStoryPhase(p.id)}
-                    className={`p-3 rounded-xl text-left border transition-all ${storyPhase === p.id ? 'bg-primary/20 border-primary shadow-lg' : 'bg-background/30 border-border/50 text-muted-foreground'}`}
-                  >
-                    <span className={`text-[9px] font-black uppercase ${storyPhase === p.id ? 'text-foreground' : 'text-muted-foreground'}`}>{p.label}</span>
-                  </button>
-                ))}
+          {/* Options Grid */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <label className="text-[7px] font-black text-muted-foreground uppercase tracking-widest ml-1">VOICE TONE</label>
+              <div className="flex p-1 bg-muted/20 rounded-lg border border-border/50">
+                <button 
+                  onClick={() => setVoice('MALE')} 
+                  className={`flex-1 py-1.5 rounded-md text-[8px] font-black uppercase transition-all ${voice === 'MALE' ? 'jewel-sapphire text-white shadow-md' : 'text-muted-foreground'}`}
+                >
+                  MALE
+                </button>
+                <button 
+                  onClick={() => setVoice('FEMALE')} 
+                  className={`flex-1 py-1.5 rounded-md text-[8px] font-black uppercase transition-all ${voice === 'FEMALE' ? 'jewel-sapphire text-white shadow-md' : 'text-muted-foreground'}`}
+                >
+                  FEMALE
+                </button>
               </div>
             </div>
-
-            {/* Plot Focus (Multi-Select) */}
-            <div className="space-y-2">
-              <label className="text-[7px] font-black text-muted-foreground uppercase tracking-widest ml-1">PLOT FOCUS (SELECT MULTIPLE)</label>
-              <div className="flex flex-wrap gap-2">
-                {PLOT_FOCUS.map(f => (
-                  <button 
-                    key={f.id} 
-                    onClick={() => toggleFocus(f.id)}
-                    className={`px-3 py-2 rounded-xl text-[8px] font-black uppercase border transition-all ${selectedFocus.includes(f.id) ? 'jewel-ruby text-white border-rose-500 shadow-lg' : 'bg-background/30 border-border/50 text-muted-foreground'}`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
+            <div className="space-y-1">
+              <label className="text-[7px] font-black text-muted-foreground uppercase tracking-widest ml-1">CONTENT TYPE</label>
+              <div className="flex p-1 bg-muted/20 rounded-lg border border-border/50">
+                <button 
+                  onClick={() => setContentType('TEXT')} 
+                  className={`flex-1 py-1.5 rounded-md text-[8px] font-black uppercase transition-all ${contentType === 'TEXT' ? 'bg-muted text-foreground shadow-md border border-border' : 'text-muted-foreground'}`}
+                >
+                  TEXT
+                </button>
+                <button 
+                  onClick={() => setContentType('VIDEO SCRIPT')} 
+                  className={`flex-1 py-1.5 rounded-md text-[8px] font-black uppercase transition-all ${contentType === 'VIDEO SCRIPT' ? 'jewel-ruby text-white shadow-md' : 'text-muted-foreground'}`}
+                >
+                  SCRIPT
+                </button>
               </div>
             </div>
           </div>
 
-          {/* Generate Button */}
-          <div className="pt-2">
+          <div className="grid grid-cols-2 gap-2 pt-1">
             <button 
-              disabled={loading || !title} 
-              onClick={handleGenerate} 
-              className={`w-full py-5 rounded-[28px] font-black text-xs uppercase tracking-[0.2em] shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-20 ${loading ? 'bg-muted text-muted-foreground' : 'jewel-sapphire text-white'}`}
+              onClick={() => setSeoViral(!seoViral)} 
+              className={`p-3 rounded-2xl border transition-all flex flex-col items-center justify-center gap-1 ${seoViral ? 'bg-amber-400/10 border-amber-400/30 shadow-[inset_0_0_15px_rgba(251,191,36,0.1)]' : 'bg-muted/20 border-border/50'}`}
             >
-              {loading ? 'WRITING MASTERPIECE...' : (storySegments.length > 0 ? 'GENERATE NEXT PART ▶' : 'START NOVEL (INTRO)')}
+              <p className="text-[7px] font-black text-muted-foreground uppercase tracking-widest">VIRAL SEO</p>
+              <p className={`text-[9px] font-black uppercase tracking-tight ${seoViral ? 'text-amber-400' : 'text-muted-foreground/50'}`}>{seoViral ? 'ON' : 'OFF'}</p>
+            </button>
+            <button 
+              onClick={() => setWithImage(!withImage)} 
+              className={`p-3 rounded-2xl border transition-all flex flex-col items-center justify-center gap-1 ${withImage ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-muted/20 border-border/50'}`}
+            >
+              <p className="text-[7px] font-black text-muted-foreground uppercase tracking-widest">IMAGE AI</p>
+              <p className={`text-[9px] font-black uppercase tracking-tight ${withImage ? 'text-emerald-400' : 'text-muted-foreground/50'}`}>{withImage ? 'WITH IMG' : 'TEXT ONLY'}</p>
             </button>
           </div>
 
-          {/* Story Result & Navigation */}
-          {storySegments.length > 0 && (
-            <div id="story-result" className="mt-8 space-y-3 animate-in fade-in zoom-in-95 duration-1000">
-              <div className="flex justify-between items-center px-4">
-                <h3 className="text-[9px] font-black text-primary uppercase tracking-widest flex items-center gap-2">
-                  <div className="w-1.5 h-3 bg-primary rounded-full"></div> CHAPTER {currentSegmentIndex + 1} OF {storySegments.length}
-                </h3>
-                <div className="flex gap-2">
-                  <button onClick={downloadTxt} className="text-[8px] font-black text-emerald-400 hover:text-emerald-300 transition-colors uppercase tracking-widest border border-emerald-500/30 px-2 py-1 rounded">SAVE ALL .TXT</button>
-                  <button onClick={() => navigator.clipboard.writeText(currentText)} className="text-[8px] font-black text-muted-foreground hover:text-foreground transition-colors uppercase tracking-widest border border-border/50 px-2 py-1 rounded">COPY</button>
-                </div>
-              </div>
-              
-              {/* Result Box */}
-              <div className="p-8 bg-card rounded-[40px] border border-primary/10 shadow-[0_0_80px_rgba(0,0,0,1)] relative min-h-[200px]">
-                <p className="text-[14px] leading-[2.2] font-medium text-foreground whitespace-pre-wrap">{currentText}</p>
-              </div>
-              
-              {/* Navigation Controls */}
-              <div className="flex justify-between items-center bg-background/40 p-2 rounded-[24px] border border-border/50">
-                <button 
-                  onClick={() => setCurrentSegmentIndex(prev => Math.max(0, prev - 1))}
-                  disabled={currentSegmentIndex <= 0}
-                  className="px-4 py-3 rounded-xl bg-muted/50 hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed text-[8px] font-black text-foreground uppercase tracking-widest transition-all"
-                >
-                  ◀ PREVIOUS
-                </button>
-                
-                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">
-                  PART {currentSegmentIndex + 1} / {storySegments.length}
-                </span>
+          {/* Action Button */}
+          <div className="pt-2">
+            <button
+              disabled={loading || !topic}
+              onClick={handleGenerate}
+              className="w-full py-4 rounded-[24px] jewel-gold font-black text-[10px] uppercase tracking-[0.3em] shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-20 disabled:grayscale text-amber-950"
+            >
+              {loading ? (
+                <><div className="w-3 h-3 border-2 border-amber-950/20 border-t-amber-950 rounded-full animate-spin"></div> PROCESSING...</>
+              ) : 'GENERATE CONTENT'}
+            </button>
+          </div>
+        </div>
 
+        {/* Result Display */}
+        {(result || generatedImg) && (
+          <div className="animate-in fade-in zoom-in-95 duration-500 space-y-4 max-w-2xl mx-auto">
+            <div className="flex justify-between items-center px-4">
+              <h3 className="text-[9px] font-black text-primary uppercase tracking-widest flex items-center gap-2">
+                <div className="w-1.5 h-3 bg-primary rounded-full"></div> AI OUTPUT
+              </h3>
+              <div className="flex gap-2">
                 <button 
-                  onClick={() => setCurrentSegmentIndex(prev => Math.min(storySegments.length - 1, prev + 1))}
-                  disabled={currentSegmentIndex >= storySegments.length - 1}
-                  className="px-4 py-3 rounded-xl bg-muted/50 hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed text-[8px] font-black text-foreground uppercase tracking-widest transition-all"
+                  onClick={() => navigator.clipboard.writeText(result)} 
+                  className="text-[8px] font-black text-muted-foreground hover:text-foreground transition-colors uppercase tracking-widest border border-border/50 px-2 py-1 rounded"
                 >
-                  NEXT ▶
+                  COPY
+                </button>
+                <button 
+                  onClick={() => { setResult(''); setGeneratedImg(null); }} 
+                  className="text-[8px] font-black text-destructive/70 hover:text-destructive transition-colors uppercase tracking-widest border border-destructive/30 px-2 py-1 rounded"
+                >
+                  CLEAR
                 </button>
               </div>
             </div>
-          )}
-        </div>
+            
+            {generatedImg && (
+              <div className="rounded-[32px] overflow-hidden border border-border/50 shadow-2xl">
+                <img src={generatedImg} alt="Generated Thumbnail" className="w-full object-cover" />
+              </div>
+            )}
+            
+            <div className="p-6 bg-card rounded-[32px] border border-border/50 shadow-xl">
+              <p className="text-[13px] leading-[2] font-medium text-foreground whitespace-pre-wrap">{result}</p>
+            </div>
+          </div>
+        )}
       </main>
 
-      <BottomNav activeTab="home" onTabChange={() => {}} />
+      <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
     </div>
   );
 };
