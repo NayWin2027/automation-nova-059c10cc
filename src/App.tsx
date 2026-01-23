@@ -7,6 +7,7 @@ import Index from "./pages/Index";
 import TranscribePage from "./pages/TranscribePage";
 import VoicePage from "./pages/VoicePage";
 import CreatorPage from "./pages/CreatorPage";
+import StoryCreatorPage from "./pages/StoryCreatorPage";
 import NovelTransPage from "./pages/NovelTransPage";
 import NotFound from "./pages/NotFound";
 
@@ -23,6 +24,7 @@ const App = () => (
           <Route path="/transcribe" element={<TranscribePage />} />
           <Route path="/voice" element={<VoicePage />} />
           <Route path="/creator" element={<CreatorPage />} />
+          <Route path="/story" element={<StoryCreatorPage />} />
           <Route path="/novel" element={<NovelTransPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
