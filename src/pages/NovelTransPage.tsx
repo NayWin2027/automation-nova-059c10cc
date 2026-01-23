@@ -501,11 +501,35 @@ PREVIOUS CONTEXT (For continuity):
         }
         setTimeout(() => document.getElementById('novel-result')?.scrollIntoView({ behavior: 'smooth' }), 100);
 
-      } catch (e) {
-          console.error(e);
+      } catch (e: unknown) {
+          console.error('[Novel Translate] Error:', e);
+          const errorMsg = e instanceof Error ? e.message : String(e);
+          
+          // Check for quota exceeded (429) error
+          const isQuotaError = errorMsg.includes('Quota') || errorMsg.includes('429') || errorMsg.includes('QUOTA_EXCEEDED');
+          
+          // Extract retry delay if present (e.g., "54s")
+          const retryMatch = errorMsg.match(/(\d+)s/);
+          const retrySeconds = retryMatch ? parseInt(retryMatch[1], 10) : 60;
+          
+          if (isQuotaError && autoDrive) {
+              // For auto-drive: pause, wait for retry period, then resume
+              console.log(`[Auto-Drive] Quota hit. Waiting ${retrySeconds}s before retry...`);
+              setCooldownSeconds(retrySeconds);
+              // Keep autoDrive ON so it resumes after cooldown
+              setIsAutoDriving(false);
+              setLoading(false);
+              return; // Exit without disabling autoDrive - cooldown effect will resume
+          } else if (isQuotaError) {
+              // Manual mode: show user-friendly message with wait time
+              alert(`API Quota ပြည့်သွားပါပြီ။ ${retrySeconds} စက္ကန့်စောင့်ပြီး ပြန်ကြိုးစားပါ။\n\n(သို့) App API mode သို့ပြောင်းပါ။`);
+          } else {
+              // Other errors
+              alert('Translation failed: ' + errorMsg);
+          }
+          
           setIsAutoDriving(false);
           setAutoDrive(false);
-          alert('Translation paused or failed. Please check your API Quota or Connection.');
       } finally {
           setLoading(false);
       }
