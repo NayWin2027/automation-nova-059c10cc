@@ -32,8 +32,7 @@ const tools = [
     title: "Story Creator",
     description: "ဇာတ်လမ်းရည်မှန်များ ဖန်တီးရန်။",
     gradient: "violet" as const,
-    systemPrompt:
-      "You are a creative story writer. Help users create engaging stories, scripts, and narratives. Respond in Burmese when the user writes in Burmese.",
+    route: "/story",
   },
   {
     id: "thumbnail",
