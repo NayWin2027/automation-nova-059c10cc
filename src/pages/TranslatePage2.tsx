@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { translateText } from "../services/geminiService";
-import { ICONS } from "../constants";
 import { GoogleGenAI } from "@google/genai";
 
 type TranslationType = "PURE" | "DEEP" | "HOOKS";
