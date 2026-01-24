@@ -49,8 +49,7 @@ const tools = [
     title: "Translate",
     description: "ဘာသာစကားများ ပြောင်းရန်။",
     gradient: "blue" as const,
-    systemPrompt:
-      "You are a professional translator. Help users translate text between languages accurately while maintaining context and meaning. Respond in Burmese when the user writes in Burmese.",
+    route: "/translate",
   },
   {
     id: "srt",
