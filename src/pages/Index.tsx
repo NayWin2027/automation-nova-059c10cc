@@ -1,4 +1,5 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import { Tool } from "./types";
 
 export const TOOLS: Tool[] = [
@@ -326,3 +327,36 @@ export const ICONS: Record<string, React.ReactNode> = {
     </svg>
   ),
 };
+
+const Index: React.FC = () => {
+  const navigate = useNavigate();
+
+  const handleToolClick = (tool: Tool) => {
+    if (tool.route) {
+      navigate(tool.route);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-background p-4">
+      <h1 className="text-2xl font-bold text-center mb-6">AI Tools</h1>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-w-4xl mx-auto">
+        {TOOLS.map((tool) => (
+          <div
+            key={tool.id}
+            onClick={() => handleToolClick(tool)}
+            className={`p-4 rounded-lg cursor-pointer transition-all hover:scale-105 ${tool.jewelClass} bg-card border`}
+          >
+            <div className="flex flex-col items-center text-center gap-2">
+              <div className="text-primary">{ICONS[tool.icon]}</div>
+              <h3 className="font-semibold text-sm">{tool.name}</h3>
+              <p className="text-xs text-muted-foreground">{tool.description}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default Index;
