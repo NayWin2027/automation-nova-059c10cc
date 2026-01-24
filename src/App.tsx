@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
+import TranslatePage2 from "./pages/TranslatePage2";
 import TranscribePage from "./pages/TranscribePage";
 import VoicePage from "./pages/VoicePage";
 import CreatorPage from "./pages/CreatorPage";
@@ -22,6 +23,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/transcribe" element={<TranscribePage />} />
+          <Route path="/translate" element={<TranslatePage2 />} />
           <Route path="/voice" element={<VoicePage />} />
           <Route path="/creator" element={<CreatorPage />} />
           <Route path="/story" element={<StoryCreatorPage />} />
