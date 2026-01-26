@@ -1,5 +1,29 @@
 import React, { useState, useRef, useEffect } from "react";
-import { analyzeVideo, generateSpeech, audioContext } from "../services/geminiService";
+import { generateSpeech } from "../services/geminiService";
+import { supabase } from "@/integrations/supabase/client";
+
+// Create audio context for playback
+const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+
+// Function to call video-recap edge function
+async function analyzeVideo(
+  base64Video: string,
+  mimeType: string,
+  targetLang: string,
+  apiKey?: string
+): Promise<string> {
+  const { data, error } = await supabase.functions.invoke('video-recap', {
+    body: {
+      videoUrl: `data:${mimeType};base64,${base64Video}`,
+      useOwnApi: !!apiKey,
+      apiKey
+    }
+  });
+
+  if (error) throw new Error(error.message || 'Video analysis failed');
+  if (data?.error) throw new Error(data.error);
+  return data?.recap || '';
+}
 
 // --- CONSTANTS ---
 const VOICES = [
