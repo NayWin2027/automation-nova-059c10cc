@@ -7,7 +7,7 @@ import { useAdmin } from "@/hooks/useAdmin";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Shield, Users, Activity, Settings, BarChart3, LogOut, 
-  RefreshCw, UserPlus, Smartphone, Crown, Ban, Coins 
+  RefreshCw, UserPlus, Smartphone, Crown, Ban, Coins, Home 
 } from "lucide-react";
 import AdminUsersTab from "@/components/admin/AdminUsersTab";
 import AdminActivityTab from "@/components/admin/AdminActivityTab";
@@ -98,6 +98,16 @@ const AdminDashboardPage: React.FC = () => {
               <h1 className="font-bold text-foreground">Admin Control Panel</h1>
               <p className="text-xs text-muted-foreground">{user?.email}</p>
             </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate("/")}
+            >
+              <Home className="w-4 h-4 mr-2" />
+              Home
+            </Button>
           </div>
           <div className="flex items-center gap-2">
             <Button
