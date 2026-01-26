@@ -11,6 +11,7 @@ import {
   MessageSquare,
   PenTool,
   Download,
+  Video,
 } from "lucide-react";
 import { ToolCard } from "@/components/ToolCard";
 import { BottomNav } from "@/components/BottomNav";
@@ -18,6 +19,14 @@ import { GatewayBanner } from "@/components/GatewayBanner";
 import { ChatDialog } from "@/components/ChatDialog";
 
 const tools = [
+  {
+    id: "video-recap",
+    icon: Video,
+    title: "Video Recap",
+    description: "ဗီဒီယို အကျဉ်းချုပ် ဖန်တီးရန်။",
+    gradient: "rose" as const,
+    route: "/video-recap",
+  },
   {
     id: "transcribe",
     icon: Mic,
