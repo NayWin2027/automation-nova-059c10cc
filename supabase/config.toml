@@ -17,3 +17,12 @@ verify_jwt = false
 
 [functions.novel-translate]
 verify_jwt = false
+
+[functions.video-recap]
+verify_jwt = false
+
+[functions.admin-register]
+verify_jwt = false
+
+[functions.admin-actions]
+verify_jwt = false
