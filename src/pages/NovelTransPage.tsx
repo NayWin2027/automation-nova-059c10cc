@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { translateText } from '../services/geminiService';
 import { BottomNav } from '@/components/BottomNav';
 import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist';
 import PdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
+import { Home } from 'lucide-react';
 
 type InputMode = 'UPLOAD' | 'PASTE';
 type NovelTone = 'WUXIA' | 'ROMANTIC' | 'CLASSIC' | 'MODERN' | 'FANTASY';
@@ -582,10 +584,23 @@ PREVIOUS CONTEXT (For continuity):
     ? (countTotalChars > 0 ? Math.min(100, (countTranslatedChars / countTotalChars) * 100) : 0)
     : (charCount > 0 ? Math.min(100, (startIndex / charCount) * 100) : 0);
 
+  const navigate = useNavigate();
+
   return (
     <div className="min-h-screen bg-background pb-24">
       <div className="space-y-6 pb-40 animate-in fade-in slide-in-from-bottom-2 duration-500 max-w-3xl mx-auto px-4 pt-4">
       
+      {/* HOME BUTTON */}
+      <div className="flex justify-start">
+        <button
+          onClick={() => navigate("/")}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800/80 border border-white/10 text-white text-xs font-bold hover:bg-slate-700 transition-all"
+        >
+          <Home className="w-4 h-4" />
+          Home
+        </button>
+      </div>
+
       {/* API Switcher */}
       <div className="flex bg-slate-900/60 backdrop-blur-xl p-1.5 rounded-2xl border border-white/10 shadow-lg max-w-[280px] mx-auto overflow-hidden">
         <button onClick={() => setApiType('app')} className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all ${apiType === 'app' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}>APP API 🔒</button>
