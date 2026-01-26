@@ -1,5 +1,18 @@
 import React, { useState, useRef, useEffect } from "react";
-import { analyzeVideo, generateSpeech, audioContext } from "../services/geminiService";
+import { generateSpeech } from "../services/geminiService";
+import { supabase } from "@/integrations/supabase/client";
+
+// Create audio context for playback
+const getAudioContext = () => {
+  return new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+};
+let audioContext: AudioContext | null = null;
+const ensureAudioContext = () => {
+  if (!audioContext) {
+    audioContext = getAudioContext();
+  }
+  return audioContext;
+};
 
 const AVATARS = [
   { id: "none", src: "" },
@@ -78,6 +91,7 @@ const VideoRecapView: React.FC = () => {
   };
 
   const decodeAudio = async (base64: string) => {
+    const ctx = ensureAudioContext();
     const binaryString = atob(base64);
     const len = binaryString.length;
     const bytes = new Uint8Array(len);
@@ -85,7 +99,7 @@ const VideoRecapView: React.FC = () => {
       bytes[i] = binaryString.charCodeAt(i);
     }
     const int16 = new Int16Array(bytes.buffer);
-    const buffer = audioContext.createBuffer(1, int16.length, 24000);
+    const buffer = ctx.createBuffer(1, int16.length, 24000);
     const channelData = buffer.getChannelData(0);
     for (let i = 0; i < int16.length; i++) {
       channelData[i] = int16[i] / 32768.0;
@@ -98,7 +112,7 @@ const VideoRecapView: React.FC = () => {
     if (apiType === "own" && !apiKey) return alert("API Key Required");
 
     setAnalyzing(true);
-    setStatusText("0% SYNCING AUDIO & VISUALS..."); // Matches screenshot text
+    setStatusText("0% SYNCING AUDIO & VISUALS...");
     try {
       const reader = new FileReader();
       reader.readAsDataURL(file);
@@ -106,7 +120,20 @@ const VideoRecapView: React.FC = () => {
         const base64 = (reader.result as string).split(",")[1];
 
         setStatusText("ANALYZING VISUALS...");
-        const text = await analyzeVideo(base64, file.type, "Burmese", apiType === "own" ? apiKey : undefined);
+        // Call the video-recap edge function to analyze video
+        const { data, error } = await supabase.functions.invoke<{ recap?: string; error?: string }>('video-recap', {
+          body: { 
+            videoUrl: `data:${file.type};base64,${base64}`,
+            useOwnApi: apiType === "own",
+            apiKey: apiType === "own" ? apiKey : undefined
+          }
+        });
+        
+        if (error || data?.error) {
+          throw new Error(data?.error || error?.message || 'Analysis failed');
+        }
+        
+        const text = data?.recap || '';
         setScript(text);
 
         setStatusText("GENERATING VOICEOVER...");
@@ -133,17 +160,19 @@ const VideoRecapView: React.FC = () => {
         audioSourceRef.current.stop();
         audioSourceRef.current = null;
       }
-      setPausedAt(audioContext.currentTime - startTime);
+      const ctx = ensureAudioContext();
+      setPausedAt(ctx.currentTime - startTime);
       setIsPlaying(false);
       if (videoRef.current) videoRef.current.pause();
     } else {
       if (pausedAt >= audioDuration) setPausedAt(0);
 
-      const source = audioContext.createBufferSource();
+      const ctx = ensureAudioContext();
+      const source = ctx.createBufferSource();
       source.buffer = audioBuffer;
-      source.connect(audioContext.destination);
+      source.connect(ctx.destination);
 
-      setStartTime(audioContext.currentTime - pausedAt);
+      setStartTime(ctx.currentTime - pausedAt);
       source.start(0, pausedAt);
       audioSourceRef.current = source;
 
@@ -169,8 +198,9 @@ const VideoRecapView: React.FC = () => {
         const targetH = canvas.height;
 
         let elapsed = pausedAt;
+        const audioCtx = ensureAudioContext();
         if (isPlaying) {
-          elapsed = audioContext.currentTime - startTime;
+          elapsed = audioCtx.currentTime - startTime;
           if (elapsed > audioDuration) {
             elapsed = audioDuration;
             setIsPlaying(false);
