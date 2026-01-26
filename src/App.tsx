@@ -11,6 +11,9 @@ import VoicePage from "./pages/VoicePage";
 import CreatorPage from "./pages/CreatorPage";
 import StoryCreatorPage from "./pages/StoryCreatorPage";
 import NovelTransPage from "./pages/NovelTransPage";
+import AdminRegisterPage from "./pages/AdminRegisterPage";
+import AdminLoginPage from "./pages/AdminLoginPage";
+import AdminDashboardPage from "./pages/AdminDashboardPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,6 +33,10 @@ const App = () => (
           <Route path="/creator" element={<CreatorPage />} />
           <Route path="/story" element={<StoryCreatorPage />} />
           <Route path="/novel" element={<NovelTransPage />} />
+          {/* Admin Routes */}
+          <Route path="/admin/register" element={<AdminRegisterPage />} />
+          <Route path="/admin/login" element={<AdminLoginPage />} />
+          <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
