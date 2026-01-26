@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { videoUrl, useOwnApi, apiKey } = await req.json();
+    const { videoUrl, useOwnApi, apiKey, targetLang } = await req.json();
 
     if (!videoUrl) {
       return new Response(
@@ -20,13 +20,16 @@ serve(async (req) => {
       );
     }
 
-    const systemPrompt = `You are a professional video content summarizer. Your task is to create a comprehensive recap of video content.
+    // Check if it's base64 data
+    const isBase64 = videoUrl.startsWith("data:");
+    
+    const systemPrompt = `You are a professional video content summarizer. Create a comprehensive recap.
 
 INSTRUCTIONS:
-1. Analyze the video URL provided and create a detailed summary
+1. Analyze the video content thoroughly
 2. Include key points, main topics, and important takeaways
 3. Structure the recap with clear sections
-4. Write in Burmese (Myanmar language) with proper spelling (မြန်မာစာသတ်ပုံ)
+4. Write in ${targetLang || 'Burmese'} with proper spelling
 5. Keep the recap informative yet concise
 
 FORMAT:
@@ -44,26 +47,50 @@ FORMAT:
 💡 သုံးသပ်ချက်
 [Key takeaways and insights]`;
 
-    const userMessage = `Please analyze and create a recap for this video: ${videoUrl}
-
-Note: If you cannot directly access the video content, provide a helpful response about what information would be needed to create an accurate recap, or offer to help with video content analysis if the user can provide additional context about the video.`;
-
     let response;
 
     if (useOwnApi && apiKey) {
-      // Use Google Gemini directly
+      // Use Google Gemini directly with Files API for video
+      console.log("Using Own API Key for video recap");
+      
+      let parts: any[] = [];
+      
+      if (isBase64) {
+        // Extract mime type and base64 data
+        const matches = videoUrl.match(/^data:([^;]+);base64,(.+)$/);
+        if (matches) {
+          const mimeType = matches[1];
+          const base64Data = matches[2];
+          
+          parts = [
+            {
+              inlineData: {
+                mimeType: mimeType,
+                data: base64Data
+              }
+            },
+            { text: systemPrompt + "\n\nPlease analyze this video and create a detailed recap." }
+          ];
+        } else {
+          throw new Error("Invalid base64 video format");
+        }
+      } else {
+        // For URL-based videos, just use text prompt
+        parts = [
+          { text: `${systemPrompt}\n\nPlease analyze and create a recap for this video URL: ${videoUrl}\n\nNote: If you cannot directly access the video, provide general guidance on what a good recap would include.` }
+        ];
+      }
+
       response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            contents: [
-              { role: "user", parts: [{ text: `${systemPrompt}\n\n${userMessage}` }] }
-            ],
+            contents: [{ role: "user", parts }],
             generationConfig: {
               temperature: 0.7,
-              maxOutputTokens: 2048,
+              maxOutputTokens: 4096,
             },
           }),
         }
@@ -72,22 +99,40 @@ Note: If you cannot directly access the video content, provide a helpful respons
       if (!response.ok) {
         const errorText = await response.text();
         console.error("Gemini API error:", errorText);
-        throw new Error("Failed to generate recap with Gemini API");
+        
+        // Check for specific error types
+        if (errorText.includes("INVALID_ARGUMENT") || errorText.includes("too large")) {
+          throw new Error("ဗီဒီယိုဖိုင်ကြီးလွန်းသည်။ 20MB အောက်ဖိုင်သုံးပါ။");
+        }
+        if (errorText.includes("quota") || errorText.includes("429")) {
+          throw new Error("API quota ကုန်သွားပါပြီ။ ခဏစောင့်ပါ။");
+        }
+        
+        throw new Error("Gemini API error: " + errorText.substring(0, 200));
       }
 
       const data = await response.json();
       const recap = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+      if (!recap) {
+        throw new Error("AI မှ အဖြေမရရှိပါ။ ထပ်ကြိုးစားပါ။");
+      }
 
       return new Response(
         JSON.stringify({ recap }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     } else {
-      // Use Lovable AI Gateway
+      // Use Lovable AI Gateway - text only since it doesn't support video
       const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
       if (!LOVABLE_API_KEY) {
         throw new Error("LOVABLE_API_KEY is not configured");
       }
+
+      // For app mode, we can only do text-based analysis
+      const userMessage = isBase64 
+        ? "ဗီဒီယိုဖိုင်ကို ခွဲခြမ်းစိတ်ဖြာရန် Own API Key လိုအပ်ပါသည်။ App Mode တွင် URL link များသာ အသုံးပြုနိုင်ပါသည်။"
+        : `Please analyze and create a recap for this video: ${videoUrl}`;
 
       response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",

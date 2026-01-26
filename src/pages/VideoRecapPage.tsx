@@ -25,7 +25,8 @@ async function analyzeVideo(
     body: {
       videoUrl: `data:${mimeType};base64,${base64Video}`,
       useOwnApi: !!apiKey,
-      apiKey
+      apiKey,
+      targetLang
     }
   });
 
