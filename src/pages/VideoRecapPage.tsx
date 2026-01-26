@@ -1,9 +1,18 @@
 import React, { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { generateSpeech } from "../services/geminiService";
 import { supabase } from "@/integrations/supabase/client";
+import { Home } from "lucide-react";
 
-// Create audio context for playback
-const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+// Lazy audio context - only created when needed
+let audioContext: AudioContext | null = null;
+
+function getAudioContext(): AudioContext {
+  if (!audioContext) {
+    audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+  }
+  return audioContext;
+}
 
 // Function to call video-recap edge function
 async function analyzeVideo(
@@ -296,7 +305,8 @@ const VideoRecapView: React.FC = () => {
             const bytes = new Uint8Array(binaryString.length);
             for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
             const int16 = new Int16Array(bytes.buffer);
-            const buffer = audioContext.createBuffer(1, int16.length, 24000);
+            const ctx = getAudioContext();
+            const buffer = ctx.createBuffer(1, int16.length, 24000);
             const channelData = buffer.getChannelData(0);
             for (let i = 0; i < int16.length; i++) channelData[i] = int16[i] / 32768.0;
 
@@ -322,17 +332,19 @@ const VideoRecapView: React.FC = () => {
         audioSourceRef.current.stop();
         audioSourceRef.current = null;
       }
-      setPausedAt(audioContext.currentTime - startTime);
+      const ctx = getAudioContext();
+      setPausedAt(ctx.currentTime - startTime);
       setIsPlaying(false);
       videoRef.current.pause();
     } else {
       if (audioBuffer) {
         if (pausedAt >= audioDuration) setPausedAt(0);
-        const source = audioContext.createBufferSource();
+        const ctx = getAudioContext();
+        const source = ctx.createBufferSource();
         source.buffer = audioBuffer;
         source.playbackRate.value = audioSpeed;
-        source.connect(audioContext.destination);
-        setStartTime(audioContext.currentTime - pausedAt / audioSpeed);
+        source.connect(ctx.destination);
+        setStartTime(ctx.currentTime - pausedAt / audioSpeed);
         source.start(0, pausedAt);
         audioSourceRef.current = source;
       }
@@ -372,7 +384,8 @@ const VideoRecapView: React.FC = () => {
 
         let elapsed = pausedAt;
         if (isPlaying && audioBuffer) {
-          elapsed = (audioContext.currentTime - startTime) * audioSpeed;
+          const ctx = getAudioContext();
+          elapsed = (ctx.currentTime - startTime) * audioSpeed;
           if (elapsed > audioDuration) {
             setIsPlaying(false);
             setPausedAt(0);
@@ -674,8 +687,20 @@ const VideoRecapView: React.FC = () => {
     audioDuration,
   ]);
 
+  const navigate = useNavigate();
+
   return (
     <div className="space-y-6 pb-32 max-w-7xl mx-auto px-1">
+      {/* HOME BUTTON */}
+      <div className="flex justify-start p-2">
+        <button
+          onClick={() => navigate("/")}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800/80 border border-white/10 text-white text-xs font-bold hover:bg-slate-700 transition-all"
+        >
+          <Home className="w-4 h-4" />
+          Home
+        </button>
+      </div>
       {/* API KEY & HEADER */}
       <div className="flex flex-col items-center gap-3">
         <div className="flex bg-slate-900/60 p-1 rounded-2xl border border-white/10 shadow-lg">
