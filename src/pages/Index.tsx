@@ -12,6 +12,7 @@ import {
   PenTool,
   Download,
   Video,
+  Diamond,
 } from "lucide-react";
 import { ToolCard } from "@/components/ToolCard";
 import { BottomNav } from "@/components/BottomNav";
@@ -128,45 +129,86 @@ const Index = () => {
     }
   };
 
+  const renderHomeContent = () => (
+    <>
+      <GatewayBanner />
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-foreground leading-tight">Master Your</h2>
+        <h2 className="text-2xl font-bold text-gradient-cyan leading-tight">Media Engine.</h2>
+        <p className="text-2xs font-medium tracking-[0.2em] text-muted-foreground mt-1 uppercase">
+          Pro Media Toolset V4.8
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        {tools.map((tool) => (
+          <ToolCard
+            key={tool.id}
+            icon={tool.icon}
+            title={tool.title}
+            description={tool.description}
+            gradient={tool.gradient}
+            onClick={() => handleToolClick(tool)}
+          />
+        ))}
+      </div>
+    </>
+  );
+
+  const renderPremiumContent = () => (
+    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+      <Diamond className="w-16 h-16 text-primary mb-4" />
+      <h2 className="text-2xl font-bold text-foreground mb-2">Premium Plans</h2>
+      <p className="text-muted-foreground mb-6">Unlock all features with our premium subscriptions</p>
+      <div className="space-y-3 w-full max-w-sm">
+        <div className="p-4 rounded-xl border border-border bg-card">
+          <h3 className="font-semibold text-foreground">Pro Plan</h3>
+          <p className="text-sm text-muted-foreground">Advanced features & priority support</p>
+        </div>
+        <div className="p-4 rounded-xl border border-primary bg-primary/10">
+          <h3 className="font-semibold text-primary">Premium Plan</h3>
+          <p className="text-sm text-muted-foreground">All features + unlimited usage</p>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderSettingsContent = () => (
+    <div className="space-y-4">
+      <h2 className="text-2xl font-bold text-foreground mb-4">Settings</h2>
+      <div className="space-y-3">
+        <button 
+          onClick={() => navigate("/admin/login")}
+          className="w-full p-4 rounded-xl border border-border bg-card text-left hover:bg-accent transition-colors"
+        >
+          <h3 className="font-semibold text-foreground">Admin Panel</h3>
+          <p className="text-sm text-muted-foreground">Access admin dashboard</p>
+        </button>
+        <div className="p-4 rounded-xl border border-border bg-card">
+          <h3 className="font-semibold text-foreground">Account</h3>
+          <p className="text-sm text-muted-foreground">Manage your profile & preferences</p>
+        </div>
+        <div className="p-4 rounded-xl border border-border bg-card">
+          <h3 className="font-semibold text-foreground">About</h3>
+          <p className="text-sm text-muted-foreground">App version & information</p>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-background pb-24">
-      {/* Header */}
       <header className="p-4">
         <h1 className="text-sm font-bold tracking-wider text-foreground">MASTER</h1>
       </header>
 
-      {/* Content */}
       <main className="px-4">
-        <GatewayBanner />
-
-        {/* Hero */}
-        <div className="mb-6">
-          <h2 className="text-2xl font-bold text-foreground leading-tight">Master Your</h2>
-          <h2 className="text-2xl font-bold text-gradient-cyan leading-tight">Media Engine.</h2>
-          <p className="text-2xs font-medium tracking-[0.2em] text-muted-foreground mt-1 uppercase">
-            Pro Media Toolset V4.8
-          </p>
-        </div>
-
-        {/* Tools Grid */}
-        <div className="grid grid-cols-2 gap-3">
-          {tools.map((tool) => (
-            <ToolCard
-              key={tool.id}
-              icon={tool.icon}
-              title={tool.title}
-              description={tool.description}
-              gradient={tool.gradient}
-              onClick={() => handleToolClick(tool)}
-            />
-          ))}
-        </div>
+        {activeTab === "home" && renderHomeContent()}
+        {activeTab === "premium" && renderPremiumContent()}
+        {activeTab === "settings" && renderSettingsContent()}
       </main>
 
-      {/* Bottom Navigation */}
       <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
 
-      {/* Chat Dialog */}
       <ChatDialog
         isOpen={selectedTool !== null}
         onClose={() => setSelectedTool(null)}
