@@ -576,17 +576,26 @@ export default function TransformativeVideoPage() {
     const voice = VOICES.find(v => v.id === voiceId);
     if (!voice) return;
     
+    // Validate API key for Own API mode
+    if (apiMode === "own" && !apiKey.trim()) {
+      toast.error("Own API Mode သုံးရန် Google AI API Key ထည့်ပါ", { duration: 5000 });
+      return;
+    }
+    
     setPlayingVoice(voiceId);
     
     try {
       // Use Gemini TTS to generate "မင်္ဂလာပါ" (Hello in Burmese)
       const previewText = "မင်္ဂလာပါ";
       
+      // For Own API mode, user's key is used; for App mode, backend shared key is used
+      const effectiveApiKey = apiMode === "own" ? apiKey.trim() : undefined;
+      
       const { data, error } = await supabase.functions.invoke('gemini-tts', {
         body: {
           text: previewText,
           voiceName: voice.apiVoice,
-          apiKey: apiMode === "own" ? apiKey : undefined,
+          apiKey: effectiveApiKey,
           languageCode: "my-MM"
         }
       });
@@ -686,9 +695,12 @@ export default function TransformativeVideoPage() {
       return;
     }
 
-    // Check if browser supports FFMPEG
+    // Check if browser supports FFMPEG (requires SharedArrayBuffer)
     if (!isFFmpegSupported()) {
-      toast.error("သင့် browser က FFMPEG ကို support မလုပ်ပါ။ Chrome/Edge သုံးပါ။");
+      toast.error(
+        "Video processing မလုပ်နိုင်ပါ။ Facebook/TikTok/Telegram in-app browser မဟုတ်ဘဲ Chrome/Edge app ထဲမှာ ဖွင့်ပါ။",
+        { duration: 8000 }
+      );
       return;
     }
 
