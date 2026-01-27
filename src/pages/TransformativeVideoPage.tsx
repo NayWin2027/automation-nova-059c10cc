@@ -31,6 +31,8 @@ import {
   Music,
   Video,
   StopCircle,
+  Key,
+  Download,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
@@ -52,6 +54,17 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import {
+  loadFFmpeg,
+  extractAudio,
+  processVideo,
+  isFFmpegSupported,
+} from "@/services/ffmpegService";
+import {
+  transcribeAudio,
+  translateText,
+  generateSpeech,
+} from "@/services/transformativeAIService";
 
 // ============ DATA CONSTANTS ============
 
@@ -271,16 +284,23 @@ function CharacterCard({
   );
 }
 
-function ProcessingQueue({ job }: { job: ProcessingJob }) {
+function ProcessingQueue({ job, stage }: { job: ProcessingJob; stage?: string }) {
   return (
     <div className="rounded-2xl border border-primary/30 bg-gradient-to-b from-primary/5 to-card/50 p-6 space-y-6">
       <div className="text-center space-y-1">
         <div className="text-lg font-bold text-primary uppercase tracking-wider">
-          {job.status === "queued" ? "QUEUED" : "PROCESSING"}
+          {job.status === "queued" ? "QUEUED" : job.status === "completed" ? "COMPLETED" : job.status === "failed" ? "FAILED" : "PROCESSING"}
         </div>
-        <div className="text-sm text-muted-foreground">
-          Position {job.queuePosition} in queue. Est. wait: {job.estimatedWait} minutes
-        </div>
+        {stage && (
+          <div className="text-sm text-primary/80 font-medium">
+            {stage}
+          </div>
+        )}
+        {!stage && job.status === "queued" && (
+          <div className="text-sm text-muted-foreground">
+            Position {job.queuePosition} in queue. Est. wait: {job.estimatedWait} minutes
+          </div>
+        )}
       </div>
 
       <div className="space-y-4">
@@ -382,6 +402,23 @@ function ProcessingQueue({ job }: { job: ProcessingJob }) {
 export default function TransformativeVideoPage() {
   const navigate = useNavigate();
 
+  // API Mode
+  const [apiMode, setApiMode] = useState<"app" | "own">(() => {
+    const saved = localStorage.getItem("transformative_api_mode");
+    return saved === "own" ? "own" : "app";
+  });
+  const [apiKey, setApiKey] = useState(() =>
+    localStorage.getItem("transformative_api_key") || ""
+  );
+
+  useEffect(() => {
+    localStorage.setItem("transformative_api_mode", apiMode);
+  }, [apiMode]);
+
+  useEffect(() => {
+    localStorage.setItem("transformative_api_key", apiKey);
+  }, [apiKey]);
+
   // URL & Upload State
   const [videoUrl, setVideoUrl] = useState("");
   const [uploadEnabled, setUploadEnabled] = useState(false);
@@ -425,6 +462,8 @@ export default function TransformativeVideoPage() {
   // Processing
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingJob, setProcessingJob] = useState<ProcessingJob | null>(null);
+  const [processingStage, setProcessingStage] = useState("");
+  const [outputVideoUrl, setOutputVideoUrl] = useState<string | null>(null);
 
   // Credits (mock)
   const credits = 15;
@@ -499,13 +538,26 @@ export default function TransformativeVideoPage() {
     setTimeout(() => setPlayingVoice(null), 2000);
   };
 
-  const handleStartProcessing = () => {
-    if (!videoUrl && !uploadedFile) {
+  const handleStartProcessing = async () => {
+    if (!uploadedFile && !videoUrl) {
       toast.error("Video URL သို့မဟုတ် ဖိုင် ထည့်ပါ");
       return;
     }
 
+    // Check if browser supports FFMPEG
+    if (!isFFmpegSupported()) {
+      toast.error("သင့် browser က FFMPEG ကို support မလုပ်ပါ။ Chrome/Edge သုံးပါ။");
+      return;
+    }
+
+    // Check API key for Own API mode
+    if (apiMode === "own" && !apiKey.trim()) {
+      toast.error("Google AI API Key ထည့်ပါ");
+      return;
+    }
+
     setIsProcessing(true);
+    setOutputVideoUrl(null);
     setProcessingJob({
       id: crypto.randomUUID(),
       status: "queued",
@@ -515,31 +567,147 @@ export default function TransformativeVideoPage() {
       estimatedWait: 0,
     });
 
-    // Simulate processing
-    let audioP = 0;
-    let videoP = 0;
-    const interval = setInterval(() => {
-      audioP = Math.min(audioP + Math.random() * 5, 100);
-      if (audioP > 30) {
-        videoP = Math.min(videoP + Math.random() * 3, 100);
-      }
-      setProcessingJob((prev) =>
-        prev
-          ? {
-              ...prev,
-              status: "processing",
-              audioProgress: Math.round(audioP),
-              videoProgress: Math.round(videoP),
-            }
-          : null
-      );
-      if (audioP >= 100 && videoP >= 100) {
-        clearInterval(interval);
-        setProcessingJob((prev) => (prev ? { ...prev, status: "completed" } : null));
+    try {
+      // Step 1: Load FFMPEG
+      setProcessingStage("Loading FFMPEG...");
+      await loadFFmpeg((p) => {
+        setProcessingJob((prev) =>
+          prev ? { ...prev, audioProgress: Math.min(p * 0.1, 10) } : null
+        );
+      });
+
+      // Step 2: Extract audio from video (for uploaded files)
+      let audioBlob: Blob | undefined;
+      let transcriptionResult: any;
+      let translatedSrt: string | undefined;
+      let ttsAudioBlob: Blob | undefined;
+
+      if (uploadedFile) {
+        setProcessingStage("Extracting audio...");
+        setProcessingJob((prev) =>
+          prev ? { ...prev, status: "processing", audioProgress: 15 } : null
+        );
+
+        audioBlob = await extractAudio(uploadedFile, (p, stage) => {
+          setProcessingStage(stage);
+          setProcessingJob((prev) =>
+            prev ? { ...prev, audioProgress: 15 + p * 0.15 } : null
+          );
+        });
+
+        // Step 3: Transcribe audio
+        setProcessingStage("Transcribing audio with AI...");
+        setProcessingJob((prev) =>
+          prev ? { ...prev, audioProgress: 30 } : null
+        );
+
+        transcriptionResult = await transcribeAudio(audioBlob, {
+          useOwnApi: apiMode === "own",
+          apiKey: apiMode === "own" ? apiKey : undefined,
+        });
+
+        setProcessingJob((prev) =>
+          prev ? { ...prev, audioProgress: 50 } : null
+        );
+
+        // Step 4: Translate if target language is different
+        const selectedLangCode = LANGUAGES.find((l) => l.code === targetLang)?.name || "Burmese";
+        setProcessingStage(`Translating to ${selectedLangCode}...`);
+
+        const translationResult = await translateText("", {
+          useOwnApi: apiMode === "own",
+          apiKey: apiMode === "own" ? apiKey : undefined,
+          sourceLanguage: "auto",
+          targetLanguage: selectedLangCode,
+          segments: transcriptionResult.segments,
+        });
+
+        translatedSrt = translationResult.translatedSrt;
+        setProcessingJob((prev) =>
+          prev ? { ...prev, audioProgress: 70 } : null
+        );
+
+        // Step 5: Generate TTS audio
+        setProcessingStage("Generating AI voice...");
+
+        const ttsResult = await generateSpeech(translationResult.translatedText, {
+          useOwnApi: apiMode === "own",
+          apiKey: apiMode === "own" ? apiKey : undefined,
+          voiceId: selectedVoice,
+          language: targetLang,
+        });
+
+        ttsAudioBlob = ttsResult.audioBlob;
+        setProcessingJob((prev) =>
+          prev ? { ...prev, audioProgress: 100 } : null
+        );
+
+        // Step 6: Process video with FFMPEG
+        setProcessingStage("Processing video with FFMPEG...");
+        setProcessingJob((prev) =>
+          prev ? { ...prev, videoProgress: 10 } : null
+        );
+
+        const fontSizeMap: Record<string, number> = {
+          small: 45,
+          medium: 55,
+          large: 65,
+        };
+
+        const outputBlob = await processVideo(
+          {
+            inputFile: uploadedFile,
+            audioTrack: ttsAudioBlob,
+            subtitlesSrt: subtitlesEnabled ? translatedSrt : undefined,
+            cropRatio: cropRatio !== "original" ? cropRatio : undefined,
+            flipHorizontal: flipVideo,
+            textWatermark: textWatermark || undefined,
+            subtitleFontSize: fontSizeMap[subtitleFont] || 55,
+            subtitleColor: subtitleColor,
+            subtitlePosition: subtitlePosition,
+            subtitleBackground: subtitleBackground as "none" | "transparent" | "box",
+          },
+          (p, stage) => {
+            setProcessingStage(stage);
+            setProcessingJob((prev) =>
+              prev ? { ...prev, videoProgress: 10 + p * 0.9 } : null
+            );
+          }
+        );
+
+        // Create download URL
+        const outputUrl = URL.createObjectURL(outputBlob);
+        setOutputVideoUrl(outputUrl);
+        setProcessingJob((prev) =>
+          prev ? { ...prev, status: "completed", videoProgress: 100 } : null
+        );
         toast.success("ပြောင်းလဲမှု အောင်မြင်ပါပြီ!");
-        setIsProcessing(false);
+      } else {
+        // URL-based video (would require video download API)
+        toast.error("URL video အတွက် video download API လိုအပ်ပါသည်။ File upload သုံးပါ။");
+        setProcessingJob((prev) =>
+          prev ? { ...prev, status: "failed" } : null
+        );
       }
-    }, 500);
+    } catch (error) {
+      console.error("Processing error:", error);
+      toast.error(error instanceof Error ? error.message : "Processing failed");
+      setProcessingJob((prev) =>
+        prev ? { ...prev, status: "failed" } : null
+      );
+    } finally {
+      setIsProcessing(false);
+      setProcessingStage("");
+    }
+  };
+
+  const handleDownloadOutput = () => {
+    if (outputVideoUrl) {
+      const a = document.createElement("a");
+      a.href = outputVideoUrl;
+      a.download = `transformed_video_${Date.now()}.mp4`;
+      a.click();
+    }
   };
 
   const selectedLang = LANGUAGES.find((l) => l.code === targetLang);
@@ -571,8 +739,71 @@ export default function TransformativeVideoPage() {
       </header>
 
       <main className="px-4 pb-32 space-y-4 pt-4">
+        {/* API Mode Toggle */}
+        <div className="rounded-2xl border border-border/30 bg-card/50 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs text-muted-foreground flex items-center gap-2">
+              <Key className="w-3.5 h-3.5" />
+              API Mode
+            </Label>
+            <div className="flex gap-1 p-0.5 bg-muted/50 rounded-lg">
+              <button
+                onClick={() => setApiMode("app")}
+                className={`px-3 py-1 text-xs rounded-md transition-all ${
+                  apiMode === "app"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                App
+              </button>
+              <button
+                onClick={() => setApiMode("own")}
+                className={`px-3 py-1 text-xs rounded-md transition-all ${
+                  apiMode === "own"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Own API
+              </button>
+            </div>
+          </div>
+          {apiMode === "own" && (
+            <Input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="Google AI API Key"
+              className="bg-card/50 border-border/30"
+            />
+          )}
+        </div>
+
+        {/* Output Video (when processing is complete) */}
+        {outputVideoUrl && (
+          <div className="rounded-2xl overflow-hidden border border-neon-green/30 bg-gradient-to-b from-neon-green/5 to-card/50 p-4 space-y-4">
+            <div className="flex items-center gap-2">
+              <Check className="w-5 h-5 text-neon-green" />
+              <span className="text-sm font-medium text-neon-green">Video Ready!</span>
+            </div>
+            <video
+              src={outputVideoUrl}
+              className="w-full aspect-[9/16] object-cover rounded-xl"
+              controls
+            />
+            <Button
+              onClick={handleDownloadOutput}
+              className="w-full bg-gradient-to-r from-neon-green to-emerald-500 text-background font-bold"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              DOWNLOAD VIDEO
+            </Button>
+          </div>
+        )}
+
         {/* Video Preview */}
-        {(videoPreview || videoInfo) && (
+        {(videoPreview || videoInfo) && !outputVideoUrl && (
           <div className="rounded-2xl overflow-hidden border border-border/30 bg-card/30">
             {videoPreview ? (
               <video
@@ -660,7 +891,7 @@ export default function TransformativeVideoPage() {
         </div>
 
         {/* Processing Queue */}
-        {isProcessing && processingJob && <ProcessingQueue job={processingJob} />}
+        {isProcessing && processingJob && <ProcessingQueue job={processingJob} stage={processingStage} />}
 
         {/* Voice Model */}
         <SectionCard title="Voice Model *" icon={Volume2} collapsible={false}>

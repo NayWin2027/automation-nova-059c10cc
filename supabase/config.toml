@@ -26,3 +26,9 @@ verify_jwt = false
 
 [functions.admin-actions]
 verify_jwt = false
+
+[functions.transformative-transcribe]
+verify_jwt = false
+
+[functions.transformative-translate]
+verify_jwt = false
