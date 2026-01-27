@@ -1,5 +1,16 @@
 import React, { useState, useRef, useEffect } from "react";
-import { analyzeVideo, generateSpeech, audioContext } from "../services/geminiService.ts";
+import { generateSpeech } from "../services/geminiService";
+import { supabase } from "@/integrations/supabase/client";
+
+// Local helper to call video-recap edge function
+async function analyzeVideo(base64: string, mimeType: string, targetLang: string): Promise<string> {
+  const { data, error } = await supabase.functions.invoke<{ recap?: string; error?: string }>('video-recap', {
+    body: { videoUrl: `data:${mimeType};base64,${base64}`, useOwnApi: false, targetLang }
+  });
+  if (error) throw new Error(error.message || 'Video analysis failed');
+  if (data?.error) throw new Error(data.error);
+  return data?.recap || '';
+}
 
 // --- DATA SETS ---
 const VOICES = [
@@ -524,13 +535,17 @@ export default function VideoRecapView() {
     // Capture Streams
     const canvasStream = canvasRef.current.captureStream(30);
 
-    let audioStream;
+    let audioStream: MediaStream | undefined;
     try {
-      // @ts-ignore
-      const stream = audioRef.current.captureStream
-        ? audioRef.current.captureStream()
-        : audioRef.current.mozCaptureStream();
-      audioStream = stream;
+      const audioEl = audioRef.current as HTMLAudioElement & {
+        captureStream?: () => MediaStream;
+        mozCaptureStream?: () => MediaStream;
+      };
+      if (audioEl.captureStream) {
+        audioStream = audioEl.captureStream();
+      } else if (audioEl.mozCaptureStream) {
+        audioStream = audioEl.mozCaptureStream();
+      }
     } catch (e) {
       console.warn("Audio capture not supported in this browser. Export will be silent or video only.");
     }
