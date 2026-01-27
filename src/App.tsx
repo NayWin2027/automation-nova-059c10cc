@@ -7,6 +7,7 @@ import Index from "./pages/Index";
 import TranslatePage2 from "./pages/TranslatePage2";
 import TranscribePage from "./pages/TranscribePage";
 import VideoRecapPage from "./pages/VideoRecapPage";
+import TransformativeVideoPage from "./pages/TransformativeVideoPage";
 import VoicePage from "./pages/VoicePage";
 import CreatorPage from "./pages/CreatorPage";
 import StoryCreatorPage from "./pages/StoryCreatorPage";
@@ -29,6 +30,7 @@ const App = () => (
           <Route path="/transcribe" element={<TranscribePage />} />
           <Route path="/translate" element={<TranslatePage2 />} />
           <Route path="/video-recap" element={<VideoRecapPage />} />
+          <Route path="/transformative" element={<TransformativeVideoPage />} />
           <Route path="/voice" element={<VoicePage />} />
           <Route path="/creator" element={<CreatorPage />} />
           <Route path="/story" element={<StoryCreatorPage />} />
