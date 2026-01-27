@@ -21,12 +21,12 @@ import { ChatDialog } from "@/components/ChatDialog";
 
 const tools = [
   {
-    id: "video-recap",
+    id: "transformative",
     icon: Video,
-    title: "Video Recap",
-    description: "ဗီဒီယို အကျဉ်းချုပ် ဖန်တီးရန်။",
+    title: "Transformative Video",
+    description: "ဗီဒီယို ဘာသာပြန် & ပြောင်းလဲရန်။",
     gradient: "rose" as const,
-    route: "/video-recap",
+    route: "/transformative",
   },
   {
     id: "transcribe",
