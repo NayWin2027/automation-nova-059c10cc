@@ -33,6 +33,8 @@ import {
   StopCircle,
   Key,
   Download,
+  RotateCw,
+  Zap,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
@@ -65,19 +67,35 @@ import {
   translateText,
   generateSpeech,
 } from "@/services/transformativeAIService";
+import { languages } from "@/data/languages";
+import { supabase } from "@/integrations/supabase/client";
 
 // ============ DATA CONSTANTS ============
 
+// 20 Voices (10 Male, 10 Female) with Gemini TTS voice names
 const VOICES = [
-  { id: "v1", name: "ကျော်စင်", gender: "female", apiVoice: "Kore" },
-  { id: "v2", name: "လုလု", gender: "female", apiVoice: "Zephyr" },
-  { id: "v3", name: "ဆန်းသစ်", gender: "male", apiVoice: "Charon" },
-  { id: "v4", name: "မြတ်သူ", gender: "male", apiVoice: "Fenrir" },
-  { id: "v5", name: "မိုးသူ", gender: "male", apiVoice: "Puck" },
-  { id: "v6", name: "ချယ်ရီ", gender: "female", apiVoice: "Kore" },
-  { id: "v7", name: "မင်းမင်း", gender: "male", apiVoice: "Charon" },
-  { id: "v8", name: "နှင်းနှင်း", gender: "female", apiVoice: "Zephyr" },
-  { id: "v9", name: "စံပယ်", gender: "female", apiVoice: "Kore" },
+  // Female Voices
+  { id: "v1", name: "ချယ်ရီ", gender: "female", apiVoice: "Kore", color: "from-pink-500 to-rose-600" },
+  { id: "v2", name: "နှင်းနှင်း", gender: "female", apiVoice: "Zephyr", color: "from-emerald-500 to-teal-700" },
+  { id: "v3", name: "စံပယ်", gender: "female", apiVoice: "Kore", color: "from-purple-400 to-violet-600" },
+  { id: "v4", name: "မေသူ", gender: "female", apiVoice: "Zephyr", color: "from-sky-400 to-indigo-500" },
+  { id: "v5", name: "ယမင်း", gender: "female", apiVoice: "Kore", color: "from-rose-400 to-red-600" },
+  { id: "v6", name: "နန္ဒာ", gender: "female", apiVoice: "Zephyr", color: "from-teal-400 to-cyan-600" },
+  { id: "v7", name: "ဆုမြတ်", gender: "female", apiVoice: "Kore", color: "from-fuchsia-400 to-purple-600" },
+  { id: "v8", name: "အိအိ", gender: "female", apiVoice: "Zephyr", color: "from-lime-400 to-green-600" },
+  { id: "v9", name: "သီတာ", gender: "female", apiVoice: "Kore", color: "from-pink-300 to-rose-400" },
+  { id: "v10", name: "ဝတ်မှုံ", gender: "female", apiVoice: "Zephyr", color: "from-cyan-400 to-blue-500" },
+  // Male Voices
+  { id: "v11", name: "မင်းသူ", gender: "male", apiVoice: "Puck", color: "from-orange-500 to-amber-600" },
+  { id: "v12", name: "ကျော်ဇင်", gender: "male", apiVoice: "Charon", color: "from-slate-600 to-slate-800" },
+  { id: "v13", name: "ဇော်လင်း", gender: "male", apiVoice: "Fenrir", color: "from-indigo-500 to-blue-700" },
+  { id: "v14", name: "မြတ်မင်း", gender: "male", apiVoice: "Puck", color: "from-blue-400 to-indigo-600" },
+  { id: "v15", name: "အောင်စိုး", gender: "male", apiVoice: "Charon", color: "from-stone-500 to-gray-700" },
+  { id: "v16", name: "ညီညီ", gender: "male", apiVoice: "Fenrir", color: "from-blue-600 to-slate-700" },
+  { id: "v17", name: "သန့်စင်", gender: "male", apiVoice: "Puck", color: "from-amber-400 to-yellow-600" },
+  { id: "v18", name: "ထက်ဝေ", gender: "male", apiVoice: "Charon", color: "from-slate-700 to-gray-900" },
+  { id: "v19", name: "ပြည့်ဖြိုး", gender: "male", apiVoice: "Fenrir", color: "from-blue-300 to-blue-500" },
+  { id: "v20", name: "ကောင်းမြတ်", gender: "male", apiVoice: "Puck", color: "from-orange-400 to-red-500" },
 ];
 
 const CHARACTERS = [
@@ -87,18 +105,6 @@ const CHARACTERS = [
   { id: "c4", name: "Character 4", gender: "Female", avatar: "" },
   { id: "c5", name: "Character 5", gender: "Male", avatar: "" },
   { id: "c6", name: "Character 6", gender: "Female", avatar: "" },
-];
-
-const LANGUAGES = [
-  { code: "my", name: "Burmese (Myanmar)", flag: "🇲🇲" },
-  { code: "en", name: "English", flag: "🇺🇸" },
-  { code: "ja", name: "Japanese", flag: "🇯🇵" },
-  { code: "ko", name: "Korean", flag: "🇰🇷" },
-  { code: "zh", name: "Chinese", flag: "🇨🇳" },
-  { code: "th", name: "Thai", flag: "🇹🇭" },
-  { code: "vi", name: "Vietnamese", flag: "🇻🇳" },
-  { code: "hi", name: "Hindi", flag: "🇮🇳" },
-  { code: "id", name: "Indonesian", flag: "🇮🇩" },
 ];
 
 const CROP_RATIOS = [
@@ -125,6 +131,15 @@ const SUBTITLE_BACKGROUNDS = [
   { id: "none", label: "None" },
   { id: "transparent", label: "Transparent" },
   { id: "box", label: "Box" },
+];
+
+// Logo animation positions for bouncing
+const LOGO_POSITIONS = [
+  { id: "top-left", label: "Top Left" },
+  { id: "top-right", label: "Top Right" },
+  { id: "bottom-left", label: "Bottom Left" },
+  { id: "bottom-right", label: "Bottom Right" },
+  { id: "bounce", label: "Bounce (Animated)" },
 ];
 
 // ============ TYPES ============
@@ -220,29 +235,45 @@ function VoiceCard({
   return (
     <button
       onClick={onSelect}
-      className={`relative p-3 rounded-xl border transition-all duration-200 text-center ${
+      className={`relative p-3 rounded-xl border transition-all duration-200 text-center overflow-hidden ${
         isSelected
           ? "border-primary bg-primary/10 shadow-lg shadow-primary/20"
           : "border-border/30 bg-card/30 hover:border-border/60"
       }`}
     >
-      <div className="text-sm font-medium text-foreground mb-1">{voice.name}</div>
-      <div className="text-2xs text-muted-foreground">{voice.gender}</div>
+      {/* Gradient indicator */}
+      <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${voice.color}`} />
+      
+      <div className="pt-1">
+        <div className="text-sm font-medium text-foreground mb-0.5">{voice.name}</div>
+        <div className="text-2xs text-muted-foreground capitalize">
+          {voice.gender === "female" ? "♀ မိန်းမ" : "♂ ယောက်ျား"}
+        </div>
+      </div>
+      
       <button
         onClick={(e) => {
           e.stopPropagation();
           onPreview();
         }}
-        className={`absolute bottom-2 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-          isSelected
+        className={`mt-2 w-full py-1.5 rounded-lg flex items-center justify-center gap-1 transition-all text-xs ${
+          isPlaying
             ? "bg-primary text-primary-foreground"
-            : "bg-muted text-muted-foreground hover:bg-primary hover:text-primary-foreground"
+            : isSelected
+            ? "bg-primary/20 text-primary hover:bg-primary hover:text-primary-foreground"
+            : "bg-muted/50 text-muted-foreground hover:bg-primary/20 hover:text-primary"
         }`}
       >
         {isPlaying ? (
-          <Loader2 className="w-3 h-3 animate-spin" />
+          <>
+            <Loader2 className="w-3 h-3 animate-spin" />
+            <span>ဖွင့်နေ...</span>
+          </>
         ) : (
-          <Play className="w-3 h-3 ml-0.5" />
+          <>
+            <Play className="w-3 h-3" />
+            <span>နမူနာ</span>
+          </>
         )}
       </button>
     </button>
@@ -450,6 +481,11 @@ export default function TransformativeVideoPage() {
   const [blurMaskEnabled, setBlurMaskEnabled] = useState(false);
   const [logoWatermarkEnabled, setLogoWatermarkEnabled] = useState(false);
   const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPosition, setLogoPosition] = useState("bottom-right");
+  const [logoSpin, setLogoSpin] = useState(false);
+  const [logoNeonRing, setLogoNeonRing] = useState(false);
+  const [channelName, setChannelName] = useState("");
+  const [channelNameBounce, setChannelNameBounce] = useState(false);
   const [introOutroEnabled, setIntroOutroEnabled] = useState(false);
 
   // Subtitles
@@ -464,6 +500,9 @@ export default function TransformativeVideoPage() {
   const [processingJob, setProcessingJob] = useState<ProcessingJob | null>(null);
   const [processingStage, setProcessingStage] = useState("");
   const [outputVideoUrl, setOutputVideoUrl] = useState<string | null>(null);
+  
+  // Voice preview audio
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Credits (mock)
   const credits = 15;
@@ -532,10 +571,86 @@ export default function TransformativeVideoPage() {
     }
   };
 
-  const handlePreviewVoice = (voiceId: string) => {
+  // Voice preview - says "မင်္ဂလာပါ" using Gemini TTS
+  const handlePreviewVoice = async (voiceId: string) => {
+    const voice = VOICES.find(v => v.id === voiceId);
+    if (!voice) return;
+    
     setPlayingVoice(voiceId);
-    // Simulate preview
-    setTimeout(() => setPlayingVoice(null), 2000);
+    
+    try {
+      // Use Gemini TTS to generate "မင်္ဂလာပါ" (Hello in Burmese)
+      const previewText = "မင်္ဂလာပါ";
+      
+      const { data, error } = await supabase.functions.invoke('gemini-tts', {
+        body: {
+          text: previewText,
+          voiceName: voice.apiVoice,
+          apiKey: apiMode === "own" ? apiKey : undefined,
+          languageCode: "my-MM"
+        }
+      });
+      
+      if (error) throw error;
+      
+      // Check if we should use client-side TTS (App API mode)
+      if (data?.useClientTTS) {
+        // Use Web Speech API fallback
+        if ('speechSynthesis' in window) {
+          speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(previewText);
+          utterance.lang = "my-MM";
+          utterance.rate = 1.0;
+          utterance.onend = () => setPlayingVoice(null);
+          utterance.onerror = () => setPlayingVoice(null);
+          speechSynthesis.speak(utterance);
+        } else {
+          toast.error("Browser မှာ speech synthesis မရှိပါ");
+          setPlayingVoice(null);
+        }
+        return;
+      }
+      
+      if (data?.audio) {
+        // Create audio from base64
+        const audioBlob = new Blob(
+          [Uint8Array.from(atob(data.audio), c => c.charCodeAt(0))],
+          { type: 'audio/mp3' }
+        );
+        const audioUrl = URL.createObjectURL(audioBlob);
+        
+        // Stop previous audio if playing
+        if (previewAudioRef.current) {
+          previewAudioRef.current.pause();
+        }
+        
+        const audio = new Audio(audioUrl);
+        previewAudioRef.current = audio;
+        audio.onended = () => {
+          setPlayingVoice(null);
+          URL.revokeObjectURL(audioUrl);
+        };
+        audio.onerror = () => {
+          setPlayingVoice(null);
+          URL.revokeObjectURL(audioUrl);
+        };
+        await audio.play();
+      } else {
+        throw new Error("No audio data received");
+      }
+    } catch (err) {
+      console.error("Voice preview error:", err);
+      // Fallback to Web Speech API
+      if ('speechSynthesis' in window) {
+        speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance("မင်္ဂလာပါ");
+        utterance.lang = "my-MM";
+        utterance.onend = () => setPlayingVoice(null);
+        speechSynthesis.speak(utterance);
+      } else {
+        setPlayingVoice(null);
+      }
+    }
   };
 
   const handleStartProcessing = async () => {
@@ -611,7 +726,7 @@ export default function TransformativeVideoPage() {
         );
 
         // Step 4: Translate if target language is different
-        const selectedLangCode = LANGUAGES.find((l) => l.code === targetLang)?.name || "Burmese";
+        const selectedLangCode = languages.find((l) => l.code === targetLang)?.name || "Burmese";
         setProcessingStage(`Translating to ${selectedLangCode}...`);
 
         const translationResult = await translateText("", {
@@ -710,7 +825,7 @@ export default function TransformativeVideoPage() {
     }
   };
 
-  const selectedLang = LANGUAGES.find((l) => l.code === targetLang);
+  const selectedLang = languages.find((l) => l.code === targetLang);
 
   return (
     <div className="min-h-screen bg-background">
@@ -918,30 +1033,34 @@ export default function TransformativeVideoPage() {
           </div>
         </SectionCard>
 
-        {/* Target Language */}
-        <SectionCard title="Target Language" icon={Globe} collapsible={false}>
+        {/* Target Language - 80+ Languages */}
+        <SectionCard title="Target Language (80+ ဘာသာစကား)" icon={Globe} collapsible={false}>
           <Select value={targetLang} onValueChange={setTargetLang}>
             <SelectTrigger className="bg-card/50 border-border/30">
               <SelectValue>
                 {selectedLang && (
                   <span className="flex items-center gap-2">
-                    <span>{selectedLang.flag}</span>
+                    <Globe className="w-3.5 h-3.5 text-primary" />
                     <span>{selectedLang.name}</span>
+                    <span className="text-muted-foreground text-xs">({selectedLang.nativeName})</span>
                   </span>
                 )}
               </SelectValue>
             </SelectTrigger>
-            <SelectContent>
-              {LANGUAGES.map((lang) => (
+            <SelectContent className="max-h-[300px]">
+              {languages.map((lang) => (
                 <SelectItem key={lang.code} value={lang.code}>
                   <span className="flex items-center gap-2">
-                    <span>{lang.flag}</span>
-                    <span>{lang.name}</span>
+                    <span className="font-medium">{lang.name}</span>
+                    <span className="text-muted-foreground text-xs">({lang.nativeName})</span>
                   </span>
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          <p className="text-2xs text-muted-foreground mt-1">
+            ဘာသာစကား 80 ကျော် ရွေးချယ်နိုင်ပါသည်
+          </p>
         </SectionCard>
 
         {/* Crop Ratio */}
@@ -1064,21 +1183,31 @@ export default function TransformativeVideoPage() {
           </p>
         </SectionCard>
 
-        {/* Logo Watermark */}
+        {/* Logo Watermark with Animation Features */}
         <SectionCard
-          title="Logo Watermark"
+          title="Logo Watermark + Animation"
           icon={Image}
           enabled={logoWatermarkEnabled}
           onToggle={setLogoWatermarkEnabled}
         >
+          {/* Logo Upload */}
           <div
             onClick={() => logoInputRef.current?.click()}
-            className="upload-zone p-4 text-center cursor-pointer"
+            className="upload-zone p-4 text-center cursor-pointer relative overflow-hidden"
           >
-            <Image className="w-6 h-6 text-muted-foreground mx-auto mb-1" />
-            <p className="text-xs text-muted-foreground">
-              {logoFile ? logoFile.name : "Click to upload logo"}
-            </p>
+            {logoFile ? (
+              <div className="relative inline-block">
+                <div className={`${logoSpin ? "animate-spin" : ""} ${logoNeonRing ? "p-1 rounded-full bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500" : ""}`}>
+                  <Image className="w-10 h-10 text-primary mx-auto" />
+                </div>
+                <p className="text-xs text-primary mt-2">{logoFile.name}</p>
+              </div>
+            ) : (
+              <>
+                <Image className="w-6 h-6 text-muted-foreground mx-auto mb-1" />
+                <p className="text-xs text-muted-foreground">Click to upload logo</p>
+              </>
+            )}
             <input
               ref={logoInputRef}
               type="file"
@@ -1087,6 +1216,122 @@ export default function TransformativeVideoPage() {
               className="hidden"
             />
           </div>
+
+          {/* Logo Position */}
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">Logo Position</Label>
+            <Select value={logoPosition} onValueChange={setLogoPosition}>
+              <SelectTrigger className="bg-card/50 border-border/30">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LOGO_POSITIONS.map((pos) => (
+                  <SelectItem key={pos.id} value={pos.id}>
+                    {pos.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Animation Options */}
+          <div className="grid grid-cols-2 gap-3">
+            {/* Spin Animation */}
+            <div
+              className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                logoSpin
+                  ? "border-primary/50 bg-primary/10"
+                  : "border-border/30 bg-card/30"
+              }`}
+              onClick={() => setLogoSpin(!logoSpin)}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <Checkbox checked={logoSpin} />
+                <RotateCw className={`w-4 h-4 text-primary ${logoSpin ? "animate-spin" : ""}`} />
+              </div>
+              <span className="text-xs text-foreground font-medium">Spin Logo</span>
+              <p className="text-2xs text-muted-foreground">Logo လှည့်နေမယ်</p>
+            </div>
+
+            {/* Neon Ring */}
+            <div
+              className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                logoNeonRing
+                  ? "border-primary/50 bg-gradient-to-r from-pink-500/10 via-purple-500/10 to-cyan-500/10"
+                  : "border-border/30 bg-card/30"
+              }`}
+              onClick={() => setLogoNeonRing(!logoNeonRing)}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <Checkbox checked={logoNeonRing} />
+                <Zap className="w-4 h-4 text-neon-rose" />
+              </div>
+              <span className="text-xs text-foreground font-medium">Neon Ring</span>
+              <p className="text-2xs text-muted-foreground">Neon ကာလာစုံ</p>
+            </div>
+          </div>
+
+          {/* Channel Name */}
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">Channel Name</Label>
+            <Input
+              value={channelName}
+              onChange={(e) => setChannelName(e.target.value)}
+              placeholder="@YourChannel"
+              className="bg-card/50 border-border/30"
+            />
+          </div>
+
+          {/* Bounce Animation */}
+          <div
+            className={`p-3 rounded-xl border cursor-pointer transition-all ${
+              channelNameBounce
+                ? "border-primary/50 bg-primary/10"
+                : "border-border/30 bg-card/30"
+            }`}
+            onClick={() => setChannelNameBounce(!channelNameBounce)}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <Checkbox checked={channelNameBounce} />
+              <span className={`text-lg ${channelNameBounce ? "animate-bounce" : ""}`}>↕️</span>
+            </div>
+            <span className="text-xs text-foreground font-medium">Bounce Channel Name</span>
+            <p className="text-2xs text-muted-foreground">Channel Name အပေါ်အောက်ဘယ်ညာ ပြေးလွှားမယ်</p>
+          </div>
+
+          {/* Preview Box */}
+          {logoFile && (
+            <div className="relative bg-gradient-to-br from-muted/30 to-background rounded-xl p-4 border border-border/20 overflow-hidden h-32">
+              <div className="absolute inset-0 flex items-center justify-center">
+                <p className="text-2xs text-muted-foreground">Video Preview Area</p>
+              </div>
+              
+              {/* Animated Logo Preview */}
+              <div className={`absolute ${
+                logoPosition === "top-left" ? "top-2 left-2" :
+                logoPosition === "top-right" ? "top-2 right-2" :
+                logoPosition === "bottom-left" ? "bottom-2 left-2" :
+                logoPosition === "bottom-right" ? "bottom-2 right-2" :
+                "animate-bounce top-2 right-2"
+              }`}>
+                <div className={`w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center ${logoSpin ? "animate-spin" : ""}`}>
+                  {logoNeonRing && (
+                    <div className="absolute inset-0 rounded-full bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500 animate-pulse opacity-50" />
+                  )}
+                  <Image className="w-4 h-4 text-primary relative z-10" />
+                </div>
+              </div>
+
+              {/* Bouncing Channel Name Preview */}
+              {channelName && (
+                <div className={`absolute ${channelNameBounce ? "animate-bounce" : ""} bottom-2 left-1/2 -translate-x-1/2`}>
+                  <span className="text-2xs font-bold text-primary bg-background/80 px-2 py-0.5 rounded">
+                    {channelName}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </SectionCard>
 
         {/* Intro/Outro */}
