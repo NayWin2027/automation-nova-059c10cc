@@ -17,7 +17,32 @@ async function analyzeVideo(params: {
       targetLang: params.targetLang,
     },
   });
-  if (error) throw new Error(error.message || 'Video analysis failed');
+
+  if (error) {
+    const anyErr = error as any;
+    const status: number | undefined = anyErr?.context?.status;
+    const body = anyErr?.context?.body;
+
+    // Supabase functions errors often include the JSON body in context.body
+    if (body) {
+      try {
+        const parsed = typeof body === "string" ? JSON.parse(body) : body;
+        const msg = parsed?.error as string | undefined;
+        if (msg) throw new Error(msg);
+      } catch {
+        // ignore parse issues; fall back below
+      }
+    }
+
+    if (status === 429) {
+      throw new Error("API quota ကုန်သွားပါပြီ။ ခဏစောင့်ပြီး ထပ်စမ်းကြည့်ပါ။");
+    }
+    if (status === 413) {
+      throw new Error("ဗီဒီယိုဖိုင်ကြီးလွန်းသည်။ 20MB အောက်ဖိုင်သုံးပါ။");
+    }
+
+    throw new Error(error.message || "Video analysis failed");
+  }
   if (data?.error) throw new Error(data.error);
   return data?.recap || '';
 }
@@ -413,53 +438,66 @@ export default function VideoRecapView() {
       }
 
       const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = async () => {
-        const base64 = (reader.result as string).split(",")[1];
-        try {
-          const rawResponse = await analyzeVideo({
-            videoUrl: `data:${file.type || "video/mp4"};base64,${base64}`,
-            useOwnApi: true,
-            apiKey: apiKey.trim(),
-            targetLang,
-          });
 
-          let segments: ScriptSegment[] = [];
-          try {
-            segments = JSON.parse(rawResponse);
-            if (!Array.isArray(segments)) throw new Error("Not Array");
-          } catch {
-            console.warn("JSON Parse Failed, falling back to linear.");
-            segments = [{ time: 0, text: rawResponse }];
-          }
-
-          segments = segments
-            .map((s) => ({
-              time: typeof s.time === "number" ? s.time : 0,
-              text: s.text || "",
-            }))
-            .sort((a, b) => a.time - b.time);
-
-          // Fix: Remove commas from numbers rigorously to prevent "1000" reading for "100,000"
-          // Replaces "100,000" with "100000" and "1, 000" with "1000"
-          const completeText = segments
-            .map((s) => s.text)
-            .join(" ")
-            .replace(/(\d+),(?=\d{3})/g, "$1") // Standard thousand separator
-            .replace(/(\d)\s?,\s?(\d)/g, "$1$2"); // Commas with spaces
-
-          setFullScriptText(completeText);
-
-          await generateAudioFromText(completeText, segments);
-        } catch (err: any) {
-          console.error(err);
-          alert("Error: " + (err.message || "Process Failed."));
-          setAnalyzing(false);
-        }
+      reader.onerror = () => {
+        setAnalyzing(false);
+        alert("File read error. Please try again.");
       };
+
+      reader.onload = () => {
+        void (async () => {
+          try {
+            const result = reader.result;
+            if (typeof result !== "string") throw new Error("Invalid file data");
+
+            const base64 = result.split(",")[1];
+            if (!base64) throw new Error("Failed to read video (base64 missing)");
+
+            const rawResponse = await analyzeVideo({
+              videoUrl: `data:${file.type || "video/mp4"};base64,${base64}`,
+              useOwnApi: true,
+              apiKey: apiKey.trim(),
+              targetLang,
+            });
+
+            let segments: ScriptSegment[] = [];
+            try {
+              segments = JSON.parse(rawResponse);
+              if (!Array.isArray(segments)) throw new Error("Not Array");
+            } catch {
+              console.warn("JSON Parse Failed, falling back to linear.");
+              segments = [{ time: 0, text: rawResponse }];
+            }
+
+            segments = segments
+              .map((s) => ({
+                time: typeof s.time === "number" ? s.time : 0,
+                text: s.text || "",
+              }))
+              .sort((a, b) => a.time - b.time);
+
+            // Fix: Remove commas from numbers rigorously to prevent "1000" reading for "100,000"
+            // Replaces "100,000" with "100000" and "1, 000" with "1000"
+            const completeText = segments
+              .map((s) => s.text)
+              .join(" ")
+              .replace(/(\d+),(?=\d{3})/g, "$1") // Standard thousand separator
+              .replace(/(\d)\s?,\s?(\d)/g, "$1$2"); // Commas with spaces
+
+            setFullScriptText(completeText);
+            await generateAudioFromText(completeText, segments);
+          } catch (err: any) {
+            console.error(err);
+            setAnalyzing(false);
+            alert(err?.message || "Process Failed.");
+          }
+        })();
+      };
+
+      reader.readAsDataURL(file);
     } catch (e) {
       setAnalyzing(false);
-      alert("File error.");
+      alert((e as any)?.message || "File error.");
     }
   };
 
