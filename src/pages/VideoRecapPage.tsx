@@ -2,10 +2,20 @@ import React, { useState, useRef, useEffect } from "react";
 import { generateSpeech } from "../services/geminiService";
 import { supabase } from "@/integrations/supabase/client";
 
-// Local helper to call video-recap edge function
-async function analyzeVideo(base64: string, mimeType: string, targetLang: string): Promise<string> {
-  const { data, error } = await supabase.functions.invoke<{ recap?: string; error?: string }>('video-recap', {
-    body: { videoUrl: `data:${mimeType};base64,${base64}`, useOwnApi: false, targetLang }
+// Local helper to call video-recap backend function
+async function analyzeVideo(params: {
+  videoUrl: string;
+  useOwnApi: boolean;
+  apiKey?: string;
+  targetLang: string;
+}): Promise<string> {
+  const { data, error } = await supabase.functions.invoke<{ recap?: string; error?: string }>("video-recap", {
+    body: {
+      videoUrl: params.videoUrl,
+      useOwnApi: params.useOwnApi,
+      apiKey: params.useOwnApi ? params.apiKey : undefined,
+      targetLang: params.targetLang,
+    },
   });
   if (error) throw new Error(error.message || 'Video analysis failed');
   if (data?.error) throw new Error(data.error);
@@ -243,6 +253,21 @@ export default function VideoRecapView() {
   const [analyzing, setAnalyzing] = useState(false);
   const [statusText, setStatusText] = useState("");
 
+  // API Mode (App vs Own)
+  const [apiMode, setApiMode] = useState<"app" | "own">(() => {
+    const saved = localStorage.getItem("master_video_recap_api_mode");
+    return saved === "own" ? "own" : "app";
+  });
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem("master_video_recap_api_key") || "");
+
+  useEffect(() => {
+    localStorage.setItem("master_video_recap_api_mode", apiMode);
+  }, [apiMode]);
+
+  useEffect(() => {
+    localStorage.setItem("master_video_recap_api_key", apiKey);
+  }, [apiKey]);
+
   // Data State
   const [scriptSegments, setScriptSegments] = useState<ScriptSegment[]>([]);
   const [fullScriptText, setFullScriptText] = useState("");
@@ -379,12 +404,25 @@ export default function VideoRecapView() {
     setAudioBlobUrl(null);
 
     try {
+      // Important: App mode cannot analyze uploaded video files (only URL text guidance).
+      if (apiMode === "app") {
+        throw new Error("App Mode cannot analyze uploaded videos. Switch to OWN API KEY mode to recap a video file.");
+      }
+      if (!apiKey.trim()) {
+        throw new Error("Please paste your Google AI (Gemini) API key first.");
+      }
+
       const reader = new FileReader();
       reader.readAsDataURL(file);
       reader.onload = async () => {
         const base64 = (reader.result as string).split(",")[1];
         try {
-          const rawResponse = await analyzeVideo(base64, file.type || "video/mp4", targetLang);
+          const rawResponse = await analyzeVideo({
+            videoUrl: `data:${file.type || "video/mp4"};base64,${base64}`,
+            useOwnApi: true,
+            apiKey: apiKey.trim(),
+            targetLang,
+          });
 
           let segments: ScriptSegment[] = [];
           try {
@@ -1105,6 +1143,65 @@ export default function VideoRecapView() {
           onClick={() => setOpenSection(openSection === "script" ? null : "script")}
         >
           <div className="space-y-3">
+            <div className="space-y-2">
+              <label className="text-[7px] font-black text-slate-500 uppercase tracking-widest">AI MODE</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setApiMode("app")}
+                  className={`py-2 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all active:scale-[0.99] ${
+                    apiMode === "app"
+                      ? "bg-blue-600/20 border-blue-500/40 text-blue-200"
+                      : "bg-[#1a1a1a] border-white/10 text-slate-300 hover:bg-white/5"
+                  }`}
+                >
+                  APP MODE
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setApiMode("own")}
+                  className={`py-2 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all active:scale-[0.99] ${
+                    apiMode === "own"
+                      ? "bg-amber-500/15 border-amber-500/40 text-amber-200"
+                      : "bg-[#1a1a1a] border-white/10 text-slate-300 hover:bg-white/5"
+                  }`}
+                >
+                  OWN API KEY
+                </button>
+              </div>
+
+              {apiMode === "own" && (
+                <div className="space-y-1">
+                  <label className="text-[7px] font-black text-slate-500 uppercase tracking-widest">GEMINI API KEY</label>
+                  <input
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="AIza..."
+                    className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl p-3 text-[9px] font-bold text-white outline-none focus:border-amber-500/50"
+                  />
+                  <p className="text-[9px] text-slate-500">
+                    Uploaded video recap requires <span className="text-amber-300 font-bold">OWN API KEY</span>. Get a key from{" "}
+                    <a
+                      href="https://aistudio.google.com/apikey"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-300 underline"
+                    >
+                      AI Studio
+                    </a>
+                    .
+                  </p>
+                </div>
+              )}
+
+              {apiMode === "app" && (
+                <p className="text-[9px] text-slate-500">
+                  App Mode cannot analyze uploaded video files. Switch to <span className="text-amber-300 font-bold">OWN API KEY</span>.
+                </p>
+              )}
+            </div>
+
             <div className="space-y-1">
               <label className="text-[7px] font-black text-slate-500 uppercase tracking-widest">
                 VIDEO SIZE / ASPECT RATIO
