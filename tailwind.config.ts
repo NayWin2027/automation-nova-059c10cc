@@ -20,6 +20,15 @@ export default {
         '2xs': ['0.625rem', { lineHeight: '0.875rem' }],
       },
       colors: {
+        gold: {
+          DEFAULT: "hsl(var(--gold))",
+          light: "hsl(var(--gold-light))",
+          dark: "hsl(var(--gold-dark))",
+        },
+        platinum: {
+          DEFAULT: "hsl(var(--platinum))",
+          dark: "hsl(var(--platinum-dark))",
+        },
         neon: {
           cyan: "hsl(var(--neon-cyan))",
           green: "hsl(var(--neon-green))",

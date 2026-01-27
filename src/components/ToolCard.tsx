@@ -22,21 +22,21 @@ export function ToolCard({ icon: Icon, title, description, gradient, onClick }: 
   return (
     <button
       onClick={onClick}
-      className="glass-card p-3 text-left transition-all duration-300 hover:scale-[1.02] hover:border-primary/30 active:scale-[0.98] w-full group animate-fade-in"
+      className="glass-card p-2.5 text-left transition-all duration-300 hover:scale-[1.01] hover:border-primary/20 active:scale-[0.99] w-full group animate-fade-in"
     >
       <div
-        className={`w-9 h-9 rounded-xl flex items-center justify-center mb-2.5 ${gradientClasses[gradient]} shadow-lg`}
+        className={`w-7 h-7 rounded-lg flex items-center justify-center mb-2 ${gradientClasses[gradient]}`}
       >
-        <Icon className="w-4 h-4 text-foreground" />
+        <Icon className="w-3.5 h-3.5 text-foreground" />
       </div>
       
-      <div className="flex items-center gap-1 mb-1">
-        <span className="text-2xs font-medium tracking-wider text-primary uppercase">Secure</span>
-        <Lock className="w-2.5 h-2.5 text-amber-500" />
+      <div className="flex items-center gap-1 mb-0.5">
+        <span className="text-2xs font-medium tracking-wider text-primary/80 uppercase">Secure</span>
+        <Lock className="w-2 h-2 text-amber-500/80" />
       </div>
       
-      <h3 className="text-xs font-semibold text-foreground mb-0.5">{title}</h3>
-      <p className="text-2xs text-muted-foreground line-clamp-2">{description}</p>
+      <h3 className="text-2xs font-semibold text-foreground mb-0.5">{title}</h3>
+      <p className="text-2xs text-muted-foreground line-clamp-2 leading-tight">{description}</p>
     </button>
   );
 }

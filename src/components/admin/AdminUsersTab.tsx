@@ -1,16 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
 import { useAdmin } from "@/hooks/useAdmin";
 import { useToast } from "@/hooks/use-toast";
 import { 
   UserPlus, Trash2, Ban, Key, Coins, Crown, 
-  Smartphone, MoreVertical, Search, ShieldCheck, ShieldX
+  Smartphone, MoreVertical, Search, ShieldCheck, Sparkles
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -19,14 +17,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 
 const AdminUsersTab: React.FC = () => {
   const { toast } = useToast();
@@ -54,8 +44,9 @@ const AdminUsersTab: React.FC = () => {
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<typeof profiles[0] | null>(null);
   
+  // Changed from email to userId for ID-based auth
   const [newUser, setNewUser] = useState({
-    email: "",
+    userId: "",
     password: "",
     plan: "free" as "free" | "pro" | "premium",
     credits: 100,
@@ -72,9 +63,20 @@ const AdminUsersTab: React.FC = () => {
   );
 
   const handleCreateUser = async () => {
+    if (!newUser.userId || !newUser.password) {
+      toast({
+        title: "❌ Required Fields",
+        description: "User ID and Password are required",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
+    // Use userId as the email (internal identifier)
+    const internalEmail = `${newUser.userId}@internal.user`;
     const { error } = await createUser(
-      newUser.email,
+      internalEmail,
       newUser.password,
       newUser.plan,
       newUser.credits
@@ -89,10 +91,10 @@ const AdminUsersTab: React.FC = () => {
     } else {
       toast({
         title: "✅ User Created",
-        description: `${newUser.email} has been added`,
+        description: `User "${newUser.userId}" has been added`,
       });
       setAddUserOpen(false);
-      setNewUser({ email: "", password: "", plan: "free", credits: 100 });
+      setNewUser({ userId: "", password: "", plan: "free", credits: 100 });
       fetchProfiles();
       fetchStats();
     }
@@ -243,368 +245,379 @@ const AdminUsersTab: React.FC = () => {
     setDevicesDialogOpen(true);
   };
 
+  // Extract user ID from internal email
+  const getUserDisplayId = (email: string) => {
+    if (email.endsWith("@internal.user")) {
+      return email.replace("@internal.user", "");
+    }
+    return email;
+  };
+
   const getPlanBadgeClass = (plan: string) => {
     switch (plan) {
       case "premium":
-        return "bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0";
+        return "badge-premium text-white text-2xs px-2 py-0.5";
       case "pro":
-        return "bg-gradient-to-r from-amber-500 to-orange-500 text-white border-0";
+        return "badge-pro text-2xs px-2 py-0.5";
       default:
-        return "bg-muted text-muted-foreground";
+        return "badge-free text-muted-foreground text-2xs px-2 py-0.5";
     }
   };
 
   return (
-    <Card className="border-border/50 bg-card/50">
-      <CardHeader>
+    <div className="luxury-card rounded-xl overflow-hidden">
+      {/* Header */}
+      <div className="p-4 border-b border-border/30">
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle>User Management</CardTitle>
-            <CardDescription>Manage users, credits, and permissions</CardDescription>
+            <h3 className="text-sm font-semibold text-foreground">User Management</h3>
+            <p className="text-2xs text-muted-foreground">Manage users & permissions</p>
           </div>
           <Dialog open={addUserOpen} onOpenChange={setAddUserOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-gradient-to-r from-cyan-500 to-blue-600">
-                <UserPlus className="w-4 h-4 mr-2" />
+              <button className="btn-luxury px-3 py-1.5 rounded-lg text-2xs flex items-center gap-1.5">
+                <UserPlus className="w-3 h-3" />
                 Add User
-              </Button>
+              </button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="luxury-card border-border/30">
               <DialogHeader>
-                <DialogTitle>Add New User</DialogTitle>
-                <DialogDescription>Create a new user account</DialogDescription>
+                <DialogTitle className="text-sm text-gold">Add New User</DialogTitle>
+                <DialogDescription className="text-2xs">Create a new user with ID & Password</DialogDescription>
               </DialogHeader>
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <div>
-                  <Label>Email</Label>
+                  <Label className="text-2xs text-muted-foreground">User ID</Label>
                   <Input
-                    type="email"
-                    placeholder="user@example.com"
-                    value={newUser.email}
-                    onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                    placeholder="Enter unique user ID"
+                    value={newUser.userId}
+                    onChange={(e) => setNewUser({ ...newUser, userId: e.target.value })}
+                    className="h-8 text-xs bg-secondary/30 border-border/30"
                   />
                 </div>
                 <div>
-                  <Label>Password</Label>
+                  <Label className="text-2xs text-muted-foreground">Password</Label>
                   <Input
                     type="password"
                     placeholder="••••••••"
                     value={newUser.password}
                     onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                    className="h-8 text-xs bg-secondary/30 border-border/30"
                   />
                 </div>
                 <div>
-                  <Label>Plan</Label>
+                  <Label className="text-2xs text-muted-foreground">Plan</Label>
                   <Select
                     value={newUser.plan}
                     onValueChange={(v) => setNewUser({ ...newUser, plan: v as "free" | "pro" | "premium" })}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="h-8 text-xs bg-secondary/30 border-border/30">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="free">Free</SelectItem>
-                      <SelectItem value="pro">Pro</SelectItem>
-                      <SelectItem value="premium">Premium</SelectItem>
+                      <SelectItem value="free" className="text-xs">Free</SelectItem>
+                      <SelectItem value="pro" className="text-xs">Pro</SelectItem>
+                      <SelectItem value="premium" className="text-xs">Premium</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label>Initial Credits</Label>
+                  <Label className="text-2xs text-muted-foreground">Initial Credits</Label>
                   <Input
                     type="number"
                     value={newUser.credits}
                     onChange={(e) => setNewUser({ ...newUser, credits: parseInt(e.target.value) || 0 })}
+                    className="h-8 text-xs bg-secondary/30 border-border/30"
                   />
                 </div>
-                <Button onClick={handleCreateUser} disabled={loading} className="w-full">
+                <button 
+                  onClick={handleCreateUser} 
+                  disabled={loading} 
+                  className="btn-luxury w-full py-2 rounded-lg text-xs"
+                >
                   {loading ? "Creating..." : "Create User"}
-                </Button>
+                </button>
               </div>
             </DialogContent>
           </Dialog>
         </div>
-      </CardHeader>
-      <CardContent>
-        <div className="flex items-center gap-4 mb-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search users..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10"
-            />
-          </div>
+      </div>
+
+      {/* Search */}
+      <div className="p-3 border-b border-border/20">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+          <Input
+            placeholder="Search users..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-8 h-7 text-2xs bg-secondary/20 border-border/20"
+          />
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="table-luxury">
+        {/* Table Header */}
+        <div className="table-luxury-header grid grid-cols-6 gap-2 px-3 py-2">
+          <span className="text-2xs font-medium text-muted-foreground uppercase tracking-wider">User</span>
+          <span className="text-2xs font-medium text-muted-foreground uppercase tracking-wider">Plan</span>
+          <span className="text-2xs font-medium text-muted-foreground uppercase tracking-wider">Credits</span>
+          <span className="text-2xs font-medium text-muted-foreground uppercase tracking-wider">Status</span>
+          <span className="text-2xs font-medium text-muted-foreground uppercase tracking-wider">Joined</span>
+          <span className="text-2xs font-medium text-muted-foreground uppercase tracking-wider text-right">Actions</span>
         </div>
 
-        <div className="rounded-md border border-border/50 overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/30">
-                <TableHead>User</TableHead>
-                <TableHead>Plan</TableHead>
-                <TableHead>Credits</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Joined</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredProfiles.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                    No users found
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredProfiles.map((profile) => (
-                  <TableRow key={profile.id}>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{profile.display_name || "—"}</p>
-                        <p className="text-sm text-muted-foreground">{profile.email}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={getPlanBadgeClass(profile.plan)}>
-                        {profile.plan.toUpperCase()}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Coins className="w-4 h-4 text-amber-500" />
-                        {profile.credits}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {profile.is_banned ? (
-                        <Badge variant="destructive">Banned</Badge>
-                      ) : (
-                        <Badge variant="secondary" className="bg-green-500/10 text-green-500 border-green-500/20">
-                          Active
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {new Date(profile.created_at).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <MoreVertical className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => {
-                            setSelectedUser(profile.user_id);
-                            setNewCredits(profile.credits);
-                            setCreditDialogOpen(true);
-                          }}>
-                            <Coins className="w-4 h-4 mr-2" />
-                            Manage Credits
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => {
-                            setSelectedUser(profile.user_id);
-                            setPasswordDialogOpen(true);
-                          }}>
-                            <Key className="w-4 h-4 mr-2" />
-                            Reset Password
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openDevicesDialog(profile.user_id, profile)}>
-                            <Smartphone className="w-4 h-4 mr-2" />
-                            View Devices
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleUpdatePlan(profile.user_id, "free")}>
-                            Set Free
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleUpdatePlan(profile.user_id, "pro")}>
-                            <Crown className="w-4 h-4 mr-2 text-amber-500" />
-                            Set Pro
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleUpdatePlan(profile.user_id, "premium")}>
-                            <Crown className="w-4 h-4 mr-2 text-purple-500" />
-                            Set Premium
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem 
-                            onClick={() => {
-                              setSelectedUser(profile.user_id);
-                              setSelectedProfile(profile);
-                              setBanDialogOpen(true);
-                            }}
-                            className={profile.is_banned ? "text-green-500" : "text-orange-500"}
-                          >
-                            {profile.is_banned ? (
-                              <>
-                                <ShieldCheck className="w-4 h-4 mr-2" />
-                                Unban User
-                              </>
-                            ) : (
-                              <>
-                                <Ban className="w-4 h-4 mr-2" />
-                                Ban User
-                              </>
-                            )}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleDeleteUser(profile.user_id)}
-                            className="text-destructive"
-                          >
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            Delete User
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-
-        {/* Credit Dialog */}
-        <Dialog open={creditDialogOpen} onOpenChange={setCreditDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Manage Credits</DialogTitle>
-              <DialogDescription>Update user's credit balance</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label>Credits</Label>
-                <Input
-                  type="number"
-                  value={newCredits}
-                  onChange={(e) => setNewCredits(parseInt(e.target.value) || 0)}
-                />
-              </div>
-              <Button onClick={handleUpdateCredits} disabled={loading} className="w-full">
-                {loading ? "Updating..." : "Update Credits"}
-              </Button>
+        {/* Table Body */}
+        <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
+          {filteredProfiles.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground text-xs">
+              No users found
             </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* Password Dialog */}
-        <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Reset Password</DialogTitle>
-              <DialogDescription>Set a new password for this user</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label>New Password</Label>
-                <Input
-                  type="password"
-                  placeholder="••••••••"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                />
-              </div>
-              <Button onClick={handleResetPassword} disabled={loading} className="w-full">
-                {loading ? "Resetting..." : "Reset Password"}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* Ban Dialog */}
-        <Dialog open={banDialogOpen} onOpenChange={setBanDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>
-                {selectedProfile?.is_banned ? "Unban User" : "Ban User"}
-              </DialogTitle>
-              <DialogDescription>
-                {selectedProfile?.is_banned
-                  ? "This will restore the user's access"
-                  : "This will block the user from accessing the app"}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              {!selectedProfile?.is_banned && (
+          ) : (
+            filteredProfiles.map((profile) => (
+              <div key={profile.id} className="table-luxury-row grid grid-cols-6 gap-2 px-3 py-2 items-center">
                 <div>
-                  <Label>Reason (optional)</Label>
-                  <Input
-                    placeholder="Reason for ban"
-                    value={banReason}
-                    onChange={(e) => setBanReason(e.target.value)}
-                  />
+                  <p className="text-xs font-medium text-foreground truncate">
+                    {profile.display_name || getUserDisplayId(profile.email)}
+                  </p>
+                  <p className="text-2xs text-muted-foreground truncate">{getUserDisplayId(profile.email)}</p>
                 </div>
-              )}
-              <Button
-                onClick={() => handleBanUser(!selectedProfile?.is_banned)}
-                disabled={loading}
-                className="w-full"
-                variant={selectedProfile?.is_banned ? "default" : "destructive"}
-              >
-                {loading
-                  ? "Processing..."
-                  : selectedProfile?.is_banned
-                  ? "Unban User"
-                  : "Ban User"}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+                <div>
+                  <span className={`inline-flex items-center gap-1 rounded-full ${getPlanBadgeClass(profile.plan)}`}>
+                    {profile.plan === "premium" && <Sparkles className="w-2.5 h-2.5" />}
+                    {profile.plan === "pro" && <Crown className="w-2.5 h-2.5" />}
+                    {profile.plan.toUpperCase()}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Coins className="w-3 h-3 text-gold" />
+                  <span className="text-xs">{profile.credits}</span>
+                </div>
+                <div>
+                  {profile.is_banned ? (
+                    <span className="text-2xs px-2 py-0.5 rounded-full bg-destructive/20 text-destructive">Banned</span>
+                  ) : (
+                    <span className="text-2xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400">Active</span>
+                  )}
+                </div>
+                <div className="text-2xs text-muted-foreground">
+                  {new Date(profile.created_at).toLocaleDateString()}
+                </div>
+                <div className="text-right">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="p-1.5 rounded hover:bg-secondary/50 transition-colors">
+                        <MoreVertical className="w-3 h-3 text-muted-foreground" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="luxury-card border-border/30 min-w-[140px]">
+                      <DropdownMenuItem 
+                        onClick={() => {
+                          setSelectedUser(profile.user_id);
+                          setNewCredits(profile.credits);
+                          setCreditDialogOpen(true);
+                        }}
+                        className="text-xs"
+                      >
+                        <Coins className="w-3 h-3 mr-2 text-gold" />
+                        Credits
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        onClick={() => {
+                          setSelectedUser(profile.user_id);
+                          setPasswordDialogOpen(true);
+                        }}
+                        className="text-xs"
+                      >
+                        <Key className="w-3 h-3 mr-2" />
+                        Password
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        onClick={() => openDevicesDialog(profile.user_id, profile)}
+                        className="text-xs"
+                      >
+                        <Smartphone className="w-3 h-3 mr-2" />
+                        Devices
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator className="bg-border/30" />
+                      <DropdownMenuItem onClick={() => handleUpdatePlan(profile.user_id, "free")} className="text-xs">
+                        Set Free
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleUpdatePlan(profile.user_id, "pro")} className="text-xs">
+                        <Crown className="w-3 h-3 mr-2 text-gold" />
+                        Set Pro
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleUpdatePlan(profile.user_id, "premium")} className="text-xs">
+                        <Sparkles className="w-3 h-3 mr-2 text-purple-400" />
+                        Set Premium
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator className="bg-border/30" />
+                      <DropdownMenuItem 
+                        onClick={() => {
+                          setSelectedUser(profile.user_id);
+                          setSelectedProfile(profile);
+                          setBanDialogOpen(true);
+                        }}
+                        className={`text-xs ${profile.is_banned ? "text-emerald-400" : "text-orange-400"}`}
+                      >
+                        {profile.is_banned ? (
+                          <>
+                            <ShieldCheck className="w-3 h-3 mr-2" />
+                            Unban
+                          </>
+                        ) : (
+                          <>
+                            <Ban className="w-3 h-3 mr-2" />
+                            Ban
+                          </>
+                        )}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => handleDeleteUser(profile.user_id)}
+                        className="text-xs text-destructive"
+                      >
+                        <Trash2 className="w-3 h-3 mr-2" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
 
-        {/* Devices Dialog */}
-        <Dialog open={devicesDialogOpen} onOpenChange={setDevicesDialogOpen}>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>User Devices</DialogTitle>
-              <DialogDescription>
-                {selectedProfile?.email} - {devices.length} device(s)
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              {devices.length === 0 ? (
-                <p className="text-center text-muted-foreground py-4">No devices found</p>
-              ) : (
-                <div className="space-y-2">
-                  {devices.map((device) => (
-                    <div
-                      key={device.id}
-                      className="flex items-center justify-between p-3 rounded-lg border border-border/50"
-                    >
-                      <div className="flex items-center gap-3">
-                        <Smartphone className="w-5 h-5 text-muted-foreground" />
-                        <div>
-                          <p className="text-sm font-medium">
-                            {(device.device_info as Record<string, unknown>)?.browser as string || "Unknown Device"}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Last used: {new Date(device.last_used_at).toLocaleString()}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {selectedUser && devices.length > 0 && (
-                <Button
-                  variant="destructive"
-                  onClick={() => {
-                    handleClearDevices(selectedUser);
-                    setDevicesDialogOpen(false);
-                  }}
-                  disabled={loading}
-                  className="w-full"
-                >
-                  Clear All Devices
-                </Button>
-              )}
+      {/* Credit Dialog */}
+      <Dialog open={creditDialogOpen} onOpenChange={setCreditDialogOpen}>
+        <DialogContent className="luxury-card border-border/30">
+          <DialogHeader>
+            <DialogTitle className="text-sm text-gold">Manage Credits</DialogTitle>
+            <DialogDescription className="text-2xs">Update user's credit balance</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-2xs text-muted-foreground">Credits</Label>
+              <Input
+                type="number"
+                value={newCredits}
+                onChange={(e) => setNewCredits(parseInt(e.target.value) || 0)}
+                className="h-8 text-xs bg-secondary/30 border-border/30"
+              />
             </div>
-          </DialogContent>
-        </Dialog>
-      </CardContent>
-    </Card>
+            <button onClick={handleUpdateCredits} disabled={loading} className="btn-luxury w-full py-2 rounded-lg text-xs">
+              {loading ? "Updating..." : "Update Credits"}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Password Dialog */}
+      <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+        <DialogContent className="luxury-card border-border/30">
+          <DialogHeader>
+            <DialogTitle className="text-sm text-gold">Reset Password</DialogTitle>
+            <DialogDescription className="text-2xs">Set a new password for the user</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-2xs text-muted-foreground">New Password</Label>
+              <Input
+                type="password"
+                placeholder="••••••••"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="h-8 text-xs bg-secondary/30 border-border/30"
+              />
+            </div>
+            <button onClick={handleResetPassword} disabled={loading} className="btn-luxury w-full py-2 rounded-lg text-xs">
+              {loading ? "Resetting..." : "Reset Password"}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Ban Dialog */}
+      <Dialog open={banDialogOpen} onOpenChange={setBanDialogOpen}>
+        <DialogContent className="luxury-card border-border/30">
+          <DialogHeader>
+            <DialogTitle className="text-sm text-gold">
+              {selectedProfile?.is_banned ? "Unban User" : "Ban User"}
+            </DialogTitle>
+            <DialogDescription className="text-2xs">
+              {selectedProfile?.is_banned 
+                ? "This will restore user access" 
+                : "Provide a reason for banning"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {!selectedProfile?.is_banned && (
+              <div>
+                <Label className="text-2xs text-muted-foreground">Ban Reason</Label>
+                <Input
+                  placeholder="Enter reason..."
+                  value={banReason}
+                  onChange={(e) => setBanReason(e.target.value)}
+                  className="h-8 text-xs bg-secondary/30 border-border/30"
+                />
+              </div>
+            )}
+            <button 
+              onClick={() => handleBanUser(!selectedProfile?.is_banned)} 
+              disabled={loading} 
+              className={`w-full py-2 rounded-lg text-xs font-medium ${
+                selectedProfile?.is_banned 
+                  ? "bg-emerald-600 hover:bg-emerald-700 text-white" 
+                  : "bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+              }`}
+            >
+              {loading ? "Processing..." : selectedProfile?.is_banned ? "Unban User" : "Ban User"}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Devices Dialog */}
+      <Dialog open={devicesDialogOpen} onOpenChange={setDevicesDialogOpen}>
+        <DialogContent className="luxury-card border-border/30">
+          <DialogHeader>
+            <DialogTitle className="text-sm text-gold">User Devices</DialogTitle>
+            <DialogDescription className="text-2xs">
+              {selectedProfile?.display_name || getUserDisplayId(selectedProfile?.email || "")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
+            {devices.length === 0 ? (
+              <p className="text-center text-xs text-muted-foreground py-4">No devices found</p>
+            ) : (
+              devices.map((device) => (
+                <div key={device.id} className="p-2 rounded-lg bg-secondary/30 border border-border/20">
+                  <div className="flex items-center gap-2">
+                    <Smartphone className="w-3 h-3 text-muted-foreground" />
+                    <span className="text-2xs font-mono text-muted-foreground truncate">
+                      {device.device_fingerprint}
+                    </span>
+                  </div>
+                  <p className="text-2xs text-muted-foreground mt-1">
+                    Last used: {new Date(device.last_used_at).toLocaleString()}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+          {devices.length > 0 && selectedUser && (
+            <button 
+              onClick={() => handleClearDevices(selectedUser)} 
+              disabled={loading}
+              className="w-full py-2 rounded-lg text-xs font-medium bg-destructive/20 text-destructive hover:bg-destructive/30"
+            >
+              {loading ? "Clearing..." : "Clear All Devices"}
+            </button>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 };
 

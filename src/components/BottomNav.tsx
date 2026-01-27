@@ -8,38 +8,38 @@ interface BottomNavProps {
 export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
   return (
     <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
-      <div className="nav-glass px-6 py-2 flex items-center gap-8">
+      <div className="nav-glass px-5 py-1.5 flex items-center gap-6">
         <button
           onClick={() => onTabChange("home")}
-          className={`p-2 rounded-full transition-all duration-200 ${
+          className={`p-1.5 rounded-full transition-all duration-200 ${
             activeTab === "home"
-              ? "text-amber-500"
+              ? "text-gold"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          <Home className="w-5 h-5" />
+          <Home className="w-4 h-4" />
         </button>
         
         <button
           onClick={() => onTabChange("premium")}
-          className={`p-2 rounded-full transition-all duration-200 ${
+          className={`p-1.5 rounded-full transition-all duration-200 ${
             activeTab === "premium"
               ? "text-primary"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          <Diamond className="w-5 h-5" />
+          <Diamond className="w-4 h-4" />
         </button>
         
         <button
           onClick={() => onTabChange("settings")}
-          className={`p-2 rounded-full transition-all duration-200 ${
+          className={`p-1.5 rounded-full transition-all duration-200 ${
             activeTab === "settings"
               ? "text-foreground"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          <Settings className="w-5 h-5" />
+          <Settings className="w-4 h-4" />
         </button>
       </div>
     </div>
