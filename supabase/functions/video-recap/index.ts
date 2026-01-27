@@ -99,16 +99,59 @@ FORMAT:
       if (!response.ok) {
         const errorText = await response.text();
         console.error("Gemini API error:", errorText);
+
+        // Try to extract retry delay if present
+        let retryAfterSeconds: number | undefined;
+        try {
+          const parsed = JSON.parse(errorText);
+          const retryInfo = parsed?.error?.details?.find((d: any) => d?.["@type"] === "type.googleapis.com/google.rpc.RetryInfo");
+          const retryDelay = retryInfo?.retryDelay as string | undefined;
+          if (retryDelay && retryDelay.endsWith("s")) {
+            const s = parseInt(retryDelay.replace("s", ""), 10);
+            if (!Number.isNaN(s)) retryAfterSeconds = s;
+          }
+        } catch {
+          // ignore JSON parse errors
+        }
         
-        // Check for specific error types
+        // Check for specific error types and return appropriate HTTP status codes
         if (errorText.includes("INVALID_ARGUMENT") || errorText.includes("too large")) {
-          throw new Error("ဗီဒီယိုဖိုင်ကြီးလွန်းသည်။ 20MB အောက်ဖိုင်သုံးပါ။");
+          return new Response(
+            JSON.stringify({ error: "ဗီဒီယိုဖိုင်ကြီးလွန်းသည်။ 20MB အောက်ဖိုင်သုံးပါ။" }),
+            {
+              status: 413,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            }
+          );
         }
-        if (errorText.includes("quota") || errorText.includes("429")) {
-          throw new Error("API quota ကုန်သွားပါပြီ။ ခဏစောင့်ပါ။");
+
+        // Quota / rate limit
+        if (
+          response.status === 429 ||
+          errorText.includes("RESOURCE_EXHAUSTED") ||
+          errorText.includes("quota") ||
+          errorText.includes('"code": 429')
+        ) {
+          return new Response(
+            JSON.stringify({
+              error: "API quota ကုန်သွားပါပြီ။ ခဏစောင့်ပါ။",
+              retryAfterSeconds: retryAfterSeconds ?? null,
+            }),
+            {
+              status: 429,
+              headers: {
+                ...corsHeaders,
+                "Content-Type": "application/json",
+                ...(retryAfterSeconds ? { "Retry-After": String(retryAfterSeconds) } : {}),
+              },
+            }
+          );
         }
-        
-        throw new Error("Gemini API error: " + errorText.substring(0, 200));
+
+        return new Response(
+          JSON.stringify({ error: "Gemini API error: " + errorText.substring(0, 200) }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
       const data = await response.json();
