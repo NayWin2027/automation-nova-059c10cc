@@ -49,10 +49,12 @@ serve(async (req) => {
     const apiUrl = `${GEMINI_TTS_API}?key=${apiKey}`;
     
     // Build the proper Gemini TTS request
-    // The model understands language from context, no need for language prefix
+    // IMPORTANT: Use clear instruction to only read the text, not generate new content
+    const ttsInstruction = `Read the following text aloud naturally: "${text}"`;
+    
     const requestBody = {
       contents: [{
-        parts: [{ text: text }]
+        parts: [{ text: ttsInstruction }]
       }],
       generationConfig: {
         responseModalities: ["AUDIO"],
