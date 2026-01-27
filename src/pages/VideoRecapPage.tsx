@@ -1,66 +1,40 @@
 import React, { useState, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { generateSpeech } from "../services/geminiService";
-import { supabase } from "@/integrations/supabase/client";
-import { Home } from "lucide-react";
+import { analyzeVideo, generateSpeech, audioContext } from "../services/geminiService.ts";
 
-// Lazy audio context - only created when needed
-let audioContext: AudioContext | null = null;
-
-function getAudioContext(): AudioContext {
-  if (!audioContext) {
-    audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-  }
-  return audioContext;
-}
-
-// Function to call video-recap edge function
-async function analyzeVideo(
-  base64Video: string,
-  mimeType: string,
-  targetLang: string,
-  apiKey?: string
-): Promise<string> {
-  const { data, error } = await supabase.functions.invoke('video-recap', {
-    body: {
-      videoUrl: `data:${mimeType};base64,${base64Video}`,
-      useOwnApi: !!apiKey,
-      apiKey,
-      targetLang
-    }
-  });
-
-  if (error) throw new Error(error.message || 'Video analysis failed');
-  if (data?.error) throw new Error(data.error);
-  return data?.recap || '';
-}
-
-// --- CONSTANTS ---
+// --- DATA SETS ---
 const VOICES = [
-  { id: "v1", name: "Thura (Male - Professional)", gender: "MALE", apiVoice: "Charon" },
-  { id: "v2", name: "May (Female - Soft)", gender: "FEMALE", apiVoice: "Kore" },
-  { id: "v3", name: "Kyaw (Male - News)", gender: "MALE", apiVoice: "Fenrir" },
-  { id: "v4", name: "Hnin (Female - Story)", gender: "FEMALE", apiVoice: "Zephyr" },
-  { id: "v5", name: "Zayar (Male - Deep)", gender: "MALE", apiVoice: "Puck" },
-  { id: "v6", name: "Thandar (Female - Formal)", gender: "FEMALE", apiVoice: "Kore" },
-  { id: "v7", name: "Aung (Male - Energetic)", gender: "MALE", apiVoice: "Fenrir" },
-  { id: "v8", name: "Phyu (Female - Sweet)", gender: "FEMALE", apiVoice: "Zephyr" },
-  { id: "v9", name: "Min (Male - Serious)", gender: "MALE", apiVoice: "Charon" },
-  { id: "v10", name: "Nwe (Female - Calm)", gender: "FEMALE", apiVoice: "Kore" },
-  { id: "v11", name: "Zwe (Male - Dynamic)", gender: "MALE", apiVoice: "Puck" },
-  { id: "v12", name: "Aye (Female - Bright)", gender: "FEMALE", apiVoice: "Zephyr" },
-  { id: "v13", name: "Bo (Male - Authoritative)", gender: "MALE", apiVoice: "Fenrir" },
-  { id: "v14", name: "Yin (Female - Gentle)", gender: "FEMALE", apiVoice: "Kore" },
-  { id: "v15", name: "Kaung (Male - Fast)", gender: "MALE", apiVoice: "Charon" },
-  { id: "v16", name: "Su (Female - Clear)", gender: "FEMALE", apiVoice: "Zephyr" },
-  { id: "v17", name: "Naing (Male - Robust)", gender: "MALE", apiVoice: "Puck" },
-  { id: "v18", name: "Moe (Female - Elegant)", gender: "FEMALE", apiVoice: "Kore" },
-  { id: "v19", name: "Win (Male - Classic)", gender: "MALE", apiVoice: "Fenrir" },
-  { id: "v20", name: "Khin (Female - Warm)", gender: "FEMALE", apiVoice: "Zephyr" },
+  { id: "v1", name: "Kyaw Swar (Deep Narration)", gender: "MALE", apiVoice: "Charon", avatar: "👨‍💼" },
+  { id: "v2", name: "May Thet (Soft Story)", gender: "FEMALE", apiVoice: "Kore", avatar: "👩‍💼" },
+  { id: "v3", name: "Thura (News Reader)", gender: "MALE", apiVoice: "Fenrir", avatar: "🤵" },
+  { id: "v4", name: "Hnin Wutyi (Emotional)", gender: "FEMALE", apiVoice: "Zephyr", avatar: "💃" },
+  { id: "v5", name: "Zayar (Documentary)", gender: "MALE", apiVoice: "Puck", avatar: "🧔" },
+  { id: "v6", name: "Ko Aung (Casual - M)", gender: "MALE", apiVoice: "Fenrir", avatar: "👮" },
+  { id: "v7", name: "Ma Su (Sweet - F)", gender: "FEMALE", apiVoice: "Kore", avatar: "👩‍⚕️" },
+  { id: "v8", name: "U Win (Authoritative - M)", gender: "MALE", apiVoice: "Charon", avatar: "👷" },
+  { id: "v9", name: "Daw Moe (Calm - F)", gender: "FEMALE", apiVoice: "Zephyr", avatar: "🧕" },
+  { id: "v10", name: "Ko Tun (Fast Paced - M)", gender: "MALE", apiVoice: "Puck", avatar: "⛹️" },
+  { id: "v11", name: "Ma Nway (Teacher Tone - F)", gender: "FEMALE", apiVoice: "Kore", avatar: "👩‍🏫" },
+  { id: "v12", name: "Ko Min (Heroic - M)", gender: "MALE", apiVoice: "Fenrir", avatar: "🦸‍♂️" },
+  { id: "v13", name: "Ma Yin (Whisper - F)", gender: "FEMALE", apiVoice: "Zephyr", avatar: "🧚‍♀️" },
+  { id: "v14", name: "Ko Kaung (Friendly - M)", gender: "MALE", apiVoice: "Puck", avatar: "🙋‍♂️" },
+  { id: "v15", name: "Daw Myat (Professional - F)", gender: "FEMALE", apiVoice: "Kore", avatar: "👩‍⚖️" },
+  { id: "v16", name: "U Naing (Serious - M)", gender: "MALE", apiVoice: "Charon", avatar: "👮‍♂️" },
+  { id: "v17", name: "Ma Phyu (Bright - F)", gender: "FEMALE", apiVoice: "Zephyr", avatar: "💁‍♀️" },
+  { id: "v18", name: "Ko Kyaw (Youthful - M)", gender: "MALE", apiVoice: "Puck", avatar: "🙍‍♂️" },
+  { id: "v19", name: "Daw Thida (Warm - F)", gender: "FEMALE", apiVoice: "Kore", avatar: "🤱" },
+  { id: "v20", name: "U Soe (Classic - M)", gender: "MALE", apiVoice: "Fenrir", avatar: "🕴️" },
+];
+
+const CHARACTERS = [
+  { id: "none", label: "NONE", src: "" },
+  { id: "c1", label: "Male", src: "https://cdn-icons-png.flaticon.com/512/4140/4140048.png" },
+  { id: "c2", label: "Female", src: "https://cdn-icons-png.flaticon.com/512/4140/4140047.png" },
+  { id: "c3", label: "Pro M", src: "https://cdn-icons-png.flaticon.com/512/4140/4140037.png" },
+  { id: "c4", label: "Pro F", src: "https://cdn-icons-png.flaticon.com/512/4140/4140051.png" },
 ];
 
 const LANGUAGES = [
-  "BURMESE",
+  "BURMESE (MYANMAR)",
   "ENGLISH",
   "JAPANESE",
   "KOREAN",
@@ -145,102 +119,174 @@ const LANGUAGES = [
 
 const ASPECT_RATIOS = [
   { label: "ORIGINAL", w: 0, h: 0 },
-  { label: "16:9", w: 16, h: 9 },
-  { label: "9:16", w: 9, h: 16 },
-  { label: "1:1", w: 1, h: 1 },
-  { label: "4:3", w: 4, h: 3 },
+  { label: "16:9 (YouTube)", w: 16, h: 9 },
+  { label: "9:16 (TikTok)", w: 9, h: 16 },
+  { label: "1:1 (Square)", w: 1, h: 1 },
+  { label: "4:3 (Classic)", w: 4, h: 3 },
 ];
 
-const VideoRecapView: React.FC = () => {
-  // --- STATE ---
-  const [apiType, setApiType] = useState<"app" | "own">("app");
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem("master_recap_api_key") || "");
+const COLORS = [
+  { id: "cyan", name: "CYAN", hex: "#00FFFF" },
+  { id: "red", name: "RED", hex: "#ef4444" },
+  { id: "gold", name: "GOLD", hex: "#fbbf24" },
+  { id: "green", name: "GREEN", hex: "#22c55e" },
+  { id: "purple", name: "PURP", hex: "#c084fc" },
+  { id: "blue", name: "BLUE", hex: "#3b82f6" },
+  { id: "white", name: "WHITE", hex: "#ffffff" },
+];
 
+const SUB_COLORS = [
+  { id: "GOLD", label: "GOLD GRADIENT", hex: "#FFD700" },
+  { id: "WHITE", label: "PURE WHITE", hex: "#FFFFFF" },
+  { id: "NEON", label: "NEON CYAN", hex: "#00FFFF" },
+  { id: "ROSE", label: "ROSE PINK", hex: "#FB7185" },
+  { id: "LIME", label: "LIME GREEN", hex: "#A3E635" },
+];
+
+interface ScriptSegment {
+  time: number;
+  text: string;
+  audioStart?: number;
+  audioEnd?: number;
+}
+
+const AccordionItem = ({
+  title,
+  isOpen,
+  onClick,
+  children,
+}: {
+  title: string;
+  isOpen: boolean;
+  onClick: () => void;
+  children?: React.ReactNode;
+}) => (
+  <div className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0a0a] transition-all duration-300">
+    <button
+      onClick={onClick}
+      className="w-full p-4 flex justify-between items-center bg-white/5 hover:bg-white/10 active:bg-white/20 transition-colors"
+    >
+      <span className="text-[9px] font-black text-white uppercase tracking-widest">{title}</span>
+      <span className={`text-white transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`}>▼</span>
+    </button>
+    <div
+      className={`transition-[max-height] duration-500 ease-in-out overflow-hidden ${isOpen ? "max-h-[800px]" : "max-h-0"}`}
+    >
+      <div className="p-4 space-y-4 border-t border-white/5">{children}</div>
+    </div>
+  </div>
+);
+
+export default function VideoRecapView() {
+  // --- STATE ---
   const [file, setFile] = useState<File | null>(null);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [statusText, setStatusText] = useState("");
-  const [script, setScript] = useState("");
+
+  // Data State
+  const [scriptSegments, setScriptSegments] = useState<ScriptSegment[]>([]);
+  const [fullScriptText, setFullScriptText] = useState("");
   const [audioBuffer, setAudioBuffer] = useState<AudioBuffer | null>(null);
 
-  // Playback & Speed
+  // Playback
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [startTime, setStartTime] = useState(0);
   const [pausedAt, setPausedAt] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
   const [progress, setProgress] = useState(0);
-  const [videoSpeed, setVideoSpeed] = useState(1.0);
-  const [audioSpeed, setAudioSpeed] = useState(1.0);
+  const [isVideoReady, setIsVideoReady] = useState(false);
 
-  // Core Features
+  // Drop Box Control
+  const [openSection, setOpenSection] = useState<string | null>("script");
+
+  // Configs
   const [aspectRatio, setAspectRatio] = useState(ASPECT_RATIOS[0]);
-  const [smartZoom, setSmartZoom] = useState(true);
-  const [autoSyncMode, setAutoSyncMode] = useState(true);
+  const [targetLang, setTargetLang] = useState("BURMESE (MYANMAR)");
+  const [selectedVoice, setSelectedVoice] = useState(VOICES[0].id);
 
-  // 3S Engine & Effects
-  const [premiumProEdit, setPremiumProEdit] = useState(false);
-  const [copyrightBypass, setCopyrightBypass] = useState(false);
-  const [motionZoom, setMotionZoom] = useState(true);
-  const [zoomIntensity, setZoomIntensity] = useState(1.2);
-  const [filter, setFilter] = useState<"NORMAL" | "CINEMATIC" | "VINTAGE" | "NOIR">("NORMAL");
+  // Colors & Sizes
+  const [timelineColor, setTimelineColor] = useState(COLORS[0].hex);
+  const [timelineHeight, setTimelineHeight] = useState(3);
+  const [borderColor, setBorderColor] = useState(COLORS[2].hex);
+  const [borderWidth, setBorderWidth] = useState(10);
+
+  // Character Overlay
+  const [charId, setCharId] = useState("none");
+  const [charPos, setCharPos] = useState<"TL" | "TR" | "BL" | "BR">("BR");
+
+  // Visuals - Blur Box
+  const [blurEnabled, setBlurEnabled] = useState(true);
+  const [blurY, setBlurY] = useState(70);
+  const [blurH, setBlurH] = useState(25);
+  const [blurOpacity, setBlurOpacity] = useState(0.6);
+
+  // Visuals - Other
+  const [subScale, setSubScale] = useState(1.0);
+  const [subColor, setSubColor] = useState("GOLD");
+  const [filmGrain, setFilmGrain] = useState(true);
+  const [borderEnabled, setBorderEnabled] = useState(false);
+  const [videoSpeed, setVideoSpeed] = useState(1.0);
+  const [motionZoom, setMotionZoom] = useState(true); // Default ON
   const [flipVideo, setFlipVideo] = useState(false);
-  const [filmGrain, setFilmGrain] = useState(false);
+  const [audioSpeed, setAudioSpeed] = useState(1.0);
+  const [smartZoom, setSmartZoom] = useState(true);
   const [autoColor, setAutoColor] = useState(false);
-
-  // Visuals
-  const [borderThick, setBorderThick] = useState(0);
-  const [borderColor, setBorderColor] = useState("#00FFFF");
-  const [timelineColor, setTimelineColor] = useState("#FF0000");
-
-  // Masking
-  const [maskEnabled, setMaskEnabled] = useState(false);
-  const [maskType, setMaskType] = useState<"SOLID" | "BLUR">("SOLID");
-  const [maskX, setMaskX] = useState(0);
-  const [maskY, setMaskY] = useState(80);
-  const [maskW, setMaskW] = useState(100);
-  const [maskH, setMaskH] = useState(20);
-  const [maskOpacity, setMaskOpacity] = useState(0.9);
 
   // Logo & Branding
   const [logoSrc, setLogoSrc] = useState<string | null>(null);
+  const [logoSize, setLogoSize] = useState(15);
   const [logoSpin, setLogoSpin] = useState(false);
   const [logoNeon, setLogoNeon] = useState(false);
-  const [channelName, setChannelName] = useState("");
-  const [tickerMode, setTickerMode] = useState<"FIXED" | "SCROLL" | "FLOAT">("FLOAT");
 
-  // Subtitle Styling
-  const [targetLang, setTargetLang] = useState("BURMESE");
-  const [subtitleMode, setSubtitleMode] = useState<"ON" | "OFF">("ON");
-  const [subScale, setSubScale] = useState(1.2);
-  const [subColor, setSubColor] = useState<"GOLD" | "WHITE" | "NEON">("GOLD");
-  const [selectedVoiceId, setSelectedVoiceId] = useState("v1");
+  // Channel Ticker
+  const [channelName, setChannelName] = useState("");
+  const [tickerMode, setTickerMode] = useState<"OFF" | "SCROLL" | "BOUNCE">("OFF");
 
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
   const reqRef = useRef<number>();
+
+  // Animation Refs
   const logoAngleRef = useRef(0);
+  const tickerXRef = useRef(0);
+  const tickerYRef = useRef(0);
+  const tickerVelXRef = useRef(2);
+  const tickerVelYRef = useRef(1);
+  const charImgRef = useRef<HTMLImageElement | null>(null);
 
-  useEffect(() => {
-    localStorage.setItem("master_recap_api_key", apiKey);
-  }, [apiKey]);
+  // 3S Logic Refs
+  const freezeCanvasRef = useRef<HTMLCanvasElement | null>(null); // To store the frozen frame
+  const currentSegmentIndexRef = useRef<number>(-1);
+  const videoSeekRef = useRef<number>(-1); // To prevent seeking every frame
 
+  // --- HANDLERS ---
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const f = e.target.files[0];
       setFile(f);
       const url = URL.createObjectURL(f);
       setVideoSrc(url);
-      setScript("");
+      setFullScriptText("");
+      setScriptSegments([]);
       setAudioBuffer(null);
       setPausedAt(0);
       setIsPlaying(false);
       setProgress(0);
+      setIsVideoReady(false);
+    }
+  };
 
-      setTimeout(() => {
-        if (videoRef.current) videoRef.current.currentTime = 0.1;
-      }, 500);
+  const handleVideoLoaded = () => {
+    setIsVideoReady(true);
+    if (videoRef.current) {
+      videoRef.current.currentTime = 0;
+      videoRef.current.loop = true;
     }
   };
 
@@ -252,38 +298,29 @@ const VideoRecapView: React.FC = () => {
     }
   };
 
-  // PREMIUM PRO AI AUTO EDIT LOGIC
-  const triggerAutoEdit = () => {
-    const newState = !premiumProEdit;
-    setPremiumProEdit(newState);
-    if (newState) {
-      setMotionZoom(true);
-      setZoomIntensity(1.3);
-      setFilter("CINEMATIC");
-      setAutoColor(true);
-      setFlipVideo(true);
-      setFilmGrain(true);
-      setSmartZoom(true);
-      setCopyrightBypass(true);
-      setAutoSyncMode(true);
-      setTickerMode("FLOAT");
-      setSubScale(1.3);
-      setSubColor("GOLD");
+  useEffect(() => {
+    const char = CHARACTERS.find((c) => c.id === charId);
+    if (char && char.src) {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.src = char.src;
+      img.onload = () => {
+        charImgRef.current = img;
+      };
     } else {
-      setFilter("NORMAL");
-      setAutoColor(false);
-      setFlipVideo(false);
-      setFilmGrain(false);
-      setMotionZoom(false);
+      charImgRef.current = null;
     }
-  };
+  }, [charId]);
 
   const handleProcess = async () => {
     if (!file) return;
-    if (apiType === "own" && !apiKey) return alert("API Key ထည့်ပါ။");
+    if (audioContext.state === "suspended") await audioContext.resume();
 
     setAnalyzing(true);
-    setStatusText("AI ANALYZING & SCRIPTING...");
+    setStatusText("STEP 1/3: SEMANTIC VIDEO MATCHING...");
+    setFullScriptText("");
+    setScriptSegments([]);
+    setAudioBuffer(null);
 
     try {
       const reader = new FileReader();
@@ -291,359 +328,574 @@ const VideoRecapView: React.FC = () => {
       reader.onload = async () => {
         const base64 = (reader.result as string).split(",")[1];
         try {
-          const text = await analyzeVideo(base64, file.type, targetLang, apiType === "own" ? apiKey : undefined);
-          setScript(text);
+          const rawResponse = await analyzeVideo(base64, file.type || "video/mp4", targetLang);
 
-          setStatusText("SYNTHESIZING PROFESSIONAL NATIVE VOICE...");
-          const voiceObj = VOICES.find((v) => v.id === selectedVoiceId) || VOICES[0];
+          let segments: ScriptSegment[] = [];
+          try {
+            // Try parsing JSON
+            segments = JSON.parse(rawResponse);
+            if (!Array.isArray(segments)) throw new Error("Not Array");
+          } catch {
+            // Fallback if AI returns plain text
+            console.warn("JSON Parse Failed, falling back to linear.");
+            segments = [{ time: 0, text: rawResponse }];
+          }
 
-          // NOTE: We rely on the geminiService to generate speech.
-          // The prompt injection in the service handles the 'Burmese' tone.
-          const audioB64 = await generateSpeech(text, voiceObj.apiVoice, apiType === "own" ? apiKey : undefined);
+          // Clean segments
+          segments = segments
+            .map((s) => ({
+              time: typeof s.time === "number" ? s.time : 0,
+              text: s.text || "",
+            }))
+            .sort((a, b) => a.time - b.time);
+
+          const completeText = segments.map((s) => s.text).join(" ");
+          setFullScriptText(completeText);
+
+          setStatusText("STEP 2/3: GENERATING NARRATION...");
+          const voiceObj = VOICES.find((v) => v.id === selectedVoice) || VOICES[0];
+          const audioB64 = await generateSpeech(completeText, voiceObj.apiVoice);
 
           if (audioB64) {
+            setStatusText("STEP 3/3: SYNCING VISUALS...");
             const binaryString = atob(audioB64);
             const bytes = new Uint8Array(binaryString.length);
             for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
             const int16 = new Int16Array(bytes.buffer);
-            const ctx = getAudioContext();
-            const buffer = ctx.createBuffer(1, int16.length, 24000);
+            const buffer = audioContext.createBuffer(1, int16.length, 24000);
             const channelData = buffer.getChannelData(0);
             for (let i = 0; i < int16.length; i++) channelData[i] = int16[i] / 32768.0;
 
+            const totalDur = buffer.duration;
             setAudioBuffer(buffer);
-            setAudioDuration(buffer.duration);
+            setAudioDuration(totalDur);
+
+            // Map Audio Times to Segments (Proportional distribution)
+            const totalChars = completeText.length;
+            let currentTimePointer = 0;
+
+            const mappedSegments = segments.map((seg) => {
+              const segLen = seg.text.length;
+              const segDur = (segLen / totalChars) * totalDur;
+              const s = {
+                ...seg,
+                audioStart: currentTimePointer,
+                audioEnd: currentTimePointer + segDur,
+              };
+              currentTimePointer += segDur;
+              return s;
+            });
+
+            setScriptSegments(mappedSegments);
+
+            // AUTO PLAY START
+            setTimeout(() => {
+              setPausedAt(0);
+              if (videoRef.current) {
+                videoRef.current.currentTime = 0;
+                videoRef.current.play().catch(() => {});
+              }
+              startAudio(0);
+              setIsPlaying(true);
+              setAnalyzing(false);
+            }, 1500);
+          } else {
+            throw new Error("Audio generation failed.");
           }
         } catch (err: any) {
-          alert(err.message?.includes("429") ? "Quota Exceeded. Use Own API." : "Error: " + err.message);
-        } finally {
+          console.error(err);
+          alert("Error: " + (err.message || "Process Failed."));
           setAnalyzing(false);
         }
       };
     } catch (e) {
       setAnalyzing(false);
-      alert("File Error");
+      alert("File error.");
     }
   };
 
-  const togglePlay = () => {
-    if (!videoRef.current) return;
-    if (isPlaying) {
-      if (audioSourceRef.current) {
+  const activateCopyrightSafeMode = () => {
+    setFlipVideo(true);
+    setFilmGrain(true);
+    setMotionZoom(true);
+    setAutoColor(true);
+    alert("Safe Mode Enabled: Video Flip, Grain, Zoom, and Auto-Color activated.");
+  };
+
+  const stopAudio = () => {
+    if (audioSourceRef.current) {
+      try {
         audioSourceRef.current.stop();
-        audioSourceRef.current = null;
-      }
-      const ctx = getAudioContext();
-      setPausedAt(ctx.currentTime - startTime);
+      } catch (e) {}
+      audioSourceRef.current = null;
+    }
+  };
+
+  const startAudio = (offset: number, destination: AudioNode = audioContext.destination) => {
+    if (!audioBuffer) return;
+    stopAudio();
+    const source = audioContext.createBufferSource();
+    source.buffer = audioBuffer;
+    source.playbackRate.value = audioSpeed;
+    source.connect(destination);
+    source.start(0, offset);
+    audioSourceRef.current = source;
+    setStartTime(audioContext.currentTime - offset / audioSpeed);
+  };
+
+  const togglePlay = async () => {
+    if (!videoRef.current) return;
+    if (audioContext.state === "suspended") await audioContext.resume();
+
+    if (isPlaying) {
       setIsPlaying(false);
       videoRef.current.pause();
+      stopAudio();
+      const elapsed = (audioContext.currentTime - startTime) * audioSpeed;
+      setPausedAt(elapsed);
     } else {
-      if (audioBuffer) {
-        if (pausedAt >= audioDuration) setPausedAt(0);
-        const ctx = getAudioContext();
-        const source = ctx.createBufferSource();
-        source.buffer = audioBuffer;
-        source.playbackRate.value = audioSpeed;
-        source.connect(ctx.destination);
-        setStartTime(ctx.currentTime - pausedAt / audioSpeed);
-        source.start(0, pausedAt);
-        audioSourceRef.current = source;
-      }
+      if (pausedAt >= audioDuration && audioDuration > 0) setPausedAt(0);
       setIsPlaying(true);
       videoRef.current.play().catch(() => {});
+      if (audioBuffer) startAudio(pausedAt);
     }
   };
 
-  // --- THE ULTIMATE RENDER LOOP ---
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseFloat(e.target.value);
+    const totalDur = audioDuration || videoRef.current?.duration || 1;
+    const newTime = (val / 100) * totalDur;
+
+    if (isPlaying && audioBuffer) {
+      stopAudio();
+      startAudio(newTime);
+    } else {
+      setPausedAt(newTime);
+      setProgress(val);
+    }
+  };
+
+  const handleExport = async () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    if (audioContext.state === "suspended") await audioContext.resume();
+
+    setIsExporting(true);
+    setIsPlaying(true);
+    setPausedAt(0);
+    setProgress(0);
+    videoRef.current.currentTime = 0;
+    videoRef.current.play();
+
+    const streamDestination = audioContext.createMediaStreamDestination();
+    if (audioBuffer) startAudio(0, streamDestination);
+
+    const canvasStream = canvasRef.current.captureStream(30);
+    const combinedStream = new MediaStream([
+      ...canvasStream.getVideoTracks(),
+      ...streamDestination.stream.getAudioTracks(),
+    ]);
+
+    const recorder = new MediaRecorder(combinedStream, { mimeType: "video/webm;codecs=vp9" });
+    mediaRecorderRef.current = recorder;
+    recordedChunksRef.current = [];
+
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) recordedChunksRef.current.push(e.data);
+    };
+    recorder.onstop = () => {
+      const blob = new Blob(recordedChunksRef.current, { type: "video/webm" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `MASTER_AI_VIDEO_${Date.now()}.webm`;
+      a.click();
+      setIsExporting(false);
+      setIsPlaying(false);
+      setPausedAt(0);
+      stopAudio();
+      videoRef.current?.pause();
+    };
+    recorder.start();
+  };
+
+  // --- RENDER ENGINE ---
   useEffect(() => {
+    // Initialize Offscreen Canvas for freeze effect
+    if (!freezeCanvasRef.current) {
+      freezeCanvasRef.current = document.createElement("canvas");
+    }
+
     const render = () => {
       const video = videoRef.current;
       const canvas = canvasRef.current;
+      const freezeCanvas = freezeCanvasRef.current;
 
-      if (video && canvas) {
+      if (video && canvas && freezeCanvas) {
         let targetW = video.videoWidth;
         let targetH = video.videoHeight;
+        const MAX_RES = 1080;
+        if (targetH > MAX_RES) {
+          targetW = targetW * (MAX_RES / targetH);
+          targetH = MAX_RES;
+        }
 
         if (aspectRatio.label !== "ORIGINAL") {
           const baseH = 720;
           targetW = baseH * (aspectRatio.w / aspectRatio.h);
           targetH = baseH;
-        } else {
-          if (targetH > 720) {
-            const ratio = 720 / targetH;
-            targetH = 720;
-            targetW = targetW * ratio;
-          }
         }
-
         if (canvas.width !== targetW || canvas.height !== targetH) {
           canvas.width = targetW;
           canvas.height = targetH;
+          freezeCanvas.width = targetW;
+          freezeCanvas.height = targetH;
         }
 
         const ctx = canvas.getContext("2d");
+        const freezeCtx = freezeCanvas.getContext("2d");
 
         let elapsed = pausedAt;
-        if (isPlaying && audioBuffer) {
-          const ctx = getAudioContext();
-          elapsed = (ctx.currentTime - startTime) * audioSpeed;
-          if (elapsed > audioDuration) {
-            setIsPlaying(false);
-            setPausedAt(0);
-          } else {
-            setProgress((elapsed / audioDuration) * 100);
-          }
+        const totalDur = audioDuration || video.duration || 1;
 
-          if (autoSyncMode) {
-            const videoDuration = video.duration;
-            if (videoDuration && isFinite(videoDuration)) {
-              video.currentTime = elapsed % videoDuration;
+        if (isPlaying && audioBuffer) {
+          elapsed = (audioContext.currentTime - startTime) * audioSpeed;
+          if (elapsed >= totalDur) {
+            if (isExporting && mediaRecorderRef.current && mediaRecorderRef.current.state === "recording")
+              mediaRecorderRef.current.stop();
+            else {
+              setIsPlaying(false);
+              setPausedAt(0);
+              stopAudio();
+              video.pause();
             }
+          } else {
+            setProgress((elapsed / totalDur) * 100);
           }
-        } else if (isPlaying && !audioBuffer) {
+        } else if (isPlaying) {
           elapsed = video.currentTime;
+          if (video.duration) setProgress((video.currentTime / video.duration) * 100);
         }
 
-        if (video.readyState >= 2) {
+        // --- SEMANTIC SCENE MATCHING ---
+        // Identify current script segment based on elapsed Audio Time
+        let activeSegment = scriptSegments.find(
+          (s) => elapsed >= (s.audioStart || 0) && elapsed < (s.audioEnd || Infinity),
+        );
+        if (!activeSegment && scriptSegments.length > 0) activeSegment = scriptSegments[scriptSegments.length - 1]; // Fallback to last
+
+        if (activeSegment && video.readyState >= 2 && ctx && freezeCtx) {
           video.playbackRate = videoSpeed;
-          if (!isPlaying && !autoSyncMode) video.pause();
-          if (isPlaying && !autoSyncMode && video.paused) video.play().catch(() => {});
 
-          if (ctx) {
-            ctx.fillStyle = "#000";
-            ctx.fillRect(0, 0, targetW, targetH);
+          // Calculate time relative to the START of this narrative segment
+          const segmentRelativeTime = elapsed - (activeSegment.audioStart || 0);
 
-            ctx.save();
+          // --- 3S VIDEO / 3S PHOTO RHYTHM ---
+          // Cycle: 0-3s Video, 3-6s Photo, 6-9s Video, etc.
+          const CYCLE_DUR = 6.0;
+          const cycleTime = segmentRelativeTime % CYCLE_DUR;
+          const isFreezeMode = cycleTime >= 3.0 && motionZoom;
 
-            let scale = 1.0;
-            let tx = 0;
-            let ty = 0;
+          // --- VIDEO SEEK LOGIC ---
+          // We want the video to play from the segment's matched timestamp.
+          // Video Target Time = SegmentTimestamp + TimeSinceSegmentStarted
+          // BUT: if we are in freeze mode, we want to freeze the frame at (SegmentTimestamp + 3s).
 
-            if (motionZoom && isPlaying) {
-              const cycle = 12;
-              const progress = (elapsed % cycle) / cycle;
-              const maxScale = zoomIntensity;
-              const maxPanX = targetW * 0.1;
+          let targetVideoTime = activeSegment.time + segmentRelativeTime;
 
-              if (progress < 0.25) {
-                const p = progress / 0.25;
-                scale = 1.0 + p * (maxScale - 1.0);
-              } else if (progress < 0.5) {
-                scale = maxScale;
-                const p = (progress - 0.25) / 0.25;
-                tx = Math.sin(p * Math.PI) * maxPanX;
-              } else if (progress < 0.75) {
-                scale = maxScale;
-                const p = (progress - 0.5) / 0.25;
-                tx = -Math.sin(p * Math.PI) * maxPanX;
-              } else {
-                const p = (progress - 0.75) / 0.25;
-                scale = maxScale - p * (maxScale - 1.0);
-              }
+          // IMPORTANT: If we jump to a new segment (new topic), force video seek
+          // To avoid seeking every frame, we allow a small drift threshold
+          const drift = Math.abs(video.currentTime - targetVideoTime);
+
+          if (isFreezeMode) {
+            // In freeze mode, we don't need to seek the video element, we just draw the captured frame.
+            // But we keep video playing in background or pause it?
+            // Better to let it play to be ready for next chunk.
+          } else {
+            // Video Mode: Ensure video is at the right semantic spot
+            // If drift is large (> 0.5s), seek. This happens when topics change.
+            if (drift > 0.5) {
+              video.currentTime = targetVideoTime;
             }
+            if (!isPlaying && !video.paused) video.pause();
+            if (isPlaying && video.paused) video.play().catch(() => {});
+          }
 
+          // Drawing Stage
+          ctx.fillStyle = "#000";
+          ctx.fillRect(0, 0, targetW, targetH);
+          ctx.save();
+
+          if (flipVideo) {
+            ctx.translate(targetW, 0);
+            ctx.scale(-1, 1);
+          }
+
+          // Capture Freeze Frame logic:
+          // We need to capture the frame exactly when the cycle transitions from Video -> Photo (at 3s mark of cycle)
+          // Simplified: Capture current frame if we are in video mode, so it's ready for freeze mode.
+          if (!isFreezeMode) {
             const vw = video.videoWidth;
             const vh = video.videoHeight;
+            let scale = Math.min(targetW / vw, targetH / vh);
+            if (smartZoom) scale = Math.max(targetW / vw, targetH / vh);
+            const dw = vw * scale;
+            const dh = vh * scale;
+            const dx = (targetW - dw) / 2;
+            const dy = (targetH - dh) / 2;
 
-            let dw, dh, dx, dy;
-
-            const videoRatio = vw / vh;
-            const canvasRatio = targetW / targetH;
-
-            if (smartZoom || aspectRatio.label === "ORIGINAL") {
-              if (canvasRatio > videoRatio) {
-                dw = targetW;
-                dh = targetW / videoRatio;
-              } else {
-                dh = targetH;
-                dw = targetH * videoRatio;
-              }
-            } else {
-              const scaleFit = Math.min(targetW / vw, targetH / vh);
-              dw = vw * scaleFit;
-              dh = vh * scaleFit;
-            }
-
-            dx = (targetW - dw) / 2;
-            dy = (targetH - dh) / 2;
-
-            ctx.translate(targetW / 2, targetH / 2);
-            ctx.scale(scale, scale);
-            ctx.translate(-targetW / 2, -targetH / 2);
-            ctx.translate(tx, ty);
-
-            if (flipVideo) {
-              ctx.translate(targetW, 0);
-              ctx.scale(-1, 1);
-            }
-
-            if (filter === "CINEMATIC") ctx.filter = "contrast(1.2) saturate(1.2) brightness(0.95)";
-            else if (filter === "VINTAGE") ctx.filter = "sepia(0.4) contrast(1.1) brightness(0.9)";
-            else if (filter === "NOIR") ctx.filter = "grayscale(1) contrast(1.3)";
-
+            // Draw to main canvas
             ctx.drawImage(video, dx, dy, dw, dh);
 
-            if (autoColor) {
-              ctx.globalCompositeOperation = "overlay";
-              ctx.fillStyle = "rgba(255, 180, 50, 0.15)";
-              ctx.fillRect(dx, dy, dw, dh);
-              ctx.globalCompositeOperation = "source-over";
+            // Also draw to freeze canvas to keep it fresh
+            freezeCtx.fillStyle = "#000";
+            freezeCtx.fillRect(0, 0, targetW, targetH);
+            freezeCtx.drawImage(video, 0, 0, vw, vh, dx, dy, dw, dh);
+          } else {
+            // --- PHOTO MODE (KEN BURNS) ---
+            // Use the frame captured in freezeCtx
+            const freezeIndex = Math.floor(segmentRelativeTime / 6.0); // Differentiate cycles
+            const panDirection = freezeIndex % 2 === 0 ? 1 : -1;
+            const progressInFreeze = (cycleTime - 3.0) / 3.0; // 0 to 1
+
+            const zoomLevel = 1.2;
+            const zoomedW = targetW * zoomLevel;
+            const zoomedH = targetH * zoomLevel;
+            const excessX = zoomedW - targetW;
+            const excessY = zoomedH - targetH;
+
+            let translateX = 0;
+            if (panDirection === 1) {
+              translateX = 0 - progressInFreeze * excessX;
+            } else {
+              translateX = -excessX + progressInFreeze * excessX;
+            }
+            const translateY = -excessY / 2;
+
+            ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH, translateX, translateY, zoomedW, zoomedH);
+
+            // Flash effect
+            if (progressInFreeze < 0.1) {
+              ctx.fillStyle = `rgba(255, 255, 255, ${0.2 - progressInFreeze * 2})`;
+              ctx.fillRect(0, 0, targetW, targetH);
+            }
+          }
+
+          // Color & Grain
+          if (autoColor) {
+            ctx.fillStyle = "rgba(255, 160, 0, 0.1)";
+            ctx.globalCompositeOperation = "overlay";
+            ctx.fillRect(0, 0, targetW, targetH);
+            ctx.globalCompositeOperation = "source-over";
+          }
+
+          if (filmGrain) {
+            const noiseCount = targetW * targetH * 0.005;
+            ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
+            for (let i = 0; i < noiseCount; i++) {
+              ctx.fillRect(Math.random() * targetW, Math.random() * targetH, 1, 1);
+            }
+          }
+
+          ctx.restore();
+
+          if (blurEnabled) {
+            const by = targetH * (blurY / 100);
+            const bh = targetH * (blurH / 100);
+            ctx.fillStyle = `rgba(0,0,0,${blurOpacity})`;
+            ctx.fillRect(0, by, targetW, bh);
+          }
+
+          // Character Overlay
+          if (charImgRef.current) {
+            const cw = targetW * 0.25;
+            const ch = cw;
+            let cx = 20,
+              cy = 20;
+            if (charPos === "TL") {
+              cx = 20;
+              cy = 20;
+            }
+            if (charPos === "TR") {
+              cx = targetW - cw - 20;
+              cy = 20;
+            }
+            if (charPos === "BL") {
+              cx = 20;
+              cy = targetH - ch - 20;
+            }
+            if (charPos === "BR") {
+              cx = targetW - cw - 20;
+              cy = targetH - ch - 20;
             }
 
-            ctx.filter = "none";
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(cx + cw / 2, cy + ch / 2, cw / 2, 0, Math.PI * 2);
+            ctx.clip();
+            ctx.drawImage(charImgRef.current, cx, cy, cw, ch);
+            ctx.strokeStyle = "#fff";
+            ctx.lineWidth = 4;
+            ctx.stroke();
             ctx.restore();
+          }
 
-            if (filmGrain) {
-              const noiseX = Math.random() * targetW;
-              const noiseY = Math.random() * targetH;
-              ctx.fillStyle = "rgba(255,255,255,0.1)";
-              ctx.fillRect(noiseX, noiseY, 2, 2);
-            }
+          if (logoSrc) {
+            const logoImg = new Image();
+            logoImg.src = logoSrc;
+            if (logoImg.complete && logoImg.width > 0) {
+              const size = targetH * (logoSize / 100);
+              const margin = 20;
+              const lx = targetW - size - margin;
+              const ly = margin;
+              const centerX = lx + size / 2;
+              const centerY = ly + size / 2;
 
-            if (maskEnabled) {
-              const mx = targetW * (maskX / 100);
-              const my = targetH * (maskY / 100);
-              const mw = targetW * (maskW / 100);
-              const mh = targetH * (maskH / 100);
-
-              if (maskType === "BLUR") {
-                ctx.fillStyle = `rgba(10, 10, 10, ${0.85 * maskOpacity})`;
-                ctx.fillRect(mx, my, mw, mh);
-              } else {
-                ctx.fillStyle = `rgba(0, 0, 0, ${maskOpacity})`;
-                ctx.fillRect(mx, my, mw, mh);
+              ctx.save();
+              ctx.translate(centerX, centerY);
+              if (logoSpin) {
+                logoAngleRef.current += 0.05;
+                ctx.rotate(logoAngleRef.current);
               }
-            }
-
-            if (logoSrc) {
-              const logoImg = new Image();
-              logoImg.src = logoSrc;
-              if (logoImg.complete && logoImg.width > 0) {
-                const size = targetH * 0.15;
-                const lx = targetW - size - 20;
-                const ly = 20;
-
-                ctx.save();
-                ctx.translate(lx + size / 2, ly + size / 2);
-                if (logoSpin) {
-                  logoAngleRef.current += 0.02;
-                  ctx.rotate(logoAngleRef.current);
-                }
-
-                if (logoNeon) {
-                  ctx.shadowColor = borderColor;
-                  ctx.shadowBlur = 15;
-                  ctx.strokeStyle = borderColor;
-                  ctx.lineWidth = 3;
-                }
-
+              if (logoNeon) {
+                const h = (Date.now() / 10) % 360;
+                ctx.shadowColor = `hsl(${h}, 100%, 50%)`;
+                ctx.shadowBlur = 30;
+                ctx.strokeStyle = `hsl(${h}, 100%, 50%)`;
+                ctx.lineWidth = 5;
                 ctx.beginPath();
-                ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
-                ctx.clip();
-                ctx.drawImage(logoImg, -size / 2, -size / 2, size, size);
-                if (logoNeon) ctx.stroke();
-                ctx.restore();
+                ctx.arc(0, 0, size / 2 + 5, 0, Math.PI * 2);
+                ctx.stroke();
               }
+              ctx.beginPath();
+              ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
+              ctx.clip();
+              ctx.drawImage(logoImg, -size / 2, -size / 2, size, size);
+              ctx.restore();
             }
+          }
 
-            if (subtitleMode !== "OFF" && script && isPlaying) {
-              const totalWords = script.split(" ").length;
-              const dynamicWPS = audioDuration > 0 ? totalWords / audioDuration : 2.5;
+          if (channelName && tickerMode !== "OFF") {
+            const fontSize = targetH * 0.04;
+            ctx.font = `900 ${fontSize}px sans-serif`;
+            ctx.fillStyle = "#fff";
+            ctx.shadowColor = "black";
+            ctx.shadowBlur = 4;
+            const textMetrics = ctx.measureText(channelName);
+            const textW = textMetrics.width;
 
-              const words = script.split(" ");
-              const idx = Math.floor(elapsed * dynamicWPS);
-              const chunk = words.slice(idx, idx + 8).join(" ");
-
-              if (chunk) {
-                const fontSize = targetH * 0.06 * subScale;
-                ctx.font = `900 ${fontSize}px sans-serif`;
-                ctx.textAlign = "center";
-
-                let tx = targetW / 2;
-                let ty = targetH - targetH * 0.1;
-
-                if (maskEnabled) {
-                  const mx = targetW * (maskX / 100);
-                  const my = targetH * (maskY / 100);
-                  const mw = targetW * (maskW / 100);
-                  const mh = targetH * (maskH / 100);
-                  tx = mx + mw / 2;
-                  ty = my + mh / 2 + fontSize / 3;
-                }
-
-                ctx.strokeStyle = "black";
-                ctx.lineWidth = fontSize * 0.15;
-                ctx.lineJoin = "round";
-                ctx.strokeText(chunk, tx, ty);
-
-                if (subColor === "GOLD") {
-                  const gradient = ctx.createLinearGradient(0, ty - fontSize, 0, ty);
-                  gradient.addColorStop(0, "#FFD700");
-                  gradient.addColorStop(1, "#DAA520");
-                  ctx.fillStyle = gradient;
-                } else if (subColor === "NEON") {
-                  ctx.fillStyle = "#00FFFF";
-                  ctx.shadowColor = "#00FFFF";
-                  ctx.shadowBlur = 15;
-                } else {
-                  ctx.fillStyle = "#FFFFFF";
-                }
-
-                ctx.fillText(chunk, tx, ty);
-                ctx.shadowBlur = 0;
-              }
+            if (tickerMode === "SCROLL") {
+              tickerXRef.current -= 3;
+              if (tickerXRef.current < -textW) tickerXRef.current = targetW;
+              const y = fontSize + 20;
+              ctx.fillText(channelName, tickerXRef.current, y);
+            } else if (tickerMode === "BOUNCE") {
+              tickerXRef.current += tickerVelXRef.current;
+              tickerYRef.current += tickerVelYRef.current;
+              if (tickerXRef.current <= 0 || tickerXRef.current >= targetW - textW) tickerVelXRef.current *= -1;
+              if (tickerYRef.current <= fontSize || tickerYRef.current >= targetH) tickerVelYRef.current *= -1;
+              if (tickerYRef.current === 0) tickerYRef.current = targetH / 2;
+              ctx.fillText(channelName, tickerXRef.current, tickerYRef.current);
             }
+            ctx.shadowBlur = 0;
+          }
 
-            // --- CHANNEL TICKER (Floating/Scrolling) ---
-            if (channelName) {
-              const tSize = targetH * 0.04;
-              ctx.font = `bold ${tSize}px sans-serif`;
-              ctx.fillStyle = "#fff";
-              const tWidth = ctx.measureText(channelName).width;
+          // --- BURMESE AUTO-SUBTITLES LOGIC ---
+          // Use activeSegment text instead of full text for better sync
+          if (activeSegment && (isPlaying || pausedAt > 0)) {
+            const chunk = activeSegment.text;
+            // For the active segment, we can just show the text directly.
+            // Or if it's long, we scroll it?
+            // Let's stick to the previous pagination logic but applied to the *segment* text.
+            // Calculate progress WITHIN the segment
+            const segmentProgress =
+              segmentRelativeTime / ((activeSegment.audioEnd || 1) - (activeSegment.audioStart || 0));
 
-              let tx = 0;
-              let ty = targetH * 0.1;
+            // Show a sliding window within the segment text?
+            // Or just show the whole segment text if it fits?
+            // To keep it simple and perfectly synced to "Scene", let's show the text block.
+            // But if it's too long, we page it.
 
-              if (tickerMode === "SCROLL") {
-                const speed = 2;
-                const period = targetW + tWidth + 100;
-                const offset = (elapsed * 60 * speed) % period;
-                tx = targetW - offset;
-              } else if (tickerMode === "FLOAT") {
-                // IMPROVED DVD BOUNCE LOGIC (Up Down Left Right)
-                const speedX = 0.6;
-                const speedY = 0.8;
+            const totalChars = chunk.length;
+            const charsPerPage = 80;
+            const pageIndex = Math.floor(Math.min(0.99, segmentProgress) * (totalChars / charsPerPage));
+            // Use segmentProgress to scroll through text if it's long
 
-                const minX = 20;
-                const maxX = targetW - tWidth - 20;
-                const minY = tSize + 10;
-                const maxY = targetH - 10;
+            const startChar = Math.floor(pageIndex * charsPerPage);
+            const endChar = Math.min(totalChars, startChar + charsPerPage);
+            const visibleText = chunk; // Show full chunk context usually better for short clips, but let's wrap
 
-                // Map sine (-1 to 1) to (min to max)
-                // (sin + 1) / 2 goes 0 to 1
-                const nX = (Math.sin(elapsed * speedX) + 1) / 2;
-                const nY = (Math.cos(elapsed * speedY) + 1) / 2;
+            // Let's actually show the whole text of the segment but wrap it.
+            // The segment usually corresponds to one or two sentences.
 
-                tx = minX + nX * (maxX - minX);
-                ty = minY + nY * (maxY - minY);
-              } else {
-                tx = 20; // Fixed
-              }
+            if (chunk) {
+              const fs = targetH * 0.05 * subScale;
+              ctx.font = `900 ${fs}px 'Padauk', sans-serif`;
+              ctx.textAlign = "center";
+              ctx.textBaseline = "middle";
 
-              ctx.shadowColor = "black";
+              const tx = targetW / 2;
+              const by = targetH * (blurY / 100);
+              const bh = targetH * (blurH / 100);
+              const ty = by + bh / 2;
+
+              ctx.shadowColor = "rgba(0,0,0,0.8)";
               ctx.shadowBlur = 4;
-              ctx.fillText(channelName, tx, ty);
+              ctx.shadowOffsetX = 2;
+              ctx.shadowOffsetY = 2;
+
+              if (subColor === "GOLD") {
+                const g = ctx.createLinearGradient(0, ty - fs, 0, ty);
+                g.addColorStop(0, "#FFD700");
+                g.addColorStop(1, "#B8860B");
+                ctx.fillStyle = g;
+              } else if (subColor === "NEON") {
+                ctx.fillStyle = "#00FFFF";
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = "#00FFFF";
+              } else {
+                ctx.fillStyle = SUB_COLORS.find((c) => c.id === subColor)?.hex || "white";
+              }
+
+              const maxWidth = targetW * 0.9;
+              // Manual Line Wrapping
+              const words = chunk.split("");
+              let line = "";
+              let lines = [];
+
+              for (let i = 0; i < words.length; i++) {
+                const testLine = line + words[i];
+                const metrics = ctx.measureText(testLine);
+                if (metrics.width > maxWidth && i > 0) {
+                  lines.push(line);
+                  line = words[i];
+                } else {
+                  line = testLine;
+                }
+              }
+              lines.push(line);
+
+              // Limit to 2 lines for subtitle box, scroll if needed based on time
+              // If lines > 2, use segmentProgress to shift which lines are shown
+              let displayLines = lines;
+              if (lines.length > 2) {
+                const maxScroll = lines.length - 2;
+                const scrollIdx = Math.floor(segmentProgress * (maxScroll + 1));
+                displayLines = lines.slice(scrollIdx, scrollIdx + 2);
+              }
+
+              displayLines.forEach((l, i) => {
+                const yOff = ty - (displayLines.length - 1) * fs * 0.6 + i * fs * 1.2;
+                ctx.fillText(l, tx, yOff);
+              });
+
               ctx.shadowBlur = 0;
             }
+          }
 
-            if (borderThick > 0) {
-              ctx.lineWidth = borderThick * 15;
-              ctx.strokeStyle = borderColor;
-              ctx.strokeRect(0, 0, targetW, targetH);
-            }
-
-            ctx.fillStyle = timelineColor;
-            ctx.fillRect(0, targetH - 10, targetW * (progress / 100), 10);
+          if (borderEnabled) {
+            ctx.lineWidth = borderWidth;
+            ctx.strokeStyle = borderColor;
+            ctx.strokeRect(0, 0, targetW, targetH);
           }
         }
       }
@@ -653,556 +905,583 @@ const VideoRecapView: React.FC = () => {
     return () => cancelAnimationFrame(reqRef.current!);
   }, [
     isPlaying,
+    isExporting,
     startTime,
     pausedAt,
     aspectRatio,
-    videoSpeed,
-    audioSpeed,
-    maskEnabled,
-    maskX,
-    maskY,
-    maskW,
-    maskH,
-    maskOpacity,
-    maskType,
-    borderThick,
-    borderColor,
-    timelineColor,
-    script,
-    subtitleMode,
-    channelName,
-    subScale,
-    subColor,
-    filter,
-    flipVideo,
-    autoColor,
-    filmGrain,
+    smartZoom,
     motionZoom,
-    zoomIntensity,
+    borderEnabled,
+    timelineColor,
+    borderColor,
+    logoSrc,
     logoSpin,
     logoNeon,
-    logoSrc,
+    logoSize,
     tickerMode,
-    smartZoom,
-    autoSyncMode,
-    audioDuration,
+    channelName,
+    charId,
+    charPos,
+    scriptSegments,
+    audioBuffer,
+    audioSpeed,
+    videoSpeed,
+    filmGrain,
+    autoColor,
+    subScale,
+    subColor,
+    blurEnabled,
+    blurY,
+    blurH,
+    blurOpacity,
+    borderWidth,
+    timelineHeight,
+    flipVideo,
+    isVideoReady,
   ]);
 
-  const navigate = useNavigate();
-
   return (
-    <div className="space-y-6 pb-32 max-w-7xl mx-auto px-1">
-      {/* HOME BUTTON */}
-      <div className="flex justify-start p-2">
-        <button
-          onClick={() => navigate("/")}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800/80 border border-white/10 text-white text-xs font-bold hover:bg-slate-700 transition-all"
-        >
-          <Home className="w-4 h-4" />
-          Home
-        </button>
-      </div>
-      {/* API KEY & HEADER */}
-      <div className="flex flex-col items-center gap-3">
-        <div className="flex bg-slate-900/60 p-1 rounded-2xl border border-white/10 shadow-lg">
-          <button
-            onClick={() => setApiType("app")}
-            className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase ${apiType === "app" ? "bg-blue-600 text-white" : "text-slate-500"}`}
-          >
-            APP API
-          </button>
-          <button
-            onClick={() => setApiType("own")}
-            className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase ${apiType === "own" ? "bg-amber-500 text-white" : "text-slate-500"}`}
-          >
-            OWN API
-          </button>
+    <div className="flex flex-col gap-5 pb-32 max-w-lg mx-auto px-2 animate-in fade-in duration-500">
+      {/* HEADER */}
+      <div className="flex items-center gap-3 bg-[#050505] p-2 rounded-2xl border border-white/10">
+        <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
         </div>
-        {apiType === "own" && (
+        <div className="flex-1">
+          <h2 className="text-sm font-black text-white uppercase tracking-tighter">
+            MASTER <span className="text-blue-500">AI</span>
+          </h2>
           <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="PASTE GEMINI API KEY..."
-            className="bg-black/40 border border-white/10 rounded-xl p-2 text-xs text-white text-center w-64"
+            type="text"
+            placeholder="Video Link..."
+            disabled
+            className="w-full bg-transparent text-[9px] text-slate-500 outline-none border-none p-0 h-auto font-bold"
           />
-        )}
+        </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6">
-        {/* LEFT: PREVIEW & CONTROLS */}
-        <div className="lg:w-2/3 space-y-4">
-          {/* PREVIEW CONTAINER */}
-          <div
-            className="bg-black rounded-[32px] overflow-hidden shadow-2xl border border-white/10 relative flex items-center justify-center mx-auto transition-all duration-300"
-            style={{
-              aspectRatio: aspectRatio.label === "ORIGINAL" ? "auto" : `${aspectRatio.w}/${aspectRatio.h}`,
-              maxHeight: "70vh",
-              minHeight: "300px",
-            }}
-          >
-            {!videoSrc ? (
-              <div onClick={() => document.getElementById("vid")?.click()} className="text-center cursor-pointer p-10">
-                <div className="w-20 h-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mx-auto mb-4 animate-pulse">
-                  <span className="text-2xl text-amber-400">⚡</span>
-                </div>
-                <p className="text-amber-400 font-black text-xl">UPLOAD VIDEO</p>
-                <input id="vid" type="file" accept="video/*" onChange={handleFileChange} className="hidden" />
+      {/* MONITOR */}
+      <div className="bg-black rounded-[32px] overflow-hidden border border-white/10 shadow-2xl relative group">
+        <div className="relative w-full aspect-square bg-black flex items-center justify-center">
+          {!videoSrc ? (
+            <div
+              onClick={() => document.getElementById("vid")?.click()}
+              className="flex flex-col items-center justify-center cursor-pointer gap-2 opacity-50 hover:opacity-100 transition-opacity"
+            >
+              <div className="w-16 h-16 rounded-full border-2 border-dashed border-slate-600 flex items-center justify-center">
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  className="text-slate-400"
+                >
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" x2="12" y1="15" y2="3" />
+                </svg>
               </div>
-            ) : (
-              <>
-                <video
-                  ref={videoRef}
-                  src={videoSrc}
-                  className="hidden"
-                  playsInline
-                  muted
-                  loop
-                  crossOrigin="anonymous"
-                  onLoadedMetadata={() => {
-                    if (videoRef.current && canvasRef.current) {
-                      canvasRef.current.width = videoRef.current.videoWidth;
-                      canvasRef.current.height = videoRef.current.videoHeight;
-                    }
-                  }}
-                />
-                <canvas ref={canvasRef} className="w-full h-full object-contain" />
-                {analyzing && (
-                  <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center text-white font-black animate-pulse gap-2">
-                    <div className="w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-                    <p>{statusText}</p>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
+              <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">TAP TO UPLOAD</span>
+              <input id="vid" type="file" accept="video/*" onChange={handleFileChange} className="hidden" />
+            </div>
+          ) : (
+            <>
+              <video
+                ref={videoRef}
+                src={videoSrc}
+                className="hidden"
+                muted
+                playsInline
+                crossOrigin="anonymous"
+                onLoadedData={handleVideoLoaded}
+              />
+              <canvas ref={canvasRef} className="w-full h-full object-contain" />
 
-          {/* SCRIPT BOX */}
-          {script && (
-            <textarea
-              value={script}
-              onChange={(e) => setScript(e.target.value)}
-              className="w-full h-24 bg-black/40 border border-white/10 rounded-xl p-3 text-xs text-white"
-            />
+              <div
+                className="absolute bottom-0 left-0 right-0 z-30 group-hover:opacity-100 transition-all cursor-pointer"
+                style={{ height: `${timelineHeight * 3}px`, background: "rgba(255,255,255,0.1)" }}
+              >
+                <div
+                  className="h-full transition-all duration-100 ease-linear shadow-[0_0_10px_rgba(0,0,0,0.5)]"
+                  style={{ width: `${progress}%`, backgroundColor: timelineColor }}
+                />
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={progress}
+                  onChange={handleSeek}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                />
+              </div>
+            </>
           )}
 
-          {/* PLAYBACK CONTROLS */}
-          <div className="flex gap-2">
-            <button
-              onClick={togglePlay}
-              className={`flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest ${isPlaying ? "bg-rose-600" : "bg-emerald-500"} text-white shadow-lg active:scale-95 transition-all`}
-            >
-              {isPlaying ? "PAUSE PREVIEW" : "PLAY PREVIEW"}
-            </button>
-            <button
-              onClick={handleProcess}
-              disabled={analyzing || !file}
-              className="flex-1 py-4 rounded-2xl bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest shadow-lg disabled:opacity-50 active:scale-95 transition-all"
-            >
-              {analyzing ? "GENERATING..." : "GENERATE AI RECAP"}
-            </button>
-          </div>
+          {analyzing && (
+            <div className="absolute inset-0 bg-black/95 z-[100] flex flex-col items-center justify-center text-white gap-4 animate-in fade-in duration-300 pointer-events-none">
+              <div className="relative">
+                <div className="w-20 h-20 border-4 border-blue-500/30 rounded-full animate-spin"></div>
+                <div className="w-20 h-20 border-4 border-t-blue-500 rounded-full animate-spin absolute top-0 left-0"></div>
+              </div>
+              <p className="text-xs font-black tracking-[0.2em] uppercase text-blue-200 animate-pulse bg-blue-900/30 px-6 py-3 rounded-xl border border-blue-500/30 shadow-lg">
+                {statusText}
+              </p>
+            </div>
+          )}
+          {isExporting && (
+            <div className="absolute inset-0 bg-black/95 z-[100] flex flex-col items-center justify-center text-white gap-3">
+              <div className="w-12 h-12 border-4 border-rose-500 border-t-transparent rounded-full animate-spin"></div>
+              <span className="text-[10px] font-black tracking-widest text-rose-500">
+                EXPORTING... {Math.round(progress)}%
+              </span>
+            </div>
+          )}
         </div>
+      </div>
 
-        {/* RIGHT: SETTINGS PANEL - PREMIUM UI */}
-        <div className="lg:w-1/3 space-y-4 h-[700px] overflow-y-auto custom-scrollbar pr-2 pb-20">
-          {/* 1. FORMAT & SPEED */}
-          <div className="platinum-glass p-4 rounded-[24px] space-y-3">
-            <h3 className="text-[9px] font-black text-white uppercase tracking-widest">VIDEO FORMAT & SPEED</h3>
-            <div className="flex gap-1 flex-wrap">
-              {ASPECT_RATIOS.map((r) => (
-                <button
-                  key={r.label}
-                  onClick={() => setAspectRatio(r)}
-                  className={`flex-1 py-2 px-2 rounded-lg text-[8px] font-black border transition-all ${aspectRatio.label === r.label ? "jewel-sapphire text-white border-transparent" : "bg-black/20 text-slate-400 border-white/10"}`}
-                >
-                  {r.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Size & Speed Sliders */}
-            <div className="space-y-4 pt-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[8px] font-black text-slate-400 uppercase">SMART ZOOM (FILL)</span>
-                <button
-                  onClick={() => setSmartZoom(!smartZoom)}
-                  className={`w-8 h-4 rounded-full transition-all ${smartZoom ? "bg-emerald-500" : "bg-slate-700"}`}
-                >
-                  <div
-                    className={`w-3 h-3 bg-white rounded-full shadow-md transform transition-transform ${smartZoom ? "translate-x-4" : "translate-x-1"}`}
-                  ></div>
-                </button>
-              </div>
-
-              {/* AUTO SYNC MODE */}
-              <div className="flex items-center justify-between">
-                <span className="text-[8px] font-black text-slate-400 uppercase">AUTO SYNC MODE (AV MATCH)</span>
-                <button
-                  onClick={() => setAutoSyncMode(!autoSyncMode)}
-                  className={`w-8 h-4 rounded-full transition-all ${autoSyncMode ? "bg-amber-500" : "bg-slate-700"}`}
-                >
-                  <div
-                    className={`w-3 h-3 bg-white rounded-full shadow-md transform transition-transform ${autoSyncMode ? "translate-x-4" : "translate-x-1"}`}
-                  ></div>
-                </button>
-              </div>
-
-              <div className="space-y-2 bg-black/20 p-3 rounded-xl">
-                <div className="flex justify-between text-[7px] text-slate-300 font-bold uppercase">
-                  <span>VIDEO SPEED: {videoSpeed}x</span>
-                  <span>AUDIO SPEED: {audioSpeed}x</span>
-                </div>
-                <input
-                  type="range"
-                  min="0.5"
-                  max="2"
-                  step="0.1"
-                  value={videoSpeed}
-                  onChange={(e) => setVideoSpeed(parseFloat(e.target.value))}
-                  className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                />
-                <input
-                  type="range"
-                  min="0.5"
-                  max="2"
-                  step="0.1"
-                  value={audioSpeed}
-                  onChange={(e) => setAudioSpeed(parseFloat(e.target.value))}
-                  className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-green-500"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* 2. 3S ENGINE & EFFECTS (Restored & Enhanced) */}
-          <div className="gold-glass p-4 rounded-[24px] space-y-3">
-            <div className="flex justify-between items-center">
-              <h3 className="text-[9px] font-black text-amber-200 uppercase tracking-widest">3S ENGINE & EFFECTS</h3>
-              {/* PREMIUM PRO AI AUTO EDIT BUTTON */}
-              <button
-                onClick={triggerAutoEdit}
-                className={`px-2 py-1 rounded text-[7px] font-black border ${premiumProEdit ? "jewel-gold text-white border-transparent shadow-[0_0_10px_#f59e0b]" : "bg-slate-800 text-slate-400 border-white/10"}`}
-              >
-                {premiumProEdit ? "PREMIUM AI EDIT: ON" : "PREMIUM AI EDIT: OFF"}
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => setFilter("CINEMATIC")}
-                className={`py-2 rounded-lg text-[7px] font-black border ${filter === "CINEMATIC" ? "bg-indigo-600 text-white border-transparent" : "bg-black/20 text-slate-400 border-white/10"}`}
-              >
-                CINEMA
-              </button>
-              <button
-                onClick={() => setFilter("VINTAGE")}
-                className={`py-2 rounded-lg text-[7px] font-black border ${filter === "VINTAGE" ? "bg-amber-700 text-white border-transparent" : "bg-black/20 text-slate-400 border-white/10"}`}
-              >
-                VINTAGE
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => setFlipVideo(!flipVideo)}
-                className={`py-2 rounded-lg text-[7px] font-black border ${flipVideo ? "jewel-emerald text-white border-transparent" : "bg-black/20 text-slate-400 border-white/10"}`}
-              >
-                FLIP
-              </button>
-              <button
-                onClick={() => setFilmGrain(!filmGrain)}
-                className={`py-2 rounded-lg text-[7px] font-black border ${filmGrain ? "jewel-emerald text-white border-transparent" : "bg-black/20 text-slate-400 border-white/10"}`}
-              >
-                GRAIN
-              </button>
-              <button
-                onClick={() => setMotionZoom(!motionZoom)}
-                className={`py-2 rounded-lg text-[7px] font-black border ${motionZoom ? "jewel-emerald text-white border-transparent shadow-[0_0_15px_rgba(16,185,129,0.4)]" : "bg-black/20 text-slate-400 border-white/10"}`}
-              >
-                PAN & ZOOM
-              </button>
-            </div>
-
-            {motionZoom && (
-              <div className="space-y-1 pt-2">
-                <span className="text-[7px] text-amber-200/70 font-bold uppercase">
-                  ZOOM INTENSITY: {zoomIntensity}
-                </span>
-                <input
-                  type="range"
-                  min="1.0"
-                  max="1.5"
-                  step="0.05"
-                  value={zoomIntensity}
-                  onChange={(e) => setZoomIntensity(parseFloat(e.target.value))}
-                  className="w-full accent-emerald-500 h-1 rounded-lg bg-black/40"
-                />
-              </div>
-            )}
-
-            <div className="pt-2 border-t border-white/10">
-              <button
-                onClick={() => setCopyrightBypass(!copyrightBypass)}
-                className={`w-full py-2 rounded-lg text-[8px] font-black border flex items-center justify-center gap-2 ${copyrightBypass ? "bg-purple-600 text-white border-transparent shadow-lg" : "bg-black/20 text-slate-500 border-white/10"}`}
-              >
-                {copyrightBypass ? "✅ COPYRIGHT BYPASS ACTIVE" : "⚠️ COPYRIGHT BYPASS OFF"}
-              </button>
-            </div>
-          </div>
-
-          {/* 3. LANGUAGE & CONTENT (UPDATED with VOICE SELECTOR) */}
-          <div className="neon-glass p-4 rounded-[24px] space-y-3">
-            <h3 className="text-[9px] font-black text-cyan-300 uppercase tracking-widest">CONTENT & LANGUAGE</h3>
-
+      {/* --- SETTINGS DROP BOX (ACCORDIONS) --- */}
+      <div className="space-y-2">
+        {/* 1. SCRIPT & VOICE */}
+        <AccordionItem
+          title="1. SETTINGS & FORMAT"
+          isOpen={openSection === "script"}
+          onClick={() => setOpenSection(openSection === "script" ? null : "script")}
+        >
+          <div className="space-y-3">
             <div className="space-y-1">
-              <label className="text-[7px] font-black text-slate-400 uppercase">SELECT NATIVE VOICE (20 TYPES)</label>
+              <label className="text-[7px] font-black text-slate-500 uppercase tracking-widest">
+                VIDEO SIZE / ASPECT RATIO
+              </label>
               <select
-                value={selectedVoiceId}
-                onChange={(e) => setSelectedVoiceId(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-xl p-2 text-[9px] font-bold text-cyan-400 outline-none focus:border-cyan-500"
+                value={aspectRatio.label}
+                onChange={(e) =>
+                  setAspectRatio(ASPECT_RATIOS.find((r) => r.label === e.target.value) || ASPECT_RATIOS[0])
+                }
+                className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl p-3 text-[9px] font-black text-white outline-none"
               >
-                {VOICES.map((v) => (
-                  <option key={v.id} value={v.id} className="bg-slate-900 text-white">
-                    {v.name} ({v.gender})
+                {ASPECT_RATIOS.map((r) => (
+                  <option key={r.label} value={r.label}>
+                    {r.label}
                   </option>
                 ))}
               </select>
             </div>
+            <div className="flex gap-4 pt-2">
+              <div className="flex-1 space-y-1">
+                <label className="text-[7px] font-black text-slate-500 uppercase tracking-widest">
+                  VIDEO PLAYBACK SPEED ({videoSpeed}x)
+                </label>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="2.0"
+                  step="0.1"
+                  value={videoSpeed}
+                  onChange={(e) => setVideoSpeed(parseFloat(e.target.value))}
+                  className="w-full h-1.5 bg-white/10 rounded-full appearance-none accent-blue-500"
+                />
+              </div>
+              <div className="flex-1 space-y-1">
+                <label className="text-[7px] font-black text-slate-500 uppercase tracking-widest">
+                  AUDIO DURATION / SPEED ({audioSpeed}x)
+                </label>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="2.0"
+                  step="0.1"
+                  value={audioSpeed}
+                  onChange={(e) => setAudioSpeed(parseFloat(e.target.value))}
+                  className="w-full h-1.5 bg-white/10 rounded-full appearance-none accent-amber-500"
+                />
+              </div>
+            </div>
 
+            {/* SCRIPT EDITOR */}
+            <div className="space-y-1 pt-2">
+              <label className="text-[7px] font-black text-slate-500 uppercase tracking-widest">
+                AI GENERATED SCRIPT
+              </label>
+              <textarea
+                value={fullScriptText}
+                readOnly
+                placeholder="Script will appear here after analysis..."
+                className="w-full h-24 bg-[#1a1a1a] border border-white/10 rounded-xl p-3 text-[9px] font-medium text-white outline-none focus:border-blue-500/50 resize-none opacity-80"
+              />
+            </div>
+          </div>
+        </AccordionItem>
+
+        {/* 2. LANGUAGE & VOICE */}
+        <AccordionItem
+          title="2. LANGUAGE & VOICE (20 PROFILES)"
+          isOpen={openSection === "voice"}
+          onClick={() => setOpenSection(openSection === "voice" ? null : "voice")}
+        >
+          <div className="space-y-3">
             <div className="space-y-1">
-              <label className="text-[7px] font-black text-slate-400 uppercase">TARGET LANGUAGE</label>
+              <label className="text-[7px] font-black text-slate-500 uppercase tracking-widest">
+                NARRATIVE LANGUAGE (80+)
+              </label>
               <select
                 value={targetLang}
                 onChange={(e) => setTargetLang(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-xl p-2 text-[9px] font-bold text-white outline-none focus:border-cyan-500"
+                className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl p-3 text-[9px] font-black text-white outline-none"
               >
                 {LANGUAGES.map((l) => (
-                  <option key={l} value={l} className="bg-slate-900">
+                  <option key={l} value={l}>
                     {l}
                   </option>
                 ))}
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-[7px] font-black text-slate-400 uppercase">CHANNEL NAME</label>
-              <input
-                type="text"
-                placeholder="YOUR CHANNEL"
-                value={channelName}
-                onChange={(e) => setChannelName(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-xl p-2 text-[10px] text-white"
-              />
-            </div>
-          </div>
-
-          {/* 4. MASKING / SUBTITLES (Restored Size/Color) */}
-          <div className="bg-white/5 p-4 rounded-[24px] border border-white/10 space-y-3">
-            <div className="flex justify-between items-center">
-              <h3 className="text-[9px] font-black text-rose-300 uppercase tracking-widest">SUBTITLE MASK & STYLE</h3>
-              <button
-                onClick={() => setMaskEnabled(!maskEnabled)}
-                className={`px-2 py-1 rounded text-[7px] font-black ${maskEnabled ? "bg-rose-500 text-white" : "bg-slate-700 text-slate-400"}`}
+              <label className="text-[7px] font-black text-slate-500 uppercase tracking-widest">VOICE ARTIST</label>
+              <select
+                value={selectedVoice}
+                onChange={(e) => setSelectedVoice(e.target.value)}
+                className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl p-3 text-[9px] font-black text-white outline-none"
               >
-                {maskEnabled ? "MASK ON" : "MASK OFF"}
-              </button>
-            </div>
-
-            {maskEnabled && (
-              <div className="space-y-2 animate-in fade-in">
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setMaskType("SOLID")}
-                    className={`flex-1 py-1 text-[7px] rounded border ${maskType === "SOLID" ? "bg-rose-500 border-rose-500 text-white" : "border-white/10 text-slate-400"}`}
-                  >
-                    SOLID
-                  </button>
-                  <button
-                    onClick={() => setMaskType("BLUR")}
-                    className={`flex-1 py-1 text-[7px] rounded border ${maskType === "BLUR" ? "bg-rose-500 border-rose-500 text-white" : "border-white/10 text-slate-400"}`}
-                  >
-                    BLUR
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <span className="text-[7px] text-slate-400">POS X</span>
-                    <input
-                      type="range"
-                      max="100"
-                      value={maskX}
-                      onChange={(e) => setMaskX(parseInt(e.target.value))}
-                      className="w-full accent-rose-500 h-1 bg-black/40 rounded"
-                    />
-                  </div>
-                  <div>
-                    <span className="text-[7px] text-slate-400">POS Y</span>
-                    <input
-                      type="range"
-                      max="100"
-                      value={maskY}
-                      onChange={(e) => setMaskY(parseInt(e.target.value))}
-                      className="w-full accent-rose-500 h-1 bg-black/40 rounded"
-                    />
-                  </div>
-                  <div>
-                    <span className="text-[7px] text-slate-400">WIDTH</span>
-                    <input
-                      type="range"
-                      max="100"
-                      value={maskW}
-                      onChange={(e) => setMaskW(parseInt(e.target.value))}
-                      className="w-full accent-rose-500 h-1 bg-black/40 rounded"
-                    />
-                  </div>
-                  <div>
-                    <span className="text-[7px] text-slate-400">HEIGHT</span>
-                    <input
-                      type="range"
-                      max="100"
-                      value={maskH}
-                      onChange={(e) => setMaskH(parseInt(e.target.value))}
-                      className="w-full accent-rose-500 h-1 bg-black/40 rounded"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <span className="text-[7px] text-slate-400">OPACITY</span>
-                  <input
-                    type="range"
-                    max="1"
-                    step="0.1"
-                    value={maskOpacity}
-                    onChange={(e) => setMaskOpacity(parseFloat(e.target.value))}
-                    className="w-full accent-rose-500 h-1 bg-black/40 rounded"
-                  />
-                </div>
-              </div>
-            )}
-
-            <div className="pt-2 border-t border-white/5 space-y-2">
-              <div className="space-y-1">
-                <span className="text-[7px] font-black text-slate-400 uppercase">
-                  SUBTITLE SIZE ({subScale.toFixed(1)}x)
-                </span>
-                <input
-                  type="range"
-                  min="0.5"
-                  max="3.0"
-                  step="0.1"
-                  value={subScale}
-                  onChange={(e) => setSubScale(parseFloat(e.target.value))}
-                  className="w-full accent-white h-1 rounded bg-black/40"
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setSubColor("GOLD")}
-                  className={`flex-1 py-1 text-[7px] font-black rounded border ${subColor === "GOLD" ? "bg-amber-500 text-black border-transparent shadow-lg" : "border-white/10 text-slate-400"}`}
-                >
-                  GOLD
-                </button>
-                <button
-                  onClick={() => setSubColor("WHITE")}
-                  className={`flex-1 py-1 text-[7px] font-black rounded border ${subColor === "WHITE" ? "bg-white text-black border-transparent shadow-lg" : "border-white/10 text-slate-400"}`}
-                >
-                  WHITE
-                </button>
-                <button
-                  onClick={() => setSubColor("NEON")}
-                  className={`flex-1 py-1 text-[7px] font-black rounded border ${subColor === "NEON" ? "bg-cyan-500 text-black border-transparent shadow-lg" : "border-white/10 text-slate-400"}`}
-                >
-                  NEON
-                </button>
-              </div>
+                {VOICES.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
+        </AccordionItem>
 
-          {/* 5. VISUALS (Border & Timeline) */}
-          <div className="bg-white/5 p-4 rounded-[24px] border border-white/10 space-y-3">
-            <h3 className="text-[9px] font-black text-cyan-300 uppercase tracking-widest">BORDER & TIMELINE</h3>
-            <div className="space-y-1">
-              <div className="flex justify-between">
-                <span className="text-[8px] text-slate-400">BORDER SIZE</span>
-                <span className="text-[8px] text-white">{borderThick}</span>
-              </div>
-              <input
-                type="range"
-                max="5"
-                step="0.1"
-                value={borderThick}
-                onChange={(e) => setBorderThick(parseFloat(e.target.value))}
-                className="w-full accent-cyan-500 h-1 rounded bg-black/40"
-              />
+        {/* 3. CHARACTER & POS */}
+        <AccordionItem
+          title="3. CHARACTER OVERLAY"
+          isOpen={openSection === "char"}
+          onClick={() => setOpenSection(openSection === "char" ? null : "char")}
+        >
+          <div className="space-y-3">
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              {CHARACTERS.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => setCharId(c.id)}
+                  className={`w-12 h-12 rounded-full border-2 shrink-0 overflow-hidden transition-all ${charId === c.id ? "border-blue-500 scale-110" : "border-white/10 opacity-50"}`}
+                >
+                  {c.id === "none" ? (
+                    <span className="text-[5px] text-white font-bold flex items-center justify-center h-full">
+                      NONE
+                    </span>
+                  ) : (
+                    <img src={c.src} className="w-full h-full object-cover" />
+                  )}
+                </button>
+              ))}
             </div>
-            <div className="flex justify-between items-center">
-              <span className="text-[8px] text-slate-400">BORDER COLOR</span>
-              <input
-                type="color"
-                value={borderColor}
-                onChange={(e) => setBorderColor(e.target.value)}
-                className="bg-transparent w-6 h-6 border-none"
-              />
-            </div>
-            <div className="flex justify-between items-center border-t border-white/5 pt-2">
-              <span className="text-[8px] text-slate-400">TIMELINE COLOR</span>
-              <input
-                type="color"
-                value={timelineColor}
-                onChange={(e) => setTimelineColor(e.target.value)}
-                className="bg-transparent w-6 h-6 border-none"
-              />
+            <div className="grid grid-cols-2 gap-2">
+              {["TL", "TR", "BL", "BR"].map((pos) => (
+                <button
+                  key={pos}
+                  onClick={() => setCharPos(pos as any)}
+                  className={`py-2 rounded-lg text-[7px] font-black border transition-all ${charPos === pos ? "bg-blue-500 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-500"}`}
+                >
+                  {pos}
+                </button>
+              ))}
             </div>
           </div>
+        </AccordionItem>
 
-          {/* 6. BRANDING (Restored Logo Effects & Ticker) */}
-          <div className="bg-white/5 p-4 rounded-[24px] border border-white/10 space-y-3">
-            <h3 className="text-[9px] font-black text-amber-300 uppercase tracking-widest">BRANDING & LOGO</h3>
+        {/* 4. VISUAL EFFECTS */}
+        <AccordionItem
+          title="4. VISUAL EFFECTS & BLUR"
+          isOpen={openSection === "visual"}
+          onClick={() => setOpenSection(openSection === "visual" ? null : "visual")}
+        >
+          <div className="space-y-4">
+            <button
+              onClick={activateCopyrightSafeMode}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 text-white font-black text-[9px] uppercase tracking-widest shadow-lg active:scale-95 transition-all border border-emerald-400/30"
+            >
+              🛡️ ACTIVATE COPYRIGHT SAFE MODE (AUTO)
+            </button>
 
             <div className="flex gap-2">
-              <label className="flex-1 bg-black/40 border border-white/10 rounded-lg p-2 text-[7px] font-bold text-slate-400 text-center cursor-pointer hover:bg-white/5">
-                UPLOAD LOGO
-                <input type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
-              </label>
               <button
-                onClick={() => setLogoSpin(!logoSpin)}
-                className={`px-2 rounded-lg text-[7px] font-black border ${logoSpin ? "bg-amber-500 text-white border-transparent" : "bg-black/20 text-slate-400 border-white/10"}`}
+                onClick={() => setFlipVideo(!flipVideo)}
+                className={`flex-1 py-2 rounded-xl border text-[7px] font-black ${flipVideo ? "border-emerald-500 text-emerald-400 bg-emerald-500/10" : "border-white/10 text-slate-500"}`}
               >
-                SPIN
+                FLIP VIDEO
               </button>
               <button
-                onClick={() => setLogoNeon(!logoNeon)}
-                className={`px-2 rounded-lg text-[7px] font-black border ${logoNeon ? "bg-cyan-500 text-white border-transparent" : "bg-black/20 text-slate-400 border-white/10"}`}
+                onClick={() => setMotionZoom(!motionZoom)}
+                className={`flex-1 py-2 rounded-xl border text-[7px] font-black ${motionZoom ? "border-amber-500 text-amber-400 bg-amber-500/10" : "border-white/10 text-slate-500"}`}
               >
-                NEON
+                {motionZoom ? "3S FREEZE ON" : "FREEZE OFF"}
+              </button>
+              <button
+                onClick={() => setFilmGrain(!filmGrain)}
+                className={`flex-1 py-2 rounded-xl border text-[7px] font-black ${filmGrain ? "border-purple-500 text-purple-400 bg-purple-500/10" : "border-white/10 text-slate-500"}`}
+              >
+                FILM GRAIN
               </button>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-[7px] font-black text-slate-400 uppercase">TICKER TEXT</label>
+            <div className="bg-white/5 p-3 rounded-xl border border-white/5 space-y-3">
+              <div className="flex justify-between">
+                <span className="text-[7px] font-black text-slate-400 uppercase">SUBTITLE BLUR BOX</span>
+                <button
+                  onClick={() => setBlurEnabled(!blurEnabled)}
+                  className={`text-[7px] font-black px-2 rounded ${blurEnabled ? "bg-blue-500 text-white" : "bg-slate-700 text-slate-400"}`}
+                >
+                  {blurEnabled ? "ON" : "OFF"}
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[7px] text-slate-500 w-8">POS Y</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={blurY}
+                  onChange={(e) => setBlurY(parseInt(e.target.value))}
+                  className="flex-1 h-1.5 bg-black rounded-full appearance-none accent-blue-500"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[7px] text-slate-500 w-8">HEIGHT</span>
+                <input
+                  type="range"
+                  min="5"
+                  max="50"
+                  value={blurH}
+                  onChange={(e) => setBlurH(parseInt(e.target.value))}
+                  className="flex-1 h-1.5 bg-black rounded-full appearance-none accent-blue-500"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[7px] text-slate-500 w-8">OPACITY</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={blurOpacity}
+                  onChange={(e) => setBlurOpacity(parseFloat(e.target.value))}
+                  className="flex-1 h-1.5 bg-black rounded-full appearance-none accent-blue-500"
+                />
+              </div>
+            </div>
+          </div>
+        </AccordionItem>
+
+        {/* 5. COLORS & CUSTOMIZATION */}
+        <AccordionItem
+          title="5. COLORS & BRANDING"
+          isOpen={openSection === "color"}
+          onClick={() => setOpenSection(openSection === "color" ? null : "color")}
+        >
+          <div className="space-y-4">
+            {/* Timeline Controls */}
+            <div className="space-y-2 bg-white/5 p-3 rounded-xl border border-white/5">
+              <div className="flex justify-between items-center">
+                <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">TIMELINE BAR</span>
+                <input
+                  type="color"
+                  value={timelineColor}
+                  onChange={(e) => setTimelineColor(e.target.value)}
+                  className="w-6 h-6 rounded bg-transparent border-none cursor-pointer"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[7px] text-slate-500 w-12">THICKNESS</span>
+                <input
+                  type="range"
+                  min="1"
+                  max="15"
+                  value={timelineHeight}
+                  onChange={(e) => setTimelineHeight(parseInt(e.target.value))}
+                  className="flex-1 h-1.5 bg-black rounded-full appearance-none accent-white"
+                />
+              </div>
+              <div className="flex gap-2 pt-1">
+                {COLORS.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => setTimelineColor(c.hex)}
+                    className={`w-4 h-4 rounded-full border ${timelineColor === c.hex ? "border-white scale-125" : "border-transparent opacity-40"}`}
+                    style={{ backgroundColor: c.hex }}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Border Controls */}
+            <div className="space-y-2 bg-white/5 p-3 rounded-xl border border-white/5">
+              <div className="flex justify-between items-center">
+                <button
+                  onClick={() => setBorderEnabled(!borderEnabled)}
+                  className={`px-2 py-1 rounded text-[6px] font-black uppercase ${borderEnabled ? "bg-blue-500 text-white" : "bg-slate-800 text-slate-500"}`}
+                >
+                  VIDEO BORDER: {borderEnabled ? "ON" : "OFF"}
+                </button>
+                {borderEnabled && (
+                  <input
+                    type="color"
+                    value={borderColor}
+                    onChange={(e) => setBorderColor(e.target.value)}
+                    className="w-6 h-6 rounded bg-transparent border-none cursor-pointer"
+                  />
+                )}
+              </div>
+              {borderEnabled && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[7px] text-slate-500 w-12">WIDTH</span>
+                  <input
+                    type="range"
+                    min="1"
+                    max="50"
+                    value={borderWidth}
+                    onChange={(e) => setBorderWidth(parseInt(e.target.value))}
+                    className="flex-1 h-1.5 bg-black rounded-full appearance-none accent-white"
+                  />
+                </div>
+              )}
+              {borderEnabled && (
+                <div className="flex gap-2 pt-1">
+                  {COLORS.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => setBorderColor(c.hex)}
+                      className={`w-4 h-4 rounded-full border ${borderColor === c.hex ? "border-white scale-125" : "border-transparent opacity-40"}`}
+                      style={{ backgroundColor: c.hex }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Logo & Ticker */}
+            <div className="border-t border-white/5 pt-2 space-y-2">
+              <label className="text-[7px] font-black text-slate-500 uppercase">CHANNEL LOGO</label>
+              <div className="flex gap-2">
+                <label className="flex-1 py-2 border border-dashed border-white/20 rounded-xl flex items-center justify-center gap-1 cursor-pointer hover:bg-white/5">
+                  <span className="text-[7px] font-black text-white uppercase">UPLOAD IMG</span>
+                  <input type="file" onChange={handleLogoUpload} className="hidden" />
+                </label>
+                {logoSrc && (
+                  <>
+                    <button
+                      onClick={() => setLogoNeon(!logoNeon)}
+                      className={`px-2 rounded-xl text-[6px] font-black border ${logoNeon ? "border-purple-500 text-purple-400" : "border-white/10 text-slate-500"}`}
+                    >
+                      NEON
+                    </button>
+                    <button
+                      onClick={() => setLogoSpin(!logoSpin)}
+                      className={`px-2 rounded-xl text-[6px] font-black border ${logoSpin ? "border-blue-500 text-blue-400" : "border-white/10 text-slate-500"}`}
+                    >
+                      SPIN
+                    </button>
+                  </>
+                )}
+              </div>
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={channelName}
                   onChange={(e) => setChannelName(e.target.value)}
-                  className="flex-1 bg-black/40 border border-white/10 rounded-lg p-2 text-[9px] font-bold text-white outline-none"
-                  placeholder="YOUR CHANNEL NAME..."
+                  placeholder="Ticker Text..."
+                  className="flex-1 bg-black/40 border border-white/10 rounded-xl px-2 text-[8px] text-white outline-none"
                 />
                 <button
                   onClick={() =>
-                    setTickerMode(tickerMode === "SCROLL" ? "FLOAT" : tickerMode === "FLOAT" ? "FIXED" : "SCROLL")
+                    setTickerMode(tickerMode === "OFF" ? "SCROLL" : tickerMode === "SCROLL" ? "BOUNCE" : "OFF")
                   }
-                  className="px-2 bg-slate-800 rounded-lg text-[7px] font-black text-white w-16"
+                  className="px-3 rounded-xl bg-white/5 border border-white/10 text-[7px] font-black text-white w-16"
                 >
                   {tickerMode}
                 </button>
               </div>
             </div>
           </div>
-        </div>
+        </AccordionItem>
+
+        {/* 6. SUBTITLES */}
+        <AccordionItem
+          title="6. SUBTITLE STYLING"
+          isOpen={openSection === "sub"}
+          onClick={() => setOpenSection(openSection === "sub" ? null : "sub")}
+        >
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <label className="text-[7px] font-black text-slate-500 uppercase tracking-widest">TEXT COLOR</label>
+              <select
+                value={subColor}
+                onChange={(e) => setSubColor(e.target.value)}
+                className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl p-3 text-[9px] font-black text-white outline-none"
+              >
+                {SUB_COLORS.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[7px] font-black text-slate-500 uppercase tracking-widest">
+                TEXT SIZE ({subScale}x)
+              </label>
+              <select
+                value={subScale}
+                onChange={(e) => setSubScale(parseFloat(e.target.value))}
+                className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl p-3 text-[9px] font-black text-white outline-none"
+              >
+                <option value="0.5">XS - Tiny</option>
+                <option value="0.8">S - Small</option>
+                <option value="1.0">M - Normal</option>
+                <option value="1.2">L - Large</option>
+                <option value="1.5">XL - Extra Large</option>
+                <option value="2.0">XXL - Huge</option>
+              </select>
+            </div>
+          </div>
+        </AccordionItem>
+      </div>
+
+      {/* ACTIONS */}
+      <div className="flex gap-3 pt-4 sticky bottom-4 z-50">
+        <button
+          onClick={() => {
+            if (!audioBuffer && !analyzing) {
+              handleProcess();
+            } else {
+              togglePlay();
+            }
+          }}
+          disabled={!videoSrc || isExporting}
+          className={`flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all ${isPlaying ? "bg-rose-600 text-white" : "bg-blue-600 text-white"}`}
+        >
+          {analyzing
+            ? "PROCESSING..."
+            : audioBuffer
+              ? isPlaying
+                ? "PAUSE PREVIEW"
+                : "▶ PLAY RESULT"
+              : "⚡ PROCESS AI"}
+        </button>
+        <button onClick={handleProcess} className="hidden" id="process-trigger"></button>
+
+        <button
+          onClick={handleExport}
+          disabled={!audioBuffer || isExporting || isPlaying}
+          className="flex-1 py-4 rounded-2xl bg-[#1a202c] border border-white/10 text-white font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all disabled:opacity-50"
+        >
+          {isExporting ? "EXPORTING..." : "📥 EXPORT"}
+        </button>
       </div>
     </div>
   );
-};
-
-export default VideoRecapView;
+}
