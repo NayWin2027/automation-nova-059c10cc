@@ -571,7 +571,7 @@ export default function TransformativeVideoPage() {
     }
   };
 
-  // Voice preview - says "မင်္ဂလာပါ" using Gemini TTS
+  // Voice preview - says "မင်္ဂလာပါ" using Gemini TTS (Natural Voice with Own API)
   const handlePreviewVoice = async (voiceId: string) => {
     const voice = VOICES.find(v => v.id === voiceId);
     if (!voice) return;
@@ -593,8 +593,13 @@ export default function TransformativeVideoPage() {
       
       if (error) throw error;
       
-      // Check if we should use client-side TTS (App API mode)
+      // Check if we should use client-side TTS (App API mode - Robot voice)
       if (data?.useClientTTS) {
+        // Show warning that this is robot voice
+        if (apiMode === "app") {
+          toast.info("Robot အသံ - Natural Voice ရဖို့ Own API mode သုံးပါ", { duration: 2000 });
+        }
+        
         // Use Web Speech API fallback
         if ('speechSynthesis' in window) {
           speechSynthesis.cancel();
@@ -612,10 +617,11 @@ export default function TransformativeVideoPage() {
       }
       
       if (data?.audio) {
-        // Create audio from base64
+        // Create audio from base64 - Gemini TTS returns WAV audio
+        const mimeType = data.mimeType || 'audio/wav';
         const audioBlob = new Blob(
           [Uint8Array.from(atob(data.audio), c => c.charCodeAt(0))],
-          { type: 'audio/mp3' }
+          { type: mimeType }
         );
         const audioUrl = URL.createObjectURL(audioBlob);
         
@@ -630,17 +636,31 @@ export default function TransformativeVideoPage() {
           setPlayingVoice(null);
           URL.revokeObjectURL(audioUrl);
         };
-        audio.onerror = () => {
+        audio.onerror = (e) => {
+          console.error("Audio playback error:", e);
           setPlayingVoice(null);
           URL.revokeObjectURL(audioUrl);
+          toast.error("Audio playback failed");
         };
         await audio.play();
+        toast.success(`${voice.name} - Natural Voice ✓`, { duration: 1500 });
+      } else if (data?.error) {
+        throw new Error(data.error);
       } else {
         throw new Error("No audio data received");
       }
     } catch (err) {
       console.error("Voice preview error:", err);
-      // Fallback to Web Speech API
+      const errorMsg = err instanceof Error ? err.message : "Voice preview failed";
+      
+      // If Own API mode failed, show specific error
+      if (apiMode === "own") {
+        toast.error(errorMsg);
+        setPlayingVoice(null);
+        return;
+      }
+      
+      // Fallback to Web Speech API for App mode
       if ('speechSynthesis' in window) {
         speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance("မင်္ဂလာပါ");
@@ -854,7 +874,7 @@ export default function TransformativeVideoPage() {
       </header>
 
       <main className="px-4 pb-32 space-y-4 pt-4">
-        {/* API Mode Toggle */}
+        {/* API Mode Toggle - Enhanced with Voice Quality Info */}
         <div className="rounded-2xl border border-border/30 bg-card/50 p-4 space-y-3">
           <div className="flex items-center justify-between">
             <Label className="text-xs text-muted-foreground flex items-center gap-2">
@@ -866,7 +886,7 @@ export default function TransformativeVideoPage() {
                 onClick={() => setApiMode("app")}
                 className={`px-3 py-1 text-xs rounded-md transition-all ${
                   apiMode === "app"
-                    ? "bg-primary text-primary-foreground"
+                    ? "bg-muted text-muted-foreground"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -876,21 +896,47 @@ export default function TransformativeVideoPage() {
                 onClick={() => setApiMode("own")}
                 className={`px-3 py-1 text-xs rounded-md transition-all ${
                   apiMode === "own"
-                    ? "bg-primary text-primary-foreground"
+                    ? "bg-gradient-to-r from-primary to-cyan-500 text-primary-foreground shadow-lg"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                Own API
+                Own API ⭐
               </button>
             </div>
           </div>
+          
+          {/* Voice Quality Notice */}
+          {apiMode === "app" ? (
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-2">
+              <div className="flex items-center gap-2 text-amber-500">
+                <Volume2 className="w-4 h-4" />
+                <span className="text-xs font-medium">Robot အသံ (Browser Speech)</span>
+              </div>
+              <p className="text-2xs text-muted-foreground">
+                App Mode က Browser's Web Speech API သုံးလို့ Robot အသံဖြစ်ပါတယ်။
+                <br />
+                <strong className="text-primary">Natural Human Voice</strong> ရဖို့ <strong>"Own API"</strong> mode သုံးပါ။
+              </p>
+            </div>
+          ) : (
+            <div className="p-3 rounded-xl bg-neon-green/10 border border-neon-green/30 space-y-2">
+              <div className="flex items-center gap-2 text-neon-green">
+                <Sparkles className="w-4 h-4" />
+                <span className="text-xs font-medium">Natural Human Voice (Gemini TTS)</span>
+              </div>
+              <p className="text-2xs text-muted-foreground">
+                Google AI Studio ရဲ့ Gemini TTS - လူအစစ် ပြောသလိုပဲ အသံထွက်ပါတယ်။
+              </p>
+            </div>
+          )}
+          
           {apiMode === "own" && (
             <Input
               type="password"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Google AI API Key"
-              className="bg-card/50 border-border/30"
+              placeholder="Google AI API Key (aistudio.google.com မှ ရယူပါ)"
+              className="bg-card/50 border-primary/30 focus:border-primary"
             />
           )}
         </div>
