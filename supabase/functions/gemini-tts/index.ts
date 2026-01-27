@@ -5,7 +5,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Gemini TTS endpoint - using the correct model name
+// Gemini TTS endpoint - using the correct model name for natural human-like voice
 const GEMINI_TTS_API = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent";
 
 serve(async (req) => {
@@ -28,32 +28,31 @@ serve(async (req) => {
     const isOwnKey = !!apiKey?.trim();
 
     if (!isOwnKey) {
-      // App API mode - return flag to use client-side Web Speech API with language
-      console.log(`[gemini-tts] App API mode - returning client-side TTS flag for language: ${languageCode || 'en-US'}`);
+      // App API mode - Gemini TTS requires direct API key
+      // Return flag indicating natural TTS not available in App mode
+      console.log(`[gemini-tts] App API mode - Natural TTS requires Own API Key`);
       return new Response(
         JSON.stringify({ 
           useClientTTS: true,
           text: text,
           voiceName: voiceName,
-          languageCode: languageCode || 'en-US'
+          languageCode: languageCode || 'en-US',
+          message: 'For natural human-like voice, please use Own API Key mode with your Gemini API key.'
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`[gemini-tts] Own API mode - generating speech for voice: ${voiceName}, language: ${languageCode}, text length: ${text.length}`);
+    console.log(`[gemini-tts] Own API mode - generating natural speech with voice: ${voiceName}, language: ${languageCode}, text length: ${text.length}`);
 
-    // Direct Google API call for own key
+    // Direct Google API call for own key - Real Gemini TTS with natural human voice
     const apiUrl = `${GEMINI_TTS_API}?key=${apiKey}`;
     
-    // Build the request with language instruction
-    const languageInstruction = languageCode && languageCode !== 'en-US' 
-      ? `[Speak in ${languageCode} language] ` 
-      : '';
-    
+    // Build the proper Gemini TTS request
+    // The model understands language from context, no need for language prefix
     const requestBody = {
       contents: [{
-        parts: [{ text: languageInstruction + text }]
+        parts: [{ text: text }]
       }],
       generationConfig: {
         responseModalities: ["AUDIO"],
@@ -67,7 +66,7 @@ serve(async (req) => {
       }
     };
 
-    console.log(`[gemini-tts] Sending request to Gemini TTS API...`);
+    console.log(`[gemini-tts] Sending request to Gemini TTS API with voice: ${voiceName || "Puck"}...`);
 
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -95,16 +94,14 @@ serve(async (req) => {
         );
       }
 
-      // Check for model not found error - suggest alternative
+      // Check for model not found error
       if (errorText.includes('not found') || errorText.includes('404') || errorText.includes('does not support')) {
         return new Response(
           JSON.stringify({ 
-            error: 'TTS model not available for your API key. The Gemini TTS preview may require special access. Please try using App API mode instead (uses browser speech synthesis).',
-            useClientTTS: true,
-            text: text,
-            languageCode: languageCode || 'en-US'
+            error: 'TTS model not available. Please make sure your API key has access to gemini-2.5-flash-preview-tts model.',
+            details: 'Visit Google AI Studio to verify your API key has TTS access.'
           }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
@@ -118,26 +115,28 @@ serve(async (req) => {
 
     // Extract audio from Gemini TTS response
     const audioData = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    const mimeType = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.mimeType || 'audio/mp3';
     
     if (!audioData) {
       console.error('[gemini-tts] No audio data in response:', JSON.stringify(data).slice(0, 500));
       
-      // Fallback to client-side TTS
       return new Response(
         JSON.stringify({ 
-          useClientTTS: true,
-          text: text,
-          languageCode: languageCode || 'en-US',
-          error: 'No audio generated, falling back to browser speech'
+          error: 'No audio generated from Gemini TTS. Please try again.',
+          details: JSON.stringify(data).slice(0, 200)
         }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`[gemini-tts] Successfully generated audio, size: ${audioData.length} chars`);
+    console.log(`[gemini-tts] Successfully generated natural audio, size: ${audioData.length} chars, mimeType: ${mimeType}`);
 
     return new Response(
-      JSON.stringify({ audio: audioData }),
+      JSON.stringify({ 
+        audio: audioData,
+        mimeType: mimeType,
+        voice: voiceName || "Puck"
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
