@@ -132,14 +132,14 @@ const Index = () => {
   const renderHomeContent = () => (
     <>
       <GatewayBanner />
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-foreground leading-tight">Master Your</h2>
-        <h2 className="text-2xl font-bold text-gradient-cyan leading-tight">Media Engine.</h2>
-        <p className="text-2xs font-medium tracking-[0.2em] text-muted-foreground mt-1 uppercase">
+      <div className="mb-4">
+        <h2 className="text-lg font-bold text-foreground leading-tight">Master Your</h2>
+        <h2 className="text-lg font-bold text-gradient-cyan leading-tight">Media Engine.</h2>
+        <p className="text-2xs font-medium tracking-[0.15em] text-muted-foreground mt-0.5 uppercase">
           Pro Media Toolset V4.8
         </p>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-2">
         {tools.map((tool) => (
           <ToolCard
             key={tool.id}
@@ -156,40 +156,42 @@ const Index = () => {
 
   const renderPremiumContent = () => (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-      <Diamond className="w-16 h-16 text-primary mb-4" />
-      <h2 className="text-2xl font-bold text-foreground mb-2">Premium Plans</h2>
-      <p className="text-muted-foreground mb-6">Unlock all features with our premium subscriptions</p>
-      <div className="space-y-3 w-full max-w-sm">
-        <div className="p-4 rounded-xl border border-border bg-card">
-          <h3 className="font-semibold text-foreground">Pro Plan</h3>
-          <p className="text-sm text-muted-foreground">Advanced features & priority support</p>
+      <div className="w-12 h-12 rounded-xl icon-gradient-gold flex items-center justify-center mb-3 shadow-lg">
+        <Diamond className="w-5 h-5 text-foreground" />
+      </div>
+      <h2 className="text-lg font-bold text-gold mb-1">Premium Plans</h2>
+      <p className="text-2xs text-muted-foreground mb-4">Unlock all features with premium</p>
+      <div className="space-y-2 w-full max-w-xs">
+        <div className="p-3 rounded-xl border border-border/30 bg-card/50">
+          <h3 className="text-xs font-semibold text-foreground">Pro Plan</h3>
+          <p className="text-2xs text-muted-foreground">Advanced features & priority</p>
         </div>
-        <div className="p-4 rounded-xl border border-primary bg-primary/10">
-          <h3 className="font-semibold text-primary">Premium Plan</h3>
-          <p className="text-sm text-muted-foreground">All features + unlimited usage</p>
+        <div className="p-3 rounded-xl border border-primary/30 bg-primary/5 shadow-lg">
+          <h3 className="text-xs font-semibold text-primary">Premium Plan</h3>
+          <p className="text-2xs text-muted-foreground">All features + unlimited</p>
         </div>
       </div>
     </div>
   );
 
   const renderSettingsContent = () => (
-    <div className="space-y-4">
-      <h2 className="text-2xl font-bold text-foreground mb-4">Settings</h2>
-      <div className="space-y-3">
+    <div className="space-y-3">
+      <h2 className="text-lg font-bold text-foreground mb-3">Settings</h2>
+      <div className="space-y-2">
         <button 
           onClick={() => navigate("/admin/login")}
-          className="w-full p-4 rounded-xl border border-border bg-card text-left hover:bg-accent transition-colors"
+          className="w-full p-3 rounded-xl border border-gold/20 bg-card/50 text-left hover:bg-card transition-colors"
         >
-          <h3 className="font-semibold text-foreground">Admin Panel</h3>
-          <p className="text-sm text-muted-foreground">Access admin dashboard</p>
+          <h3 className="text-xs font-semibold text-gold">Admin Panel</h3>
+          <p className="text-2xs text-muted-foreground">Access admin dashboard</p>
         </button>
-        <div className="p-4 rounded-xl border border-border bg-card">
-          <h3 className="font-semibold text-foreground">Account</h3>
-          <p className="text-sm text-muted-foreground">Manage your profile & preferences</p>
+        <div className="p-3 rounded-xl border border-border/30 bg-card/50">
+          <h3 className="text-xs font-semibold text-foreground">Account</h3>
+          <p className="text-2xs text-muted-foreground">Manage profile & preferences</p>
         </div>
-        <div className="p-4 rounded-xl border border-border bg-card">
-          <h3 className="font-semibold text-foreground">About</h3>
-          <p className="text-sm text-muted-foreground">App version & information</p>
+        <div className="p-3 rounded-xl border border-border/30 bg-card/50">
+          <h3 className="text-xs font-semibold text-foreground">About</h3>
+          <p className="text-2xs text-muted-foreground">App version & info</p>
         </div>
       </div>
     </div>
