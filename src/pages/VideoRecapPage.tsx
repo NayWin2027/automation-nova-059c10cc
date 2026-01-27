@@ -1,29 +1,5 @@
-import React, { useMemo, useState, useRef, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { generateSpeech } from "../services/geminiService.ts";
-
-// Local helper (previously imported from geminiService)
-async function analyzeVideo(
-  base64Video: string,
-  mimeType: string,
-  targetLang: string,
-): Promise<string> {
-  const videoUrl = `data:${mimeType || "video/mp4"};base64,${base64Video}`;
-
-  const { data, error } = await supabase.functions.invoke<{
-    recap?: string;
-    error?: string;
-  }>("video-recap", {
-    body: {
-      videoUrl,
-      targetLang,
-    },
-  });
-
-  if (error) throw new Error(error.message || "Video recap failed");
-  if (data?.error) throw new Error(data.error);
-  return data?.recap || "";
-}
+import React, { useState, useRef, useEffect } from "react";
+import { analyzeVideo, generateSpeech, audioContext } from "../services/geminiService.ts";
 
 // --- DATA SETS ---
 const VOICES = [
@@ -50,11 +26,11 @@ const VOICES = [
 ];
 
 const CHARACTERS = [
-  { id: "none", label: "NONE", src: "" },
-  { id: "c1", label: "Male", src: "https://cdn-icons-png.flaticon.com/512/4140/4140048.png" },
-  { id: "c2", label: "Female", src: "https://cdn-icons-png.flaticon.com/512/4140/4140047.png" },
-  { id: "c3", label: "Pro M", src: "https://cdn-icons-png.flaticon.com/512/4140/4140037.png" },
-  { id: "c4", label: "Pro F", src: "https://cdn-icons-png.flaticon.com/512/4140/4140051.png" },
+  { id: "none", label: "မပြပါ (None)", src: "" },
+  { id: "c1", label: "ဒီကောင်လေး (Boy)", src: "https://cdn-icons-png.flaticon.com/512/4140/4140048.png" },
+  { id: "c2", label: "ဒီကောင်မလေး (Girl)", src: "https://cdn-icons-png.flaticon.com/512/4140/4140047.png" },
+  { id: "c3", label: "ဒီလူကြီး (Adult M)", src: "https://cdn-icons-png.flaticon.com/512/4140/4140037.png" },
+  { id: "c4", label: "ဒီအမျိုးသမီး (Adult F)", src: "https://cdn-icons-png.flaticon.com/512/4140/4140051.png" },
 ];
 
 const LANGUAGES = [
@@ -201,6 +177,54 @@ const AccordionItem = ({
   </div>
 );
 
+// Helper to create WAV Blob from PCM Data for HTML5 Audio playback (preserves pitch)
+const createWavBlob = (base64Audio: string) => {
+  const binaryString = atob(base64Audio);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) bytes[i] = binaryString.charCodeAt(i);
+
+  // Check if it's already a WAV/MP3 container (common with Gemini)
+  // If header RIFF exists, return as is.
+  if (len > 4 && String.fromCharCode(...bytes.slice(0, 4)) === "RIFF") {
+    return new Blob([bytes], { type: "audio/wav" });
+  }
+
+  // Otherwise wrap Raw PCM (assuming 24kHz 16bit Mono from Gemini default)
+  const sampleRate = 24000;
+  const numChannels = 1;
+  const bitsPerSample = 16;
+  const blockAlign = (numChannels * bitsPerSample) / 8;
+  const byteRate = sampleRate * blockAlign;
+  const dataSize = len;
+
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+
+  const writeString = (offset: number, string: string) => {
+    for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i));
+  };
+
+  writeString(0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeString(8, "WAVE");
+  writeString(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitsPerSample, true);
+  writeString(36, "data");
+  view.setUint32(40, dataSize, true);
+
+  const pcmData = new Uint8Array(buffer, 44);
+  pcmData.set(bytes);
+
+  return new Blob([buffer], { type: "audio/wav" });
+};
+
 export default function VideoRecapView() {
   // --- STATE ---
   const [file, setFile] = useState<File | null>(null);
@@ -211,14 +235,15 @@ export default function VideoRecapView() {
   // Data State
   const [scriptSegments, setScriptSegments] = useState<ScriptSegment[]>([]);
   const [fullScriptText, setFullScriptText] = useState("");
-  const [audioBuffer, setAudioBuffer] = useState<AudioBuffer | null>(null);
+
+  // Audio State
+  const [audioBlobUrl, setAudioBlobUrl] = useState<string | null>(null);
+  const [audioDuration, setAudioDuration] = useState(0);
 
   // Playback
   const [isPlaying, setIsPlaying] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [startTime, setStartTime] = useState(0);
-  const [pausedAt, setPausedAt] = useState(0);
-  const [audioDuration, setAudioDuration] = useState(0);
+  // We track time via the Audio Element now
   const [progress, setProgress] = useState(0);
   const [isVideoReady, setIsVideoReady] = useState(false);
 
@@ -270,36 +295,11 @@ export default function VideoRecapView() {
 
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null); // Replaced AudioContext source with HTMLAudioElement
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const reqRef = useRef<number>();
-
-  // Lazily create AudioContext only after user interaction (prevents desktop black screen / autoplay policy issues)
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const getAudioContext = () => {
-    if (!audioContextRef.current) {
-      const Ctx = window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      audioContextRef.current = new Ctx();
-    }
-    return audioContextRef.current;
-  };
-
-  // Keep existing code using `audioContext.*` without importing a global instance.
-  const audioContext = useMemo(() => {
-    return new Proxy({} as AudioContext, {
-      get(_target, prop) {
-        return (getAudioContext() as any)[prop as any];
-      },
-      set(_target, prop, value) {
-        (getAudioContext() as any)[prop as any] = value;
-        return true;
-      },
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Animation Refs
   const logoAngleRef = useRef(0);
@@ -310,9 +310,7 @@ export default function VideoRecapView() {
   const charImgRef = useRef<HTMLImageElement | null>(null);
 
   // 3S Logic Refs
-  const freezeCanvasRef = useRef<HTMLCanvasElement | null>(null); // To store the frozen frame
-  const currentSegmentIndexRef = useRef<number>(-1);
-  const videoSeekRef = useRef<number>(-1); // To prevent seeking every frame
+  const freezeCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // --- HANDLERS ---
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -323,8 +321,7 @@ export default function VideoRecapView() {
       setVideoSrc(url);
       setFullScriptText("");
       setScriptSegments([]);
-      setAudioBuffer(null);
-      setPausedAt(0);
+      setAudioBlobUrl(null);
       setIsPlaying(false);
       setProgress(0);
       setIsVideoReady(false);
@@ -335,7 +332,8 @@ export default function VideoRecapView() {
     setIsVideoReady(true);
     if (videoRef.current) {
       videoRef.current.currentTime = 0;
-      videoRef.current.loop = true;
+      // Set to false initially to avoid interfering with playback logic, handle loop manually if needed
+      videoRef.current.loop = false;
     }
   };
 
@@ -363,13 +361,11 @@ export default function VideoRecapView() {
 
   const handleProcess = async () => {
     if (!file) return;
-    if (audioContext.state === "suspended") await audioContext.resume();
-
     setAnalyzing(true);
     setStatusText("STEP 1/3: SEMANTIC VIDEO MATCHING...");
     setFullScriptText("");
     setScriptSegments([]);
-    setAudioBuffer(null);
+    setAudioBlobUrl(null);
 
     try {
       const reader = new FileReader();
@@ -381,16 +377,13 @@ export default function VideoRecapView() {
 
           let segments: ScriptSegment[] = [];
           try {
-            // Try parsing JSON
             segments = JSON.parse(rawResponse);
             if (!Array.isArray(segments)) throw new Error("Not Array");
           } catch {
-            // Fallback if AI returns plain text
             console.warn("JSON Parse Failed, falling back to linear.");
             segments = [{ time: 0, text: rawResponse }];
           }
 
-          // Clean segments
           segments = segments
             .map((s) => ({
               time: typeof s.time === "number" ? s.time : 0,
@@ -398,59 +391,17 @@ export default function VideoRecapView() {
             }))
             .sort((a, b) => a.time - b.time);
 
-          const completeText = segments.map((s) => s.text).join(" ");
+          // Fix: Remove commas from numbers rigorously to prevent "1000" reading for "100,000"
+          // Replaces "100,000" with "100000" and "1, 000" with "1000"
+          const completeText = segments
+            .map((s) => s.text)
+            .join(" ")
+            .replace(/(\d+),(?=\d{3})/g, "$1") // Standard thousand separator
+            .replace(/(\d)\s?,\s?(\d)/g, "$1$2"); // Commas with spaces
+
           setFullScriptText(completeText);
 
-          setStatusText("STEP 2/3: GENERATING NARRATION...");
-          const voiceObj = VOICES.find((v) => v.id === selectedVoice) || VOICES[0];
-          const audioB64 = await generateSpeech(completeText, voiceObj.apiVoice);
-
-          if (audioB64) {
-            setStatusText("STEP 3/3: SYNCING VISUALS...");
-            const binaryString = atob(audioB64);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
-            const int16 = new Int16Array(bytes.buffer);
-            const buffer = audioContext.createBuffer(1, int16.length, 24000);
-            const channelData = buffer.getChannelData(0);
-            for (let i = 0; i < int16.length; i++) channelData[i] = int16[i] / 32768.0;
-
-            const totalDur = buffer.duration;
-            setAudioBuffer(buffer);
-            setAudioDuration(totalDur);
-
-            // Map Audio Times to Segments (Proportional distribution)
-            const totalChars = completeText.length;
-            let currentTimePointer = 0;
-
-            const mappedSegments = segments.map((seg) => {
-              const segLen = seg.text.length;
-              const segDur = (segLen / totalChars) * totalDur;
-              const s = {
-                ...seg,
-                audioStart: currentTimePointer,
-                audioEnd: currentTimePointer + segDur,
-              };
-              currentTimePointer += segDur;
-              return s;
-            });
-
-            setScriptSegments(mappedSegments);
-
-            // AUTO PLAY START
-            setTimeout(() => {
-              setPausedAt(0);
-              if (videoRef.current) {
-                videoRef.current.currentTime = 0;
-                videoRef.current.play().catch(() => {});
-              }
-              startAudio(0);
-              setIsPlaying(true);
-              setAnalyzing(false);
-            }, 1500);
-          } else {
-            throw new Error("Audio generation failed.");
-          }
+          await generateAudioFromText(completeText, segments);
         } catch (err: any) {
           console.error(err);
           alert("Error: " + (err.message || "Process Failed."));
@@ -463,6 +414,65 @@ export default function VideoRecapView() {
     }
   };
 
+  const generateAudioFromText = async (text: string, segments: ScriptSegment[]) => {
+    setStatusText("STEP 2/3: GENERATING NARRATION...");
+    const voiceObj = VOICES.find((v) => v.id === selectedVoice) || VOICES[0];
+    const audioB64 = await generateSpeech(text, voiceObj.apiVoice);
+
+    if (audioB64) {
+      setStatusText("STEP 3/3: SYNCING VISUALS...");
+      const blob = createWavBlob(audioB64);
+      const url = URL.createObjectURL(blob);
+      setAudioBlobUrl(url);
+
+      // We need duration to map segments
+      const tempAudio = new Audio(url);
+      tempAudio.onloadedmetadata = () => {
+        const totalDur = tempAudio.duration;
+        setAudioDuration(totalDur);
+
+        // Map Segments
+        const totalChars = text.length;
+        let currentTimePointer = 0;
+
+        const mappedSegments = segments.map((seg) => {
+          const segLen = seg.text.length;
+          const segDur = (segLen / totalChars) * totalDur;
+          const s = {
+            ...seg,
+            audioStart: currentTimePointer,
+            audioEnd: currentTimePointer + segDur,
+          };
+          currentTimePointer += segDur;
+          return s;
+        });
+        setScriptSegments(mappedSegments);
+        setAnalyzing(false);
+
+        // Auto Play
+        setTimeout(() => {
+          togglePlay();
+        }, 500);
+      };
+    } else {
+      throw new Error("Audio generation failed.");
+    }
+  };
+
+  const handleRegenerateAudio = async () => {
+    if (!fullScriptText.trim()) return;
+    setAnalyzing(true);
+    setStatusText("REGENERATING AUDIO...");
+    const singleSegment: ScriptSegment[] = [{ time: 0, text: fullScriptText }];
+
+    try {
+      await generateAudioFromText(fullScriptText, singleSegment);
+    } catch (e) {
+      alert("Audio Regeneration Failed");
+      setAnalyzing(false);
+    }
+  };
+
   const activateCopyrightSafeMode = () => {
     setFlipVideo(true);
     setFilmGrain(true);
@@ -471,42 +481,19 @@ export default function VideoRecapView() {
     alert("Safe Mode Enabled: Video Flip, Grain, Zoom, and Auto-Color activated.");
   };
 
-  const stopAudio = () => {
-    if (audioSourceRef.current) {
-      try {
-        audioSourceRef.current.stop();
-      } catch (e) {}
-      audioSourceRef.current = null;
-    }
-  };
-
-  const startAudio = (offset: number, destination: AudioNode = audioContext.destination) => {
-    if (!audioBuffer) return;
-    stopAudio();
-    const source = audioContext.createBufferSource();
-    source.buffer = audioBuffer;
-    source.playbackRate.value = audioSpeed;
-    source.connect(destination);
-    source.start(0, offset);
-    audioSourceRef.current = source;
-    setStartTime(audioContext.currentTime - offset / audioSpeed);
-  };
-
-  const togglePlay = async () => {
+  const togglePlay = () => {
     if (!videoRef.current) return;
-    if (audioContext.state === "suspended") await audioContext.resume();
+    // Audio might be null if just previewing video
+    const audio = audioRef.current;
 
     if (isPlaying) {
       setIsPlaying(false);
       videoRef.current.pause();
-      stopAudio();
-      const elapsed = (audioContext.currentTime - startTime) * audioSpeed;
-      setPausedAt(elapsed);
+      if (audio) audio.pause();
     } else {
-      if (pausedAt >= audioDuration && audioDuration > 0) setPausedAt(0);
       setIsPlaying(true);
       videoRef.current.play().catch(() => {});
-      if (audioBuffer) startAudio(pausedAt);
+      if (audio) audio.play().catch(() => {});
     }
   };
 
@@ -515,36 +502,45 @@ export default function VideoRecapView() {
     const totalDur = audioDuration || videoRef.current?.duration || 1;
     const newTime = (val / 100) * totalDur;
 
-    if (isPlaying && audioBuffer) {
-      stopAudio();
-      startAudio(newTime);
-    } else {
-      setPausedAt(newTime);
-      setProgress(val);
-    }
+    // Seek both
+    if (videoRef.current) videoRef.current.currentTime = newTime;
+    if (audioRef.current) audioRef.current.currentTime = newTime;
+
+    setProgress(val);
   };
 
   const handleExport = async () => {
-    if (!videoRef.current || !canvasRef.current) return;
-    if (audioContext.state === "suspended") await audioContext.resume();
+    if (!videoRef.current || !canvasRef.current || !audioRef.current) return;
 
     setIsExporting(true);
     setIsPlaying(true);
-    setPausedAt(0);
-    setProgress(0);
+
+    // Reset positions
     videoRef.current.currentTime = 0;
+    audioRef.current.currentTime = 0;
     videoRef.current.play();
+    audioRef.current.play();
 
-    const streamDestination = audioContext.createMediaStreamDestination();
-    if (audioBuffer) startAudio(0, streamDestination);
-
+    // Capture Streams
     const canvasStream = canvasRef.current.captureStream(30);
-    const combinedStream = new MediaStream([
-      ...canvasStream.getVideoTracks(),
-      ...streamDestination.stream.getAudioTracks(),
-    ]);
 
+    let audioStream;
+    try {
+      // @ts-ignore
+      const stream = audioRef.current.captureStream
+        ? audioRef.current.captureStream()
+        : audioRef.current.mozCaptureStream();
+      audioStream = stream;
+    } catch (e) {
+      console.warn("Audio capture not supported in this browser. Export will be silent or video only.");
+    }
+
+    const tracks = [...canvasStream.getVideoTracks()];
+    if (audioStream) tracks.push(...audioStream.getAudioTracks());
+
+    const combinedStream = new MediaStream(tracks);
     const recorder = new MediaRecorder(combinedStream, { mimeType: "video/webm;codecs=vp9" });
+
     mediaRecorderRef.current = recorder;
     recordedChunksRef.current = [];
 
@@ -560,16 +556,18 @@ export default function VideoRecapView() {
       a.click();
       setIsExporting(false);
       setIsPlaying(false);
-      setPausedAt(0);
-      stopAudio();
-      videoRef.current?.pause();
     };
+
+    // Stop when audio ends
+    audioRef.current.onended = () => {
+      recorder.stop();
+    };
+
     recorder.start();
   };
 
   // --- RENDER ENGINE ---
   useEffect(() => {
-    // Initialize Offscreen Canvas for freeze effect
     if (!freezeCanvasRef.current) {
       freezeCanvasRef.current = document.createElement("canvas");
     }
@@ -577,96 +575,88 @@ export default function VideoRecapView() {
     const render = () => {
       const video = videoRef.current;
       const canvas = canvasRef.current;
+      const audio = audioRef.current;
       const freezeCanvas = freezeCanvasRef.current;
 
-      if (video && canvas && freezeCanvas) {
-        let targetW = video.videoWidth;
-        let targetH = video.videoHeight;
-        const MAX_RES = 1080;
-        if (targetH > MAX_RES) {
-          targetW = targetW * (MAX_RES / targetH);
-          targetH = MAX_RES;
-        }
-
-        if (aspectRatio.label !== "ORIGINAL") {
-          const baseH = 720;
-          targetW = baseH * (aspectRatio.w / aspectRatio.h);
-          targetH = baseH;
-        }
-        if (canvas.width !== targetW || canvas.height !== targetH) {
-          canvas.width = targetW;
-          canvas.height = targetH;
-          freezeCanvas.width = targetW;
-          freezeCanvas.height = targetH;
-        }
-
+      if (video && canvas && freezeCanvas && audio && video.readyState >= 2) {
         const ctx = canvas.getContext("2d");
         const freezeCtx = freezeCanvas.getContext("2d");
 
-        let elapsed = pausedAt;
-        const totalDur = audioDuration || video.duration || 1;
-
-        if (isPlaying && audioBuffer) {
-          elapsed = (audioContext.currentTime - startTime) * audioSpeed;
-          if (elapsed >= totalDur) {
-            if (isExporting && mediaRecorderRef.current && mediaRecorderRef.current.state === "recording")
-              mediaRecorderRef.current.stop();
-            else {
-              setIsPlaying(false);
-              setPausedAt(0);
-              stopAudio();
-              video.pause();
-            }
-          } else {
-            setProgress((elapsed / totalDur) * 100);
+        if (ctx && freezeCtx) {
+          // SYNC CHECK
+          if (audioDuration > 0 && !audio.paused) {
+            audio.playbackRate = audioSpeed;
           }
-        } else if (isPlaying) {
-          elapsed = video.currentTime;
-          if (video.duration) setProgress((video.currentTime / video.duration) * 100);
-        }
 
-        // --- SEMANTIC SCENE MATCHING ---
-        // Identify current script segment based on elapsed Audio Time
-        let activeSegment = scriptSegments.find(
-          (s) => elapsed >= (s.audioStart || 0) && elapsed < (s.audioEnd || Infinity),
-        );
-        if (!activeSegment && scriptSegments.length > 0) activeSegment = scriptSegments[scriptSegments.length - 1]; // Fallback to last
+          let targetW = video.videoWidth;
+          let targetH = video.videoHeight;
+          const MAX_RES = 1080;
+          if (targetH > MAX_RES) {
+            targetW = targetW * (MAX_RES / targetH);
+            targetH = MAX_RES;
+          }
 
-        if (activeSegment && video.readyState >= 2 && ctx && freezeCtx) {
-          video.playbackRate = videoSpeed;
+          if (aspectRatio.label !== "ORIGINAL") {
+            const baseH = 720;
+            targetW = baseH * (aspectRatio.w / aspectRatio.h);
+            targetH = baseH;
+          }
 
-          // Calculate time relative to the START of this narrative segment
-          const segmentRelativeTime = elapsed - (activeSegment.audioStart || 0);
+          const currentTime = audio.currentTime;
+          // Use video time if audio isn't available (Preview Mode)
+          const effectiveTime = audioBlobUrl && !audio.paused ? audio.currentTime : video.currentTime;
 
-          // --- 3S VIDEO / 3S PHOTO RHYTHM ---
-          // Cycle: 0-3s Video, 3-6s Photo, 6-9s Video, etc.
-          const CYCLE_DUR = 6.0;
-          const cycleTime = segmentRelativeTime % CYCLE_DUR;
-          const isFreezeMode = cycleTime >= 3.0 && motionZoom;
+          if (isPlaying) {
+            const totalDur = audioDuration || video.duration || 1;
+            setProgress((effectiveTime / totalDur) * 100);
+          }
 
-          // --- VIDEO SEEK LOGIC ---
-          // We want the video to play from the segment's matched timestamp.
-          // Video Target Time = SegmentTimestamp + TimeSinceSegmentStarted
-          // BUT: if we are in freeze mode, we want to freeze the frame at (SegmentTimestamp + 3s).
+          // --- SEMANTIC SCENE MATCHING ---
+          let activeSegment = scriptSegments.find(
+            (s) => effectiveTime >= (s.audioStart || 0) && effectiveTime < (s.audioEnd || Infinity),
+          );
+          if (
+            !activeSegment &&
+            scriptSegments.length > 0 &&
+            effectiveTime >= (scriptSegments[scriptSegments.length - 1].audioEnd || 0)
+          ) {
+            activeSegment = scriptSegments[scriptSegments.length - 1];
+          }
 
-          let targetVideoTime = activeSegment.time + segmentRelativeTime;
+          let isFreezeMode = false;
+          let segmentRelativeTime = 0;
 
-          // IMPORTANT: If we jump to a new segment (new topic), force video seek
-          // To avoid seeking every frame, we allow a small drift threshold
-          const drift = Math.abs(video.currentTime - targetVideoTime);
+          if (activeSegment) {
+            video.playbackRate = videoSpeed;
+            segmentRelativeTime = effectiveTime - (activeSegment.audioStart || 0);
 
-          if (isFreezeMode) {
-            // In freeze mode, we don't need to seek the video element, we just draw the captured frame.
-            // But we keep video playing in background or pause it?
-            // Better to let it play to be ready for next chunk.
-          } else {
-            // Video Mode: Ensure video is at the right semantic spot
-            // If drift is large (> 0.5s), seek. This happens when topics change.
-            if (drift > 0.5) {
-              video.currentTime = targetVideoTime;
+            // --- 3S VIDEO / 3S PHOTO RHYTHM ---
+            const CYCLE_DUR = 6.0;
+            const cycleTime = segmentRelativeTime % CYCLE_DUR;
+            isFreezeMode = cycleTime >= 3.0 && motionZoom;
+
+            // --- VIDEO SEEK LOGIC ---
+            if (!isFreezeMode && isPlaying && scriptSegments.length > 0) {
+              const targetVideoTime = activeSegment.time + segmentRelativeTime;
+              const drift = Math.abs(video.currentTime - targetVideoTime);
+              // Only force sync if drift is significant to avoid stutter
+              if (drift > 0.5) {
+                video.currentTime = targetVideoTime;
+              }
             }
-            if (!isPlaying && !video.paused) video.pause();
-            if (isPlaying && video.paused) video.play().catch(() => {});
+          }
+
+          // Update Canvas Sizes
+          if (canvas.width !== targetW || canvas.height !== targetH) {
+            canvas.width = targetW;
+            canvas.height = targetH;
+            // FIX: Only resize freeze buffer if we are NOT in freeze mode.
+            // Resizing clears the canvas, which causes black screen if done during freeze.
+            // Also resize if it's the very first time (width 0).
+            if (!isFreezeMode || freezeCanvas.width === 0) {
+              freezeCanvas.width = targetW;
+              freezeCanvas.height = targetH;
+            }
           }
 
           // Drawing Stage
@@ -679,57 +669,65 @@ export default function VideoRecapView() {
             ctx.scale(-1, 1);
           }
 
-          // Capture Freeze Frame logic:
-          // We need to capture the frame exactly when the cycle transitions from Video -> Photo (at 3s mark of cycle)
-          // Simplified: Capture current frame if we are in video mode, so it's ready for freeze mode.
-          if (!isFreezeMode) {
-            const vw = video.videoWidth;
-            const vh = video.videoHeight;
-            let scale = Math.min(targetW / vw, targetH / vh);
-            if (smartZoom) scale = Math.max(targetW / vw, targetH / vh);
-            const dw = vw * scale;
-            const dh = vh * scale;
-            const dx = (targetW - dw) / 2;
-            const dy = (targetH - dh) / 2;
+          // Standard Zoom/Fit Logic
+          const vw = video.videoWidth;
+          const vh = video.videoHeight;
+          let scale = Math.min(targetW / vw, targetH / vh);
+          if (smartZoom) scale = Math.max(targetW / vw, targetH / vh);
+          const dw = vw * scale;
+          const dh = vh * scale;
+          const dx = (targetW - dw) / 2;
+          const dy = (targetH - dh) / 2;
 
-            // Draw to main canvas
+          if (!isFreezeMode) {
+            // 1. Draw Video to Main Canvas
             ctx.drawImage(video, dx, dy, dw, dh);
 
-            // Also draw to freeze canvas to keep it fresh
-            freezeCtx.fillStyle = "#000";
-            freezeCtx.fillRect(0, 0, targetW, targetH);
-            freezeCtx.drawImage(video, 0, 0, vw, vh, dx, dy, dw, dh);
+            // 2. Continually update Freeze Buffer with raw video frame
+            // We do NOT apply flips here, as freezeCtx is separate.
+            // But we must match the drawImage logic.
+            if (freezeCanvas.width > 0 && freezeCanvas.height > 0) {
+              freezeCtx.drawImage(video, dx, dy, dw, dh);
+            }
           } else {
-            // --- PHOTO MODE (KEN BURNS) ---
-            // Use the frame captured in freezeCtx
-            const freezeIndex = Math.floor(segmentRelativeTime / 6.0); // Differentiate cycles
-            const panDirection = freezeIndex % 2 === 0 ? 1 : -1;
+            // --- PHOTO MODE (ZOOM IN ONLY) ---
+            // Draw from freeze buffer
+            const cycleTime = segmentRelativeTime % 6.0;
             const progressInFreeze = (cycleTime - 3.0) / 3.0; // 0 to 1
 
-            const zoomLevel = 1.2;
-            const zoomedW = targetW * zoomLevel;
-            const zoomedH = targetH * zoomLevel;
-            const excessX = zoomedW - targetW;
-            const excessY = zoomedH - targetH;
+            // Zoom IN Only (Scale 1.0 to 1.3)
+            const zoomStart = 1.0;
+            const zoomEnd = 1.3;
+            const currentZoom = zoomStart + progressInFreeze * (zoomEnd - zoomStart);
 
-            let translateX = 0;
-            if (panDirection === 1) {
-              translateX = 0 - progressInFreeze * excessX;
-            } else {
-              translateX = -excessX + progressInFreeze * excessX;
+            const zoomedW = targetW * currentZoom;
+            const zoomedH = targetH * currentZoom;
+            const centerX = (targetW - zoomedW) / 2;
+            const centerY = (targetH - zoomedH) / 2;
+
+            // Draw the freeze buffer image zoomed
+            // We assume freezeCanvas has the frame captured just before freezing
+            if (freezeCanvas.width > 0) {
+              ctx.drawImage(
+                freezeCanvas,
+                0,
+                0,
+                targetW,
+                targetH, // Source entire buffer
+                centerX,
+                centerY,
+                zoomedW,
+                zoomedH, // Dest zoomed
+              );
             }
-            const translateY = -excessY / 2;
 
-            ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH, translateX, translateY, zoomedW, zoomedH);
-
-            // Flash effect
+            // Subtle Flash at start of freeze
             if (progressInFreeze < 0.1) {
-              ctx.fillStyle = `rgba(255, 255, 255, ${0.2 - progressInFreeze * 2})`;
+              ctx.fillStyle = `rgba(255, 255, 255, ${0.1 - progressInFreeze})`;
               ctx.fillRect(0, 0, targetW, targetH);
             }
           }
 
-          // Color & Grain
           if (autoColor) {
             ctx.fillStyle = "rgba(255, 160, 0, 0.1)";
             ctx.globalCompositeOperation = "overlay";
@@ -754,7 +752,6 @@ export default function VideoRecapView() {
             ctx.fillRect(0, by, targetW, bh);
           }
 
-          // Character Overlay
           if (charImgRef.current) {
             const cw = targetW * 0.25;
             const ch = cw;
@@ -849,32 +846,11 @@ export default function VideoRecapView() {
           }
 
           // --- BURMESE AUTO-SUBTITLES LOGIC ---
-          // Use activeSegment text instead of full text for better sync
-          if (activeSegment && (isPlaying || pausedAt > 0)) {
+          if (activeSegment && (isPlaying || effectiveTime > 0)) {
             const chunk = activeSegment.text;
-            // For the active segment, we can just show the text directly.
-            // Or if it's long, we scroll it?
-            // Let's stick to the previous pagination logic but applied to the *segment* text.
-            // Calculate progress WITHIN the segment
-            const segmentProgress =
-              segmentRelativeTime / ((activeSegment.audioEnd || 1) - (activeSegment.audioStart || 0));
-
-            // Show a sliding window within the segment text?
-            // Or just show the whole segment text if it fits?
-            // To keep it simple and perfectly synced to "Scene", let's show the text block.
-            // But if it's too long, we page it.
-
-            const totalChars = chunk.length;
-            const charsPerPage = 80;
-            const pageIndex = Math.floor(Math.min(0.99, segmentProgress) * (totalChars / charsPerPage));
-            // Use segmentProgress to scroll through text if it's long
-
-            const startChar = Math.floor(pageIndex * charsPerPage);
-            const endChar = Math.min(totalChars, startChar + charsPerPage);
-            const visibleText = chunk; // Show full chunk context usually better for short clips, but let's wrap
-
-            // Let's actually show the whole text of the segment but wrap it.
-            // The segment usually corresponds to one or two sentences.
+            // Calc progress within this segment
+            const segmentDuration = (activeSegment.audioEnd || 1) - (activeSegment.audioStart || 0);
+            const segmentProgress = segmentRelativeTime / (segmentDuration || 1);
 
             if (chunk) {
               const fs = targetH * 0.05 * subScale;
@@ -906,8 +882,16 @@ export default function VideoRecapView() {
               }
 
               const maxWidth = targetW * 0.9;
-              // Manual Line Wrapping
-              const words = chunk.split("");
+
+              let words: string[] = [];
+              if (typeof Intl !== "undefined" && (Intl as any).Segmenter) {
+                const segmenter = new (Intl as any).Segmenter("my", { granularity: "word" });
+                words = Array.from(segmenter.segment(chunk)).map((s: any) => s.segment);
+              } else {
+                words = chunk.split(" ");
+                if (words.length === 1) words = chunk.split("");
+              }
+
               let line = "";
               let lines = [];
 
@@ -923,8 +907,6 @@ export default function VideoRecapView() {
               }
               lines.push(line);
 
-              // Limit to 2 lines for subtitle box, scroll if needed based on time
-              // If lines > 2, use segmentProgress to shift which lines are shown
               let displayLines = lines;
               if (lines.length > 2) {
                 const maxScroll = lines.length - 2;
@@ -955,8 +937,7 @@ export default function VideoRecapView() {
   }, [
     isPlaying,
     isExporting,
-    startTime,
-    pausedAt,
+    audioDuration,
     aspectRatio,
     smartZoom,
     motionZoom,
@@ -972,7 +953,6 @@ export default function VideoRecapView() {
     charId,
     charPos,
     scriptSegments,
-    audioBuffer,
     audioSpeed,
     videoSpeed,
     filmGrain,
@@ -1047,6 +1027,15 @@ export default function VideoRecapView() {
                 playsInline
                 crossOrigin="anonymous"
                 onLoadedData={handleVideoLoaded}
+              />
+              <audio
+                ref={audioRef}
+                src={audioBlobUrl || undefined}
+                onEnded={() => {
+                  setIsPlaying(false);
+                  setProgress(100);
+                }}
+                className="hidden"
               />
               <canvas ref={canvasRef} className="w-full h-full object-contain" />
 
@@ -1150,17 +1139,24 @@ export default function VideoRecapView() {
               </div>
             </div>
 
-            {/* SCRIPT EDITOR */}
-            <div className="space-y-1 pt-2">
+            {/* SCRIPT EDITOR - EDITABLE */}
+            <div className="space-y-2 pt-2">
               <label className="text-[7px] font-black text-slate-500 uppercase tracking-widest">
-                AI GENERATED SCRIPT
+                AI GENERATED SCRIPT (EDITABLE)
               </label>
               <textarea
                 value={fullScriptText}
-                readOnly
+                onChange={(e) => setFullScriptText(e.target.value)}
                 placeholder="Script will appear here after analysis..."
-                className="w-full h-24 bg-[#1a1a1a] border border-white/10 rounded-xl p-3 text-[9px] font-medium text-white outline-none focus:border-blue-500/50 resize-none opacity-80"
+                className="w-full h-32 bg-[#1a1a1a] border border-white/10 rounded-xl p-3 text-[9px] font-medium text-white outline-none focus:border-blue-500/50 resize-none opacity-90 custom-scrollbar"
               />
+              <button
+                disabled={!fullScriptText || analyzing}
+                onClick={handleRegenerateAudio}
+                className="w-full py-3 rounded-xl bg-amber-600/20 border border-amber-500/30 text-amber-300 font-black text-[9px] uppercase tracking-widest hover:bg-amber-600 hover:text-white transition-all shadow-lg active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                🔄 REGENERATE AUDIO FROM EDITED SCRIPT
+              </button>
             </div>
           </div>
         </AccordionItem>
@@ -1504,7 +1500,7 @@ export default function VideoRecapView() {
       <div className="flex gap-3 pt-4 sticky bottom-4 z-50">
         <button
           onClick={() => {
-            if (!audioBuffer && !analyzing) {
+            if (!audioBlobUrl && !analyzing) {
               handleProcess();
             } else {
               togglePlay();
@@ -1515,7 +1511,7 @@ export default function VideoRecapView() {
         >
           {analyzing
             ? "PROCESSING..."
-            : audioBuffer
+            : audioBlobUrl
               ? isPlaying
                 ? "PAUSE PREVIEW"
                 : "▶ PLAY RESULT"
@@ -1525,7 +1521,7 @@ export default function VideoRecapView() {
 
         <button
           onClick={handleExport}
-          disabled={!audioBuffer || isExporting || isPlaying}
+          disabled={!audioBlobUrl || isExporting || isPlaying}
           className="flex-1 py-4 rounded-2xl bg-[#1a202c] border border-white/10 text-white font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all disabled:opacity-50"
         >
           {isExporting ? "EXPORTING..." : "📥 EXPORT"}
