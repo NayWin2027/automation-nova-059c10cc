@@ -15,7 +15,7 @@ serve(async (req) => {
   }
 
   try {
-    const { text, voiceName, apiKey, performance, languageCode } = await req.json();
+    const { text, voiceName, apiKey: userApiKey, languageCode } = await req.json();
 
     if (!text || !text.trim()) {
       return new Response(
@@ -24,29 +24,32 @@ serve(async (req) => {
       );
     }
 
-    // Check if using own API key
-    const isOwnKey = !!apiKey?.trim();
+    // Determine which API key to use:
+    // 1. User's own API key (if provided)
+    // 2. Backend shared GEMINI_API_KEY (for App Mode - natural voice for everyone!)
+    const userKey = userApiKey?.trim();
+    const backendKey = Deno.env.get("GEMINI_API_KEY");
+    const effectiveApiKey = userKey || backendKey;
 
-    if (!isOwnKey) {
-      // App API mode - Gemini TTS requires direct API key
-      // Return flag indicating natural TTS not available in App mode
-      console.log(`[gemini-tts] App API mode - Natural TTS requires Own API Key`);
+    if (!effectiveApiKey) {
+      console.log(`[gemini-tts] No API key available - neither user key nor backend GEMINI_API_KEY`);
       return new Response(
         JSON.stringify({ 
           useClientTTS: true,
           text: text,
           voiceName: voiceName,
           languageCode: languageCode || 'en-US',
-          message: 'For natural human-like voice, please use Own API Key mode with your Gemini API key.'
+          message: 'Natural TTS not available. Using browser fallback.'
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`[gemini-tts] Own API mode - generating natural speech with voice: ${voiceName}, language: ${languageCode}, text length: ${text.length}`);
+    const keySource = userKey ? "user" : "backend";
+    console.log(`[gemini-tts] Using ${keySource} API key - generating natural speech with voice: ${voiceName}, language: ${languageCode}, text length: ${text.length}`);
 
-    // Direct Google API call for own key - Real Gemini TTS with natural human voice
-    const apiUrl = `${GEMINI_TTS_API}?key=${apiKey}`;
+    // Direct Google API call for Gemini TTS with natural human voice
+    const apiUrl = `${GEMINI_TTS_API}?key=${effectiveApiKey}`;
     
     // Build the proper Gemini TTS request
     // IMPORTANT: Use clear instruction to only read the text, not generate new content
@@ -84,7 +87,10 @@ serve(async (req) => {
       
       if (response.status === 429) {
         return new Response(
-          JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
+          JSON.stringify({ 
+            error: 'Rate limit exceeded. Please try again later.',
+            retryable: true 
+          }),
           { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }

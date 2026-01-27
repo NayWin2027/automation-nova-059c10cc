@@ -571,7 +571,7 @@ export default function TransformativeVideoPage() {
     }
   };
 
-  // Voice preview - says "မင်္ဂလာပါ" using Gemini TTS (Natural Voice with Own API)
+  // Voice preview - says "မင်္ဂလာပါ" using Gemini TTS (Natural Voice)
   const handlePreviewVoice = async (voiceId: string) => {
     const voice = VOICES.find(v => v.id === voiceId);
     if (!voice) return;
@@ -593,12 +593,22 @@ export default function TransformativeVideoPage() {
       
       if (error) throw error;
       
-      // Check if we should use client-side TTS (App API mode - Robot voice)
+      // Handle rate limit error with Retry button
+      if (data?.retryable) {
+        setPlayingVoice(null);
+        toast.error(data.error || "Rate limit exceeded", {
+          duration: 8000,
+          action: {
+            label: "Retry",
+            onClick: () => handlePreviewVoice(voiceId)
+          }
+        });
+        return;
+      }
+      
+      // Check if we should use client-side TTS (fallback)
       if (data?.useClientTTS) {
-        // Show warning that this is robot voice
-        if (apiMode === "app") {
-          toast.info("Robot အသံ - Natural Voice ရဖို့ Own API mode သုံးပါ", { duration: 2000 });
-        }
+        toast.info("Browser TTS fallback - backend key မရှိပါ", { duration: 2000 });
         
         // Use Web Speech API fallback
         if ('speechSynthesis' in window) {
@@ -652,24 +662,21 @@ export default function TransformativeVideoPage() {
     } catch (err) {
       console.error("Voice preview error:", err);
       const errorMsg = err instanceof Error ? err.message : "Voice preview failed";
+      setPlayingVoice(null);
       
-      // If Own API mode failed, show specific error
-      if (apiMode === "own") {
-        toast.error(errorMsg);
-        setPlayingVoice(null);
+      // Check if error is retryable (rate limit)
+      if ((err as any)?.retryable || errorMsg.includes("Rate limit") || errorMsg.includes("429")) {
+        toast.error("Rate limit - ခဏစောင့်ပြီး ထပ်ကြိုးစားပါ", {
+          duration: 8000,
+          action: {
+            label: "Retry",
+            onClick: () => handlePreviewVoice(voiceId)
+          }
+        });
         return;
       }
       
-      // Fallback to Web Speech API for App mode
-      if ('speechSynthesis' in window) {
-        speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance("မင်္ဂလာပါ");
-        utterance.lang = "my-MM";
-        utterance.onend = () => setPlayingVoice(null);
-        speechSynthesis.speak(utterance);
-      } else {
-        setPlayingVoice(null);
-      }
+      toast.error(errorMsg);
     }
   };
 
