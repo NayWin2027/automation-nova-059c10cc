@@ -1,5 +1,29 @@
-import React, { useState, useRef, useEffect } from "react";
-import { analyzeVideo, generateSpeech, audioContext } from "../services/geminiService.ts";
+import React, { useMemo, useState, useRef, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { generateSpeech } from "../services/geminiService.ts";
+
+// Local helper (previously imported from geminiService)
+async function analyzeVideo(
+  base64Video: string,
+  mimeType: string,
+  targetLang: string,
+): Promise<string> {
+  const videoUrl = `data:${mimeType || "video/mp4"};base64,${base64Video}`;
+
+  const { data, error } = await supabase.functions.invoke<{
+    recap?: string;
+    error?: string;
+  }>("video-recap", {
+    body: {
+      videoUrl,
+      targetLang,
+    },
+  });
+
+  if (error) throw new Error(error.message || "Video recap failed");
+  if (data?.error) throw new Error(data.error);
+  return data?.recap || "";
+}
 
 // --- DATA SETS ---
 const VOICES = [
@@ -251,6 +275,31 @@ export default function VideoRecapView() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const reqRef = useRef<number>();
+
+  // Lazily create AudioContext only after user interaction (prevents desktop black screen / autoplay policy issues)
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const getAudioContext = () => {
+    if (!audioContextRef.current) {
+      const Ctx = window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      audioContextRef.current = new Ctx();
+    }
+    return audioContextRef.current;
+  };
+
+  // Keep existing code using `audioContext.*` without importing a global instance.
+  const audioContext = useMemo(() => {
+    return new Proxy({} as AudioContext, {
+      get(_target, prop) {
+        return (getAudioContext() as any)[prop as any];
+      },
+      set(_target, prop, value) {
+        (getAudioContext() as any)[prop as any] = value;
+        return true;
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Animation Refs
   const logoAngleRef = useRef(0);
