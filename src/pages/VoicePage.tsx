@@ -162,8 +162,8 @@ const VoicePage: React.FC = () => {
       const selectedVoiceObj = voices.find(v => v.name === voiceName) || voices[0];
       const actualVoiceValue = selectedVoiceObj.value;
 
-      // Always use backend shared GEMINI_API_KEY - never send user API keys
-      const pcmData = await generateSpeech(text, actualVoiceValue, undefined, performance, selectedLanguage);
+      // Use user's API key if Own API mode, otherwise use backend shared key
+      const pcmData = await generateSpeech(text, actualVoiceValue, apiType === 'own' ? apiKey : undefined, performance, selectedLanguage);
       if (pcmData) {
         setResultAudio(pcmData);
         
@@ -249,6 +249,32 @@ const VoicePage: React.FC = () => {
       </header>
 
       <main className="px-4 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
+        
+        {/* 1. API Switcher */}
+        <div className="flex bg-white/5 backdrop-blur-xl p-1 rounded-[18px] border border-white/10 shadow-lg">
+          <button onClick={() => setApiType('app')} className={`flex-1 py-2.5 rounded-[14px] font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${apiType === 'app' ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md' : 'text-muted-foreground'}`}>
+            APP API <span className="text-[8px]">🔒</span>
+          </button>
+          <button onClick={() => setApiType('own')} className={`flex-1 py-2.5 rounded-[14px] font-black text-[9px] uppercase tracking-widest transition-all ${apiType === 'own' ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md' : 'text-muted-foreground'}`}>
+            OWN API
+          </button>
+        </div>
+
+        {/* 2. OWN API KEY BOX */}
+        {apiType === 'own' && (
+          <div className="bg-white/5 backdrop-blur-2xl rounded-[28px] p-6 border border-white/10 space-y-3 shadow-xl animate-in zoom-in-95 duration-300">
+            <h4 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">GEMINI API KEY</h4>
+            <div className="relative">
+              <input 
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="••••••••••••••••••••••••••••••••••••••"
+                className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-sm font-bold text-foreground focus:ring-1 focus:ring-primary outline-none transition-all placeholder:text-muted-foreground/30"
+              />
+            </div>
+          </div>
+        )}
 
         {/* Language Selector - 80+ Languages */}
         <div className="bg-white/5 backdrop-blur-2xl rounded-[28px] p-5 border border-white/10 space-y-3 shadow-xl">
