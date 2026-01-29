@@ -166,18 +166,81 @@ FORMAT:
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     } else {
-      // App Mode - video file upload requires Own API Key
-      if (isBase64) {
+      // App Mode - use backend GEMINI_API_KEY for video processing
+      const BACKEND_GEMINI_KEY = Deno.env.get("GEMINI_API_KEY");
+      
+      if (isBase64 && BACKEND_GEMINI_KEY) {
+        // Process video file using backend Gemini key
+        console.log("App Mode: Processing video with backend GEMINI_API_KEY");
+        
+        const matches = videoUrl.match(/^data:([^;]+);base64,(.+)$/);
+        if (!matches) {
+          throw new Error("Invalid base64 video format");
+        }
+        
+        const mimeType = matches[1];
+        const base64Data = matches[2];
+        
+        const parts = [
+          {
+            inlineData: {
+              mimeType: mimeType,
+              data: base64Data
+            }
+          },
+          { text: systemPrompt + "\n\nPlease analyze this video and create a detailed recap." }
+        ];
+
+        response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${BACKEND_GEMINI_KEY}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ role: "user", parts }],
+              generationConfig: {
+                temperature: 0.7,
+                maxOutputTokens: 4096,
+              },
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("Backend Gemini API error:", errorText);
+          
+          if (errorText.includes("INVALID_ARGUMENT") || errorText.includes("too large")) {
+            return new Response(
+              JSON.stringify({ error: "ဗီဒီယိုဖိုင်ကြီးလွန်းသည်။ 20MB အောက်ဖိုင်သုံးပါ။" }),
+              { status: 413, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          
+          if (response.status === 429 || errorText.includes("RESOURCE_EXHAUSTED")) {
+            return new Response(
+              JSON.stringify({ error: "API quota ကုန်သွားပါပြီ။ ခဏစောင့်ပါ။" }),
+              { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          
+          throw new Error("Video analysis failed: " + errorText.substring(0, 200));
+        }
+
+        const data = await response.json();
+        const recap = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+        if (!recap) {
+          throw new Error("AI မှ အဖြေမရရှိပါ။ ထပ်ကြိုးစားပါ။");
+        }
+
         return new Response(
-          JSON.stringify({ 
-            error: "Video ဖိုင်များကို analyze လုပ်ရန် Own API Key လိုအပ်ပါသည်။ 'Own API' mode ကို ရွေးချယ်ပြီး Gemini API Key ထည့်ပါ။",
-            requiresOwnApi: true 
-          }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ recap }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      // For URL-only in App Mode, use Lovable AI Gateway
+      // For URL-only or no backend key, use Lovable AI Gateway
       const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
       if (!LOVABLE_API_KEY) {
         throw new Error("LOVABLE_API_KEY is not configured");
