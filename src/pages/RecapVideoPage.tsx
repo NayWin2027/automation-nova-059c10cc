@@ -3,25 +3,25 @@ import { generateSpeech } from "../services/geminiService";
 import { supabase } from "@/integrations/supabase/client";
 
 // Analyze video function - calls the video-recap edge function
-const analyzeVideo = async (file: File, mimeType: string, targetLang: string): Promise<string> => {
-  // Convert file to base64
-  const arrayBuffer = await file.arrayBuffer();
-  const bytes = new Uint8Array(arrayBuffer);
-  let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  const base64Data = btoa(binary);
-  const videoUrl = `data:${mimeType};base64,${base64Data}`;
-
+const analyzeVideo = async (videoDataUrl: string, targetLang: string): Promise<string> => {
   const { data, error } = await supabase.functions.invoke('video-recap', {
-    body: { videoUrl, targetLang }
+    body: { videoUrl: videoDataUrl, targetLang }
   });
 
   if (error) throw new Error(error.message);
   if (data?.error) throw new Error(data.error);
   
   return data?.recap || '';
+};
+
+// Convert file to base64 data URL immediately on selection
+const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 };
 
 // --- DATA SETS ---
@@ -238,8 +238,9 @@ const createWavBlob = (base64Audio: string) => {
 };
 
 export default function VideoRecapView() {
-  const [file, setFile] = useState<File | null>(null);
+  const [videoDataUrl, setVideoDataUrl] = useState<string | null>(null); // Base64 data URL stored immediately
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
+  const [fileSize, setFileSize] = useState<number>(0);
   const [analyzing, setAnalyzing] = useState(false);
   const [statusText, setStatusText] = useState("");
   const [scriptSegments, setScriptSegments] = useState<ScriptSegment[]>([]);
@@ -300,12 +301,25 @@ export default function VideoRecapView() {
   const dataArrayRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const f = e.target.files[0];
-      setFile(f);
+      setFileSize(f.size);
+      
+      // Create object URL for video preview
       const url = URL.createObjectURL(f);
       setVideoSrc(url);
+      
+      // Convert to base64 IMMEDIATELY to avoid permission issues on mobile
+      try {
+        const dataUrl = await fileToBase64(f);
+        setVideoDataUrl(dataUrl);
+      } catch (err) {
+        console.error("Failed to convert file to base64:", err);
+        alert("ဖိုင်ဖတ်ရန် မအောင်မြင်ပါ။ ထပ်ကြိုးစားပါ။");
+        return;
+      }
+      
       setFullScriptText("");
       setScriptSegments([]);
       setAudioBlobUrl(null);
@@ -346,8 +360,8 @@ export default function VideoRecapView() {
   }, [charId]);
 
   const handleProcess = async () => {
-    if (!file) return;
-    if (file.size > 200 * 1024 * 1024) {
+    if (!videoDataUrl) return;
+    if (fileSize > 200 * 1024 * 1024) {
       alert("⚠️ Video file is too large! Maximum limit is 200MB.");
       return;
     }
@@ -357,7 +371,7 @@ export default function VideoRecapView() {
     setScriptSegments([]);
     setAudioBlobUrl(null);
     try {
-      const rawResponse = await analyzeVideo(file, file.type || "video/mp4", targetLang);
+      const rawResponse = await analyzeVideo(videoDataUrl, targetLang);
       let segments: ScriptSegment[] = [];
       try {
         segments = JSON.parse(rawResponse);
