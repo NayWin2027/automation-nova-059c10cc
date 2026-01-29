@@ -116,10 +116,16 @@ FORMAT:
         
         // Check for specific error types and return appropriate HTTP status codes
         if (errorText.includes("INVALID_ARGUMENT") || errorText.includes("too large")) {
+          // Return 200 with structured payload to prevent frontend blank screens
           return new Response(
-            JSON.stringify({ error: "ဗီဒီယိုဖိုင်ကြီးလွန်းသည်။ 20MB အောက်ဖိုင်သုံးပါ။" }),
+            JSON.stringify({
+              recap: null,
+              error: "ဗီဒီယိုဖိုင်ကြီးလွန်းသည်။ 20MB အောက်ဖိုင်သုံးပါ။",
+              retryable: false,
+              retryAfterSeconds: null,
+            }),
             {
-              status: 413,
+              status: 200,
               headers: { ...corsHeaders, "Content-Type": "application/json" },
             }
           );
@@ -132,13 +138,20 @@ FORMAT:
           errorText.includes("quota") ||
           errorText.includes('"code": 429')
         ) {
+          // IMPORTANT: Return 200 with retry metadata so the frontend can show countdown without crashing.
+          // If Google says limit is 0, waiting won't help; mark as non-retryable.
+          const isHardQuota = errorText.includes("limit: 0");
           return new Response(
             JSON.stringify({
-              error: "API quota ကုန်သွားပါပြီ။ ခဏစောင့်ပါ။",
-              retryAfterSeconds: retryAfterSeconds ?? null,
+              recap: null,
+              error: isHardQuota
+                ? "API quota 0 ဖြစ်နေပါတယ် (billing/plan မပြည့်မီနိုင်ပါတယ်)။ အလုပ်လုပ်အောင် GEMINI API Key ကို ပြင်/အစားထိုးပေးရန်လိုပါတယ်။"
+                : "API quota ကုန်သွားပါပြီ။ ခဏစောင့်ပါ။",
+              retryable: !isHardQuota,
+              retryAfterSeconds: isHardQuota ? null : retryAfterSeconds ?? null,
             }),
             {
-              status: 429,
+              status: 200,
               headers: {
                 ...corsHeaders,
                 "Content-Type": "application/json",
@@ -294,23 +307,42 @@ FORMAT:
         }),
       });
 
-      if (!response.ok) {
-        if (response.status === 429) {
-          return new Response(
-            JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
-            { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-        if (response.status === 402) {
-          return new Response(
-            JSON.stringify({ error: "Payment required. Please add credits to your workspace." }),
-            { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-        const errorText = await response.text();
-        console.error("AI Gateway error:", errorText);
-        throw new Error("Failed to generate recap");
-      }
+       if (!response.ok) {
+         // IMPORTANT: Always return 200 with structured payload (same as other functions) to avoid frontend blank screens.
+         if (response.status === 429) {
+           return new Response(
+             JSON.stringify({
+               recap: null,
+               error: "Rate limit exceeded. Please try again later.",
+               retryable: true,
+               retryAfterSeconds: 30,
+             }),
+             { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+           );
+         }
+         if (response.status === 402) {
+           return new Response(
+             JSON.stringify({
+               recap: null,
+               error: "Payment required. Please add credits to your workspace.",
+               retryable: false,
+               retryAfterSeconds: null,
+             }),
+             { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+           );
+         }
+         const errorText = await response.text();
+         console.error("AI Gateway error:", errorText);
+         return new Response(
+           JSON.stringify({
+             recap: null,
+             error: "Failed to generate recap",
+             retryable: true,
+             retryAfterSeconds: 10,
+           }),
+           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+         );
+       }
 
       const data = await response.json();
       const recap = data.choices?.[0]?.message?.content || "";

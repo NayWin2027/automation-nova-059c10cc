@@ -2,25 +2,37 @@ import React, { useState, useRef, useEffect } from "react";
 import { generateSpeech } from "../services/geminiService";
 import { supabase } from "@/integrations/supabase/client";
 
-// Analyze video function - calls the video-recap edge function
-const analyzeVideo = async (videoDataUrl: string, targetLang: string): Promise<{ recap: string; error?: string; retryable?: boolean; retryAfterSeconds?: number }> => {
-  const { data, error } = await supabase.functions.invoke('video-recap', {
-    body: { videoUrl: videoDataUrl, targetLang }
+// Analyze video function - calls the video-recap backend function
+// IMPORTANT: Never throw on quota/rate-limit errors; return a structured payload so the UI doesn't blank-screen.
+const analyzeVideo = async (
+  videoDataUrl: string,
+  targetLang: string
+): Promise<{ recap: string; error?: string; retryable?: boolean; retryAfterSeconds?: number }> => {
+  const { data, error } = await supabase.functions.invoke("video-recap", {
+    body: { videoUrl: videoDataUrl, targetLang },
   });
 
-  if (error) throw new Error(error.message);
-  
-  // Handle graceful error responses (200 with error payload)
-  if (data?.error) {
-    return { 
-      recap: '', 
-      error: data.error, 
-      retryable: data.retryable ?? false,
-      retryAfterSeconds: data.retryAfterSeconds
+  // If the function returned a non-2xx, Supabase sets `error`. We still try to read `data` if present.
+  if (error) {
+    return {
+      recap: "",
+      error: (data as any)?.error ?? error.message,
+      retryable: (data as any)?.retryable ?? false,
+      retryAfterSeconds: (data as any)?.retryAfterSeconds,
     };
   }
-  
-  return { recap: data?.recap || '' };
+
+  // Handle graceful error responses (200 with error payload)
+  if ((data as any)?.error) {
+    return {
+      recap: "",
+      error: (data as any).error,
+      retryable: (data as any).retryable ?? false,
+      retryAfterSeconds: (data as any).retryAfterSeconds,
+    };
+  }
+
+  return { recap: (data as any)?.recap || "" };
 };
 
 // Convert file to base64 data URL immediately on selection
