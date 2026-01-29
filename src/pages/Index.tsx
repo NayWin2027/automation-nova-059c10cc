@@ -21,6 +21,14 @@ import { ChatDialog } from "@/components/ChatDialog";
 
 const tools = [
   {
+    id: "recap",
+    icon: Video,
+    title: "Recap Video",
+    description: "AI Video အကျဉ်းချုပ် ဖန်တီးရန်။",
+    gradient: "amber" as const,
+    route: "/recap",
+  },
+  {
     id: "transformative",
     icon: Video,
     title: "Transformative Video",
