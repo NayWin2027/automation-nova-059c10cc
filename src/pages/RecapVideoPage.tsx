@@ -1,5 +1,28 @@
 import React, { useState, useRef, useEffect } from "react";
-import { analyzeVideo, generateSpeech, audioContext } from "../services/geminiService.ts";
+import { generateSpeech } from "../services/geminiService";
+import { supabase } from "@/integrations/supabase/client";
+
+// Analyze video function - calls the video-recap edge function
+const analyzeVideo = async (file: File, mimeType: string, targetLang: string): Promise<string> => {
+  // Convert file to base64
+  const arrayBuffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  const base64Data = btoa(binary);
+  const videoUrl = `data:${mimeType};base64,${base64Data}`;
+
+  const { data, error } = await supabase.functions.invoke('video-recap', {
+    body: { videoUrl, targetLang }
+  });
+
+  if (error) throw new Error(error.message);
+  if (data?.error) throw new Error(data.error);
+  
+  return data?.recap || '';
+};
 
 // --- DATA SETS ---
 const VOICES = [
@@ -274,7 +297,7 @@ export default function VideoRecapView() {
 
   // Animation States for Lip-sync
   const analyserRef = useRef<AnalyserNode | null>(null);
-  const dataArrayRef = useRef<Uint8Array | null>(null);
+  const dataArrayRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
