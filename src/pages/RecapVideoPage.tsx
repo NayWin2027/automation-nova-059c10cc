@@ -3,15 +3,24 @@ import { generateSpeech } from "../services/geminiService";
 import { supabase } from "@/integrations/supabase/client";
 
 // Analyze video function - calls the video-recap edge function
-const analyzeVideo = async (videoDataUrl: string, targetLang: string): Promise<string> => {
+const analyzeVideo = async (videoDataUrl: string, targetLang: string): Promise<{ recap: string; error?: string; retryable?: boolean; retryAfterSeconds?: number }> => {
   const { data, error } = await supabase.functions.invoke('video-recap', {
     body: { videoUrl: videoDataUrl, targetLang }
   });
 
   if (error) throw new Error(error.message);
-  if (data?.error) throw new Error(data.error);
   
-  return data?.recap || '';
+  // Handle graceful error responses (200 with error payload)
+  if (data?.error) {
+    return { 
+      recap: '', 
+      error: data.error, 
+      retryable: data.retryable ?? false,
+      retryAfterSeconds: data.retryAfterSeconds
+    };
+  }
+  
+  return { recap: data?.recap || '' };
 };
 
 // Convert file to base64 data URL immediately on selection
@@ -371,7 +380,20 @@ export default function VideoRecapView() {
     setScriptSegments([]);
     setAudioBlobUrl(null);
     try {
-      const rawResponse = await analyzeVideo(videoDataUrl, targetLang);
+      const result = await analyzeVideo(videoDataUrl, targetLang);
+      
+      // Handle graceful error responses with retry info
+      if (result.error) {
+        if (result.retryable && result.retryAfterSeconds) {
+          alert(`${result.error}\n\n${result.retryAfterSeconds} စက္ကန့်အကြာတွင် ပြန်ကြိုးစားပါ။`);
+        } else {
+          alert("Error: " + result.error);
+        }
+        setAnalyzing(false);
+        return;
+      }
+      
+      const rawResponse = result.recap;
       let segments: ScriptSegment[] = [];
       try {
         segments = JSON.parse(rawResponse);
