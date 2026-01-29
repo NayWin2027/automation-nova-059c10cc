@@ -166,16 +166,22 @@ FORMAT:
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     } else {
-      // Use Lovable AI Gateway - text only since it doesn't support video
+      // App Mode - video file upload requires Own API Key
+      if (isBase64) {
+        return new Response(
+          JSON.stringify({ 
+            error: "Video ဖိုင်များကို analyze လုပ်ရန် Own API Key လိုအပ်ပါသည်။ 'Own API' mode ကို ရွေးချယ်ပြီး Gemini API Key ထည့်ပါ။",
+            requiresOwnApi: true 
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // For URL-only in App Mode, use Lovable AI Gateway
       const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
       if (!LOVABLE_API_KEY) {
         throw new Error("LOVABLE_API_KEY is not configured");
       }
-
-      // For app mode, we can only do text-based analysis
-      const userMessage = isBase64 
-        ? "ဗီဒီယိုဖိုင်ကို ခွဲခြမ်းစိတ်ဖြာရန် Own API Key လိုအပ်ပါသည်။ App Mode တွင် URL link များသာ အသုံးပြုနိုင်ပါသည်။"
-        : `Please analyze and create a recap for this video: ${videoUrl}`;
 
       response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
@@ -187,7 +193,7 @@ FORMAT:
           model: "google/gemini-3-flash-preview",
           messages: [
             { role: "system", content: systemPrompt },
-            { role: "user", content: userMessage },
+            { role: "user", content: `Please analyze and create a recap for this video: ${videoUrl}` },
           ],
         }),
       });
