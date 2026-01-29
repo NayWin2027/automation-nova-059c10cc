@@ -210,21 +210,54 @@ FORMAT:
           const errorText = await response.text();
           console.error("Backend Gemini API error:", errorText);
           
+          // Extract retry delay if present
+          let retryAfterSeconds = 30; // Default 30 seconds
+          try {
+            const parsed = JSON.parse(errorText);
+            const retryInfo = parsed?.error?.details?.find((d: any) => d?.["@type"] === "type.googleapis.com/google.rpc.RetryInfo");
+            const retryDelay = retryInfo?.retryDelay as string | undefined;
+            if (retryDelay && retryDelay.endsWith("s")) {
+              const s = parseInt(retryDelay.replace("s", ""), 10);
+              if (!Number.isNaN(s)) retryAfterSeconds = s;
+            }
+          } catch {
+            // ignore JSON parse errors
+          }
+          
           if (errorText.includes("INVALID_ARGUMENT") || errorText.includes("too large")) {
+            // Return 200 with error to prevent blank screen
             return new Response(
-              JSON.stringify({ error: "ဗီဒီယိုဖိုင်ကြီးလွန်းသည်။ 20MB အောက်ဖိုင်သုံးပါ။" }),
-              { status: 413, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              JSON.stringify({ 
+                recap: null,
+                error: "ဗီဒီယိုဖိုင်ကြီးလွန်းသည်။ 20MB အောက်ဖိုင်သုံးပါ။",
+                retryable: false
+              }),
+              { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
           }
           
-          if (response.status === 429 || errorText.includes("RESOURCE_EXHAUSTED")) {
+          if (response.status === 429 || errorText.includes("RESOURCE_EXHAUSTED") || errorText.includes("quota")) {
+            // Return 200 with error payload to prevent blank screen (like gemini-tts pattern)
             return new Response(
-              JSON.stringify({ error: "API quota ကုန်သွားပါပြီ။ ခဏစောင့်ပါ။" }),
-              { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              JSON.stringify({ 
+                recap: null,
+                error: "API quota ကုန်သွားပါပြီ။ ခဏစောင့်ပါ။",
+                retryable: true,
+                retryAfterSeconds: retryAfterSeconds
+              }),
+              { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
           }
           
-          throw new Error("Video analysis failed: " + errorText.substring(0, 200));
+          return new Response(
+            JSON.stringify({ 
+              recap: null,
+              error: "Video analysis failed. ထပ်ကြိုးစားပါ။",
+              retryable: true,
+              retryAfterSeconds: 10
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
 
         const data = await response.json();
