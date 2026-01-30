@@ -122,6 +122,45 @@ export type Database = {
         }
         Relationships: []
       }
+      tool_settings: {
+        Row: {
+          created_at: string | null
+          daily_free_limit: number | null
+          description: string
+          id: string
+          is_enabled: boolean | null
+          is_premium: boolean | null
+          requires_auth: boolean | null
+          title: string
+          tool_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          daily_free_limit?: number | null
+          description: string
+          id?: string
+          is_enabled?: boolean | null
+          is_premium?: boolean | null
+          requires_auth?: boolean | null
+          title: string
+          tool_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          daily_free_limit?: number | null
+          description?: string
+          id?: string
+          is_enabled?: boolean | null
+          is_premium?: boolean | null
+          requires_auth?: boolean | null
+          title?: string
+          tool_id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       user_devices: {
         Row: {
           created_at: string
@@ -166,6 +205,33 @@ export type Database = {
           created_at?: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_tool_usage: {
+        Row: {
+          created_at: string | null
+          id: string
+          tool_id: string
+          usage_count: number | null
+          usage_date: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          tool_id: string
+          usage_count?: number | null
+          usage_date?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          tool_id?: string
+          usage_count?: number | null
+          usage_date?: string
           user_id?: string
         }
         Relationships: []
