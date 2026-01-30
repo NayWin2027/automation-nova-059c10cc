@@ -133,20 +133,20 @@ const Index = () => {
   const renderHomeContent = () => (
     <>
       <GatewayBanner />
-      <div className="mb-6 flex items-start justify-between">
+      <div className="mb-4 flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">
+          <h1 className="text-base font-bold text-foreground">
             Media<span className="text-primary">Master.</span>
           </h1>
-          <p className="text-xs font-medium tracking-[0.2em] text-primary/70 uppercase mt-1">
+          <p className="text-2xs font-medium tracking-[0.15em] text-primary/60 uppercase mt-0.5">
             Pro Edition V8.0
           </p>
         </div>
-        <button className="w-10 h-10 rounded-xl bg-secondary/50 border border-border/30 flex items-center justify-center hover:bg-secondary transition-colors">
-          <MessageCircle className="w-5 h-5 text-muted-foreground" />
+        <button className="w-7 h-7 rounded-lg bg-secondary/40 border border-border/20 flex items-center justify-center hover:bg-secondary/60 transition-colors">
+          <MessageCircle className="w-3.5 h-3.5 text-muted-foreground" />
         </button>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-2">
         {tools.map((tool) => (
           <ToolCard
             key={tool.id}
@@ -205,18 +205,18 @@ const Index = () => {
   );
 
   return (
-    <div className="min-h-screen premium-background pb-28">
+    <div className="min-h-screen premium-background pb-24">
       {/* Light rays overlay */}
       <div className="premium-rays" />
       
-      <header className="p-4 flex items-center justify-between relative z-10">
-        <h1 className="text-sm font-bold tracking-wider">
+      <header className="px-3 py-2.5 flex items-center justify-between relative z-10">
+        <h1 className="text-xs font-bold tracking-wider">
           <span className="text-foreground">MASTER</span>{" "}
           <span className="text-primary">AI</span>
         </h1>
       </header>
 
-      <main className="px-4 relative z-10">
+      <main className="px-3 relative z-10">
         {activeTab === "home" && renderHomeContent()}
         {activeTab === "premium" && renderPremiumContent()}
         {activeTab === "settings" && renderSettingsContent()}
