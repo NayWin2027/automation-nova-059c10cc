@@ -2,8 +2,17 @@ import React, { useState, useRef, useEffect } from "react";
 import { generateSpeech } from "../services/geminiService";
 import { supabase } from "@/integrations/supabase/client";
 
+// Maximum file size for video analysis (15MB - edge function memory limit)
+const MAX_VIDEO_SIZE_MB = 15;
+const MAX_VIDEO_SIZE_BYTES = MAX_VIDEO_SIZE_MB * 1024 * 1024;
+
 // Analyze video using video-recap edge function
 async function analyzeVideo(file: File, mimeType: string, targetLang: string): Promise<string> {
+  // Check file size before processing
+  if (file.size > MAX_VIDEO_SIZE_BYTES) {
+    throw new Error(`ဗီဒီယိုဖိုင်ကြီးလွန်းသည်။ ${MAX_VIDEO_SIZE_MB}MB အောက်ဖိုင်သုံးပါ။`);
+  }
+  
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = async () => {
@@ -18,6 +27,11 @@ async function analyzeVideo(file: File, mimeType: string, targetLang: string): P
         });
         
         if (error) {
+          // Check for memory/compute limit errors
+          if (error.message?.includes('WORKER_LIMIT') || error.message?.includes('compute resources')) {
+            reject(new Error(`ဗီဒီယိုဖိုင်ကြီးလွန်းသည်။ ${MAX_VIDEO_SIZE_MB}MB အောက်ဖိုင်သုံးပါ။`));
+            return;
+          }
           reject(new Error(error.message || 'Video analysis failed'));
           return;
         }
@@ -29,6 +43,11 @@ async function analyzeVideo(file: File, mimeType: string, targetLang: string): P
         
         resolve(data?.recap || '');
       } catch (err: any) {
+        // Handle edge function errors
+        if (err.message?.includes('WORKER_LIMIT') || err.message?.includes('546')) {
+          reject(new Error(`ဗီဒီယိုဖိုင်ကြီးလွန်းသည်။ ${MAX_VIDEO_SIZE_MB}MB အောက်ဖိုင်သုံးပါ။`));
+          return;
+        }
         reject(err);
       }
     };
@@ -422,9 +441,9 @@ export default function VideoRecapView() {
 
   const handleProcess = async () => {
     if (!file) return;
-    // UPDATED: 1GB LIMIT as requested (1024 * 1024 * 1024)
-    if (file.size > 1024 * 1024 * 1024) {
-      alert("⚠️ Video file is too large! Maximum limit is 1GB.");
+    // File size check - 15MB limit for edge function memory
+    if (file.size > MAX_VIDEO_SIZE_BYTES) {
+      alert(`⚠️ ဗီဒီယိုဖိုင်ကြီးလွန်းသည်။ ${MAX_VIDEO_SIZE_MB}MB အောက်ဖိုင်သုံးပါ။`);
       return;
     }
     setAnalyzing(true);
