@@ -174,6 +174,20 @@ serve(async (req) => {
         );
       }
 
+      case 'get_profiles': {
+        const { data: profiles, error: profilesError } = await supabaseAdmin
+          .from('profiles')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (profilesError) throw profilesError;
+
+        return new Response(
+          JSON.stringify({ success: true, profiles }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       case 'clear_devices': {
         const { userId } = params;
         const { error: clearError } = await supabaseAdmin

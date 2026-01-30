@@ -16,6 +16,7 @@ import NovelTransPage from "./pages/NovelTransPage";
 import AdminRegisterPage from "./pages/AdminRegisterPage";
 import AdminLoginPage from "./pages/AdminLoginPage";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
+import UserLoginPage from "./pages/UserLoginPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -41,6 +42,9 @@ const App = () => (
           <Route path="/admin/register" element={<AdminRegisterPage />} />
           <Route path="/admin/login" element={<AdminLoginPage />} />
           <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+          {/* User Routes */}
+          <Route path="/login" element={<UserLoginPage />} />
+          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
