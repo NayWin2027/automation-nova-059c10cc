@@ -104,15 +104,15 @@ export function useAdmin() {
   };
 
   const fetchProfiles = async () => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .order('created_at', { ascending: false });
+    // Use edge function with service role to bypass RLS
+    const { data, error } = await supabase.functions.invoke('admin-actions', {
+      body: { action: 'get_profiles' }
+    });
 
-    if (!error && data) {
-      setProfiles(data as Profile[]);
+    if (!error && data?.profiles) {
+      setProfiles(data.profiles as Profile[]);
     }
-    return { data, error };
+    return { data: data?.profiles, error };
   };
 
   const fetchDevices = async (userId?: string) => {
