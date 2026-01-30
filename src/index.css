@@ -124,6 +124,64 @@
 }
 
 @layer components {
+  /* Premium Background with light rays */
+  .premium-background {
+    background: linear-gradient(135deg, hsl(222 50% 6%) 0%, hsl(225 45% 8%) 50%, hsl(220 40% 10%) 100%);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .premium-rays {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+      linear-gradient(125deg, transparent 20%, hsl(200 60% 30% / 0.08) 40%, transparent 60%),
+      linear-gradient(145deg, transparent 30%, hsl(220 50% 40% / 0.05) 50%, transparent 70%),
+      linear-gradient(105deg, transparent 40%, hsl(240 40% 35% / 0.06) 55%, transparent 75%);
+    pointer-events: none;
+  }
+
+  /* Premium Tool Card */
+  .premium-tool-card {
+    background: linear-gradient(145deg, hsl(220 35% 12% / 0.8) 0%, hsl(225 40% 8% / 0.9) 100%);
+    border: 1px solid hsl(220 30% 20% / 0.5);
+    border-radius: 1rem;
+    backdrop-filter: blur(20px);
+    box-shadow: 
+      0 4px 20px hsl(0 0% 0% / 0.3),
+      inset 0 1px 0 hsl(220 30% 30% / 0.1);
+  }
+
+  .premium-tool-card:hover {
+    border-color: hsl(200 80% 50% / 0.3);
+    box-shadow: 
+      0 8px 30px hsl(200 80% 50% / 0.1),
+      inset 0 1px 0 hsl(220 30% 30% / 0.15);
+  }
+
+  /* Premium Navigation Glass */
+  .premium-nav-glass {
+    background: linear-gradient(180deg, hsl(220 35% 15% / 0.95) 0%, hsl(225 40% 10% / 0.98) 100%);
+    border: 1px solid hsl(220 25% 25% / 0.5);
+    border-radius: 1.5rem;
+    backdrop-filter: blur(30px);
+    box-shadow: 
+      0 8px 32px hsl(0 0% 0% / 0.4),
+      inset 0 1px 0 hsl(220 30% 35% / 0.1);
+  }
+
+  /* Premium Banner */
+  .premium-banner {
+    background: linear-gradient(135deg, hsl(220 35% 12% / 0.7) 0%, hsl(225 40% 8% / 0.8) 100%);
+    border: 1px solid hsl(220 30% 25% / 0.4);
+    border-radius: 0.75rem;
+    padding: 1rem 1.5rem;
+    backdrop-filter: blur(15px);
+  }
+
   .glass-card {
     @apply bg-card/80 backdrop-blur-xl border border-border/50 rounded-2xl;
     box-shadow: var(--shadow-card);

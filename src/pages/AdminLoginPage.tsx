@@ -20,8 +20,8 @@ const AdminLoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
-    email: "",
-    password: "",
+    email: "TeamNova@internal.user",
+    password: "TeamNova",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
