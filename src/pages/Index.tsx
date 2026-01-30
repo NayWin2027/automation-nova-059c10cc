@@ -13,14 +13,18 @@ import {
   Download,
   Video,
   Diamond,
-  MessageCircle,
+  User,
+  LogOut,
 } from "lucide-react";
 import { ToolCard } from "@/components/ToolCard";
 import { BottomNav } from "@/components/BottomNav";
 import { GatewayBanner } from "@/components/GatewayBanner";
 import { ChatDialog } from "@/components/ChatDialog";
+import { useAuth } from "@/hooks/useAuth";
+import { useToolSettings } from "@/hooks/useToolSettings";
+import { useToast } from "@/hooks/use-toast";
 
-const tools = [
+const defaultTools = [
   {
     id: "recap",
     icon: Video,
@@ -115,14 +119,60 @@ const tools = [
   },
 ];
 
-type Tool = (typeof tools)[number];
+type Tool = (typeof defaultTools)[number];
 
 const Index = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const { user, profile, isAuthenticated, signOut, getToolUsageCount, recordToolUsage } = useAuth();
+  const { toolSettings, accessControl, canAccessTool, loading: settingsLoading } = useToolSettings();
+  
   const [activeTab, setActiveTab] = useState<"home" | "premium" | "settings">("home");
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
 
-  const handleToolClick = (tool: Tool) => {
+  // Merge tool settings with default tools
+  const tools = defaultTools.map(tool => {
+    const setting = toolSettings.find(s => s.tool_id === tool.id);
+    if (setting) {
+      return {
+        ...tool,
+        title: setting.title,
+        description: setting.description,
+      };
+    }
+    return tool;
+  }).filter(tool => {
+    const setting = toolSettings.find(s => s.tool_id === tool.id);
+    return !setting || setting.is_enabled;
+  });
+
+  const handleToolClick = async (tool: Tool) => {
+    const isPremium = profile?.plan === 'premium' || profile?.plan === 'pro';
+    const usageCount = getToolUsageCount(tool.id);
+    
+    const access = canAccessTool(tool.id, isAuthenticated, isPremium, usageCount);
+    
+    if (!access.allowed) {
+      if (access.reason === 'Login ဝင်ရန်လိုအပ်ပါသည်') {
+        toast({
+          title: "🔐 Login Required",
+          description: "Tool ကို အသုံးပြုရန် Login ဝင်ပါ",
+        });
+        navigate('/login');
+        return;
+      }
+      
+      toast({
+        title: "⚠️ Access Denied",
+        description: access.reason,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Record usage
+    await recordToolUsage(tool.id);
+
     if (tool.route) {
       navigate(tool.route);
     } else {
@@ -130,87 +180,127 @@ const Index = () => {
     }
   };
 
+  const handleLogout = async () => {
+    await signOut();
+    toast({
+      title: "👋 Logged Out",
+      description: "အောင်မြင်စွာ ထွက်လိုက်ပါပြီ",
+    });
+  };
+
   const renderHomeContent = () => (
     <>
       <GatewayBanner />
-      <div className="mb-4 flex items-start justify-between">
+      <div className="mb-3 flex items-start justify-between">
         <div>
-          <h1 className="text-base font-bold text-foreground">
+          <h1 className="text-sm font-bold text-foreground">
             Media<span className="text-primary">Master.</span>
           </h1>
-          <p className="text-2xs font-medium tracking-[0.15em] text-primary/60 uppercase mt-0.5">
+          <p className="text-3xs font-medium tracking-[0.12em] text-primary/60 uppercase mt-0.5">
             Pro Edition V8.0
           </p>
         </div>
-        <button className="w-7 h-7 rounded-lg bg-secondary/40 border border-border/20 flex items-center justify-center hover:bg-secondary/60 transition-colors">
-          <MessageCircle className="w-3.5 h-3.5 text-muted-foreground" />
-        </button>
+        <div className="flex items-center gap-1.5">
+          {isAuthenticated ? (
+            <>
+              <div className="px-2 py-1 rounded-md bg-primary/10 border border-primary/20">
+                <span className="text-3xs text-primary font-medium">
+                  {profile?.display_name || user?.email?.split('@')[0]}
+                </span>
+              </div>
+              <button 
+                onClick={handleLogout}
+                className="w-6 h-6 rounded-md bg-secondary/40 border border-border/20 flex items-center justify-center hover:bg-destructive/20 transition-colors"
+              >
+                <LogOut className="w-3 h-3 text-muted-foreground" />
+              </button>
+            </>
+          ) : (
+            <button 
+              onClick={() => navigate('/login')}
+              className="flex items-center gap-1 px-2 py-1 rounded-md bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-colors"
+            >
+              <User className="w-3 h-3 text-primary" />
+              <span className="text-3xs text-primary font-medium">Login</span>
+            </button>
+          )}
+        </div>
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        {tools.map((tool) => (
-          <ToolCard
-            key={tool.id}
-            icon={tool.icon}
-            title={tool.title}
-            description={tool.description}
-            gradient={tool.gradient}
-            onClick={() => handleToolClick(tool)}
-          />
-        ))}
+      <div className="grid grid-cols-2 gap-1.5">
+        {tools.map((tool) => {
+          const setting = toolSettings.find(s => s.tool_id === tool.id);
+          const isPremiumTool = setting?.is_premium && !accessControl.freeMode;
+          
+          return (
+            <ToolCard
+              key={tool.id}
+              icon={tool.icon}
+              title={tool.title}
+              description={tool.description}
+              gradient={tool.gradient}
+              isPremium={isPremiumTool}
+              onClick={() => handleToolClick(tool)}
+            />
+          );
+        })}
       </div>
     </>
   );
 
   const renderPremiumContent = () => (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-      <div className="w-12 h-12 rounded-xl icon-gradient-gold flex items-center justify-center mb-3 shadow-lg">
-        <Diamond className="w-5 h-5 text-foreground" />
+      <div className="w-10 h-10 rounded-lg icon-gradient-gold flex items-center justify-center mb-2 shadow-lg">
+        <Diamond className="w-4 h-4 text-foreground" />
       </div>
-      <h2 className="text-lg font-bold text-gold mb-1">Premium Plans</h2>
-      <p className="text-2xs text-muted-foreground mb-4">Unlock all features with premium</p>
-      <div className="space-y-2 w-full max-w-xs">
-        <div className="p-3 rounded-xl border border-border/30 bg-card/50">
-          <h3 className="text-xs font-semibold text-foreground">Pro Plan</h3>
-          <p className="text-2xs text-muted-foreground">Advanced features & priority</p>
+      <h2 className="text-sm font-bold text-gold mb-1">Premium Plans</h2>
+      <p className="text-3xs text-muted-foreground mb-3">Unlock all features with premium</p>
+      <div className="space-y-1.5 w-full max-w-xs">
+        <div className="p-2.5 rounded-lg border border-border/30 bg-card/50">
+          <h3 className="text-2xs font-semibold text-foreground">Pro Plan</h3>
+          <p className="text-3xs text-muted-foreground">Advanced features & priority</p>
         </div>
-        <div className="p-3 rounded-xl border border-primary/30 bg-primary/5 shadow-lg">
-          <h3 className="text-xs font-semibold text-primary">Premium Plan</h3>
-          <p className="text-2xs text-muted-foreground">All features + unlimited</p>
+        <div className="p-2.5 rounded-lg border border-primary/30 bg-primary/5 shadow-lg">
+          <h3 className="text-2xs font-semibold text-primary">Premium Plan</h3>
+          <p className="text-3xs text-muted-foreground">All features + unlimited</p>
         </div>
       </div>
     </div>
   );
 
   const renderSettingsContent = () => (
-    <div className="space-y-3">
-      <h2 className="text-lg font-bold text-foreground mb-3">Settings</h2>
-      <div className="space-y-2">
+    <div className="space-y-2">
+      <h2 className="text-sm font-bold text-foreground mb-2">Settings</h2>
+      <div className="space-y-1.5">
         <button 
           onClick={() => navigate("/admin/login")}
-          className="w-full p-3 rounded-xl border border-gold/20 bg-card/50 text-left hover:bg-card transition-colors"
+          className="w-full p-2.5 rounded-lg border border-gold/20 bg-card/50 text-left hover:bg-card transition-colors"
         >
-          <h3 className="text-xs font-semibold text-gold">Admin Panel</h3>
-          <p className="text-2xs text-muted-foreground">Access admin dashboard</p>
+          <h3 className="text-2xs font-semibold text-gold">Admin Panel</h3>
+          <p className="text-3xs text-muted-foreground">Access admin dashboard</p>
         </button>
-        <div className="p-3 rounded-xl border border-border/30 bg-card/50">
-          <h3 className="text-xs font-semibold text-foreground">Account</h3>
-          <p className="text-2xs text-muted-foreground">Manage profile & preferences</p>
-        </div>
-        <div className="p-3 rounded-xl border border-border/30 bg-card/50">
-          <h3 className="text-xs font-semibold text-foreground">About</h3>
-          <p className="text-2xs text-muted-foreground">App version & info</p>
+        {isAuthenticated && (
+          <div className="p-2.5 rounded-lg border border-border/30 bg-card/50">
+            <h3 className="text-2xs font-semibold text-foreground">Account</h3>
+            <p className="text-3xs text-muted-foreground">
+              {profile?.email} • {profile?.plan?.toUpperCase()} Plan
+            </p>
+          </div>
+        )}
+        <div className="p-2.5 rounded-lg border border-border/30 bg-card/50">
+          <h3 className="text-2xs font-semibold text-foreground">About</h3>
+          <p className="text-3xs text-muted-foreground">App version 8.0</p>
         </div>
       </div>
     </div>
   );
 
   return (
-    <div className="min-h-screen premium-background pb-24">
+    <div className="min-h-screen premium-background pb-20">
       {/* Light rays overlay */}
       <div className="premium-rays" />
       
-      <header className="px-3 py-2.5 flex items-center justify-between relative z-10">
-        <h1 className="text-xs font-bold tracking-wider">
+      <header className="px-3 py-2 flex items-center justify-between relative z-10">
+        <h1 className="text-2xs font-bold tracking-wider">
           <span className="text-foreground">MASTER</span>{" "}
           <span className="text-primary">AI</span>
         </h1>
