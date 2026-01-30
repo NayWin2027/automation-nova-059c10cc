@@ -1,4 +1,3 @@
-import { Lock } from "lucide-react";
 import { LucideIcon } from "lucide-react";
 
 interface ToolCardProps {
@@ -10,33 +9,32 @@ interface ToolCardProps {
 }
 
 const gradientClasses = {
-  cyan: "icon-gradient-cyan",
-  rose: "icon-gradient-rose",
-  amber: "icon-gradient-amber",
-  violet: "icon-gradient-violet",
-  emerald: "icon-gradient-emerald",
-  blue: "icon-gradient-blue",
+  cyan: "bg-gradient-to-br from-cyan-400 to-cyan-600",
+  rose: "bg-gradient-to-br from-rose-400 to-rose-600",
+  amber: "bg-gradient-to-br from-amber-400 to-amber-600",
+  violet: "bg-gradient-to-br from-violet-400 to-violet-600",
+  emerald: "bg-gradient-to-br from-emerald-400 to-emerald-600",
+  blue: "bg-gradient-to-br from-blue-400 to-blue-600",
 };
 
 export function ToolCard({ icon: Icon, title, description, gradient, onClick }: ToolCardProps) {
   return (
     <button
       onClick={onClick}
-      className="glass-card p-2.5 text-left transition-all duration-300 hover:scale-[1.01] hover:border-primary/20 active:scale-[0.99] w-full group animate-fade-in"
+      className="premium-tool-card p-4 text-left transition-all duration-300 hover:scale-[1.02] hover:border-primary/30 active:scale-[0.99] w-full group animate-fade-in"
     >
       <div
-        className={`w-7 h-7 rounded-lg flex items-center justify-center mb-2 ${gradientClasses[gradient]}`}
+        className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${gradientClasses[gradient]} shadow-lg`}
       >
-        <Icon className="w-3.5 h-3.5 text-foreground" />
+        <Icon className="w-5 h-5 text-white" />
       </div>
       
-      <div className="flex items-center gap-1 mb-0.5">
-        <span className="text-2xs font-medium tracking-wider text-primary/80 uppercase">Secure</span>
-        <Lock className="w-2 h-2 text-amber-500/80" />
-      </div>
+      <span className="text-[10px] font-semibold tracking-widest text-primary uppercase block mb-1">
+        Premium
+      </span>
       
-      <h3 className="text-2xs font-semibold text-foreground mb-0.5">{title}</h3>
-      <p className="text-2xs text-muted-foreground line-clamp-2 leading-tight">{description}</p>
+      <h3 className="text-sm font-bold text-foreground uppercase tracking-wide mb-1">{title}</h3>
+      <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{description}</p>
     </button>
   );
 }
