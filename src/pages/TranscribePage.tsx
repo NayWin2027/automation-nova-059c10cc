@@ -164,6 +164,11 @@ export default function TranscribePage() {
     }
 
     setIsTranscribing(true);
+    
+    // Create an AbortController for timeout handling
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minute timeout
+    
     try {
       const formData = new FormData();
       formData.append("file", selectedFile);
@@ -188,29 +193,52 @@ export default function TranscribePage() {
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
         body: formData,
+        signal: controller.signal,
       });
 
-      if (response.status === 429) {
-        throw new Error("Rate limit ကျော်သွားပါပြီ။ ခဏစောင့်ပြီး ပြန်စမ်းပါ။");
-      }
-      if (response.status === 402) {
-        throw new Error("Credits ကုန်သွားပါပြီ။ Credits ဝယ်ပါ။");
-      }
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || "Transcription မအောင်မြင်ပါ။");
+      clearTimeout(timeoutId);
+
+      // Parse response - always expect JSON now
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        console.error("Failed to parse response:", parseError);
+        throw new Error("Server response မှားယွင်းနေပါသည်။ ပြန်စမ်းပါ။");
       }
 
-      const data = await response.json();
-      if (data.error) throw new Error(data.error);
-      if (!data.text) throw new Error("Transcription ရလဒ် မရှိပါ။");
+      // Check for error in response (even with 200 status)
+      if (data.error) {
+        if (data.retryable && data.retryAfterSeconds) {
+          toast.error(`${data.error} (${data.retryAfterSeconds}s စောင့်ပါ)`);
+        } else {
+          toast.error(data.error);
+        }
+        return;
+      }
+
+      if (!data.text) {
+        throw new Error("Transcription ရလဒ် မရှိပါ။");
+      }
 
       setTranscription(data.text);
       toast.success("Transcription အောင်မြင်ပါသည်!");
     } catch (error) {
       console.error("Transcription error:", error);
-      toast.error(error instanceof Error ? error.message : "Transcription မအောင်မြင်ပါ။");
+      
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          toast.error("Timeout ဖြစ်သွားပါသည်။ ဖိုင်ငယ်တစ်ခုနဲ့ ပြန်စမ်းပါ။");
+        } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+          toast.error("Internet connection ပြတ်တောက်သွားပါသည်။ ပြန်ချိတ်ဆက်ပြီး စမ်းပါ။");
+        } else {
+          toast.error(error.message);
+        }
+      } else {
+        toast.error("Transcription မအောင်မြင်ပါ။ ပြန်စမ်းပါ။");
+      }
     } finally {
+      clearTimeout(timeoutId);
       setIsTranscribing(false);
     }
   };
