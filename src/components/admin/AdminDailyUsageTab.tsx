@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useAdmin } from "@/hooks/useAdmin";
-import { Calendar, User, BarChart3, Search, TrendingUp, Zap } from "lucide-react";
+import { Calendar, User, BarChart3, Search, TrendingUp, Zap, Smartphone, Monitor } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -14,6 +14,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface DailyUsage {
   id: string;
@@ -29,9 +35,18 @@ interface Profile {
   display_name: string | null;
 }
 
+interface UserDevice {
+  id: string;
+  user_id: string;
+  device_fingerprint: string;
+  device_info: unknown;
+  last_used_at: string;
+}
+
 const AdminDailyUsageTab: React.FC = () => {
-  const { profiles } = useAdmin();
+  const { profiles, fetchProfiles } = useAdmin();
   const [usageData, setUsageData] = useState<DailyUsage[]>([]);
+  const [userDevices, setUserDevices] = useState<Record<string, UserDevice[]>>({});
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split('T')[0]
@@ -40,11 +55,20 @@ const AdminDailyUsageTab: React.FC = () => {
   const [search, setSearch] = useState("");
 
   useEffect(() => {
+    // Ensure profiles are loaded
+    if (profiles.length === 0) {
+      fetchProfiles();
+    }
+  }, []);
+
+  useEffect(() => {
     fetchUsageData();
   }, [selectedDate, selectedUser]);
 
   const fetchUsageData = async () => {
     setLoading(true);
+    
+    // Fetch usage data
     let query = supabase
       .from('user_tool_usage')
       .select('*')
@@ -59,13 +83,71 @@ const AdminDailyUsageTab: React.FC = () => {
     
     if (!error && data) {
       setUsageData(data);
+      
+      // Fetch devices for all users in usage data
+      const userIds = [...new Set(data.map(u => u.user_id))];
+      if (userIds.length > 0) {
+        const { data: devices } = await supabase
+          .from('user_devices')
+          .select('*')
+          .in('user_id', userIds);
+        
+        if (devices) {
+          const devicesByUser: Record<string, UserDevice[]> = {};
+          devices.forEach((device: UserDevice) => {
+            if (!devicesByUser[device.user_id]) {
+              devicesByUser[device.user_id] = [];
+            }
+            devicesByUser[device.user_id].push(device);
+          });
+          setUserDevices(devicesByUser);
+        }
+      }
     }
     setLoading(false);
   };
 
-  const getProfileEmail = (userId: string): string => {
+  const getProfileInfo = (userId: string): { name: string; email: string } => {
     const profile = profiles.find((p: Profile) => p.user_id === userId);
-    return profile?.email || "Unknown User";
+    if (profile) {
+      // Extract user ID from email (before @internal.user)
+      const displayName = profile.display_name || profile.email.replace('@internal.user', '');
+      return { 
+        name: displayName,
+        email: profile.email 
+      };
+    }
+    return { name: "Unknown", email: userId };
+  };
+
+  const getUserDeviceInfo = (userId: string): { count: number; devices: UserDevice[] } => {
+    const devices = userDevices[userId] || [];
+    return { count: devices.length, devices };
+  };
+
+  const getDeviceName = (device: UserDevice): string => {
+    const info = device.device_info as Record<string, unknown> | null;
+    if (info && typeof info === 'object') {
+      // Try to extract device name from device_info
+      if (typeof info.browser === 'string' && typeof info.os === 'string') {
+        return `${info.browser} on ${info.os}`;
+      }
+      if (typeof info.userAgent === 'string') {
+        // Parse user agent for device info
+        const ua = info.userAgent;
+        if (ua.includes('Android')) return 'Android Device';
+        if (ua.includes('iPhone')) return 'iPhone';
+        if (ua.includes('iPad')) return 'iPad';
+        if (ua.includes('Windows')) return 'Windows PC';
+        if (ua.includes('Mac')) return 'Mac';
+        if (ua.includes('Linux')) return 'Linux PC';
+      }
+      if (typeof info.platform === 'string') {
+        return info.platform;
+      }
+    }
+    // Use fingerprint as fallback
+    return device.device_fingerprint.slice(0, 8) + '...';
   };
 
   const getToolBadgeClass = (tool: string) => {
@@ -81,9 +163,12 @@ const AdminDailyUsageTab: React.FC = () => {
   };
 
   const filteredData = usageData.filter(
-    (usage) =>
-      usage.tool_id.toLowerCase().includes(search.toLowerCase()) ||
-      getProfileEmail(usage.user_id).toLowerCase().includes(search.toLowerCase())
+    (usage) => {
+      const userInfo = getProfileInfo(usage.user_id);
+      return usage.tool_id.toLowerCase().includes(search.toLowerCase()) ||
+        userInfo.name.toLowerCase().includes(search.toLowerCase()) ||
+        userInfo.email.toLowerCase().includes(search.toLowerCase());
+    }
   );
 
   // Calculate daily stats
@@ -162,7 +247,7 @@ const AdminDailyUsageTab: React.FC = () => {
             Daily Tool Usage
           </CardTitle>
           <CardDescription className="text-2xs">
-            ဘယ် User က ဘယ် Tool ကို ဘယ်နှစ်ကြိမ် သုံးသွားသလဲ
+            ဘယ် User က ဘယ် Tool ကို ဘယ်နှစ်ကြိမ် သုံးသွားသလဲ (နှစ်ခါသုံးရင် 2 ကုန်တယ်)
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -190,7 +275,7 @@ const AdminDailyUsageTab: React.FC = () => {
                 <SelectItem value="all">All Users</SelectItem>
                 {profiles.map((profile: Profile) => (
                   <SelectItem key={profile.user_id} value={profile.user_id}>
-                    {profile.email}
+                    {profile.display_name || profile.email.replace('@internal.user', '')}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -202,6 +287,7 @@ const AdminDailyUsageTab: React.FC = () => {
               <TableHeader>
                 <TableRow className="bg-muted/30">
                   <TableHead className="text-2xs">User</TableHead>
+                  <TableHead className="text-2xs">Devices</TableHead>
                   <TableHead className="text-2xs">Tool</TableHead>
                   <TableHead className="text-2xs text-center">Uses</TableHead>
                   <TableHead className="text-2xs">Date</TableHead>
@@ -210,47 +296,84 @@ const AdminDailyUsageTab: React.FC = () => {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-8">
+                    <TableCell colSpan={5} className="text-center py-8">
                       <div className="animate-pulse text-muted-foreground text-xs">Loading...</div>
                     </TableCell>
                   </TableRow>
                 ) : filteredData.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-8 text-muted-foreground text-xs">
+                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground text-xs">
                       ဒီနေ့အတွက် အသုံးပြုမှု မရှိသေးပါ
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredData.map((usage) => (
-                    <TableRow key={usage.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
-                            <User className="w-3 h-3 text-primary" />
+                  filteredData.map((usage) => {
+                    const userInfo = getProfileInfo(usage.user_id);
+                    const deviceInfo = getUserDeviceInfo(usage.user_id);
+                    
+                    return (
+                      <TableRow key={usage.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center">
+                              <User className="w-3.5 h-3.5 text-primary" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium">{userInfo.name}</p>
+                              <p className="text-3xs text-muted-foreground">{userInfo.email}</p>
+                            </div>
                           </div>
-                          <span className="text-2xs">{getProfileEmail(usage.user_id)}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={`${getToolBadgeClass(usage.tool_id)} text-2xs`}>
-                          {usage.tool_id}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span className="text-sm font-bold text-primary">{usage.usage_count}</span>
-                        <span className="text-3xs text-muted-foreground ml-1">times</span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-2xs text-muted-foreground">
-                          {new Date(usage.usage_date).toLocaleDateString('my-MM', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric'
-                          })}
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                        </TableCell>
+                        <TableCell>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="flex items-center gap-1.5 cursor-help">
+                                  <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-secondary/50 border border-border/30">
+                                    <Smartphone className="w-3 h-3 text-muted-foreground" />
+                                    <span className="text-2xs font-medium">{deviceInfo.count}</span>
+                                  </div>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className="max-w-xs">
+                                <div className="space-y-1">
+                                  <p className="text-2xs font-medium">Registered Devices:</p>
+                                  {deviceInfo.devices.length > 0 ? (
+                                    deviceInfo.devices.map((device, idx) => (
+                                      <div key={device.id} className="flex items-center gap-1.5 text-2xs">
+                                        <Monitor className="w-3 h-3" />
+                                        <span>{getDeviceName(device)}</span>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <p className="text-2xs text-muted-foreground">No devices registered</p>
+                                  )}
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={`${getToolBadgeClass(usage.tool_id)} text-2xs`}>
+                            {usage.tool_id}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span className="text-sm font-bold text-primary">{usage.usage_count}</span>
+                          <span className="text-3xs text-muted-foreground ml-1">times</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-2xs text-muted-foreground">
+                            {new Date(usage.usage_date).toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric'
+                            })}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
