@@ -125,6 +125,7 @@ export type Database = {
       tool_settings: {
         Row: {
           created_at: string | null
+          credit_cost: number | null
           daily_free_limit: number | null
           description: string
           id: string
@@ -137,6 +138,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          credit_cost?: number | null
           daily_free_limit?: number | null
           description: string
           id?: string
@@ -149,6 +151,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          credit_cost?: number | null
           daily_free_limit?: number | null
           description?: string
           id?: string
