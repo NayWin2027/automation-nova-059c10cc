@@ -263,23 +263,23 @@ serve(async (req) => {
 
     if (!file) {
       return new Response(
-        JSON.stringify({ error: "ဖိုင်မပေးထားပါ" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "ဖိုင်မပေးထားပါ", retryable: false }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     if (!apiKey) {
       return new Response(
-        JSON.stringify({ error: "API Key မပေးထားပါ" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "API Key မပေးထားပါ", retryable: false }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     // Check file size limit (100MB)
     if (file.size > 100 * 1024 * 1024) {
       return new Response(
-        JSON.stringify({ error: "ဖိုင်အရွယ်အစား 100MB ထက်မကျော်ရပါ။" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "ဖိုင်အရွယ်အစား 100MB ထက်မကျော်ရပါ။", retryable: false }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -288,61 +288,140 @@ serve(async (req) => {
     // Preflight to avoid wasting time uploading big files when the key has no quota/billing.
     // (For small files, skip to avoid an extra request.)
     if (file.size >= 8 * 1024 * 1024) {
-      await preflightGenerateCheck(apiKey);
+      try {
+        await preflightGenerateCheck(apiKey);
+      } catch (preflightError) {
+        const errorMessage = preflightError instanceof Error ? preflightError.message : "Unknown error";
+        console.error("Preflight check failed:", errorMessage);
+        
+        if (errorMessage === "RATE_LIMIT") {
+          return new Response(
+            JSON.stringify({ 
+              error: "Rate limit ကျော်သွားပါပြီ။ ခဏစောင့်ပြီး ပြန်စမ်းပါ။",
+              retryable: true,
+              retryAfterSeconds: 60
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        
+        if (errorMessage === "GOOGLE_QUOTA_NOT_ENABLED") {
+          return new Response(
+            JSON.stringify({
+              error: "Google AI API quota မဖွင့်ထားသေးပါ။ Google AI Studio မှာ Billing ဖွင့်ပြီး ပြန်စမ်းပါ။",
+              retryable: false
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        
+        if (errorMessage === "API_KEY_INVALID") {
+          return new Response(
+            JSON.stringify({ error: "API Key မမှန်ပါ။ ပြန်စစ်ဆေးပါ။", retryable: false }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        
+        return new Response(
+          JSON.stringify({ error: `API စစ်ဆေးမှု မအောင်မြင်ပါ: ${errorMessage}`, retryable: true }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     const mimeType = getMimeType(file);
     
     // Upload file to Google Files API
-    const fileUri = await uploadToGoogleFiles(apiKey, file, mimeType);
+    let fileUri: string;
+    try {
+      fileUri = await uploadToGoogleFiles(apiKey, file, mimeType);
+    } catch (uploadError) {
+      console.error("File upload failed:", uploadError);
+      return new Response(
+        JSON.stringify({ 
+          error: "ဖိုင် upload မအောင်မြင်ပါ။ ဖိုင်အရွယ်အစား/format စစ်ဆေးပြီး ပြန်စမ်းပါ။",
+          retryable: true
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     
     // Extract file name for status checking
     const fileName = fileUri.includes("/") ? fileUri.split("/").slice(-2).join("/") : fileUri;
     
     // Wait for file to be processed
     if (fileName.startsWith("files/")) {
-      await waitForFileProcessing(apiKey, fileName);
+      try {
+        await waitForFileProcessing(apiKey, fileName);
+      } catch (processingError) {
+        console.error("File processing failed:", processingError);
+        return new Response(
+          JSON.stringify({ 
+            error: "ဖိုင် processing မအောင်မြင်ပါ။ ခဏစောင့်ပြီး ပြန်စမ်းပါ။",
+            retryable: true,
+            retryAfterSeconds: 30
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
     
     // Transcribe with Gemini
-    const transcription = await transcribeWithGemini(apiKey, fileUri, mimeType, languageName);
+    let transcription: string;
+    try {
+      transcription = await transcribeWithGemini(apiKey, fileUri, mimeType, languageName);
+    } catch (transcribeError) {
+      const errorMessage = transcribeError instanceof Error ? transcribeError.message : "Unknown error";
+      console.error("Transcription failed:", errorMessage);
+      
+      if (errorMessage === "RATE_LIMIT") {
+        return new Response(
+          JSON.stringify({ 
+            error: "Rate limit ကျော်သွားပါပြီ။ ခဏစောင့်ပြီး ပြန်စမ်းပါ။",
+            retryable: true,
+            retryAfterSeconds: 60
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      if (errorMessage === "GOOGLE_QUOTA_NOT_ENABLED") {
+        return new Response(
+          JSON.stringify({
+            error: "Google AI API quota မဖွင့်ထားသေးပါ။",
+            retryable: false
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      if (errorMessage === "API_KEY_INVALID") {
+        return new Response(
+          JSON.stringify({ error: "API Key မမှန်ပါ။", retryable: false }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      return new Response(
+        JSON.stringify({ error: "Transcription မအောင်မြင်ပါ။ ပြန်စမ်းပါ။", retryable: true }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     return new Response(
       JSON.stringify({ text: transcription }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
-    console.error("Transcription error:", error);
+    console.error("Unexpected transcription error:", error);
     
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    
-    if (errorMessage === "RATE_LIMIT") {
-      return new Response(
-        JSON.stringify({ error: "Rate limit ကျော်သွားပါပြီ။ ခဏစောင့်ပြီး ပြန်စမ်းပါ။" }),
-        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    if (errorMessage === "GOOGLE_QUOTA_NOT_ENABLED") {
-      return new Response(
-        JSON.stringify({
-          error:
-            "Google AI API quota မဖွင့်ထားသေးတာ (သို့) Billing မဖွင့်ထားသေးတာကြောင့် request limit = 0 ဖြစ်နေပါတယ်။ Google AI Studio ထဲမှာ Gemini API ကို enable + billing/quota ထည့်ပြီးမှ ပြန်စမ်းပါ။",
-        }),
-        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    if (errorMessage === "API_KEY_INVALID") {
-      return new Response(
-        JSON.stringify({ error: "API Key မမှန်ပါ (သို့) permission မရှိပါ။" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-    
+    // Always return 200 with structured error to prevent UI crashes
     return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ 
+        error: "အမျိုးအမည်မသိ အမှား ဖြစ်ပွားပါသည်။ ပြန်စမ်းပါ။",
+        retryable: true
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
