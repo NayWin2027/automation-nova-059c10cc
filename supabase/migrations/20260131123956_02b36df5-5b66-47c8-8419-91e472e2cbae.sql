@@ -1,0 +1,1 @@
+ALTER TABLE public.tool_settings ADD COLUMN IF NOT EXISTS credit_cost integer DEFAULT 10
