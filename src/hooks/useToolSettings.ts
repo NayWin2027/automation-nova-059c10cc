@@ -10,6 +10,7 @@ interface ToolSetting {
   requires_auth: boolean;
   is_premium: boolean;
   daily_free_limit: number;
+  credit_cost: number;
 }
 
 interface AccessControl {
