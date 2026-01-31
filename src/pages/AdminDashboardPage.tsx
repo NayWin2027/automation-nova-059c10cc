@@ -5,12 +5,13 @@ import { useAdmin } from "@/hooks/useAdmin";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Shield, Users, Activity, Settings, LogOut, 
-  RefreshCw, Home, Sparkles
+  RefreshCw, Home, Sparkles, BarChart3
 } from "lucide-react";
 import AdminUsersTab from "@/components/admin/AdminUsersTab";
 import AdminActivityTab from "@/components/admin/AdminActivityTab";
 import AdminSettingsTab from "@/components/admin/AdminSettingsTab";
 import AdminStatsCards from "@/components/admin/AdminStatsCards";
+import AdminDailyUsageTab from "@/components/admin/AdminDailyUsageTab";
 
 const AdminDashboardPage: React.FC = () => {
   const navigate = useNavigate();
@@ -129,10 +130,14 @@ const AdminDashboardPage: React.FC = () => {
 
         {/* Main Tabs */}
         <Tabs defaultValue="users" className="mt-4">
-          <TabsList className="grid w-full max-w-xs grid-cols-3 mb-4 bg-secondary/30 p-0.5 h-8">
+          <TabsList className="grid w-full max-w-md grid-cols-4 mb-4 bg-secondary/30 p-0.5 h-8">
             <TabsTrigger value="users" className="flex items-center gap-1.5 text-2xs data-[state=active]:bg-card">
               <Users className="w-3 h-3" />
               Users
+            </TabsTrigger>
+            <TabsTrigger value="daily" className="flex items-center gap-1.5 text-2xs data-[state=active]:bg-card">
+              <BarChart3 className="w-3 h-3" />
+              Daily
             </TabsTrigger>
             <TabsTrigger value="activity" className="flex items-center gap-1.5 text-2xs data-[state=active]:bg-card">
               <Activity className="w-3 h-3" />
@@ -146,6 +151,10 @@ const AdminDashboardPage: React.FC = () => {
 
           <TabsContent value="users">
             <AdminUsersTab />
+          </TabsContent>
+
+          <TabsContent value="daily">
+            <AdminDailyUsageTab />
           </TabsContent>
 
           <TabsContent value="activity">

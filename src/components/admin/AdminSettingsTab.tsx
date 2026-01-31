@@ -19,6 +19,8 @@ interface BrandingSettings {
   primaryColor: string;
   backgroundColor: string;
   textColor: string;
+  accentColor: string;
+  fontFamily: string;
 }
 
 interface FeatureSettings {
@@ -43,6 +45,7 @@ interface ToolSetting {
   requires_auth: boolean;
   is_premium: boolean;
   daily_free_limit: number;
+  credit_cost: number;
 }
 
 const AdminSettingsTab: React.FC = () => {
@@ -56,9 +59,11 @@ const AdminSettingsTab: React.FC = () => {
     appName: "MediaMaster",
     title: "AI-Powered Tools",
     subtitle: "Pro Edition V8.0",
-    primaryColor: "220 70% 50%",
-    backgroundColor: "222 84% 5%",
-    textColor: "210 40% 98%",
+    primaryColor: "199 89% 48%",
+    backgroundColor: "222 47% 6%",
+    textColor: "210 20% 92%",
+    accentColor: "199 89% 48%",
+    fontFamily: "Inter",
   });
 
   const [features, setFeatures] = useState<FeatureSettings>({
@@ -170,6 +175,7 @@ const AdminSettingsTab: React.FC = () => {
         requires_auth: tool.requires_auth,
         is_premium: tool.is_premium,
         daily_free_limit: tool.daily_free_limit,
+        credit_cost: tool.credit_cost,
       })
       .eq('id', tool.id);
 
@@ -345,7 +351,7 @@ const AdminSettingsTab: React.FC = () => {
               <CardContent className="p-3">
                 {editingTool === tool.id ? (
                   <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                       <div className="space-y-1">
                         <Label className="text-2xs">Title</Label>
                         <Input
@@ -363,6 +369,18 @@ const AdminSettingsTab: React.FC = () => {
                           value={tool.daily_free_limit}
                           onChange={(e) => setToolSettings(prev => 
                             prev.map(t => t.id === tool.id ? { ...t, daily_free_limit: parseInt(e.target.value) || 0 } : t)
+                          )}
+                          className="h-7 text-xs"
+                          min={0}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-2xs">💳 Credit Cost</Label>
+                        <Input
+                          type="number"
+                          value={tool.credit_cost || 10}
+                          onChange={(e) => setToolSettings(prev => 
+                            prev.map(t => t.id === tool.id ? { ...t, credit_cost: parseInt(e.target.value) || 10 } : t)
                           )}
                           className="h-7 text-xs"
                           min={0}
@@ -453,6 +471,7 @@ const AdminSettingsTab: React.FC = () => {
                         <div className="flex gap-2 mt-1 text-3xs text-muted-foreground">
                           <span>{tool.requires_auth ? '🔐 Login Required' : '🌐 Public'}</span>
                           <span>• {tool.daily_free_limit || '∞'} uses/day</span>
+                          <span>• 💳 {tool.credit_cost || 10} credits</span>
                         </div>
                       </div>
                     </div>
@@ -502,7 +521,7 @@ const AdminSettingsTab: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-4 gap-2">
               <div className="space-y-1">
                 <Label className="text-2xs">Primary (HSL)</Label>
                 <Input
@@ -537,6 +556,38 @@ const AdminSettingsTab: React.FC = () => {
                 <div 
                   className="h-6 rounded border"
                   style={{ backgroundColor: `hsl(${branding.textColor})` }}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-2xs">Accent (HSL)</Label>
+                <Input
+                  value={branding.accentColor || branding.primaryColor}
+                  onChange={(e) => setBranding({ ...branding, accentColor: e.target.value })}
+                  className="h-7 text-2xs"
+                />
+                <div 
+                  className="h-6 rounded border"
+                  style={{ backgroundColor: `hsl(${branding.accentColor || branding.primaryColor})` }}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-2xs">🔤 Font Family</Label>
+                <Input
+                  value={branding.fontFamily || "Inter"}
+                  onChange={(e) => setBranding({ ...branding, fontFamily: e.target.value })}
+                  placeholder="Inter, Roboto, Poppins..."
+                  className="h-8 text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-2xs">📝 Title</Label>
+                <Input
+                  value={branding.title}
+                  onChange={(e) => setBranding({ ...branding, title: e.target.value })}
+                  className="h-8 text-xs"
                 />
               </div>
             </div>
