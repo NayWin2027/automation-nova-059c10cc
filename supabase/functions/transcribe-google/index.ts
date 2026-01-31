@@ -8,7 +8,7 @@ const corsHeaders = {
 // Google Files API base URL
 const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1beta/files";
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
-const DEFAULT_TRANSCRIBE_MODEL = "gemini-2.0-flash-exp";
+const DEFAULT_TRANSCRIBE_MODEL = "gemini-2.0-flash";
 
 function tryParseGoogleApiError(errorText: string): {
   status?: string;
