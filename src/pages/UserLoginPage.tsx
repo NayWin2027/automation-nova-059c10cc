@@ -4,26 +4,23 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { 
   User, Lock, ArrowRight, Sparkles, Eye, EyeOff, 
-  UserPlus, LogIn, Home
+  LogIn, Home
 } from "lucide-react";
 
 const UserLoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     userId: "",
     password: "",
-    confirmPassword: "",
   });
 
   useEffect(() => {
     // Check if already logged in
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        // Check if admin - if so, redirect to admin dashboard
         checkUserRole(session.user.id);
       }
     });
@@ -54,47 +51,29 @@ const UserLoginPage: React.FC = () => {
       return;
     }
 
-    if (!isLogin && formData.password !== formData.confirmPassword) {
-      toast({
-        title: "❌ Password မတူညီပါ",
-        description: "Password နှစ်ခု တူညီအောင် ထည့်ပါ",
-        variant: "destructive",
-      });
-      return;
-    }
-
     setLoading(true);
     
     // Use internal email format
     const internalEmail = `${formData.userId}@internal.user`;
 
     try {
-      if (isLogin) {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: internalEmail,
-          password: formData.password,
-        });
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: internalEmail,
+        password: formData.password,
+      });
 
-        if (error) {
-          toast({
-            title: "❌ Login မအောင်မြင်ပါ",
-            description: "User ID သို့မဟုတ် Password မှားနေပါသည်",
-            variant: "destructive",
-          });
-        } else if (data.user) {
-          toast({
-            title: "✅ Login အောင်မြင်ပါပြီ",
-            description: "ကြိုဆိုပါတယ်!",
-          });
-          checkUserRole(data.user.id);
-        }
-      } else {
-        // Signup - for regular users, they need to contact admin
+      if (error) {
         toast({
-          title: "ℹ️ အကောင့်ဖွင့်ခြင်း",
-          description: "အကောင့်အသစ်ဖွင့်ရန် Admin ထံ ဆက်သွယ်ပါ",
+          title: "❌ Login မအောင်မြင်ပါ",
+          description: "User ID သို့မဟုတ် Password မှားနေပါသည်",
           variant: "destructive",
         });
+      } else if (data.user) {
+        toast({
+          title: "✅ Login အောင်မြင်ပါပြီ",
+          description: "ကြိုဆိုပါတယ်!",
+        });
+        checkUserRole(data.user.id);
       }
     } catch (error) {
       toast({
@@ -137,7 +116,7 @@ const UserLoginPage: React.FC = () => {
             </div>
             <h1 className="text-lg font-bold text-white mb-1">MediaMaster</h1>
             <p className="text-2xs text-white/50 uppercase tracking-widest">
-              {isLogin ? "User Login" : "Create Account"}
+              User Login
             </p>
           </div>
 
@@ -188,27 +167,6 @@ const UserLoginPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Confirm Password (Signup only) */}
-            {!isLogin && (
-              <div className="space-y-1.5">
-                <label className="text-2xs text-white/60 uppercase tracking-wider font-medium">
-                  Confirm Password
-                </label>
-                <div className="relative">
-                  <div className="absolute left-3 top-1/2 -translate-y-1/2">
-                    <Lock className="w-3.5 h-3.5 text-white/40" />
-                  </div>
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    value={formData.confirmPassword}
-                    onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                    placeholder="••••••••"
-                    className="w-full h-10 pl-9 pr-3 rounded-lg bg-white/5 border border-white/10 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-violet-500/50 focus:bg-white/10 transition-all"
-                  />
-                </div>
-              </div>
-            )}
-
             {/* Submit Button */}
             <button
               type="submit"
@@ -219,25 +177,18 @@ const UserLoginPage: React.FC = () => {
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
                 <>
-                  {isLogin ? <LogIn className="w-3.5 h-3.5" /> : <UserPlus className="w-3.5 h-3.5" />}
-                  {isLogin ? "Login" : "Sign Up"}
+                  <LogIn className="w-3.5 h-3.5" />
+                  Login
                   <ArrowRight className="w-3.5 h-3.5" />
                 </>
               )}
             </button>
           </form>
 
-          {/* Toggle Login/Signup */}
+          {/* Info text */}
           <div className="mt-4 pt-4 border-t border-white/10 text-center">
             <p className="text-2xs text-white/50">
-              {isLogin ? "အကောင့်မရှိသေးဘူးလား?" : "အကောင့်ရှိပြီးသားလား?"}
-              <button
-                type="button"
-                onClick={() => setIsLogin(!isLogin)}
-                className="ml-1.5 text-violet-400 hover:text-violet-300 transition-colors font-medium"
-              >
-                {isLogin ? "Admin ဆက်သွယ်ပါ" : "Login"}
-              </button>
+              အကောင့်မရှိသေးပါက Admin ထံဆက်သွယ်ပါ
             </p>
           </div>
 
