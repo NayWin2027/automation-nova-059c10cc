@@ -56,6 +56,11 @@ const AdminUsersTab: React.FC = () => {
   const [banReason, setBanReason] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Fetch profiles on mount
+  useEffect(() => {
+    fetchProfiles();
+  }, []);
+
   const filteredProfiles = profiles.filter(
     (p) =>
       p.email.toLowerCase().includes(search.toLowerCase()) ||
