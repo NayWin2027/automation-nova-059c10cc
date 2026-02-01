@@ -125,29 +125,117 @@ const AdminDailyUsageTab: React.FC = () => {
     return { count: devices.length, devices };
   };
 
-  const getDeviceName = (device: UserDevice): string => {
+  const parseDeviceModel = (userAgent: string): string => {
+    // iOS devices
+    const iosMatch = userAgent.match(/iPhone\s*(\d+)?/i);
+    if (iosMatch) return `iPhone${iosMatch[1] ? ' ' + iosMatch[1] : ''}`;
+    
+    const ipadMatch = userAgent.match(/iPad/i);
+    if (ipadMatch) return 'iPad';
+    
+    // Android devices - extract model name
+    const androidMatch = userAgent.match(/;\s*([^;)]+)\s*Build\//i);
+    if (androidMatch) {
+      let model = androidMatch[1].trim();
+      // Clean up common prefixes
+      model = model.replace(/^(SAMSUNG|Xiaomi|POCO|Redmi|realme|OPPO|vivo|OnePlus|Huawei|HONOR|ASUS|Lenovo|Sony|LG|HTC|Motorola|Nokia|Google)\s*/i, '');
+      // If model is still long, keep the brand
+      if (!model || model.length < 2) {
+        model = androidMatch[1].trim();
+      }
+      // Limit length
+      return model.length > 25 ? model.slice(0, 22) + '...' : model;
+    }
+    
+    // Specific brand patterns for Android
+    const xiaomiMatch = userAgent.match(/(Redmi|POCO|Mi\s*\d+|Xiaomi)[^;)]*/i);
+    if (xiaomiMatch) return xiaomiMatch[0].trim();
+    
+    const samsungMatch = userAgent.match(/SM-[A-Z]\d{3}[A-Z]?/i);
+    if (samsungMatch) return `Samsung ${samsungMatch[0]}`;
+    
+    // Desktop detection with more detail
+    if (userAgent.includes('Windows')) {
+      if (userAgent.includes('Windows NT 10.0')) return 'Windows 10/11 PC';
+      if (userAgent.includes('Windows NT 6.3')) return 'Windows 8.1 PC';
+      return 'Windows PC';
+    }
+    
+    if (userAgent.includes('Macintosh')) {
+      const macMatch = userAgent.match(/Mac OS X\s*([\d_]+)/);
+      if (macMatch) {
+        const version = macMatch[1].replace(/_/g, '.');
+        return `MacOS ${version}`;
+      }
+      return 'Mac';
+    }
+    
+    if (userAgent.includes('Linux') && !userAgent.includes('Android')) {
+      return 'Linux PC';
+    }
+    
+    if (userAgent.includes('CrOS')) return 'Chromebook';
+    
+    return 'Unknown Device';
+  };
+
+  const getBrowserName = (userAgent: string): string => {
+    if (userAgent.includes('Edg/')) return 'Edge';
+    if (userAgent.includes('OPR/') || userAgent.includes('Opera')) return 'Opera';
+    if (userAgent.includes('Firefox/')) return 'Firefox';
+    if (userAgent.includes('Safari/') && !userAgent.includes('Chrome')) return 'Safari';
+    if (userAgent.includes('Chrome/')) return 'Chrome';
+    return 'Browser';
+  };
+
+  const getDeviceName = (device: UserDevice): { model: string; browser: string; full: string } => {
     const info = device.device_info as Record<string, unknown> | null;
+    
     if (info && typeof info === 'object') {
-      // Try to extract device name from device_info
-      if (typeof info.browser === 'string' && typeof info.os === 'string') {
-        return `${info.browser} on ${info.os}`;
+      // Check for UA-CH data first (most accurate)
+      if (typeof info.model === 'string' && info.model) {
+        const browser = typeof info.browser === 'string' ? info.browser : 'Browser';
+        return { 
+          model: info.model, 
+          browser, 
+          full: `${info.model} (${browser})` 
+        };
       }
+      
+      // Check for brand from UA-CH
+      if (typeof info.brand === 'string' && typeof info.platform === 'string') {
+        const browser = typeof info.browser === 'string' ? info.browser : 'Browser';
+        return { 
+          model: `${info.brand} ${info.platform}`, 
+          browser, 
+          full: `${info.brand} ${info.platform} (${browser})` 
+        };
+      }
+      
+      // Parse from userAgent string
       if (typeof info.userAgent === 'string') {
-        // Parse user agent for device info
         const ua = info.userAgent;
-        if (ua.includes('Android')) return 'Android Device';
-        if (ua.includes('iPhone')) return 'iPhone';
-        if (ua.includes('iPad')) return 'iPad';
-        if (ua.includes('Windows')) return 'Windows PC';
-        if (ua.includes('Mac')) return 'Mac';
-        if (ua.includes('Linux')) return 'Linux PC';
+        const model = parseDeviceModel(ua);
+        const browser = getBrowserName(ua);
+        return { model, browser, full: `${model} (${browser})` };
       }
-      if (typeof info.platform === 'string') {
-        return info.platform;
+      
+      // Legacy format
+      if (typeof info.browser === 'string' && typeof info.os === 'string') {
+        return { 
+          model: info.os, 
+          browser: info.browser, 
+          full: `${info.os} (${info.browser})` 
+        };
       }
     }
-    // Use fingerprint as fallback
-    return device.device_fingerprint.slice(0, 8) + '...';
+    
+    // Fallback
+    return { 
+      model: 'Unknown', 
+      browser: 'Unknown', 
+      full: device.device_fingerprint.slice(0, 12) + '...' 
+    };
   };
 
   const getToolBadgeClass = (tool: string) => {
@@ -339,12 +427,16 @@ const AdminDailyUsageTab: React.FC = () => {
                                 <div className="space-y-1">
                                   <p className="text-2xs font-medium">Registered Devices:</p>
                                   {deviceInfo.devices.length > 0 ? (
-                                    deviceInfo.devices.map((device, idx) => (
-                                      <div key={device.id} className="flex items-center gap-1.5 text-2xs">
-                                        <Monitor className="w-3 h-3" />
-                                        <span>{getDeviceName(device)}</span>
-                                      </div>
-                                    ))
+                                    deviceInfo.devices.map((device) => {
+                                      const deviceData = getDeviceName(device);
+                                      return (
+                                        <div key={device.id} className="flex items-center gap-1.5 text-2xs">
+                                          <Monitor className="w-3 h-3" />
+                                          <span className="font-medium">{deviceData.model}</span>
+                                          <span className="text-muted-foreground">({deviceData.browser})</span>
+                                        </div>
+                                      );
+                                    })
                                   ) : (
                                     <p className="text-2xs text-muted-foreground">No devices registered</p>
                                   )}
