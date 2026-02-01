@@ -4,8 +4,9 @@ import { translateText } from '../services/geminiService';
 import { BottomNav } from '@/components/BottomNav';
 import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist';
 import PdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
-import { Home } from 'lucide-react';
+import { Home, Loader2 } from 'lucide-react';
 import { useSecureApiKey } from '@/hooks/useSecureApiKey';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
 
 type InputMode = 'UPLOAD' | 'PASTE';
 type NovelTone = 'WUXIA' | 'ROMANTIC' | 'CLASSIC' | 'MODERN' | 'FANTASY';
@@ -38,6 +39,9 @@ const LANGUAGES = [
 ];
 
 const NovelTransPage: React.FC = () => {
+  const navigate = useNavigate();
+  const { isAllowed, isLoading: authLoading } = useAuthGuard('novel');
+  
   const [activeTab, setActiveTab] = useState<"home" | "premium" | "settings">("home");
   const [apiType, setApiType] = useState<'app' | 'own'>('own');
   const { apiKey, setApiKey } = useSecureApiKey('master_novel_api_key');
@@ -51,6 +55,15 @@ const NovelTransPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [translated, setTranslated] = useState('');
   const [charCount, setCharCount] = useState(0);
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
   
   // NEW FEATURES STATES
   const [autoDrive, setAutoDrive] = useState(false);
@@ -582,8 +595,6 @@ PREVIOUS CONTEXT (For continuity):
   const progressPercent = countIsChunkTextMode
     ? (countTotalChars > 0 ? Math.min(100, (countTranslatedChars / countTotalChars) * 100) : 0)
     : (charCount > 0 ? Math.min(100, (startIndex / charCount) * 100) : 0);
-
-  const navigate = useNavigate();
 
   return (
     <div className="min-h-screen bg-background pb-24">

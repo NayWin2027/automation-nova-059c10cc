@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { generateStory, generateThumbnail } from '@/services/geminiService';
 import { BottomNav } from '@/components/BottomNav';
 import { useSecureApiKey } from '@/hooks/useSecureApiKey';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
 
 const LANGUAGES = [
   "BURMESE", "ENGLISH", "JAPANESE", "KOREAN", "CHINESE (SIMPLIFIED)", 
@@ -57,6 +58,8 @@ const FINE_TUNE_GROUPS = {
 
 const CreatorPage: React.FC = () => {
   const navigate = useNavigate();
+  const { isAllowed, isLoading: authLoading } = useAuthGuard('creator');
+  
   const [activeTab, setActiveTab] = useState<"home" | "premium" | "settings">("home");
   const [apiType, setApiType] = useState<'app' | 'own'>('app');
   const { apiKey, setApiKey } = useSecureApiKey('master_creator_api_key');
@@ -73,6 +76,15 @@ const CreatorPage: React.FC = () => {
   const [result, setResult] = useState('');
   const [generatedImg, setGeneratedImg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   // API key is now managed by useSecureApiKey hook (session storage)
 

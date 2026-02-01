@@ -1,6 +1,9 @@
 import React, { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 import { generateSpeech } from "../services/geminiService";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 
 // File size limits
 const APP_MODE_MAX_MB = 500;
@@ -536,6 +539,9 @@ const createWavBlob = (base64Audio: string) => {
 };
 
 export default function VideoRecapView() {
+  const navigate = useNavigate();
+  const { isAllowed, isLoading: authLoading } = useAuthGuard('recap');
+  
   const [file, setFile] = useState<File | null>(null);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -555,6 +561,15 @@ export default function VideoRecapView() {
   const [timelineColor, setTimelineColor] = useState(COLORS[0].hex);
   const [timelineHeight, setTimelineHeight] = useState(3);
   const [borderColor, setBorderColor] = useState(COLORS[2].hex);
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
   const [borderWidth, setBorderWidth] = useState(10);
   const [charId, setCharId] = useState("none");
   const [charPos, setCharPos] = useState<"TL" | "TR" | "BL" | "BR">("BR");

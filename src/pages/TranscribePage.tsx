@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { useApiAccess } from "@/hooks/useApiAccess";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 
 type ApiMode = "app" | "own";
 
@@ -111,6 +112,7 @@ const CREDIT_TIERS = [
 
 export default function TranscribePage() {
   const navigate = useNavigate();
+  const { isAllowed, isLoading: authLoading } = useAuthGuard('transcribe');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { appApiAllowed, ownApiAllowed, appApiReason, ownApiReason, defaultApiMode, isLoading: accessLoading } = useApiAccess();
   
@@ -129,6 +131,16 @@ export default function TranscribePage() {
       setApiMode(defaultApiMode);
     }
   }, [accessLoading, defaultApiMode]);
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {

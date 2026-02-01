@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { generateThumbnail } from '@/services/geminiService';
 import { useApiAccess } from '@/hooks/useApiAccess';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
 
 type Position = 'UPON LEFT' | 'UPON RIGHT' | 'BUTTON LEFT' | 'BUTTON RIGHT' | 'CENTER';
 type AspectRatio = '1:1' | '16:9' | '9:16' | '4:3' | '3:4';
@@ -72,6 +73,7 @@ const ManualPad: React.FC<{ offset: { x: number; y: number }; setOffset: React.D
 
 const ThumbnailPage: React.FC = () => {
   const navigate = useNavigate();
+  const { isAllowed, isLoading: authLoading } = useAuthGuard('thumbnail');
   const { appApiAllowed } = useApiAccess();
   
   const [apiKey, setApiKey] = useState('');
@@ -87,6 +89,15 @@ const ThumbnailPage: React.FC = () => {
   const [customFill, setCustomFill] = useState('#FFD700');
   const [customStroke, setCustomStroke] = useState('#000000');
   const [customGlow, setCustomGlow] = useState('rgba(251, 191, 36, 0.6)');
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   // Multiple Reference Images
   const [referenceImages, setReferenceImages] = useState<string[]>([]);

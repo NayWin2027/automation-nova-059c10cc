@@ -2,9 +2,10 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { translateText } from "../services/geminiService";
 import { GoogleGenAI } from "@google/genai";
-import { Home, Lock } from "lucide-react";
+import { Home, Lock, Loader2 } from "lucide-react";
 import { useApiAccess } from "@/hooks/useApiAccess";
 import { useSecureApiKey } from "@/hooks/useSecureApiKey";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 
 type TranslationType = "PURE" | "DEEP" | "HOOKS";
 
@@ -94,6 +95,7 @@ const LANGUAGES = [
 
 const TranslateView: React.FC = () => {
   const navigate = useNavigate();
+  const { isAllowed, isLoading: authLoading } = useAuthGuard('translate');
   const { appApiAllowed, ownApiAllowed, appApiReason, ownApiReason, defaultApiMode, isLoading: accessLoading } = useApiAccess();
   
   const [apiType, setApiType] = useState<"app" | "own">("app");
@@ -114,6 +116,15 @@ const TranslateView: React.FC = () => {
       setApiType(defaultApiMode);
     }
   }, [accessLoading, defaultApiMode]);
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   // API key is now managed by useSecureApiKey hook (session storage)
 
