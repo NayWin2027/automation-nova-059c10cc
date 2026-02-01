@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useApiAccess } from '@/hooks/useApiAccess';
+import { useSecureApiKey } from '@/hooks/useSecureApiKey';
 
 type SubStyle = 'GOLD' | 'BLUE' | 'RUBY' | 'DIAMOND' | 'EMERALD';
 
@@ -33,7 +34,7 @@ const VoicePage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [performance, setPerformance] = useState('PROFESSIONAL');
   const [apiType, setApiType] = useState<'app' | 'own'>('app');
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('master_voice_api_key') || '');
+  const { apiKey, setApiKey } = useSecureApiKey('master_voice_api_key');
   const [activeTab, setActiveTab] = useState<"home" | "premium" | "settings">("home");
   const [selectedLanguage, setSelectedLanguage] = useState(() => 
     localStorage.getItem('master_voice_language') || getDefaultLanguage()
@@ -63,9 +64,7 @@ const VoicePage: React.FC = () => {
   
   const playbackTimeoutRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    localStorage.setItem('master_voice_api_key', apiKey);
-  }, [apiKey]);
+  // API key is now managed by useSecureApiKey hook (session storage)
 
   useEffect(() => {
     localStorage.setItem('master_voice_history_v2', JSON.stringify(history));

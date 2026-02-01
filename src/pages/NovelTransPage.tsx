@@ -5,6 +5,7 @@ import { BottomNav } from '@/components/BottomNav';
 import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist';
 import PdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import { Home } from 'lucide-react';
+import { useSecureApiKey } from '@/hooks/useSecureApiKey';
 
 type InputMode = 'UPLOAD' | 'PASTE';
 type NovelTone = 'WUXIA' | 'ROMANTIC' | 'CLASSIC' | 'MODERN' | 'FANTASY';
@@ -39,7 +40,7 @@ const LANGUAGES = [
 const NovelTransPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"home" | "premium" | "settings">("home");
   const [apiType, setApiType] = useState<'app' | 'own'>('own');
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('master_novel_api_key') || '');
+  const { apiKey, setApiKey } = useSecureApiKey('master_novel_api_key');
   const [inputMode, setInputMode] = useState<InputMode>('UPLOAD');
   const [file, setFile] = useState<File | null>(null);
   const [fileBase64, setFileBase64] = useState<string | null>(null);
@@ -110,9 +111,7 @@ const NovelTransPage: React.FC = () => {
     return text.slice(0, MAX_INPUT_CHARS).trim();
   };
 
-  useEffect(() => {
-    localStorage.setItem('master_novel_api_key', apiKey);
-  }, [apiKey]);
+  // API key is now managed by useSecureApiKey hook (session storage)
 
   useEffect(() => {
     localStorage.setItem('master_novel_progress_v3', JSON.stringify(progressData));
