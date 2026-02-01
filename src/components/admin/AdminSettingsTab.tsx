@@ -45,6 +45,7 @@ interface AccessControl {
   promotionToolCount: number;
   appApiAccess: ApiModeAccess;
   ownApiAccess: ApiModeAccess;
+  blockFreeAppApi: boolean;
 }
 
 interface ToolSetting {
@@ -84,6 +85,7 @@ function normalizeAccessControl(input?: Partial<AccessControl> | null): AccessCo
     promotionToolCount: input?.promotionToolCount ?? 3,
     appApiAccess: normalizeApiModeAccess(input?.appApiAccess),
     ownApiAccess: normalizeApiModeAccess(input?.ownApiAccess),
+    blockFreeAppApi: input?.blockFreeAppApi ?? true, // Default ON
   };
 }
 
@@ -131,6 +133,7 @@ const AdminSettingsTab: React.FC = () => {
     promotionToolCount: 3,
     appApiAccess: { all: true, premium: true, pro: true, free: true },
     ownApiAccess: { all: true, premium: true, pro: true, free: true },
+    blockFreeAppApi: true,
   });
 
   const [toolSettings, setToolSettings] = useState<ToolSetting[]>([]);
@@ -342,6 +345,24 @@ const AdminSettingsTab: React.FC = () => {
                   <Switch
                     checked={accessControl.freeMode}
                     onCheckedChange={(checked) => setAccessControl({ ...accessControl, freeMode: checked })}
+                  />
+                </div>
+              </div>
+
+              {/* Block Free App API Toggle */}
+              <div className="flex items-center justify-between pt-2 border-t border-border/30">
+                <div>
+                  <Label className="text-xs flex items-center gap-1">
+                    <Server className="w-3 h-3 text-red-500" />
+                    Block Free App API
+                  </Label>
+                  <p className="text-2xs text-muted-foreground">Free/Guest များ App API သုံးခွင့်မပေး</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <OnOffBadge checked={accessControl.blockFreeAppApi} />
+                  <Switch
+                    checked={accessControl.blockFreeAppApi}
+                    onCheckedChange={(checked) => setAccessControl({ ...accessControl, blockFreeAppApi: checked })}
                   />
                 </div>
               </div>

@@ -36,8 +36,11 @@ export function useApiAccess(): ApiAccessResult {
   const checkAppApiAccess = (): { allowed: boolean; reason?: string } => {
     const apiAccess = accessControl.appApiAccess;
 
-    // HARD BLOCK: Free users and guests can NEVER use App API
-    if (isGuest || userPlan === 'free') {
+    // Check if blockFreeAppApi is enabled (default true if undefined)
+    const blockFreeAppApi = accessControl.blockFreeAppApi !== false;
+    
+    // Block Free/Guest users from App API if toggle is ON
+    if (blockFreeAppApi && (isGuest || userPlan === 'free')) {
       return { allowed: false, reason: 'Free/Guest users များသည် App API သုံးခွင့်မရှိပါ။ Own API ကိုသာ သုံးနိုင်ပါသည်။' };
     }
     
@@ -45,12 +48,20 @@ export function useApiAccess(): ApiAccessResult {
       return { allowed: true };
     }
 
-    // Check plan-specific access for paid users only
+    // Check plan-specific access
     if (userPlan === 'premium' && apiAccess.premium === false) {
       return { allowed: false, reason: 'Premium users အတွက် App API ပိတ်ထားပါသည်' };
     }
     if (userPlan === 'pro' && apiAccess.pro === false) {
       return { allowed: false, reason: 'Pro users အတွက် App API ပိတ်ထားပါသည်' };
+    }
+    if (userPlan === 'free' && apiAccess.free === false) {
+      return { allowed: false, reason: 'Free users အတွက် App API ပိတ်ထားပါသည်' };
+    }
+
+    // Guest users - check free tier setting
+    if (isGuest && apiAccess.free === false) {
+      return { allowed: false, reason: 'Guest users အတွက် App API ပိတ်ထားပါသည်' };
     }
 
     return { allowed: true };
