@@ -3,6 +3,7 @@ import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { generateStory, generateThumbnail } from '@/services/geminiService';
 import { BottomNav } from '@/components/BottomNav';
+import { useSecureApiKey } from '@/hooks/useSecureApiKey';
 
 const LANGUAGES = [
   "BURMESE", "ENGLISH", "JAPANESE", "KOREAN", "CHINESE (SIMPLIFIED)", 
@@ -58,7 +59,7 @@ const CreatorPage: React.FC = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"home" | "premium" | "settings">("home");
   const [apiType, setApiType] = useState<'app' | 'own'>('app');
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('master_creator_api_key') || '');
+  const { apiKey, setApiKey } = useSecureApiKey('master_creator_api_key');
   const [language, setLanguage] = useState('BURMESE');
   const [category, setCategory] = useState('EDUCATION');
   const [topic, setTopic] = useState('');
@@ -73,9 +74,7 @@ const CreatorPage: React.FC = () => {
   const [generatedImg, setGeneratedImg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    localStorage.setItem('master_creator_api_key', apiKey);
-  }, [apiKey]);
+  // API key is now managed by useSecureApiKey hook (session storage)
 
   const toggleChip = (val: string) => {
     setSelectedChips(prev => prev.includes(val) ? prev.filter(c => c !== val) : [...prev, val]);

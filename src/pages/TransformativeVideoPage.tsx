@@ -69,6 +69,7 @@ import {
 } from "@/services/transformativeAIService";
 import { languages } from "@/data/languages";
 import { supabase } from "@/integrations/supabase/client";
+import { useSecureApiKey } from "@/hooks/useSecureApiKey";
 
 // ============ DATA CONSTANTS ============
 
@@ -435,20 +436,14 @@ export default function TransformativeVideoPage() {
 
   // API Mode
   const [apiMode, setApiMode] = useState<"app" | "own">(() => {
-    const saved = localStorage.getItem("transformative_api_mode");
+    const saved = sessionStorage.getItem("transformative_api_mode");
     return saved === "own" ? "own" : "app";
   });
-  const [apiKey, setApiKey] = useState(() =>
-    localStorage.getItem("transformative_api_key") || ""
-  );
+  const { apiKey, setApiKey } = useSecureApiKey("transformative_api_key");
 
   useEffect(() => {
-    localStorage.setItem("transformative_api_mode", apiMode);
+    sessionStorage.setItem("transformative_api_mode", apiMode);
   }, [apiMode]);
-
-  useEffect(() => {
-    localStorage.setItem("transformative_api_key", apiKey);
-  }, [apiKey]);
 
   // URL & Upload State
   const [videoUrl, setVideoUrl] = useState("");

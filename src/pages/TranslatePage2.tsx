@@ -4,6 +4,7 @@ import { translateText } from "../services/geminiService";
 import { GoogleGenAI } from "@google/genai";
 import { Home, Lock } from "lucide-react";
 import { useApiAccess } from "@/hooks/useApiAccess";
+import { useSecureApiKey } from "@/hooks/useSecureApiKey";
 
 type TranslationType = "PURE" | "DEEP" | "HOOKS";
 
@@ -96,7 +97,7 @@ const TranslateView: React.FC = () => {
   const { appApiAllowed, ownApiAllowed, appApiReason, ownApiReason, defaultApiMode, isLoading: accessLoading } = useApiAccess();
   
   const [apiType, setApiType] = useState<"app" | "own">("app");
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem("master_translate_api_key") || "");
+  const { apiKey, setApiKey } = useSecureApiKey("master_translate_api_key");
   const [text, setText] = useState("");
   const [targetLang, setTargetLang] = useState("BURMESE");
   const [transType, setTransType] = useState<TranslationType>("PURE");
@@ -114,9 +115,7 @@ const TranslateView: React.FC = () => {
     }
   }, [accessLoading, defaultApiMode]);
 
-  useEffect(() => {
-    localStorage.setItem("master_translate_api_key", apiKey);
-  }, [apiKey]);
+  // API key is now managed by useSecureApiKey hook (session storage)
 
   const handleCheckCount = () => {
     if (!text.trim()) {
