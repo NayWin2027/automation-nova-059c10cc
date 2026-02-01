@@ -24,21 +24,22 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    // Verify the requesting user is an admin
-    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } }
-    });
-
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+    // Verify the requesting user is an admin using the access token
+    const token = authHeader.replace('Bearer ', '');
+    
+    // Use service role client to verify the token
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
     if (userError || !user) {
+      console.error('Auth error:', userError?.message);
       return new Response(
-        JSON.stringify({ error: "Invalid authentication" }),
+        JSON.stringify({ error: "Invalid authentication", details: userError?.message }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Check if user is admin using service role
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    // Check if user is admin using service role (already created above)
     const { data: isAdmin } = await supabaseAdmin.rpc('has_role', {
       _user_id: user.id,
       _role: 'admin'
