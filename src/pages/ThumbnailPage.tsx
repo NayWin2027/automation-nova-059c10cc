@@ -106,15 +106,6 @@ const ThumbnailPage: React.FC = () => {
   const bgImgRef = useRef<HTMLImageElement | null>(null);
   const logoImgRef = useRef<HTMLImageElement | null>(null);
 
-  // Show loading while checking auth - MUST be after all hooks
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
   const RATIO_MAP: Record<AspectRatio, number> = {
     '1:1': 1,
     '16:9': 16/9,
@@ -381,6 +372,15 @@ const ThumbnailPage: React.FC = () => {
   };
 
   const canGenerate = (genMode === 'AUTO' && context.trim().length > 0) || (genMode === 'REF' && (referenceImages.length > 0 || context.trim().length > 0));
+
+  // IMPORTANT: keep this AFTER all hooks (including useEffect) to avoid hook-order mismatch
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen premium-background">
