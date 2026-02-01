@@ -159,7 +159,6 @@ const Index = () => {
     const accessApp = canAccessTool(tool.id, isAuthenticated, isPremium, usageCount, userPlan, 'app');
     const accessOwn = canAccessTool(tool.id, isAuthenticated, isPremium, usageCount, userPlan, 'own');
 
-    const access = accessApp.allowed ? accessApp : accessOwn;
     const anyAllowed = accessApp.allowed || accessOwn.allowed;
 
     if (!anyAllowed) {
@@ -182,8 +181,8 @@ const Index = () => {
       return;
     }
 
-    // Record usage
-    await recordToolUsage(tool.id);
+    // Record usage in background (don't await to prevent re-render issues)
+    recordToolUsage(tool.id).catch(console.error);
 
     if (tool.route) {
       navigate(tool.route);
