@@ -1,11 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Gemini TTS endpoint - using the correct model name for natural human-like voice
+// Input validation constants
+const MAX_TEXT_LENGTH = 10000; // 10KB max for TTS text
+const ALLOWED_VOICE_NAMES = ["Puck", "Charon", "Kore", "Fenrir", "Aoede"];
+
+// Gemini TTS endpoint
 const GEMINI_TTS_API = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent";
 
 serve(async (req) => {
@@ -15,30 +20,109 @@ serve(async (req) => {
   }
 
   try {
+    // ===== AUTHENTICATION =====
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Authentication required" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    
+    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: "Invalid or expired token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(`[gemini-tts] Authenticated user: ${user.id}`);
+
+    // ===== INPUT VALIDATION =====
     const { text, voiceName, apiKey: userApiKey, languageCode } = await req.json();
 
-    if (!text || !text.trim()) {
+    // Validate text
+    if (!text || typeof text !== "string" || !text.trim()) {
       return new Response(
         JSON.stringify({ error: 'Text is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Determine which API key to use:
-    // 1. User's own API key (if provided)
-    // 2. Backend shared GEMINI_API_KEY (for App Mode - natural voice for everyone!)
+    if (text.length > MAX_TEXT_LENGTH) {
+      return new Response(
+        JSON.stringify({ error: `Text exceeds maximum length of ${MAX_TEXT_LENGTH} characters` }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Validate voice name (allow any alphanumeric)
+    const sanitizedVoiceName = voiceName && /^[a-zA-Z0-9\-_]+$/.test(voiceName) 
+      ? voiceName 
+      : "Puck";
+
+    // Validate language code
+    const sanitizedLanguageCode = languageCode && /^[a-z]{2}(-[A-Z]{2})?$/.test(languageCode)
+      ? languageCode
+      : "en-US";
+
+    // ===== CREDIT CHECK (Server-side) =====
+    const isOwnApiKey = !!userApiKey?.trim();
+    
+    if (!isOwnApiKey) {
+      const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      
+      // Check credits before processing
+      const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", {
+        _user_id: user.id,
+        _tool_id: "voice",
+        _is_own_api: false
+      });
+
+      if (creditError) {
+        console.error("[gemini-tts] Credit check error:", creditError);
+        return new Response(
+          JSON.stringify({ error: "Failed to process credits" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (!creditResult.success) {
+        return new Response(
+          JSON.stringify({ 
+            error: creditResult.error,
+            balance: creditResult.balance,
+            required: creditResult.required,
+            errorCode: "INSUFFICIENT_CREDITS"
+          }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log(`[gemini-tts] Credits deducted. New balance: ${creditResult.balance}`);
+    }
+
+    // ===== API KEY SELECTION =====
     const userKey = userApiKey?.trim();
     const backendKey = Deno.env.get("GEMINI_API_KEY");
     const effectiveApiKey = userKey || backendKey;
 
     if (!effectiveApiKey) {
-      console.log(`[gemini-tts] No API key available - neither user key nor backend GEMINI_API_KEY`);
+      console.log(`[gemini-tts] No API key available`);
       return new Response(
         JSON.stringify({ 
           useClientTTS: true,
           text: text,
-          voiceName: voiceName,
-          languageCode: languageCode || 'en-US',
+          voiceName: sanitizedVoiceName,
+          languageCode: sanitizedLanguageCode,
           message: 'Natural TTS not available. Using browser fallback.'
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -46,13 +130,10 @@ serve(async (req) => {
     }
 
     const keySource = userKey ? "user" : "backend";
-    console.log(`[gemini-tts] Using ${keySource} API key - generating natural speech with voice: ${voiceName}, language: ${languageCode}, text length: ${text.length}`);
+    console.log(`[gemini-tts] Using ${keySource} API key - voice: ${sanitizedVoiceName}, text length: ${text.length}`);
 
-    // Direct Google API call for Gemini TTS with natural human voice
+    // ===== GENERATE TTS =====
     const apiUrl = `${GEMINI_TTS_API}?key=${effectiveApiKey}`;
-    
-    // Build the proper Gemini TTS request
-    // IMPORTANT: Use clear instruction to only read the text, not generate new content
     const ttsInstruction = `Read the following text aloud naturally: "${text}"`;
     
     const requestBody = {
@@ -64,26 +145,22 @@ serve(async (req) => {
         speechConfig: {
           voiceConfig: {
             prebuiltVoiceConfig: {
-              voiceName: voiceName || "Puck"
+              voiceName: sanitizedVoiceName
             }
           }
         }
       }
     };
 
-    console.log(`[gemini-tts] Sending request to Gemini TTS API with voice: ${voiceName || "Puck"}...`);
-
     const response = await fetch(apiUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[gemini-tts] API error: ${response.status} - ${errorText}`);
+      console.error(`[gemini-tts] API error: ${response.status}`);
       
       if (response.status === 429) {
         return new Response(
@@ -97,53 +174,46 @@ serve(async (req) => {
       
       if (response.status === 401 || response.status === 403) {
         return new Response(
-          JSON.stringify({ error: 'Invalid API key. Please check your Gemini API key.' }),
+          JSON.stringify({ error: 'Invalid API key.' }),
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      // Check for model not found error
-      if (errorText.includes('not found') || errorText.includes('404') || errorText.includes('does not support')) {
+      if (errorText.includes('not found') || errorText.includes('does not support')) {
         return new Response(
           JSON.stringify({ 
-            error: 'TTS model not available. Please make sure your API key has access to gemini-2.5-flash-preview-tts model.',
-            details: 'Visit Google AI Studio to verify your API key has TTS access.'
+            error: 'TTS model not available.',
+            details: 'API key may not have TTS access.'
           }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
       return new Response(
-        JSON.stringify({ error: `TTS generation failed: ${response.status} - ${errorText.slice(0, 200)}` }),
+        JSON.stringify({ error: `TTS generation failed: ${response.status}` }),
         { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     const data = await response.json();
-
-    // Extract audio from Gemini TTS response
     const audioData = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     const mimeType = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.mimeType || 'audio/mp3';
     
     if (!audioData) {
-      console.error('[gemini-tts] No audio data in response:', JSON.stringify(data).slice(0, 500));
-      
+      console.error('[gemini-tts] No audio data in response');
       return new Response(
-        JSON.stringify({ 
-          error: 'No audio generated from Gemini TTS. Please try again.',
-          details: JSON.stringify(data).slice(0, 200)
-        }),
+        JSON.stringify({ error: 'No audio generated. Please try again.' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`[gemini-tts] Successfully generated natural audio, size: ${audioData.length} chars, mimeType: ${mimeType}`);
+    console.log(`[gemini-tts] Successfully generated audio, size: ${audioData.length} chars`);
 
     return new Response(
       JSON.stringify({ 
         audio: audioData,
         mimeType: mimeType,
-        voice: voiceName || "Puck"
+        voice: sanitizedVoiceName
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

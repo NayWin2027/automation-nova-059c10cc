@@ -1,9 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+// Input validation
+const MAX_TEXT_LENGTH = 100000; // 100KB
+const MAX_SEGMENTS = 1000;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -11,8 +16,35 @@ serve(async (req) => {
   }
 
   try {
+    // ===== AUTHENTICATION =====
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Authentication required" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    
+    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: "Invalid or expired token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(`[transformative-translate] Authenticated user: ${user.id}`);
+
     const { text, sourceLanguage, targetLanguage, segments } = await req.json();
 
+    // ===== INPUT VALIDATION =====
     if (!text && !segments) {
       return new Response(
         JSON.stringify({ error: "Text or segments are required" }),
@@ -20,25 +52,76 @@ serve(async (req) => {
       );
     }
 
+    // Validate text length
+    if (text && text.length > MAX_TEXT_LENGTH) {
+      return new Response(
+        JSON.stringify({ error: `Text exceeds maximum length of ${MAX_TEXT_LENGTH} characters` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate segments
+    if (segments && (!Array.isArray(segments) || segments.length > MAX_SEGMENTS)) {
+      return new Response(
+        JSON.stringify({ error: `Too many segments (max ${MAX_SEGMENTS})` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Sanitize language inputs
+    const sanitizedSourceLang = sourceLanguage?.replace(/[<>\"'&]/g, "").substring(0, 50) || "auto";
+    const sanitizedTargetLang = targetLanguage?.replace(/[<>\"'&]/g, "").substring(0, 50) || "Burmese";
+
+    // ===== CREDIT CHECK (Server-side) =====
+    const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    
+    const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", {
+      _user_id: user.id,
+      _tool_id: "transformative-translate",
+      _is_own_api: false
+    });
+
+    if (creditError) {
+      console.error("[transformative-translate] Credit check error:", creditError);
+      return new Response(
+        JSON.stringify({ error: "Failed to process credits" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!creditResult.success) {
+      return new Response(
+        JSON.stringify({ 
+          error: creditResult.error,
+          balance: creditResult.balance,
+          required: creditResult.required,
+          errorCode: "INSUFFICIENT_CREDITS"
+        }),
+        { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(`[transformative-translate] Credits deducted. New balance: ${creditResult.balance}`);
+
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
     const prompt = segments
-      ? `Translate these subtitle segments from ${sourceLanguage || "auto"} to ${targetLanguage || "Burmese"}.
+      ? `Translate these subtitle segments from ${sanitizedSourceLang} to ${sanitizedTargetLang}.
 
 Input segments:
 ${JSON.stringify(segments, null, 2)}
 
 Output the same JSON array structure with translated text. Keep timing unchanged.
-Important: Use natural ${targetLanguage || "Burmese"} phrasing, not word-by-word translation.
+Important: Use natural ${sanitizedTargetLang} phrasing, not word-by-word translation.
 Follow Myanmar Sar Dictionary (မြန်မာစာသတ်ပုံကျမ်း) spelling standards.`
-      : `Translate this text from ${sourceLanguage || "auto"} to ${targetLanguage || "Burmese"}:
+      : `Translate this text from ${sanitizedSourceLang} to ${sanitizedTargetLang}:
 
 "${text}"
 
-Important: Use natural ${targetLanguage || "Burmese"} phrasing, not word-by-word translation.
+Important: Use natural ${sanitizedTargetLang} phrasing, not word-by-word translation.
 Follow Myanmar Sar Dictionary (မြန်မာစာသတ်ပုံကျမ်း) spelling standards.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {

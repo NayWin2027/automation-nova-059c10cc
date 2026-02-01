@@ -1,9 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+// Input validation constants
+const MAX_PROMPT_LENGTH = 50000;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -11,19 +15,93 @@ serve(async (req) => {
   }
 
   try {
+    // ===== AUTHENTICATION =====
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Authentication required" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    
+    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: "Invalid or expired token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(`[creator-ai] Authenticated user: ${user.id}`);
+
+    // ===== INPUT VALIDATION =====
     const { prompt, apiKey, type } = await req.json();
 
-    console.log("[creator-ai] Request type:", type);
-    console.log("[creator-ai] Prompt length:", prompt?.length);
+    if (!prompt || typeof prompt !== "string") {
+      return new Response(
+        JSON.stringify({ error: "Prompt is required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
-    // Determine which API to use
-    const useOwnKey = apiKey && apiKey.trim().length > 0;
+    if (prompt.length > MAX_PROMPT_LENGTH) {
+      return new Response(
+        JSON.stringify({ error: `Prompt exceeds maximum length of ${MAX_PROMPT_LENGTH} characters` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const validTypes = ["text", "image"];
+    const sanitizedType = validTypes.includes(type) ? type : "text";
+
+    console.log("[creator-ai] Request type:", sanitizedType);
+
+    // ===== CREDIT CHECK (Server-side) =====
+    const isOwnApiKey = !!apiKey?.trim();
     
-    if (type === 'image') {
+    if (!isOwnApiKey) {
+      const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      
+      const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", {
+        _user_id: user.id,
+        _tool_id: "creator",
+        _is_own_api: false
+      });
+
+      if (creditError) {
+        console.error("[creator-ai] Credit check error:", creditError);
+        return new Response(
+          JSON.stringify({ error: "Failed to process credits" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (!creditResult.success) {
+        return new Response(
+          JSON.stringify({ 
+            error: creditResult.error,
+            balance: creditResult.balance,
+            required: creditResult.required,
+            errorCode: "INSUFFICIENT_CREDITS"
+          }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log(`[creator-ai] Credits deducted. New balance: ${creditResult.balance}`);
+    }
+
+    // ===== PROCESS REQUEST =====
+    if (sanitizedType === 'image') {
       // Image generation
-      if (useOwnKey) {
-        // Use Gemini image generation with own key
-        // Try multiple model names as they change frequently
+      if (isOwnApiKey) {
         const imageModels = [
           "gemini-2.0-flash-preview-image-generation",
           "imagen-3.0-generate-002",
@@ -68,7 +146,6 @@ serve(async (req) => {
               const errorText = await response.text();
               console.error(`[creator-ai] Model ${model} failed:`, errorText);
               lastError = errorText;
-              // Continue to try next model
             }
           } catch (e) {
             console.error(`[creator-ai] Model ${model} error:`, e);
@@ -76,10 +153,9 @@ serve(async (req) => {
           }
         }
         
-        console.error("[creator-ai] All image models failed. Last error:", lastError);
         throw new Error("Image generation failed - your API key may not have image generation enabled");
       } else {
-        // Use Lovable AI Gateway for image generation
+        // Use Lovable AI Gateway
         const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
         if (!LOVABLE_API_KEY) {
           return new Response(
@@ -87,8 +163,6 @@ serve(async (req) => {
             { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
-
-        console.log("[creator-ai] Using Lovable AI Gateway for image generation");
 
         const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
@@ -98,17 +172,12 @@ serve(async (req) => {
           },
           body: JSON.stringify({
             model: "google/gemini-2.5-flash-image",
-            messages: [
-              { role: "user", content: prompt }
-            ],
+            messages: [{ role: "user", content: prompt }],
             modalities: ["image", "text"],
           }),
         });
 
         if (!response.ok) {
-          const errorText = await response.text();
-          console.error("[creator-ai] Lovable image error:", response.status, errorText);
-          
           if (response.status === 429) {
             return new Response(
               JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
@@ -129,15 +198,10 @@ serve(async (req) => {
         }
 
         const data = await response.json();
-        console.log("[creator-ai] Lovable AI response received");
-        
-        // Extract image from the correct response format
-        // Format: data.choices[0].message.images[0].image_url.url
         const images = data.choices?.[0]?.message?.images;
         if (images && images.length > 0) {
           const imageUrl = images[0]?.image_url?.url;
           if (imageUrl) {
-            console.log("[creator-ai] Image generated successfully");
             return new Response(
               JSON.stringify({ image: imageUrl }),
               { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -145,7 +209,6 @@ serve(async (req) => {
           }
         }
         
-        // Fallback: check content for base64 image
         const content = data.choices?.[0]?.message?.content;
         if (content && content.includes("data:image")) {
           return new Response(
@@ -154,16 +217,14 @@ serve(async (req) => {
           );
         }
         
-        console.error("[creator-ai] No image in response:", JSON.stringify(data).substring(0, 500));
         return new Response(
           JSON.stringify({ error: "No image was generated. Please try a different prompt." }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
     } else {
-      // Text generation (story/content)
-      if (useOwnKey) {
-        // Use Gemini directly with own key
+      // Text generation
+      if (isOwnApiKey) {
         const response = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
           {
@@ -180,8 +241,6 @@ serve(async (req) => {
         );
 
         if (!response.ok) {
-          const errorText = await response.text();
-          console.error("[creator-ai] Gemini text error:", errorText);
           throw new Error("Content generation failed");
         }
 
@@ -193,7 +252,6 @@ serve(async (req) => {
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       } else {
-        // Use Lovable AI Gateway
         const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
         if (!LOVABLE_API_KEY) {
           throw new Error("LOVABLE_API_KEY is not configured");

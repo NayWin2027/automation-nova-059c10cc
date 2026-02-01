@@ -1,9 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Input validation constants
+const MAX_PROMPT_LENGTH = 100000; // 100KB
+const MAX_BASE64_SIZE = 52428800; // 50MB
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -11,21 +16,99 @@ serve(async (req) => {
   }
 
   try {
+    // ===== AUTHENTICATION =====
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Authentication required" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    
+    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: "Invalid or expired token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(`[novel-translate] Authenticated user: ${user.id}`);
+
+    // ===== INPUT VALIDATION =====
     const { prompt, targetLang, apiKey, fileData } = await req.json();
 
-    if (!prompt) {
+    if (!prompt || typeof prompt !== "string") {
       return new Response(
         JSON.stringify({ error: 'Prompt is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Determine which API to use
-    const useOwnApi = !!apiKey;
+    if (prompt.length > MAX_PROMPT_LENGTH) {
+      return new Response(
+        JSON.stringify({ error: `Prompt exceeds maximum length of ${MAX_PROMPT_LENGTH} characters` }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Validate file data size
+    if (fileData?.data) {
+      const estimatedSize = (fileData.data.length * 3) / 4;
+      if (estimatedSize > MAX_BASE64_SIZE) {
+        return new Response(
+          JSON.stringify({ error: `File size exceeds maximum of 50MB` }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    // ===== CREDIT CHECK (Server-side) =====
+    const isOwnApiKey = !!apiKey?.trim();
     
+    if (!isOwnApiKey) {
+      const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      
+      const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", {
+        _user_id: user.id,
+        _tool_id: "novel-translate",
+        _is_own_api: false
+      });
+
+      if (creditError) {
+        console.error("[novel-translate] Credit check error:", creditError);
+        return new Response(
+          JSON.stringify({ error: "Failed to process credits" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (!creditResult.success) {
+        return new Response(
+          JSON.stringify({ 
+            error: creditResult.error,
+            balance: creditResult.balance,
+            required: creditResult.required,
+            errorCode: "INSUFFICIENT_CREDITS"
+          }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log(`[novel-translate] Credits deducted. New balance: ${creditResult.balance}`);
+    }
+
+    // ===== PROCESS TRANSLATION =====
     let translatedText = '';
 
-    if (useOwnApi) {
+    if (isOwnApiKey) {
       // Use Direct Gemini API with user's key
       console.log('[Novel Translate] Using Own API Key mode');
       
@@ -45,16 +128,15 @@ CRITICAL RULES:
 
       const parts: Array<{ text?: string; inline_data?: { mime_type: string; data: string } }> = [];
       
-      // Add file data if provided - MUST come first so AI reads it
-      if (fileData && fileData.data) {
-        console.log('[Novel Translate] Attaching file, mimeType:', fileData.mimeType, 'data length:', fileData.data.length);
+      // Add file data if provided
+      if (fileData?.data) {
+        console.log('[Novel Translate] Attaching file, mimeType:', fileData.mimeType);
         parts.push({
           inline_data: {
             mime_type: fileData.mimeType || 'application/pdf',
             data: fileData.data
           }
         });
-        // Add explicit instruction to read the file
         parts.push({ 
           text: `IMPORTANT: I have attached a PDF/document file above. Please READ and EXTRACT all the text content from this attached file first, then translate that content according to the following instructions:\n\n${prompt}` 
         });
@@ -81,7 +163,6 @@ CRITICAL RULES:
         const errorText = await geminiResponse.text();
         console.error('[Novel Translate] Gemini API error:', errorText);
         
-        // Handle 429 rate limit specifically
         if (geminiResponse.status === 429) {
           const errorData = JSON.parse(errorText);
           const retryDelay = errorData?.error?.details?.find((d: any) => d['@type']?.includes('RetryInfo'))?.retryDelay || '60s';
