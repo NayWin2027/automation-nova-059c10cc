@@ -53,15 +53,6 @@ const VoicePage: React.FC = () => {
   const [proSubtitles, setProSubtitles] = useState(false);
   const [selectedTier, setSelectedTier] = useState<number | null>(null);
 
-  // Show loading while checking auth
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
   const [history, setHistory] = useState<HistoryItem[]>(() => {
     const saved = localStorage.getItem('master_voice_history_v2');
     return saved ? JSON.parse(saved) : [];
@@ -75,8 +66,6 @@ const VoicePage: React.FC = () => {
   
   const playbackTimeoutRef = useRef<number | null>(null);
 
-  // API key is now managed by useSecureApiKey hook (session storage)
-
   useEffect(() => {
     localStorage.setItem('master_voice_history_v2', JSON.stringify(history));
   }, [history]);
@@ -85,6 +74,15 @@ const VoicePage: React.FC = () => {
     localStorage.setItem('master_voice_language', selectedLanguage);
     setTTSLanguage(selectedLanguage);
   }, [selectedLanguage]);
+
+  // IMPORTANT: authLoading early return MUST be after ALL hooks
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   const handleCheckWordCount = () => {
     if (!text.trim()) {
