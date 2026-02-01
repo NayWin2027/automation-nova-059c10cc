@@ -1,9 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+// Input validation constants
+const MAX_BASE64_SIZE = 52428800; // 50MB
+const MAX_URL_LENGTH = 2048;
 
 const SYSTEM_PROMPT = `You are a professional video content summarizer. Create a comprehensive recap.
 
@@ -35,15 +40,82 @@ serve(async (req) => {
   }
 
   try {
+    // ===== AUTHENTICATION =====
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Authentication required" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    
+    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: "Invalid or expired token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(`[video-recap] Authenticated user: ${user.id}`);
+
     const body = await req.json();
-    const { action, videoUrl, useOwnApi, apiKey, targetLang } = body;
+    const { action, videoUrl, useOwnApi, apiKey, targetLang, fileName, fileSize, mimeType, fileUri } = body;
     
     const BACKEND_GEMINI_KEY = Deno.env.get("GEMINI_API_KEY");
+    const isOwnApiKey = useOwnApi && !!apiKey?.trim();
+
+    // ===== CREDIT CHECK (Server-side) - only for non-init actions =====
+    if (action !== 'initUpload' && !isOwnApiKey) {
+      const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      
+      const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", {
+        _user_id: user.id,
+        _tool_id: "video-recap",
+        _is_own_api: false
+      });
+
+      if (creditError) {
+        console.error("[video-recap] Credit check error:", creditError);
+        return new Response(
+          JSON.stringify({ error: "Failed to process credits" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (!creditResult.success) {
+        return new Response(
+          JSON.stringify({ 
+            error: creditResult.error,
+            balance: creditResult.balance,
+            required: creditResult.required,
+            errorCode: "INSUFFICIENT_CREDITS"
+          }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log(`[video-recap] Credits deducted. New balance: ${creditResult.balance}`);
+    }
 
     // Handle different actions
     if (action === 'initUpload') {
-      // Initialize resumable upload session for large files
-      const { fileName, fileSize, mimeType } = body;
+      // ===== INPUT VALIDATION for initUpload =====
+      if (!fileName || typeof fileName !== "string") {
+        return new Response(
+          JSON.stringify({ error: "File name is required" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const sanitizedFileName = fileName.replace(/[\/\\:*?"<>|]/g, "_").substring(0, 255);
       
       if (!BACKEND_GEMINI_KEY) {
         return new Response(
@@ -52,7 +124,7 @@ serve(async (req) => {
         );
       }
 
-      console.log(`Initiating upload for file: ${fileName}, size: ${fileSize}, type: ${mimeType}`);
+      console.log(`Initiating upload for file: ${sanitizedFileName}, size: ${fileSize}`);
 
       const initResponse = await fetch(
         `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${BACKEND_GEMINI_KEY}`,
@@ -66,7 +138,7 @@ serve(async (req) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            file: { display_name: fileName || 'video_upload' }
+            file: { display_name: sanitizedFileName }
           })
         }
       );
@@ -87,7 +159,7 @@ serve(async (req) => {
         }
         
         return new Response(
-          JSON.stringify({ error: `Upload init failed: ${errText.substring(0, 200)}` }),
+          JSON.stringify({ error: `Upload init failed` }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -101,8 +173,6 @@ serve(async (req) => {
         );
       }
 
-      console.log("Upload URL obtained successfully");
-
       return new Response(
         JSON.stringify({ uploadUrl }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -110,19 +180,17 @@ serve(async (req) => {
     }
 
     if (action === 'analyzeFile') {
-      // Analyze an already-uploaded file using its URI
-      const { fileUri, fileName } = body;
-      
-      if (!BACKEND_GEMINI_KEY) {
+      // ===== INPUT VALIDATION for analyzeFile =====
+      if (!fileUri || typeof fileUri !== "string") {
         return new Response(
-          JSON.stringify({ error: "Backend API key not configured" }),
+          JSON.stringify({ error: "File URI is required" }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      if (!fileUri) {
+      if (!BACKEND_GEMINI_KEY) {
         return new Response(
-          JSON.stringify({ error: "File URI is required" }),
+          JSON.stringify({ error: "Backend API key not configured" }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -161,7 +229,6 @@ serve(async (req) => {
         }
       }
 
-      // Call Gemini with the file URI
       const systemPrompt = SYSTEM_PROMPT.replace('the specified language', targetLang || 'Burmese');
       
       const response = await fetch(
@@ -202,7 +269,7 @@ serve(async (req) => {
         }
 
         return new Response(
-          JSON.stringify({ error: "Gemini API error: " + errorText.substring(0, 200) }),
+          JSON.stringify({ error: "Gemini API error" }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -217,15 +284,14 @@ serve(async (req) => {
         );
       }
 
-      console.log("Analysis complete");
-
       return new Response(
         JSON.stringify({ recap }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Default: Handle base64 video data (for small files)
+    // Default: Handle base64 video data
+    // ===== INPUT VALIDATION =====
     if (!videoUrl) {
       return new Response(
         JSON.stringify({ error: "Video URL is required" }),
@@ -233,12 +299,41 @@ serve(async (req) => {
       );
     }
 
+    // Validate URL
+    if (!videoUrl.startsWith("data:") && !videoUrl.startsWith("http://") && !videoUrl.startsWith("https://")) {
+      return new Response(
+        JSON.stringify({ error: "Invalid video URL format" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!videoUrl.startsWith("data:") && videoUrl.length > MAX_URL_LENGTH) {
+      return new Response(
+        JSON.stringify({ error: "URL too long" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate base64 size
+    if (videoUrl.startsWith("data:")) {
+      const base64Part = videoUrl.split(",")[1];
+      if (base64Part) {
+        const estimatedSize = (base64Part.length * 3) / 4;
+        if (estimatedSize > MAX_BASE64_SIZE) {
+          return new Response(
+            JSON.stringify({ error: "Video file too large (max 50MB)" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+    }
+
     const isBase64 = videoUrl.startsWith("data:");
     const systemPrompt = SYSTEM_PROMPT.replace('the specified language', targetLang || 'Burmese');
 
     let response;
 
-    if (useOwnApi && apiKey) {
+    if (isOwnApiKey) {
       console.log("Using Own API Key for video recap");
       
       let parts: any[] = [];
@@ -305,7 +400,7 @@ serve(async (req) => {
         }
 
         return new Response(
-          JSON.stringify({ error: "Gemini API error: " + errorText.substring(0, 200) }),
+          JSON.stringify({ error: "Gemini API error" }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -327,11 +422,11 @@ serve(async (req) => {
           throw new Error("Invalid base64 video format");
         }
         
-        const mimeType = matches[1];
+        const contentMimeType = matches[1];
         const base64Data = matches[2];
         
         const parts = [
-          { inlineData: { mimeType, data: base64Data } },
+          { inlineData: { mimeType: contentMimeType, data: base64Data } },
           { text: systemPrompt + "\n\nPlease analyze this video and create a detailed recap." }
         ];
 
@@ -437,8 +532,6 @@ serve(async (req) => {
             { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
-        const errorText = await response.text();
-        console.error("AI Gateway error:", errorText);
         return new Response(
           JSON.stringify({
             recap: null,

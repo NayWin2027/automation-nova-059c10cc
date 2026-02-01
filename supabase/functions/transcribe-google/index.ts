@@ -1,9 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+// Input validation
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 
 // Google Files API base URL
 const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1beta/files";
@@ -39,7 +43,6 @@ function tryParseGoogleApiError(errorText: string): {
 }
 
 async function preflightGenerateCheck(apiKey: string): Promise<void> {
-  // Minimal request to detect invalid key / disabled billing-quota BEFORE uploading large files.
   const response = await fetch(`${GOOGLE_AI_API}/${DEFAULT_TRANSCRIBE_MODEL}:generateContent?key=${apiKey}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -57,7 +60,6 @@ async function preflightGenerateCheck(apiKey: string): Promise<void> {
 
   if (response.status === 429) {
     if (info.quotaLimitZero) {
-      // Common case: API key is valid but free-tier quota is 0 (billing/quota not enabled).
       throw new Error("GOOGLE_QUOTA_NOT_ENABLED");
     }
     throw new Error("RATE_LIMIT");
@@ -71,7 +73,6 @@ async function preflightGenerateCheck(apiKey: string): Promise<void> {
 async function uploadToGoogleFiles(apiKey: string, file: File, mimeType: string): Promise<string> {
   console.log("Uploading file to Google Files API...", file.name, file.size, mimeType);
   
-  // Step 1: Start resumable upload
   const startResponse = await fetch(`${GOOGLE_FILES_API}?key=${apiKey}`, {
     method: "POST",
     headers: {
@@ -83,7 +84,7 @@ async function uploadToGoogleFiles(apiKey: string, file: File, mimeType: string)
     },
     body: JSON.stringify({
       file: {
-        display_name: file.name,
+        display_name: file.name.replace(/[\/\\:*?"<>|]/g, "_").substring(0, 255),
       },
     }),
   });
@@ -101,7 +102,6 @@ async function uploadToGoogleFiles(apiKey: string, file: File, mimeType: string)
 
   console.log("Got upload URL, uploading file content...");
 
-  // Step 2: Upload file content
   const arrayBuffer = await file.arrayBuffer();
   const uploadResponse = await fetch(uploadUrl, {
     method: "POST",
@@ -126,8 +126,8 @@ async function uploadToGoogleFiles(apiKey: string, file: File, mimeType: string)
 }
 
 async function waitForFileProcessing(apiKey: string, fileName: string): Promise<void> {
-  const maxAttempts = 60; // Wait up to 5 minutes
-  const delay = 5000; // 5 seconds between checks
+  const maxAttempts = 60;
+  const delay = 5000;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${apiKey}`);
@@ -154,7 +154,6 @@ async function waitForFileProcessing(apiKey: string, fileName: string): Promise<
 }
 
 async function transcribeWithGemini(apiKey: string, fileUri: string, mimeType: string, languageName: string): Promise<string> {
-  // Special prompt for Burmese - native transcription with correct spelling
   const isBurmese = languageName.toUpperCase() === "BURMESE";
   
   const transcriptionPrompt = isBurmese
@@ -165,7 +164,7 @@ async function transcribeWithGemini(apiKey: string, fileUri: string, mimeType: s
 လိုအပ်ချက်များ:
 - ဤ audio/video ဖိုင်ထဲရှိ ပြောဆိုချက်အားလုံးကို တိကျစွာ ဗမာစာဖြင့် ရေးချပါ
 - မြန်မာစာသတ်ပုံကျမ်း အတိုင်း စာလုံးပေါင်း သတ်ပုံ 100% မှန်ကန်ရမည်
-- သဘာဝကျသော ဗမာစကားပြောပုံစံဖြင့် ရေးပါ (robotic translation မဖြစ်စေရ)
+- သဘာဝကျသော ဗမာစကားပြောပုံစံဖြင့် ရေးပါ
 - ဘာသာပြန်ခြင်း၊ အနှစ်ချုပ်ခြင်း လုံးဝမလုပ်ပါနဲ့
 - ပြောသည့်အတိုင်း အတိအကျ ရေးပါ
 - Speaker ပြောင်းရင် line break ခံပါ
@@ -256,11 +255,38 @@ serve(async (req) => {
   }
 
   try {
+    // ===== AUTHENTICATION =====
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Authentication required", retryable: false }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    
+    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: "Invalid or expired token", retryable: false }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(`[transcribe-google] Authenticated user: ${user.id}`);
+
     const formData = await req.formData();
     const file = formData.get("file") as File;
     const apiKey = formData.get("apiKey") as string;
-    const languageName = formData.get("languageName") as string || "BURMESE";
+    const languageName = (formData.get("languageName") as string || "BURMESE").replace(/[<>\"'&]/g, "").substring(0, 50);
 
+    // ===== INPUT VALIDATION =====
     if (!file) {
       return new Response(
         JSON.stringify({ error: "ဖိုင်မပေးထားပါ", retryable: false }),
@@ -275,8 +301,7 @@ serve(async (req) => {
       );
     }
 
-    // Check file size limit (100MB)
-    if (file.size > 100 * 1024 * 1024) {
+    if (file.size > MAX_FILE_SIZE) {
       return new Response(
         JSON.stringify({ error: "ဖိုင်အရွယ်အစား 100MB ထက်မကျော်ရပါ။", retryable: false }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -285,8 +310,7 @@ serve(async (req) => {
 
     console.log("Processing file:", file.name, "Size:", file.size, "bytes");
 
-    // Preflight to avoid wasting time uploading big files when the key has no quota/billing.
-    // (For small files, skip to avoid an extra request.)
+    // Preflight for large files
     if (file.size >= 8 * 1024 * 1024) {
       try {
         await preflightGenerateCheck(apiKey);
@@ -323,7 +347,7 @@ serve(async (req) => {
         }
         
         return new Response(
-          JSON.stringify({ error: `API စစ်ဆေးမှု မအောင်မြင်ပါ: ${errorMessage}`, retryable: true }),
+          JSON.stringify({ error: `API စစ်ဆေးမှု မအောင်မြင်ပါ`, retryable: true }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -339,17 +363,15 @@ serve(async (req) => {
       console.error("File upload failed:", uploadError);
       return new Response(
         JSON.stringify({ 
-          error: "ဖိုင် upload မအောင်မြင်ပါ။ ဖိုင်အရွယ်အစား/format စစ်ဆေးပြီး ပြန်စမ်းပါ။",
+          error: "ဖိုင် upload မအောင်မြင်ပါ။",
           retryable: true
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
     
-    // Extract file name for status checking
     const fileName = fileUri.includes("/") ? fileUri.split("/").slice(-2).join("/") : fileUri;
     
-    // Wait for file to be processed
     if (fileName.startsWith("files/")) {
       try {
         await waitForFileProcessing(apiKey, fileName);
@@ -357,7 +379,7 @@ serve(async (req) => {
         console.error("File processing failed:", processingError);
         return new Response(
           JSON.stringify({ 
-            error: "ဖိုင် processing မအောင်မြင်ပါ။ ခဏစောင့်ပြီး ပြန်စမ်းပါ။",
+            error: "ဖိုင် processing မအောင်မြင်ပါ။",
             retryable: true,
             retryAfterSeconds: 30
           }),
@@ -377,7 +399,7 @@ serve(async (req) => {
       if (errorMessage === "RATE_LIMIT") {
         return new Response(
           JSON.stringify({ 
-            error: "Rate limit ကျော်သွားပါပြီ။ ခဏစောင့်ပြီး ပြန်စမ်းပါ။",
+            error: "Rate limit ကျော်သွားပါပြီ။",
             retryable: true,
             retryAfterSeconds: 60
           }),
@@ -415,7 +437,6 @@ serve(async (req) => {
   } catch (error) {
     console.error("Unexpected transcription error:", error);
     
-    // Always return 200 with structured error to prevent UI crashes
     return new Response(
       JSON.stringify({ 
         error: "အမျိုးအမည်မသိ အမှား ဖြစ်ပွားပါသည်။ ပြန်စမ်းပါ။",
