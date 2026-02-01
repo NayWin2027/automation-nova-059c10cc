@@ -40,29 +40,24 @@ export function useApiAccess(): ApiAccessResult {
       return { allowed: true };
     }
 
-    // Master switch - if ALL is off, API is completely blocked
-    if (!apiAccess.all) {
-      return { allowed: false, reason: 'App API ကို ပိတ်ထားပါသည်' };
-    }
-
     // In Free Mode, App API is NOT available for free/guest users
     if (isFreeMode && (isGuest || userPlan === 'free')) {
       return { allowed: false, reason: 'Free Mode တွင် App API မသုံးနိုင်ပါ' };
     }
 
     // Check plan-specific access
-    if (userPlan === 'premium' && !apiAccess.premium) {
+    if (userPlan === 'premium' && apiAccess.premium === false) {
       return { allowed: false, reason: 'Premium users အတွက် App API ပိတ်ထားပါသည်' };
     }
-    if (userPlan === 'pro' && !apiAccess.pro) {
+    if (userPlan === 'pro' && apiAccess.pro === false) {
       return { allowed: false, reason: 'Pro users အတွက် App API ပိတ်ထားပါသည်' };
     }
-    if (userPlan === 'free' && !apiAccess.free) {
+    if (userPlan === 'free' && apiAccess.free === false) {
       return { allowed: false, reason: 'Free users အတွက် App API ပိတ်ထားပါသည်' };
     }
 
     // Guest users in non-free mode - check free tier setting
-    if (isGuest && !apiAccess.free) {
+    if (isGuest && apiAccess.free === false) {
       return { allowed: false, reason: 'Guest users အတွက် App API ပိတ်ထားပါသည်' };
     }
 
@@ -77,24 +72,19 @@ export function useApiAccess(): ApiAccessResult {
       return { allowed: true };
     }
 
-    // Master switch - if ALL is off, API is completely blocked
-    if (!apiAccess.all) {
-      return { allowed: false, reason: 'Own API ကို ပိတ်ထားပါသည်' };
-    }
-
     // Check plan-specific access
-    if (userPlan === 'premium' && !apiAccess.premium) {
+    if (userPlan === 'premium' && apiAccess.premium === false) {
       return { allowed: false, reason: 'Premium users အတွက် Own API ပိတ်ထားပါသည်' };
     }
-    if (userPlan === 'pro' && !apiAccess.pro) {
+    if (userPlan === 'pro' && apiAccess.pro === false) {
       return { allowed: false, reason: 'Pro users အတွက် Own API ပိတ်ထားပါသည်' };
     }
-    if (userPlan === 'free' && !apiAccess.free) {
+    if (userPlan === 'free' && apiAccess.free === false) {
       return { allowed: false, reason: 'Free users အတွက် Own API ပိတ်ထားပါသည်' };
     }
 
     // Guest users - check free tier setting
-    if (isGuest && !apiAccess.free) {
+    if (isGuest && apiAccess.free === false) {
       return { allowed: false, reason: 'Guest users အတွက် Own API ပိတ်ထားပါသည်' };
     }
 

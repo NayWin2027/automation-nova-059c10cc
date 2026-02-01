@@ -98,19 +98,20 @@ export function useToolSettings() {
     const apiAccess = apiMode === 'app' ? accessControl.appApiAccess : accessControl.ownApiAccess;
     
     if (apiAccess) {
-      // Check master switch (ALL)
-      if (!apiAccess.all) {
-        return { allowed: false, reason: `${apiMode === 'app' ? 'App API' : 'Own API'} ကို ပိတ်ထားပါသည်` };
+      // NOTE: 'ALL' toggle is UI convenience only; tier toggles must always have effect.
+      // Free Mode rule: App API is not allowed for free/guest users.
+      if (accessControl.freeMode && apiMode === 'app' && (!isAuthenticated || userPlan === 'free')) {
+        return { allowed: false, reason: 'Free Mode တွင် App API မသုံးနိုင်ပါ' };
       }
-      
+
       // Check plan-specific access
-      if (userPlan === 'premium' && !apiAccess.premium) {
+      if (userPlan === 'premium' && apiAccess.premium === false) {
         return { allowed: false, reason: `Premium users အတွက် ${apiMode === 'app' ? 'App API' : 'Own API'} ပိတ်ထားပါသည်` };
       }
-      if (userPlan === 'pro' && !apiAccess.pro) {
+      if (userPlan === 'pro' && apiAccess.pro === false) {
         return { allowed: false, reason: `Pro users အတွက် ${apiMode === 'app' ? 'App API' : 'Own API'} ပိတ်ထားပါသည်` };
       }
-      if (userPlan === 'free' && !apiAccess.free) {
+      if (userPlan === 'free' && apiAccess.free === false) {
         return { allowed: false, reason: `Free users အတွက် ${apiMode === 'app' ? 'App API' : 'Own API'} ပိတ်ထားပါသည်` };
       }
     }
@@ -155,17 +156,18 @@ export function useToolSettings() {
       return { allowed: true };
     }
 
-    if (!apiAccess.all) {
-      return { allowed: false, reason: `${apiMode === 'app' ? 'App API' : 'Own API'} ကို ပိတ်ထားပါသည်` };
+    // NOTE: 'ALL' toggle is UI convenience only; tier toggles must always have effect.
+    if (accessControl.freeMode && apiMode === 'app' && userPlan === 'free') {
+      return { allowed: false, reason: 'Free Mode တွင် App API မသုံးနိုင်ပါ' };
     }
     
-    if (userPlan === 'premium' && !apiAccess.premium) {
+    if (userPlan === 'premium' && apiAccess.premium === false) {
       return { allowed: false, reason: `Premium users အတွက် ${apiMode === 'app' ? 'App API' : 'Own API'} ပိတ်ထားပါသည်` };
     }
-    if (userPlan === 'pro' && !apiAccess.pro) {
+    if (userPlan === 'pro' && apiAccess.pro === false) {
       return { allowed: false, reason: `Pro users အတွက် ${apiMode === 'app' ? 'App API' : 'Own API'} ပိတ်ထားပါသည်` };
     }
-    if (userPlan === 'free' && !apiAccess.free) {
+    if (userPlan === 'free' && apiAccess.free === false) {
       return { allowed: false, reason: `Free users အတွက် ${apiMode === 'app' ? 'App API' : 'Own API'} ပိတ်ထားပါသည်` };
     }
 
