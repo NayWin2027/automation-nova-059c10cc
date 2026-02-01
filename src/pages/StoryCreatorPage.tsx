@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { generateStory } from "../services/geminiService";
-import { Home } from "lucide-react";
+import { Home, Loader2 } from "lucide-react";
 import { useSecureApiKey } from "@/hooks/useSecureApiKey";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 
 type Archetype = "CLASSIC" | "ROUGH" | "VILLAIN" | "AI_AUTO";
 
@@ -169,6 +170,9 @@ const PLOT_FOCUS = [
 ];
 
 const StoryView: React.FC = () => {
+  const navigate = useNavigate();
+  const { isAllowed, isLoading: authLoading } = useAuthGuard('story');
+  
   const [apiType, setApiType] = useState<"app" | "own">("app");
   const { apiKey, setApiKey } = useSecureApiKey("master_story_api_key");
   const [title, setTitle] = useState("");
@@ -194,6 +198,15 @@ const StoryView: React.FC = () => {
   const [storySegments, setStorySegments] = useState<string[]>([]);
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState(-1);
   const [loading, setLoading] = useState(false);
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   // API key is now managed by useSecureApiKey hook (session storage)
 
@@ -405,8 +418,6 @@ const StoryView: React.FC = () => {
         return "bg-slate-700";
     }
   };
-
-  const navigate = useNavigate();
 
   return (
     <div className="space-y-5 pb-32 animate-in fade-in duration-500 max-w-2xl mx-auto px-1">

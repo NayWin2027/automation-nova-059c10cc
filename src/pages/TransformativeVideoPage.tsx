@@ -37,6 +37,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -433,6 +434,7 @@ function ProcessingQueue({ job, stage }: { job: ProcessingJob; stage?: string })
 
 export default function TransformativeVideoPage() {
   const navigate = useNavigate();
+  const { isAllowed, isLoading: authLoading } = useAuthGuard('recap');
 
   // API Mode
   const [apiMode, setApiMode] = useState<"app" | "own">(() => {
@@ -444,6 +446,15 @@ export default function TransformativeVideoPage() {
   useEffect(() => {
     sessionStorage.setItem("transformative_api_mode", apiMode);
   }, [apiMode]);
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   // URL & Upload State
   const [videoUrl, setVideoUrl] = useState("");

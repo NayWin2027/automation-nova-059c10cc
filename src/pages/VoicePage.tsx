@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Globe, ChevronDown, Lock } from 'lucide-react';
+import { ArrowLeft, Globe, ChevronDown, Lock, Loader2 } from 'lucide-react';
 import { generateSpeech, playPCM, setTTSLanguage } from '@/services/geminiService';
 import { BottomNav } from '@/components/BottomNav';
 import { languages, getDefaultLanguage } from '@/data/languages';
@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/select';
 import { useApiAccess } from '@/hooks/useApiAccess';
 import { useSecureApiKey } from '@/hooks/useSecureApiKey';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
 
 type SubStyle = 'GOLD' | 'BLUE' | 'RUBY' | 'DIAMOND' | 'EMERALD';
 
@@ -27,6 +28,7 @@ interface HistoryItem {
 
 const VoicePage: React.FC = () => {
   const navigate = useNavigate();
+  const { isAllowed, isLoading: authLoading } = useAuthGuard('voice');
   const { appApiAllowed, ownApiAllowed, appApiReason, ownApiReason, defaultApiMode, isLoading: accessLoading } = useApiAccess();
   
   const [text, setText] = useState('');
@@ -50,6 +52,15 @@ const VoicePage: React.FC = () => {
   const [showOptions, setShowOptions] = useState(false);
   const [proSubtitles, setProSubtitles] = useState(false);
   const [selectedTier, setSelectedTier] = useState<number | null>(null);
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   const [history, setHistory] = useState<HistoryItem[]>(() => {
     const saved = localStorage.getItem('master_voice_history_v2');
