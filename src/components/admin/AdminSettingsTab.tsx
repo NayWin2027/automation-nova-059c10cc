@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   Settings, Palette, Save, RefreshCw, Lock, Unlock, Crown,
-  Zap, Edit3, Gift
+  Zap, Edit3, Gift, Key, Server
 } from "lucide-react";
 
 interface BrandingSettings {
@@ -28,12 +28,21 @@ interface FeatureSettings {
   defaultCredits: number;
 }
 
+interface ApiModeAccess {
+  all: boolean;
+  premium: boolean;
+  pro: boolean;
+  free: boolean;
+}
+
 interface AccessControl {
   requireLogin: boolean;
   freeMode: boolean;
   promotionMode: boolean;
   promotionDailyLimit: number;
   promotionToolCount: number;
+  appApiAccess: ApiModeAccess;
+  ownApiAccess: ApiModeAccess;
 }
 
 interface ToolSetting {
@@ -77,6 +86,8 @@ const AdminSettingsTab: React.FC = () => {
     promotionMode: false,
     promotionDailyLimit: 3,
     promotionToolCount: 3,
+    appApiAccess: { all: true, premium: true, pro: true, free: true },
+    ownApiAccess: { all: true, premium: true, pro: true, free: true },
   });
 
   const [toolSettings, setToolSettings] = useState<ToolSetting[]>([]);
@@ -327,6 +338,130 @@ const AdminSettingsTab: React.FC = () => {
                   </div>
                 </>
               )}
+            </CardContent>
+          </Card>
+
+          {/* App API Access Control */}
+          <Card className="border-border/50 bg-card/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <Server className="w-4 h-4 text-blue-500" />
+                APP API
+              </CardTitle>
+              <CardDescription className="text-2xs">Shared API Key အသုံးပြုခွင့် ထိန်းချုပ်ရန်</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div className="flex items-center justify-between py-1 border-b border-border/30">
+                <Label className="text-xs font-semibold text-red-400">ALL (Master)</Label>
+                <Switch
+                  checked={accessControl.appApiAccess?.all ?? true}
+                  onCheckedChange={(checked) => setAccessControl({ 
+                    ...accessControl, 
+                    appApiAccess: { ...accessControl.appApiAccess, all: checked }
+                  })}
+                />
+              </div>
+              <div className="flex items-center justify-between py-1">
+                <Label className="text-xs flex items-center gap-1">
+                  <Crown className="w-3 h-3 text-amber-400" />
+                  Premium
+                </Label>
+                <Switch
+                  checked={accessControl.appApiAccess?.premium ?? true}
+                  onCheckedChange={(checked) => setAccessControl({ 
+                    ...accessControl, 
+                    appApiAccess: { ...accessControl.appApiAccess, premium: checked }
+                  })}
+                  disabled={!accessControl.appApiAccess?.all}
+                />
+              </div>
+              <div className="flex items-center justify-between py-1">
+                <Label className="text-xs flex items-center gap-1">
+                  <Zap className="w-3 h-3 text-purple-400" />
+                  Pro
+                </Label>
+                <Switch
+                  checked={accessControl.appApiAccess?.pro ?? true}
+                  onCheckedChange={(checked) => setAccessControl({ 
+                    ...accessControl, 
+                    appApiAccess: { ...accessControl.appApiAccess, pro: checked }
+                  })}
+                  disabled={!accessControl.appApiAccess?.all}
+                />
+              </div>
+              <div className="flex items-center justify-between py-1">
+                <Label className="text-xs text-muted-foreground">Free</Label>
+                <Switch
+                  checked={accessControl.appApiAccess?.free ?? true}
+                  onCheckedChange={(checked) => setAccessControl({ 
+                    ...accessControl, 
+                    appApiAccess: { ...accessControl.appApiAccess, free: checked }
+                  })}
+                  disabled={!accessControl.appApiAccess?.all}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Own API Access Control */}
+          <Card className="border-border/50 bg-card/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <Key className="w-4 h-4 text-green-500" />
+                OWN API
+              </CardTitle>
+              <CardDescription className="text-2xs">User ကိုယ်ပိုင် API Key သုံးခွင့် ထိန်းချုပ်ရန်</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div className="flex items-center justify-between py-1 border-b border-border/30">
+                <Label className="text-xs font-semibold text-red-400">ALL (Master)</Label>
+                <Switch
+                  checked={accessControl.ownApiAccess?.all ?? true}
+                  onCheckedChange={(checked) => setAccessControl({ 
+                    ...accessControl, 
+                    ownApiAccess: { ...accessControl.ownApiAccess, all: checked }
+                  })}
+                />
+              </div>
+              <div className="flex items-center justify-between py-1">
+                <Label className="text-xs flex items-center gap-1">
+                  <Crown className="w-3 h-3 text-amber-400" />
+                  Premium
+                </Label>
+                <Switch
+                  checked={accessControl.ownApiAccess?.premium ?? true}
+                  onCheckedChange={(checked) => setAccessControl({ 
+                    ...accessControl, 
+                    ownApiAccess: { ...accessControl.ownApiAccess, premium: checked }
+                  })}
+                  disabled={!accessControl.ownApiAccess?.all}
+                />
+              </div>
+              <div className="flex items-center justify-between py-1">
+                <Label className="text-xs flex items-center gap-1">
+                  <Zap className="w-3 h-3 text-purple-400" />
+                  Pro
+                </Label>
+                <Switch
+                  checked={accessControl.ownApiAccess?.pro ?? true}
+                  onCheckedChange={(checked) => setAccessControl({ 
+                    ...accessControl, 
+                    ownApiAccess: { ...accessControl.ownApiAccess, pro: checked }
+                  })}
+                  disabled={!accessControl.ownApiAccess?.all}
+                />
+              </div>
+              <div className="flex items-center justify-between py-1">
+                <Label className="text-xs text-muted-foreground">Free</Label>
+                <Switch
+                  checked={accessControl.ownApiAccess?.free ?? true}
+                  onCheckedChange={(checked) => setAccessControl({ 
+                    ...accessControl, 
+                    ownApiAccess: { ...accessControl.ownApiAccess, free: checked }
+                  })}
+                  disabled={!accessControl.ownApiAccess?.all}
+                />
+              </div>
             </CardContent>
           </Card>
 

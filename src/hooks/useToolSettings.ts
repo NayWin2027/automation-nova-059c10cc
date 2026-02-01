@@ -13,12 +13,21 @@ interface ToolSetting {
   credit_cost: number;
 }
 
+interface ApiModeAccess {
+  all: boolean;
+  premium: boolean;
+  pro: boolean;
+  free: boolean;
+}
+
 interface AccessControl {
   requireLogin: boolean;
   freeMode: boolean;
   promotionMode: boolean;
   promotionDailyLimit: number;
   promotionToolCount: number;
+  appApiAccess?: ApiModeAccess;
+  ownApiAccess?: ApiModeAccess;
 }
 
 export function useToolSettings() {
@@ -29,6 +38,8 @@ export function useToolSettings() {
     promotionMode: false,
     promotionDailyLimit: 3,
     promotionToolCount: 3,
+    appApiAccess: { all: true, premium: true, pro: true, free: true },
+    ownApiAccess: { all: true, premium: true, pro: true, free: true },
   });
   const [loading, setLoading] = useState(true);
 
@@ -69,7 +80,9 @@ export function useToolSettings() {
     toolId: string, 
     isAuthenticated: boolean, 
     isPremiumUser: boolean,
-    todayUsageCount: number
+    todayUsageCount: number,
+    userPlan: 'free' | 'pro' | 'premium' = 'free',
+    apiMode: 'app' | 'own' = 'app'
   ): { allowed: boolean; reason?: string } => {
     const tool = getToolSetting(toolId);
     
@@ -79,6 +92,27 @@ export function useToolSettings() {
 
     if (!tool.is_enabled) {
       return { allowed: false, reason: 'ဤ Tool ကို ပိတ်ထားပါသည်' };
+    }
+
+    // Check API mode access control
+    const apiAccess = apiMode === 'app' ? accessControl.appApiAccess : accessControl.ownApiAccess;
+    
+    if (apiAccess) {
+      // Check master switch (ALL)
+      if (!apiAccess.all) {
+        return { allowed: false, reason: `${apiMode === 'app' ? 'App API' : 'Own API'} ကို ပိတ်ထားပါသည်` };
+      }
+      
+      // Check plan-specific access
+      if (userPlan === 'premium' && !apiAccess.premium) {
+        return { allowed: false, reason: `Premium users အတွက် ${apiMode === 'app' ? 'App API' : 'Own API'} ပိတ်ထားပါသည်` };
+      }
+      if (userPlan === 'pro' && !apiAccess.pro) {
+        return { allowed: false, reason: `Pro users အတွက် ${apiMode === 'app' ? 'App API' : 'Own API'} ပိတ်ထားပါသည်` };
+      }
+      if (userPlan === 'free' && !apiAccess.free) {
+        return { allowed: false, reason: `Free users အတွက် ${apiMode === 'app' ? 'App API' : 'Own API'} ပိတ်ထားပါသည်` };
+      }
     }
 
     // Check if login is required
@@ -110,6 +144,34 @@ export function useToolSettings() {
     return { allowed: true };
   };
 
+  // Helper to check API mode access only
+  const canUseApiMode = (
+    userPlan: 'free' | 'pro' | 'premium',
+    apiMode: 'app' | 'own'
+  ): { allowed: boolean; reason?: string } => {
+    const apiAccess = apiMode === 'app' ? accessControl.appApiAccess : accessControl.ownApiAccess;
+    
+    if (!apiAccess) {
+      return { allowed: true };
+    }
+
+    if (!apiAccess.all) {
+      return { allowed: false, reason: `${apiMode === 'app' ? 'App API' : 'Own API'} ကို ပိတ်ထားပါသည်` };
+    }
+    
+    if (userPlan === 'premium' && !apiAccess.premium) {
+      return { allowed: false, reason: `Premium users အတွက် ${apiMode === 'app' ? 'App API' : 'Own API'} ပိတ်ထားပါသည်` };
+    }
+    if (userPlan === 'pro' && !apiAccess.pro) {
+      return { allowed: false, reason: `Pro users အတွက် ${apiMode === 'app' ? 'App API' : 'Own API'} ပိတ်ထားပါသည်` };
+    }
+    if (userPlan === 'free' && !apiAccess.free) {
+      return { allowed: false, reason: `Free users အတွက် ${apiMode === 'app' ? 'App API' : 'Own API'} ပိတ်ထားပါသည်` };
+    }
+
+    return { allowed: true };
+  };
+
   return {
     toolSettings,
     accessControl,
@@ -117,5 +179,6 @@ export function useToolSettings() {
     fetchSettings,
     getToolSetting,
     canAccessTool,
+    canUseApiMode,
   };
 }
