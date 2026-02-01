@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronLeft, Download, Lock, Play, Home, Diamond, Settings, Loader2, Copy, Check, X, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { useApiAccess } from "@/hooks/useApiAccess";
 
 type ApiMode = "app" | "own";
 
@@ -111,6 +112,8 @@ const CREDIT_TIERS = [
 export default function TranscribePage() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { appApiAllowed, ownApiAllowed, appApiReason, ownApiReason, defaultApiMode, isLoading: accessLoading } = useApiAccess();
+  
   const [apiMode, setApiMode] = useState<ApiMode>("app");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -120,6 +123,12 @@ export default function TranscribePage() {
   const [selectedCreditTier, setSelectedCreditTier] = useState<number | null>(null);
   const [ownApiKey, setOwnApiKey] = useState("");
 
+  // Set default API mode based on access
+  useEffect(() => {
+    if (!accessLoading) {
+      setApiMode(defaultApiMode);
+    }
+  }, [accessLoading, defaultApiMode]);
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -274,26 +283,49 @@ export default function TranscribePage() {
         {/* API Toggle */}
         <div className="glass-card p-1 flex rounded-full">
           <button
-            onClick={() => setApiMode("app")}
+            onClick={() => appApiAllowed && setApiMode("app")}
+            disabled={!appApiAllowed}
             className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-full text-2xs font-medium transition-all ${
-              apiMode === "app" ? "tab-active text-foreground" : "text-muted-foreground"
+              !appApiAllowed 
+                ? "opacity-40 cursor-not-allowed" 
+                : apiMode === "app" 
+                  ? "tab-active text-foreground" 
+                  : "text-muted-foreground"
             }`}
+            title={appApiReason}
           >
+            {!appApiAllowed && <Lock className="w-2.5 h-2.5 text-destructive" />}
             APP API
-            <Lock className="w-2.5 h-2.5 text-amber-500" />
+            {appApiAllowed && <Lock className="w-2.5 h-2.5 text-amber-500" />}
           </button>
           <button
-            onClick={() => setApiMode("own")}
-            className={`flex-1 py-2 rounded-full text-2xs font-medium transition-all ${
-              apiMode === "own" ? "tab-active text-foreground" : "text-muted-foreground"
+            onClick={() => ownApiAllowed && setApiMode("own")}
+            disabled={!ownApiAllowed}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-full text-2xs font-medium transition-all ${
+              !ownApiAllowed 
+                ? "opacity-40 cursor-not-allowed" 
+                : apiMode === "own" 
+                  ? "tab-active text-foreground" 
+                  : "text-muted-foreground"
             }`}
+            title={ownApiReason}
           >
+            {!ownApiAllowed && <Lock className="w-2.5 h-2.5 text-destructive" />}
             OWN API
           </button>
         </div>
 
+        {/* Blocked API Notice */}
+        {!appApiAllowed && !ownApiAllowed && (
+          <div className="glass-card p-3 border-destructive/30 bg-destructive/10 text-center">
+            <p className="text-2xs font-bold text-destructive">
+              API နှစ်မျိုးလုံး ပိတ်ထားပါသည်။ Admin ကို ဆက်သွယ်ပါ။
+            </p>
+          </div>
+        )}
+
         {/* Own API Key Input */}
-        {apiMode === "own" && (
+        {apiMode === "own" && ownApiAllowed && (
           <div className="glass-card p-4 animate-fade-in">
             <label className="text-2xs text-muted-foreground tracking-wider uppercase mb-2 block">
               Enter Your Google AI API Key
