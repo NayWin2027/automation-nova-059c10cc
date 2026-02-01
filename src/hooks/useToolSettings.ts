@@ -131,30 +131,38 @@ export function useToolSettings() {
       return { allowed: false, reason: 'ဤ Tool ကို ပိတ်ထားပါသည်' };
     }
 
+    // CRITICAL: Check requireLogin FIRST
+    // If requireLogin is OFF, treat unauthenticated users as "allowed guests"
+    const requiresLogin = accessControl.requireLogin && tool.requires_auth;
+    
+    if (requiresLogin && !isAuthenticated) {
+      return { allowed: false, reason: 'Login ဝင်ရန်လိုအပ်ပါသည်' };
+    }
+
+    // Determine effective user state
+    // If not authenticated but requireLogin is OFF, they're a "guest" with free access
+    const effectivelyAuthenticated = isAuthenticated || !accessControl.requireLogin;
+    const effectivePlan = isAuthenticated ? userPlan : 'free';
+
     // Check API mode access control
     const apiAccess = apiMode === 'app' ? accessControl.appApiAccess : accessControl.ownApiAccess;
     
     if (apiAccess) {
-      // Free Mode rule: App API is not allowed for free/guest users.
-      if (accessControl.freeMode && apiMode === 'app' && (!isAuthenticated || userPlan === 'free')) {
+      // Free Mode rule: App API is not allowed for free/guest users
+      if (accessControl.freeMode && apiMode === 'app' && effectivePlan === 'free') {
         return { allowed: false, reason: 'Free Mode တွင် App API မသုံးနိုင်ပါ' };
       }
 
       // Check plan-specific access
-      if (userPlan === 'premium' && apiAccess.premium === false) {
+      if (effectivePlan === 'premium' && apiAccess.premium === false) {
         return { allowed: false, reason: `Premium users အတွက် ${apiMode === 'app' ? 'App API' : 'Own API'} ပိတ်ထားပါသည်` };
       }
-      if (userPlan === 'pro' && apiAccess.pro === false) {
+      if (effectivePlan === 'pro' && apiAccess.pro === false) {
         return { allowed: false, reason: `Pro users အတွက် ${apiMode === 'app' ? 'App API' : 'Own API'} ပိတ်ထားပါသည်` };
       }
-      if (userPlan === 'free' && apiAccess.free === false) {
+      if (effectivePlan === 'free' && apiAccess.free === false) {
         return { allowed: false, reason: `Free users အတွက် ${apiMode === 'app' ? 'App API' : 'Own API'} ပိတ်ထားပါသည်` };
       }
-    }
-
-    // Check if login is required
-    if (accessControl.requireLogin && tool.requires_auth && !isAuthenticated) {
-      return { allowed: false, reason: 'Login ဝင်ရန်လိုအပ်ပါသည်' };
     }
 
     // Premium users can access everything
