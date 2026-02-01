@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { translateText } from "../services/geminiService";
 import { GoogleGenAI } from "@google/genai";
-import { Home } from "lucide-react";
+import { Home, Lock } from "lucide-react";
+import { useApiAccess } from "@/hooks/useApiAccess";
 
 type TranslationType = "PURE" | "DEEP" | "HOOKS";
 
@@ -91,6 +92,9 @@ const LANGUAGES = [
 ];
 
 const TranslateView: React.FC = () => {
+  const navigate = useNavigate();
+  const { appApiAllowed, ownApiAllowed, appApiReason, ownApiReason, defaultApiMode, isLoading: accessLoading } = useApiAccess();
+  
   const [apiType, setApiType] = useState<"app" | "own">("app");
   const [apiKey, setApiKey] = useState(() => localStorage.getItem("master_translate_api_key") || "");
   const [text, setText] = useState("");
@@ -102,6 +106,13 @@ const TranslateView: React.FC = () => {
   const [result, setResult] = useState("");
 
   const charLimit = 30000;
+
+  // Set default API mode based on access
+  useEffect(() => {
+    if (!accessLoading) {
+      setApiType(defaultApiMode);
+    }
+  }, [accessLoading, defaultApiMode]);
 
   useEffect(() => {
     localStorage.setItem("master_translate_api_key", apiKey);
@@ -173,8 +184,6 @@ const TranslateView: React.FC = () => {
     }
   };
 
-  const navigate = useNavigate();
-
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-500 pb-24 px-1">
       {/* HOME BUTTON */}
@@ -190,21 +199,48 @@ const TranslateView: React.FC = () => {
       {/* 1. API Switcher */}
       <div className="flex bg-slate-900/60 backdrop-blur-xl p-1 rounded-2xl border border-white/10 shadow-lg">
         <button
-          onClick={() => setApiType("app")}
-          className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${apiType === "app" ? "jewel-sapphire shadow-[0_0_15px_rgba(37,99,235,0.4)] text-white" : "text-slate-400"}`}
+          onClick={() => appApiAllowed && setApiType("app")}
+          disabled={!appApiAllowed}
+          className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 relative ${
+            !appApiAllowed 
+              ? "opacity-40 cursor-not-allowed" 
+              : apiType === "app" 
+                ? "jewel-sapphire shadow-[0_0_15px_rgba(37,99,235,0.4)] text-white" 
+                : "text-slate-400"
+          }`}
+          title={appApiReason}
         >
+          {!appApiAllowed && <Lock className="w-3 h-3 text-rose-400" />}
           APP API <span className="text-[8px]">🔒</span>
         </button>
         <button
-          onClick={() => setApiType("own")}
-          className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all ${apiType === "own" ? "jewel-sapphire shadow-[0_0_15px_rgba(37,99,235,0.4)] text-white" : "text-slate-400"}`}
+          onClick={() => ownApiAllowed && setApiType("own")}
+          disabled={!ownApiAllowed}
+          className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${
+            !ownApiAllowed 
+              ? "opacity-40 cursor-not-allowed" 
+              : apiType === "own" 
+                ? "jewel-sapphire shadow-[0_0_15px_rgba(37,99,235,0.4)] text-white" 
+                : "text-slate-400"
+          }`}
+          title={ownApiReason}
         >
+          {!ownApiAllowed && <Lock className="w-3 h-3 text-rose-400" />}
           OWN API
         </button>
       </div>
 
+      {/* Blocked API Notice */}
+      {!appApiAllowed && !ownApiAllowed && (
+        <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 text-center">
+          <p className="text-[10px] font-bold text-rose-300">
+            API နှစ်မျိုးလုံး ပိတ်ထားပါသည်။ Admin ကို ဆက်သွယ်ပါ။
+          </p>
+        </div>
+      )}
+
       {/* 2. OWN API KEY BOX */}
-      {apiType === "own" && (
+      {apiType === "own" && ownApiAllowed && (
         <div className="neon-glass rounded-[24px] p-4 border border-indigo-500/20 space-y-2 shadow-xl animate-in zoom-in-95 duration-300">
           <h4 className="text-[9px] font-black text-indigo-200 uppercase tracking-widest ml-1 drop-shadow-md">
             GEMINI API KEY

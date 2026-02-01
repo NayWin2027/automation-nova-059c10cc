@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Globe, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Globe, ChevronDown, Lock } from 'lucide-react';
 import { generateSpeech, playPCM, setTTSLanguage } from '@/services/geminiService';
 import { BottomNav } from '@/components/BottomNav';
 import { languages, getDefaultLanguage } from '@/data/languages';
@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useApiAccess } from '@/hooks/useApiAccess';
 
 type SubStyle = 'GOLD' | 'BLUE' | 'RUBY' | 'DIAMOND' | 'EMERALD';
 
@@ -25,6 +26,8 @@ interface HistoryItem {
 
 const VoicePage: React.FC = () => {
   const navigate = useNavigate();
+  const { appApiAllowed, ownApiAllowed, appApiReason, ownApiReason, defaultApiMode, isLoading: accessLoading } = useApiAccess();
+  
   const [text, setText] = useState('');
   const [voiceName, setVoiceName] = useState('PUCK');
   const [loading, setLoading] = useState(false);
@@ -35,6 +38,13 @@ const VoicePage: React.FC = () => {
   const [selectedLanguage, setSelectedLanguage] = useState(() => 
     localStorage.getItem('master_voice_language') || getDefaultLanguage()
   );
+  
+  // Set default API mode based on access
+  useEffect(() => {
+    if (!accessLoading) {
+      setApiType(defaultApiMode);
+    }
+  }, [accessLoading, defaultApiMode]);
   
   const [showOptions, setShowOptions] = useState(false);
   const [proSubtitles, setProSubtitles] = useState(false);
@@ -252,16 +262,49 @@ const VoicePage: React.FC = () => {
         
         {/* 1. API Switcher */}
         <div className="flex bg-white/5 backdrop-blur-xl p-1 rounded-[18px] border border-white/10 shadow-lg">
-          <button onClick={() => setApiType('app')} className={`flex-1 py-2.5 rounded-[14px] font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${apiType === 'app' ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md' : 'text-muted-foreground'}`}>
+          <button 
+            onClick={() => appApiAllowed && setApiType('app')} 
+            disabled={!appApiAllowed}
+            className={`flex-1 py-2.5 rounded-[14px] font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${
+              !appApiAllowed 
+                ? 'opacity-40 cursor-not-allowed' 
+                : apiType === 'app' 
+                  ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md' 
+                  : 'text-muted-foreground'
+            }`}
+            title={appApiReason}
+          >
+            {!appApiAllowed && <Lock className="w-3 h-3 text-rose-400" />}
             APP API <span className="text-[8px]">🔒</span>
           </button>
-          <button onClick={() => setApiType('own')} className={`flex-1 py-2.5 rounded-[14px] font-black text-[9px] uppercase tracking-widest transition-all ${apiType === 'own' ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md' : 'text-muted-foreground'}`}>
+          <button 
+            onClick={() => ownApiAllowed && setApiType('own')} 
+            disabled={!ownApiAllowed}
+            className={`flex-1 py-2.5 rounded-[14px] font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${
+              !ownApiAllowed 
+                ? 'opacity-40 cursor-not-allowed' 
+                : apiType === 'own' 
+                  ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md' 
+                  : 'text-muted-foreground'
+            }`}
+            title={ownApiReason}
+          >
+            {!ownApiAllowed && <Lock className="w-3 h-3 text-rose-400" />}
             OWN API
           </button>
         </div>
 
+        {/* Blocked API Notice */}
+        {!appApiAllowed && !ownApiAllowed && (
+          <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-3 text-center">
+            <p className="text-[10px] font-bold text-destructive">
+              API နှစ်မျိုးလုံး ပိတ်ထားပါသည်။ Admin ကို ဆက်သွယ်ပါ။
+            </p>
+          </div>
+        )}
+
         {/* 2. OWN API KEY BOX */}
-        {apiType === 'own' && (
+        {apiType === 'own' && ownApiAllowed && (
           <div className="bg-white/5 backdrop-blur-2xl rounded-[28px] p-6 border border-white/10 space-y-3 shadow-xl animate-in zoom-in-95 duration-300">
             <h4 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">GEMINI API KEY</h4>
             <div className="relative">
