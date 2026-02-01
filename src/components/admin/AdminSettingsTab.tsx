@@ -57,6 +57,40 @@ interface ToolSetting {
   credit_cost: number;
 }
 
+function normalizeApiModeAccess(input?: Partial<ApiModeAccess> | null): ApiModeAccess {
+  return {
+    all: input?.all ?? true,
+    premium: input?.premium ?? true,
+    pro: input?.pro ?? true,
+    free: input?.free ?? true,
+  };
+}
+
+function normalizeAccessControl(input?: Partial<AccessControl> | null): AccessControl {
+  return {
+    requireLogin: input?.requireLogin ?? true,
+    freeMode: input?.freeMode ?? false,
+    promotionMode: input?.promotionMode ?? false,
+    promotionDailyLimit: input?.promotionDailyLimit ?? 3,
+    promotionToolCount: input?.promotionToolCount ?? 3,
+    appApiAccess: normalizeApiModeAccess(input?.appApiAccess),
+    ownApiAccess: normalizeApiModeAccess(input?.ownApiAccess),
+  };
+}
+
+const OnOffBadge = ({ checked }: { checked: boolean }) => (
+  <span
+    className={
+      "min-w-10 text-center text-3xs px-2 py-0.5 rounded border " +
+      (checked
+        ? "bg-primary/10 text-primary border-primary/20"
+        : "bg-secondary/30 text-muted-foreground border-border/30")
+    }
+  >
+    {checked ? "ON" : "OFF"}
+  </span>
+);
+
 const AdminSettingsTab: React.FC = () => {
   const { toast } = useToast();
   const { getAppSettings, updateAppSettings } = useAdmin();
@@ -114,7 +148,7 @@ const AdminSettingsTab: React.FC = () => {
         setFeatures(featuresData.value as unknown as FeatureSettings);
       }
       if (accessData?.value) {
-        setAccessControl(accessData.value as unknown as AccessControl);
+        setAccessControl(normalizeAccessControl(accessData.value as unknown as Partial<AccessControl>));
       }
     }
 
@@ -133,7 +167,9 @@ const AdminSettingsTab: React.FC = () => {
 
   const handleSaveAccessControl = async () => {
     setSaving(true);
-    const { error } = await updateAppSettings("access_control", accessControl);
+    const normalized = normalizeAccessControl(accessControl);
+    setAccessControl(normalized);
+    const { error } = await updateAppSettings("access_control", normalized);
     
     if (error) {
       toast({
@@ -259,15 +295,22 @@ const AdminSettingsTab: React.FC = () => {
               <CardDescription className="text-2xs">Tools အသုံးပြုခွင့် ထိန်းချုပ်ရန်</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
+              <p className="text-3xs text-muted-foreground">
+                <span className="font-medium text-foreground">ON</span> = ခွင့်ပြု (အသုံးပြုလို့ရ) •{" "}
+                <span className="font-medium text-foreground">OFF</span> = ပိတ် (အသုံးမပြုလို့ရ)
+              </p>
               <div className="flex items-center justify-between">
                 <div>
                   <Label className="text-xs">Login Required</Label>
                   <p className="text-2xs text-muted-foreground">Tools သုံးရန် Login လိုအပ်မလား</p>
                 </div>
-                <Switch
-                  checked={accessControl.requireLogin}
-                  onCheckedChange={(checked) => setAccessControl({ ...accessControl, requireLogin: checked })}
-                />
+                <div className="flex items-center gap-2">
+                  <OnOffBadge checked={accessControl.requireLogin} />
+                  <Switch
+                    checked={accessControl.requireLogin}
+                    onCheckedChange={(checked) => setAccessControl({ ...accessControl, requireLogin: checked })}
+                  />
+                </div>
               </div>
 
               <div className="flex items-center justify-between">
@@ -278,10 +321,13 @@ const AdminSettingsTab: React.FC = () => {
                   </Label>
                   <p className="text-2xs text-muted-foreground">Tools အားလုံး Free ဖြစ်မယ်</p>
                 </div>
-                <Switch
-                  checked={accessControl.freeMode}
-                  onCheckedChange={(checked) => setAccessControl({ ...accessControl, freeMode: checked })}
-                />
+                <div className="flex items-center gap-2">
+                  <OnOffBadge checked={accessControl.freeMode} />
+                  <Switch
+                    checked={accessControl.freeMode}
+                    onCheckedChange={(checked) => setAccessControl({ ...accessControl, freeMode: checked })}
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -300,10 +346,13 @@ const AdminSettingsTab: React.FC = () => {
                   <Label className="text-xs">Promotion Active</Label>
                   <p className="text-2xs text-muted-foreground">Free trial ပေးမယ်</p>
                 </div>
-                <Switch
-                  checked={accessControl.promotionMode}
-                  onCheckedChange={(checked) => setAccessControl({ ...accessControl, promotionMode: checked })}
-                />
+                <div className="flex items-center gap-2">
+                  <OnOffBadge checked={accessControl.promotionMode} />
+                  <Switch
+                    checked={accessControl.promotionMode}
+                    onCheckedChange={(checked) => setAccessControl({ ...accessControl, promotionMode: checked })}
+                  />
+                </div>
               </div>
 
               {accessControl.promotionMode && (
@@ -353,52 +402,72 @@ const AdminSettingsTab: React.FC = () => {
             <CardContent className="space-y-2">
               <div className="flex items-center justify-between py-1 border-b border-border/30">
                 <Label className="text-xs font-semibold text-red-400">ALL (Master)</Label>
-                <Switch
-                  checked={accessControl.appApiAccess?.all ?? true}
-                  onCheckedChange={(checked) => setAccessControl({ 
-                    ...accessControl, 
-                    appApiAccess: { ...accessControl.appApiAccess, all: checked }
-                  })}
-                />
+                <div className="flex items-center gap-2">
+                  <OnOffBadge checked={accessControl.appApiAccess.all} />
+                  <Switch
+                    checked={accessControl.appApiAccess.all}
+                    onCheckedChange={(checked) =>
+                      setAccessControl({
+                        ...accessControl,
+                        appApiAccess: { ...accessControl.appApiAccess, all: checked },
+                      })
+                    }
+                  />
+                </div>
               </div>
               <div className="flex items-center justify-between py-1">
                 <Label className="text-xs flex items-center gap-1">
                   <Crown className="w-3 h-3 text-amber-400" />
                   Premium
                 </Label>
-                <Switch
-                  checked={accessControl.appApiAccess?.premium ?? true}
-                  onCheckedChange={(checked) => setAccessControl({ 
-                    ...accessControl, 
-                    appApiAccess: { ...accessControl.appApiAccess, premium: checked }
-                  })}
-                  disabled={!accessControl.appApiAccess?.all}
-                />
+                <div className="flex items-center gap-2">
+                  <OnOffBadge checked={accessControl.appApiAccess.premium} />
+                  <Switch
+                    checked={accessControl.appApiAccess.premium}
+                    onCheckedChange={(checked) =>
+                      setAccessControl({
+                        ...accessControl,
+                        appApiAccess: { ...accessControl.appApiAccess, premium: checked },
+                      })
+                    }
+                    disabled={!accessControl.appApiAccess.all}
+                  />
+                </div>
               </div>
               <div className="flex items-center justify-between py-1">
                 <Label className="text-xs flex items-center gap-1">
                   <Zap className="w-3 h-3 text-purple-400" />
                   Pro
                 </Label>
-                <Switch
-                  checked={accessControl.appApiAccess?.pro ?? true}
-                  onCheckedChange={(checked) => setAccessControl({ 
-                    ...accessControl, 
-                    appApiAccess: { ...accessControl.appApiAccess, pro: checked }
-                  })}
-                  disabled={!accessControl.appApiAccess?.all}
-                />
+                <div className="flex items-center gap-2">
+                  <OnOffBadge checked={accessControl.appApiAccess.pro} />
+                  <Switch
+                    checked={accessControl.appApiAccess.pro}
+                    onCheckedChange={(checked) =>
+                      setAccessControl({
+                        ...accessControl,
+                        appApiAccess: { ...accessControl.appApiAccess, pro: checked },
+                      })
+                    }
+                    disabled={!accessControl.appApiAccess.all}
+                  />
+                </div>
               </div>
               <div className="flex items-center justify-between py-1">
                 <Label className="text-xs text-muted-foreground">Free</Label>
-                <Switch
-                  checked={accessControl.appApiAccess?.free ?? true}
-                  onCheckedChange={(checked) => setAccessControl({ 
-                    ...accessControl, 
-                    appApiAccess: { ...accessControl.appApiAccess, free: checked }
-                  })}
-                  disabled={!accessControl.appApiAccess?.all}
-                />
+                <div className="flex items-center gap-2">
+                  <OnOffBadge checked={accessControl.appApiAccess.free} />
+                  <Switch
+                    checked={accessControl.appApiAccess.free}
+                    onCheckedChange={(checked) =>
+                      setAccessControl({
+                        ...accessControl,
+                        appApiAccess: { ...accessControl.appApiAccess, free: checked },
+                      })
+                    }
+                    disabled={!accessControl.appApiAccess.all}
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -415,52 +484,72 @@ const AdminSettingsTab: React.FC = () => {
             <CardContent className="space-y-2">
               <div className="flex items-center justify-between py-1 border-b border-border/30">
                 <Label className="text-xs font-semibold text-red-400">ALL (Master)</Label>
-                <Switch
-                  checked={accessControl.ownApiAccess?.all ?? true}
-                  onCheckedChange={(checked) => setAccessControl({ 
-                    ...accessControl, 
-                    ownApiAccess: { ...accessControl.ownApiAccess, all: checked }
-                  })}
-                />
+                <div className="flex items-center gap-2">
+                  <OnOffBadge checked={accessControl.ownApiAccess.all} />
+                  <Switch
+                    checked={accessControl.ownApiAccess.all}
+                    onCheckedChange={(checked) =>
+                      setAccessControl({
+                        ...accessControl,
+                        ownApiAccess: { ...accessControl.ownApiAccess, all: checked },
+                      })
+                    }
+                  />
+                </div>
               </div>
               <div className="flex items-center justify-between py-1">
                 <Label className="text-xs flex items-center gap-1">
                   <Crown className="w-3 h-3 text-amber-400" />
                   Premium
                 </Label>
-                <Switch
-                  checked={accessControl.ownApiAccess?.premium ?? true}
-                  onCheckedChange={(checked) => setAccessControl({ 
-                    ...accessControl, 
-                    ownApiAccess: { ...accessControl.ownApiAccess, premium: checked }
-                  })}
-                  disabled={!accessControl.ownApiAccess?.all}
-                />
+                <div className="flex items-center gap-2">
+                  <OnOffBadge checked={accessControl.ownApiAccess.premium} />
+                  <Switch
+                    checked={accessControl.ownApiAccess.premium}
+                    onCheckedChange={(checked) =>
+                      setAccessControl({
+                        ...accessControl,
+                        ownApiAccess: { ...accessControl.ownApiAccess, premium: checked },
+                      })
+                    }
+                    disabled={!accessControl.ownApiAccess.all}
+                  />
+                </div>
               </div>
               <div className="flex items-center justify-between py-1">
                 <Label className="text-xs flex items-center gap-1">
                   <Zap className="w-3 h-3 text-purple-400" />
                   Pro
                 </Label>
-                <Switch
-                  checked={accessControl.ownApiAccess?.pro ?? true}
-                  onCheckedChange={(checked) => setAccessControl({ 
-                    ...accessControl, 
-                    ownApiAccess: { ...accessControl.ownApiAccess, pro: checked }
-                  })}
-                  disabled={!accessControl.ownApiAccess?.all}
-                />
+                <div className="flex items-center gap-2">
+                  <OnOffBadge checked={accessControl.ownApiAccess.pro} />
+                  <Switch
+                    checked={accessControl.ownApiAccess.pro}
+                    onCheckedChange={(checked) =>
+                      setAccessControl({
+                        ...accessControl,
+                        ownApiAccess: { ...accessControl.ownApiAccess, pro: checked },
+                      })
+                    }
+                    disabled={!accessControl.ownApiAccess.all}
+                  />
+                </div>
               </div>
               <div className="flex items-center justify-between py-1">
                 <Label className="text-xs text-muted-foreground">Free</Label>
-                <Switch
-                  checked={accessControl.ownApiAccess?.free ?? true}
-                  onCheckedChange={(checked) => setAccessControl({ 
-                    ...accessControl, 
-                    ownApiAccess: { ...accessControl.ownApiAccess, free: checked }
-                  })}
-                  disabled={!accessControl.ownApiAccess?.all}
-                />
+                <div className="flex items-center gap-2">
+                  <OnOffBadge checked={accessControl.ownApiAccess.free} />
+                  <Switch
+                    checked={accessControl.ownApiAccess.free}
+                    onCheckedChange={(checked) =>
+                      setAccessControl({
+                        ...accessControl,
+                        ownApiAccess: { ...accessControl.ownApiAccess, free: checked },
+                      })
+                    }
+                    disabled={!accessControl.ownApiAccess.all}
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>
