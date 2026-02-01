@@ -90,15 +90,6 @@ const ThumbnailPage: React.FC = () => {
   const [customStroke, setCustomStroke] = useState('#000000');
   const [customGlow, setCustomGlow] = useState('rgba(251, 191, 36, 0.6)');
 
-  // Show loading while checking auth
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
   // Multiple Reference Images
   const [referenceImages, setReferenceImages] = useState<string[]>([]);
   const [logoImg, setLogoImg] = useState<string | null>(null);
@@ -114,6 +105,15 @@ const ThumbnailPage: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const bgImgRef = useRef<HTMLImageElement | null>(null);
   const logoImgRef = useRef<HTMLImageElement | null>(null);
+
+  // Show loading while checking auth - MUST be after all hooks
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   const RATIO_MAP: Record<AspectRatio, number> = {
     '1:1': 1,
