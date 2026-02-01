@@ -1,6 +1,17 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
+export interface TierApiLimit {
+  app: number | null; // null = unlimited, number = daily limit
+  own: number | null;
+}
+
+export interface TierLimits {
+  premium: TierApiLimit;
+  pro: TierApiLimit;
+  free: TierApiLimit;
+}
+
 interface ToolSetting {
   id: string;
   tool_id: string;
@@ -11,6 +22,7 @@ interface ToolSetting {
   is_premium: boolean;
   daily_free_limit: number;
   credit_cost: number;
+  tier_limits: TierLimits | null;
 }
 
 interface ApiModeAccess {
@@ -29,6 +41,12 @@ interface AccessControl {
   appApiAccess?: ApiModeAccess;
   ownApiAccess?: ApiModeAccess;
 }
+
+const defaultTierLimits: TierLimits = {
+  premium: { app: null, own: null },
+  pro: { app: null, own: null },
+  free: { app: null, own: null },
+};
 
 export function useToolSettings() {
   const [toolSettings, setToolSettings] = useState<ToolSetting[]>([]);
@@ -55,7 +73,12 @@ export function useToolSettings() {
       .order('tool_id');
 
     if (tools) {
-      setToolSettings(tools as ToolSetting[]);
+      // Normalize tier_limits for each tool
+      const normalizedTools = tools.map(tool => ({
+        ...tool,
+        tier_limits: tool.tier_limits ? (tool.tier_limits as unknown as TierLimits) : defaultTierLimits,
+      }));
+      setToolSettings(normalizedTools as ToolSetting[]);
     }
 
     // Fetch access control settings
@@ -74,6 +97,18 @@ export function useToolSettings() {
 
   const getToolSetting = (toolId: string): ToolSetting | undefined => {
     return toolSettings.find(t => t.tool_id === toolId);
+  };
+
+  const getToolTierLimit = (
+    toolId: string,
+    userPlan: 'free' | 'pro' | 'premium',
+    apiMode: 'app' | 'own'
+  ): number | null => {
+    const tool = getToolSetting(toolId);
+    if (!tool?.tier_limits) return null;
+    
+    const tierLimit = tool.tier_limits[userPlan];
+    return tierLimit ? tierLimit[apiMode] : null;
   };
 
   const canAccessTool = (
@@ -160,7 +195,6 @@ export function useToolSettings() {
       return { allowed: true };
     }
 
-    // NOTE: 'ALL' toggle is UI convenience only; tier toggles must always have effect.
     if (accessControl.freeMode && apiMode === 'app' && userPlan === 'free') {
       return { allowed: false, reason: 'Free Mode တွင် App API မသုံးနိုင်ပါ' };
     }
@@ -184,6 +218,7 @@ export function useToolSettings() {
     loading,
     fetchSettings,
     getToolSetting,
+    getToolTierLimit,
     canAccessTool,
     canUseApiMode,
   };

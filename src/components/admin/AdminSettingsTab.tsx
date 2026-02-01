@@ -11,6 +11,8 @@ import {
   Settings, Palette, Save, RefreshCw, Lock, Unlock, Crown,
   Zap, Edit3, Gift, Key, Server
 } from "lucide-react";
+import TierLimitsEditor from "./TierLimitsEditor";
+import type { TierLimits } from "@/hooks/useToolSettings";
 
 interface BrandingSettings {
   appName: string;
@@ -55,7 +57,14 @@ interface ToolSetting {
   is_premium: boolean;
   daily_free_limit: number;
   credit_cost: number;
+  tier_limits: TierLimits;
 }
+
+const defaultTierLimits: TierLimits = {
+  premium: { app: null, own: null },
+  pro: { app: null, own: null },
+  free: { app: null, own: null },
+};
 
 function normalizeApiModeAccess(input?: Partial<ApiModeAccess> | null): ApiModeAccess {
   return {
@@ -159,7 +168,13 @@ const AdminSettingsTab: React.FC = () => {
       .order('tool_id');
     
     if (tools) {
-      setToolSettings(tools as ToolSetting[]);
+      const normalizedTools = tools.map(tool => ({
+        ...tool,
+        tier_limits: tool.tier_limits 
+          ? (tool.tier_limits as unknown as TierLimits) 
+          : defaultTierLimits,
+      }));
+      setToolSettings(normalizedTools as ToolSetting[]);
     }
 
     setLoading(false);
@@ -223,6 +238,7 @@ const AdminSettingsTab: React.FC = () => {
         is_premium: tool.is_premium,
         daily_free_limit: tool.daily_free_limit,
         credit_cost: tool.credit_cost,
+        tier_limits: JSON.parse(JSON.stringify(tool.tier_limits)),
       })
       .eq('id', tool.id);
 
@@ -650,6 +666,15 @@ const AdminSettingsTab: React.FC = () => {
                         <span className="text-2xs">Premium Only</span>
                       </div>
                     </div>
+                    
+                    {/* Tier Limits Editor */}
+                    <TierLimitsEditor
+                      tierLimits={tool.tier_limits}
+                      onChange={(limits) => setToolSettings(prev => 
+                        prev.map(t => t.id === tool.id ? { ...t, tier_limits: limits } : t)
+                      )}
+                    />
+                    
                     <div className="flex gap-2">
                       <Button
                         size="sm"

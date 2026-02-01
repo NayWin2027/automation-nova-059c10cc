@@ -23,6 +23,8 @@ import { ChatDialog } from "@/components/ChatDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { useToolSettings } from "@/hooks/useToolSettings";
 import { useToast } from "@/hooks/use-toast";
+import { useAdmin } from "@/hooks/useAdmin";
+import ToolLimitsBadge from "@/components/ToolLimitsBadge";
 
 const defaultTools = [
   {
@@ -126,6 +128,7 @@ const Index = () => {
   const { toast } = useToast();
   const { user, profile, isAuthenticated, signOut, getToolUsageCount, recordToolUsage } = useAuth();
   const { toolSettings, accessControl, canAccessTool, loading: settingsLoading } = useToolSettings();
+  const { isAdmin } = useAdmin();
   
   const [activeTab, setActiveTab] = useState<"home" | "premium" | "settings">("home");
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
@@ -241,15 +244,23 @@ const Index = () => {
           const isPremiumTool = setting?.is_premium && !accessControl.freeMode;
           
           return (
-            <ToolCard
-              key={tool.id}
-              icon={tool.icon}
-              title={tool.title}
-              description={tool.description}
-              gradient={tool.gradient}
-              isPremium={isPremiumTool}
-              onClick={() => handleToolClick(tool)}
-            />
+            <div key={tool.id} className="relative">
+              {/* Admin-only tier limits badge */}
+              {isAdmin && setting?.tier_limits && (
+                <ToolLimitsBadge 
+                  tierLimits={setting.tier_limits} 
+                  toolTitle={tool.title} 
+                />
+              )}
+              <ToolCard
+                icon={tool.icon}
+                title={tool.title}
+                description={tool.description}
+                gradient={tool.gradient}
+                isPremium={isPremiumTool}
+                onClick={() => handleToolClick(tool)}
+              />
+            </div>
           );
         })}
       </div>

@@ -132,6 +132,7 @@ export type Database = {
           is_enabled: boolean | null
           is_premium: boolean | null
           requires_auth: boolean | null
+          tier_limits: Json | null
           title: string
           tool_id: string
           updated_at: string | null
@@ -145,6 +146,7 @@ export type Database = {
           is_enabled?: boolean | null
           is_premium?: boolean | null
           requires_auth?: boolean | null
+          tier_limits?: Json | null
           title: string
           tool_id: string
           updated_at?: string | null
@@ -158,6 +160,7 @@ export type Database = {
           is_enabled?: boolean | null
           is_premium?: boolean | null
           requires_auth?: boolean | null
+          tier_limits?: Json | null
           title?: string
           tool_id?: string
           updated_at?: string | null
