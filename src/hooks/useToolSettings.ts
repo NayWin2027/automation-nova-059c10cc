@@ -98,7 +98,6 @@ export function useToolSettings() {
     const apiAccess = apiMode === 'app' ? accessControl.appApiAccess : accessControl.ownApiAccess;
     
     if (apiAccess) {
-      // NOTE: 'ALL' toggle is UI convenience only; tier toggles must always have effect.
       // Free Mode rule: App API is not allowed for free/guest users.
       if (accessControl.freeMode && apiMode === 'app' && (!isAuthenticated || userPlan === 'free')) {
         return { allowed: false, reason: 'Free Mode တွင် App API မသုံးနိုင်ပါ' };
@@ -131,7 +130,12 @@ export function useToolSettings() {
       return { allowed: false, reason: 'Premium Plan လိုအပ်ပါသည်' };
     }
 
-    // Check daily limit in promotion mode
+    // **OWN API MODE BYPASS**: Own API users are NOT subject to daily limits
+    if (apiMode === 'own') {
+      return { allowed: true };
+    }
+
+    // Check daily limit in promotion mode (only for App API)
     if (accessControl.promotionMode && !accessControl.freeMode) {
       const limit = tool.daily_free_limit || accessControl.promotionDailyLimit;
       if (todayUsageCount >= limit) {

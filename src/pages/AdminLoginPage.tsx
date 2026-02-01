@@ -190,11 +190,16 @@ const AdminLoginPage: React.FC = () => {
               </Button>
             </form>
 
-            <div className="mt-6 text-center">
+            <div className="mt-6 text-center space-y-2">
               <p className="text-sm text-muted-foreground">
                 Need an admin account?{" "}
                 <Link to="/admin/register" className="text-cyan-500 hover:underline">
                   Register here
+                </Link>
+              </p>
+              <p className="text-sm text-muted-foreground">
+                <Link to="/login" className="text-cyan-500 hover:underline">
+                  ← User Login သို့ ပြန်သွားရန်
                 </Link>
               </p>
             </div>
