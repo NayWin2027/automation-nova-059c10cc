@@ -23,39 +23,61 @@ serve(async (req) => {
       // Image generation
       if (useOwnKey) {
         // Use Gemini image generation with own key
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${apiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: prompt }] }],
-              generationConfig: {
-                responseModalities: ["Text", "Image"],
-              },
-            }),
-          }
-        );
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error("[creator-ai] Gemini image error:", errorText);
-          throw new Error("Image generation failed");
-        }
-
-        const data = await response.json();
-        const parts = data.candidates?.[0]?.content?.parts || [];
+        // Try multiple model names as they change frequently
+        const imageModels = [
+          "gemini-2.0-flash-preview-image-generation",
+          "imagen-3.0-generate-002",
+          "gemini-2.0-flash-exp-image-generation",
+        ];
         
-        for (const part of parts) {
-          if (part.inlineData?.mimeType?.startsWith("image/")) {
-            return new Response(
-              JSON.stringify({ image: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}` }),
-              { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        let lastError = "";
+        
+        for (const model of imageModels) {
+          console.log("[creator-ai] Trying model:", model);
+          
+          try {
+            const response = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  contents: [{ parts: [{ text: prompt }] }],
+                  generationConfig: {
+                    responseModalities: ["Text", "Image"],
+                  },
+                }),
+              }
             );
+
+            if (response.ok) {
+              const data = await response.json();
+              const parts = data.candidates?.[0]?.content?.parts || [];
+              
+              for (const part of parts) {
+                if (part.inlineData?.mimeType?.startsWith("image/")) {
+                  console.log("[creator-ai] Image generated with model:", model);
+                  return new Response(
+                    JSON.stringify({ image: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}` }),
+                    { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                  );
+                }
+              }
+              lastError = "No image data in response";
+            } else {
+              const errorText = await response.text();
+              console.error(`[creator-ai] Model ${model} failed:`, errorText);
+              lastError = errorText;
+              // Continue to try next model
+            }
+          } catch (e) {
+            console.error(`[creator-ai] Model ${model} error:`, e);
+            lastError = e instanceof Error ? e.message : "Unknown error";
           }
         }
         
-        throw new Error("No image generated");
+        console.error("[creator-ai] All image models failed. Last error:", lastError);
+        throw new Error("Image generation failed - your API key may not have image generation enabled");
       } else {
         // Use Lovable AI Gateway for image generation
         const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
