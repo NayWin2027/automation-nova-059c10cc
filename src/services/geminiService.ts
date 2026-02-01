@@ -299,16 +299,40 @@ export async function translateText(
   fileData?: { data: string; mimeType: string }
 ): Promise<string | null> {
   try {
-    const { data, error } = await supabase.functions.invoke<{ text?: string; error?: string }>('novel-translate', {
+    const { data, error } = await supabase.functions.invoke<{ 
+      text?: string; 
+      error?: string; 
+      errorCode?: string;
+      retryAfter?: string;
+    }>('novel-translate', {
       body: { prompt, targetLang, apiKey, fileData }
     });
 
+    // Handle edge function errors (non-2xx responses)
     if (error) {
-      console.error('translateText error:', error);
+      console.error('translateText invoke error:', error);
+      // Try to extract the error body from the FunctionsHttpError
+      const errContext = (error as any).context;
+      if (errContext) {
+        try {
+          const errorBody = await errContext.json();
+          if (errorBody?.errorCode === 'QUOTA_EXCEEDED') {
+            throw new Error(`QUOTA_EXCEEDED: ${errorBody.error} (${errorBody.retryAfter})`);
+          }
+          throw new Error(errorBody?.error || error.message || 'Translation failed');
+        } catch (parseErr) {
+          // If parsing fails, throw original error
+          throw new Error(error.message || 'Translation failed');
+        }
+      }
       throw new Error(error.message || 'Translation failed');
     }
 
+    // Handle structured error in response body
     if (data?.error) {
+      if (data.errorCode === 'QUOTA_EXCEEDED') {
+        throw new Error(`QUOTA_EXCEEDED: ${data.error} (${data.retryAfter})`);
+      }
       throw new Error(data.error);
     }
 
