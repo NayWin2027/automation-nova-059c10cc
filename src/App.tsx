@@ -13,6 +13,7 @@ import VoicePage from "./pages/VoicePage";
 import CreatorPage from "./pages/CreatorPage";
 import StoryCreatorPage from "./pages/StoryCreatorPage";
 import NovelTransPage from "./pages/NovelTransPage";
+import ThumbnailPage from "./pages/ThumbnailPage";
 import AdminRegisterPage from "./pages/AdminRegisterPage";
 import AdminLoginPage from "./pages/AdminLoginPage";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
@@ -38,6 +39,7 @@ const App = () => (
           <Route path="/creator" element={<CreatorPage />} />
           <Route path="/story" element={<StoryCreatorPage />} />
           <Route path="/novel" element={<NovelTransPage />} />
+          <Route path="/thumbnail" element={<ThumbnailPage />} />
           {/* Admin Routes */}
           <Route path="/admin/register" element={<AdminRegisterPage />} />
           <Route path="/admin/login" element={<AdminLoginPage />} />

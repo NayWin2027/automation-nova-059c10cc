@@ -57,8 +57,7 @@ const defaultTools = [
     title: "Thumbnail",
     description: "AI Thumbnail ပုံရိုက်ခြင်း။",
     gradient: "violet" as const,
-    systemPrompt:
-      "You are a thumbnail design consultant. Help users create compelling thumbnail ideas and descriptions. Provide detailed visual descriptions that could be used to generate thumbnails. Respond in Burmese when the user writes in Burmese.",
+    route: "/thumbnail",
   },
   {
     id: "translate",

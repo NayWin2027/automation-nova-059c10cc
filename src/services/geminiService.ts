@@ -256,10 +256,23 @@ export async function generateStory(prompt: string, apiKey?: string): Promise<st
 }
 
 // Generate thumbnail/image using Creator AI
-export async function generateThumbnail(prompt: string, apiKey?: string): Promise<string | null> {
+export async function generateThumbnail(
+  prompt: string, 
+  apiKey?: string,
+  options?: {
+    referenceImgs?: string[];
+    aspectRatio?: string;
+  }
+): Promise<string | null> {
   try {
     const { data, error } = await supabase.functions.invoke<{ image?: string; error?: string }>('creator-ai', {
-      body: { prompt, apiKey, type: 'image' }
+      body: { 
+        prompt, 
+        apiKey, 
+        type: 'image',
+        referenceImages: options?.referenceImgs,
+        aspectRatio: options?.aspectRatio
+      }
     });
 
     if (error) {
