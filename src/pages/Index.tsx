@@ -147,13 +147,22 @@ const Index = () => {
   });
 
   const handleToolClick = async (tool: Tool) => {
-    const isPremium = profile?.plan === 'premium' || profile?.plan === 'pro';
+    const userPlan = profile?.plan || 'free';
+    // Keep existing behavior: treat Pro + Premium as "premium users" for premium-tool access.
+    const isPremium = userPlan === 'premium' || userPlan === 'pro';
     const usageCount = getToolUsageCount(tool.id);
-    
-    const access = canAccessTool(tool.id, isAuthenticated, isPremium, usageCount);
-    
-    if (!access.allowed) {
-      if (access.reason === 'Login ဝင်ရန်လိုအပ်ပါသည်') {
+
+    // IMPORTANT: if either API mode is enabled, allow the tool.
+    const accessApp = canAccessTool(tool.id, isAuthenticated, isPremium, usageCount, userPlan, 'app');
+    const accessOwn = canAccessTool(tool.id, isAuthenticated, isPremium, usageCount, userPlan, 'own');
+
+    const access = accessApp.allowed ? accessApp : accessOwn;
+    const anyAllowed = accessApp.allowed || accessOwn.allowed;
+
+    if (!anyAllowed) {
+      const reason = accessApp.reason || accessOwn.reason;
+
+      if (reason === 'Login ဝင်ရန်လိုအပ်ပါသည်') {
         toast({
           title: "🔐 Login Required",
           description: "Tool ကို အသုံးပြုရန် Login ဝင်ပါ",
@@ -161,10 +170,10 @@ const Index = () => {
         navigate('/login');
         return;
       }
-      
+
       toast({
         title: "⚠️ Access Denied",
-        description: access.reason,
+        description: reason,
         variant: "destructive",
       });
       return;
