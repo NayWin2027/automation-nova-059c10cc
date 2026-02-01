@@ -55,17 +55,8 @@ const NovelTransPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [translated, setTranslated] = useState('');
   const [charCount, setCharCount] = useState(0);
-
-  // Show loading while checking auth
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
   
-  // NEW FEATURES STATES
+  // NEW FEATURES STATES - ALL HOOKS MUST BE BEFORE ANY CONDITIONAL RETURN
   const [autoDrive, setAutoDrive] = useState(false);
   const [glossary, setGlossary] = useState('');
   const [showGlossary, setShowGlossary] = useState(false);
@@ -86,10 +77,6 @@ const NovelTransPage: React.FC = () => {
   });
 
   const MAX_INPUT_CHARS = 350000;
-  // IMPORTANT:
-  // - SESSION_MAX_CHARS: safety cap for auto-drive to avoid burning credits too fast.
-  // - STEP_SIZE: how many source chars we request per translation call.
-  //   Using 50,000 as a single request can exceed output limits and causes "fake 100%" progress.
   const SESSION_MAX_CHARS = 50000;
   const STEP_SIZE = 12000;
 
@@ -217,6 +204,15 @@ const NovelTransPage: React.FC = () => {
     
     return () => clearTimeout(timer);
   }, [translated, autoDrive, loading, startIndex, charCount, cooldownSeconds, inputMode, novelText]);
+
+  // IMPORTANT: authLoading early return MUST be after ALL hooks
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
