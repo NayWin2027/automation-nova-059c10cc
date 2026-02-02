@@ -344,6 +344,7 @@ export default function VideoRecapView() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const reqRef = useRef<number>();
+  const lastProgressUpdateRef = useRef<number>(0);
   const logoAngleRef = useRef(0);
   const tickerXRef = useRef(0);
   const tickerYRef = useRef(0);
@@ -676,11 +677,12 @@ export default function VideoRecapView() {
       });
 
     const pickMimeType = () => {
+      // Prefer VP8 for broader device compatibility.
       const candidates = [
-        "video/webm;codecs=vp9,opus",
         "video/webm;codecs=vp8,opus",
-        "video/webm;codecs=vp9",
+        "video/webm;codecs=vp9,opus",
         "video/webm;codecs=vp8",
+        "video/webm;codecs=vp9",
         "video/webm",
       ];
       for (const t of candidates) {
@@ -786,7 +788,7 @@ export default function VideoRecapView() {
     };
 
     // Start playback + recording
-    toast.info("🎬 Recording started! Preview ပြီးရင် auto-save ဖြစ်မယ်");
+    toast.info("🎬 Download recording started...");
     recorder.start(250);
 
     setupAudioAnalyzer();
@@ -796,18 +798,14 @@ export default function VideoRecapView() {
     video.play().catch(() => {});
     audio.play().catch(() => {});
 
-    // Track progress and auto-stop when audio ends
-    const totalDur = (Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : audioDuration) || video.duration || 10;
-
-    const progressInterval = window.setInterval(() => {
-      if (audio.currentTime > 0 && totalDur > 0) {
-        setProgress((audio.currentTime / totalDur) * 100);
-      }
-    }, 100);
+    // Used for progress + safety timeout
+    const totalDur =
+      (Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : audioDuration) ||
+      video.duration ||
+      10;
 
     // Stop when audio ends OR reaches end (some browsers don't fire ended reliably)
     const stopRecording = () => {
-      window.clearInterval(progressInterval);
       try {
         video.pause();
         audio.pause();
@@ -815,7 +813,21 @@ export default function VideoRecapView() {
         // ignore
       }
       try {
-        if (recorder.state === "recording") recorder.stop();
+        if (recorder.state === "recording") {
+          // Helps some browsers finalize a playable file (duration/headers).
+          try {
+            recorder.requestData();
+          } catch {
+            // ignore
+          }
+          window.setTimeout(() => {
+            try {
+              if (recorder.state === "recording") recorder.stop();
+            } catch {
+              cleanupAfterStop();
+            }
+          }, 80);
+        }
       } catch {
         cleanupAfterStop();
       }
@@ -1101,10 +1113,15 @@ export default function VideoRecapView() {
 
           const effectiveTime = audioBlobUrl && !audio.paused ? audio.currentTime : video.currentTime;
 
-          if (isPlaying) {
-            const totalDur = audioDuration || video.duration || 1;
-            setProgress((effectiveTime / totalDur) * 100);
-          }
+           // Avoid updating React state every frame (causes stutter). Throttle to ~10fps.
+           if (isPlaying) {
+             const now = performance.now();
+             if (now - lastProgressUpdateRef.current > 100) {
+               lastProgressUpdateRef.current = now;
+               const totalDur = audioDuration || video.duration || 1;
+               setProgress((effectiveTime / totalDur) * 100);
+             }
+           }
 
           let activeSegment = scriptSegments.find(
             (s) => effectiveTime >= (s.audioStart || 0) && effectiveTime < (s.audioEnd || Infinity),
@@ -2189,37 +2206,38 @@ export default function VideoRecapView() {
       </div>
 
       <div className="flex gap-3 pt-4 sticky bottom-4 z-50">
-        {/* Single unified button: PROCESS AI → PREVIEW (which auto-records and saves) */}
+        {!audioBlobUrl ? (
+          <button
+            onClick={handleProcess}
+            disabled={!videoSrc || analyzing}
+            className={`flex-1 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all ${
+              analyzing ? "bg-blue-600/80 text-white animate-pulse" : "bg-blue-600 text-white"
+            }`}
+          >
+            {analyzing ? "PROCESSING..." : "⚡ PROCESS AI"}
+          </button>
+        ) : (
+          <button
+            onClick={togglePlay}
+            disabled={analyzing || isExporting}
+            className={`flex-1 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all ${
+              isPlaying ? "bg-rose-600 text-white" : "bg-gradient-to-r from-emerald-600 to-teal-600 text-white"
+            }`}
+          >
+            {isPlaying ? "⏸ PAUSE" : "▶ PREVIEW"}
+          </button>
+        )}
+
         <button
-          onClick={() => {
-            if (!audioBlobUrl && !analyzing) {
-              handleProcess();
-            } else if (isExporting) {
-              // Already recording, do nothing (or could stop)
-              return;
-            } else {
-              // Start recording + preview (auto-save when done)
-              handleAutoSaveRecord();
-            }
-          }}
-          disabled={!videoSrc || analyzing}
-          className={`flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all ${
-            isExporting 
-              ? "bg-gradient-to-r from-rose-600 to-orange-600 text-white animate-pulse" 
-              : isPlaying 
-                ? "bg-rose-600 text-white" 
-                : audioBlobUrl 
-                  ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white" 
-                  : "bg-blue-600 text-white"
+          onClick={handleDownload}
+          disabled={!audioBlobUrl || analyzing || isExporting}
+          className={`w-[44%] py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all border ${
+            !audioBlobUrl || analyzing || isExporting
+              ? "bg-white/5 border-white/10 text-slate-500"
+              : "bg-white/10 border-white/20 text-white hover:bg-white/15 active:scale-[0.99]"
           }`}
         >
-          {analyzing
-            ? "PROCESSING..."
-            : isExporting
-              ? `🔴 RECORDING & SAVING... ${Math.round(progress)}%`
-              : audioBlobUrl
-                ? "▶ PREVIEW → AUTO SAVE"
-                : "⚡ PROCESS AI"}
+          {isExporting ? `⬇ EXPORTING... ${Math.round(progress)}%` : "⬇ DOWNLOAD"}
         </button>
       </div>
     </div>
