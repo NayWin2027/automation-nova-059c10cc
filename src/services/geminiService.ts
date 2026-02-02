@@ -436,7 +436,8 @@ export async function analyzeVideo(
     }
 
     // Step 2: Upload file in chunks through backend proxy
-    const CHUNK_SIZE = 8 * MB; // 8MB chunks
+    // REDUCED: 2MB chunks to avoid edge function memory limits (was 8MB)
+    const CHUNK_SIZE = 2 * MB;
     const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
     let uploadedBytes = 0;
     let fileUri = '';

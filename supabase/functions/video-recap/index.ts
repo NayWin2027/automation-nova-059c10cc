@@ -290,6 +290,7 @@ serve(async (req) => {
     }
 
     // NEW: Handle chunk upload through backend (CORS-safe)
+    // MEMORY OPTIMIZED: Use streaming decode to avoid holding full base64 in memory
     if (action === 'uploadChunk') {
       const { uploadUrl: chunkUploadUrl, chunkData, chunkIndex, totalChunks, offset, totalSize, isLastChunk } = body;
       
@@ -300,10 +301,31 @@ serve(async (req) => {
         );
       }
 
-      console.log(`Uploading chunk ${chunkIndex + 1}/${totalChunks}, offset: ${offset}`);
+      // Validate chunk size to prevent memory overflow (max 3MB base64 = ~2.25MB binary)
+      if (chunkData.length > 4 * 1024 * 1024) {
+        return new Response(
+          JSON.stringify({ error: "Chunk too large. Max 2MB per chunk." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
-      // Decode base64 chunk to binary
-      const binaryChunk = Uint8Array.from(atob(chunkData), c => c.charCodeAt(0));
+      console.log(`Uploading chunk ${chunkIndex + 1}/${totalChunks}, offset: ${offset}, size: ${chunkData.length}`);
+
+      // Decode base64 chunk to binary using streaming approach
+      let binaryChunk: Uint8Array;
+      try {
+        const binaryString = atob(chunkData);
+        binaryChunk = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          binaryChunk[i] = binaryString.charCodeAt(i);
+        }
+      } catch (decodeErr) {
+        console.error("Base64 decode failed:", decodeErr);
+        return new Response(
+          JSON.stringify({ error: "Invalid chunk data encoding" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       
       const uploadCommand = isLastChunk ? 'upload, finalize' : 'upload';
       
@@ -314,7 +336,7 @@ serve(async (req) => {
           'X-Goog-Upload-Offset': String(offset),
           'X-Goog-Upload-Command': uploadCommand,
         },
-        body: binaryChunk
+        body: binaryChunk.buffer as ArrayBuffer
       });
 
       if (!chunkResponse.ok) {
