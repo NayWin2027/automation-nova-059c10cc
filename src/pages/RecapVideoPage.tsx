@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { analyzeVideo, generateSpeech } from "../services/geminiService";
+import { useAuthGuard } from "../hooks/useAuthGuard";
+import { Loader2 } from "lucide-react";
 
 // --- DATA SETS ---
 const VOICES = [
@@ -215,6 +217,9 @@ const createWavBlob = (base64Audio: string) => {
 };
 
 export default function VideoRecapView() {
+  // Auth guard - redirects to login if not authenticated
+  const { isLoading: authLoading, isAllowed } = useAuthGuard("video-recap");
+
   const [file, setFile] = useState<File | null>(null);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -829,6 +834,15 @@ export default function VideoRecapView() {
     isVideoReady,
     audioBlobUrl,
   ]);
+
+  // Show loading spinner while auth is checking
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-5 pb-32 max-w-lg mx-auto px-2 animate-in fade-in duration-500">
