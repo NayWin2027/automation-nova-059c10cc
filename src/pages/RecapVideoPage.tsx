@@ -600,54 +600,350 @@ export default function VideoRecapView() {
     setProgress(val);
   };
 
-  const handleExport = async () => {
-    if (!videoRef.current || !canvasRef.current || !audioRef.current) return;
+  // DOWNLOAD: Pre-render frames at LOCKED timing for perfect sync (no real-time playback drift)
+  const handleDownload = async () => {
+    if (!videoRef.current || !canvasRef.current || !audioRef.current || !audioBlobUrl) return;
+    
     setIsExporting(true);
-    setIsPlaying(true);
-    videoRef.current.currentTime = 0;
-    audioRef.current.currentTime = 0;
-    videoRef.current.play();
-    audioRef.current.play();
-    const canvasStream = canvasRef.current.captureStream(30);
-    let audioStream;
-    try {
-      const stream = (audioRef.current as any).captureStream
-        ? (audioRef.current as any).captureStream()
-        : (audioRef.current as any).mozCaptureStream();
-      audioStream = stream;
-    } catch (e) {
-      console.warn("Audio capture failed");
+    setProgress(0);
+    
+    const video = videoRef.current;
+    const audio = audioRef.current;
+    const canvas = canvasRef.current;
+    
+    // Create an offscreen canvas for rendering
+    const exportCanvas = document.createElement("canvas");
+    exportCanvas.width = canvas.width || 1280;
+    exportCanvas.height = canvas.height || 720;
+    const exportCtx = exportCanvas.getContext("2d", { alpha: false });
+    
+    if (!exportCtx) {
+      toast.error("Canvas context creation failed");
+      setIsExporting(false);
+      return;
     }
-    const tracks = [...canvasStream.getVideoTracks()];
-    if (audioStream) tracks.push(...audioStream.getAudioTracks());
-    const combinedStream = new MediaStream(tracks);
-    const recorder = new MediaRecorder(combinedStream, { mimeType: "video/webm;codecs=vp9" });
-    mediaRecorderRef.current = recorder;
+    
+    const totalDuration = audioDuration || video.duration || 10;
+    const fps = 30;
+    const totalFrames = Math.ceil(totalDuration * fps);
+    const frameInterval = 1000 / fps;
+    
+    // Setup MediaRecorder on export canvas
+    const stream = exportCanvas.captureStream(fps);
+    
+    // Add audio track from audio element
+    let audioStream: MediaStream | null = null;
+    try {
+      audio.currentTime = 0;
+      audioStream = (audio as any).captureStream?.() || (audio as any).mozCaptureStream?.();
+      if (audioStream) {
+        audioStream.getAudioTracks().forEach(track => stream.addTrack(track));
+      }
+    } catch (e) {
+      console.warn("Audio capture not supported, video will be silent");
+    }
+    
+    const recorder = new MediaRecorder(stream, { 
+      mimeType: "video/webm;codecs=vp9",
+      videoBitsPerSecond: 8000000 
+    });
+    
     recordedChunksRef.current = [];
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) recordedChunksRef.current.push(e.data);
     };
+    
     recorder.onstop = () => {
       const blob = new Blob(recordedChunksRef.current, { type: "video/webm" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
       a.download = `MASTER_AI_VIDEO_${Date.now()}.webm`;
+      document.body.appendChild(a);
       a.click();
-
-      // Confirm success + deduct credits ONLY after export produced a file.
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      // Confirm success + deduct credits ONLY after download
       if (!didConfirmSuccessRef.current) {
         didConfirmSuccessRef.current = true;
         const customKeyForConfirm = apiType === "own" ? apiKey : undefined;
         confirmRecapSuccess(customKeyForConfirm);
-        toast.success("✅ Export အောင်မြင်ပါတယ် (Credits က export success အပြီးမှသာ ဖြတ်ပါတယ်)");
+        toast.success("✅ Download အောင်မြင်ပါတယ်!");
       }
-
+      
       setIsExporting(false);
       setIsPlaying(false);
+      setProgress(100);
     };
-    audioRef.current.onended = () => recorder.stop();
+    
+    // Start recording
     recorder.start();
+    audio.currentTime = 0;
+    await audio.play();
+    
+    // Frame-by-frame render with LOCKED timing
+    let frameIndex = 0;
+    const freezeCanvas = freezeCanvasRef.current || document.createElement("canvas");
+    freezeCanvas.width = exportCanvas.width;
+    freezeCanvas.height = exportCanvas.height;
+    const freezeCtx = freezeCanvas.getContext("2d", { alpha: false });
+    let wasFreeze = false;
+    
+    const renderFrame = () => {
+      if (frameIndex >= totalFrames || !isExporting) {
+        audio.pause();
+        recorder.stop();
+        return;
+      }
+      
+      const currentTime = frameIndex / fps;
+      setProgress((frameIndex / totalFrames) * 100);
+      
+      // Sync video to current frame time
+      video.currentTime = currentTime % video.duration;
+      
+      // Render using the same logic as preview
+      renderFrameToCanvas(exportCtx, freezeCtx!, freezeCanvas, video, currentTime, wasFreeze, (newWasFreeze) => {
+        wasFreeze = newWasFreeze;
+      });
+      
+      frameIndex++;
+      setTimeout(renderFrame, frameInterval / 3); // Faster than real-time
+    };
+    
+    // Wait for video to be ready, then start
+    video.currentTime = 0;
+    await new Promise(resolve => setTimeout(resolve, 100));
+    renderFrame();
+  };
+  
+  // Unified frame render function (same logic for preview and export)
+  const renderFrameToCanvas = (
+    ctx: CanvasRenderingContext2D,
+    freezeCtx: CanvasRenderingContext2D,
+    freezeCanvas: HTMLCanvasElement,
+    video: HTMLVideoElement,
+    effectiveTime: number,
+    wasFreezePrev: boolean,
+    setWasFreeze: (val: boolean) => void
+  ) => {
+    const targetW = ctx.canvas.width;
+    const targetH = ctx.canvas.height;
+    
+    // Find active segment
+    let activeSegment = scriptSegments.find(
+      (s) => effectiveTime >= (s.audioStart || 0) && effectiveTime < (s.audioEnd || Infinity),
+    );
+    if (!activeSegment && scriptSegments.length > 0 && effectiveTime >= (scriptSegments[scriptSegments.length - 1].audioEnd || 0)) {
+      activeSegment = scriptSegments[scriptSegments.length - 1];
+    }
+    
+    let isFreezeMode = false;
+    let crossfadeAlpha = 1.0; // 1 = full video, 0 = full photo
+    
+    if (activeSegment) {
+      const segmentRelativeTime = effectiveTime - (activeSegment.audioStart || 0);
+      const CYCLE_DUR = 6.0;
+      const cycleTime = segmentRelativeTime % CYCLE_DUR;
+      
+      // Smooth 6-second cycle: 0-3s video, 3-6s photo zoom
+      isFreezeMode = cycleTime >= 3.0 && motionZoom;
+      
+      // SMOOTH CROSSFADE (0.4s transition)
+      const FADE_DUR = 0.4;
+      if (cycleTime >= 3.0 - FADE_DUR && cycleTime < 3.0) {
+        // Transitioning TO photo
+        crossfadeAlpha = 1.0 - ((cycleTime - (3.0 - FADE_DUR)) / FADE_DUR);
+      } else if (cycleTime >= 6.0 - FADE_DUR || cycleTime < FADE_DUR) {
+        // Transitioning TO video (wrap-around)
+        if (cycleTime >= 6.0 - FADE_DUR) {
+          crossfadeAlpha = (cycleTime - (6.0 - FADE_DUR)) / FADE_DUR;
+        } else {
+          crossfadeAlpha = 0.5 + (cycleTime / FADE_DUR) * 0.5;
+        }
+      } else {
+        crossfadeAlpha = isFreezeMode ? 0.0 : 1.0;
+      }
+    }
+    
+    // Easing for smoother feel
+    const easeInOut = (t: number) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    crossfadeAlpha = easeInOut(Math.max(0, Math.min(1, crossfadeAlpha)));
+    
+    // Calculate video dimensions
+    const vw = video.videoWidth || 1280;
+    const vh = video.videoHeight || 720;
+    let scale = smartZoom ? Math.max(targetW / vw, targetH / vh) : Math.min(targetW / vw, targetH / vh);
+    const dw = vw * scale;
+    const dh = vh * scale;
+    const dx = (targetW - dw) / 2;
+    const dy = (targetH - dh) / 2;
+    
+    // Clear and fill black
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, targetW, targetH);
+    
+    ctx.save();
+    if (flipVideo) {
+      ctx.translate(targetW, 0);
+      ctx.scale(-1, 1);
+    }
+    
+    // Capture freeze frame at transition point
+    const needsCapture = (isFreezeMode && !wasFreezePrev) || 
+      (freezeCanvas.width !== targetW || freezeCanvas.height !== targetH);
+    
+    if (needsCapture && freezeCtx) {
+      freezeCanvas.width = targetW;
+      freezeCanvas.height = targetH;
+      freezeCtx.fillStyle = "#000";
+      freezeCtx.fillRect(0, 0, targetW, targetH);
+      if (flipVideo) {
+        freezeCtx.save();
+        freezeCtx.translate(targetW, 0);
+        freezeCtx.scale(-1, 1);
+      }
+      freezeCtx.drawImage(video, dx, dy, dw, dh);
+      if (flipVideo) freezeCtx.restore();
+    }
+    
+    // Draw video layer with crossfade
+    if (crossfadeAlpha > 0.01) {
+      ctx.globalAlpha = crossfadeAlpha;
+      ctx.drawImage(video, dx, dy, dw, dh);
+    }
+    
+    // Draw photo zoom layer with crossfade
+    if (crossfadeAlpha < 0.99 && motionZoom) {
+      const segmentRelativeTime = activeSegment ? (effectiveTime - (activeSegment.audioStart || 0)) : 0;
+      const cycleTime = segmentRelativeTime % 6.0;
+      const progressInFreeze = cycleTime >= 3.0 ? (cycleTime - 3.0) / 3.0 : 0;
+      
+      // Cinematic Ken Burns zoom with easing
+      const easedProgress = easeInOut(progressInFreeze);
+      const currentZoom = 1.0 + easedProgress * 0.2; // Subtle 1.2x zoom
+      
+      const zoomedW = targetW * currentZoom;
+      const zoomedH = targetH * currentZoom;
+      const centerX = (targetW - zoomedW) / 2;
+      const centerY = (targetH - zoomedH) / 2;
+      
+      ctx.globalAlpha = 1.0 - crossfadeAlpha;
+      ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH, centerX, centerY, zoomedW, zoomedH);
+    }
+    
+    ctx.globalAlpha = 1.0;
+    ctx.restore();
+    
+    // Apply color grading
+    if (autoColor) {
+      ctx.fillStyle = "rgba(255, 160, 0, 0.08)";
+      ctx.globalCompositeOperation = "overlay";
+      ctx.fillRect(0, 0, targetW, targetH);
+      ctx.globalCompositeOperation = "source-over";
+    }
+    
+    // Film grain
+    if (filmGrain) {
+      const noiseCount = targetW * targetH * 0.003;
+      ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
+      for (let i = 0; i < noiseCount; i++) {
+        ctx.fillRect(Math.random() * targetW, Math.random() * targetH, 1, 1);
+      }
+    }
+    
+    // Blur band
+    if (blurEnabled) {
+      const by = targetH * (blurY / 100);
+      const bh = targetH * (blurH / 100);
+      ctx.fillStyle = `rgba(0,0,0,${blurOpacity})`;
+      ctx.fillRect(0, by, targetW, bh);
+    }
+    
+    // Subtitle rendering
+    if (activeSegment) {
+      const chunk = String(activeSegment.text || "")
+        .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, "")
+        .replace(/\[[^\]]*\d[^\]]*\]/g, "")
+        .replace(/```[\s\S]*?```/g, "")
+        .replace(/[•●◆▶️➡️]+/g, " ")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+      
+      if (chunk) {
+        const by = targetH * (blurY / 100);
+        const bh = targetH * (blurH / 100);
+        const bandPadding = Math.max(8, targetH * 0.015);
+        const clipY = by + bandPadding;
+        const clipH = Math.max(1, bh - bandPadding * 2);
+        const ty = clipY + clipH / 2;
+        const maxWidth = targetW * 0.92;
+        const maxLines = 2;
+        const lineSpacing = 1.15;
+        
+        let fs = targetH * 0.038 * subScale;
+        const minFs = targetH * 0.022;
+        
+        const wrapText = (text: string, fontSize: number): string[] => {
+          ctx.font = `900 ${fontSize}px 'Padauk', sans-serif`;
+          const words = text.split(/\s+/).filter(Boolean);
+          const lines: string[] = [];
+          let currentLine = "";
+          for (const word of words) {
+            const testLine = currentLine ? `${currentLine} ${word}` : word;
+            if (ctx.measureText(testLine).width > maxWidth && currentLine) {
+              lines.push(currentLine);
+              currentLine = word;
+            } else {
+              currentLine = testLine;
+            }
+          }
+          if (currentLine) lines.push(currentLine);
+          return lines;
+        };
+        
+        let wrappedLines = wrapText(chunk, fs);
+        while (wrappedLines.length > maxLines && fs > minFs) {
+          fs -= 1;
+          wrappedLines = wrapText(chunk, fs);
+        }
+        const finalLines = wrappedLines.slice(0, maxLines);
+        
+        ctx.font = `900 ${fs}px 'Padauk', sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.shadowColor = "rgba(0,0,0,0.85)";
+        ctx.shadowBlur = 5;
+        
+        if (subColor === "GOLD") {
+          const g = ctx.createLinearGradient(0, ty - fs, 0, ty + fs);
+          g.addColorStop(0, "#FFD700");
+          g.addColorStop(1, "#B8860B");
+          ctx.fillStyle = g;
+        } else if (subColor === "NEON") {
+          ctx.fillStyle = "#00FFFF";
+          ctx.shadowBlur = 15;
+          ctx.shadowColor = "#00FFFF";
+        } else {
+          ctx.fillStyle = SUB_COLORS.find((c) => c.id === subColor)?.hex || "white";
+        }
+        
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, clipY, targetW, clipH);
+        ctx.clip();
+        
+        const totalTextHeight = finalLines.length * fs * lineSpacing;
+        const startY = ty - (totalTextHeight / 2) + (fs * lineSpacing / 2);
+        finalLines.forEach((l, i) => {
+          ctx.fillText(l, targetW / 2, startY + i * fs * lineSpacing);
+        });
+        ctx.restore();
+      }
+    }
+    
+    setWasFreeze(isFreezeMode);
   };
 
   useEffect(() => {
@@ -704,7 +1000,7 @@ export default function VideoRecapView() {
 
           let isFreezeMode = false;
           let segmentRelativeTime = 0;
-          let opacityRamp = 1.0;
+          let crossfadeAlpha = 1.0; // 1 = full video, 0 = full photo
 
           if (activeSegment) {
             video.playbackRate = videoSpeed;
@@ -712,18 +1008,29 @@ export default function VideoRecapView() {
             const CYCLE_DUR = 6.0;
             const cycleTime = segmentRelativeTime % CYCLE_DUR;
 
-            // --- ENHANCED CYCLE LOGIC (3S Video / 3S Photo Zoom) ---
+            // --- SMOOTH 6S CYCLE (3S Video / 3S Photo Zoom) ---
             isFreezeMode = cycleTime >= 3.0 && motionZoom;
 
-            // Transition Smoothing (0.5s ramp)
-            if (cycleTime >= 2.5 && cycleTime < 3.0) {
-              opacityRamp = 1.0 - (cycleTime - 2.5) / 0.5; // Fade out video
-            } else if (cycleTime >= 5.5 && cycleTime < 6.0) {
-              opacityRamp = (cycleTime - 5.5) / 0.5; // Fade in video
+            // SMOOTH CROSSFADE (0.4s transition for professional look)
+            const FADE_DUR = 0.4;
+            if (cycleTime >= 3.0 - FADE_DUR && cycleTime < 3.0) {
+              // Transitioning TO photo
+              crossfadeAlpha = 1.0 - ((cycleTime - (3.0 - FADE_DUR)) / FADE_DUR);
+            } else if (cycleTime >= 6.0 - FADE_DUR) {
+              // Transitioning TO video (end of cycle)
+              crossfadeAlpha = (cycleTime - (6.0 - FADE_DUR)) / FADE_DUR;
+            } else if (cycleTime < FADE_DUR && segmentRelativeTime > FADE_DUR) {
+              // Continuing from previous cycle
+              crossfadeAlpha = 0.5 + (cycleTime / FADE_DUR) * 0.5;
+            } else {
+              crossfadeAlpha = isFreezeMode ? 0.0 : 1.0;
             }
 
+            // Easing for smoother feel
+            const easeInOut = (t: number) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+            crossfadeAlpha = easeInOut(Math.max(0, Math.min(1, crossfadeAlpha)));
+
             if (!isFreezeMode && isPlaying && scriptSegments.length > 0) {
-              // PRECISE MATCHING: Ensure the video subject matches the narration
               const targetVideoTime = activeSegment.time + (segmentRelativeTime % video.duration);
               const drift = Math.abs(video.currentTime - targetVideoTime);
               if (drift > 0.1) video.currentTime = targetVideoTime;
@@ -754,42 +1061,40 @@ export default function VideoRecapView() {
           const dx = (targetW - dw) / 2;
           const dy = (targetH - dh) / 2;
 
-          // RENDER VIDEO LAYER
-          ctx.globalAlpha = isFreezeMode ? 0 : opacityRamp;
-          ctx.drawImage(video, dx, dy, dw, dh);
+          // Capture freeze frame at transition (or if empty)
+          const needsCapture = (isFreezeMode && !wasFreezeModeRef.current) || 
+            !freezeCanvas.width || !freezeCanvas.height;
+          
+          if (needsCapture) {
+            freezeCanvas.width = targetW;
+            freezeCanvas.height = targetH;
+            freezeCtx.fillStyle = "#000";
+            freezeCtx.fillRect(0, 0, targetW, targetH);
+            freezeCtx.drawImage(video, dx, dy, dw, dh);
+          }
 
-          // RENDER PHOTO ZOOM LAYER
-          if (isFreezeMode || opacityRamp < 1.0) {
-            // Capture freeze frame exactly when entering photo mode (prevents black screen)
-            // Also capture if freezeCanvas is empty (first frame insurance)
-            const freezeCanvasEmpty = !freezeCanvas.width || !freezeCanvas.height || 
-              (freezeCtx.getImageData(0, 0, 1, 1).data[3] === 0);
-            
-            if ((isFreezeMode && !wasFreezeModeRef.current) || freezeCanvasEmpty) {
-              // Ensure freezeCanvas matches target size
-              if (freezeCanvas.width !== targetW || freezeCanvas.height !== targetH) {
-                freezeCanvas.width = targetW;
-                freezeCanvas.height = targetH;
-              }
-              freezeCtx.clearRect(0, 0, targetW, targetH);
-              // Draw current video frame to freeze canvas
-              freezeCtx.drawImage(video, dx, dy, dw, dh);
-            }
+          // RENDER VIDEO LAYER with crossfade
+          if (crossfadeAlpha > 0.01) {
+            ctx.globalAlpha = crossfadeAlpha;
+            ctx.drawImage(video, dx, dy, dw, dh);
+          }
 
+          // RENDER PHOTO ZOOM LAYER with crossfade
+          if (crossfadeAlpha < 0.99 && motionZoom) {
             const cycleTime = segmentRelativeTime % 6.0;
-            const progressInFreeze = isFreezeMode ? (cycleTime - 3.0) / 3.0 : 0;
+            const progressInFreeze = cycleTime >= 3.0 ? (cycleTime - 3.0) / 3.0 : 0;
 
-            // --- CINEMATIC PHOTO ZOOM (Easing for smoothness) ---
-            const easedProgress = progressInFreeze * progressInFreeze * (3 - 2 * progressInFreeze);
-            const currentZoom = 1.0 + easedProgress * 0.25; // Zoom up to 1.25x
+            // Cinematic Ken Burns zoom with easing
+            const easeInOut = (t: number) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+            const easedProgress = easeInOut(progressInFreeze);
+            const currentZoom = 1.0 + easedProgress * 0.2; // Subtle 1.2x zoom
 
             const zoomedW = targetW * currentZoom;
             const zoomedH = targetH * currentZoom;
             const centerX = (targetW - zoomedW) / 2;
             const centerY = (targetH - zoomedH) / 2;
 
-            ctx.globalAlpha = isFreezeMode ? 1.0 : 1.0 - opacityRamp;
-            // Always draw from freezeCanvas - it should have valid content now
+            ctx.globalAlpha = 1.0 - crossfadeAlpha;
             ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH, centerX, centerY, zoomedW, zoomedH);
           }
 
@@ -1785,11 +2090,11 @@ export default function VideoRecapView() {
               : "⚡ PROCESS AI"}
         </button>
         <button
-          onClick={handleExport}
+          onClick={handleDownload}
           disabled={!audioBlobUrl || isExporting || isPlaying}
-          className="flex-1 py-4 rounded-2xl bg-[#1a202c] border border-white/10 text-white font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all disabled:opacity-50"
+          className="flex-1 py-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 border border-emerald-400/30 text-white font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all disabled:opacity-50 hover:from-emerald-500 hover:to-teal-500"
         >
-          {isExporting ? "EXPORTING..." : "📥 EXPORT"}
+          {isExporting ? `RENDERING... ${Math.round(progress)}%` : "📥 DOWNLOAD"}
         </button>
       </div>
     </div>
