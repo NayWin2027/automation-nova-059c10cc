@@ -342,3 +342,118 @@ export async function translateText(
     throw err;
   }
 }
+
+// Analyze video for Recap Video tool
+export async function analyzeVideo(
+  file: File,
+  mimeType: string,
+  targetLang: string,
+  apiKey?: string
+): Promise<string> {
+  try {
+    // For smaller files (under 15MB), use base64 inline data
+    if (file.size < 15 * 1024 * 1024) {
+      const base64 = await fileToBase64(file);
+      const videoUrl = `data:${mimeType};base64,${base64}`;
+      
+      const { data, error } = await supabase.functions.invoke<{ recap?: string; error?: string }>('video-recap', {
+        body: { 
+          videoUrl, 
+          targetLang, 
+          useOwnApi: !!apiKey, 
+          apiKey 
+        }
+      });
+
+      if (error) {
+        console.error('analyzeVideo error:', error);
+        throw new Error(error.message || 'Video analysis failed');
+      }
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      return data?.recap || '';
+    }
+
+    // For larger files, use resumable upload flow
+    // Step 1: Initialize upload
+    const { data: initData, error: initError } = await supabase.functions.invoke<{ uploadUrl?: string; error?: string }>('video-recap', {
+      body: {
+        action: 'initUpload',
+        fileName: file.name,
+        fileSize: file.size,
+        mimeType: mimeType,
+        useOwnApi: !!apiKey,
+        apiKey
+      }
+    });
+
+    if (initError || initData?.error) {
+      throw new Error(initData?.error || initError?.message || 'Failed to initialize upload');
+    }
+
+    if (!initData?.uploadUrl) {
+      throw new Error('No upload URL received');
+    }
+
+    // Step 2: Upload file directly to Google
+    const uploadResponse = await fetch(initData.uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': mimeType,
+        'X-Goog-Upload-Offset': '0',
+        'X-Goog-Upload-Command': 'upload, finalize'
+      },
+      body: file
+    });
+
+    if (!uploadResponse.ok) {
+      throw new Error('File upload failed');
+    }
+
+    const uploadResult = await uploadResponse.json();
+    const fileUri = uploadResult.file?.uri;
+    const fileName = uploadResult.file?.name;
+
+    if (!fileUri) {
+      throw new Error('No file URI received after upload');
+    }
+
+    // Step 3: Analyze the uploaded file
+    const { data: analyzeData, error: analyzeError } = await supabase.functions.invoke<{ recap?: string; error?: string }>('video-recap', {
+      body: {
+        action: 'analyzeFile',
+        fileUri,
+        fileName,
+        targetLang,
+        useOwnApi: !!apiKey,
+        apiKey
+      }
+    });
+
+    if (analyzeError || analyzeData?.error) {
+      throw new Error(analyzeData?.error || analyzeError?.message || 'Video analysis failed');
+    }
+
+    return analyzeData?.recap || '';
+  } catch (err) {
+    console.error('analyzeVideo error:', err);
+    throw err;
+  }
+}
+
+// Helper to convert File to base64
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.split(',')[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
