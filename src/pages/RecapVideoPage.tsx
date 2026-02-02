@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { analyzeVideo, generateSpeech } from "../services/geminiService";
 import { useAuthGuard } from "../hooks/useAuthGuard";
-import { Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 // --- DATA SETS ---
 const VOICES = [
@@ -152,32 +152,38 @@ interface ScriptSegment {
   audioEnd?: number;
 }
 
-const AccordionItem = ({
-  title,
-  isOpen,
-  onClick,
-  children,
-}: {
+interface AccordionItemProps {
   title: string;
   isOpen: boolean;
   onClick: () => void;
   children?: React.ReactNode;
-}) => (
-  <div className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0a0a] transition-all duration-300">
-    <button
-      onClick={onClick}
-      className="w-full p-4 flex justify-between items-center bg-white/5 hover:bg-white/10 active:bg-white/20 transition-colors"
-    >
-      <span className="text-[9px] font-black text-white uppercase tracking-widest">{title}</span>
-      <span className={`text-white transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`}>▼</span>
-    </button>
+}
+
+// Fix: silence "Function components cannot be given refs" warnings by forwarding any ref.
+const AccordionItem = React.forwardRef<HTMLDivElement, AccordionItemProps>(function AccordionItem(
+  { title, isOpen, onClick, children },
+  ref
+) {
+  return (
     <div
-      className={`transition-[max-height] duration-500 ease-in-out overflow-hidden ${isOpen ? "max-h-[800px]" : "max-h-0"}`}
+      ref={ref}
+      className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0a0a] transition-all duration-300"
     >
-      <div className="p-4 space-y-4 border-t border-white/5">{children}</div>
+      <button
+        onClick={onClick}
+        className="w-full p-4 flex justify-between items-center bg-white/5 hover:bg-white/10 active:bg-white/20 transition-colors"
+      >
+        <span className="text-[9px] font-black text-white uppercase tracking-widest">{title}</span>
+        <span className={`text-white transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`}>▼</span>
+      </button>
+      <div
+        className={`transition-[max-height] duration-500 ease-in-out overflow-hidden ${isOpen ? "max-h-[800px]" : "max-h-0"}`}
+      >
+        <div className="p-4 space-y-4 border-t border-white/5">{children}</div>
+      </div>
     </div>
-  </div>
-);
+  );
+});
 
 const createWavBlob = (base64Audio: string) => {
   const binaryString = atob(base64Audio);
@@ -217,9 +223,9 @@ const createWavBlob = (base64Audio: string) => {
 };
 
 export default function VideoRecapView() {
-  // Auth guard - but we don't show loading spinner to preserve processing state
-  // This prevents the component from resetting when auth state changes during long processes
-  const { isAllowed } = useAuthGuard("video-recap");
+  // Auth guard (redirects when needed). Don't render a blocking spinner here;
+  // we keep UI state alive to avoid "blink" resets during long processes.
+  useAuthGuard("video-recap");
   const [file, setFile] = useState<File | null>(null);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -262,6 +268,47 @@ export default function VideoRecapView() {
   const [logoNeon, setLogoNeon] = useState(false);
   const [channelName, setChannelName] = useState("");
   const [tickerMode, setTickerMode] = useState<"OFF" | "SCROLL" | "BOUNCE">("OFF");
+
+  // Keep session alive during long-running steps to prevent token expiry → 401 → redirect → state reset.
+  useEffect(() => {
+    if (!analyzing && !isExporting) return;
+    let disposed = false;
+
+    const ensureFreshSession = async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const session = data.session;
+        if (!session) return;
+
+        // If expiring soon (next 2 minutes), refresh.
+        const expiresAtMs = (session.expires_at ?? 0) * 1000;
+        if (expiresAtMs && expiresAtMs - Date.now() < 2 * 60 * 1000) {
+          await supabase.auth.refreshSession();
+        }
+      } catch {
+        // ignore; auth guard will handle if the user truly loses session
+      }
+    };
+
+    const onVisible = () => {
+      if (disposed) return;
+      if (document.visibilityState === "visible") {
+        void ensureFreshSession();
+      }
+    };
+
+    void ensureFreshSession();
+    document.addEventListener("visibilitychange", onVisible);
+    const id = window.setInterval(() => {
+      void ensureFreshSession();
+    }, 60 * 1000);
+
+    return () => {
+      disposed = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(id);
+    };
+  }, [analyzing, isExporting]);
 
   // NEW API STATES
   const [apiType, setApiType] = useState<"app" | "own">("app");
@@ -835,8 +882,7 @@ export default function VideoRecapView() {
     audioBlobUrl,
   ]);
 
-  // NOTE: We removed the authLoading check here to prevent state reset during processing
-  // The useAuthGuard hook will handle redirects automatically if not authenticated
+  // NOTE: no authLoading gate here; avoids UI "blink" and state reset.
 
   return (
     <div className="flex flex-col gap-5 pb-32 max-w-lg mx-auto px-2 animate-in fade-in duration-500">

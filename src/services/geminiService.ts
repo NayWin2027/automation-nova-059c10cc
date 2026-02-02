@@ -14,6 +14,28 @@ interface TTSResponse {
 let isUsingWebSpeech = false;
 let currentLanguageCode = 'en-US';
 
+// Helper: invoke backend function, and if we hit 401 due to token expiry, refresh and retry once.
+async function invokeWithAuthRetry<T>(
+  functionName: string,
+  body: unknown,
+  allowRetry: boolean = true
+): Promise<{ data: T | null; error: any | null }> {
+  const { data, error } = await supabase.functions.invoke<T>(functionName, { body });
+  if (!error) return { data: data ?? null, error: null };
+
+  const status = (error as any)?.context?.status;
+  if (status === 401 && allowRetry) {
+    try {
+      await supabase.auth.refreshSession();
+    } catch {
+      // If refresh fails, return original 401; caller will surface it.
+    }
+    return invokeWithAuthRetry<T>(functionName, body, false);
+  }
+
+  return { data: data ?? null, error };
+}
+
 export function setTTSLanguage(langCode: string) {
   currentLanguageCode = langCode;
 }
@@ -28,15 +50,13 @@ export async function generateSpeech(
   try {
     isUsingWebSpeech = false;
     const lang = languageCode || currentLanguageCode;
-    
-    const { data, error } = await supabase.functions.invoke<TTSResponse>('gemini-tts', {
-      body: {
-        text,
-        voiceName,
-        apiKey,
-        performance: performance || 'PROFESSIONAL',
-        languageCode: lang
-      }
+
+    const { data, error } = await invokeWithAuthRetry<TTSResponse>('gemini-tts', {
+      text,
+      voiceName,
+      apiKey,
+      performance: performance || 'PROFESSIONAL',
+      languageCode: lang,
     });
 
     if (error) {
@@ -356,13 +376,11 @@ export async function analyzeVideo(
       const base64 = await fileToBase64(file);
       const videoUrl = `data:${mimeType};base64,${base64}`;
       
-      const { data, error } = await supabase.functions.invoke<{ recap?: string; error?: string }>('video-recap', {
-        body: { 
-          videoUrl, 
-          targetLang, 
-          useOwnApi: !!apiKey, 
-          apiKey 
-        }
+      const { data, error } = await invokeWithAuthRetry<{ recap?: string; error?: string }>('video-recap', {
+        videoUrl,
+        targetLang,
+        useOwnApi: !!apiKey,
+        apiKey,
       });
 
       if (error) {
@@ -379,15 +397,13 @@ export async function analyzeVideo(
 
     // For larger files, use resumable upload flow
     // Step 1: Initialize upload
-    const { data: initData, error: initError } = await supabase.functions.invoke<{ uploadUrl?: string; error?: string }>('video-recap', {
-      body: {
-        action: 'initUpload',
-        fileName: file.name,
-        fileSize: file.size,
-        mimeType: mimeType,
-        useOwnApi: !!apiKey,
-        apiKey
-      }
+    const { data: initData, error: initError } = await invokeWithAuthRetry<{ uploadUrl?: string; error?: string }>('video-recap', {
+      action: 'initUpload',
+      fileName: file.name,
+      fileSize: file.size,
+      mimeType: mimeType,
+      useOwnApi: !!apiKey,
+      apiKey,
     });
 
     if (initError || initData?.error) {
@@ -422,15 +438,13 @@ export async function analyzeVideo(
     }
 
     // Step 3: Analyze the uploaded file
-    const { data: analyzeData, error: analyzeError } = await supabase.functions.invoke<{ recap?: string; error?: string }>('video-recap', {
-      body: {
-        action: 'analyzeFile',
-        fileUri,
-        fileName,
-        targetLang,
-        useOwnApi: !!apiKey,
-        apiKey
-      }
+    const { data: analyzeData, error: analyzeError } = await invokeWithAuthRetry<{ recap?: string; error?: string }>('video-recap', {
+      action: 'analyzeFile',
+      fileUri,
+      fileName,
+      targetLang,
+      useOwnApi: !!apiKey,
+      apiKey,
     });
 
     if (analyzeError || analyzeData?.error) {
