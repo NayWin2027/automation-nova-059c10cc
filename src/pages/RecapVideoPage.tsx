@@ -217,9 +217,9 @@ const createWavBlob = (base64Audio: string) => {
 };
 
 export default function VideoRecapView() {
-  // Auth guard - redirects to login if not authenticated
-  const { isLoading: authLoading, isAllowed } = useAuthGuard("video-recap");
-
+  // Auth guard - but we don't show loading spinner to preserve processing state
+  // This prevents the component from resetting when auth state changes during long processes
+  const { isAllowed } = useAuthGuard("video-recap");
   const [file, setFile] = useState<File | null>(null);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -835,14 +835,8 @@ export default function VideoRecapView() {
     audioBlobUrl,
   ]);
 
-  // Show loading spinner while auth is checking
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+  // NOTE: We removed the authLoading check here to prevent state reset during processing
+  // The useAuthGuard hook will handle redirects automatically if not authenticated
 
   return (
     <div className="flex flex-col gap-5 pb-32 max-w-lg mx-auto px-2 animate-in fade-in duration-500">
@@ -1297,7 +1291,108 @@ export default function VideoRecapView() {
           </div>
         </AccordionItem>
         <AccordionItem
-          title="6. SUBTITLE STYLING"
+          title="7. LOGO & BRANDING"
+          isOpen={openSection === "logo"}
+          onClick={() => setOpenSection(openSection === "logo" ? null : "logo")}
+        >
+          <div className="space-y-4">
+            {/* Logo Upload */}
+            <div className="space-y-2 bg-white/5 p-3 rounded-xl border border-white/5">
+              <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">LOGO UPLOAD</span>
+              <label className="flex items-center justify-center gap-2 py-3 rounded-xl border border-dashed border-white/20 bg-black/20 cursor-pointer hover:border-blue-500/50 transition-all">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleLogoUpload}
+                  className="hidden"
+                />
+                {logoSrc ? (
+                  <div className="flex items-center gap-2">
+                    <img src={logoSrc} alt="Logo" className="w-8 h-8 object-contain rounded" />
+                    <span className="text-[8px] text-green-400 font-bold">LOGO LOADED ✓</span>
+                  </div>
+                ) : (
+                  <span className="text-[8px] text-slate-500 font-bold">TAP TO UPLOAD LOGO</span>
+                )}
+              </label>
+              {logoSrc && (
+                <button
+                  onClick={() => setLogoSrc(null)}
+                  className="w-full py-2 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 text-[7px] font-black"
+                >
+                  REMOVE LOGO
+                </button>
+              )}
+            </div>
+            
+            {/* Logo Size */}
+            {logoSrc && (
+              <div className="space-y-2 bg-white/5 p-3 rounded-xl border border-white/5">
+                <div className="flex justify-between items-center">
+                  <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">LOGO SIZE ({logoSize}%)</span>
+                </div>
+                <input
+                  type="range"
+                  min="5"
+                  max="40"
+                  value={logoSize}
+                  onChange={(e) => setLogoSize(parseInt(e.target.value))}
+                  className="w-full h-1.5 bg-black rounded-full appearance-none accent-blue-500"
+                />
+              </div>
+            )}
+
+            {/* Logo Effects */}
+            {logoSrc && (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setLogoSpin(!logoSpin)}
+                  className={`flex-1 py-2 rounded-xl border text-[7px] font-black ${logoSpin ? "border-cyan-500 text-cyan-400 bg-cyan-500/10" : "border-white/10 text-slate-500"}`}
+                >
+                  🔄 LOGO SPIN
+                </button>
+                <button
+                  onClick={() => setLogoNeon(!logoNeon)}
+                  className={`flex-1 py-2 rounded-xl border text-[7px] font-black ${logoNeon ? "border-purple-500 text-purple-400 bg-purple-500/10" : "border-white/10 text-slate-500"}`}
+                >
+                  💎 NEON RING
+                </button>
+              </div>
+            )}
+
+            {/* Channel Name */}
+            <div className="space-y-2 bg-white/5 p-3 rounded-xl border border-white/5">
+              <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">CHANNEL NAME</span>
+              <input
+                type="text"
+                value={channelName}
+                onChange={(e) => setChannelName(e.target.value)}
+                placeholder="Enter your channel name..."
+                className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-xs font-bold text-white focus:ring-1 focus:ring-blue-500 outline-none transition-all placeholder:text-slate-600"
+              />
+            </div>
+
+            {/* Ticker Mode (Bounce) */}
+            {channelName && (
+              <div className="space-y-2 bg-white/5 p-3 rounded-xl border border-white/5">
+                <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">CHANNEL NAME ANIMATION</span>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["OFF", "SCROLL", "BOUNCE"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      onClick={() => setTickerMode(mode)}
+                      className={`py-2 rounded-lg text-[7px] font-black border transition-all ${tickerMode === mode ? "bg-blue-500 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-500"}`}
+                    >
+                      {mode === "OFF" ? "STATIC" : mode}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </AccordionItem>
+        <AccordionItem
+          title="8. SUBTITLE STYLING"
           isOpen={openSection === "sub"}
           onClick={() => setOpenSection(openSection === "sub" ? null : "sub")}
         >
