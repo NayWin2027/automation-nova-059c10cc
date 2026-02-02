@@ -10,6 +10,53 @@ const corsHeaders = {
 const MAX_BASE64_SIZE = 52428800; // 50MB
 const MAX_URL_LENGTH = 2048;
 
+function cleanNarrationText(input: string): string {
+  return String(input || "")
+    // remove timestamps
+    .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, "")
+    .replace(/\[[^\]]*\d[^\]]*\]/g, "")
+    // remove markdown / symbols
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/[•●◆▶➡️]+/g, " ")
+    .replace(/[#*_`>|]+/g, " ")
+    // remove common filler phrases
+    .replace(/\b(In\s+this\s+video|Today\s+we\s+will|Let\s+us\s+analyze)\b/gi, "")
+    .replace(/ဒီ\s*ဗီဒီယို\s*ကို\s*လေ့လာပြီး\s*ပြောပြမယ်/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function normalizeRecapJson(raw: string): string | null {
+  const cleaned = String(raw || "")
+    .replace(/```json\n?/g, "")
+    .replace(/```\n?/g, "")
+    .trim();
+
+  const start = cleaned.indexOf("[");
+  const end = cleaned.lastIndexOf("]");
+  if (start === -1 || end === -1 || end <= start) return null;
+
+  const slice = cleaned.slice(start, end + 1);
+  try {
+    const arr = JSON.parse(slice);
+    if (!Array.isArray(arr)) return null;
+
+    const normalized = arr
+      .map((s: any, idx: number) => {
+        const timeRaw = s?.time;
+        const time = typeof timeRaw === "number" && Number.isFinite(timeRaw) ? Math.max(0, Math.floor(timeRaw)) : idx * 6;
+        const text = cleanNarrationText(s?.text);
+        return { time, text };
+      })
+      .filter((s: any) => s.text && s.text.length > 0);
+
+    if (normalized.length === 0) return null;
+    return JSON.stringify(normalized);
+  } catch {
+    return null;
+  }
+}
+
 // ===== PREMIUM TRANSFORMATIVE SYSTEM PROMPT =====
 const getSystemPrompt = (targetLang: string) => `You are a world-class transformative content creator specializing in premium video recap production.
 
@@ -90,6 +137,12 @@ OUTPUT FORMAT (JSON Array for precise timing):
   {"time": 12, "text": "Continuing the transformative story..."},
   ...
 ]
+
+ABSOLUTE OUTPUT RULES:
+- Return ONLY the JSON array. No preface, no explanation, no markdown.
+- Do NOT include timestamps inside text.
+- Do NOT include symbols/bullets (#, *, -, •) or English labels like "Segment 1:".
+- Each "text" must be clean narration only.
 
 GOLDEN RULES:
 1. Each segment should be 5-8 seconds of narration
@@ -413,16 +466,17 @@ serve(async (req) => {
       
       // Clean up JSON response
       recap = recap.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const normalized = normalizeRecapJson(recap);
 
-      if (!recap) {
+      if (!normalized) {
         return new Response(
-          JSON.stringify({ error: "AI မှ အဖြေမရရှိပါ။ ထပ်ကြိုးစားပါ။" }),
+          JSON.stringify({ error: "AI script format မမှန်ပါ (JSON array မဟုတ်ပါ)။ ထပ်ကြိုးစားပါ။" }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
       return new Response(
-        JSON.stringify({ recap }),
+        JSON.stringify({ recap: normalized }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -546,8 +600,16 @@ serve(async (req) => {
       let recap = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
       recap = recap.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
 
+      const normalized = normalizeRecapJson(recap);
+      if (!normalized) {
+        return new Response(
+          JSON.stringify({ error: "AI script format မမှန်ပါ (JSON array မဟုတ်ပါ)။ ထပ်ကြိုးစားပါ။" }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       return new Response(
-        JSON.stringify({ recap }),
+        JSON.stringify({ recap: normalized }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     } else {
@@ -622,8 +684,16 @@ serve(async (req) => {
         let recap = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
         recap = recap.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
 
+        const normalized = normalizeRecapJson(recap);
+        if (!normalized) {
+          return new Response(
+            JSON.stringify({ error: "AI script format မမှန်ပါ (JSON array မဟုတ်ပါ)။ ထပ်ကြိုးစားပါ။" }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
         return new Response(
-          JSON.stringify({ recap }),
+          JSON.stringify({ recap: normalized }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -686,8 +756,16 @@ serve(async (req) => {
       let recap = data.choices?.[0]?.message?.content || "";
       recap = recap.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
 
+      const normalized = normalizeRecapJson(recap);
+      if (!normalized) {
+        return new Response(
+          JSON.stringify({ error: "AI script format မမှန်ပါ (JSON array မဟုတ်ပါ)။ ထပ်ကြိုးစားပါ။" }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       return new Response(
-        JSON.stringify({ recap }),
+        JSON.stringify({ recap: normalized }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
