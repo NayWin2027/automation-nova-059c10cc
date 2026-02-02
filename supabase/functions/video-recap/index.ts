@@ -10,29 +10,96 @@ const corsHeaders = {
 const MAX_BASE64_SIZE = 52428800; // 50MB
 const MAX_URL_LENGTH = 2048;
 
-const SYSTEM_PROMPT = `You are a professional video content summarizer. Create a comprehensive recap.
+// ===== PREMIUM TRANSFORMATIVE SYSTEM PROMPT =====
+const getSystemPrompt = (targetLang: string) => `You are a world-class transformative content creator specializing in premium video recap production.
 
-INSTRUCTIONS:
-1. Analyze the video content thoroughly
-2. Include key points, main topics, and important takeaways
-3. Structure the recap with clear sections
-4. Write in the specified language with proper spelling
-5. Keep the recap informative yet concise
+CRITICAL MISSION:
+1. First, ANALYZE the video to detect its CONTENT TYPE (Movie/Drama, Documentary, News/Politics, Tech, Health, Education, Sports, Horror, Cooking, Travel, Relationship, Daily Vlog, Music, Gaming, Business, Science, History, Nature, etc.)
+2. Generate a TRANSFORMATIVE script that is copyright-safe and adds significant creative value
+3. The script must be in ${targetLang} with 100% accurate spelling and natural flow
 
-FORMAT:
-📺 ဗီဒီယို အကျဉ်းချုပ်
-[Brief overview]
+CONTENT-ADAPTIVE SCRIPT STYLES:
 
-🔑 အဓိက အချက်များ
-- [Key point 1]
-- [Key point 2]
-- [Key point 3]
+📽️ MOVIE/DRAMA RECAP:
+- Open with dramatic hook: "ဒီရုပ်ရှင်ဇာတ်လမ်းက..."
+- Build tension with emotional beats
+- Use cinematic language: "ရုတ်တရက်...", "ထို့နောက်...", "သို့သော်..."
+- Character focus with motivations
+- End with thought-provoking conclusion
 
-📝 အသေးစိတ် အကြောင်းအရာ
-[Detailed content summary]
+📰 NEWS/POLITICS/WAR:
+- Open with significance: "ကမ္ဘာ့သမိုင်းတွင်..."
+- Present balanced analysis
+- Use authoritative tone
+- Include context and implications
+- Professional conclusion with insights
 
-💡 သုံးသပ်ချက်
-[Key takeaways and insights]`;
+💻 TECH/SCIENCE:
+- Hook with innovation angle: "နည်းပညာအသစ်တစ်ခုက..."
+- Explain complex concepts simply
+- Compare with existing solutions
+- Highlight practical applications
+- Forward-looking conclusion
+
+❤️ RELATIONSHIP/LIFESTYLE:
+- Warm, relatable opening
+- Story-driven narrative
+- Emotional connections
+- Practical takeaways
+- Heartfelt conclusion
+
+🎮 GAMING/ENTERTAINMENT:
+- Energetic, exciting tone
+- Action-focused descriptions
+- Highlight key moments
+- Community references
+- Hype-building conclusion
+
+🍳 COOKING/FOOD:
+- Sensory descriptions
+- Step awareness
+- Cultural context
+- Personal touches
+- Appetizing conclusion
+
+🌍 TRAVEL/ADVENTURE:
+- Immersive scene-setting
+- Cultural insights
+- Visual descriptions
+- Personal discoveries
+- Inspiring conclusion
+
+😱 HORROR/THRILLER:
+- Build suspense gradually
+- Mysterious undertones
+- Tension escalation
+- Surprising reveals
+- Chilling conclusion
+
+📚 EDUCATION/KNOWLEDGE:
+- Clear structure
+- Engaging explanations
+- Real-world examples
+- Key learning points
+- Memorable summary
+
+OUTPUT FORMAT (JSON Array for precise timing):
+[
+  {"time": 0, "text": "Opening hook sentence for this segment..."},
+  {"time": 6, "text": "Next segment building on the narrative..."},
+  {"time": 12, "text": "Continuing the transformative story..."},
+  ...
+]
+
+GOLDEN RULES:
+1. Each segment should be 5-8 seconds of narration
+2. NEVER copy original dialogue - TRANSFORM and REINTERPRET
+3. Add creative analysis and insights
+4. Make content feel PREMIUM and PROFESSIONAL
+5. Script MUST sync with visual scenes from the source
+6. Maintain consistent tone throughout
+7. Use natural ${targetLang} speaking patterns
+8. Script length should match video duration (approx 1 segment per 6 seconds)`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -67,13 +134,13 @@ serve(async (req) => {
     console.log(`[video-recap] Authenticated user: ${user.id}`);
 
     const body = await req.json();
-    const { action, videoUrl, useOwnApi, apiKey, targetLang, fileName, fileSize, mimeType, fileUri } = body;
+    const { action, videoUrl, useOwnApi, apiKey, targetLang, fileName, fileSize, mimeType, fileUri, confirmSuccess } = body;
     
     const BACKEND_GEMINI_KEY = Deno.env.get("GEMINI_API_KEY");
     const isOwnApiKey = useOwnApi && !!apiKey?.trim();
 
-    // ===== CREDIT CHECK (Server-side) - only for non-init actions =====
-    if (action !== 'initUpload' && !isOwnApiKey) {
+    // ===== CREDIT DEDUCTION: Only on confirmSuccess =====
+    if (confirmSuccess === true && !isOwnApiKey) {
       const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       
       const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", {
@@ -83,26 +150,15 @@ serve(async (req) => {
       });
 
       if (creditError) {
-        console.error("[video-recap] Credit check error:", creditError);
-        return new Response(
-          JSON.stringify({ error: "Failed to process credits" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        console.error("[video-recap] Credit deduction error:", creditError);
+      } else {
+        console.log(`[video-recap] Credits deducted on success. New balance: ${creditResult.balance}`);
       }
 
-      if (!creditResult.success) {
-        return new Response(
-          JSON.stringify({ 
-            error: creditResult.error,
-            balance: creditResult.balance,
-            required: creditResult.required,
-            errorCode: "INSUFFICIENT_CREDITS"
-          }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      console.log(`[video-recap] Credits deducted. New balance: ${creditResult.balance}`);
+      return new Response(
+        JSON.stringify({ success: true, message: "Credits deducted", balance: creditResult?.balance }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // Handle different actions
@@ -229,7 +285,7 @@ serve(async (req) => {
         }
       }
 
-      const systemPrompt = SYSTEM_PROMPT.replace('the specified language', targetLang || 'Burmese');
+      const systemPrompt = getSystemPrompt(targetLang || 'Burmese');
       
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${BACKEND_GEMINI_KEY}`,
@@ -241,12 +297,12 @@ serve(async (req) => {
               role: "user",
               parts: [
                 { fileData: { mimeType: "video/mp4", fileUri: fileUri } },
-                { text: systemPrompt + "\n\nPlease analyze this video and create a detailed recap." }
+                { text: systemPrompt + "\n\nAnalyze this video, detect its content type, and create a premium transformative recap script. Return ONLY the JSON array." }
               ]
             }],
             generationConfig: {
               temperature: 0.7,
-              maxOutputTokens: 4096,
+              maxOutputTokens: 8192,
             },
           }),
         }
@@ -275,7 +331,10 @@ serve(async (req) => {
       }
 
       const data = await response.json();
-      const recap = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      let recap = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      
+      // Clean up JSON response
+      recap = recap.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
 
       if (!recap) {
         return new Response(
@@ -329,7 +388,7 @@ serve(async (req) => {
     }
 
     const isBase64 = videoUrl.startsWith("data:");
-    const systemPrompt = SYSTEM_PROMPT.replace('the specified language', targetLang || 'Burmese');
+    const systemPrompt = getSystemPrompt(targetLang || 'Burmese');
 
     let response;
 
@@ -346,14 +405,14 @@ serve(async (req) => {
           
           parts = [
             { inlineData: { mimeType, data: base64Data } },
-            { text: systemPrompt + "\n\nPlease analyze this video and create a detailed recap." }
+            { text: systemPrompt + "\n\nAnalyze this video, detect its content type, and create a premium transformative recap script. Return ONLY the JSON array." }
           ];
         } else {
           throw new Error("Invalid base64 video format");
         }
       } else {
         parts = [
-          { text: `${systemPrompt}\n\nPlease analyze and create a recap for this video URL: ${videoUrl}` }
+          { text: `${systemPrompt}\n\nAnalyze and create a premium transformative recap for this video URL: ${videoUrl}. Return ONLY the JSON array.` }
         ];
       }
 
@@ -364,7 +423,7 @@ serve(async (req) => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             contents: [{ role: "user", parts }],
-            generationConfig: { temperature: 0.7, maxOutputTokens: 4096 },
+            generationConfig: { temperature: 0.7, maxOutputTokens: 8192 },
           }),
         }
       );
@@ -406,7 +465,8 @@ serve(async (req) => {
       }
 
       const data = await response.json();
-      const recap = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      let recap = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      recap = recap.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
 
       return new Response(
         JSON.stringify({ recap }),
@@ -427,7 +487,7 @@ serve(async (req) => {
         
         const parts = [
           { inlineData: { mimeType: contentMimeType, data: base64Data } },
-          { text: systemPrompt + "\n\nPlease analyze this video and create a detailed recap." }
+          { text: systemPrompt + "\n\nAnalyze this video, detect its content type, and create a premium transformative recap script. Return ONLY the JSON array." }
         ];
 
         response = await fetch(
@@ -437,7 +497,7 @@ serve(async (req) => {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               contents: [{ role: "user", parts }],
-              generationConfig: { temperature: 0.7, maxOutputTokens: 4096 },
+              generationConfig: { temperature: 0.7, maxOutputTokens: 8192 },
             }),
           }
         );
@@ -481,7 +541,8 @@ serve(async (req) => {
         }
 
         const data = await response.json();
-        const recap = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        let recap = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        recap = recap.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
 
         return new Response(
           JSON.stringify({ recap }),
@@ -505,7 +566,7 @@ serve(async (req) => {
           model: "google/gemini-3-flash-preview",
           messages: [
             { role: "system", content: systemPrompt },
-            { role: "user", content: `Please analyze and create a recap for this video: ${videoUrl}` },
+            { role: "user", content: `Analyze and create a premium transformative recap for this video: ${videoUrl}. Return ONLY the JSON array.` },
           ],
         }),
       });
@@ -544,7 +605,8 @@ serve(async (req) => {
       }
 
       const data = await response.json();
-      const recap = data.choices?.[0]?.message?.content || "";
+      let recap = data.choices?.[0]?.message?.content || "";
+      recap = recap.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
 
       return new Response(
         JSON.stringify({ recap }),
