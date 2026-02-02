@@ -677,8 +677,11 @@ export default function VideoRecapView() {
       });
 
     const pickMimeType = () => {
-      // Prefer VP8 for broader device compatibility.
+      // Prefer MP4 when supported (plays in more phone galleries), otherwise VP8 WebM.
       const candidates = [
+        // Some Android devices support MP4/H264 recording via MediaRecorder
+        "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+        "video/mp4",
         "video/webm;codecs=vp8,opus",
         "video/webm;codecs=vp9,opus",
         "video/webm;codecs=vp8",
@@ -757,7 +760,8 @@ export default function VideoRecapView() {
     };
 
     recorder.onstop = () => {
-      const blob = new Blob(recordedChunksRef.current, { type: mimeType || "video/webm" });
+      const finalType = mimeType || "video/webm";
+      const blob = new Blob(recordedChunksRef.current, { type: finalType });
 
       // If ended immediately / no frames were encoded, this will be tiny and unreadable.
       if (blob.size < 200 * 1024) {
@@ -769,7 +773,8 @@ export default function VideoRecapView() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `MASTER_AI_VIDEO_${Date.now()}.webm`;
+      const ext = finalType.includes("mp4") ? "mp4" : "webm";
+      a.download = `MASTER_AI_VIDEO_${Date.now()}.${ext}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -1198,15 +1203,23 @@ export default function VideoRecapView() {
           const dy = (targetH - dh) / 2;
 
           // Capture freeze frame at transition (or if empty)
-          const needsCapture = (isFreezeMode && !wasFreezeModeRef.current) || 
-            !freezeCanvas.width || !freezeCanvas.height;
+          const sizeChanged = freezeCanvas.width !== targetW || freezeCanvas.height !== targetH;
+          const needsCapture = sizeChanged || (isFreezeMode && !wasFreezeModeRef.current);
           
           if (needsCapture) {
             freezeCanvas.width = targetW;
             freezeCanvas.height = targetH;
             freezeCtx.fillStyle = "#000";
             freezeCtx.fillRect(0, 0, targetW, targetH);
+
+            // Match flip transform for freeze frame (prevents blank/incorrect freeze on some devices)
+            if (flipVideo) {
+              freezeCtx.save();
+              freezeCtx.translate(targetW, 0);
+              freezeCtx.scale(-1, 1);
+            }
             freezeCtx.drawImage(video, dx, dy, dw, dh);
+            if (flipVideo) freezeCtx.restore();
           }
 
           // RENDER VIDEO LAYER with crossfade

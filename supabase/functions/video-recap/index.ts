@@ -3,7 +3,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  // Include common Supabase headers + our custom binary-chunk headers
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-recap-action, x-upload-url, x-chunk-index, x-total-chunks, x-offset, x-total-size, x-mime-type, x-is-last-chunk",
 };
 
 // Input validation constants
@@ -186,8 +188,24 @@ serve(async (req) => {
 
     console.log(`[video-recap] Authenticated user: ${user.id}`);
 
-    const body = await req.json();
-    const { action, videoUrl, useOwnApi, apiKey, targetLang, fileName, fileSize, mimeType, fileUri, confirmSuccess } = body;
+    // We support BOTH:
+    // - JSON requests (existing)
+    // - Binary chunk upload requests (to prevent 546/WORKER_LIMIT)
+    const contentType = req.headers.get("content-type") || "";
+    const isJson = contentType.toLowerCase().includes("application/json");
+
+    let body: any = {};
+    let action: string | null = null;
+
+    if (isJson) {
+      body = await req.json();
+      action = body?.action ?? null;
+    } else {
+      // Binary mode: metadata comes from headers
+      action = req.headers.get("x-recap-action");
+    }
+
+    const { videoUrl, useOwnApi, apiKey, targetLang, fileName, fileSize, mimeType, fileUri, confirmSuccess } = body;
     
     const BACKEND_GEMINI_KEY = Deno.env.get("GEMINI_API_KEY");
     const isOwnApiKey = useOwnApi && !!apiKey?.trim();
@@ -386,6 +404,119 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ success: true, chunkIndex }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // NEW (2026): Upload chunk via raw binary body to avoid base64 decoding memory spikes.
+    // Frontend sends:
+    //   Content-Type: application/octet-stream
+    //   x-recap-action: uploadChunkBinary
+    //   x-upload-url, x-offset, x-mime-type, x-is-last-chunk, x-chunk-index, x-total-chunks, x-total-size
+    if (action === 'uploadChunkBinary') {
+      const chunkUploadUrl = req.headers.get('x-upload-url');
+      const offsetStr = req.headers.get('x-offset');
+      const isLastChunk = (req.headers.get('x-is-last-chunk') || '').toLowerCase() === 'true';
+      const chunkIndexStr = req.headers.get('x-chunk-index') || '0';
+      const totalChunksStr = req.headers.get('x-total-chunks') || '0';
+      const mimeTypeHdr = req.headers.get('x-mime-type') || 'video/mp4';
+
+      if (!chunkUploadUrl || !offsetStr) {
+        return new Response(
+          JSON.stringify({ error: 'Upload URL and offset required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const offset = Number(offsetStr);
+      const chunkIndex = Number(chunkIndexStr);
+      const totalChunks = Number(totalChunksStr);
+      if (!Number.isFinite(offset) || offset < 0) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid offset' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Read raw bytes
+      let binaryChunk: Uint8Array;
+      try {
+        const buf = await req.arrayBuffer();
+        binaryChunk = new Uint8Array(buf);
+      } catch (e) {
+        console.error('[uploadChunkBinary] Failed to read body:', e);
+        return new Response(
+          JSON.stringify({ error: 'Failed to read chunk body' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      console.log(
+        `Uploading chunk(binary) ${chunkIndex + 1}/${totalChunks || '?'}, offset: ${offset}, bytes: ${binaryChunk.length}`
+      );
+
+      // Guardrail: avoid accidental huge bodies
+      if (binaryChunk.length > 9 * 1024 * 1024) {
+        return new Response(
+          JSON.stringify({ error: 'Chunk too large. Max 9MB.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const uploadCommand = isLastChunk ? 'upload, finalize' : 'upload';
+      const chunkResponse = await fetch(chunkUploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': mimeTypeHdr,
+          'X-Goog-Upload-Offset': String(offset),
+          'X-Goog-Upload-Command': uploadCommand,
+        },
+        body: binaryChunk.buffer as ArrayBuffer,
+      });
+
+      if (!chunkResponse.ok) {
+        const errText = await chunkResponse.text();
+        console.error(`[uploadChunkBinary] Chunk upload failed:`, errText);
+
+        if (chunkResponse.status === 429 || errText.includes('RESOURCE_EXHAUSTED')) {
+          return new Response(
+            JSON.stringify({
+              error: 'API quota ကုန်သွားပါပြီ။ ခဏစောင့်ပါ။',
+              retryable: true,
+              retryAfterSeconds: 30,
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        return new Response(
+          JSON.stringify({ error: 'Chunk upload failed' }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (isLastChunk) {
+        try {
+          const uploadResult = await chunkResponse.json();
+          const newFileUri = uploadResult.file?.uri;
+          const uploadedFileName = uploadResult.file?.name;
+
+          console.log(`Upload complete! File URI: ${newFileUri}`);
+          return new Response(
+            JSON.stringify({ success: true, fileUri: newFileUri, fileName: uploadedFileName }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } catch (e) {
+          console.error('[uploadChunkBinary] Failed to parse upload result:', e);
+          return new Response(
+            JSON.stringify({ error: 'Failed to get file URI after upload' }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, chunkIndex }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 

@@ -36,6 +36,32 @@ async function invokeWithAuthRetry<T>(
   return { data: data ?? null, error };
 }
 
+// Same as invokeWithAuthRetry but allows custom headers and non-JSON bodies (ArrayBuffer/Blob).
+async function invokeWithAuthRetryRaw<T>(
+  functionName: string,
+  body: any,
+  headers?: Record<string, string>,
+  allowRetry: boolean = true
+): Promise<{ data: T | null; error: any | null }> {
+  const { data, error } = await supabase.functions.invoke<T>(functionName, {
+    body,
+    headers,
+  });
+  if (!error) return { data: data ?? null, error: null };
+
+  const status = (error as any)?.context?.status;
+  if (status === 401 && allowRetry) {
+    try {
+      await supabase.auth.refreshSession();
+    } catch {
+      // ignore
+    }
+    return invokeWithAuthRetryRaw<T>(functionName, body, headers, false);
+  }
+
+  return { data: data ?? null, error };
+}
+
 export function setTTSLanguage(langCode: string) {
   currentLanguageCode = langCode;
 }
@@ -447,31 +473,63 @@ export async function analyzeVideo(
       const start = i * CHUNK_SIZE;
       const end = Math.min(start + CHUNK_SIZE, file.size);
       const chunk = file.slice(start, end);
-      const chunkBase64 = await blobToBase64(chunk);
       
       const isLastChunk = (i === totalChunks - 1);
       const uploadProgress = 5 + Math.floor(((i + 1) / totalChunks) * 50);
       onProgress?.(uploadProgress, `Uploading chunk ${i + 1}/${totalChunks}...`);
-      
-      const { data: chunkData, error: chunkError } = await invokeWithAuthRetry<{
+
+      // IMPORTANT: Send binary chunk (no base64) to drastically reduce backend memory usage (prevents 546/WORKER_LIMIT).
+      // Backend falls back to legacy JSON/base64 mode if needed.
+      const chunkBuf = await chunk.arrayBuffer();
+      let { data: chunkData, error: chunkError } = await invokeWithAuthRetryRaw<{
         success?: boolean;
+        chunkIndex?: number;
         fileUri?: string;
         fileName?: string;
         error?: string;
         retryable?: boolean;
-      }>('video-recap', {
-        action: 'uploadChunk',
-        uploadUrl: initData.uploadUrl,
-        chunkData: chunkBase64,
-        chunkIndex: i,
-        totalChunks,
-        offset: start,
-        totalSize: file.size,
-        mimeType,
-        isLastChunk,
-        useOwnApi: !!apiKey,
-        apiKey,
-      });
+      }>(
+        'video-recap',
+        chunkBuf,
+        {
+          'content-type': 'application/octet-stream',
+          'x-recap-action': 'uploadChunkBinary',
+          'x-upload-url': initData.uploadUrl,
+          'x-chunk-index': String(i),
+          'x-total-chunks': String(totalChunks),
+          'x-offset': String(start),
+          'x-total-size': String(file.size),
+          'x-mime-type': mimeType,
+          'x-is-last-chunk': String(isLastChunk),
+        }
+      );
+
+      // Fallback: legacy JSON/base64 chunk upload (kept for backwards compatibility)
+      if (chunkError || chunkData?.error) {
+        const chunkBase64 = await blobToBase64(chunk);
+        const fallback = await invokeWithAuthRetry<{
+          success?: boolean;
+          chunkIndex?: number;
+          fileUri?: string;
+          fileName?: string;
+          error?: string;
+          retryable?: boolean;
+        }>('video-recap', {
+          action: 'uploadChunk',
+          uploadUrl: initData.uploadUrl,
+          chunkData: chunkBase64,
+          chunkIndex: i,
+          totalChunks,
+          offset: start,
+          totalSize: file.size,
+          mimeType,
+          isLastChunk,
+          useOwnApi: !!apiKey,
+          apiKey,
+        });
+        chunkData = fallback.data;
+        chunkError = fallback.error;
+      }
 
       if (chunkError || chunkData?.error) {
         throw new Error(chunkData?.error || chunkError?.message || `Chunk ${i + 1} upload failed`);
