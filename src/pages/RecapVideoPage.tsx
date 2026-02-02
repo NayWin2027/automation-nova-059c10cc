@@ -624,50 +624,146 @@ export default function VideoRecapView() {
       return;
     }
     
+    // Basic capability checks (avoid hard crashes on mobile browsers)
+    if (typeof MediaRecorder === "undefined") {
+      toast.error("ဒီ browser မှာ Auto Save မထောက်ပံ့ပါ (MediaRecorder မရှိပါ)။ Chrome (Android/Desktop) နဲ့ စမ်းပါ");
+      return;
+    }
+
+    // Stop any previous recording cleanly
+    try {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+        mediaRecorderRef.current.stop();
+      }
+    } catch {
+      // ignore
+    }
+
+    const waitForPlayable = (el: HTMLMediaElement, label: string) =>
+      new Promise<void>((resolve, reject) => {
+        // HAVE_CURRENT_DATA = 2
+        if (el.readyState >= 2 && Number.isFinite(el.duration) && el.duration > 0) return resolve();
+
+        let done = false;
+        const cleanup = () => {
+          if (done) return;
+          done = true;
+          el.removeEventListener("loadedmetadata", onReady);
+          el.removeEventListener("canplay", onReady);
+          el.removeEventListener("canplaythrough", onReady);
+          el.removeEventListener("error", onErr);
+          window.clearTimeout(t);
+        };
+        const onReady = () => {
+          if (el.readyState >= 2 && Number.isFinite(el.duration) && el.duration > 0) {
+            cleanup();
+            resolve();
+          }
+        };
+        const onErr = () => {
+          cleanup();
+          reject(new Error(`${label} load error`));
+        };
+        const t = window.setTimeout(() => {
+          cleanup();
+          reject(new Error(`${label} timed out`));
+        }, 12000);
+
+        el.addEventListener("loadedmetadata", onReady);
+        el.addEventListener("canplay", onReady);
+        el.addEventListener("canplaythrough", onReady);
+        el.addEventListener("error", onErr);
+      });
+
+    const pickMimeType = () => {
+      const candidates = [
+        "video/webm;codecs=vp9,opus",
+        "video/webm;codecs=vp8,opus",
+        "video/webm;codecs=vp9",
+        "video/webm;codecs=vp8",
+        "video/webm",
+      ];
+      for (const t of candidates) {
+        if ((MediaRecorder as any).isTypeSupported?.(t)) return t;
+      }
+      return "";
+    };
+
     setIsExporting(true);
     setProgress(0);
     didConfirmSuccessRef.current = false;
-    
-    // Reset to start
+
+    try {
+      // Ensure media is actually ready (prevents instant-ended → tiny 0s file)
+      await Promise.all([waitForPlayable(video, "Video"), waitForPlayable(audio, "Audio")]);
+    } catch {
+      toast.error("Audio/Video load မပြီးသေးပါ—ခဏစောင့်ပြီး ပြန်နှိပ်ပါ");
+      setIsExporting(false);
+      return;
+    }
+
+    // Reset to start (after ready)
     video.currentTime = 0;
     audio.currentTime = 0;
-    
-    toast.info("🎬 Recording started! Preview ပြီးရင် auto-save ဖြစ်မယ်");
-    
+
     // Capture canvas stream at 30fps
     const fps = 30;
     const stream = canvas.captureStream(fps);
-    
-    // Add audio track
+
+    // Add audio track if supported
     try {
       const audioStream = (audio as any).captureStream?.() || (audio as any).mozCaptureStream?.();
       if (audioStream) {
         audioStream.getAudioTracks().forEach((track: MediaStreamTrack) => stream.addTrack(track));
       }
-    } catch (e) {
+    } catch {
+      // Some browsers don't support captureStream on audio; we still record video and warn.
       console.warn("Audio capture not supported");
     }
-    
-    const recorder = new MediaRecorder(stream, { 
-      mimeType: "video/webm;codecs=vp9",
-      videoBitsPerSecond: 6000000 
-    });
-    
+
+    const mimeType = pickMimeType();
+
+    let recorder: MediaRecorder;
+    try {
+      recorder = new MediaRecorder(
+        stream,
+        mimeType
+          ? { mimeType, videoBitsPerSecond: 6000000 }
+          : { videoBitsPerSecond: 6000000 }
+      );
+    } catch {
+      toast.error("ဒီ browser မှာ recording format မထောက်ပံ့ပါ—Chrome နဲ့ စမ်းပါ");
+      setIsExporting(false);
+      return;
+    }
+
+    mediaRecorderRef.current = recorder;
     recordedChunksRef.current = [];
+
     recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) recordedChunksRef.current.push(e.data);
+      if (e.data && e.data.size > 0) recordedChunksRef.current.push(e.data);
     };
-    
+
+    recorder.onerror = () => {
+      toast.error("Recording error ဖြစ်သွားပါတယ်—ပြန်စမ်းပါ");
+    };
+
+    const cleanupAfterStop = () => {
+      setIsExporting(false);
+      setProgress(100);
+      setIsPlaying(false);
+    };
+
     recorder.onstop = () => {
-      const blob = new Blob(recordedChunksRef.current, { type: "video/webm" });
-      
-      if (blob.size < 10000) {
-        toast.error("❌ Recording failed. ပြန်စမ်းပါ");
-        setIsExporting(false);
+      const blob = new Blob(recordedChunksRef.current, { type: mimeType || "video/webm" });
+
+      // If ended immediately / no frames were encoded, this will be tiny and unreadable.
+      if (blob.size < 200 * 1024) {
+        toast.error("❌ Auto Save မအောင်မြင်ပါ (0s/empty) — Preview ပြီးသွားမှ Stop ဖြစ်အောင် ပြန်နှိပ်ပါ");
+        cleanupAfterStop();
         return;
       }
-      
-      // Auto download
+
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -675,53 +771,66 @@ export default function VideoRecapView() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      
-      // Confirm success
+
+      // Delay revoke so mobile browsers can finish downloading
+      window.setTimeout(() => URL.revokeObjectURL(url), 5000);
+
       if (!didConfirmSuccessRef.current) {
         didConfirmSuccessRef.current = true;
         const customKeyForConfirm = apiType === "own" ? apiKey : undefined;
         confirmRecapSuccess(customKeyForConfirm);
         toast.success(`✅ Auto-save ပြီးပါပြီ! (${(blob.size / 1024 / 1024).toFixed(1)} MB)`);
       }
-      
-      setIsExporting(false);
-      setProgress(100);
-      setIsPlaying(false);
+
+      cleanupAfterStop();
     };
-    
-    mediaRecorderRef.current = recorder;
-    recorder.start(100);
-    
-    // Start playback
+
+    // Start playback + recording
+    toast.info("🎬 Recording started! Preview ပြီးရင် auto-save ဖြစ်မယ်");
+    recorder.start(250);
+
     setupAudioAnalyzer();
     setIsPlaying(true);
+
+    // Start video/audio (must be within user gesture; button click already)
     video.play().catch(() => {});
     audio.play().catch(() => {});
-    
+
     // Track progress and auto-stop when audio ends
-    const totalDur = audioDuration || video.duration || 10;
-    
-    const progressInterval = setInterval(() => {
-      if (audio.currentTime > 0) {
+    const totalDur = (Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : audioDuration) || video.duration || 10;
+
+    const progressInterval = window.setInterval(() => {
+      if (audio.currentTime > 0 && totalDur > 0) {
         setProgress((audio.currentTime / totalDur) * 100);
       }
     }, 100);
-    
-    // Listen for audio end to stop recording
-    const onAudioEnd = () => {
-      clearInterval(progressInterval);
-      video.pause();
-      audio.pause();
-      
-      if (recorder.state === "recording") {
-        recorder.stop();
+
+    // Stop when audio ends OR reaches end (some browsers don't fire ended reliably)
+    const stopRecording = () => {
+      window.clearInterval(progressInterval);
+      try {
+        video.pause();
+        audio.pause();
+      } catch {
+        // ignore
       }
-      
-      audio.removeEventListener("ended", onAudioEnd);
+      try {
+        if (recorder.state === "recording") recorder.stop();
+      } catch {
+        cleanupAfterStop();
+      }
     };
-    
-    audio.addEventListener("ended", onAudioEnd);
+
+    const onAudioEnd = () => stopRecording();
+    audio.addEventListener("ended", onAudioEnd, { once: true });
+
+    // Safety timeout: duration + small buffer
+    const safetyMs = Math.max(2000, Math.round(totalDur * 1000) + 1500);
+    window.setTimeout(() => {
+      if (mediaRecorderRef.current === recorder && recorder.state === "recording") {
+        stopRecording();
+      }
+    }, safetyMs);
     
   }, [audioBlobUrl, audioDuration, apiType, apiKey, setupAudioAnalyzer]);
 
