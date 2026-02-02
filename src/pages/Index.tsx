@@ -15,11 +15,16 @@ import {
   Diamond,
   User,
   LogOut,
+  Phone,
+  FileCheck,
+  Shield,
+  Info,
 } from "lucide-react";
 import { ToolCard } from "@/components/ToolCard";
 import { BottomNav } from "@/components/BottomNav";
 import { GatewayBanner } from "@/components/GatewayBanner";
 import { ChatDialog } from "@/components/ChatDialog";
+import { ContactDialog } from "@/components/ContactDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { useToolSettings } from "@/hooks/useToolSettings";
 import { useToast } from "@/hooks/use-toast";
@@ -131,6 +136,7 @@ const Index = () => {
   
   const [activeTab, setActiveTab] = useState<"home" | "premium" | "settings">("home");
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
+  const [showContactDialog, setShowContactDialog] = useState(false);
 
   // Merge tool settings with default tools
   const tools = defaultTools.map(tool => {
@@ -289,6 +295,63 @@ const Index = () => {
     <div className="space-y-2">
       <h2 className="text-sm font-bold text-foreground mb-2">Settings</h2>
       <div className="space-y-1.5">
+        {/* Contact */}
+        <button 
+          onClick={() => setShowContactDialog(true)}
+          className="w-full p-2.5 rounded-lg border border-primary/20 bg-card/50 text-left hover:bg-card transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <Phone className="w-4 h-4 text-primary" />
+            <div>
+              <h3 className="text-2xs font-semibold text-foreground">Contact</h3>
+              <p className="text-3xs text-muted-foreground">FB, Viber, Telegram, Messenger</p>
+            </div>
+          </div>
+        </button>
+
+        {/* Terms */}
+        <button 
+          onClick={() => navigate("/terms")}
+          className="w-full p-2.5 rounded-lg border border-border/30 bg-card/50 text-left hover:bg-card transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <FileCheck className="w-4 h-4 text-primary" />
+            <div>
+              <h3 className="text-2xs font-semibold text-foreground">Terms of Service</h3>
+              <p className="text-3xs text-muted-foreground">အသုံးပြုမှု စည်းကမ်းချက်များ</p>
+            </div>
+          </div>
+        </button>
+
+        {/* Privacy */}
+        <button 
+          onClick={() => navigate("/privacy")}
+          className="w-full p-2.5 rounded-lg border border-border/30 bg-card/50 text-left hover:bg-card transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <Shield className="w-4 h-4 text-primary" />
+            <div>
+              <h3 className="text-2xs font-semibold text-foreground">Privacy Policy</h3>
+              <p className="text-3xs text-muted-foreground">ကိုယ်ရေးလုံခြုံမှု မူဝါဒ</p>
+            </div>
+          </div>
+        </button>
+
+        {/* About */}
+        <button 
+          onClick={() => navigate("/about")}
+          className="w-full p-2.5 rounded-lg border border-border/30 bg-card/50 text-left hover:bg-card transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <Info className="w-4 h-4 text-primary" />
+            <div>
+              <h3 className="text-2xs font-semibold text-foreground">About</h3>
+              <p className="text-3xs text-muted-foreground">App အကြောင်း</p>
+            </div>
+          </div>
+        </button>
+
+        {/* Admin Panel */}
         <button 
           onClick={() => navigate("/admin/login")}
           className="w-full p-2.5 rounded-lg border border-gold/20 bg-card/50 text-left hover:bg-card transition-colors"
@@ -296,6 +359,7 @@ const Index = () => {
           <h3 className="text-2xs font-semibold text-gold">Admin Panel</h3>
           <p className="text-3xs text-muted-foreground">Access admin dashboard</p>
         </button>
+
         {isAuthenticated && (
           <div className="p-2.5 rounded-lg border border-border/30 bg-card/50">
             <h3 className="text-2xs font-semibold text-foreground">Account</h3>
@@ -304,8 +368,9 @@ const Index = () => {
             </p>
           </div>
         )}
+
         <div className="p-2.5 rounded-lg border border-border/30 bg-card/50">
-          <h3 className="text-2xs font-semibold text-foreground">About</h3>
+          <h3 className="text-2xs font-semibold text-foreground">Version</h3>
           <p className="text-3xs text-muted-foreground">App version 8.0</p>
         </div>
       </div>
@@ -337,6 +402,11 @@ const Index = () => {
         onClose={() => setSelectedTool(null)}
         toolName={selectedTool?.title || ""}
         systemPrompt={selectedTool?.systemPrompt || ""}
+      />
+
+      <ContactDialog
+        isOpen={showContactDialog}
+        onClose={() => setShowContactDialog(false)}
       />
     </div>
   );
