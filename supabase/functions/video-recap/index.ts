@@ -290,7 +290,7 @@ serve(async (req) => {
     }
 
     // NEW: Handle chunk upload through backend (CORS-safe)
-    // MEMORY OPTIMIZED: Use streaming decode to avoid holding full base64 in memory
+    // Google requires 8MB chunk granularity for resumable uploads
     if (action === 'uploadChunk') {
       const { uploadUrl: chunkUploadUrl, chunkData, chunkIndex, totalChunks, offset, totalSize, isLastChunk } = body;
       
@@ -301,17 +301,17 @@ serve(async (req) => {
         );
       }
 
-      // Validate chunk size to prevent memory overflow (max 3MB base64 = ~2.25MB binary)
-      if (chunkData.length > 4 * 1024 * 1024) {
+      // 8MB binary = ~11MB base64, allow up to 12MB base64 string
+      if (chunkData.length > 12 * 1024 * 1024) {
         return new Response(
-          JSON.stringify({ error: "Chunk too large. Max 2MB per chunk." }),
+          JSON.stringify({ error: "Chunk too large. Max 8MB binary per chunk." }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      console.log(`Uploading chunk ${chunkIndex + 1}/${totalChunks}, offset: ${offset}, size: ${chunkData.length}`);
+      console.log(`Uploading chunk ${chunkIndex + 1}/${totalChunks}, offset: ${offset}, base64Len: ${chunkData.length}`);
 
-      // Decode base64 chunk to binary using streaming approach
+      // Decode base64 chunk to binary
       let binaryChunk: Uint8Array;
       try {
         const binaryString = atob(chunkData);
@@ -319,6 +319,7 @@ serve(async (req) => {
         for (let i = 0; i < binaryString.length; i++) {
           binaryChunk[i] = binaryString.charCodeAt(i);
         }
+        console.log(`Decoded to ${binaryChunk.length} bytes`);
       } catch (decodeErr) {
         console.error("Base64 decode failed:", decodeErr);
         return new Response(

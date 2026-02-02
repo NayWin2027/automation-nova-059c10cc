@@ -375,8 +375,8 @@ export async function analyzeVideo(
   try {
     const MB = 1024 * 1024;
     
-    // For smaller files (under 10MB), use base64 inline data
-    if (file.size < 10 * MB) {
+    // For smaller files (under 15MB), use base64 inline data (safe for edge function memory)
+    if (file.size < 15 * MB) {
       onProgress?.(10, "Uploading video...");
       const base64 = await fileToBase64(file);
       const videoUrl = `data:${mimeType};base64,${base64}`;
@@ -435,9 +435,9 @@ export async function analyzeVideo(
       throw new Error('No upload URL received');
     }
 
-    // Step 2: Upload file in chunks through backend proxy
-    // REDUCED: 2MB chunks to avoid edge function memory limits (was 8MB)
-    const CHUNK_SIZE = 2 * MB;
+    // Step 2: Upload file in chunks - Google requires 8MB granularity for resumable uploads
+    // Use 8MB chunks but split the base64 encoding on the client side
+    const CHUNK_SIZE = 8 * MB;
     const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
     let uploadedBytes = 0;
     let fileUri = '';
