@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { analyzeVideo, generateSpeech, audioContext } from "../services/geminiService";
+import { generateSpeech, analyzeVideo } from "../services/geminiService";
 
 // --- DATA SETS ---
 const VOICES = [
@@ -278,7 +278,7 @@ export default function VideoRecapView() {
 
   // Animation States for Lip-sync
   const analyserRef = useRef<AnalyserNode | null>(null);
-  const dataArrayRef = useRef<Uint8Array | null>(null);
+  const dataArrayRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
 
   useEffect(() => {
