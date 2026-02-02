@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, useState } from "react";
-import { analyzeVideo, generateSpeech } from "../services/geminiService";
+import React, { useEffect, useRef, useState, useCallback } from "react";
+import { analyzeVideo, generateSpeech, confirmRecapSuccess } from "../services/geminiService";
 import { useAuthGuard } from "../hooks/useAuthGuard";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 // --- DATA SETS ---
 const VOICES = [
@@ -152,6 +153,16 @@ interface ScriptSegment {
   audioEnd?: number;
 }
 
+interface HistoryItem {
+  id: string;
+  timestamp: number;
+  fileName: string;
+  script: string;
+  audioBlobUrl: string | null;
+  segments: ScriptSegment[];
+  thumbnail?: string;
+}
+
 interface AccordionItemProps {
   title: string;
   isOpen: boolean;
@@ -268,6 +279,18 @@ export default function VideoRecapView() {
   const [logoNeon, setLogoNeon] = useState(false);
   const [channelName, setChannelName] = useState("");
   const [tickerMode, setTickerMode] = useState<"OFF" | "SCROLL" | "BOUNCE">("OFF");
+  
+  // History state
+  const [history, setHistory] = useState<HistoryItem[]>(() => {
+    try {
+      const saved = localStorage.getItem("video_recap_history");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [showHistory, setShowHistory] = useState(false);
+  const [currentFileName, setCurrentFileName] = useState("");
 
   // Keep session alive during long-running steps to prevent token expiry → 401 → redirect → state reset.
   useEffect(() => {
@@ -342,6 +365,7 @@ export default function VideoRecapView() {
     if (e.target.files && e.target.files[0]) {
       const f = e.target.files[0];
       setFile(f);
+      setCurrentFileName(f.name);
       const url = URL.createObjectURL(f);
       setVideoSrc(url);
       setFullScriptText("");
@@ -351,6 +375,47 @@ export default function VideoRecapView() {
       setProgress(0);
       setIsVideoReady(false);
     }
+  };
+
+  // Save to history
+  const saveToHistory = useCallback((script: string, audioUrl: string | null, segments: ScriptSegment[]) => {
+    if (!currentFileName || !script) return;
+    
+    const newItem: HistoryItem = {
+      id: Date.now().toString(),
+      timestamp: Date.now(),
+      fileName: currentFileName,
+      script,
+      audioBlobUrl: audioUrl,
+      segments,
+    };
+    
+    setHistory(prev => {
+      const updated = [newItem, ...prev.slice(0, 19)]; // Keep last 20
+      localStorage.setItem("video_recap_history", JSON.stringify(updated));
+      return updated;
+    });
+    
+    toast.success("History ထဲမှာ သိမ်းပြီးပါပြီ!");
+  }, [currentFileName]);
+
+  // Load from history
+  const loadFromHistory = (item: HistoryItem) => {
+    setFullScriptText(item.script);
+    setScriptSegments(item.segments);
+    setAudioBlobUrl(item.audioBlobUrl);
+    setShowHistory(false);
+    toast.success(`"${item.fileName}" ပြန်ဖွင့်ပြီးပါပြီ`);
+  };
+
+  // Delete from history
+  const deleteFromHistory = (id: string) => {
+    setHistory(prev => {
+      const updated = prev.filter(h => h.id !== id);
+      localStorage.setItem("video_recap_history", JSON.stringify(updated));
+      return updated;
+    });
+    toast.success("History မှ ဖျက်ပြီးပါပြီ");
   };
 
   const handleVideoLoaded = () => {
@@ -459,6 +524,13 @@ export default function VideoRecapView() {
         });
         setScriptSegments(mappedSegments);
         setAnalyzing(false);
+        
+        // SUCCESS: Deduct credits now + save to history
+        const customKeyForConfirm = apiType === "own" ? apiKey : undefined;
+        confirmRecapSuccess(customKeyForConfirm);
+        saveToHistory(text, url, mappedSegments);
+        toast.success("✨ Premium Recap ပြီးပါပြီ! Credits ဖြတ်ပြီးပါပြီ။");
+        
         setTimeout(() => togglePlay(), 500);
       };
     } else {
@@ -803,6 +875,64 @@ export default function VideoRecapView() {
             }
           }
 
+          // ===== CHANNEL NAME RENDERING (BOUNCE/SCROLL/STATIC) =====
+          if (channelName && tickerMode !== "OFF") {
+            const tickerFs = targetH * 0.04;
+            ctx.font = `900 ${tickerFs}px 'Padauk', sans-serif`;
+            ctx.shadowColor = "rgba(0,0,0,0.9)";
+            ctx.shadowBlur = 6;
+            
+            // Gradient fill for channel name
+            const tickerGrad = ctx.createLinearGradient(0, 0, 0, tickerFs);
+            tickerGrad.addColorStop(0, "#FFD700");
+            tickerGrad.addColorStop(1, "#FF8C00");
+            ctx.fillStyle = tickerGrad;
+            ctx.textAlign = "left";
+            ctx.textBaseline = "top";
+            
+            const textWidth = ctx.measureText(channelName).width;
+            const padding = 20;
+            
+            if (tickerMode === "SCROLL") {
+              // Horizontal scroll from right to left
+              tickerXRef.current -= 2;
+              if (tickerXRef.current < -textWidth - padding) {
+                tickerXRef.current = targetW + padding;
+              }
+              ctx.fillText(channelName, tickerXRef.current, padding);
+            } else if (tickerMode === "BOUNCE") {
+              // Bounce animation (DVD logo style)
+              tickerXRef.current += tickerVelXRef.current;
+              tickerYRef.current += tickerVelYRef.current;
+              
+              // Boundary checks
+              if (tickerXRef.current <= 0 || tickerXRef.current + textWidth >= targetW) {
+                tickerVelXRef.current *= -1;
+                tickerXRef.current = Math.max(0, Math.min(tickerXRef.current, targetW - textWidth));
+              }
+              if (tickerYRef.current <= 0 || tickerYRef.current + tickerFs >= targetH) {
+                tickerVelYRef.current *= -1;
+                tickerYRef.current = Math.max(0, Math.min(tickerYRef.current, targetH - tickerFs));
+              }
+              
+              // Neon glow effect for bounce
+              ctx.shadowColor = `hsl(${(Date.now() / 20) % 360}, 100%, 50%)`;
+              ctx.shadowBlur = 15;
+              ctx.fillText(channelName, tickerXRef.current, tickerYRef.current);
+            }
+          } else if (channelName) {
+            // STATIC mode - bottom left
+            const tickerFs = targetH * 0.035;
+            ctx.font = `800 ${tickerFs}px 'Padauk', sans-serif`;
+            ctx.fillStyle = "#FFFFFF";
+            ctx.shadowColor = "rgba(0,0,0,0.8)";
+            ctx.shadowBlur = 4;
+            ctx.textAlign = "left";
+            ctx.textBaseline = "bottom";
+            ctx.fillText(channelName, 20, targetH - 20);
+          }
+
+          // ===== SUBTITLE RENDERING =====
           if (activeSegment && (isPlaying || effectiveTime > 0)) {
             const chunk = activeSegment.text;
             const fs = targetH * 0.05 * subScale;
@@ -886,6 +1016,87 @@ export default function VideoRecapView() {
 
   return (
     <div className="flex flex-col gap-5 pb-32 max-w-lg mx-auto px-2 animate-in fade-in duration-500">
+      {/* History Toggle Button */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => setShowHistory(!showHistory)}
+          className={`flex-1 py-3 rounded-2xl font-black text-[9px] uppercase tracking-widest transition-all border ${
+            showHistory 
+              ? "bg-amber-500/20 border-amber-500/50 text-amber-300" 
+              : "bg-white/5 border-white/10 text-slate-400 hover:text-white"
+          }`}
+        >
+          📚 HISTORY ({history.length})
+        </button>
+        {history.length > 0 && (
+          <button
+            onClick={() => {
+              if (confirm("History အကုန်ဖျက်မှာလား?")) {
+                setHistory([]);
+                localStorage.removeItem("video_recap_history");
+                toast.success("History အကုန်ဖျက်ပြီးပါပြီ");
+              }
+            }}
+            className="px-4 py-3 rounded-2xl bg-red-500/20 border border-red-500/30 text-red-400 font-black text-[9px] uppercase tracking-widest"
+          >
+            🗑️
+          </button>
+        )}
+      </div>
+
+      {/* History Panel */}
+      {showHistory && (
+        <div className="bg-[#0a0a0a] rounded-2xl border border-white/10 overflow-hidden animate-in slide-in-from-top duration-300">
+          <div className="p-3 bg-white/5 border-b border-white/10">
+            <h3 className="text-[10px] font-black text-white uppercase tracking-widest">
+              📼 RECENT RECAPS
+            </h3>
+          </div>
+          <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
+            {history.length === 0 ? (
+              <div className="p-6 text-center text-slate-500 text-xs">
+                History မရှိသေးပါ
+              </div>
+            ) : (
+              history.map((item) => (
+                <div
+                  key={item.id}
+                  className="p-3 border-b border-white/5 hover:bg-white/5 transition-colors"
+                >
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] font-bold text-white truncate">
+                        {item.fileName}
+                      </p>
+                      <p className="text-[8px] text-slate-500 mt-0.5">
+                        {new Date(item.timestamp).toLocaleString("my-MM")}
+                      </p>
+                      <p className="text-[9px] text-slate-400 mt-1 line-clamp-2">
+                        {item.script.substring(0, 100)}...
+                      </p>
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      <button
+                        onClick={() => loadFromHistory(item)}
+                        className="px-2 py-1 rounded bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[7px] font-bold"
+                      >
+                        LOAD
+                      </button>
+                      <button
+                        onClick={() => deleteFromHistory(item.id)}
+                        className="px-2 py-1 rounded bg-red-500/20 border border-red-500/30 text-red-400 text-[7px] font-bold"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
       {/* API Switcher Section */}
       <div className="flex bg-slate-900/60 backdrop-blur-xl p-1 rounded-2xl border border-white/10 shadow-lg">
         <button

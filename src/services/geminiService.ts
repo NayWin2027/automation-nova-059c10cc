@@ -458,6 +458,21 @@ export async function analyzeVideo(
   }
 }
 
+// Confirm successful process and deduct credits
+export async function confirmRecapSuccess(apiKey?: string): Promise<void> {
+  try {
+    await invokeWithAuthRetry('video-recap', {
+      confirmSuccess: true,
+      useOwnApi: !!apiKey,
+      apiKey,
+    });
+    console.log('[confirmRecapSuccess] Credits deducted on success');
+  } catch (err) {
+    console.error('confirmRecapSuccess error:', err);
+    // Don't throw - this is a best-effort call
+  }
+}
+
 // Helper to convert File to base64
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
