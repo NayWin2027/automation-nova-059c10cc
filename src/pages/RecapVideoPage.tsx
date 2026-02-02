@@ -613,115 +613,44 @@ export default function VideoRecapView() {
     setProgress(val);
   };
 
-  // DOWNLOAD: Frame-by-frame rendering with PROPER video seek await
-  const handleDownload = async () => {
-    if (!videoRef.current || !canvasRef.current || !audioRef.current || !audioBlobUrl) return;
+  // FAST REAL-TIME RECORDING: Record during preview playback (no frame-by-frame)
+  const handleAutoSaveRecord = useCallback(async () => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const audio = audioRef.current;
+    
+    if (!video || !canvas || !audio || !audioBlobUrl) {
+      toast.error("Video/Audio မ ready ဖြစ်သေးပါ");
+      return;
+    }
     
     setIsExporting(true);
     setProgress(0);
     didConfirmSuccessRef.current = false;
     
-    const video = videoRef.current;
-    const audio = audioRef.current;
-    const canvas = canvasRef.current;
+    // Reset to start
+    video.currentTime = 0;
+    audio.currentTime = 0;
     
-    // Pause any current playback
-    video.pause();
-    audio.pause();
-    setIsPlaying(false);
+    toast.info("🎬 Recording started! Preview ပြီးရင် auto-save ဖြစ်မယ်");
     
-    // Create an offscreen canvas for rendering
-    const exportCanvas = document.createElement("canvas");
-    exportCanvas.width = canvas.width || 1280;
-    exportCanvas.height = canvas.height || 720;
-    const exportCtx = exportCanvas.getContext("2d", { alpha: false });
-    
-    if (!exportCtx) {
-      toast.error("Canvas context creation failed");
-      setIsExporting(false);
-      return;
-    }
-    
-    const totalDuration = audioDuration || video.duration || 10;
+    // Capture canvas stream at 30fps
     const fps = 30;
-    const totalFrames = Math.ceil(totalDuration * fps);
-    
-    // Create freeze canvas for photo zoom effect
-    const freezeCanvas = document.createElement("canvas");
-    freezeCanvas.width = exportCanvas.width;
-    freezeCanvas.height = exportCanvas.height;
-    const freezeCtx = freezeCanvas.getContext("2d", { alpha: false });
-    
-    if (!freezeCtx) {
-      toast.error("Freeze canvas creation failed");
-      setIsExporting(false);
-      return;
-    }
-    
-    // Helper: Wait for video to seek to specific time
-    const seekVideo = (time: number): Promise<void> => {
-      return new Promise((resolve) => {
-        const targetTime = time % (video.duration || 1);
-        if (Math.abs(video.currentTime - targetTime) < 0.01) {
-          resolve();
-          return;
-        }
-        const onSeeked = () => {
-          video.removeEventListener("seeked", onSeeked);
-          resolve();
-        };
-        video.addEventListener("seeked", onSeeked);
-        video.currentTime = targetTime;
-      });
-    };
-    
-    // Collect all rendered frames as ImageData
-    const frames: ImageData[] = [];
-    let wasFreeze = false;
-    
-    toast.info("🎬 Rendering frames... ခဏစောင့်ပါ");
-    
-    // STEP 1: Pre-render all frames with proper seek await
-    for (let i = 0; i < totalFrames; i++) {
-      const currentTime = i / fps;
-      setProgress((i / totalFrames) * 50); // First 50% for rendering
-      
-      // Await video seek before drawing
-      await seekVideo(currentTime);
-      
-      // Render frame using same logic as preview
-      renderFrameToCanvas(exportCtx, freezeCtx, freezeCanvas, video, currentTime, wasFreeze, (newWasFreeze) => {
-        wasFreeze = newWasFreeze;
-      });
-      
-      // Store the frame
-      frames.push(exportCtx.getImageData(0, 0, exportCanvas.width, exportCanvas.height));
-      
-      // Yield to prevent UI freeze
-      if (i % 30 === 0) {
-        await new Promise(r => setTimeout(r, 0));
-      }
-    }
-    
-    toast.info("🎵 Encoding video with audio...");
-    
-    // STEP 2: Encode frames to video using MediaRecorder at exact fps
-    const stream = exportCanvas.captureStream(fps);
+    const stream = canvas.captureStream(fps);
     
     // Add audio track
     try {
-      audio.currentTime = 0;
       const audioStream = (audio as any).captureStream?.() || (audio as any).mozCaptureStream?.();
       if (audioStream) {
         audioStream.getAudioTracks().forEach((track: MediaStreamTrack) => stream.addTrack(track));
       }
     } catch (e) {
-      console.warn("Audio capture not supported, video will be silent");
+      console.warn("Audio capture not supported");
     }
     
     const recorder = new MediaRecorder(stream, { 
       mimeType: "video/webm;codecs=vp9",
-      videoBitsPerSecond: 8000000 
+      videoBitsPerSecond: 6000000 
     });
     
     recordedChunksRef.current = [];
@@ -729,68 +658,75 @@ export default function VideoRecapView() {
       if (e.data.size > 0) recordedChunksRef.current.push(e.data);
     };
     
-    const downloadPromise = new Promise<void>((resolve) => {
-      recorder.onstop = () => {
-        const blob = new Blob(recordedChunksRef.current, { type: "video/webm" });
-        
-        // Verify blob size before download
-        if (blob.size < 10000) {
-          toast.error("❌ Video file size too small. Please try again.");
-          setIsExporting(false);
-          resolve();
-          return;
-        }
-        
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `MASTER_AI_VIDEO_${Date.now()}.webm`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
-        // Confirm success + deduct credits ONLY after successful download
-        if (!didConfirmSuccessRef.current) {
-          didConfirmSuccessRef.current = true;
-          const customKeyForConfirm = apiType === "own" ? apiKey : undefined;
-          confirmRecapSuccess(customKeyForConfirm);
-          toast.success(`✅ Download အောင်မြင်ပါတယ်! (${(blob.size / 1024 / 1024).toFixed(1)} MB)`);
-        }
-        
+    recorder.onstop = () => {
+      const blob = new Blob(recordedChunksRef.current, { type: "video/webm" });
+      
+      if (blob.size < 10000) {
+        toast.error("❌ Recording failed. ပြန်စမ်းပါ");
         setIsExporting(false);
-        setProgress(100);
-        resolve();
-      };
-    });
-    
-    // Start recording and playback
-    recorder.start(100); // Request data every 100ms
-    audio.currentTime = 0;
-    await audio.play();
-    
-    // STEP 3: Play back pre-rendered frames at exact timing
-    let frameIndex = 0;
-    const frameInterval = 1000 / fps;
-    
-    const playbackFrame = () => {
-      if (frameIndex >= frames.length) {
-        audio.pause();
-        recorder.stop();
         return;
       }
       
-      // Draw pre-rendered frame
-      exportCtx.putImageData(frames[frameIndex], 0, 0);
-      setProgress(50 + (frameIndex / frames.length) * 50); // Last 50% for encoding
+      // Auto download
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `MASTER_AI_VIDEO_${Date.now()}.webm`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
       
-      frameIndex++;
-      setTimeout(playbackFrame, frameInterval);
+      // Confirm success
+      if (!didConfirmSuccessRef.current) {
+        didConfirmSuccessRef.current = true;
+        const customKeyForConfirm = apiType === "own" ? apiKey : undefined;
+        confirmRecapSuccess(customKeyForConfirm);
+        toast.success(`✅ Auto-save ပြီးပါပြီ! (${(blob.size / 1024 / 1024).toFixed(1)} MB)`);
+      }
+      
+      setIsExporting(false);
+      setProgress(100);
+      setIsPlaying(false);
     };
     
-    playbackFrame();
-    await downloadPromise;
-  };
+    mediaRecorderRef.current = recorder;
+    recorder.start(100);
+    
+    // Start playback
+    setupAudioAnalyzer();
+    setIsPlaying(true);
+    video.play().catch(() => {});
+    audio.play().catch(() => {});
+    
+    // Track progress and auto-stop when audio ends
+    const totalDur = audioDuration || video.duration || 10;
+    
+    const progressInterval = setInterval(() => {
+      if (audio.currentTime > 0) {
+        setProgress((audio.currentTime / totalDur) * 100);
+      }
+    }, 100);
+    
+    // Listen for audio end to stop recording
+    const onAudioEnd = () => {
+      clearInterval(progressInterval);
+      video.pause();
+      audio.pause();
+      
+      if (recorder.state === "recording") {
+        recorder.stop();
+      }
+      
+      audio.removeEventListener("ended", onAudioEnd);
+    };
+    
+    audio.addEventListener("ended", onAudioEnd);
+    
+  }, [audioBlobUrl, audioDuration, apiType, apiKey, setupAudioAnalyzer]);
+
+  // Legacy download handler (unused but kept for reference)
+  const handleDownload = handleAutoSaveRecord;
   
   // Unified frame render function (same logic for preview and export)
   const renderFrameToCanvas = (
@@ -2144,31 +2080,37 @@ export default function VideoRecapView() {
       </div>
 
       <div className="flex gap-3 pt-4 sticky bottom-4 z-50">
+        {/* Single unified button: PROCESS AI → PREVIEW (which auto-records and saves) */}
         <button
           onClick={() => {
             if (!audioBlobUrl && !analyzing) {
               handleProcess();
+            } else if (isExporting) {
+              // Already recording, do nothing (or could stop)
+              return;
             } else {
-              togglePlay();
+              // Start recording + preview (auto-save when done)
+              handleAutoSaveRecord();
             }
           }}
-          disabled={!videoSrc || isExporting}
-          className={`flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all ${isPlaying ? "bg-rose-600 text-white" : "bg-blue-600 text-white"}`}
+          disabled={!videoSrc || analyzing}
+          className={`flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all ${
+            isExporting 
+              ? "bg-gradient-to-r from-rose-600 to-orange-600 text-white animate-pulse" 
+              : isPlaying 
+                ? "bg-rose-600 text-white" 
+                : audioBlobUrl 
+                  ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white" 
+                  : "bg-blue-600 text-white"
+          }`}
         >
           {analyzing
             ? "PROCESSING..."
-            : audioBlobUrl
-              ? isPlaying
-                ? "PAUSE PREVIEW"
-                : "▶ PLAY RESULT"
-              : "⚡ PROCESS AI"}
-        </button>
-        <button
-          onClick={handleDownload}
-          disabled={!audioBlobUrl || isExporting || isPlaying}
-          className="flex-1 py-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 border border-emerald-400/30 text-white font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all disabled:opacity-50 hover:from-emerald-500 hover:to-teal-500"
-        >
-          {isExporting ? `RENDERING... ${Math.round(progress)}%` : "📥 DOWNLOAD"}
+            : isExporting
+              ? `🔴 RECORDING & SAVING... ${Math.round(progress)}%`
+              : audioBlobUrl
+                ? "▶ PREVIEW → AUTO SAVE"
+                : "⚡ PROCESS AI"}
         </button>
       </div>
     </div>
