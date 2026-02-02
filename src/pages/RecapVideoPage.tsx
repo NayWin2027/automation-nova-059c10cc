@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { analyzeVideo, generateSpeech, confirmRecapSuccess } from "../services/geminiService";
 import { useAuthGuard } from "../hooks/useAuthGuard";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { Home } from "lucide-react";
 
 // --- DATA SETS ---
 const VOICES = [
@@ -237,6 +239,7 @@ export default function VideoRecapView() {
   // Auth guard (redirects when needed). Don't render a blocking spinner here;
   // we keep UI state alive to avoid "blink" resets during long processes.
   useAuthGuard("video-recap");
+  const navigate = useNavigate();
   const [file, setFile] = useState<File | null>(null);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [videoDataUrl, setVideoDataUrl] = useState<string | null>(null); // Persist video as base64
@@ -1143,15 +1146,14 @@ export default function VideoRecapView() {
           let segmentRelativeTime = 0;
           let crossfadeAlpha = 1.0; // 1 = full video, 0 = full photo
 
-          if (activeSegment) {
-            video.playbackRate = videoSpeed;
-            segmentRelativeTime = effectiveTime - (activeSegment.audioStart || 0);
-            const CYCLE_DUR = 6.0;
-            const cycleTime = segmentRelativeTime % CYCLE_DUR;
-
+          // Always apply 3s/3s cycle when motionZoom is enabled (even without segments)
+          const CYCLE_DUR = 6.0;
+          const cycleTime = effectiveTime % CYCLE_DUR;
+          
+          if (motionZoom) {
             // --- SMOOTH 6S CYCLE (3S Video / 3S Photo Zoom) ---
-            isFreezeMode = cycleTime >= 3.0 && motionZoom;
-
+            isFreezeMode = cycleTime >= 3.0;
+            
             // SMOOTH CROSSFADE (0.4s transition for professional look)
             const FADE_DUR = 0.4;
             if (cycleTime >= 3.0 - FADE_DUR && cycleTime < 3.0) {
@@ -1160,16 +1162,21 @@ export default function VideoRecapView() {
             } else if (cycleTime >= 6.0 - FADE_DUR) {
               // Transitioning TO video (end of cycle)
               crossfadeAlpha = (cycleTime - (6.0 - FADE_DUR)) / FADE_DUR;
-            } else if (cycleTime < FADE_DUR && segmentRelativeTime > FADE_DUR) {
+            } else if (cycleTime < FADE_DUR && effectiveTime > FADE_DUR) {
               // Continuing from previous cycle
               crossfadeAlpha = 0.5 + (cycleTime / FADE_DUR) * 0.5;
             } else {
               crossfadeAlpha = isFreezeMode ? 0.0 : 1.0;
             }
-
+            
             // Easing for smoother feel
             const easeInOut = (t: number) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
             crossfadeAlpha = easeInOut(Math.max(0, Math.min(1, crossfadeAlpha)));
+          }
+
+          if (activeSegment) {
+            video.playbackRate = videoSpeed;
+            segmentRelativeTime = effectiveTime - (activeSegment.audioStart || 0);
 
             if (!isFreezeMode && isPlaying && scriptSegments.length > 0) {
               const targetVideoTime = activeSegment.time + (segmentRelativeTime % video.duration);
@@ -1230,8 +1237,9 @@ export default function VideoRecapView() {
 
           // RENDER PHOTO ZOOM LAYER with crossfade
           if (crossfadeAlpha < 0.99 && motionZoom) {
-            const cycleTime = segmentRelativeTime % 6.0;
-            const progressInFreeze = cycleTime >= 3.0 ? (cycleTime - 3.0) / 3.0 : 0;
+            // Use global cycle time (not segment-relative) for consistent zoom
+            const globalCycleTime = effectiveTime % 6.0;
+            const progressInFreeze = globalCycleTime >= 3.0 ? (globalCycleTime - 3.0) / 3.0 : 0;
 
             // Cinematic Ken Burns zoom with easing
             const easeInOut = (t: number) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
@@ -1545,6 +1553,21 @@ export default function VideoRecapView() {
 
   return (
     <div className="flex flex-col gap-5 pb-32 max-w-lg mx-auto px-2 animate-in fade-in duration-500">
+      {/* Header with Home Button */}
+      <div className="flex items-center justify-between py-2">
+        <button
+          onClick={() => navigate("/")}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-all"
+        >
+          <Home className="w-4 h-4" />
+          <span className="text-[9px] font-black uppercase tracking-widest">Home</span>
+        </button>
+        <h1 className="text-[11px] font-black text-white uppercase tracking-widest">
+          VIDEO <span className="text-blue-500">RECAP</span>
+        </h1>
+        <div className="w-16" /> {/* Spacer for centering */}
+      </div>
+      
       {/* History Toggle Button */}
       <div className="flex gap-2">
         <button
