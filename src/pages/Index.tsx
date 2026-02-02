@@ -154,26 +154,20 @@ const Index = () => {
     return !setting || setting.is_enabled;
   });
 
-  const handleToolClick = async (tool: Tool) => {
+  const handleToolClick = (tool: Tool) => {
     const userPlan = profile?.plan || 'free';
-    // Keep existing behavior: treat Pro + Premium as "premium users" for premium-tool access.
     const isPremium = userPlan === 'premium' || userPlan === 'pro';
     const usageCount = getToolUsageCount(tool.id);
 
-    // IMPORTANT: if either API mode is enabled, allow the tool.
     const accessApp = canAccessTool(tool.id, isAuthenticated, isPremium, usageCount, userPlan, 'app');
     const accessOwn = canAccessTool(tool.id, isAuthenticated, isPremium, usageCount, userPlan, 'own');
-
     const anyAllowed = accessApp.allowed || accessOwn.allowed;
 
     if (!anyAllowed) {
       const reason = accessApp.reason || accessOwn.reason;
 
       if (reason === 'Login ဝင်ရန်လိုအပ်ပါသည်') {
-        toast({
-          title: "🔐 Login Required",
-          description: "Tool ကို အသုံးပြုရန် Login ဝင်ပါ",
-        });
+        // Instant redirect - no toast delay
         navigate('/login');
         return;
       }
@@ -186,7 +180,7 @@ const Index = () => {
       return;
     }
 
-    // Record usage in background (don't await to prevent re-render issues)
+    // Record usage in background
     recordToolUsage(tool.id).catch(console.error);
 
     if (tool.route) {
