@@ -172,8 +172,9 @@ serve(async (req) => {
       }
 
       const sanitizedFileName = fileName.replace(/[\/\\:*?"<>|]/g, "_").substring(0, 255);
+      const apiKeyToUse = isOwnApiKey ? apiKey : BACKEND_GEMINI_KEY;
       
-      if (!BACKEND_GEMINI_KEY) {
+      if (!apiKeyToUse) {
         return new Response(
           JSON.stringify({ error: "Backend API key not configured" }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -183,7 +184,7 @@ serve(async (req) => {
       console.log(`Initiating upload for file: ${sanitizedFileName}, size: ${fileSize}`);
 
       const initResponse = await fetch(
-        `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${BACKEND_GEMINI_KEY}`,
+        `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${apiKeyToUse}`,
         {
           method: 'POST',
           headers: {
@@ -231,6 +232,83 @@ serve(async (req) => {
 
       return new Response(
         JSON.stringify({ uploadUrl }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // NEW: Handle chunk upload through backend (CORS-safe)
+    if (action === 'uploadChunk') {
+      const { uploadUrl: chunkUploadUrl, chunkData, chunkIndex, totalChunks, offset, totalSize, isLastChunk } = body;
+      
+      if (!chunkUploadUrl || !chunkData) {
+        return new Response(
+          JSON.stringify({ error: "Upload URL and chunk data required" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log(`Uploading chunk ${chunkIndex + 1}/${totalChunks}, offset: ${offset}`);
+
+      // Decode base64 chunk to binary
+      const binaryChunk = Uint8Array.from(atob(chunkData), c => c.charCodeAt(0));
+      
+      const uploadCommand = isLastChunk ? 'upload, finalize' : 'upload';
+      
+      const chunkResponse = await fetch(chunkUploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': mimeType || 'video/mp4',
+          'X-Goog-Upload-Offset': String(offset),
+          'X-Goog-Upload-Command': uploadCommand,
+        },
+        body: binaryChunk
+      });
+
+      if (!chunkResponse.ok) {
+        const errText = await chunkResponse.text();
+        console.error(`Chunk ${chunkIndex + 1} upload failed:`, errText);
+        
+        if (chunkResponse.status === 429 || errText.includes('RESOURCE_EXHAUSTED')) {
+          return new Response(
+            JSON.stringify({
+              error: "API quota ကုန်သွားပါပြီ။ ခဏစောင့်ပါ။",
+              retryable: true,
+              retryAfterSeconds: 30
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        
+        return new Response(
+          JSON.stringify({ error: `Chunk upload failed` }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // If last chunk, parse the response to get file URI
+      if (isLastChunk) {
+        try {
+          const uploadResult = await chunkResponse.json();
+          const fileUri = uploadResult.file?.uri;
+          const uploadedFileName = uploadResult.file?.name;
+          
+          console.log(`Upload complete! File URI: ${fileUri}`);
+          
+          return new Response(
+            JSON.stringify({ success: true, fileUri, fileName: uploadedFileName }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        } catch (parseErr) {
+          console.error("Failed to parse upload result:", parseErr);
+          return new Response(
+            JSON.stringify({ error: "Failed to get file URI after upload" }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, chunkIndex }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
