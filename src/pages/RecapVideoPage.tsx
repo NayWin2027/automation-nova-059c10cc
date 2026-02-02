@@ -1,49 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { generateSpeech } from "../services/geminiService";
-import { supabase } from "@/integrations/supabase/client";
-
-// Analyze video function - calls the video-recap backend function
-// IMPORTANT: Never throw on quota/rate-limit errors; return a structured payload so the UI doesn't blank-screen.
-const analyzeVideo = async (
-  videoDataUrl: string,
-  targetLang: string
-): Promise<{ recap: string; error?: string; retryable?: boolean; retryAfterSeconds?: number }> => {
-  const { data, error } = await supabase.functions.invoke("video-recap", {
-    body: { videoUrl: videoDataUrl, targetLang },
-  });
-
-  // If the function returned a non-2xx, Supabase sets `error`. We still try to read `data` if present.
-  if (error) {
-    return {
-      recap: "",
-      error: (data as any)?.error ?? error.message,
-      retryable: (data as any)?.retryable ?? false,
-      retryAfterSeconds: (data as any)?.retryAfterSeconds,
-    };
-  }
-
-  // Handle graceful error responses (200 with error payload)
-  if ((data as any)?.error) {
-    return {
-      recap: "",
-      error: (data as any).error,
-      retryable: (data as any).retryable ?? false,
-      retryAfterSeconds: (data as any).retryAfterSeconds,
-    };
-  }
-
-  return { recap: (data as any)?.recap || "" };
-};
-
-// Convert file to base64 data URL immediately on selection
-const fileToBase64 = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-};
+import { analyzeVideo, generateSpeech, audioContext } from "../services/geminiService";
 
 // --- DATA SETS ---
 const VOICES = [
@@ -259,9 +215,8 @@ const createWavBlob = (base64Audio: string) => {
 };
 
 export default function VideoRecapView() {
-  const [videoDataUrl, setVideoDataUrl] = useState<string | null>(null); // Base64 data URL stored immediately
+  const [file, setFile] = useState<File | null>(null);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
-  const [fileSize, setFileSize] = useState<number>(0);
   const [analyzing, setAnalyzing] = useState(false);
   const [statusText, setStatusText] = useState("");
   const [scriptSegments, setScriptSegments] = useState<ScriptSegment[]>([]);
@@ -303,6 +258,10 @@ export default function VideoRecapView() {
   const [channelName, setChannelName] = useState("");
   const [tickerMode, setTickerMode] = useState<"OFF" | "SCROLL" | "BOUNCE">("OFF");
 
+  // NEW API STATES
+  const [apiType, setApiType] = useState<"app" | "own">("app");
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem("master_recap_api_key") || "");
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -319,28 +278,19 @@ export default function VideoRecapView() {
 
   // Animation States for Lip-sync
   const analyserRef = useRef<AnalyserNode | null>(null);
-  const dataArrayRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
+  const dataArrayRef = useRef<Uint8Array | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  useEffect(() => {
+    localStorage.setItem("master_recap_api_key", apiKey);
+  }, [apiKey]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const f = e.target.files[0];
-      setFileSize(f.size);
-      
-      // Create object URL for video preview
+      setFile(f);
       const url = URL.createObjectURL(f);
       setVideoSrc(url);
-      
-      // Convert to base64 IMMEDIATELY to avoid permission issues on mobile
-      try {
-        const dataUrl = await fileToBase64(f);
-        setVideoDataUrl(dataUrl);
-      } catch (err) {
-        console.error("Failed to convert file to base64:", err);
-        alert("ဖိုင်ဖတ်ရန် မအောင်မြင်ပါ။ ထပ်ကြိုးစားပါ။");
-        return;
-      }
-      
       setFullScriptText("");
       setScriptSegments([]);
       setAudioBlobUrl(null);
@@ -381,9 +331,14 @@ export default function VideoRecapView() {
   }, [charId]);
 
   const handleProcess = async () => {
-    if (!videoDataUrl) return;
-    if (fileSize > 200 * 1024 * 1024) {
-      alert("⚠️ Video file is too large! Maximum limit is 200MB.");
+    if (!file) return;
+    if (apiType === "own" && !apiKey.trim()) {
+      alert("GEMINI API KEY အရင်ထည့်ပေးပါ။");
+      return;
+    }
+    // UPGRADED: 1GB LIMIT
+    if (file.size > 1024 * 1024 * 1024) {
+      alert("⚠️ Video file is too large! Maximum limit is 1GB.");
       return;
     }
     setAnalyzing(true);
@@ -392,20 +347,8 @@ export default function VideoRecapView() {
     setScriptSegments([]);
     setAudioBlobUrl(null);
     try {
-      const result = await analyzeVideo(videoDataUrl, targetLang);
-      
-      // Handle graceful error responses with retry info
-      if (result.error) {
-        if (result.retryable && result.retryAfterSeconds) {
-          alert(`${result.error}\n\n${result.retryAfterSeconds} စက္ကန့်အကြာတွင် ပြန်ကြိုးစားပါ။`);
-        } else {
-          alert("Error: " + result.error);
-        }
-        setAnalyzing(false);
-        return;
-      }
-      
-      const rawResponse = result.recap;
+      const customKey = apiType === "own" ? apiKey : undefined;
+      const rawResponse = await analyzeVideo(file, file.type || "video/mp4", targetLang, customKey);
       let segments: ScriptSegment[] = [];
       try {
         segments = JSON.parse(rawResponse);
@@ -419,6 +362,7 @@ export default function VideoRecapView() {
           text: s.text || "",
         }))
         .sort((a, b) => a.time - b.time);
+
       const completeText = segments
         .map((s) => s.text)
         .join(" ")
@@ -436,7 +380,8 @@ export default function VideoRecapView() {
   const generateAudioFromText = async (text: string, segments: ScriptSegment[]) => {
     setStatusText("STEP 2/3: GENERATING NARRATION...");
     const voiceObj = VOICES.find((v) => v.id === selectedVoice) || VOICES[0];
-    const audioB64 = await generateSpeech(text, voiceObj.apiVoice);
+    const customKey = apiType === "own" ? apiKey : undefined;
+    const audioB64 = await generateSpeech(text, voiceObj.apiVoice, customKey);
     if (audioB64) {
       setStatusText("STEP 3/3: SYNCING VISUALS...");
       const blob = createWavBlob(audioB64);
@@ -572,18 +517,24 @@ export default function VideoRecapView() {
 
   useEffect(() => {
     if (!freezeCanvasRef.current) freezeCanvasRef.current = document.createElement("canvas");
+
+    // --- SHARED MASTER RENDERER (LOCK PREVIEW TO EXPORT) ---
     const render = () => {
       const video = videoRef.current;
       const canvas = canvasRef.current;
       const audio = audioRef.current;
       const freezeCanvas = freezeCanvasRef.current;
+
       if (video && canvas && freezeCanvas && audio && video.readyState >= 2) {
         const ctx = canvas.getContext("2d", { alpha: false });
         const freezeCtx = freezeCanvas.getContext("2d", { alpha: false });
+
         if (ctx && freezeCtx) {
           if (audioDuration > 0 && !audio.paused) audio.playbackRate = audioSpeed;
+
           let targetW = video.videoWidth;
           let targetH = video.videoHeight;
+
           const MAX_RES = 1080;
           if (targetH > MAX_RES) {
             targetW = targetW * (MAX_RES / targetH);
@@ -594,15 +545,17 @@ export default function VideoRecapView() {
             targetW = baseH * (aspectRatio.w / aspectRatio.h);
             targetH = baseH;
           }
-          if (isNaN(targetW) || isNaN(targetH) || targetW <= 0 || targetH <= 0) {
-            targetW = 1280;
-            targetH = 720;
-          }
+
+          if (isNaN(targetW) || targetW <= 0) targetW = 1280;
+          if (isNaN(targetH) || targetH <= 0) targetH = 720;
+
           const effectiveTime = audioBlobUrl && !audio.paused ? audio.currentTime : video.currentTime;
+
           if (isPlaying) {
             const totalDur = audioDuration || video.duration || 1;
             setProgress((effectiveTime / totalDur) * 100);
           }
+
           let activeSegment = scriptSegments.find(
             (s) => effectiveTime >= (s.audioStart || 0) && effectiveTime < (s.audioEnd || Infinity),
           );
@@ -613,32 +566,42 @@ export default function VideoRecapView() {
           ) {
             activeSegment = scriptSegments[scriptSegments.length - 1];
           }
+
           let isFreezeMode = false;
           let segmentRelativeTime = 0;
+          let opacityRamp = 1.0;
+
           if (activeSegment) {
             video.playbackRate = videoSpeed;
             segmentRelativeTime = effectiveTime - (activeSegment.audioStart || 0);
             const CYCLE_DUR = 6.0;
             const cycleTime = segmentRelativeTime % CYCLE_DUR;
 
-            // --- ENHANCED 3S VIDEO / 3S PHOTO SMOOTHNESS ---
+            // --- ENHANCED CYCLE LOGIC (3S Video / 3S Photo Zoom) ---
             isFreezeMode = cycleTime >= 3.0 && motionZoom;
 
+            // Transition Smoothing (0.5s ramp)
+            if (cycleTime >= 2.5 && cycleTime < 3.0) {
+              opacityRamp = 1.0 - (cycleTime - 2.5) / 0.5; // Fade out video
+            } else if (cycleTime >= 5.5 && cycleTime < 6.0) {
+              opacityRamp = (cycleTime - 5.5) / 0.5; // Fade in video
+            }
+
             if (!isFreezeMode && isPlaying && scriptSegments.length > 0) {
-              const targetVideoTime = activeSegment.time + segmentRelativeTime;
+              // PRECISE MATCHING: Ensure the video subject matches the narration
+              const targetVideoTime = activeSegment.time + (segmentRelativeTime % video.duration);
               const drift = Math.abs(video.currentTime - targetVideoTime);
-              // Precise sync with small buffer to prevent stutter
-              if (drift > 0.3) video.currentTime = targetVideoTime;
+              if (drift > 0.1) video.currentTime = targetVideoTime;
             }
           }
+
           if (canvas.width !== targetW || canvas.height !== targetH) {
             canvas.width = targetW;
             canvas.height = targetH;
-            if (!isFreezeMode || freezeCanvas.width === 0) {
-              freezeCanvas.width = targetW;
-              freezeCanvas.height = targetH;
-            }
+            freezeCanvas.width = targetW;
+            freezeCanvas.height = targetH;
           }
+
           ctx.fillStyle = "#000";
           ctx.fillRect(0, 0, targetW, targetH);
           ctx.save();
@@ -646,6 +609,7 @@ export default function VideoRecapView() {
             ctx.translate(targetW, 0);
             ctx.scale(-1, 1);
           }
+
           const vw = video.videoWidth;
           const vh = video.videoHeight;
           let scale = Math.min(targetW / vw, targetH / vh);
@@ -655,39 +619,37 @@ export default function VideoRecapView() {
           const dx = (targetW - dw) / 2;
           const dy = (targetH - dh) / 2;
 
-          if (!isFreezeMode) {
-            ctx.drawImage(video, dx, dy, dw, dh);
-            // Update freeze buffer only during video phase for a seamless snap
-            if (freezeCanvas.width > 0 && freezeCanvas.height > 0) {
+          // RENDER VIDEO LAYER
+          ctx.globalAlpha = isFreezeMode ? 0 : opacityRamp;
+          ctx.drawImage(video, dx, dy, dw, dh);
+
+          // RENDER PHOTO ZOOM LAYER
+          if (isFreezeMode || opacityRamp < 1.0) {
+            // Update freeze buffer only when switching to photo mode
+            if (opacityRamp > 0.9 && !isFreezeMode) {
               freezeCtx.clearRect(0, 0, targetW, targetH);
               freezeCtx.drawImage(video, dx, dy, dw, dh);
             }
-          } else {
-            const cycleTime = segmentRelativeTime % 6.0;
-            const progressInFreeze = (cycleTime - 3.0) / 3.0; // 0 to 1
 
-            // --- CINEMATIC PHOTO ZOOM ---
-            const zoomStart = 1.0;
-            const zoomEnd = 1.25;
-            // Easing for smoother movement
+            const cycleTime = segmentRelativeTime % 6.0;
+            const progressInFreeze = isFreezeMode ? (cycleTime - 3.0) / 3.0 : 0;
+
+            // --- CINEMATIC PHOTO ZOOM (Easing for smoothness) ---
             const easedProgress = progressInFreeze * progressInFreeze * (3 - 2 * progressInFreeze);
-            const currentZoom = zoomStart + easedProgress * (zoomEnd - zoomStart);
+            const currentZoom = 1.0 + easedProgress * 0.25; // Zoom up to 1.25x
 
             const zoomedW = targetW * currentZoom;
             const zoomedH = targetH * currentZoom;
             const centerX = (targetW - zoomedW) / 2;
             const centerY = (targetH - zoomedH) / 2;
 
+            ctx.globalAlpha = isFreezeMode ? 1.0 : 1.0 - opacityRamp;
             if (freezeCanvas.width > 0) {
               ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH, centerX, centerY, zoomedW, zoomedH);
             }
-
-            // Subtle Camera Flash at Transition for extra juice
-            if (progressInFreeze < 0.08) {
-              ctx.fillStyle = `rgba(255, 255, 255, ${0.15 * (1 - progressInFreeze / 0.08)})`;
-              ctx.fillRect(0, 0, targetW, targetH);
-            }
           }
+
+          ctx.globalAlpha = 1.0;
 
           if (autoColor) {
             ctx.fillStyle = "rgba(255, 160, 0, 0.08)";
@@ -695,6 +657,7 @@ export default function VideoRecapView() {
             ctx.fillRect(0, 0, targetW, targetH);
             ctx.globalCompositeOperation = "source-over";
           }
+
           if (filmGrain) {
             const noiseCount = targetW * targetH * 0.005;
             ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
@@ -702,6 +665,7 @@ export default function VideoRecapView() {
           }
           ctx.restore();
 
+          // --- OVERLAYS ---
           if (blurEnabled) {
             const by = targetH * (blurY / 100);
             const bh = targetH * (blurH / 100);
@@ -710,16 +674,13 @@ export default function VideoRecapView() {
           }
 
           if (charImgRef.current) {
-            // --- ADVANCED LIP SYNC ANIMATION ---
             let volumeScale = 0;
             if (analyserRef.current && dataArrayRef.current && isPlaying) {
               analyserRef.current.getByteFrequencyData(dataArrayRef.current);
               let sum = 0;
-              // Target speech frequencies (low-mid) for better voice matching
               for (let i = 2; i < 16; i++) sum += dataArrayRef.current[i];
               volumeScale = sum / 14 / 255;
             }
-
             const cw = targetW * 0.25;
             const ch = cw;
             let cx = 20,
@@ -740,39 +701,23 @@ export default function VideoRecapView() {
               cx = targetW - cw - 20;
               cy = targetH - ch - 20;
             }
-
             ctx.save();
-            // Subtle body movement based on volume
-            const animScale = 1 + volumeScale * 0.06;
+            const animScale = 1 + volumeScale * 0.08;
             ctx.translate(cx + cw / 2, cy + ch / 2);
             ctx.scale(animScale, animScale);
             ctx.translate(-(cx + cw / 2), -(cy + ch / 2));
-
             ctx.beginPath();
             ctx.arc(cx + cw / 2, cy + ch / 2, cw / 2, 0, Math.PI * 2);
             ctx.clip();
             ctx.drawImage(charImgRef.current, cx, cy, cw, ch);
-
-            // --- REALISTIC MOUTH SYNC ---
             if (volumeScale > 0.04) {
-              // Viseme approximation: open mouth vertically based on volume
-              const mouthH = ch * 0.09 * (0.2 + volumeScale * 0.8);
-              const mouthW = cw * 0.16 * (0.8 + volumeScale * 0.2);
+              const mouthH = ch * 0.08 * (0.2 + volumeScale * 0.8);
               const mouthY = cy + ch * 0.72;
-
-              // Lip shadow
-              ctx.fillStyle = "rgba(0,0,0,0.65)";
+              ctx.fillStyle = "rgba(0,0,0,0.6)";
               ctx.beginPath();
-              ctx.ellipse(cx + cw / 2, mouthY, mouthW / 2, mouthH, 0, 0, Math.PI * 2);
-              ctx.fill();
-
-              // Lips inner detail
-              ctx.fillStyle = "rgba(180,60,60,0.35)";
-              ctx.beginPath();
-              ctx.ellipse(cx + cw / 2, mouthY, mouthW / 2.5, mouthH / 1.5, 0, 0, Math.PI * 2);
+              ctx.ellipse(cx + cw / 2, mouthY, cw * 0.08, mouthH, 0, 0, Math.PI * 2);
               ctx.fill();
             }
-
             ctx.strokeStyle = "#fff";
             ctx.lineWidth = 4;
             ctx.stroke();
@@ -787,23 +732,15 @@ export default function VideoRecapView() {
               const margin = 20;
               const lx = targetW - size - margin;
               const ly = margin;
-              const centerX = lx + size / 2;
-              const centerY = ly + size / 2;
               ctx.save();
-              ctx.translate(centerX, centerY);
+              ctx.translate(lx + size / 2, ly + size / 2);
               if (logoSpin) {
                 logoAngleRef.current += 0.05;
                 ctx.rotate(logoAngleRef.current);
               }
               if (logoNeon) {
-                const h = (Date.now() / 10) % 360;
-                ctx.shadowColor = `hsl(${h}, 100%, 50%)`;
+                ctx.shadowColor = `hsl(${(Date.now() / 10) % 360}, 100%, 50%)`;
                 ctx.shadowBlur = 30;
-                ctx.strokeStyle = `hsl(${h}, 100%, 50%)`;
-                ctx.lineWidth = 5;
-                ctx.beginPath();
-                ctx.arc(0, 0, size / 2 + 5, 0, Math.PI * 2);
-                ctx.stroke();
               }
               ctx.beginPath();
               ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
@@ -813,94 +750,42 @@ export default function VideoRecapView() {
             }
           }
 
-          if (channelName && tickerMode !== "OFF") {
-            const fontSize = targetH * 0.04;
-            ctx.font = `900 ${fontSize}px sans-serif`;
-            ctx.fillStyle = "#fff";
-            ctx.shadowColor = "black";
-            ctx.shadowBlur = 4;
-            const textMetrics = ctx.measureText(channelName);
-            const textW = textMetrics.width;
-            if (tickerMode === "SCROLL") {
-              tickerXRef.current -= 3;
-              if (tickerXRef.current < -textW) tickerXRef.current = targetW;
-              const y = fontSize + 20;
-              ctx.fillText(channelName, tickerXRef.current, y);
-            } else if (tickerMode === "BOUNCE") {
-              tickerXRef.current += tickerVelXRef.current;
-              tickerYRef.current += tickerVelYRef.current;
-              if (tickerXRef.current <= 0 || tickerXRef.current >= targetW - textW) tickerVelXRef.current *= -1;
-              if (tickerYRef.current <= fontSize || tickerYRef.current >= targetH) tickerVelYRef.current *= -1;
-              if (tickerYRef.current === 0) tickerYRef.current = targetH / 2;
-              ctx.fillText(channelName, tickerXRef.current, tickerYRef.current);
-            }
-            ctx.shadowBlur = 0;
-          }
-
           if (activeSegment && (isPlaying || effectiveTime > 0)) {
             const chunk = activeSegment.text;
-            const segmentDuration = (activeSegment.audioEnd || 1) - (activeSegment.audioStart || 0);
-            const segmentProgress = segmentRelativeTime / (segmentDuration || 1);
-            if (chunk) {
-              const fs = targetH * 0.05 * subScale;
-              ctx.font = `900 ${fs}px 'Padauk', sans-serif`;
-              ctx.textAlign = "center";
-              ctx.textBaseline = "middle";
-              const tx = targetW / 2;
-              const by = targetH * (blurY / 100);
-              const bh = targetH * (blurH / 100);
-              const ty = by + bh / 2;
-              ctx.shadowColor = "rgba(0,0,0,0.8)";
-              ctx.shadowBlur = 4;
-              ctx.shadowOffsetX = 2;
-              ctx.shadowOffsetY = 2;
-              if (subColor === "GOLD") {
-                const g = ctx.createLinearGradient(0, ty - fs, 0, ty);
-                g.addColorStop(0, "#FFD700");
-                g.addColorStop(1, "#B8860B");
-                ctx.fillStyle = g;
-              } else if (subColor === "NEON") {
-                ctx.fillStyle = "#00FFFF";
-                ctx.shadowBlur = 15;
-                ctx.shadowColor = "#00FFFF";
-              } else ctx.fillStyle = SUB_COLORS.find((c) => c.id === subColor)?.hex || "white";
-              const maxWidth = targetW * 0.9;
-              let words: string[] = [];
-              if (typeof Intl !== "undefined" && (Intl as any).Segmenter) {
-                const segmenter = new (Intl as any).Segmenter("my", { granularity: "word" });
-                words = Array.from(segmenter.segment(chunk)).map((s: any) => s.segment);
-              } else {
-                words = chunk.split(" ");
-                if (words.length === 1) words = chunk.split("");
-              }
-              let line = "";
-              let lines = [];
-              for (let i = 0; i < words.length; i++) {
-                const testLine = line + words[i];
-                const metrics = ctx.measureText(testLine);
-                if (metrics.width > maxWidth && i > 0) {
-                  lines.push(line);
-                  line = words[i];
-                } else line = testLine;
-              }
-              lines.push(line);
-              let displayLines = lines;
-              if (lines.length > 2) {
-                const maxScroll = lines.length - 2;
-                const scrollIdx = Math.floor(segmentProgress * (maxScroll + 1));
-                displayLines = lines.slice(scrollIdx, scrollIdx + 2);
-              }
-              displayLines.forEach((l, i) => {
-                const yOff = ty - (displayLines.length - 1) * fs * 0.6 + i * fs * 1.2;
-                ctx.fillText(l, tx, yOff);
-              });
-              ctx.shadowBlur = 0;
+            const fs = targetH * 0.05 * subScale;
+            ctx.font = `900 ${fs}px 'Padauk', sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            const ty = targetH * (blurY / 100) + (targetH * (blurH / 100)) / 2;
+            ctx.shadowColor = "rgba(0,0,0,0.8)";
+            ctx.shadowBlur = 4;
+            if (subColor === "GOLD") {
+              const g = ctx.createLinearGradient(0, ty - fs, 0, ty);
+              g.addColorStop(0, "#FFD700");
+              g.addColorStop(1, "#B8860B");
+              ctx.fillStyle = g;
+            } else if (subColor === "NEON") {
+              ctx.fillStyle = "#00FFFF";
+              ctx.shadowBlur = 15;
+              ctx.shadowColor = "#00FFFF";
+            } else ctx.fillStyle = SUB_COLORS.find((c) => c.id === subColor)?.hex || "white";
+
+            const maxWidth = targetW * 0.9;
+            const words = chunk.split(" ");
+            let line = "";
+            let lines = [];
+            for (let i = 0; i < words.length; i++) {
+              const metrics = ctx.measureText(line + words[i]);
+              if (metrics.width > maxWidth && i > 0) {
+                lines.push(line);
+                line = words[i] + " ";
+              } else line += words[i] + " ";
             }
-          }
-          if (borderEnabled) {
-            ctx.lineWidth = borderWidth;
-            ctx.strokeStyle = borderColor;
-            ctx.strokeRect(0, 0, targetW, targetH);
+            lines.push(line);
+            lines.forEach((l, i) => {
+              const yOff = ty - (lines.length - 1) * fs * 0.6 + i * fs * 1.2;
+              ctx.fillText(l, targetW / 2, yOff);
+            });
           }
         }
       }
@@ -946,6 +831,36 @@ export default function VideoRecapView() {
 
   return (
     <div className="flex flex-col gap-5 pb-32 max-w-lg mx-auto px-2 animate-in fade-in duration-500">
+      {/* API Switcher Section */}
+      <div className="flex bg-slate-900/60 backdrop-blur-xl p-1 rounded-2xl border border-white/10 shadow-lg">
+        <button
+          onClick={() => setApiType("app")}
+          className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${apiType === "app" ? "jewel-sapphire shadow-[0_0_15px_rgba(37,99,235,0.4)] text-white" : "text-slate-400 hover:text-white"}`}
+        >
+          APP API <span className="text-[8px]">🔒</span>
+        </button>
+        <button
+          onClick={() => setApiType("own")}
+          className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all ${apiType === "own" ? "jewel-sapphire shadow-[0_0_15px_rgba(37,99,235,0.4)] text-white" : "text-slate-400 hover:text-white"}`}
+        >
+          OWN API
+        </button>
+      </div>
+
+      {/* Custom API Input Box */}
+      {apiType === "own" && (
+        <div className="neon-glass rounded-2xl p-4 border border-amber-500/20 space-y-2 shadow-inner animate-in zoom-in-95 duration-300">
+          <h4 className="text-[9px] font-black text-amber-200 uppercase tracking-widest ml-1">GEMINI API KEY</h4>
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="Paste your Gemini API Key here..."
+            className="w-full bg-black/40 border border-amber-500/30 rounded-xl p-3 text-xs font-bold text-white focus:ring-1 focus:ring-amber-500 outline-none transition-all placeholder:text-slate-600 shadow-inner"
+          />
+        </div>
+      )}
+
       <div className="flex items-center gap-3 bg-[#050505] p-2 rounded-2xl border border-white/10">
         <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -958,12 +873,13 @@ export default function VideoRecapView() {
           </h2>
           <input
             type="text"
-            placeholder="Video Link..."
+            placeholder="1GB Video Max..."
             disabled
             className="w-full bg-transparent text-[9px] text-slate-500 outline-none border-none p-0 h-auto font-bold"
           />
         </div>
       </div>
+
       <div className="bg-black rounded-[32px] overflow-hidden border border-white/10 shadow-2xl relative group">
         <div className="relative w-full aspect-square bg-black flex items-center justify-center">
           {!videoSrc ? (
@@ -986,7 +902,9 @@ export default function VideoRecapView() {
                   <line x1="12" x2="12" y1="15" y2="3" />
                 </svg>
               </div>
-              <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">TAP TO UPLOAD</span>
+              <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">
+                TAP TO UPLOAD (1GB MAX)
+              </span>
               <input id="vid" type="file" accept="video/*" onChange={handleFileChange} className="hidden" />
             </div>
           ) : (
@@ -1051,6 +969,7 @@ export default function VideoRecapView() {
           )}
         </div>
       </div>
+
       <div className="space-y-2">
         <AccordionItem
           title="1. SETTINGS & FORMAT"
@@ -1360,48 +1279,6 @@ export default function VideoRecapView() {
                 </div>
               )}
             </div>
-            <div className="border-t border-white/5 pt-2 space-y-2">
-              <label className="text-[7px] font-black text-slate-500 uppercase">CHANNEL LOGO</label>
-              <div className="flex gap-2">
-                <label className="flex-1 py-2 border border-dashed border-white/20 rounded-xl flex items-center justify-center gap-1 cursor-pointer hover:bg-white/5">
-                  <span className="text-[7px] font-black text-white uppercase">UPLOAD IMG</span>
-                  <input type="file" onChange={handleLogoUpload} className="hidden" />
-                </label>
-                {logoSrc && (
-                  <>
-                    <button
-                      onClick={() => setLogoNeon(!logoNeon)}
-                      className={`px-2 rounded-xl text-[6px] font-black border ${logoNeon ? "border-purple-500 text-purple-400" : "border-white/10 text-slate-500"}`}
-                    >
-                      NEON
-                    </button>
-                    <button
-                      onClick={() => setLogoSpin(!logoSpin)}
-                      className={`px-2 rounded-xl text-[6px] font-black border ${logoSpin ? "border-blue-500 text-blue-400" : "border-white/10 text-slate-500"}`}
-                    >
-                      SPIN
-                    </button>
-                  </>
-                )}
-              </div>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={channelName}
-                  onChange={(e) => setChannelName(e.target.value)}
-                  placeholder="Ticker Text..."
-                  className="flex-1 bg-black/40 border border-white/10 rounded-xl px-2 text-[8px] text-white outline-none"
-                />
-                <button
-                  onClick={() =>
-                    setTickerMode(tickerMode === "OFF" ? "SCROLL" : tickerMode === "SCROLL" ? "BOUNCE" : "OFF")
-                  }
-                  className="px-3 rounded-xl bg-white/5 border border-white/10 text-[7px] font-black text-white w-16"
-                >
-                  {tickerMode}
-                </button>
-              </div>
-            </div>
           </div>
         </AccordionItem>
         <AccordionItem
@@ -1444,6 +1321,7 @@ export default function VideoRecapView() {
           </div>
         </AccordionItem>
       </div>
+
       <div className="flex gap-3 pt-4 sticky bottom-4 z-50">
         <button
           onClick={() => {
