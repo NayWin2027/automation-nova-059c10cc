@@ -350,6 +350,8 @@ export default function VideoRecapView() {
   const tickerVelYRef = useRef(1);
   const charImgRef = useRef<HTMLImageElement | null>(null);
   const freezeCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const wasFreezeModeRef = useRef(false);
+  const didConfirmSuccessRef = useRef(false);
 
   // Animation States for Lip-sync
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -525,11 +527,10 @@ export default function VideoRecapView() {
         setScriptSegments(mappedSegments);
         setAnalyzing(false);
         
-        // SUCCESS: Deduct credits now + save to history
-        const customKeyForConfirm = apiType === "own" ? apiKey : undefined;
-        confirmRecapSuccess(customKeyForConfirm);
+        // Save draft to history; confirm credits only after export succeeds.
+        didConfirmSuccessRef.current = false;
         saveToHistory(text, url, mappedSegments);
-        toast.success("✨ Premium Recap ပြီးပါပြီ! Credits ဖြတ်ပြီးပါပြီ။");
+        toast.success("✨ Premium Recap ပြီးပါပြီ! (Export အောင်မြင်မှ credits ဖြတ်ပါမယ်)");
         
         setTimeout(() => togglePlay(), 500);
       };
@@ -633,6 +634,15 @@ export default function VideoRecapView() {
       a.href = url;
       a.download = `MASTER_AI_VIDEO_${Date.now()}.webm`;
       a.click();
+
+      // Confirm success + deduct credits ONLY after export produced a file.
+      if (!didConfirmSuccessRef.current) {
+        didConfirmSuccessRef.current = true;
+        const customKeyForConfirm = apiType === "own" ? apiKey : undefined;
+        confirmRecapSuccess(customKeyForConfirm);
+        toast.success("✅ Export အောင်မြင်ပါတယ် (Credits က export success အပြီးမှသာ ဖြတ်ပါတယ်)");
+      }
+
       setIsExporting(false);
       setIsPlaying(false);
     };
@@ -750,8 +760,8 @@ export default function VideoRecapView() {
 
           // RENDER PHOTO ZOOM LAYER
           if (isFreezeMode || opacityRamp < 1.0) {
-            // Update freeze buffer only when switching to photo mode
-            if (opacityRamp > 0.9 && !isFreezeMode) {
+            // Capture freeze frame exactly when entering photo mode (prevents black screen)
+            if (isFreezeMode && !wasFreezeModeRef.current) {
               freezeCtx.clearRect(0, 0, targetW, targetH);
               freezeCtx.drawImage(video, dx, dy, dw, dh);
             }
@@ -934,42 +944,88 @@ export default function VideoRecapView() {
 
           // ===== SUBTITLE RENDERING =====
           if (activeSegment && (isPlaying || effectiveTime > 0)) {
-            const chunk = activeSegment.text;
-            const fs = targetH * 0.05 * subScale;
-            ctx.font = `900 ${fs}px 'Padauk', sans-serif`;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            const ty = targetH * (blurY / 100) + (targetH * (blurH / 100)) / 2;
-            ctx.shadowColor = "rgba(0,0,0,0.8)";
-            ctx.shadowBlur = 4;
-            if (subColor === "GOLD") {
-              const g = ctx.createLinearGradient(0, ty - fs, 0, ty);
-              g.addColorStop(0, "#FFD700");
-              g.addColorStop(1, "#B8860B");
-              ctx.fillStyle = g;
-            } else if (subColor === "NEON") {
-              ctx.fillStyle = "#00FFFF";
-              ctx.shadowBlur = 15;
-              ctx.shadowColor = "#00FFFF";
-            } else ctx.fillStyle = SUB_COLORS.find((c) => c.id === subColor)?.hex || "white";
+            const chunk = String(activeSegment.text || "")
+              // Remove junk: timestamps, bracketed timecodes, markdown fences, bullet-ish symbols
+              .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, "")
+              .replace(/\[[^\]]*\d[^\]]*\]/g, "")
+              .replace(/```[\s\S]*?```/g, "")
+              .replace(/[•●◆▶️➡️]+/g, " ")
+              .replace(/\s{2,}/g, " ")
+              .trim();
 
-            const maxWidth = targetW * 0.9;
-            const words = chunk.split(" ");
-            let line = "";
-            let lines = [];
-            for (let i = 0; i < words.length; i++) {
-              const metrics = ctx.measureText(line + words[i]);
-              if (metrics.width > maxWidth && i > 0) {
-                lines.push(line);
-                line = words[i] + " ";
-              } else line += words[i] + " ";
+            if (chunk) {
+              const fs = targetH * 0.05 * subScale;
+              ctx.font = `900 ${fs}px 'Padauk', sans-serif`;
+              ctx.textAlign = "center";
+              ctx.textBaseline = "middle";
+
+              // Keep subtitles strictly inside the blur band.
+              const by = targetH * (blurY / 100);
+              const bh = targetH * (blurH / 100);
+              const bandPadding = Math.max(8, targetH * 0.015);
+              const clipY = by + bandPadding;
+              const clipH = Math.max(1, bh - bandPadding * 2);
+              const ty = clipY + clipH / 2;
+
+              ctx.shadowColor = "rgba(0,0,0,0.8)";
+              ctx.shadowBlur = 4;
+              if (subColor === "GOLD") {
+                const g = ctx.createLinearGradient(0, ty - fs, 0, ty);
+                g.addColorStop(0, "#FFD700");
+                g.addColorStop(1, "#B8860B");
+                ctx.fillStyle = g;
+              } else if (subColor === "NEON") {
+                ctx.fillStyle = "#00FFFF";
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = "#00FFFF";
+              } else {
+                ctx.fillStyle = SUB_COLORS.find((c) => c.id === subColor)?.hex || "white";
+              }
+
+              // Wrap to max 2 lines so subtitles never cover the whole frame.
+              const maxWidth = targetW * 0.9;
+              const words = chunk.split(/\s+/).filter(Boolean);
+              const lines: string[] = [];
+              let line = "";
+              for (let i = 0; i < words.length; i++) {
+                const testLine = (line ? line + " " : "") + words[i];
+                if (ctx.measureText(testLine).width > maxWidth && line) {
+                  lines.push(line);
+                  line = words[i];
+                  if (lines.length >= 1) {
+                    const rest = [line, ...words.slice(i + 1)].join(" ");
+                    lines.push(rest);
+                    break;
+                  }
+                } else {
+                  line = testLine;
+                }
+              }
+              if (lines.length === 0) lines.push(line);
+
+              const capped = lines.slice(0, 2);
+              if (capped.length === 2) {
+                let l2 = capped[1];
+                while (l2 && ctx.measureText(l2 + "…").width > maxWidth) {
+                  l2 = l2.slice(0, -1).trim();
+                }
+                capped[1] = l2 ? l2 + "…" : "";
+              }
+
+              ctx.save();
+              ctx.beginPath();
+              ctx.rect(0, clipY, targetW, clipH);
+              ctx.clip();
+              capped.forEach((l, i) => {
+                const yOff = ty - (capped.length - 1) * fs * 0.55 + i * fs * 1.1;
+                ctx.fillText(l, targetW / 2, yOff);
+              });
+              ctx.restore();
             }
-            lines.push(line);
-            lines.forEach((l, i) => {
-              const yOff = ty - (lines.length - 1) * fs * 0.6 + i * fs * 1.2;
-              ctx.fillText(l, targetW / 2, yOff);
-            });
           }
+
+          // Track freeze mode state across frames
+          wasFreezeModeRef.current = isFreezeMode;
         }
       }
       reqRef.current = requestAnimationFrame(render);
