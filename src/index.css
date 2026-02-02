@@ -155,7 +155,120 @@
     pointer-events: none;
   }
 
-  /* Compact Premium Tool Card */
+  /* 3D Neon Glass Tool Card */
+  .neon-glass-card {
+    background: linear-gradient(145deg, hsl(270 50% 12% / 0.6) 0%, hsl(240 45% 10% / 0.75) 100%);
+    border: 1px solid hsl(260 50% 40% / 0.3);
+    border-radius: 1rem;
+    backdrop-filter: blur(20px);
+    box-shadow: 
+      0 4px 20px hsl(260 70% 30% / 0.3),
+      inset 0 1px 0 hsl(270 60% 60% / 0.1);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .neon-glass-card:hover {
+    border-color: hsl(45 100% 60% / 0.4);
+    transform: translateY(-2px);
+    box-shadow: 
+      0 8px 32px hsl(260 80% 50% / 0.25),
+      0 0 20px hsl(45 100% 50% / 0.15),
+      inset 0 1px 0 hsl(270 60% 70% / 0.15);
+  }
+
+  /* Neon Orb Container */
+  .neon-orb-container {
+    position: relative;
+    width: 56px;
+    height: 56px;
+  }
+
+  /* 3D Neon Glass Orb */
+  .neon-orb {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .neon-orb-inner {
+    position: relative;
+    z-index: 2;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(
+      145deg,
+      hsl(270 80% 55%) 0%,
+      hsl(220 90% 50%) 50%,
+      hsl(45 100% 55%) 100%
+    );
+    box-shadow: 
+      0 4px 16px hsl(270 80% 50% / 0.5),
+      0 0 24px hsl(220 90% 50% / 0.4),
+      inset 0 2px 4px hsl(0 0% 100% / 0.3),
+      inset 0 -2px 8px hsl(270 80% 30% / 0.4);
+    transition: all 0.3s ease;
+  }
+
+  .neon-glass-card:hover .neon-orb-inner {
+    box-shadow: 
+      0 6px 24px hsl(270 80% 50% / 0.6),
+      0 0 40px hsl(45 100% 50% / 0.5),
+      0 0 60px hsl(220 90% 50% / 0.3),
+      inset 0 2px 4px hsl(0 0% 100% / 0.4),
+      inset 0 -2px 8px hsl(270 80% 30% / 0.3);
+    transform: scale(1.08);
+  }
+
+  .neon-orb-glow {
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    background: linear-gradient(
+      135deg,
+      hsl(270 100% 60% / 0.4) 0%,
+      hsl(220 100% 60% / 0.3) 50%,
+      hsl(45 100% 60% / 0.4) 100%
+    );
+    filter: blur(8px);
+    z-index: 0;
+    opacity: 0.7;
+    transition: all 0.3s ease;
+  }
+
+  .neon-glass-card:hover .neon-orb-glow {
+    opacity: 1;
+    filter: blur(12px);
+    inset: -8px;
+  }
+
+  .neon-orb-ring {
+    position: absolute;
+    inset: -2px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    background: linear-gradient(135deg, hsl(270 90% 70% / 0.5), hsl(45 100% 60% / 0.5)) border-box;
+    -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    z-index: 1;
+    animation: ring-rotate 4s linear infinite;
+  }
+
+  @keyframes ring-rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  /* Legacy support - keep old class for compatibility */
   .premium-tool-card {
     background: linear-gradient(145deg, hsl(250 40% 18% / 0.7) 0%, hsl(260 35% 12% / 0.85) 100%);
     border: 1px solid hsl(250 40% 30% / 0.4);
