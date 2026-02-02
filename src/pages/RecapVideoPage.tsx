@@ -239,6 +239,7 @@ export default function VideoRecapView() {
   useAuthGuard("video-recap");
   const [file, setFile] = useState<File | null>(null);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
+  const [videoDataUrl, setVideoDataUrl] = useState<string | null>(null); // Persist video as base64
   const [analyzing, setAnalyzing] = useState(false);
   const [statusText, setStatusText] = useState("");
   const [scriptSegments, setScriptSegments] = useState<ScriptSegment[]>([]);
@@ -368,8 +369,20 @@ export default function VideoRecapView() {
       const f = e.target.files[0];
       setFile(f);
       setCurrentFileName(f.name);
-      const url = URL.createObjectURL(f);
-      setVideoSrc(url);
+      
+      // Convert to Base64 Data URL for persistence (survives browser tab switches)
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        setVideoDataUrl(dataUrl);
+        setVideoSrc(dataUrl); // Use data URL instead of blob URL
+      };
+      reader.onerror = () => {
+        // Fallback to blob URL if base64 fails
+        setVideoSrc(URL.createObjectURL(f));
+      };
+      reader.readAsDataURL(f);
+      
       setFullScriptText("");
       setScriptSegments([]);
       setAudioBlobUrl(null);
@@ -600,16 +613,22 @@ export default function VideoRecapView() {
     setProgress(val);
   };
 
-  // DOWNLOAD: Pre-render frames at LOCKED timing for perfect sync (no real-time playback drift)
+  // DOWNLOAD: Frame-by-frame rendering with PROPER video seek await
   const handleDownload = async () => {
     if (!videoRef.current || !canvasRef.current || !audioRef.current || !audioBlobUrl) return;
     
     setIsExporting(true);
     setProgress(0);
+    didConfirmSuccessRef.current = false;
     
     const video = videoRef.current;
     const audio = audioRef.current;
     const canvas = canvasRef.current;
+    
+    // Pause any current playback
+    video.pause();
+    audio.pause();
+    setIsPlaying(false);
     
     // Create an offscreen canvas for rendering
     const exportCanvas = document.createElement("canvas");
@@ -626,18 +645,75 @@ export default function VideoRecapView() {
     const totalDuration = audioDuration || video.duration || 10;
     const fps = 30;
     const totalFrames = Math.ceil(totalDuration * fps);
-    const frameInterval = 1000 / fps;
     
-    // Setup MediaRecorder on export canvas
+    // Create freeze canvas for photo zoom effect
+    const freezeCanvas = document.createElement("canvas");
+    freezeCanvas.width = exportCanvas.width;
+    freezeCanvas.height = exportCanvas.height;
+    const freezeCtx = freezeCanvas.getContext("2d", { alpha: false });
+    
+    if (!freezeCtx) {
+      toast.error("Freeze canvas creation failed");
+      setIsExporting(false);
+      return;
+    }
+    
+    // Helper: Wait for video to seek to specific time
+    const seekVideo = (time: number): Promise<void> => {
+      return new Promise((resolve) => {
+        const targetTime = time % (video.duration || 1);
+        if (Math.abs(video.currentTime - targetTime) < 0.01) {
+          resolve();
+          return;
+        }
+        const onSeeked = () => {
+          video.removeEventListener("seeked", onSeeked);
+          resolve();
+        };
+        video.addEventListener("seeked", onSeeked);
+        video.currentTime = targetTime;
+      });
+    };
+    
+    // Collect all rendered frames as ImageData
+    const frames: ImageData[] = [];
+    let wasFreeze = false;
+    
+    toast.info("🎬 Rendering frames... ခဏစောင့်ပါ");
+    
+    // STEP 1: Pre-render all frames with proper seek await
+    for (let i = 0; i < totalFrames; i++) {
+      const currentTime = i / fps;
+      setProgress((i / totalFrames) * 50); // First 50% for rendering
+      
+      // Await video seek before drawing
+      await seekVideo(currentTime);
+      
+      // Render frame using same logic as preview
+      renderFrameToCanvas(exportCtx, freezeCtx, freezeCanvas, video, currentTime, wasFreeze, (newWasFreeze) => {
+        wasFreeze = newWasFreeze;
+      });
+      
+      // Store the frame
+      frames.push(exportCtx.getImageData(0, 0, exportCanvas.width, exportCanvas.height));
+      
+      // Yield to prevent UI freeze
+      if (i % 30 === 0) {
+        await new Promise(r => setTimeout(r, 0));
+      }
+    }
+    
+    toast.info("🎵 Encoding video with audio...");
+    
+    // STEP 2: Encode frames to video using MediaRecorder at exact fps
     const stream = exportCanvas.captureStream(fps);
     
-    // Add audio track from audio element
-    let audioStream: MediaStream | null = null;
+    // Add audio track
     try {
       audio.currentTime = 0;
-      audioStream = (audio as any).captureStream?.() || (audio as any).mozCaptureStream?.();
+      const audioStream = (audio as any).captureStream?.() || (audio as any).mozCaptureStream?.();
       if (audioStream) {
-        audioStream.getAudioTracks().forEach(track => stream.addTrack(track));
+        audioStream.getAudioTracks().forEach((track: MediaStreamTrack) => stream.addTrack(track));
       }
     } catch (e) {
       console.warn("Audio capture not supported, video will be silent");
@@ -653,69 +729,67 @@ export default function VideoRecapView() {
       if (e.data.size > 0) recordedChunksRef.current.push(e.data);
     };
     
-    recorder.onstop = () => {
-      const blob = new Blob(recordedChunksRef.current, { type: "video/webm" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `MASTER_AI_VIDEO_${Date.now()}.webm`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      
-      // Confirm success + deduct credits ONLY after download
-      if (!didConfirmSuccessRef.current) {
-        didConfirmSuccessRef.current = true;
-        const customKeyForConfirm = apiType === "own" ? apiKey : undefined;
-        confirmRecapSuccess(customKeyForConfirm);
-        toast.success("✅ Download အောင်မြင်ပါတယ်!");
-      }
-      
-      setIsExporting(false);
-      setIsPlaying(false);
-      setProgress(100);
-    };
+    const downloadPromise = new Promise<void>((resolve) => {
+      recorder.onstop = () => {
+        const blob = new Blob(recordedChunksRef.current, { type: "video/webm" });
+        
+        // Verify blob size before download
+        if (blob.size < 10000) {
+          toast.error("❌ Video file size too small. Please try again.");
+          setIsExporting(false);
+          resolve();
+          return;
+        }
+        
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `MASTER_AI_VIDEO_${Date.now()}.webm`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        // Confirm success + deduct credits ONLY after successful download
+        if (!didConfirmSuccessRef.current) {
+          didConfirmSuccessRef.current = true;
+          const customKeyForConfirm = apiType === "own" ? apiKey : undefined;
+          confirmRecapSuccess(customKeyForConfirm);
+          toast.success(`✅ Download အောင်မြင်ပါတယ်! (${(blob.size / 1024 / 1024).toFixed(1)} MB)`);
+        }
+        
+        setIsExporting(false);
+        setProgress(100);
+        resolve();
+      };
+    });
     
-    // Start recording
-    recorder.start();
+    // Start recording and playback
+    recorder.start(100); // Request data every 100ms
     audio.currentTime = 0;
     await audio.play();
     
-    // Frame-by-frame render with LOCKED timing
+    // STEP 3: Play back pre-rendered frames at exact timing
     let frameIndex = 0;
-    const freezeCanvas = freezeCanvasRef.current || document.createElement("canvas");
-    freezeCanvas.width = exportCanvas.width;
-    freezeCanvas.height = exportCanvas.height;
-    const freezeCtx = freezeCanvas.getContext("2d", { alpha: false });
-    let wasFreeze = false;
+    const frameInterval = 1000 / fps;
     
-    const renderFrame = () => {
-      if (frameIndex >= totalFrames || !isExporting) {
+    const playbackFrame = () => {
+      if (frameIndex >= frames.length) {
         audio.pause();
         recorder.stop();
         return;
       }
       
-      const currentTime = frameIndex / fps;
-      setProgress((frameIndex / totalFrames) * 100);
-      
-      // Sync video to current frame time
-      video.currentTime = currentTime % video.duration;
-      
-      // Render using the same logic as preview
-      renderFrameToCanvas(exportCtx, freezeCtx!, freezeCanvas, video, currentTime, wasFreeze, (newWasFreeze) => {
-        wasFreeze = newWasFreeze;
-      });
+      // Draw pre-rendered frame
+      exportCtx.putImageData(frames[frameIndex], 0, 0);
+      setProgress(50 + (frameIndex / frames.length) * 50); // Last 50% for encoding
       
       frameIndex++;
-      setTimeout(renderFrame, frameInterval / 3); // Faster than real-time
+      setTimeout(playbackFrame, frameInterval);
     };
     
-    // Wait for video to be ready, then start
-    video.currentTime = 0;
-    await new Promise(resolve => setTimeout(resolve, 100));
-    renderFrame();
+    playbackFrame();
+    await downloadPromise;
   };
   
   // Unified frame render function (same logic for preview and export)
