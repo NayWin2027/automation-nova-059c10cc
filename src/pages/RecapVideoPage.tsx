@@ -761,8 +761,18 @@ export default function VideoRecapView() {
           // RENDER PHOTO ZOOM LAYER
           if (isFreezeMode || opacityRamp < 1.0) {
             // Capture freeze frame exactly when entering photo mode (prevents black screen)
-            if (isFreezeMode && !wasFreezeModeRef.current) {
+            // Also capture if freezeCanvas is empty (first frame insurance)
+            const freezeCanvasEmpty = !freezeCanvas.width || !freezeCanvas.height || 
+              (freezeCtx.getImageData(0, 0, 1, 1).data[3] === 0);
+            
+            if ((isFreezeMode && !wasFreezeModeRef.current) || freezeCanvasEmpty) {
+              // Ensure freezeCanvas matches target size
+              if (freezeCanvas.width !== targetW || freezeCanvas.height !== targetH) {
+                freezeCanvas.width = targetW;
+                freezeCanvas.height = targetH;
+              }
               freezeCtx.clearRect(0, 0, targetW, targetH);
+              // Draw current video frame to freeze canvas
               freezeCtx.drawImage(video, dx, dy, dw, dh);
             }
 
@@ -779,9 +789,8 @@ export default function VideoRecapView() {
             const centerY = (targetH - zoomedH) / 2;
 
             ctx.globalAlpha = isFreezeMode ? 1.0 : 1.0 - opacityRamp;
-            if (freezeCanvas.width > 0) {
-              ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH, centerX, centerY, zoomedW, zoomedH);
-            }
+            // Always draw from freezeCanvas - it should have valid content now
+            ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH, centerX, centerY, zoomedW, zoomedH);
           }
 
           ctx.globalAlpha = 1.0;
@@ -954,11 +963,6 @@ export default function VideoRecapView() {
               .trim();
 
             if (chunk) {
-              const fs = targetH * 0.05 * subScale;
-              ctx.font = `900 ${fs}px 'Padauk', sans-serif`;
-              ctx.textAlign = "center";
-              ctx.textBaseline = "middle";
-
               // Keep subtitles strictly inside the blur band.
               const by = targetH * (blurY / 100);
               const bh = targetH * (blurH / 100);
@@ -966,11 +970,51 @@ export default function VideoRecapView() {
               const clipY = by + bandPadding;
               const clipH = Math.max(1, bh - bandPadding * 2);
               const ty = clipY + clipH / 2;
-
-              ctx.shadowColor = "rgba(0,0,0,0.8)";
-              ctx.shadowBlur = 4;
+              const maxWidth = targetW * 0.92;
+              const maxLines = 2;
+              const lineSpacing = 1.15;
+              
+              // Auto-fit font size: start with base size and shrink until text fits in 2 lines
+              let fs = targetH * 0.038 * subScale; // Smaller base size
+              const minFs = targetH * 0.022; // Minimum readable size
+              
+              const wrapText = (text: string, fontSize: number): string[] => {
+                ctx.font = `900 ${fontSize}px 'Padauk', sans-serif`;
+                const words = text.split(/\s+/).filter(Boolean);
+                const lines: string[] = [];
+                let currentLine = "";
+                
+                for (const word of words) {
+                  const testLine = currentLine ? `${currentLine} ${word}` : word;
+                  if (ctx.measureText(testLine).width > maxWidth && currentLine) {
+                    lines.push(currentLine);
+                    currentLine = word;
+                  } else {
+                    currentLine = testLine;
+                  }
+                }
+                if (currentLine) lines.push(currentLine);
+                return lines;
+              };
+              
+              // Find optimal font size that fits all text in maxLines
+              let wrappedLines = wrapText(chunk, fs);
+              while (wrappedLines.length > maxLines && fs > minFs) {
+                fs -= 1;
+                wrappedLines = wrapText(chunk, fs);
+              }
+              
+              // If still too many lines, take first 2 lines (no ellipsis - text auto-changes with audio)
+              const finalLines = wrappedLines.slice(0, maxLines);
+              
+              ctx.font = `900 ${fs}px 'Padauk', sans-serif`;
+              ctx.textAlign = "center";
+              ctx.textBaseline = "middle";
+              ctx.shadowColor = "rgba(0,0,0,0.85)";
+              ctx.shadowBlur = 5;
+              
               if (subColor === "GOLD") {
-                const g = ctx.createLinearGradient(0, ty - fs, 0, ty);
+                const g = ctx.createLinearGradient(0, ty - fs, 0, ty + fs);
                 g.addColorStop(0, "#FFD700");
                 g.addColorStop(1, "#B8860B");
                 ctx.fillStyle = g;
@@ -982,42 +1026,17 @@ export default function VideoRecapView() {
                 ctx.fillStyle = SUB_COLORS.find((c) => c.id === subColor)?.hex || "white";
               }
 
-              // Wrap to max 2 lines so subtitles never cover the whole frame.
-              const maxWidth = targetW * 0.9;
-              const words = chunk.split(/\s+/).filter(Boolean);
-              const lines: string[] = [];
-              let line = "";
-              for (let i = 0; i < words.length; i++) {
-                const testLine = (line ? line + " " : "") + words[i];
-                if (ctx.measureText(testLine).width > maxWidth && line) {
-                  lines.push(line);
-                  line = words[i];
-                  if (lines.length >= 1) {
-                    const rest = [line, ...words.slice(i + 1)].join(" ");
-                    lines.push(rest);
-                    break;
-                  }
-                } else {
-                  line = testLine;
-                }
-              }
-              if (lines.length === 0) lines.push(line);
-
-              const capped = lines.slice(0, 2);
-              if (capped.length === 2) {
-                let l2 = capped[1];
-                while (l2 && ctx.measureText(l2 + "…").width > maxWidth) {
-                  l2 = l2.slice(0, -1).trim();
-                }
-                capped[1] = l2 ? l2 + "…" : "";
-              }
-
               ctx.save();
               ctx.beginPath();
               ctx.rect(0, clipY, targetW, clipH);
               ctx.clip();
-              capped.forEach((l, i) => {
-                const yOff = ty - (capped.length - 1) * fs * 0.55 + i * fs * 1.1;
+              
+              // Center lines vertically within clip area
+              const totalTextHeight = finalLines.length * fs * lineSpacing;
+              const startY = ty - (totalTextHeight / 2) + (fs * lineSpacing / 2);
+              
+              finalLines.forEach((l, i) => {
+                const yOff = startY + i * fs * lineSpacing;
                 ctx.fillText(l, targetW / 2, yOff);
               });
               ctx.restore();
