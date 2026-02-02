@@ -364,19 +364,30 @@ export async function translateText(
 }
 
 // Analyze video for Recap Video tool
+// UPGRADED: Handles files up to 1GB by streaming chunks to backend
 export async function analyzeVideo(
   file: File,
   mimeType: string,
   targetLang: string,
-  apiKey?: string
+  apiKey?: string,
+  onProgress?: (percent: number, status: string) => void
 ): Promise<string> {
   try {
-    // For smaller files (under 15MB), use base64 inline data
-    if (file.size < 15 * 1024 * 1024) {
+    const MB = 1024 * 1024;
+    
+    // For smaller files (under 10MB), use base64 inline data
+    if (file.size < 10 * MB) {
+      onProgress?.(10, "Uploading video...");
       const base64 = await fileToBase64(file);
       const videoUrl = `data:${mimeType};base64,${base64}`;
       
-      const { data, error } = await invokeWithAuthRetry<{ recap?: string; error?: string }>('video-recap', {
+      onProgress?.(30, "Analyzing with AI...");
+      const { data, error } = await invokeWithAuthRetry<{ 
+        recap?: string; 
+        error?: string;
+        retryable?: boolean;
+        retryAfterSeconds?: number;
+      }>('video-recap', {
         videoUrl,
         targetLang,
         useOwnApi: !!apiKey,
@@ -389,15 +400,25 @@ export async function analyzeVideo(
       }
 
       if (data?.error) {
+        if (data.retryable) {
+          throw new Error(`RETRYABLE: ${data.error} (${data.retryAfterSeconds}s)`);
+        }
         throw new Error(data.error);
       }
 
+      onProgress?.(100, "Complete!");
       return data?.recap || '';
     }
 
-    // For larger files, use resumable upload flow
-    // Step 1: Initialize upload
-    const { data: initData, error: initError } = await invokeWithAuthRetry<{ uploadUrl?: string; error?: string }>('video-recap', {
+    // For larger files, use chunked upload through backend
+    onProgress?.(5, "Preparing large file upload...");
+    
+    // Step 1: Initialize resumable upload through backend
+    const { data: initData, error: initError } = await invokeWithAuthRetry<{ 
+      uploadUrl?: string; 
+      error?: string;
+      retryable?: boolean;
+    }>('video-recap', {
       action: 'initUpload',
       fileName: file.name,
       fileSize: file.size,
@@ -414,31 +435,69 @@ export async function analyzeVideo(
       throw new Error('No upload URL received');
     }
 
-    // Step 2: Upload file directly to Google
-    const uploadResponse = await fetch(initData.uploadUrl, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': mimeType,
-        'X-Goog-Upload-Offset': '0',
-        'X-Goog-Upload-Command': 'upload, finalize'
-      },
-      body: file
-    });
+    // Step 2: Upload file in chunks through backend proxy
+    const CHUNK_SIZE = 8 * MB; // 8MB chunks
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    let uploadedBytes = 0;
+    let fileUri = '';
+    let fileName = '';
+    
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, file.size);
+      const chunk = file.slice(start, end);
+      const chunkBase64 = await blobToBase64(chunk);
+      
+      const isLastChunk = (i === totalChunks - 1);
+      const uploadProgress = 5 + Math.floor(((i + 1) / totalChunks) * 50);
+      onProgress?.(uploadProgress, `Uploading chunk ${i + 1}/${totalChunks}...`);
+      
+      const { data: chunkData, error: chunkError } = await invokeWithAuthRetry<{
+        success?: boolean;
+        fileUri?: string;
+        fileName?: string;
+        error?: string;
+        retryable?: boolean;
+      }>('video-recap', {
+        action: 'uploadChunk',
+        uploadUrl: initData.uploadUrl,
+        chunkData: chunkBase64,
+        chunkIndex: i,
+        totalChunks,
+        offset: start,
+        totalSize: file.size,
+        mimeType,
+        isLastChunk,
+        useOwnApi: !!apiKey,
+        apiKey,
+      });
 
-    if (!uploadResponse.ok) {
-      throw new Error('File upload failed');
+      if (chunkError || chunkData?.error) {
+        throw new Error(chunkData?.error || chunkError?.message || `Chunk ${i + 1} upload failed`);
+      }
+
+      uploadedBytes += (end - start);
+      
+      // Last chunk returns the file URI
+      if (isLastChunk && chunkData?.fileUri) {
+        fileUri = chunkData.fileUri;
+        fileName = chunkData.fileName || '';
+      }
     }
-
-    const uploadResult = await uploadResponse.json();
-    const fileUri = uploadResult.file?.uri;
-    const fileName = uploadResult.file?.name;
 
     if (!fileUri) {
       throw new Error('No file URI received after upload');
     }
 
     // Step 3: Analyze the uploaded file
-    const { data: analyzeData, error: analyzeError } = await invokeWithAuthRetry<{ recap?: string; error?: string }>('video-recap', {
+    onProgress?.(60, "Processing video with AI...");
+    
+    const { data: analyzeData, error: analyzeError } = await invokeWithAuthRetry<{ 
+      recap?: string; 
+      error?: string;
+      retryable?: boolean;
+      retryAfterSeconds?: number;
+    }>('video-recap', {
       action: 'analyzeFile',
       fileUri,
       fileName,
@@ -448,9 +507,13 @@ export async function analyzeVideo(
     });
 
     if (analyzeError || analyzeData?.error) {
+      if (analyzeData?.retryable) {
+        throw new Error(`RETRYABLE: ${analyzeData.error} (${analyzeData.retryAfterSeconds}s)`);
+      }
       throw new Error(analyzeData?.error || analyzeError?.message || 'Video analysis failed');
     }
 
+    onProgress?.(100, "Complete!");
     return analyzeData?.recap || '';
   } catch (err) {
     console.error('analyzeVideo error:', err);
@@ -484,5 +547,19 @@ function fileToBase64(file: File): Promise<string> {
     };
     reader.onerror = reject;
     reader.readAsDataURL(file);
+  });
+}
+
+// Helper to convert Blob to base64
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.split(',')[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
   });
 }
