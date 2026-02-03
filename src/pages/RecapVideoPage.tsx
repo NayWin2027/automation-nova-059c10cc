@@ -1661,15 +1661,31 @@ export default function VideoRecapView() {
       {/* API Switcher Section */}
       <div className="flex bg-slate-900/60 backdrop-blur-xl p-1 rounded-2xl border border-white/10 shadow-lg">
         <button
-          onClick={() => setApiType("app")}
-          className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${apiType === "app" ? "jewel-sapphire shadow-[0_0_15px_rgba(37,99,235,0.4)] text-white" : "text-slate-400 hover:text-white"}`}
+          onClick={() => appApiAllowed && setApiType("app")}
+          disabled={!appApiAllowed}
+          className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${
+            !appApiAllowed 
+              ? "opacity-40 cursor-not-allowed text-slate-500" 
+              : apiType === "app" 
+                ? "jewel-sapphire shadow-[0_0_15px_rgba(37,99,235,0.4)] text-white" 
+                : "text-slate-400 hover:text-white"
+          }`}
         >
-          APP API <span className="text-[8px]">🔒</span>
+          {!appApiAllowed && <Lock className="w-3 h-3" />}
+          APP API
         </button>
         <button
-          onClick={() => setApiType("own")}
-          className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all ${apiType === "own" ? "jewel-sapphire shadow-[0_0_15px_rgba(37,99,235,0.4)] text-white" : "text-slate-400 hover:text-white"}`}
+          onClick={() => ownApiAllowed && setApiType("own")}
+          disabled={!ownApiAllowed}
+          className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${
+            !ownApiAllowed 
+              ? "opacity-40 cursor-not-allowed text-slate-500" 
+              : apiType === "own" 
+                ? "jewel-sapphire shadow-[0_0_15px_rgba(37,99,235,0.4)] text-white" 
+                : "text-slate-400 hover:text-white"
+          }`}
         >
+          {!ownApiAllowed && <Lock className="w-3 h-3" />}
           OWN API
         </button>
       </div>
