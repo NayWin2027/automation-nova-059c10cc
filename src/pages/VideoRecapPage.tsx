@@ -18,41 +18,38 @@ const SMALL_FILE_THRESHOLD_BYTES = SMALL_FILE_THRESHOLD_MB * 1024 * 1024;
 // Upload file to Google Files API using resumable upload
 async function uploadToGoogleFilesApi(file: File, apiKey: string, onProgress?: (pct: number) => void): Promise<string> {
   // Step 1: Initiate resumable upload
-  const initResponse = await fetch(
-    `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: {
-        'X-Goog-Upload-Protocol': 'resumable',
-        'X-Goog-Upload-Command': 'start',
-        'X-Goog-Upload-Header-Content-Length': String(file.size),
-        'X-Goog-Upload-Header-Content-Type': file.type || 'video/mp4',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        file: { display_name: file.name }
-      })
-    }
-  );
+  const initResponse = await fetch(`https://generativelanguage.googleapis.com/upload/v1beta/files?key=${apiKey}`, {
+    method: "POST",
+    headers: {
+      "X-Goog-Upload-Protocol": "resumable",
+      "X-Goog-Upload-Command": "start",
+      "X-Goog-Upload-Header-Content-Length": String(file.size),
+      "X-Goog-Upload-Header-Content-Type": file.type || "video/mp4",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      file: { display_name: file.name },
+    }),
+  });
 
   if (!initResponse.ok) {
     const errText = await initResponse.text();
     throw new Error(`Upload init failed: ${errText}`);
   }
 
-  const uploadUrl = initResponse.headers.get('X-Goog-Upload-URL');
+  const uploadUrl = initResponse.headers.get("X-Goog-Upload-URL");
   if (!uploadUrl) {
-    throw new Error('No upload URL returned from Google');
+    throw new Error("No upload URL returned from Google");
   }
 
   // Step 2: Upload file content
   const arrayBuffer = await file.arrayBuffer();
   const uploadResponse = await fetch(uploadUrl, {
-    method: 'PUT',
+    method: "PUT",
     headers: {
-      'Content-Length': String(file.size),
-      'X-Goog-Upload-Offset': '0',
-      'X-Goog-Upload-Command': 'upload, finalize',
+      "Content-Length": String(file.size),
+      "X-Goog-Upload-Offset": "0",
+      "X-Goog-Upload-Command": "upload, finalize",
     },
     body: arrayBuffer,
   });
@@ -64,9 +61,9 @@ async function uploadToGoogleFilesApi(file: File, apiKey: string, onProgress?: (
 
   const uploadResult = await uploadResponse.json();
   const fileUri = uploadResult.file?.uri;
-  
+
   if (!fileUri) {
-    throw new Error('No file URI returned from upload');
+    throw new Error("No file URI returned from upload");
   }
 
   // Step 3: Wait for file to be processed
@@ -75,24 +72,22 @@ async function uploadToGoogleFilesApi(file: File, apiKey: string, onProgress?: (
     let attempts = 0;
     const maxAttempts = 60; // 60 seconds max wait
     while (attempts < maxAttempts) {
-      const statusResponse = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${apiKey}`
-      );
+      const statusResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${apiKey}`);
       if (statusResponse.ok) {
         const statusData = await statusResponse.json();
-        if (statusData.state === 'ACTIVE') {
+        if (statusData.state === "ACTIVE") {
           if (onProgress) onProgress(100);
           return fileUri;
         }
-        if (statusData.state === 'FAILED') {
-          throw new Error('File processing failed on Google servers');
+        if (statusData.state === "FAILED") {
+          throw new Error("File processing failed on Google servers");
         }
       }
       if (onProgress) onProgress(Math.min(90, 50 + attempts));
-      await new Promise(r => setTimeout(r, 1000));
+      await new Promise((r) => setTimeout(r, 1000));
       attempts++;
     }
-    throw new Error('File processing timeout');
+    throw new Error("File processing timeout");
   }
 
   return fileUri;
@@ -100,16 +95,16 @@ async function uploadToGoogleFilesApi(file: File, apiKey: string, onProgress?: (
 
 // Analyze video using video-recap edge function
 async function analyzeVideo(
-  file: File, 
-  mimeType: string, 
+  file: File,
+  mimeType: string,
   targetLang: string,
   useOwnApi: boolean = false,
   apiKey?: string,
-  onProgress?: (pct: number) => void
+  onProgress?: (pct: number) => void,
 ): Promise<string> {
   const maxBytes = useOwnApi ? OWN_API_MAX_BYTES : APP_MODE_MAX_BYTES;
   const maxMB = useOwnApi ? OWN_API_MAX_MB : APP_MODE_MAX_MB;
-  
+
   if (file.size > maxBytes) {
     throw new Error(`ဗီဒီယိုဖိုင်ကြီးလွန်းသည်။ ${maxMB}MB အောက်ဖိုင်သုံးပါ။`);
   }
@@ -121,58 +116,60 @@ async function analyzeVideo(
       if (onProgress) onProgress(10);
       const fileUri = await uploadToGoogleFilesApi(file, apiKey, (p) => onProgress?.(10 + p * 0.4));
       if (onProgress) onProgress(60);
-      
+
       // Call Gemini with file URI
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
         {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            contents: [{
-              role: 'user',
-              parts: [
-                { fileData: { mimeType: file.type || 'video/mp4', fileUri: fileUri } },
-                { text: getSystemPrompt(targetLang) + "\n\nPlease analyze this video and create a detailed recap." }
-              ]
-            }],
-            generationConfig: { temperature: 0.7, maxOutputTokens: 4096 }
-          })
-        }
+            contents: [
+              {
+                role: "user",
+                parts: [
+                  { fileData: { mimeType: file.type || "video/mp4", fileUri: fileUri } },
+                  { text: getSystemPrompt(targetLang) + "\n\nPlease analyze this video and create a detailed recap." },
+                ],
+              },
+            ],
+            generationConfig: { temperature: 0.7, maxOutputTokens: 4096 },
+          }),
+        },
       );
 
       if (!response.ok) {
         const errText = await response.text();
-        if (errText.includes('RESOURCE_EXHAUSTED') || response.status === 429) {
-          throw new Error('API quota ကုန်သွားပါပြီ။ ခဏစောင့်ပါ။');
+        if (errText.includes("RESOURCE_EXHAUSTED") || response.status === 429) {
+          throw new Error("API quota ကုန်သွားပါပြီ။ ခဏစောင့်ပါ။");
         }
         throw new Error(`Gemini API error: ${errText.substring(0, 200)}`);
       }
 
       const data = await response.json();
       if (onProgress) onProgress(100);
-      return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
     } else {
       // App Mode - use edge function with Files API
       if (onProgress) onProgress(10);
-      
+
       // Step 1: Get upload session from edge function
-      const { data: sessionData, error: sessionError } = await supabase.functions.invoke('video-recap', {
+      const { data: sessionData, error: sessionError } = await supabase.functions.invoke("video-recap", {
         body: {
-          action: 'initUpload',
+          action: "initUpload",
           fileName: file.name,
           fileSize: file.size,
-          mimeType: file.type || 'video/mp4'
-        }
+          mimeType: file.type || "video/mp4",
+        },
       });
 
       if (sessionError || sessionData?.error) {
-        throw new Error(sessionData?.error || sessionError?.message || 'Failed to init upload');
+        throw new Error(sessionData?.error || sessionError?.message || "Failed to init upload");
       }
 
       const uploadUrl = sessionData?.uploadUrl;
       if (!uploadUrl) {
-        throw new Error('No upload URL returned');
+        throw new Error("No upload URL returned");
       }
 
       if (onProgress) onProgress(20);
@@ -180,11 +177,11 @@ async function analyzeVideo(
       // Step 2: Upload directly to Google
       const arrayBuffer = await file.arrayBuffer();
       const uploadResponse = await fetch(uploadUrl, {
-        method: 'PUT',
+        method: "PUT",
         headers: {
-          'Content-Length': String(file.size),
-          'X-Goog-Upload-Offset': '0',
-          'X-Goog-Upload-Command': 'upload, finalize',
+          "Content-Length": String(file.size),
+          "X-Goog-Upload-Offset": "0",
+          "X-Goog-Upload-Command": "upload, finalize",
         },
         body: arrayBuffer,
       });
@@ -199,23 +196,23 @@ async function analyzeVideo(
       const fileName = uploadResult.file?.name;
 
       if (!fileUri) {
-        throw new Error('No file URI from upload');
+        throw new Error("No file URI from upload");
       }
 
       if (onProgress) onProgress(60);
 
       // Step 3: Wait for processing and analyze
-      const { data, error } = await supabase.functions.invoke('video-recap', {
+      const { data, error } = await supabase.functions.invoke("video-recap", {
         body: {
-          action: 'analyzeFile',
+          action: "analyzeFile",
           fileUri: fileUri,
           fileName: fileName,
-          targetLang: targetLang
-        }
+          targetLang: targetLang,
+        },
       });
 
       if (error) {
-        throw new Error(error.message || 'Analysis failed');
+        throw new Error(error.message || "Analysis failed");
       }
 
       if (data?.error) {
@@ -223,7 +220,7 @@ async function analyzeVideo(
       }
 
       if (onProgress) onProgress(100);
-      return data?.recap || '';
+      return data?.recap || "";
     }
   }
 
@@ -234,40 +231,40 @@ async function analyzeVideo(
       try {
         if (onProgress) onProgress(30);
         const base64 = reader.result as string;
-        const { data, error } = await supabase.functions.invoke('video-recap', {
+        const { data, error } = await supabase.functions.invoke("video-recap", {
           body: {
             videoUrl: base64,
             useOwnApi: useOwnApi,
             apiKey: apiKey,
-            targetLang: targetLang
-          }
+            targetLang: targetLang,
+          },
         });
-        
+
         if (error) {
-          if (error.message?.includes('WORKER_LIMIT') || error.message?.includes('compute resources')) {
+          if (error.message?.includes("WORKER_LIMIT") || error.message?.includes("compute resources")) {
             reject(new Error(`ဗီဒီယိုဖိုင်ကြီးလွန်းသည်။ ${SMALL_FILE_THRESHOLD_MB}MB အောက်ဖိုင်သုံးပါ။`));
             return;
           }
-          reject(new Error(error.message || 'Video analysis failed'));
+          reject(new Error(error.message || "Video analysis failed"));
           return;
         }
-        
+
         if (data?.error) {
           reject(new Error(data.error));
           return;
         }
-        
+
         if (onProgress) onProgress(100);
-        resolve(data?.recap || '');
+        resolve(data?.recap || "");
       } catch (err: any) {
-        if (err.message?.includes('WORKER_LIMIT') || err.message?.includes('546')) {
+        if (err.message?.includes("WORKER_LIMIT") || err.message?.includes("546")) {
           reject(new Error(`ဗီဒီယိုဖိုင်ကြီးလွန်းသည်။ Files API သုံးပါ။`));
           return;
         }
         reject(err);
       }
     };
-    reader.onerror = () => reject(new Error('Failed to read video file'));
+    reader.onerror = () => reject(new Error("Failed to read video file"));
     reader.readAsDataURL(file);
   });
 }
@@ -280,7 +277,7 @@ INSTRUCTIONS:
 1. Analyze the video content thoroughly
 2. Include key points, main topics, and important takeaways
 3. Structure the recap with clear sections
-4. Write in ${targetLang || 'Burmese'} with proper spelling
+4. Write in ${targetLang || "Burmese"} with proper spelling
 5. Keep the recap informative yet concise
 
 FORMAT:
@@ -540,8 +537,8 @@ const createWavBlob = (base64Audio: string) => {
 
 export default function VideoRecapView() {
   const navigate = useNavigate();
-  const { isAllowed, isLoading: authLoading } = useAuthGuard('recap');
-  
+  const { isAllowed, isLoading: authLoading } = useAuthGuard("recap");
+
   const [file, setFile] = useState<File | null>(null);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -696,26 +693,26 @@ export default function VideoRecapView() {
 
   const handleProcess = async () => {
     if (!file) return;
-    
+
     // File size check based on mode
     const maxBytes = APP_MODE_MAX_BYTES; // App mode limit (500MB)
     const maxMB = APP_MODE_MAX_MB;
-    
+
     if (file.size > maxBytes) {
       alert(`⚠️ ဗီဒီယိုဖိုင်ကြီးလွန်းသည်။ ${maxMB}MB အောက်ဖိုင်သုံးပါ။`);
       return;
     }
-    
+
     setAnalyzing(true);
     setStatusText("STEP 1/3: UPLOADING & ANALYZING VIDEO...");
     setFullScriptText("");
     setScriptSegments([]);
     setAudioBlobUrl(null);
-    
+
     try {
       const rawResponse = await analyzeVideo(
-        file, 
-        file.type || "video/mp4", 
+        file,
+        file.type || "video/mp4",
         targetLang,
         false, // useOwnApi
         undefined, // apiKey
@@ -725,7 +722,7 @@ export default function VideoRecapView() {
           } else {
             setStatusText(`STEP 1/3: ANALYZING VIDEO... ${pct}%`);
           }
-        }
+        },
       );
       let segments: ScriptSegment[] = [];
       try {
@@ -1842,7 +1839,7 @@ export default function VideoRecapView() {
           disabled={!audioBlobUrl || isExporting || isPlaying}
           className="flex-1 py-4 rounded-2xl bg-[#1a202c] border border-white/10 text-white font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all disabled:opacity-50"
         >
-          {isExporting ? "EXPORTING..." : "📥 EXPORT"}
+          {isExporting ? "SAVE AS..." : "📥 SAVE AS"}
         </button>
       </div>
     </div>
