@@ -4,9 +4,10 @@ import { translateText } from '../services/geminiService';
 import { BottomNav } from '@/components/BottomNav';
 import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist';
 import PdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
-import { Home, Loader2 } from 'lucide-react';
+import { Home, Loader2, Lock } from 'lucide-react';
 import { useSecureApiKey } from '@/hooks/useSecureApiKey';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
+import { useApiAccess } from '@/hooks/useApiAccess';
 
 type InputMode = 'UPLOAD' | 'PASTE';
 type NovelTone = 'WUXIA' | 'ROMANTIC' | 'CLASSIC' | 'MODERN' | 'FANTASY';
@@ -41,10 +42,18 @@ const LANGUAGES = [
 const NovelTransPage: React.FC = () => {
   const navigate = useNavigate();
   const { isAllowed, isLoading: authLoading } = useAuthGuard('novel');
+  const { appApiAllowed, ownApiAllowed, defaultApiMode, isLoading: accessLoading } = useApiAccess();
   
   const [activeTab, setActiveTab] = useState<"home" | "premium" | "settings">("home");
   const [apiType, setApiType] = useState<'app' | 'own'>('own');
   const { apiKey, setApiKey } = useSecureApiKey('master_novel_api_key');
+
+  // Sync apiType with access control
+  useEffect(() => {
+    if (!accessLoading) {
+      setApiType(defaultApiMode);
+    }
+  }, [accessLoading, defaultApiMode]);
   const [inputMode, setInputMode] = useState<InputMode>('UPLOAD');
   const [file, setFile] = useState<File | null>(null);
   const [fileBase64, setFileBase64] = useState<string | null>(null);
@@ -609,8 +618,22 @@ PREVIOUS CONTEXT (For continuity):
 
       {/* API Switcher */}
       <div className="flex bg-slate-900/60 backdrop-blur-xl p-1.5 rounded-2xl border border-white/10 shadow-lg max-w-[280px] mx-auto overflow-hidden">
-        <button onClick={() => setApiType('app')} className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all ${apiType === 'app' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}>APP API 🔒</button>
-        <button onClick={() => setApiType('own')} className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all ${apiType === 'own' ? 'jewel-diamond text-blue-950 shadow-lg' : 'text-slate-500 hover:text-white'}`}>OWN API</button>
+        <button 
+          onClick={() => appApiAllowed && setApiType('app')} 
+          disabled={!appApiAllowed}
+          className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-1 ${!appApiAllowed ? 'opacity-40 cursor-not-allowed' : ''} ${apiType === 'app' && appApiAllowed ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}
+        >
+          {!appApiAllowed && <Lock className="w-3 h-3" />}
+          APP API 🔒
+        </button>
+        <button 
+          onClick={() => ownApiAllowed && setApiType('own')} 
+          disabled={!ownApiAllowed}
+          className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-1 ${!ownApiAllowed ? 'opacity-40 cursor-not-allowed' : ''} ${apiType === 'own' && ownApiAllowed ? 'jewel-diamond text-blue-950 shadow-lg' : 'text-slate-500 hover:text-white'}`}
+        >
+          {!ownApiAllowed && <Lock className="w-3 h-3" />}
+          OWN API
+        </button>
       </div>
 
       {apiType === 'own' && (

@@ -98,30 +98,12 @@ const defaultTools = [
     route: "/voice",
   },
   {
-    id: "subgen",
-    icon: MessageSquare,
-    title: "Sub Gen",
-    description: "စာတန်းထိုး ဖန်တီးခြင်း။",
-    gradient: "blue" as const,
-    systemPrompt:
-      "You are a subtitle generation specialist. Help users create subtitles and captions for video content. Respond in Burmese when the user writes in Burmese.",
-  },
-  {
     id: "creator",
     icon: PenTool,
     title: "Creator",
     description: "မီဒီယာစီမံမှု ဖန်တီးခြင်း။",
     gradient: "amber" as const,
     route: "/creator",
-  },
-  {
-    id: "downloader",
-    icon: Download,
-    title: "Downloader",
-    description: "TikTok မီဒီယာများ ဒေါင်းလုဒ်ဆွဲခြင်း။",
-    gradient: "violet" as const,
-    systemPrompt:
-      "You are a media download consultant. Help users understand how to properly download and use media content while respecting copyright. Respond in Burmese when the user writes in Burmese.",
   },
 ];
 

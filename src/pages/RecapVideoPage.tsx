@@ -2,9 +2,10 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { analyzeVideo, generateSpeech, confirmRecapSuccess } from "../services/geminiService";
 import { useAuthGuard } from "../hooks/useAuthGuard";
+import { useApiAccess } from "@/hooks/useApiAccess";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Home } from "lucide-react";
+import { Home, Lock } from "lucide-react";
 
 // --- DATA SETS ---
 const VOICES = [
@@ -337,9 +338,17 @@ export default function VideoRecapView() {
     };
   }, [analyzing, isExporting]);
 
-  // NEW API STATES
+  // API Access Control
+  const { appApiAllowed, ownApiAllowed, defaultApiMode, isLoading: accessLoading } = useApiAccess();
   const [apiType, setApiType] = useState<"app" | "own">("app");
   const [apiKey, setApiKey] = useState(() => localStorage.getItem("master_recap_api_key") || "");
+
+  // Sync apiType with access control
+  useEffect(() => {
+    if (!accessLoading) {
+      setApiType(defaultApiMode);
+    }
+  }, [accessLoading, defaultApiMode]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
