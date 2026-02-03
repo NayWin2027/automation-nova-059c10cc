@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { generateStory, generateThumbnail } from '@/services/geminiService';
 import { BottomNav } from '@/components/BottomNav';
 import { useSecureApiKey } from '@/hooks/useSecureApiKey';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
+import { useApiAccess } from '@/hooks/useApiAccess';
 
 const LANGUAGES = [
   "BURMESE", "ENGLISH", "JAPANESE", "KOREAN", "CHINESE (SIMPLIFIED)", 
@@ -59,10 +60,18 @@ const FINE_TUNE_GROUPS = {
 const CreatorPage: React.FC = () => {
   const navigate = useNavigate();
   const { isAllowed, isLoading: authLoading } = useAuthGuard('creator');
+  const { appApiAllowed, ownApiAllowed, defaultApiMode, isLoading: accessLoading } = useApiAccess();
   
   const [activeTab, setActiveTab] = useState<"home" | "premium" | "settings">("home");
   const [apiType, setApiType] = useState<'app' | 'own'>('app');
   const { apiKey, setApiKey } = useSecureApiKey('master_creator_api_key');
+
+  // Sync apiType with access control
+  useEffect(() => {
+    if (!accessLoading) {
+      setApiType(defaultApiMode);
+    }
+  }, [accessLoading, defaultApiMode]);
   const [language, setLanguage] = useState('BURMESE');
   const [category, setCategory] = useState('EDUCATION');
   const [topic, setTopic] = useState('');
@@ -149,15 +158,19 @@ const CreatorPage: React.FC = () => {
         {/* API Switcher */}
         <div className="flex bg-secondary/90 backdrop-blur-xl p-1 rounded-xl border border-border/50 shadow-2xl max-w-[260px] mx-auto">
           <button 
-            onClick={() => setApiType('app')} 
-            className={`flex-1 py-2 rounded-lg font-black text-[8px] uppercase tracking-widest transition-all ${apiType === 'app' ? 'jewel-sapphire text-white shadow-lg' : 'text-muted-foreground'}`}
+            onClick={() => appApiAllowed && setApiType('app')} 
+            disabled={!appApiAllowed}
+            className={`flex-1 py-2 rounded-lg font-black text-[8px] uppercase tracking-widest transition-all flex items-center justify-center gap-1 ${!appApiAllowed ? 'opacity-40 cursor-not-allowed' : ''} ${apiType === 'app' && appApiAllowed ? 'jewel-sapphire text-white shadow-lg' : 'text-muted-foreground'}`}
           >
+            {!appApiAllowed && <Lock className="w-3 h-3" />}
             APP API 🔒
           </button>
           <button 
-            onClick={() => setApiType('own')} 
-            className={`flex-1 py-2 rounded-lg font-black text-[8px] uppercase tracking-widest transition-all ${apiType === 'own' ? 'jewel-diamond text-blue-950' : 'text-muted-foreground'}`}
+            onClick={() => ownApiAllowed && setApiType('own')} 
+            disabled={!ownApiAllowed}
+            className={`flex-1 py-2 rounded-lg font-black text-[8px] uppercase tracking-widest transition-all flex items-center justify-center gap-1 ${!ownApiAllowed ? 'opacity-40 cursor-not-allowed' : ''} ${apiType === 'own' && ownApiAllowed ? 'jewel-diamond text-blue-950' : 'text-muted-foreground'}`}
           >
+            {!ownApiAllowed && <Lock className="w-3 h-3" />}
             OWN API
           </button>
         </div>
