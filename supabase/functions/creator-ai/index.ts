@@ -198,10 +198,16 @@ serve(async (req) => {
         }
 
         const data = await response.json();
-        const images = data.choices?.[0]?.message?.images;
-        if (images && images.length > 0) {
-          const imageUrl = images[0]?.image_url?.url;
+        console.log("[creator-ai] Gateway response:", JSON.stringify(data).substring(0, 500));
+        
+        // Try multiple extraction paths for image data
+        const message = data.choices?.[0]?.message;
+        
+        // Path 1: images array (standard format)
+        if (message?.images && message.images.length > 0) {
+          const imageUrl = message.images[0]?.image_url?.url;
           if (imageUrl) {
+            console.log("[creator-ai] Image extracted from images array");
             return new Response(
               JSON.stringify({ image: imageUrl }),
               { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -209,13 +215,30 @@ serve(async (req) => {
           }
         }
         
-        const content = data.choices?.[0]?.message?.content;
-        if (content && content.includes("data:image")) {
+        // Path 2: content contains base64 image directly
+        const content = message?.content;
+        if (content && typeof content === "string" && content.includes("data:image")) {
+          console.log("[creator-ai] Image extracted from content string");
           return new Response(
             JSON.stringify({ image: content }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
+        
+        // Path 3: content is an array with image parts (multimodal response)
+        if (Array.isArray(content)) {
+          for (const part of content) {
+            if (part.type === "image_url" && part.image_url?.url) {
+              console.log("[creator-ai] Image extracted from content array");
+              return new Response(
+                JSON.stringify({ image: part.image_url.url }),
+                { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              );
+            }
+          }
+        }
+        
+        console.error("[creator-ai] No image found in response. Message structure:", JSON.stringify(message).substring(0, 300));
         
         return new Response(
           JSON.stringify({ error: "No image was generated. Please try a different prompt." }),
