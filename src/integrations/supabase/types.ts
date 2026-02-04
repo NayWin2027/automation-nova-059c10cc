@@ -244,7 +244,57 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      safe_app_settings: {
+        Row: {
+          id: string | null
+          key: string | null
+          updated_at: string | null
+          value: Json | null
+        }
+        Insert: {
+          id?: string | null
+          key?: string | null
+          updated_at?: string | null
+          value?: never
+        }
+        Update: {
+          id?: string | null
+          key?: string | null
+          updated_at?: string | null
+          value?: never
+        }
+        Relationships: []
+      }
+      safe_tool_settings: {
+        Row: {
+          description: string | null
+          id: string | null
+          is_enabled: boolean | null
+          is_premium: boolean | null
+          requires_auth: boolean | null
+          title: string | null
+          tool_id: string | null
+        }
+        Insert: {
+          description?: string | null
+          id?: string | null
+          is_enabled?: boolean | null
+          is_premium?: boolean | null
+          requires_auth?: boolean | null
+          title?: string | null
+          tool_id?: string | null
+        }
+        Update: {
+          description?: string | null
+          id?: string | null
+          is_enabled?: boolean | null
+          is_premium?: boolean | null
+          requires_auth?: boolean | null
+          title?: string | null
+          tool_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       count_user_devices: { Args: { _user_id: string }; Returns: number }
