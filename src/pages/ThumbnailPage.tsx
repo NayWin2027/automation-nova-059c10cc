@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { generateThumbnail } from "./geminiService";
-import { ViewType } from "./types";
+import { generateThumbnail } from "@/services/geminiService";
 
 type Position = "UPON LEFT" | "UPON RIGHT" | "BUTTON LEFT" | "BUTTON RIGHT" | "CENTER";
 type AspectRatio = "1:1" | "16:9" | "9:16" | "4:3" | "3:4";
@@ -361,7 +360,7 @@ const LayerControl: React.FC<any> = ({
   );
 };
 
-const ThumbnailView: React.FC<{ onNavigate: (v: ViewType) => void }> = ({ onNavigate }) => {
+const ThumbnailView: React.FC = () => {
   const [apiKey, setApiKey] = useState("");
   const [genMode, setGenMode] = useState<"AUTO" | "REF">("AUTO");
   const [selectedRatio, setSelectedRatio] = useState<AspectRatio>("16:9");
