@@ -172,9 +172,9 @@ const PLOT_FOCUS = [
 
 const StoryView: React.FC = () => {
   const navigate = useNavigate();
-  const { isAllowed, isLoading: authLoading } = useAuthGuard('story');
+  const { isAllowed, isLoading: authLoading } = useAuthGuard("story");
   const { appApiAllowed, ownApiAllowed, defaultApiMode, isLoading: accessLoading } = useApiAccess();
-  
+
   const [apiType, setApiType] = useState<"app" | "own">("app");
   const { apiKey, setApiKey } = useSecureApiKey("master_story_api_key");
   const [title, setTitle] = useState("");
@@ -217,7 +217,7 @@ const StoryView: React.FC = () => {
     );
   }
 
-  // API key is now managed by useSecureApiKey hook (session storage)
+  // Use user's API key if Own API mode, otherwise use backend shared key
 
   const toggleGenre = (genre: string) => {
     if (selectedGenres.includes(genre)) {
