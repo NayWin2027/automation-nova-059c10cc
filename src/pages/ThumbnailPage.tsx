@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
-import { generateThumbnail } from "@/services/geminiService";
+import { generateThumbnail } from "./geminiService";
+import { ViewType } from "./types";
 
 type Position = "UPON LEFT" | "UPON RIGHT" | "BUTTON LEFT" | "BUTTON RIGHT" | "CENTER";
 type AspectRatio = "1:1" | "16:9" | "9:16" | "4:3" | "3:4";
@@ -104,28 +105,12 @@ const PREMIUM_COLORS: TextStyle[] = [
     secondary: "#6d28d9",
   },
   {
-    id: "MINT",
-    label: "MINT FRESH",
-    fill: "#a7f3d0",
-    stroke: "#064e3b",
-    glow: "rgba(167, 243, 208, 0.7)",
-    secondary: "#059669",
-  },
-  {
     id: "STEEL",
     label: "STEEL GREY",
     fill: "#71717a",
     stroke: "#18181b",
     glow: "rgba(113, 113, 122, 0.4)",
     secondary: "#3f3f46",
-  },
-  {
-    id: "CREAM",
-    label: "WARM CREAM",
-    fill: "#fef3c7",
-    stroke: "#78350f",
-    glow: "rgba(254, 243, 199, 0.6)",
-    secondary: "#d97706",
   },
   {
     id: "ICE",
@@ -136,14 +121,6 @@ const PREMIUM_COLORS: TextStyle[] = [
     secondary: "#0284c7",
   },
   {
-    id: "ROSE",
-    label: "SOFT ROSE",
-    fill: "#ffe4e6",
-    stroke: "#881337",
-    glow: "rgba(251, 113, 133, 0.5)",
-    secondary: "#e11d48",
-  },
-  {
     id: "BLACK",
     label: "VOID BLACK",
     fill: "#000000",
@@ -151,50 +128,18 @@ const PREMIUM_COLORS: TextStyle[] = [
     glow: "rgba(0,0,0,0.5)",
     secondary: "#1e293b",
   },
-  {
-    id: "CRIMSON",
-    label: "DARK CRIMSON",
-    fill: "#800000",
-    stroke: "#000000",
-    glow: "rgba(128, 0, 0, 0.6)",
-    secondary: "#450a0a",
-  },
-  {
-    id: "TEAL",
-    label: "AQUA TEAL",
-    fill: "#008080",
-    stroke: "#002020",
-    glow: "rgba(0, 128, 128, 0.7)",
-    secondary: "#0d9488",
-  },
-  {
-    id: "PLUM",
-    label: "PLUM DEEP",
-    fill: "#673147",
-    stroke: "#2e0a2e",
-    glow: "rgba(103, 49, 71, 0.6)",
-    secondary: "#4c1d37",
-  },
 ];
 
-const FONTS = [
-  // --- MYANMAR ARTISTIC GROUP (AS REQUESTED) ---
+const ELITE_FONTS = [
   { id: "Rubik Glitch", label: "GUTCH (GLITCH)" },
-  { id: "Padauk", label: "PADAUK (PAUK TAUK)" },
-  { id: "Kanit", label: "KANIT (NGU WAH)" },
-  { id: "Archivo Black", label: "ARCHIVO (TAUNGGYI)" },
-  { id: "Myanmar Sans Pro", label: "MYANMAR DISPLAY" },
-  // --- ENGLISH DISPLAY GROUP ---
-  { id: "Anton", label: "ANTON" },
-  { id: "Bebas Neue", label: "BEBAS" },
+  { id: "Anton", label: "ANTON HEAVY" },
+  { id: "Bebas Neue", label: "BEBAS BOLD" },
+  { id: "Padauk", label: "PAUK TAUK" },
+  { id: "Kanit", label: "NGU WAH" },
+  { id: "Archivo Black", label: "TAUNGGYI" },
   { id: "Montserrat", label: "MONTSERRAT" },
   { id: "Righteous", label: "RIGHTEOUS" },
-  { id: "Russo One", label: "RUSSO" },
   { id: "Passion One", label: "PASSION" },
-  { id: "Pattaya", label: "PATTAYA" },
-  { id: "Impact", label: "IMPACT" },
-  { id: "Tahoma", label: "TAHOMA" },
-  { id: "Arial Black", label: "ARIAL BLACK" },
 ];
 
 const PositionBtn: React.FC<{ pos: Position; current: Position; set: (p: Position) => void; color: string }> = ({
@@ -335,17 +280,22 @@ const LayerControl: React.FC<any> = ({
         ))}
       </div>
 
-      <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide">
-        {FONTS.map((f) => (
-          <button
-            key={f.id}
-            onClick={() => setFont(f.id)}
-            className={`px-2.5 py-1.5 rounded-lg text-[7px] font-black uppercase shrink-0 border transition-all ${font === f.id ? activeClass : "bg-black/30 text-slate-600 border-white/5 hover:border-white/10"}`}
-            style={{ fontFamily: f.id }}
-          >
-            {f.label}
-          </button>
-        ))}
+      <div className="space-y-1.5">
+        <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest ml-1">
+          Elite Display Fonts (High-End)
+        </p>
+        <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide">
+          {ELITE_FONTS.map((f) => (
+            <button
+              key={f.id}
+              onClick={() => setFont(f.id)}
+              className={`px-2.5 py-1.5 rounded-lg text-[7px] font-black uppercase shrink-0 border transition-all ${font === f.id ? activeClass : "bg-black/30 text-slate-600 border-white/5 hover:border-white/10"}`}
+              style={{ fontFamily: f.id }}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 items-center">
@@ -360,7 +310,7 @@ const LayerControl: React.FC<any> = ({
   );
 };
 
-const ThumbnailView: React.FC = () => {
+const ThumbnailView: React.FC<{ onNavigate: (v: ViewType) => void }> = ({ onNavigate }) => {
   const [apiKey, setApiKey] = useState("");
   const [genMode, setGenMode] = useState<"AUTO" | "REF">("AUTO");
   const [selectedRatio, setSelectedRatio] = useState<AspectRatio>("16:9");
@@ -421,6 +371,7 @@ const ThumbnailView: React.FC = () => {
     const style = PREMIUM_COLORS.find((s) => s.id === styleId) || PREMIUM_COLORS[0];
 
     ctx.save();
+    // Use the specified font and fallbacks
     ctx.font = `900 ${size}px '${font}', 'Padauk', 'Plus Jakarta Sans', sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -452,68 +403,81 @@ const ThumbnailView: React.FC = () => {
     lines.forEach((line, i) => {
       const ly = startY + i * lineHeight;
 
+      // REAL PROFESSIONAL EFFECTS - MASTER LEVEL
       if (effect === "STICKER_POP") {
+        // Ultra Heavy Sticker Outline
         ctx.strokeStyle = "#FFFFFF";
-        ctx.lineWidth = size * 0.35;
+        ctx.lineWidth = size * 0.5;
         ctx.lineJoin = "round";
         ctx.strokeText(line, tx, ly);
-        ctx.strokeStyle = style.stroke;
-        ctx.lineWidth = size * 0.12;
+
+        // Deep Drop Shadow for Sticker
+        ctx.shadowColor = "rgba(0,0,0,0.8)";
+        ctx.shadowBlur = 20;
         ctx.strokeText(line, tx, ly);
+
+        ctx.shadowBlur = 0; // Reset for inner part
+        ctx.strokeStyle = style.stroke;
+        ctx.lineWidth = size * 0.18;
+        ctx.strokeText(line, tx, ly);
+
         ctx.fillStyle = style.fill;
         ctx.fillText(line, tx, ly);
       } else if (effect === "3D_OFFSET") {
-        const depth = size * 0.1;
+        const depth = size * 0.15;
         ctx.fillStyle = style.stroke;
+        // High-Fidelity Multi-layered Depth
         for (let d = 1; d <= depth; d++) {
           ctx.fillText(line, tx + d, ly + d);
         }
-        ctx.strokeStyle = "#000";
-        ctx.lineWidth = size * 0.05;
+        ctx.strokeStyle = "rgba(0,0,0,0.8)";
+        ctx.lineWidth = size * 0.1;
         ctx.strokeText(line, tx, ly);
         ctx.fillStyle = style.fill;
         ctx.fillText(line, tx, ly);
       } else if (effect === "CHROME_GLOW") {
         ctx.shadowColor = style.glow;
-        ctx.shadowBlur = size * 0.3;
+        ctx.shadowBlur = size * 0.6;
         const grad = ctx.createLinearGradient(tx, ly - size / 2, tx, ly + size / 2);
         grad.addColorStop(0, "#FFF");
-        grad.addColorStop(0.5, style.fill);
+        grad.addColorStop(0.3, style.fill);
+        grad.addColorStop(0.7, style.fill);
         grad.addColorStop(1, style.stroke);
         ctx.fillStyle = grad;
         ctx.strokeStyle = "black";
-        ctx.lineWidth = size * 0.1;
+        ctx.lineWidth = size * 0.2;
         ctx.strokeText(line, tx, ly);
         ctx.fillText(line, tx, ly);
       } else if (effect === "DARK_PLATE") {
         const metrics = ctx.measureText(line);
-        const pad = size * 0.2;
-        ctx.fillStyle = "rgba(0,0,0,0.85)";
+        const pad = size * 0.3;
+        ctx.fillStyle = "rgba(0,0,0,0.92)";
         ctx.fillRect(tx - metrics.width / 2 - pad, ly - size / 2 - pad / 2, metrics.width + pad * 2, size + pad);
         ctx.fillStyle = style.fill;
         ctx.fillText(line, tx, ly);
       } else if (effect === "NEON_STROKE") {
         ctx.shadowColor = style.glow;
-        ctx.shadowBlur = 25;
+        ctx.shadowBlur = 40;
         ctx.strokeStyle = style.fill;
-        ctx.lineWidth = size * 0.2;
+        ctx.lineWidth = size * 0.3;
         ctx.strokeText(line, tx, ly);
         ctx.strokeStyle = "white";
-        ctx.lineWidth = size * 0.05;
+        ctx.lineWidth = size * 0.08;
         ctx.strokeText(line, tx, ly);
         ctx.fillStyle = "#FFF";
         ctx.fillText(line, tx, ly);
       } else if (effect === "HOLLOW") {
         ctx.strokeStyle = style.fill;
-        ctx.lineWidth = size * 0.12;
+        ctx.lineWidth = size * 0.2;
         ctx.strokeText(line, tx, ly);
         ctx.fillStyle = "transparent";
         ctx.fillText(line, tx, ly);
       } else {
+        // High Performance Classic
         ctx.shadowColor = "rgba(0,0,0,1)";
-        ctx.shadowBlur = 15;
+        ctx.shadowBlur = 25;
         ctx.strokeStyle = "#000";
-        ctx.lineWidth = size * 0.2;
+        ctx.lineWidth = size * 0.3;
         ctx.strokeText(line, tx, ly);
         ctx.fillStyle = style.fill;
         ctx.fillText(line, tx, ly);
@@ -552,8 +516,8 @@ const ThumbnailView: React.FC = () => {
     if (logoImgRef.current) {
       const lSize = w * 0.12;
       ctx.save();
-      ctx.shadowColor = "rgba(0,0,0,0.5)";
-      ctx.shadowBlur = 15;
+      ctx.shadowColor = "rgba(0,0,0,0.6)";
+      ctx.shadowBlur = 30;
       ctx.drawImage(logoImgRef.current, 50, h - lSize - 50, lSize, lSize);
       ctx.restore();
     }
@@ -662,7 +626,7 @@ const ThumbnailView: React.FC = () => {
                 THUMBNAIL PRO <span className="text-blue-500">MASTER</span>
               </h2>
               <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.5em] opacity-60">
-                ELITE DESIGN ENGINE V11
+                ELITE DESIGN ENGINE V18
               </p>
             </div>
 
