@@ -255,13 +255,13 @@ export type Database = {
           id?: string | null
           key?: string | null
           updated_at?: string | null
-          value?: never
+          value?: Json | null
         }
         Update: {
           id?: string | null
           key?: string | null
           updated_at?: string | null
-          value?: never
+          value?: Json | null
         }
         Relationships: []
       }

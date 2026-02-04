@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { generateThumbnail } from "@/services/geminiService";
+import { useSecureApiKey } from "@/hooks/useSecureApiKey";
 
 type Position = "UPON LEFT" | "UPON RIGHT" | "BUTTON LEFT" | "BUTTON RIGHT" | "CENTER";
 type AspectRatio = "1:1" | "16:9" | "9:16" | "4:3" | "3:4";
@@ -310,7 +311,8 @@ const LayerControl: React.FC<any> = ({
 };
 
 const ThumbnailView: React.FC = () => {
-  const [apiKey, setApiKey] = useState("");
+  // Use secure API key storage (sessionStorage, auto-cleared on tab close)
+  const { apiKey, setApiKey } = useSecureApiKey("master_thumbnail_api_key");
   const [genMode, setGenMode] = useState<"AUTO" | "REF">("AUTO");
   const [selectedRatio, setSelectedRatio] = useState<AspectRatio>("16:9");
   const [context, setContext] = useState("");
