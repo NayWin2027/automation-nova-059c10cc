@@ -10,7 +10,7 @@ const PrivacyPolicyView: React.FC = () => {
       sections: [
         {
           title: "1. Information We Collect",
-          text: "Transcript Master AI is designed with a 'privacy-first' approach. We do not require users to create an account or provide personal identifiers like emails. The only data processed includes media files you upload for transcription (processed in-memory) and text input you enter for translation or generation.",
+          text: "Automaion Nova AI" is designed with a 'privacy-first' approach. We do not require users to create an account or provide personal identifiers like emails. The only data processed includes media files you upload for transcription (processed in-memory) and text input you enter for translation or generation.",
         },
         {
           title: "2. How We Process Data",
