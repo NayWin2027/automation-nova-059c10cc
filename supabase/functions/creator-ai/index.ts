@@ -42,7 +42,7 @@ serve(async (req) => {
     console.log(`[creator-ai] Authenticated user: ${user.id}`);
 
     // ===== INPUT VALIDATION =====
-    const { prompt, apiKey, type } = await req.json();
+    const { prompt, apiKey, type, referenceImages, aspectRatio } = await req.json();
 
     if (!prompt || typeof prompt !== "string") {
       return new Response(
@@ -60,8 +60,9 @@ serve(async (req) => {
 
     const validTypes = ["text", "image"];
     const sanitizedType = validTypes.includes(type) ? type : "text";
+    const hasReferenceImages = Array.isArray(referenceImages) && referenceImages.length > 0;
 
-    console.log("[creator-ai] Request type:", sanitizedType);
+    console.log("[creator-ai] Request type:", sanitizedType, "hasRefs:", hasReferenceImages);
 
     // ===== CREDIT CHECK (Server-side) =====
     const isOwnApiKey = !!apiKey?.trim();
@@ -164,6 +165,41 @@ serve(async (req) => {
           );
         }
 
+        // Build message content - multimodal if reference images provided
+        let messageContent: any;
+        
+        if (hasReferenceImages) {
+          // Multimodal content with images + text
+          const contentParts: any[] = [];
+          
+          // Add reference images first
+          for (const imgData of referenceImages) {
+            if (typeof imgData === "string" && imgData.startsWith("data:")) {
+              contentParts.push({
+                type: "image_url",
+                image_url: { url: imgData }
+              });
+            }
+          }
+          
+          // Add explicit image generation instruction
+          const enhancedPrompt = `IMPORTANT: You MUST generate a NEW image based on the style and elements from the reference images above.
+
+${prompt}
+
+Generate a high-quality image now. Do not ask questions or provide text-only responses.`;
+          
+          contentParts.push({ type: "text", text: enhancedPrompt });
+          messageContent = contentParts;
+          
+          console.log("[creator-ai] Sending multimodal request with", referenceImages.length, "reference images");
+        } else {
+          // Simple text prompt with explicit generation instruction
+          messageContent = `Generate an image: ${prompt}
+
+Create this image now. Output the generated image directly.`;
+        }
+
         const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
           headers: {
@@ -172,7 +208,7 @@ serve(async (req) => {
           },
           body: JSON.stringify({
             model: "google/gemini-2.5-flash-image",
-            messages: [{ role: "user", content: prompt }],
+            messages: [{ role: "user", content: messageContent }],
             modalities: ["image", "text"],
           }),
         });
