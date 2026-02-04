@@ -1,127 +1,110 @@
-import { ArrowLeft } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import { useState } from "react";
+import React, { useState } from "react";
 
-const PrivacyPage = () => {
-  const navigate = useNavigate();
-  const [lang, setLang] = useState<'en' | 'my'>('en');
+const PrivacyPolicyView: React.FC = () => {
+  const [lang, setLang] = useState<"EN" | "MY">("EN");
 
   const content = {
-    en: {
-      title: "PRIVACY POLICY",
-      updated: "Last Updated: December 2025",
+    EN: {
+      header: "PRIVACY POLICY",
+      subHeader: "LAST UPDATED: DECEMBER 2025",
       sections: [
         {
           title: "1. Information We Collect",
-          text: "Transcript Master AI is designed with a 'privacy-first' approach. We do not require users to create an account or provide personal identifiers like emails. The only data processed includes media files you upload for transcription (processed in-memory) and text input you enter for translation or generation."
+          text: "Transcript Master AI is designed with a 'privacy-first' approach. We do not require users to create an account or provide personal identifiers like emails. The only data processed includes media files you upload for transcription (processed in-memory) and text input you enter for translation or generation.",
         },
         {
           title: "2. How We Process Data",
-          text: "We utilize the Google Gemini API for all AI-related tasks. When you upload a file or enter text: Data is transmitted via an encrypted SSL/TLS connection. Processing happens in volatile memory and is NOT used to train future AI models without explicit enterprise consent. Once the output is generated, the temporary data on the server is discarded."
+          text: "We utilize the Google Gemini API for all AI-related tasks. When you upload a file or enter text: Data is transmitted via an encrypted SSL/TLS connection. Processing happens in volatile memory and is NOT used to train future AI models without explicit enterprise consent. Once the output is generated, the temporary data on the server is discarded.",
         },
         {
           title: "3. Cookies and Local Storage",
-          text: "We do not use tracking cookies or third-party marketing trackers. We only use local browser storage (localStorage) to save your transcription and translation history so you can retrieve it later without re-uploading files. This data never leaves your device unless you manually interact with the AI tools."
+          text: "We do not use tracking cookies or third-party marketing trackers. We only use local browser storage (localStorage) to save your transcription and translation history so you can retrieve it later without re-uploading files. This data never leaves your device unless you manually interact with the AI tools.",
         },
         {
           title: "4. Data Security",
-          text: "We implement industry-standard security measures to protect your information. However, please remember that no method of transmission over the internet is 100% secure. Users are advised not to process highly sensitive or confidential government information."
-        }
-      ]
+          text: "We implement industry-standard security measures to protect your information. However, please remember that no method of transmission over the internet is 100% secure. Users are advised not to process highly sensitive or confidential government information.",
+        },
+      ],
     },
-    my: {
-      title: "ကိုယ်ရေးလုံခြုံမှု မူဝါဒ",
-      updated: "နောက်ဆုံးပြင်ဆင်ချက်: ဒီဇင်ဘာ ၂၀၂၅",
+    MY: {
+      header: "ကိုယ်ရေးအချက်အလက် မူဝါဒ",
+      subHeader: "နောက်ဆုံးပြင်ဆင်သည့်ရက်စွဲ - ဒီဇင်ဘာ ၂၀၂၅",
       sections: [
         {
-          title: "၁. ကျွန်ုပ်တို့ စုဆောင်းသော အချက်အလက်များ",
-          text: "Transcript Master AI သည် 'ကိုယ်ရေးလုံခြုံမှု ဦးစားပေး' ချဉ်းကပ်မှုဖြင့် ဒီဇိုင်းထုတ်ထားပါသည်။ အသုံးပြုသူများအား အကောင့်ဖန်တီးရန် သို့မဟုတ် အီးမေးလ်ကဲ့သို့ ကိုယ်ရေးအချက်အလက်များ ပေးရန် မလိုအပ်ပါ။"
+          title: "၁။ ကျွန်ုပ်တို့ စုဆောင်းထားသော အချက်အလက်များ",
+          text: "Transcript Master AI ကို အသုံးပြုသူများ၏ ကိုယ်ရေးကိုယ်တာလုံခြုံမှုကို ဦးစားပေး၍ ဒီဇိုင်းထုတ်ထားပါသည်။ ကျွန်ုပ်တို့သည် အကောင့်ဖွင့်ရန် သို့မဟုတ် အီးမေးလ်ကဲ့သို့သော ကိုယ်ရေးအချက်အလက်များကို တောင်းဆိုခြင်း မပြုပါ။ သင်ပေးပို့လိုက်သော မီဒီယာဖိုင်များနှင့် စာသားများကိုသာ ဝန်ဆောင်မှုပေးရန်အတွက် ယာယီအသုံးပြုခြင်း ဖြစ်ပါသည်။",
         },
         {
-          title: "၂. ဒေတာ လုပ်ဆောင်ပုံ",
-          text: "AI နှင့်ဆိုင်သော လုပ်ငန်းများအားလုံးအတွက် Google Gemini API ကို အသုံးပြုပါသည်။ ဖိုင်တင်သောအခါ သို့မဟုတ် စာသားထည့်သောအခါ: ဒေတာကို SSL/TLS ကုဒ်ဝှက်ချိတ်ဆက်မှုမှတဆင့် ပို့လွှတ်ပါသည်။"
+          title: "၂။ အချက်အလက်များကို မည်သို့လုပ်ဆောင်သနည်း",
+          text: "AI ဆိုင်ရာ လုပ်ဆောင်ချက်များအားလုံးအတွက် Google Gemini API ကို အသုံးပြုပါသည်။ သင်ပေးပို့လိုက်သော အချက်အလက်များကို လုံခြုံစိတ်ချရသော SSL/TLS ကုဒ်စနစ်ဖြင့် ပေးပို့ပြီး ယာယီမှတ်ဉာဏ် (Memory) တွင်သာ လုပ်ဆောင်ပါသည်။ ဤအချက်အလက်များကို AI သင်ကြားရန်အတွက် အသုံးပြုခြင်း မပြုဘဲ ရလဒ်ထွက်ရှိပြီးသည်နှင့် ယာယီဒေတာများကို ဖျက်ဆီးပစ်ပါသည်။",
         },
         {
-          title: "၃. ကွတ်ကီးများနှင့် Local Storage",
-          text: "ကျွန်ုပ်တို့သည် tracking cookies သို့မဟုတ် third-party marketing trackers များ အသုံးမပြုပါ။ သင်၏ transcription နှင့် translation history ကို သိမ်းဆည်းရန် local browser storage ကိုသာ အသုံးပြုပါသည်။"
+          title: "၃။ Cookies နှင့် Local Storage အသုံးပြုမှု",
+          text: "ကျွန်ုပ်တို့သည် သင့်နောက်ကွယ်မှ လိုက်လံစောင့်ကြည့်သော Tracking Cookies များကို အသုံးမပြုပါ။ သင်၏ လုပ်ဆောင်ချက်မှတ်တမ်းများကို သင့်ဖုန်း/ကွန်ပျူတာ၏ Local Storage တွင်သာ သိမ်းဆည်းထားပြီး၊ ၎င်းသည် သင့်စက်ထဲတွင်သာ ရှိနေမည်ဖြစ်ကာ အခြားမည်သူမျှ ဝင်ရောက်ကြည့်ရှုနိုင်မည် မဟုတ်ပါ။",
         },
         {
-          title: "၄. ဒေတာ လုံခြုံရေး",
-          text: "သင်၏ အချက်အလက်များကို ကာကွယ်ရန် စက်မှုလုပ်ငန်း စံနှုန်း လုံခြုံရေး အစီအမံများကို ကျွန်ုပ်တို့ အကောင်အထည်ဖော်ပါသည်။ သို့သော် အင်တာနက်ပေါ်မှ ထုတ်လွှင့်မှုနည်းလမ်းသည် ၁၀၀% လုံခြုံမှု မရှိကြောင်း သတိပြုပါ။"
-        }
-      ]
-    }
+          title: "၄။ ဒေတာလုံခြုံရေး",
+          text: "သင်၏ အချက်အလက်များကို ကာကွယ်ရန် ပရော်ဖက်ရှင်နယ်အဆင့် လုံခြုံရေးစနစ်များကို ကျင့်သုံးထားပါသည်။ သို့သော်လည်း အင်တာနက်ပေါ်ရှိ မည်သည့်ပေးပို့မှုမျိုးမဆို ၁၀၀ ရာခိုင်နှုန်း စိတ်ချရသည်ဟု မဆိုနိုင်သောကြောင့် အလွန်အရေးကြီးသော လျှို့ဝှက်အချက်အလက်များကို အသုံးမပြုရန် အကြံပြုအပ်ပါသည်။",
+        },
+      ],
+    },
   };
 
-  const c = content[lang];
+  const t = content[lang];
 
   return (
-    <div className="min-h-screen premium-background">
-      <div className="premium-rays" />
-      
-      <header className="px-3 py-2 flex items-center gap-3 relative z-10">
-        <button 
-          onClick={() => navigate(-1)}
-          className="w-7 h-7 rounded-lg bg-secondary/40 border border-border/20 flex items-center justify-center hover:bg-secondary/60 transition-colors"
-        >
-          <ArrowLeft className="w-3.5 h-3.5 text-foreground" />
-        </button>
-        <h1 className="text-2xs font-bold tracking-wider">
-          <span className="text-foreground">MASTER</span>{" "}
-          <span className="text-primary">AI</span>
-        </h1>
-      </header>
-
-      <main className="px-4 py-6 relative z-10 max-w-2xl mx-auto">
-        <div className="flex justify-end mb-4">
-          <div className="flex rounded-md overflow-hidden border border-border/30">
-            <button
-              onClick={() => setLang('en')}
-              className={`px-3 py-1 text-3xs font-medium transition-colors ${
-                lang === 'en' 
-                  ? 'bg-primary text-primary-foreground' 
-                  : 'bg-secondary/40 text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              EN
-            </button>
-            <button
-              onClick={() => setLang('my')}
-              className={`px-3 py-1 text-3xs font-medium transition-colors ${
-                lang === 'my' 
-                  ? 'bg-primary text-primary-foreground' 
-                  : 'bg-secondary/40 text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              MY
-            </button>
-          </div>
+    <div className="animate-in fade-in slide-in-from-bottom-6 duration-700 pb-24">
+      {/* Premium Header Container */}
+      <div className="relative overflow-hidden rounded-[40px] mb-8 shadow-2xl">
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-500 via-indigo-700 to-purple-800 opacity-90"></div>
+        <div className="relative z-10 p-12 text-center space-y-2">
+          <h2 className="text-4xl font-black text-white tracking-tighter uppercase drop-shadow-lg">{t.header}</h2>
+          <p className="text-[10px] font-bold text-blue-200 uppercase tracking-[0.3em] opacity-80">{t.subHeader}</p>
         </div>
 
-        <div className="text-center mb-8">
-          <h1 className="text-xl font-bold text-foreground tracking-widest mb-2">
-            {c.title}
-          </h1>
-          <p className="text-3xs text-muted-foreground tracking-widest uppercase">
-            {c.updated}
-          </p>
+        {/* Compact Language Toggle */}
+        <div className="absolute top-4 right-6 flex bg-black/30 backdrop-blur-md rounded-full p-1 border border-white/10 z-20">
+          <button
+            onClick={() => setLang("EN")}
+            className={`px-3 py-1 rounded-full text-[8px] font-black transition-all ${lang === "EN" ? "bg-white text-blue-900 shadow-md" : "text-white/50 hover:text-white"}`}
+          >
+            EN
+          </button>
+          <button
+            onClick={() => setLang("MY")}
+            className={`px-3 py-1 rounded-full text-[8px] font-black transition-all ${lang === "MY" ? "bg-white text-blue-900 shadow-md" : "text-white/50 hover:text-white"}`}
+          >
+            MY
+          </button>
         </div>
+      </div>
 
-        <div className="space-y-6">
-          {c.sections.map((section, idx) => (
-            <section key={idx} className="space-y-3">
-              <h2 className="text-sm font-bold text-primary border-l-2 border-primary pl-3">
-                {section.title}
-              </h2>
-              <p className="text-2xs text-muted-foreground leading-relaxed">
+      {/* Content Card */}
+      <div className="neon-glass rounded-[48px] p-10 md:p-14 space-y-12 shadow-3xl border border-white/5 relative overflow-hidden group">
+        <div className="space-y-12 relative z-10">
+          {t.sections.map((section, idx) => (
+            <div
+              key={idx}
+              className="space-y-4 animate-in fade-in slide-in-from-left-4 duration-500"
+              style={{ animationDelay: `${idx * 150}ms` }}
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-1.5 h-6 bg-blue-500 rounded-full shadow-[0_0_10px_#3b82f6]"></div>
+                <h3 className="text-xl font-black text-white tracking-tight">{section.title}</h3>
+              </div>
+              <p className="text-sm md:text-base font-medium text-slate-400 leading-[1.8] text-justify">
                 {section.text}
               </p>
-            </section>
+            </div>
           ))}
         </div>
-      </main>
+      </div>
+
+      <div className="mt-12 text-center">
+        <p className="text-[10px] font-black text-slate-700 uppercase tracking-[0.5em] opacity-40">DATA PRIVACY TEAM</p>
+      </div>
     </div>
   );
 };
 
-export default PrivacyPage;
+export default PrivacyPolicyView;
