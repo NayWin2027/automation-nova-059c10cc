@@ -1,15 +1,10 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Lock, Loader2, Upload, Download, Trash2, Type, Image as ImageIcon, Palette, Move, Sparkles, RotateCcw } from 'lucide-react';
-import { generateThumbnail } from '@/services/geminiService';
-import { BottomNav } from '@/components/BottomNav';
-import { useApiAccess } from '@/hooks/useApiAccess';
-import { useSecureApiKey } from '@/hooks/useSecureApiKey';
-import { useAuthGuard } from '@/hooks/useAuthGuard';
+import React, { useState, useRef, useEffect } from "react";
+import { generateThumbnail } from "./geminiService";
+import { ViewType } from "./types";
 
-type Position = 'UPON LEFT' | 'UPON RIGHT' | 'BOTTOM LEFT' | 'BOTTOM RIGHT' | 'CENTER';
-type AspectRatio = '1:1' | '16:9' | '9:16' | '4:3' | '3:4';
-type FontEffect = 'CLASSIC' | 'STICKER_POP' | '3D_OFFSET' | 'CHROME_GLOW' | 'NEON_STROKE' | 'DARK_PLATE' | 'HOLLOW';
+type Position = "UPON LEFT" | "UPON RIGHT" | "BUTTON LEFT" | "BUTTON RIGHT" | "CENTER";
+type AspectRatio = "1:1" | "16:9" | "9:16" | "4:3" | "3:4";
+type FontEffect = "CLASSIC" | "STICKER_POP" | "3D_OFFSET" | "CHROME_GLOW" | "NEON_STROKE" | "DARK_PLATE" | "HOLLOW";
 
 interface TextStyle {
   id: string;
@@ -21,647 +16,884 @@ interface TextStyle {
 }
 
 const PREMIUM_COLORS: TextStyle[] = [
-  { id: 'GOLD', label: 'LUXURY GOLD', fill: '#FFD700', stroke: '#4a3701', glow: 'rgba(251, 191, 36, 0.8)', secondary: '#f59e0b' },
-  { id: 'CYAN', label: 'ELECTRIC CYAN', fill: '#00FFFF', stroke: '#003333', glow: 'rgba(0, 255, 255, 0.9)', secondary: '#0891b2' },
-  { id: 'RUBY', label: 'VIVID RUBY', fill: '#FF003F', stroke: '#33000d', glow: 'rgba(255, 0, 63, 0.7)', secondary: '#be123c' },
-  { id: 'LIME', label: 'TOXIC LIME', fill: '#32CD32', stroke: '#0a290a', glow: 'rgba(50, 205, 50, 0.8)', secondary: '#15803d' },
-  { id: 'PURPLE', label: 'ROYAL PURPLE', fill: '#BF40BF', stroke: '#2e0a2e', glow: 'rgba(191, 64, 191, 0.8)', secondary: '#7e22ce' },
-  { id: 'PINK', label: 'NEON PINK', fill: '#FF1493', stroke: '#33001a', glow: 'rgba(255, 20, 147, 1)', secondary: '#db2777' },
-  { id: 'EMERALD', label: 'DEEP EMERALD', fill: '#50C878', stroke: '#064e3b', glow: 'rgba(16, 185, 129, 0.6)', secondary: '#047857' },
-  { id: 'ORANGE', label: 'PUNCHY ORANGE', fill: '#FF4500', stroke: '#451a03', glow: 'rgba(255, 69, 0, 0.7)', secondary: '#ea580c' },
-  { id: 'WHITE', label: 'CLEAN WHITE', fill: '#FFFFFF', stroke: '#000000', glow: 'rgba(255, 255, 255, 0.5)', secondary: '#f8fafc' },
-  { id: 'LEMON', label: 'BRIGHT LEMON', fill: '#FFF700', stroke: '#4a4a00', glow: 'rgba(255, 247, 0, 0.8)', secondary: '#ca8a04' },
-  { id: 'VIOLET', label: 'NEON VIOLET', fill: '#8A2BE2', stroke: '#1a0033', glow: 'rgba(138, 43, 226, 0.8)', secondary: '#6d28d9' },
-  { id: 'MINT', label: 'MINT FRESH', fill: '#a7f3d0', stroke: '#064e3b', glow: 'rgba(167, 243, 208, 0.7)', secondary: '#059669' },
-  { id: 'BLACK', label: 'VOID BLACK', fill: '#000000', stroke: '#FFFFFF', glow: 'rgba(0,0,0,0.5)', secondary: '#1e293b' },
+  {
+    id: "GOLD",
+    label: "LUXURY GOLD",
+    fill: "#FFD700",
+    stroke: "#4a3701",
+    glow: "rgba(251, 191, 36, 0.8)",
+    secondary: "#f59e0b",
+  },
+  {
+    id: "CYAN",
+    label: "ELECTRIC CYAN",
+    fill: "#00FFFF",
+    stroke: "#003333",
+    glow: "rgba(0, 255, 255, 0.9)",
+    secondary: "#0891b2",
+  },
+  {
+    id: "RUBY",
+    label: "VIVID RUBY",
+    fill: "#FF003F",
+    stroke: "#33000d",
+    glow: "rgba(255, 0, 63, 0.7)",
+    secondary: "#be123c",
+  },
+  {
+    id: "LIME",
+    label: "TOXIC LIME",
+    fill: "#32CD32",
+    stroke: "#0a290a",
+    glow: "rgba(50, 205, 50, 0.8)",
+    secondary: "#15803d",
+  },
+  {
+    id: "PURPLE",
+    label: "ROYAL PURPLE",
+    fill: "#BF40BF",
+    stroke: "#2e0a2e",
+    glow: "rgba(191, 64, 191, 0.8)",
+    secondary: "#7e22ce",
+  },
+  {
+    id: "PINK",
+    label: "NEON PINK",
+    fill: "#FF1493",
+    stroke: "#33001a",
+    glow: "rgba(255, 20, 147, 1)",
+    secondary: "#db2777",
+  },
+  {
+    id: "EMERALD",
+    label: "DEEP EMERALD",
+    fill: "#50C878",
+    stroke: "#064e3b",
+    glow: "rgba(16, 185, 129, 0.6)",
+    secondary: "#047857",
+  },
+  {
+    id: "ORANGE",
+    label: "PUNCHY ORANGE",
+    fill: "#FF4500",
+    stroke: "#451a03",
+    glow: "rgba(255, 69, 0, 0.7)",
+    secondary: "#ea580c",
+  },
+  {
+    id: "WHITE",
+    label: "CLEAN WHITE",
+    fill: "#FFFFFF",
+    stroke: "#000000",
+    glow: "rgba(255, 255, 255, 0.5)",
+    secondary: "#f8fafc",
+  },
+  {
+    id: "LEMON",
+    label: "BRIGHT LEMON",
+    fill: "#FFF700",
+    stroke: "#4a4a00",
+    glow: "rgba(255, 247, 0, 0.8)",
+    secondary: "#ca8a04",
+  },
+  {
+    id: "VIOLET",
+    label: "NEON VIOLET",
+    fill: "#8A2BE2",
+    stroke: "#1a0033",
+    glow: "rgba(138, 43, 226, 0.8)",
+    secondary: "#6d28d9",
+  },
+  {
+    id: "MINT",
+    label: "MINT FRESH",
+    fill: "#a7f3d0",
+    stroke: "#064e3b",
+    glow: "rgba(167, 243, 208, 0.7)",
+    secondary: "#059669",
+  },
+  {
+    id: "STEEL",
+    label: "STEEL GREY",
+    fill: "#71717a",
+    stroke: "#18181b",
+    glow: "rgba(113, 113, 122, 0.4)",
+    secondary: "#3f3f46",
+  },
+  {
+    id: "CREAM",
+    label: "WARM CREAM",
+    fill: "#fef3c7",
+    stroke: "#78350f",
+    glow: "rgba(254, 243, 199, 0.6)",
+    secondary: "#d97706",
+  },
+  {
+    id: "ICE",
+    label: "ICE BLUE",
+    fill: "#e0f2fe",
+    stroke: "#0c4a6e",
+    glow: "rgba(186, 230, 253, 0.8)",
+    secondary: "#0284c7",
+  },
+  {
+    id: "ROSE",
+    label: "SOFT ROSE",
+    fill: "#ffe4e6",
+    stroke: "#881337",
+    glow: "rgba(251, 113, 133, 0.5)",
+    secondary: "#e11d48",
+  },
+  {
+    id: "BLACK",
+    label: "VOID BLACK",
+    fill: "#000000",
+    stroke: "#FFFFFF",
+    glow: "rgba(0,0,0,0.5)",
+    secondary: "#1e293b",
+  },
+  {
+    id: "CRIMSON",
+    label: "DARK CRIMSON",
+    fill: "#800000",
+    stroke: "#000000",
+    glow: "rgba(128, 0, 0, 0.6)",
+    secondary: "#450a0a",
+  },
+  {
+    id: "TEAL",
+    label: "AQUA TEAL",
+    fill: "#008080",
+    stroke: "#002020",
+    glow: "rgba(0, 128, 128, 0.7)",
+    secondary: "#0d9488",
+  },
+  {
+    id: "PLUM",
+    label: "PLUM DEEP",
+    fill: "#673147",
+    stroke: "#2e0a2e",
+    glow: "rgba(103, 49, 71, 0.6)",
+    secondary: "#4c1d37",
+  },
 ];
 
 const FONTS = [
-  { id: 'Anton', label: 'ANTON' },
-  { id: 'Bebas Neue', label: 'BEBAS' },
-  { id: 'Montserrat', label: 'MONTSERRAT' },
-  { id: 'Archivo Black', label: 'ARCHIVO' },
-  { id: 'Kanit', label: 'KANIT' },
-  { id: 'Padauk', label: 'PADAUK' },
-  { id: 'Righteous', label: 'RIGHTEOUS' },
-  { id: 'Russo One', label: 'RUSSO' },
-  { id: 'Passion One', label: 'PASSION' },
-  { id: 'Impact', label: 'IMPACT' },
-  { id: 'Arial Black', label: 'ARIAL BLACK' },
+  // --- MYANMAR ARTISTIC GROUP (AS REQUESTED) ---
+  { id: "Rubik Glitch", label: "GUTCH (GLITCH)" },
+  { id: "Padauk", label: "PADAUK (PAUK TAUK)" },
+  { id: "Kanit", label: "KANIT (NGU WAH)" },
+  { id: "Archivo Black", label: "ARCHIVO (TAUNGGYI)" },
+  { id: "Myanmar Sans Pro", label: "MYANMAR DISPLAY" },
+  // --- ENGLISH DISPLAY GROUP ---
+  { id: "Anton", label: "ANTON" },
+  { id: "Bebas Neue", label: "BEBAS" },
+  { id: "Montserrat", label: "MONTSERRAT" },
+  { id: "Righteous", label: "RIGHTEOUS" },
+  { id: "Russo One", label: "RUSSO" },
+  { id: "Passion One", label: "PASSION" },
+  { id: "Pattaya", label: "PATTAYA" },
+  { id: "Impact", label: "IMPACT" },
+  { id: "Tahoma", label: "TAHOMA" },
+  { id: "Arial Black", label: "ARIAL BLACK" },
 ];
 
-const ASPECT_RATIOS: { id: AspectRatio; label: string; width: number; height: number }[] = [
-  { id: '16:9', label: '16:9 (YouTube)', width: 1280, height: 720 },
-  { id: '1:1', label: '1:1 (Instagram)', width: 1024, height: 1024 },
-  { id: '9:16', label: '9:16 (Shorts/Reels)', width: 720, height: 1280 },
-  { id: '4:3', label: '4:3 (Classic)', width: 1024, height: 768 },
-  { id: '3:4', label: '3:4 (Portrait)', width: 768, height: 1024 },
-];
+const PositionBtn: React.FC<{ pos: Position; current: Position; set: (p: Position) => void; color: string }> = ({
+  pos,
+  current,
+  set,
+  color,
+}) => (
+  <button
+    onClick={() => set(pos)}
+    className={`py-1.5 px-1 rounded-lg text-[6px] font-black uppercase border transition-all ${current === pos ? `bg-${color}-600 text-white border-transparent shadow-lg` : "bg-slate-900/40 border-white/5 text-slate-600 hover:text-slate-400"}`}
+  >
+    {pos}
+  </button>
+);
 
-const FONT_EFFECTS: { id: FontEffect; label: string }[] = [
-  { id: 'CLASSIC', label: 'CLASSIC' },
-  { id: 'STICKER_POP', label: 'STICKER POP' },
-  { id: '3D_OFFSET', label: '3D OFFSET' },
-  { id: 'CHROME_GLOW', label: 'CHROME GLOW' },
-  { id: 'NEON_STROKE', label: 'NEON STROKE' },
-  { id: 'DARK_PLATE', label: 'DARK PLATE' },
-  { id: 'HOLLOW', label: 'HOLLOW' },
-];
-
-const ThumbnailPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<"home" | "premium" | "settings">("home");
-  const navigate = useNavigate();
-  const { isAllowed, isLoading: authLoading } = useAuthGuard('thumbnail');
-  const { appApiAllowed, ownApiAllowed, appApiReason, ownApiReason, defaultApiMode, isLoading: accessLoading } = useApiAccess();
-  
-  const [apiType, setApiType] = useState<'app' | 'own'>('app');
-  const { apiKey, setApiKey } = useSecureApiKey('master_thumbnail_api_key');
-  
-  const [headline, setHeadline] = useState('');
-  const [prompt, setPrompt] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [generatedBg, setGeneratedBg] = useState<string | null>(null);
-  const [uploadedBg, setUploadedBg] = useState<string | null>(null);
-  const [uploadedLogo, setUploadedLogo] = useState<string | null>(null);
-  const [referenceImage, setReferenceImage] = useState<string | null>(null);
-  
-  // Text styling
-  const [selectedColor, setSelectedColor] = useState<TextStyle>(PREMIUM_COLORS[0]);
-  const [selectedFont, setSelectedFont] = useState(FONTS[0].id);
-  const [selectedEffect, setSelectedEffect] = useState<FontEffect>('CLASSIC');
-  const [fontSize, setFontSize] = useState(72);
-  
-  // Layout
-  const [aspectRatio, setAspectRatio] = useState<AspectRatio>('16:9');
-  const [textPosition, setTextPosition] = useState<Position>('CENTER');
-  const [logoPosition, setLogoPosition] = useState<Position>('BOTTOM RIGHT');
-  
-  // Offset pads for pixel-perfect positioning
-  const [textOffsetX, setTextOffsetX] = useState(0);
-  const [textOffsetY, setTextOffsetY] = useState(0);
-  const [logoOffsetX, setLogoOffsetX] = useState(0);
-  const [logoOffsetY, setLogoOffsetY] = useState(0);
-  const [logoScale, setLogoScale] = useState(100);
-  
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const bgInputRef = useRef<HTMLInputElement>(null);
-  const logoInputRef = useRef<HTMLInputElement>(null);
-  const refInputRef = useRef<HTMLInputElement>(null);
-  
-  // Set default API mode based on access
-  useEffect(() => {
-    if (!accessLoading) {
-      setApiType(defaultApiMode);
-    }
-  }, [accessLoading, defaultApiMode]);
-  
-  const currentRatio = ASPECT_RATIOS.find(r => r.id === aspectRatio) || ASPECT_RATIOS[0];
-  
-  // Calculate anchor position
-  const getAnchorPosition = (pos: Position, canvasWidth: number, canvasHeight: number, elementWidth: number = 0, elementHeight: number = 0) => {
-    const padding = 40;
-    switch (pos) {
-      case 'UPON LEFT': return { x: padding, y: padding };
-      case 'UPON RIGHT': return { x: canvasWidth - padding - elementWidth, y: padding };
-      case 'BOTTOM LEFT': return { x: padding, y: canvasHeight - padding - elementHeight };
-      case 'BOTTOM RIGHT': return { x: canvasWidth - padding - elementWidth, y: canvasHeight - padding - elementHeight };
-      case 'CENTER': 
-      default: return { x: (canvasWidth - elementWidth) / 2, y: (canvasHeight - elementHeight) / 2 };
-    }
-  };
-  
-  // Apply font effect styles
-  const applyFontEffect = (ctx: CanvasRenderingContext2D, effect: FontEffect, color: TextStyle, text: string, x: number, y: number) => {
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    
-    switch (effect) {
-      case 'STICKER_POP':
-        ctx.strokeStyle = color.stroke;
-        ctx.lineWidth = fontSize / 6;
-        ctx.lineJoin = 'round';
-        ctx.strokeText(text, x, y);
-        ctx.fillStyle = color.fill;
-        ctx.fillText(text, x, y);
-        break;
-        
-      case '3D_OFFSET':
-        for (let i = 8; i > 0; i--) {
-          ctx.fillStyle = color.stroke;
-          ctx.fillText(text, x + i, y + i);
-        }
-        ctx.fillStyle = color.fill;
-        ctx.fillText(text, x, y);
-        break;
-        
-      case 'CHROME_GLOW':
-        ctx.shadowColor = color.glow;
-        ctx.shadowBlur = 30;
-        ctx.fillStyle = color.fill;
-        ctx.fillText(text, x, y);
-        ctx.shadowBlur = 0;
-        break;
-        
-      case 'NEON_STROKE':
-        ctx.shadowColor = color.glow;
-        ctx.shadowBlur = 20;
-        ctx.strokeStyle = color.fill;
-        ctx.lineWidth = 4;
-        ctx.strokeText(text, x, y);
-        ctx.shadowBlur = 40;
-        ctx.strokeText(text, x, y);
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = 'rgba(255,255,255,0.9)';
-        ctx.fillText(text, x, y);
-        break;
-        
-      case 'DARK_PLATE':
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        const metrics = ctx.measureText(text);
-        const plateHeight = fontSize * 1.4;
-        ctx.fillRect(x - metrics.width / 2 - 20, y - plateHeight / 2, metrics.width + 40, plateHeight);
-        ctx.fillStyle = color.fill;
-        ctx.fillText(text, x, y);
-        break;
-        
-      case 'HOLLOW':
-        ctx.strokeStyle = color.fill;
-        ctx.lineWidth = 3;
-        ctx.strokeText(text, x, y);
-        break;
-        
-      case 'CLASSIC':
-      default:
-        ctx.fillStyle = color.stroke;
-        ctx.fillText(text, x + 3, y + 3);
-        ctx.fillStyle = color.fill;
-        ctx.fillText(text, x, y);
-        break;
-    }
-  };
-  
-  // Render canvas
-  const renderCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    
-    canvas.width = currentRatio.width;
-    canvas.height = currentRatio.height;
-    
-    // Clear
-    ctx.fillStyle = '#1a1a2e';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    // Draw background
-    const bgImage = uploadedBg || generatedBg;
-    if (bgImage) {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        drawOverlays(ctx);
-      };
-      img.src = bgImage;
-    } else {
-      drawOverlays(ctx);
-    }
-    
-    function drawOverlays(ctx: CanvasRenderingContext2D) {
-      // Draw headline text
-      if (headline) {
-        ctx.font = `bold ${fontSize}px "${selectedFont}", sans-serif`;
-        const textMetrics = ctx.measureText(headline);
-        const textHeight = fontSize;
-        const anchor = getAnchorPosition(textPosition, canvas.width, canvas.height, textMetrics.width, textHeight);
-        const textX = anchor.x + textMetrics.width / 2 + textOffsetX;
-        const textY = anchor.y + textHeight / 2 + textOffsetY;
-        
-        applyFontEffect(ctx, selectedEffect, selectedColor, headline, textX, textY);
-      }
-      
-      // Draw logo
-      if (uploadedLogo) {
-        const logoImg = new Image();
-        logoImg.crossOrigin = 'anonymous';
-        logoImg.onload = () => {
-          const scale = logoScale / 100;
-          const logoWidth = logoImg.width * scale * 0.3;
-          const logoHeight = logoImg.height * scale * 0.3;
-          const logoAnchor = getAnchorPosition(logoPosition, canvas.width, canvas.height, logoWidth, logoHeight);
-          ctx.drawImage(logoImg, logoAnchor.x + logoOffsetX, logoAnchor.y + logoOffsetY, logoWidth, logoHeight);
-        };
-        logoImg.src = uploadedLogo;
-      }
-    }
-  }, [uploadedBg, generatedBg, headline, selectedColor, selectedFont, selectedEffect, fontSize, textPosition, uploadedLogo, logoPosition, textOffsetX, textOffsetY, logoOffsetX, logoOffsetY, logoScale, currentRatio]);
-  
-  useEffect(() => {
-    renderCanvas();
-  }, [renderCanvas]);
-  
-  // Handle file uploads
-  const handleBgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        setUploadedBg(ev.target?.result as string);
-        setGeneratedBg(null);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-  
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (ev) => setUploadedLogo(ev.target?.result as string);
-      reader.readAsDataURL(file);
-    }
-  };
-  
-  const handleRefUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (ev) => setReferenceImage(ev.target?.result as string);
-      reader.readAsDataURL(file);
-    }
-  };
-  
-  // Generate AI background
-  const handleGenerate = async () => {
-    if (!prompt.trim()) {
-      alert('ကျေးဇူးပြု၍ background prompt ထည့်ပါ။');
-      return;
-    }
-    if (apiType === 'own' && !apiKey.trim()) {
-      alert('GEMINI API KEY ထည့်ပါ။');
-      return;
-    }
-    
-    setLoading(true);
-    try {
-      const mrBeastPrompt = `Create a high-contrast, cinematic YouTube thumbnail background. Style: MrBeast-style eye-catching visuals with dramatic lighting, vibrant colors, and depth. Scene: ${prompt}. Requirements: No text, no letters, no words - pure visual background only. Make it pop on small screens with bold contrast and saturated colors. Aspect ratio: ${aspectRatio}.`;
-      
-      const refImages = referenceImage ? [referenceImage] : undefined;
-      const result = await generateThumbnail(mrBeastPrompt, apiType === 'own' ? apiKey : undefined, {
-        referenceImgs: refImages,
-        aspectRatio: aspectRatio,
-      });
-      
-      if (result) {
-        const base64 = result.startsWith('data:') ? result : `data:image/png;base64,${result}`;
-        setGeneratedBg(base64);
-        setUploadedBg(null);
-      }
-    } catch (err) {
-      console.error(err);
-      alert('Generation failed. Check your API key or quota.');
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  // Download final thumbnail
-  const handleDownload = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    const link = document.createElement('a');
-    link.download = `thumbnail-${Date.now()}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
-  };
-  
-  // Reset all
-  const handleReset = () => {
-    setHeadline('');
-    setPrompt('');
-    setGeneratedBg(null);
-    setUploadedBg(null);
-    setUploadedLogo(null);
-    setReferenceImage(null);
-    setSelectedColor(PREMIUM_COLORS[0]);
-    setSelectedFont(FONTS[0].id);
-    setSelectedEffect('CLASSIC');
-    setFontSize(72);
-    setTextPosition('CENTER');
-    setLogoPosition('BOTTOM RIGHT');
-    setTextOffsetX(0);
-    setTextOffsetY(0);
-    setLogoOffsetX(0);
-    setLogoOffsetY(0);
-    setLogoScale(100);
-  };
-  
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+const ManualPad: React.FC<{
+  offset: { x: number; y: number };
+  setOffset: React.Dispatch<React.SetStateAction<{ x: number; y: number }>>;
+  label: string;
+}> = ({ offset, setOffset, label }) => (
+  <div className="space-y-1.5 bg-black/30 p-2 rounded-2xl border border-white/5">
+    <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest text-center">{label} MOVE</p>
+    <div className="flex items-center justify-center gap-1">
+      <div className="grid grid-cols-3 gap-1">
+        <div />
+        <button
+          onClick={() => setOffset((p) => ({ ...p, y: p.y - 4 }))}
+          className="w-5 h-5 flex items-center justify-center bg-white/5 rounded-md text-[8px] hover:bg-white/10 active:scale-90 text-white shadow-sm"
+        >
+          ↑
+        </button>
+        <div />
+        <button
+          onClick={() => setOffset((p) => ({ ...p, x: p.x - 4 }))}
+          className="w-5 h-5 flex items-center justify-center bg-white/5 rounded-md text-[8px] hover:bg-white/10 active:scale-90 text-white shadow-sm"
+        >
+          ←
+        </button>
+        <button
+          onClick={() => setOffset({ x: 0, y: 0 })}
+          className="w-5 h-5 flex items-center justify-center bg-rose-500/10 text-rose-400 rounded-md text-[6px] font-black"
+        >
+          RST
+        </button>
+        <button
+          onClick={() => setOffset((p) => ({ ...p, x: p.x + 4 }))}
+          className="w-5 h-5 flex items-center justify-center bg-white/5 rounded-md text-[8px] hover:bg-white/10 active:scale-90 text-white shadow-sm"
+        >
+          →
+        </button>
+        <div />
+        <button
+          onClick={() => setOffset((p) => ({ ...p, y: p.y + 4 }))}
+          className="w-5 h-5 flex items-center justify-center bg-white/5 rounded-md text-[8px] hover:bg-white/10 active:scale-90 text-white shadow-sm"
+        >
+          ↓
+        </button>
+        <div />
       </div>
-    );
-  }
+    </div>
+  </div>
+);
+
+const LayerControl: React.FC<any> = ({
+  label,
+  text,
+  setText,
+  style,
+  setStyle,
+  effect,
+  setEffect,
+  font,
+  setFont,
+  pos,
+  setPos,
+  offset,
+  setOffset,
+  size,
+  setSize,
+  colorTheme,
+}) => {
+  const activeClass =
+    colorTheme === "amber"
+      ? "btn-active-amber"
+      : colorTheme === "cyan"
+        ? "btn-active-cyan"
+        : colorTheme === "rose"
+          ? "btn-active-rose"
+          : "btn-active-emerald";
 
   return (
-    <div className="min-h-screen bg-background pb-24">
-      {/* Header */}
-      <header className="p-4 flex items-center gap-3">
-        <button onClick={() => navigate('/')} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center">
-          <ArrowLeft className="w-4 h-4 text-foreground" />
-        </button>
-        <h1 className="text-sm font-bold tracking-wider text-foreground">AI THUMBNAIL PRO</h1>
-      </header>
-
-      <main className="px-4 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
-        {/* API Switcher */}
-        <div className="flex bg-white/5 backdrop-blur-xl p-1 rounded-[18px] border border-white/10 shadow-lg">
-          <button 
-            onClick={() => appApiAllowed && setApiType('app')} 
-            disabled={!appApiAllowed}
-            className={`flex-1 py-2.5 rounded-[14px] font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${
-              !appApiAllowed ? 'opacity-40 cursor-not-allowed' : apiType === 'app' ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md' : 'text-muted-foreground'
-            }`}
-            title={appApiReason}
-          >
-            {!appApiAllowed && <Lock className="w-3 h-3 text-rose-400" />}
-            APP API
-          </button>
-          <button 
-            onClick={() => ownApiAllowed && setApiType('own')} 
-            disabled={!ownApiAllowed}
-            className={`flex-1 py-2.5 rounded-[14px] font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${
-              !ownApiAllowed ? 'opacity-40 cursor-not-allowed' : apiType === 'own' ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md' : 'text-muted-foreground'
-            }`}
-            title={ownApiReason}
-          >
-            {!ownApiAllowed && <Lock className="w-3 h-3 text-rose-400" />}
-            OWN API
-          </button>
-        </div>
-
-        {/* Own API Key */}
-        {apiType === 'own' && ownApiAllowed && (
-          <div className="bg-white/5 backdrop-blur-2xl rounded-2xl p-4 border border-white/10 space-y-2">
-            <h4 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">GEMINI API KEY</h4>
-            <input 
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="••••••••••••••••••••••••"
-              className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm font-bold text-foreground focus:ring-1 focus:ring-primary outline-none"
-            />
-          </div>
-        )}
-
-        {/* Canvas Preview */}
-        <div className="bg-white/5 backdrop-blur-2xl rounded-2xl p-4 border border-white/10">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">PREVIEW</h4>
-            <div className="flex gap-2">
-              <button onClick={handleDownload} className="p-2 rounded-lg bg-primary/20 text-primary">
-                <Download className="w-4 h-4" />
-              </button>
-              <button onClick={handleReset} className="p-2 rounded-lg bg-destructive/20 text-destructive">
-                <RotateCcw className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-          <div className="relative overflow-hidden rounded-xl bg-black/50" style={{ aspectRatio: `${currentRatio.width}/${currentRatio.height}` }}>
-            <canvas ref={canvasRef} className="w-full h-full object-contain" />
-          </div>
-        </div>
-
-        {/* Aspect Ratio */}
-        <div className="bg-white/5 backdrop-blur-2xl rounded-2xl p-4 border border-white/10">
-          <h4 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-3">ASPECT RATIO</h4>
-          <div className="flex flex-wrap gap-2">
-            {ASPECT_RATIOS.map((ratio) => (
-              <button
-                key={ratio.id}
-                onClick={() => setAspectRatio(ratio.id)}
-                className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${
-                  aspectRatio === ratio.id ? 'bg-primary text-primary-foreground' : 'bg-white/5 text-muted-foreground'
-                }`}
-              >
-                {ratio.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Background Section */}
-        <div className="bg-white/5 backdrop-blur-2xl rounded-2xl p-4 border border-white/10 space-y-3">
-          <div className="flex items-center gap-2">
-            <ImageIcon className="w-4 h-4 text-primary" />
-            <h4 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">BACKGROUND</h4>
-          </div>
-          
-          <div className="flex gap-2">
-            <button onClick={() => bgInputRef.current?.click()} className="flex-1 py-3 rounded-xl bg-white/5 border border-dashed border-white/20 text-[10px] font-bold text-muted-foreground flex items-center justify-center gap-2">
-              <Upload className="w-4 h-4" />
-              UPLOAD BG
-            </button>
-            <button onClick={() => refInputRef.current?.click()} className="flex-1 py-3 rounded-xl bg-white/5 border border-dashed border-white/20 text-[10px] font-bold text-muted-foreground flex items-center justify-center gap-2">
-              <ImageIcon className="w-4 h-4" />
-              REF IMAGE
-            </button>
-          </div>
-          
-          <input ref={bgInputRef} type="file" accept="image/*" onChange={handleBgUpload} className="hidden" />
-          <input ref={refInputRef} type="file" accept="image/*" onChange={handleRefUpload} className="hidden" />
-          
-          {referenceImage && (
-            <div className="flex items-center gap-2 p-2 bg-white/5 rounded-lg">
-              <img src={referenceImage} alt="ref" className="w-10 h-10 object-cover rounded" />
-              <span className="text-[9px] text-muted-foreground flex-1">Reference loaded</span>
-              <button onClick={() => setReferenceImage(null)} className="text-destructive"><Trash2 className="w-4 h-4" /></button>
-            </div>
-          )}
-          
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Describe your background scene... (e.g., 'epic gaming setup with RGB lights')"
-            className="w-full h-20 bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-foreground placeholder:text-muted-foreground/50 resize-none"
-          />
-          
-          <button
-            onClick={handleGenerate}
-            disabled={loading || (!appApiAllowed && !ownApiAllowed)}
-            className="w-full py-3 rounded-xl bg-gradient-to-r from-primary to-purple-600 text-primary-foreground font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-            {loading ? 'GENERATING...' : 'GENERATE AI BACKGROUND'}
-          </button>
-        </div>
-
-        {/* Headline Text */}
-        <div className="bg-white/5 backdrop-blur-2xl rounded-2xl p-4 border border-white/10 space-y-3">
-          <div className="flex items-center gap-2">
-            <Type className="w-4 h-4 text-primary" />
-            <h4 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">HEADLINE TEXT</h4>
-          </div>
-          
+    <div className="space-y-3 bg-white/5 p-4 rounded-3xl border border-white/5 shadow-inner transition-all hover:bg-white/[0.07]">
+      <div className="flex justify-between items-center px-1">
+        <label className={`text-[9px] font-black uppercase tracking-widest text-${colorTheme}-400`}>{label}</label>
+        <div className="flex items-center gap-2">
+          <span className="text-[7px] font-black text-slate-500 uppercase">Scale</span>
           <input
-            value={headline}
-            onChange={(e) => setHeadline(e.target.value)}
-            placeholder="Your thumbnail headline..."
-            className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-lg font-bold text-foreground placeholder:text-muted-foreground/50"
+            type="range"
+            min="20"
+            max="450"
+            value={size}
+            onChange={(e) => setSize(parseInt(e.target.value))}
+            className={`w-20 h-1 accent-${colorTheme}-500 bg-white/10 rounded-lg appearance-none cursor-pointer`}
           />
-          
-          {/* Font Size */}
-          <div className="space-y-2">
-            <label className="text-[9px] font-black text-muted-foreground uppercase">FONT SIZE: {fontSize}px</label>
-            <input type="range" min="32" max="150" value={fontSize} onChange={(e) => setFontSize(Number(e.target.value))} className="w-full" />
-          </div>
-          
-          {/* Font Selection */}
-          <div className="space-y-2">
-            <label className="text-[9px] font-black text-muted-foreground uppercase">FONT</label>
-            <div className="flex flex-wrap gap-1.5">
-              {FONTS.map((font) => (
-                <button
-                  key={font.id}
-                  onClick={() => setSelectedFont(font.id)}
-                  className={`px-2 py-1 rounded text-[8px] font-bold transition-all ${
-                    selectedFont === font.id ? 'bg-primary text-primary-foreground' : 'bg-white/5 text-muted-foreground'
-                  }`}
-                >
-                  {font.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          
-          {/* Font Effect */}
-          <div className="space-y-2">
-            <label className="text-[9px] font-black text-muted-foreground uppercase">EFFECT</label>
-            <div className="flex flex-wrap gap-1.5">
-              {FONT_EFFECTS.map((effect) => (
-                <button
-                  key={effect.id}
-                  onClick={() => setSelectedEffect(effect.id)}
-                  className={`px-2 py-1 rounded text-[8px] font-bold transition-all ${
-                    selectedEffect === effect.id ? 'bg-primary text-primary-foreground' : 'bg-white/5 text-muted-foreground'
-                  }`}
-                >
-                  {effect.label}
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
+      </div>
 
-        {/* Color Selection */}
-        <div className="bg-white/5 backdrop-blur-2xl rounded-2xl p-4 border border-white/10 space-y-3">
-          <div className="flex items-center gap-2">
-            <Palette className="w-4 h-4 text-primary" />
-            <h4 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">TEXT COLOR</h4>
-          </div>
-          <div className="grid grid-cols-6 gap-2">
-            {PREMIUM_COLORS.map((color) => (
-              <button
-                key={color.id}
-                onClick={() => setSelectedColor(color)}
-                className={`w-full aspect-square rounded-lg border-2 transition-all ${
-                  selectedColor.id === color.id ? 'border-white scale-110 shadow-lg' : 'border-transparent'
-                }`}
-                style={{ backgroundColor: color.fill }}
-                title={color.label}
-              />
-            ))}
-          </div>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder={`Enter content for ${label}...`}
+        className="w-full h-14 bg-black/40 border border-white/5 rounded-xl p-3 text-xs font-bold text-white outline-none focus:border-blue-500/50 resize-none shadow-inner"
+      />
+
+      <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide">
+        {PREMIUM_COLORS.map((c) => (
+          <button
+            key={c.id}
+            onClick={() => setStyle(c.id)}
+            className={`w-6 h-6 rounded-full shrink-0 border-2 transition-all ${style === c.id ? "border-white scale-125 shadow-lg" : "border-transparent opacity-40 hover:opacity-100"}`}
+            style={{ backgroundColor: c.fill }}
+          />
+        ))}
+      </div>
+
+      <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide">
+        {(
+          ["CLASSIC", "STICKER_POP", "3D_OFFSET", "CHROME_GLOW", "NEON_STROKE", "DARK_PLATE", "HOLLOW"] as FontEffect[]
+        ).map((f) => (
+          <button
+            key={f}
+            onClick={() => setEffect(f)}
+            className={`px-2 py-1.5 rounded-lg text-[6px] font-black uppercase shrink-0 border transition-all ${effect === f ? activeClass : "bg-black/30 text-slate-600 border-white/5 hover:border-white/10"}`}
+          >
+            {f.replace("_", " ")}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide">
+        {FONTS.map((f) => (
+          <button
+            key={f.id}
+            onClick={() => setFont(f.id)}
+            className={`px-2.5 py-1.5 rounded-lg text-[7px] font-black uppercase shrink-0 border transition-all ${font === f.id ? activeClass : "bg-black/30 text-slate-600 border-white/5 hover:border-white/10"}`}
+            style={{ fontFamily: f.id }}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 items-center">
+        <div className="grid grid-cols-3 gap-1">
+          {(["UPON LEFT", "UPON RIGHT", "BUTTON LEFT", "BUTTON RIGHT", "CENTER"] as Position[]).map((p) => (
+            <PositionBtn key={p} pos={p} current={pos} set={setPos} color={colorTheme} />
+          ))}
         </div>
-
-        {/* Position Controls */}
-        <div className="bg-white/5 backdrop-blur-2xl rounded-2xl p-4 border border-white/10 space-y-4">
-          <div className="flex items-center gap-2">
-            <Move className="w-4 h-4 text-primary" />
-            <h4 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">POSITIONING</h4>
-          </div>
-          
-          {/* Text Position */}
-          <div className="space-y-2">
-            <label className="text-[9px] font-black text-muted-foreground uppercase">TEXT ANCHOR</label>
-            <div className="grid grid-cols-5 gap-1">
-              {(['UPON LEFT', 'UPON RIGHT', 'CENTER', 'BOTTOM LEFT', 'BOTTOM RIGHT'] as Position[]).map((pos) => (
-                <button
-                  key={pos}
-                  onClick={() => setTextPosition(pos)}
-                  className={`py-1.5 rounded text-[7px] font-bold transition-all ${
-                    textPosition === pos ? 'bg-primary text-primary-foreground' : 'bg-white/5 text-muted-foreground'
-                  }`}
-                >
-                  {pos.replace('UPON', 'TOP').replace('BOTTOM', 'BTM')}
-                </button>
-              ))}
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-[8px] text-muted-foreground">X Offset: {textOffsetX}px</label>
-                <input type="range" min="-200" max="200" value={textOffsetX} onChange={(e) => setTextOffsetX(Number(e.target.value))} className="w-full" />
-              </div>
-              <div>
-                <label className="text-[8px] text-muted-foreground">Y Offset: {textOffsetY}px</label>
-                <input type="range" min="-200" max="200" value={textOffsetY} onChange={(e) => setTextOffsetY(Number(e.target.value))} className="w-full" />
-              </div>
-            </div>
-          </div>
-          
-          {/* Logo Position */}
-          <div className="space-y-2">
-            <label className="text-[9px] font-black text-muted-foreground uppercase">LOGO ANCHOR</label>
-            <div className="flex gap-2 mb-2">
-              <button onClick={() => logoInputRef.current?.click()} className="flex-1 py-2 rounded-lg bg-white/5 border border-dashed border-white/20 text-[9px] font-bold text-muted-foreground flex items-center justify-center gap-1">
-                <Upload className="w-3 h-3" /> UPLOAD LOGO
-              </button>
-              {uploadedLogo && (
-                <button onClick={() => setUploadedLogo(null)} className="p-2 rounded-lg bg-destructive/20 text-destructive">
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-            <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
-            
-            <div className="grid grid-cols-5 gap-1">
-              {(['UPON LEFT', 'UPON RIGHT', 'CENTER', 'BOTTOM LEFT', 'BOTTOM RIGHT'] as Position[]).map((pos) => (
-                <button
-                  key={pos}
-                  onClick={() => setLogoPosition(pos)}
-                  className={`py-1.5 rounded text-[7px] font-bold transition-all ${
-                    logoPosition === pos ? 'bg-primary text-primary-foreground' : 'bg-white/5 text-muted-foreground'
-                  }`}
-                >
-                  {pos.replace('UPON', 'TOP').replace('BOTTOM', 'BTM')}
-                </button>
-              ))}
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <div>
-                <label className="text-[8px] text-muted-foreground">X: {logoOffsetX}px</label>
-                <input type="range" min="-200" max="200" value={logoOffsetX} onChange={(e) => setLogoOffsetX(Number(e.target.value))} className="w-full" />
-              </div>
-              <div>
-                <label className="text-[8px] text-muted-foreground">Y: {logoOffsetY}px</label>
-                <input type="range" min="-200" max="200" value={logoOffsetY} onChange={(e) => setLogoOffsetY(Number(e.target.value))} className="w-full" />
-              </div>
-              <div>
-                <label className="text-[8px] text-muted-foreground">Scale: {logoScale}%</label>
-                <input type="range" min="20" max="200" value={logoScale} onChange={(e) => setLogoScale(Number(e.target.value))} className="w-full" />
-              </div>
-            </div>
-          </div>
-        </div>
-      </main>
-
-      <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+        <ManualPad label={label.split(" ")[0]} offset={offset} setOffset={setOffset} />
+      </div>
     </div>
   );
 };
 
-export default ThumbnailPage;
+const ThumbnailView: React.FC<{ onNavigate: (v: ViewType) => void }> = ({ onNavigate }) => {
+  const [apiKey, setApiKey] = useState("");
+  const [genMode, setGenMode] = useState<"AUTO" | "REF">("AUTO");
+  const [selectedRatio, setSelectedRatio] = useState<AspectRatio>("16:9");
+  const [context, setContext] = useState("");
+
+  const [h1, setH1] = useState("");
+  const [h1Style, setH1Style] = useState("GOLD");
+  const [h1Effect, setH1Effect] = useState<FontEffect>("STICKER_POP");
+  const [h1Font, setH1Font] = useState("Rubik Glitch");
+  const [h1Pos, setH1Pos] = useState<Position>("CENTER");
+  const [h1Offset, setH1Offset] = useState({ x: 0, y: -15 });
+  const [h1Size, setH1Size] = useState(150);
+
+  const [h2, setH2] = useState("");
+  const [h2Style, setH2Style] = useState("CYAN");
+  const [h2Effect, setH2Effect] = useState<FontEffect>("3D_OFFSET");
+  const [h2Font, setH2Font] = useState("Padauk");
+  const [h2Pos, setH2Pos] = useState<Position>("CENTER");
+  const [h2Offset, setH2Offset] = useState({ x: 0, y: 15 });
+  const [h2Size, setH2Size] = useState(110);
+
+  const [desc, setDesc] = useState("");
+  const [descStyle, setDescStyle] = useState("WHITE");
+  const [descEffect, setDescEffect] = useState<FontEffect>("DARK_PLATE");
+  const [descFont, setDescFont] = useState("Montserrat");
+  const [descPos, setDescPos] = useState<Position>("BUTTON RIGHT");
+  const [descOffset, setDescOffset] = useState({ x: -10, y: -5 });
+  const [descSize, setDescSize] = useState(60);
+
+  const [referenceImages, setReferenceImages] = useState<string[]>([]);
+  const [logoImg, setLogoImg] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [bgImage, setBgImage] = useState<string | null>(null);
+
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const bgImgRef = useRef<HTMLImageElement | null>(null);
+  const logoImgRef = useRef<HTMLImageElement | null>(null);
+
+  const RATIO_MAP: Record<AspectRatio, number> = {
+    "1:1": 1,
+    "16:9": 16 / 9,
+    "9:16": 9 / 16,
+    "4:3": 4 / 3,
+    "3:4": 3 / 4,
+  };
+
+  const drawLayer = (
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    styleId: string,
+    effect: FontEffect,
+    font: string,
+    pos: Position,
+    offset: { x: number; y: number },
+    size: number,
+  ) => {
+    if (!text) return;
+    const style = PREMIUM_COLORS.find((s) => s.id === styleId) || PREMIUM_COLORS[0];
+
+    ctx.save();
+    ctx.font = `900 ${size}px '${font}', 'Padauk', 'Plus Jakarta Sans', sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    let tx = ctx.canvas.width / 2,
+      ty = ctx.canvas.height / 2;
+    if (pos === "UPON LEFT") {
+      tx = ctx.canvas.width * 0.25;
+      ty = ctx.canvas.height * 0.25;
+    } else if (pos === "UPON RIGHT") {
+      tx = ctx.canvas.width * 0.75;
+      ty = ctx.canvas.height * 0.25;
+    } else if (pos === "BUTTON LEFT") {
+      tx = ctx.canvas.width * 0.25;
+      ty = ctx.canvas.height * 0.75;
+    } else if (pos === "BUTTON RIGHT") {
+      tx = ctx.canvas.width * 0.75;
+      ty = ctx.canvas.height * 0.75;
+    }
+
+    tx += offset.x * (ctx.canvas.width / 100);
+    ty += offset.y * (ctx.canvas.height / 100);
+
+    const lines = text.split("\n");
+    const lineHeight = size * 1.15;
+    const totalH = lines.length * lineHeight;
+    const startY = ty - totalH / 2 + lineHeight / 2;
+
+    lines.forEach((line, i) => {
+      const ly = startY + i * lineHeight;
+
+      if (effect === "STICKER_POP") {
+        ctx.strokeStyle = "#FFFFFF";
+        ctx.lineWidth = size * 0.35;
+        ctx.lineJoin = "round";
+        ctx.strokeText(line, tx, ly);
+        ctx.strokeStyle = style.stroke;
+        ctx.lineWidth = size * 0.12;
+        ctx.strokeText(line, tx, ly);
+        ctx.fillStyle = style.fill;
+        ctx.fillText(line, tx, ly);
+      } else if (effect === "3D_OFFSET") {
+        const depth = size * 0.1;
+        ctx.fillStyle = style.stroke;
+        for (let d = 1; d <= depth; d++) {
+          ctx.fillText(line, tx + d, ly + d);
+        }
+        ctx.strokeStyle = "#000";
+        ctx.lineWidth = size * 0.05;
+        ctx.strokeText(line, tx, ly);
+        ctx.fillStyle = style.fill;
+        ctx.fillText(line, tx, ly);
+      } else if (effect === "CHROME_GLOW") {
+        ctx.shadowColor = style.glow;
+        ctx.shadowBlur = size * 0.3;
+        const grad = ctx.createLinearGradient(tx, ly - size / 2, tx, ly + size / 2);
+        grad.addColorStop(0, "#FFF");
+        grad.addColorStop(0.5, style.fill);
+        grad.addColorStop(1, style.stroke);
+        ctx.fillStyle = grad;
+        ctx.strokeStyle = "black";
+        ctx.lineWidth = size * 0.1;
+        ctx.strokeText(line, tx, ly);
+        ctx.fillText(line, tx, ly);
+      } else if (effect === "DARK_PLATE") {
+        const metrics = ctx.measureText(line);
+        const pad = size * 0.2;
+        ctx.fillStyle = "rgba(0,0,0,0.85)";
+        ctx.fillRect(tx - metrics.width / 2 - pad, ly - size / 2 - pad / 2, metrics.width + pad * 2, size + pad);
+        ctx.fillStyle = style.fill;
+        ctx.fillText(line, tx, ly);
+      } else if (effect === "NEON_STROKE") {
+        ctx.shadowColor = style.glow;
+        ctx.shadowBlur = 25;
+        ctx.strokeStyle = style.fill;
+        ctx.lineWidth = size * 0.2;
+        ctx.strokeText(line, tx, ly);
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = size * 0.05;
+        ctx.strokeText(line, tx, ly);
+        ctx.fillStyle = "#FFF";
+        ctx.fillText(line, tx, ly);
+      } else if (effect === "HOLLOW") {
+        ctx.strokeStyle = style.fill;
+        ctx.lineWidth = size * 0.12;
+        ctx.strokeText(line, tx, ly);
+        ctx.fillStyle = "transparent";
+        ctx.fillText(line, tx, ly);
+      } else {
+        ctx.shadowColor = "rgba(0,0,0,1)";
+        ctx.shadowBlur = 15;
+        ctx.strokeStyle = "#000";
+        ctx.lineWidth = size * 0.2;
+        ctx.strokeText(line, tx, ly);
+        ctx.fillStyle = style.fill;
+        ctx.fillText(line, tx, ly);
+      }
+    });
+    ctx.restore();
+  };
+
+  const drawThumbnail = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const w = 1280;
+    const h = 1280 / RATIO_MAP[selectedRatio];
+    canvas.width = w;
+    canvas.height = h;
+    ctx.clearRect(0, 0, w, h);
+
+    if (bgImgRef.current) {
+      ctx.drawImage(bgImgRef.current, 0, 0, w, h);
+    } else {
+      ctx.fillStyle = "#010409";
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = "#1e293b";
+      ctx.font = "40px Anton";
+      ctx.textAlign = "center";
+      ctx.fillText("DESIGN CANVAS PREVIEW", w / 2, h / 2);
+    }
+
+    drawLayer(ctx, desc, descStyle, descEffect, descFont, descPos, descOffset, descSize);
+    drawLayer(ctx, h2, h2Style, h2Effect, h2Font, h2Pos, h2Offset, h2Size);
+    drawLayer(ctx, h1, h1Style, h1Effect, h1Font, h1Pos, h1Offset, h1Size);
+
+    if (logoImgRef.current) {
+      const lSize = w * 0.12;
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,0.5)";
+      ctx.shadowBlur = 15;
+      ctx.drawImage(logoImgRef.current, 50, h - lSize - 50, lSize, lSize);
+      ctx.restore();
+    }
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(drawThumbnail, 150);
+    return () => clearTimeout(timer);
+  }, [
+    h1,
+    h1Style,
+    h1Effect,
+    h1Font,
+    h1Pos,
+    h1Offset,
+    h1Size,
+    h2,
+    h2Style,
+    h2Effect,
+    h2Font,
+    h2Pos,
+    h2Offset,
+    h2Size,
+    desc,
+    descStyle,
+    descEffect,
+    descFont,
+    descPos,
+    descOffset,
+    descSize,
+    selectedRatio,
+    bgImage,
+  ]);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: "REF" | "LOGO") => {
+    if (e.target.files) {
+      const files = Array.from(e.target.files) as File[];
+      files.forEach((file) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          if (type === "REF") {
+            if (referenceImages.length < 7) setReferenceImages((prev) => [...prev, result]);
+          } else {
+            setLogoImg(result);
+            const img = new Image();
+            img.src = result;
+            img.onload = () => {
+              logoImgRef.current = img;
+              drawThumbnail();
+            };
+          }
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  };
+
+  const handleGenerate = async () => {
+    if (!context && !h1) return alert("Vision သို့မဟုတ် Headline တစ်ခုခု အရင်ထည့်ပေးပါ။");
+    setLoading(true);
+    try {
+      const imgUrl = await generateThumbnail(context || h1, apiKey || undefined, {
+        referenceImgs: genMode === "REF" ? referenceImages : undefined,
+        aspectRatio: selectedRatio,
+      });
+
+      if (imgUrl) {
+        setBgImage(imgUrl);
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.src = imgUrl;
+        img.onload = () => {
+          bgImgRef.current = img;
+          drawThumbnail();
+          setLoading(false);
+        };
+      } else {
+        alert("AI Generation Error.");
+        setLoading(false);
+      }
+    } catch (error: any) {
+      alert(error.message);
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6 pb-40 animate-in fade-in duration-500 max-w-5xl mx-auto px-2">
+      <div className="neon-glass rounded-3xl p-5 border border-white/10 flex gap-4 shadow-2xl overflow-hidden relative">
+        <div className="absolute -top-10 -right-10 w-40 h-40 bg-blue-500/10 blur-[80px] rounded-full"></div>
+        <input
+          type="password"
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          placeholder="Gemini API Key (Optional)..."
+          className="flex-1 bg-black/50 border border-white/5 rounded-2xl p-4 text-xs font-bold text-white outline-none focus:ring-1 focus:ring-blue-500 transition-all shadow-inner"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="lg:col-span-7 space-y-6">
+          <div className="neon-glass rounded-[48px] p-8 space-y-8 shadow-3xl border border-white/10 relative overflow-hidden">
+            <div className="text-center space-y-1">
+              <h2 className="text-2xl font-black text-white tracking-tighter uppercase drop-shadow-xl">
+                THUMBNAIL PRO <span className="text-blue-500">MASTER</span>
+              </h2>
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.5em] opacity-60">
+                ELITE DESIGN ENGINE V11
+              </p>
+            </div>
+
+            <div className="space-y-8">
+              <LayerControl
+                label="HEADLINE 1 (MAIN)"
+                text={h1}
+                setText={setH1}
+                style={h1Style}
+                setStyle={setH1Style}
+                effect={h1Effect}
+                setEffect={setH1Effect}
+                font={h1Font}
+                setFont={setH1Font}
+                pos={h1Pos}
+                setPos={setH1Pos}
+                offset={h1Offset}
+                setOffset={setH1Offset}
+                size={h1Size}
+                setSize={setH1Size}
+                colorTheme="amber"
+              />
+              <LayerControl
+                label="HEADLINE 2 (SUB)"
+                text={h2}
+                setText={setH2}
+                style={h2Style}
+                setStyle={setH2Style}
+                effect={h2Effect}
+                setEffect={setH2Effect}
+                font={h2Font}
+                setFont={setH2Font}
+                pos={h2Pos}
+                setPos={setH2Pos}
+                offset={h2Offset}
+                setOffset={setH2Offset}
+                size={h2Size}
+                setSize={setH2Size}
+                colorTheme="cyan"
+              />
+              <LayerControl
+                label="DESCRIPTION (SMALL)"
+                text={desc}
+                setText={setDesc}
+                style={descStyle}
+                setStyle={setDescStyle}
+                effect={descEffect}
+                setEffect={setDescEffect}
+                font={descFont}
+                setFont={setDescFont}
+                pos={descPos}
+                setPos={setDescPos}
+                offset={descOffset}
+                setOffset={setDescOffset}
+                size={descSize}
+                setSize={setDescSize}
+                colorTheme="rose"
+              />
+            </div>
+
+            <div className="space-y-6 pt-6 border-t border-white/5">
+              <div className="flex gap-2 p-1 bg-white/5 rounded-2xl border border-white/5">
+                <button
+                  onClick={() => setGenMode("AUTO")}
+                  className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase transition-all ${genMode === "AUTO" ? "jewel-sapphire text-white shadow-lg" : "text-slate-500 hover:text-slate-300"}`}
+                >
+                  AI AUTO ENGINE
+                </button>
+                <button
+                  onClick={() => setGenMode("REF")}
+                  className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase transition-all ${genMode === "REF" ? "jewel-gold text-white shadow-lg" : "text-slate-500 hover:text-slate-300"}`}
+                >
+                  USER REFERENCE (7 PHOTOS)
+                </button>
+              </div>
+
+              {genMode === "REF" && (
+                <div className="space-y-3 animate-in zoom-in-95 duration-300">
+                  <div className="flex justify-between items-center px-1">
+                    <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest">
+                      MULTI-REFERENCE ASSETS
+                    </label>
+                    <span className="text-[8px] font-bold text-slate-600 uppercase">
+                      {referenceImages.length}/7 PHOTOS
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+                    {referenceImages.map((img, idx) => (
+                      <div
+                        key={idx}
+                        className="relative aspect-square rounded-xl overflow-hidden border border-white/10 group shadow-md hover:scale-105 transition-transform"
+                      >
+                        <img src={img} className="w-full h-full object-cover" />
+                        <button
+                          onClick={() => setReferenceImages((prev) => prev.filter((_, i) => i !== idx))}
+                          className="absolute inset-0 bg-rose-600/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-lg transition-opacity"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    {referenceImages.length < 7 && (
+                      <label className="cursor-pointer flex flex-col items-center justify-center bg-white/5 border-2 border-dashed border-white/10 rounded-xl aspect-square hover:bg-white/10 hover:border-blue-500/30 transition-all active:scale-95">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={(e) => handleFileUpload(e, "REF")}
+                          className="hidden"
+                        />
+                        <span className="text-xl text-slate-500 font-light">+</span>
+                      </label>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">
+                  AI SCENE DESCRIPTION (ACCURACY FOCUS)
+                </label>
+                <textarea
+                  value={context}
+                  onChange={(e) => setContext(e.target.value)}
+                  placeholder="Describe your background vision with location details for accuracy..."
+                  className="w-full h-24 bg-black/60 border border-white/5 rounded-3xl p-4 text-sm font-bold text-white outline-none focus:border-blue-500/50 shadow-inner custom-scrollbar"
+                />
+              </div>
+
+              <div className="grid grid-cols-5 gap-2">
+                {(["1:1", "16:9", "9:16", "4:3", "3:4"] as AspectRatio[]).map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => setSelectedRatio(r)}
+                    className={`py-2 rounded-xl text-[9px] font-black transition-all ${selectedRatio === r ? "bg-white text-black shadow-xl ring-2 ring-white/20" : "bg-slate-900/60 text-slate-600 hover:text-slate-400"}`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                disabled={loading}
+                onClick={handleGenerate}
+                className="w-full py-5 rounded-[28px] jewel-sapphire jewel-surface text-white font-black text-xs uppercase tracking-[0.4em] shadow-3xl active:scale-95 transition-all border border-white/20"
+              >
+                {loading
+                  ? "AI IS COMPOSING MASTERPIECE..."
+                  : bgImage
+                    ? "RE-GENERATE BACKGROUND"
+                    : "START AI GENERATION"}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="lg:col-span-5">
+          <div className="sticky top-20 space-y-6">
+            <div className="neon-glass rounded-[56px] p-6 space-y-5 border border-white/10 shadow-[0_0_80px_rgba(0,0,0,0.8)] overflow-hidden">
+              <div className="flex justify-between items-center px-4">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em]">
+                  LIVE HD PREVIEW
+                </span>
+              </div>
+
+              <div
+                className="bg-[#020617] rounded-[40px] overflow-hidden shadow-2xl relative border border-white/5 flex items-center justify-center max-h-[500px] group w-full"
+                style={{ aspectRatio: RATIO_MAP[selectedRatio] }}
+              >
+                <canvas
+                  ref={canvasRef}
+                  className="max-w-full max-h-full object-contain transition-transform duration-700 group-hover:scale-105"
+                />
+                {loading && (
+                  <div className="absolute inset-0 bg-black/95 backdrop-blur-md flex flex-col items-center justify-center gap-5 z-30 animate-in fade-in">
+                    <div className="w-16 h-16 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
+                    <p className="text-[11px] font-black text-blue-400 uppercase tracking-[0.5em] animate-pulse">
+                      SYNTHESIZING ASSETS...
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 p-2">
+                <label className="flex-1 py-4 bg-white/5 border border-white/10 rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-white/10 transition-all active:scale-95 shadow-sm group">
+                  <span className="text-[11px] font-black text-slate-300 uppercase tracking-widest group-hover:text-white transition-colors">
+                    ADD BRAND LOGO
+                  </span>
+                  <span className="text-[8px] text-slate-500 uppercase font-black">PNG / SVG</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleFileUpload(e, "LOGO")}
+                    className="hidden"
+                  />
+                </label>
+                <button
+                  disabled={!bgImage || loading}
+                  onClick={() => {
+                    const canvas = canvasRef.current;
+                    if (canvas) {
+                      const link = document.createElement("a");
+                      link.download = `PRO_THUMBNAIL_${Date.now()}.png`;
+                      link.href = canvas.toDataURL("image/png", 1.0);
+                      link.click();
+                    }
+                  }}
+                  className="flex-1 py-4 rounded-2xl jewel-emerald jewel-surface text-white font-black text-[11px] uppercase tracking-[0.3em] shadow-3xl active:scale-95 disabled:opacity-30 transition-all border border-white/10"
+                >
+                  DOWNLOAD HD
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-blue-600/5 border border-blue-500/20 p-6 rounded-[40px] text-center shadow-lg">
+              <p className="text-[11px] font-black text-blue-400 uppercase tracking-widest mb-2">
+                SYSTEM ACCURACY ENGINE
+              </p>
+              <p className="text-[10px] font-bold text-slate-500 leading-relaxed px-4 text-left">
+                - <span className="text-blue-400">AUTO Mode</span>: Context ထဲတွင် ဒေသဆိုင်ရာ (ဥပမာ- ရခိုင်၊ ပုဂံ)
+                တိကျစွာ ထည့်ရေးပေးပါ။
+                <br />- <span className="text-amber-400">REF Mode</span>: Reference ပုံအားလုံးကို Synthesis စနစ်ဖြင့်
+                ပေါင်းစပ်ပေးပါမည်။
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ThumbnailView;
