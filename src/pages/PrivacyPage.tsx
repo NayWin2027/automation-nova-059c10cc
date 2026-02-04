@@ -6,7 +6,7 @@ const PrivacyPolicyView: React.FC = () => {
   const content = {
     EN: {
       header: "PRIVACY POLICY",
-      subHeader: "LAST UPDATED: DECEMBER 2025",
+      subHeader: "LAST UPDATED: FEB 2026",
       sections: [
         {
           title: "1. Information We Collect",
