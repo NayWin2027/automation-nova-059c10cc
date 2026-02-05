@@ -108,13 +108,13 @@ serve(async (req) => {
 
       if (!creditResult.success) {
         return new Response(
-          JSON.stringify({ 
+          JSON.stringify({
             error: creditResult.error,
             balance: creditResult.balance,
             required: creditResult.required,
             errorCode: "INSUFFICIENT_CREDITS"
           }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
@@ -147,96 +147,168 @@ serve(async (req) => {
 
     // ===== GENERATE TTS =====
     const apiUrl = `${GEMINI_TTS_API}?key=${effectiveApiKey}`;
-    const ttsInstruction = `Read the following text aloud naturally: "${text}"`;
-    
-    const requestBody = {
-      contents: [{
-        parts: [{ text: ttsInstruction }]
-      }],
-      generationConfig: {
-        responseModalities: ["AUDIO"],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: {
-              voiceName: sanitizedVoiceName
-            }
-          }
-        }
-      }
+
+    const buildRequestBody = (voice: string) => {
+      const instruction = `You are a text-to-speech engine.\n` +
+        `Generate natural speech AUDIO only for the following text.\n` +
+        `Language (BCP-47): ${sanitizedLanguageCode}\n\n` +
+        `TEXT:\n${text}`;
+
+      return {
+        contents: [{
+          parts: [{ text: instruction }]
+        }],
+        generationConfig: {
+          responseModalities: ["AUDIO"],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName: voice,
+              },
+            },
+          },
+        },
+      };
     };
 
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-    });
+    const callGeminiTts = async (voice: string) => {
+      const resp = await fetch(apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildRequestBody(voice)),
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`[gemini-tts] API error: ${response.status}`);
-      
-      if (response.status === 429) {
+      const bodyText = await resp.text();
+
+      if (!resp.ok) {
+        return { ok: false as const, status: resp.status, bodyText };
+      }
+
+      let json: any = null;
+      try {
+        json = JSON.parse(bodyText);
+      } catch {
+        // Some upstream errors can still return non-JSON with 200.
+        json = null;
+      }
+
+      const part0 = json?.candidates?.[0]?.content?.parts?.[0];
+      const audio = part0?.inlineData?.data as string | undefined;
+      const mime = (part0?.inlineData?.mimeType as string | undefined) || "audio/mp3";
+
+      return {
+        ok: true as const,
+        audio,
+        mimeType: mime,
+        // Keep logs small to avoid edge log spam
+        jsonPreview: json ? JSON.stringify(json).substring(0, 600) : bodyText.substring(0, 600),
+      };
+    };
+
+    // Attempt 1: requested voice
+    let usedVoice = sanitizedVoiceName;
+    let result = await callGeminiTts(usedVoice);
+
+    // Attempt 2: fallback voice (Puck) if we got a 200 but no audio
+    if (result.ok && !result.audio && usedVoice !== "Puck") {
+      console.warn(`[gemini-tts] No audio with voice=${usedVoice}. Retrying with Puck.`);
+      usedVoice = "Puck";
+      result = await callGeminiTts(usedVoice);
+    }
+
+    // Handle non-OK responses from upstream
+    if (!result.ok) {
+      console.error(`[gemini-tts] API error: ${result.status}`);
+
+      // IMPORTANT: Return HTTP 200 so the frontend doesn't crash on FunctionsHttpError.
+      if (result.status === 429) {
         return new Response(
-          JSON.stringify({ 
-            error: 'Rate limit exceeded. Please try again later.',
-            retryable: true 
+          JSON.stringify({
+            useClientTTS: true,
+            text,
+            voiceName: usedVoice,
+            languageCode: sanitizedLanguageCode,
+            message: "AI TTS rate-limited. Using browser fallback.",
+            retryable: true,
+            retryAfterSeconds: 30,
+            errorCode: "RATE_LIMIT"
           }),
-          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      if (response.status === 401 || response.status === 403) {
-        return new Response(
-          JSON.stringify({ error: 'Invalid API key.' }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      if (errorText.includes('not found') || errorText.includes('does not support')) {
+      if (result.status === 402) {
         return new Response(
-          JSON.stringify({ 
-            error: 'TTS model not available.',
-            details: 'API key may not have TTS access.'
+          JSON.stringify({
+            useClientTTS: true,
+            text,
+            voiceName: usedVoice,
+            languageCode: sanitizedLanguageCode,
+            message: "Credits exhausted. Using browser fallback.",
+            errorCode: "PAYMENT_REQUIRED"
           }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
+      if (result.status === 401 || result.status === 403) {
+        return new Response(
+          JSON.stringify({ error: "Invalid API key." }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Unknown upstream error -> fallback
       return new Response(
-        JSON.stringify({ error: `TTS generation failed: ${response.status}` }),
-        { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({
+          useClientTTS: true,
+          text,
+          voiceName: usedVoice,
+          languageCode: sanitizedLanguageCode,
+          message: `TTS temporarily unavailable (${result.status}). Using browser fallback.`,
+          errorCode: "UPSTREAM_ERROR"
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const data = await response.json();
-    const audioData = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    const mimeType = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.mimeType || 'audio/mp3';
-    
-    if (!audioData) {
-      console.error('[gemini-tts] No audio data in response');
+    // OK but no audio
+    if (!result.audio) {
+      console.error("[gemini-tts] No audio data in response", result.jsonPreview);
+
+      // Return HTTP 200 with fallback so the UI never blank-screens.
       return new Response(
-        JSON.stringify({ error: 'No audio generated. Please try again.' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({
+          useClientTTS: true,
+          text,
+          voiceName: usedVoice,
+          languageCode: sanitizedLanguageCode,
+          message: "AI TTS returned no audio. Using browser fallback.",
+          errorCode: "NO_AUDIO"
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log(`[gemini-tts] Successfully generated audio, size: ${audioData.length} chars`);
+    console.log(`[gemini-tts] Successfully generated audio, size: ${result.audio.length} chars`);
 
     return new Response(
-      JSON.stringify({ 
-        audio: audioData,
-        mimeType: mimeType,
-        voice: sanitizedVoiceName
+      JSON.stringify({
+        audio: result.audio,
+        mimeType: result.mimeType,
+        voice: usedVoice,
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
   } catch (error: unknown) {
-    console.error('[gemini-tts] Error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Internal server error';
+    console.error("[gemini-tts] Error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Internal server error";
+
+    // IMPORTANT: Return 200 so the frontend doesn't crash on FunctionsHttpError.
     return new Response(
       JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
