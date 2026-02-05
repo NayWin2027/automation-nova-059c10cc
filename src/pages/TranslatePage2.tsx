@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { translateText } from "../services/geminiService";
+import { GoogleGenAI } from "@google/genai";
 import {
   Lock,
   ChevronDown,
@@ -178,6 +179,10 @@ const TranslateView: React.FC = () => {
       alert("ကျေးဇူးပြု၍ Credit Tier တစ်ခုကို အရင်ရွေးချယ်ပေးပါ။");
       return;
     }
+    if (apiType === "own" && !apiKey.trim()) {
+      alert("ကျေးဇူးပြု၍ API Key ထည့်ပေးပါ။");
+      return;
+    }
 
     setLoading(true);
     setResult("");
@@ -195,16 +200,40 @@ const TranslateView: React.FC = () => {
            Focus: ${modeObj?.title}. ${modeObj?.desc}.`
         : `Translate to ${targetLang}. Tone: ${selectedEmotion}. No introductory text. Focus: ${modeObj?.title}.`;
 
-      const response = await translateText(
-        `${systemInstruction}\n\nCONTENT TO PROCESS:\n${text}`,
-        targetLang,
-        apiType === "own" ? apiKey : undefined,
-      );
+      let response: string | null = null;
+
+      if (apiType === "own") {
+        // Own API Key mode: call Gemini API directly from client (bypass edge function)
+        const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
+        const result = await ai.models.generateContent({
+          model: "gemini-2.0-flash",
+          contents: `${systemInstruction}\n\nCONTENT TO PROCESS:\n${text}`,
+          config: {
+            temperature: 0.7,
+            maxOutputTokens: 8192,
+          },
+        });
+        response = result.text || "";
+      } else {
+        // App API mode: use edge function
+        response = await translateText(
+          `${systemInstruction}\n\nCONTENT TO PROCESS:\n${text}`,
+          targetLang,
+          undefined,
+        );
+      }
 
       setResult(response || "");
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert("AI Sync မအောင်မြင်ပါ။ API Key သို့မဟုတ် လိုင်းကို ပြန်စစ်ပေးပါ။");
+      const errMsg = error?.message || "";
+      if (errMsg.includes("API_KEY_INVALID") || errMsg.includes("API key not valid")) {
+        alert("API Key မမှန်ပါ။ ကျေးဇူးပြု၍ Google AI Studio မှ ရယူထားသော မှန်ကန်သည့် API Key ထည့်ပေးပါ။");
+      } else if (errMsg.includes("QUOTA") || errMsg.includes("429") || errMsg.includes("quota")) {
+        alert("API Quota ပြည့်သွားပါပြီ။ ခဏစောင့်ပြီး ပြန်ကြိုးစားပါ သို့မဟုတ် billing enable ထားသော API Key သုံးပါ။");
+      } else {
+        alert("AI Sync မအောင်မြင်ပါ။ API Key သို့မဟုတ် လိုင်းကို ပြန်စစ်ပေးပါ။");
+      }
     } finally {
       setLoading(false);
     }
