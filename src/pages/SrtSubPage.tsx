@@ -100,6 +100,8 @@ const SrtTranslatorView: React.FC = () => {
   const [selectedTier, setSelectedTier] = useState<number>(600);
   const [loading, setLoading] = useState(false);
   const [translated, setTranslated] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [retryCountdown, setRetryCountdown] = useState(0);
 
   useEffect(() => {
     localStorage.setItem("master_srt_api_key", apiKey);
@@ -129,16 +131,45 @@ const SrtTranslatorView: React.FC = () => {
     }
   };
 
+  // Countdown timer effect
+  React.useEffect(() => {
+    if (retryCountdown <= 0) return;
+    const timer = setInterval(() => {
+      setRetryCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [retryCountdown]);
+
   const handleTranslate = async () => {
     if (!fileContent) return;
     setLoading(true);
     setTranslated("");
+    setErrorMessage("");
     try {
       const finalInput = `Translate the following SRT content to ${targetLang}. Keep SRT format exactly. ${dualMode ? "Rule: Output Original Line followed by Translated Line." : "Rule: Replace original text with translation."}\n\nCONTENT:\n${fileContent}`;
       const result = await translateText(finalInput, targetLang, apiType === "own" ? apiKey : undefined);
       setTranslated(result || "");
-    } catch (e) {
-      alert("Translation failed. Check API Key.");
+    } catch (e: any) {
+      const errMsg = e?.message || "Translation failed";
+      
+      // Parse quota exceeded error
+      if (errMsg.includes("QUOTA_EXCEEDED") || errMsg.includes("429") || errMsg.includes("quota")) {
+        // Extract retry seconds from error message
+        const retryMatch = errMsg.match(/(\d+)s/);
+        const retrySeconds = retryMatch ? parseInt(retryMatch[1], 10) : 30;
+        setRetryCountdown(retrySeconds);
+        setErrorMessage(`API Quota ပြည့်သွားပါပြီ။ ${retrySeconds} seconds စောင့်ပြီး ပြန်ကြိုးစားပါ။`);
+      } else if (errMsg.includes("401") || errMsg.includes("Unauthorized")) {
+        setErrorMessage("API Key မမှန်ကန်ပါ။ စစ်ဆေးပြီး ပြန်ထည့်ပါ။");
+      } else {
+        setErrorMessage(errMsg);
+      }
     } finally {
       setLoading(false);
     }
@@ -187,7 +218,27 @@ const SrtTranslatorView: React.FC = () => {
         </div>
       )}
 
-      {/* 2. QUOTA STATUS BAR */}
+      {/* Error Message with Retry Countdown */}
+      {errorMessage && (
+        <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-4 text-center animate-in fade-in">
+          <p className="text-xs font-bold text-rose-400">{errorMessage}</p>
+          {retryCountdown > 0 && (
+            <div className="mt-2 flex items-center justify-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-rose-500/20 flex items-center justify-center">
+                <span className="text-sm font-black text-rose-400">{retryCountdown}</span>
+              </div>
+              <span className="text-[10px] font-bold text-rose-300 uppercase">seconds remaining</span>
+            </div>
+          )}
+          <button
+            onClick={() => setErrorMessage("")}
+            className="mt-3 text-[10px] font-bold text-slate-400 hover:text-white uppercase"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       <div className="neon-glass rounded-[28px] p-6 flex justify-between items-center border border-white/5 shadow-xl">
         <div className="space-y-1">
           <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">APP QUOTA (TODAY)</p>
