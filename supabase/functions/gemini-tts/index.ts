@@ -8,7 +8,6 @@ const corsHeaders = {
 
 // Input validation constants
 const MAX_TEXT_LENGTH = 10000; // 10KB max for TTS text
-const ALLOWED_VOICE_NAMES = ["Puck", "Charon", "Kore", "Fenrir", "Aoede"];
 
 // Gemini TTS endpoint
 const GEMINI_TTS_API = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent";
@@ -20,32 +19,6 @@ serve(async (req) => {
   }
 
   try {
-    // ===== AUTHENTICATION =====
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Authentication required" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    
-    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } }
-    });
-
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Invalid or expired token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    console.log(`[gemini-tts] Authenticated user: ${user.id}`);
-
     // ===== INPUT VALIDATION =====
     const { text, voiceName, apiKey: userApiKey, languageCode } = await req.json();
 
@@ -74,15 +47,43 @@ serve(async (req) => {
       ? languageCode
       : "en-US";
 
-    // ===== CREDIT CHECK (Server-side) =====
+    // ===== AUTHENTICATION & CREDITS (Only if NOT using own API key) =====
     const isOwnApiKey = !!userApiKey?.trim();
+    let userId: string | null = null;
     
     if (!isOwnApiKey) {
+      // Authentication required for App API mode (credit deduction)
+      const authHeader = req.headers.get("Authorization");
+      if (!authHeader) {
+        return new Response(
+          JSON.stringify({ error: "Authentication required for App API mode" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      
+      const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } }
+      });
+
+      const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+      if (authError || !user) {
+        return new Response(
+          JSON.stringify({ error: "Invalid or expired token" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      userId = user.id;
+      console.log(`[gemini-tts] Authenticated user: ${userId}`);
+
+      // Credit check and deduction
       const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       
-      // Check credits before processing
       const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", {
-        _user_id: user.id,
+        _user_id: userId,
         _tool_id: "voice",
         _is_own_api: false
       });
@@ -108,6 +109,8 @@ serve(async (req) => {
       }
 
       console.log(`[gemini-tts] Credits deducted. New balance: ${creditResult.balance}`);
+    } else {
+      console.log("[gemini-tts] Using own API key - skipping auth & credit check");
     }
 
     // ===== API KEY SELECTION =====
