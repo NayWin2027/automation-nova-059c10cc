@@ -14,6 +14,7 @@ import {
 import { useApiAccess } from '@/hooks/useApiAccess';
 import { useSecureApiKey } from '@/hooks/useSecureApiKey';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
+ import { usePageStability } from '@/hooks/usePageStability';
 
 type SubStyle = 'GOLD' | 'BLUE' | 'RUBY' | 'DIAMOND' | 'EMERALD';
 
@@ -30,10 +31,14 @@ const VoicePage: React.FC = () => {
   const navigate = useNavigate();
   const { isAllowed, isLoading: authLoading } = useAuthGuard('voice');
   const { appApiAllowed, ownApiAllowed, appApiReason, ownApiReason, defaultApiMode, isLoading: accessLoading } = useApiAccess();
-  
+   
   const [text, setText] = useState('');
   const [voiceName, setVoiceName] = useState('PUCK');
   const [loading, setLoading] = useState(false);
+   
+   // Page stability hook - prevents crashes during processing on desktop
+   usePageStability(loading);
+   
   const [performance, setPerformance] = useState('PROFESSIONAL');
   const [apiType, setApiType] = useState<'app' | 'own'>('app');
   const { apiKey, setApiKey } = useSecureApiKey('master_voice_api_key');
