@@ -630,3 +630,37 @@ function blobToBase64(blob: Blob): Promise<string> {
     reader.readAsDataURL(blob);
   });
 }
+
+// Transcribe audio/video using transcribe-google edge function
+export async function transcribeAudio(
+  base64Data: string,
+  mimeType: string,
+  language: string,
+  apiKey?: string
+): Promise<string | null> {
+  try {
+    const { data, error } = await invokeWithAuthRetry<{ 
+      text?: string; 
+      error?: string;
+    }>('transcribe-google', {
+      audioData: base64Data,
+      mimeType,
+      language,
+      apiKey,
+    });
+
+    if (error) {
+      console.error('transcribeAudio error:', error);
+      throw new Error(error.message || 'Transcription failed');
+    }
+
+    if (data?.error) {
+      throw new Error(data.error);
+    }
+
+    return data?.text || null;
+  } catch (err) {
+    console.error('transcribeAudio error:', err);
+    throw err;
+  }
+}
