@@ -188,11 +188,31 @@ function normalizeBase32Secret(input: string): string {
             secret: OTPAuth.Secret.fromBase32(normalizeBase32Secret(totpData.totp_secret)),
          });
  
-          // Setup is the most failure-prone step (device clock drift, copy/paste issues),
-          // so we allow a slightly larger window here.
+          // Setup is the most failure-prone step (device clock drift), so we allow a
+          // slightly larger window here, and if it still fails we do a drift-detection
+          // attempt to provide better guidance.
           const delta = totp.validate({ token: normalizedCode, window: 4 });
- 
-         if (delta === null) {
+
+          if (delta === null) {
+            const driftDelta = totp.validate({ token: normalizedCode, window: 20 });
+            if (driftDelta !== null) {
+              const approxDriftSeconds = Math.abs(driftDelta) * 30;
+              console.log("admin-2fa verify-setup drift-detected", {
+                userId,
+                driftSteps: driftDelta,
+                approxDriftSeconds,
+              });
+              return new Response(
+                JSON.stringify({
+                  error:
+                    "Code matched but your device time looks out of sync. Please enable Automatic date & time on your phone and try again.",
+                  driftDetected: true,
+                  approxDriftSeconds,
+                }),
+                { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              );
+            }
+
             console.log("admin-2fa verify-setup invalid", {
               userId,
               at: new Date().toISOString(),
