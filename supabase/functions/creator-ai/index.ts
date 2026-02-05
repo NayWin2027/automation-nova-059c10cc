@@ -286,31 +286,62 @@ Create this image now. Output the generated image directly.`;
     } else {
       // Text generation
       if (isOwnApiKey) {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: prompt }] }],
-              generationConfig: {
-                temperature: 0.9,
-                maxOutputTokens: 8192,
-              },
-            }),
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error("Content generation failed");
-        }
-
-        const data = await response.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        // Try multiple models in case one doesn't work with the user's API key
+        const textModels = [
+          "gemini-1.5-flash",
+          "gemini-1.5-pro",
+          "gemini-pro",
+        ];
         
+        let lastError = "";
+        
+        for (const model of textModels) {
+          console.log("[creator-ai] Trying text model:", model);
+          
+          try {
+            const response = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  contents: [{ parts: [{ text: prompt }] }],
+                  generationConfig: {
+                    temperature: 0.9,
+                    maxOutputTokens: 8192,
+                  },
+                }),
+              }
+            );
+ 
+            if (response.ok) {
+              const data = await response.json();
+              const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+              
+              if (text) {
+                console.log("[creator-ai] Text generated with model:", model);
+                return new Response(
+                  JSON.stringify({ text }),
+                  { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                );
+              }
+              lastError = "No text in response";
+            } else {
+              const errorText = await response.text();
+              console.error(`[creator-ai] Model ${model} failed:`, response.status, errorText);
+              lastError = `${response.status}: ${errorText}`;
+            }
+          } catch (e) {
+            console.error(`[creator-ai] Model ${model} error:`, e);
+            lastError = e instanceof Error ? e.message : "Unknown error";
+          }
+        }
+        
+        // If all models failed, return the last error
+        console.error("[creator-ai] All text models failed. Last error:", lastError);
         return new Response(
-          JSON.stringify({ text }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ error: `Content generation failed: ${lastError}` }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       } else {
         const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
