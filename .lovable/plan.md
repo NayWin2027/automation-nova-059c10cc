@@ -1,86 +1,126 @@
 
 <context>
-User issue (Burmese): Admin 2Factor (TOTP) ကို မနက်က setup/enable လုပ်ပြီးသားပဲ၊ အခု ပြန်ပျက်သွားသလို ဖြစ်ပြီး stable ဖြစ်အောင် error ကင်းအောင် လိုချင်တယ်။ Credit မကုန်အောင် loop မဖြစ်စေချင်။
+User goal (Burmese): /novel (Novel Translate) မှာ **App API mode က OK** ဖြစ်နေပြီး၊ **Own API key mode** နဲ့ run တိုင်း “system cool down / QUOTA_EXCEEDED (429)” တက်တာကြောင့် **stable + smooth (auto wait + auto resume)** ဖြစ်အောင် ပြင်ချင်တယ်။
 
-Constraints: User မှ တိတိကျကျပြောထားတာ—ပြင်ခိုင်းတဲ့ 2FA ပိုင်းနဲ့ ဆိုင်တဲ့ code/logic တွေကလွဲပြီး တခြား feature/logic ကို မထိ/မပြင်/မဖြုတ်ရ။
+Strict constraint (your instruction): **Novel translate own-api cooldown fix နဲ့ဆိုင်တဲ့ code/logic တွေကလွဲပြီး အခြားမဆိုင်တဲ့ code/logic/features တစ်ခုမှ မထိ/မပြင်/မဖြုတ်**။
 </context>
 
-<what-i-found (step-by-step diagnosis)>
-1) Backend side မှာ 2FA data ပျက်သွားတာ မဟုတ်ပါ။
-   - Database ထဲမှာ admin user_id = 3d06c8f8-... အတွက် `admin_totp_secrets` record ရှိပြီး `is_enabled = true` ဖြစ်နေတယ် (verified_at / updated_at လည်း ရှိ)။
-   - ဒါကြောင့် “2FA setup ပြန်ပျက်သွား” တာမဟုတ်ဘဲ UI က status ကို မဖတ်နိုင်လို့ ပျက်သလို ထင်ရတာ ဖြစ်နိုင်ချေ အရမ်းမြင့်တယ်။
+<observations (from current code + logs)>
+1) Browser console မှာ novel translate own mode က:
+   - `QUOTA_EXCEEDED: API Quota ပြည့်သွားပါပြီ။ 32s စောင့်ပြီး ... (32s)` လို့ ပြနေတာတွေ့ရပါတယ်။
+   - ဒါက backend bug မဟုတ်ပဲ **Own API key ရဲ့ rate/quota limit** ကိုထိနေတာပါ။
 
-2) Frontend console + network မှာ error အဓိကက:
-   - `Failed to check 2FA status: TypeError: Failed to fetch`
-   - Network requests မှာ `POST https://.../functions/v1/admin-2fa` ကို ခေါ်တုန်းက response မရဘဲ “Failed to fetch” ဖြစ်နေတယ်။
+2) UI behavior problem:
+   - `NovelTransPage.tsx` မှာ quota error ဖြစ်သွားရင် manual mode မှာ `alert(...)` ထုတ်ပြီး stop သွားပါတယ်။
+   - User က countdown မမြင်ရ / auto-resume မလုပ်ပေးတဲ့အတွက် “တခါတလေ ပျက်၊ ပြန်လုပ်” loop လိုခံစားရပါတယ်။
 
-3) Root cause (most likely):
-   - `TwoFactorSetup.tsx` နဲ့ `AdminLoginPage.tsx` တို့က `fetch(${VITE_SUPABASE_URL}/functions/v1/admin-2fa, ...)` ကို “raw fetch” နဲ့ ခေါ်ထားပြီး `apikey` header (publishable key) မထည့်ထားပါ။
-   - Lovable Cloud backend functions gateway က ပုံမှန်အားဖြင့် `apikey` header လိုအပ်ပြီး၊ မပါရင် function ကို မရောက်ခင် gateway-level reject ဖြစ်နိုင်တယ်။ အဲ့လို reject response က CORS headers မပါလို့ browser မှာ “Failed to fetch” (CORS/network error တမျိုး) လို့ပဲ ပေါ်တတ်ပါတယ်။
-   - အခုလိုဖြစ်ရင် user က 2FA အကုန်လုပ်ထားပြီးသားဖြစ်သော်လည်း UI မှာ status/setup/verify call တွေ မအောင်မြင်တော့ပါ။
+3) Current code already has building blocks:
+   - `cooldownSeconds` state + timer effect ရှိနေပြီးသား
+   - Auto-drive အတွက် quota error ကို cooldown ချပြီး resume လုပ်နေတဲ့ logic ရှိပြီးသား
+   - ဒါပေမဲ့ **manual run** အတွက်က auto-wait/auto-retry မလုပ်ပေးသေးပါဘူး။
 
-4) Supporting evidence:
-   - `admin-2fa` edge function logs မတွေ့တာကလည်း gateway-level reject ဖြစ်နိုင်ခြေကို ပို support လုပ်တယ် (function runtime ထဲ မဝင်သေးနိုင်)။
-</what-i-found>
+Key conclusion:
+- “Error ကို လုံးဝမတက်အောင်” ဆိုတာ Own API key quota တကယ်ထိနေသရွေ့ မဖြစ်နိုင်ပါ (အပြင် API limitation)။
+- ဒါပေမဲ့ “**user ကို အလုပ်ပြန်လုပ်ခိုင်းစရာမလိုဘဲ** cooldown ကို UI မှာပြ + အလိုအလျောက် စောင့်ပြီး ဆက်လုပ်” ဆိုတဲ့အတိုင်း **stable/smooth UX** အဖြစ် ပြောင်းလဲနိုင်ပါတယ်။
+</observations>
 
-<fix-goal>
-2FA ကို “stable” ဖြစ်အောင်:
-- Admin Dashboard/Security tab မှာ 2FA status ကို အမြဲမှန်မှန်ပြ
-- Setup / Verify / Disable actions များ error မတက်
-- Login အချိန် 2FA verification step လည်း error မတက်
-- မဆိုင်တဲ့ logic/features မထိဘဲ 2FA call path ကိုပဲ localized ပြင်
-</fix-goal>
+<solution design (stable + smooth behavior)>
+We will implement a **Quota-aware retry system** for /novel Own API mode only:
 
-<implementation-plan (minimal, localized changes only)>
-A) Frontend: Raw fetch ကို `supabase.functions.invoke()` နဲ့အစားထိုး (2 files only)
-1) `src/components/admin/TwoFactorSetup.tsx`
-   - `check2FAStatus`, `startSetup`, `verifySetup`, `disable2FA` ထဲက `fetch(...)` ကို
-     `supabase.functions.invoke('admin-2fa', { body: { action: 'status' | 'setup' | 'verify-setup' | 'disable', code? }})`
-     နဲ့ပြောင်းမယ်။
-   - Rationale: `supabase.functions.invoke` က required headers (`apikey` + auth token) တွေကို standard အတိုင်း ထည့်ပေးပြီး browser “Failed to fetch” ဖြစ်စေတဲ့ gateway/CORS failure ကို လျှော့ချနိုင်ပါတယ်။
-   - Error handling:
-     - invoke error ဖြစ်ရင် toast နဲ့ “Network/Backend unreachable – refresh/try again” လို message ပြ (credit မကွာတဲ့ UI-only retry)။
-     - `check2FAStatus` fail ဖြစ်ရင် `is2FAEnabled` ကို false လို့ မ forcibly ပြောင်းဘဲ “unknown” state အဖြစ်ထား + Retry button (optional) ထည့်ပြီး user ကို အတင်း re-setup မလုပ်စေ။
-   - Post-action refresh:
-     - `verify-setup` success ပြီးရင် `check2FAStatus()` ကို ခေါ်ပြီး UI state sync လုပ် (setupOpen ပိတ်ပြီး status badge မှန်ဖို့)။
+A) UI/UX: alert မထုတ်တော့ဘဲ “cooldown banner + countdown” ပြ
+- QUOTA_EXCEEDED / 429 / “RetryInfo: xx s” ဖြစ်လာတဲ့အခါ:
+  - `cooldownSeconds = retrySeconds` ကို set
+  - Page ထဲမှာ “Cooling down: 32s … Auto-resume will run” ဆိုတဲ့ banner/label ပြ
+  - Translate button ကို disabled လုပ် (spamming မဖြစ်အောင်)
 
-2) `src/pages/AdminLoginPage.tsx`
-   - 2FA status check (`action: "status"`) နဲ့ verify-login (`action: "verify-login"`) raw fetch ကို invoke နဲ့အစားထိုးမယ်။
-   - Behavior မပြောင်းဘဲ transport layer ပဲ stable ဖြစ်အောင်:
-     - status.enabled true ဖြစ်ရင် show2FA step ပြ
-     - verify-login success ဖြစ်ရင် navigate('/admin/dashboard')
-   - Error handling: invoke error ပြန်လာရင် toast ထဲမှာ စကားပြောရလွယ်တဲ့ message ပြ (e.g. “Backend connection error. Please try again.”) + totpCode reset logic ရှိနေတဲ့အတိုင်းထား။
+B) Manual mode ကိုပါ auto-resume လုပ် (အရေးကြီးဆုံး)
+- quota error တက်တဲ့အချိန် “နောက်တစ်ခါ run ဖို့” user ကို click ပြန်မခိုင်းဘဲ:
+  - `pendingRetryRef` (useRef) ထဲမှာ “ဘာကို ပြန် run မလဲ” (indexToUse + mode + keySnapshot) ကို stash လုပ်
+  - cooldown 0 ဖြစ်တာနဲ့ pendingRetryRef ရှိသေးရင် **auto call** generateContent() ကို 1 ကြိမ် ပြန် run
+  - Infinite loop မဖြစ်စေဖို့ **consecutiveRetryCount** ကို cap (ဥပမာ 3 ကြိမ်ထက်မပို)
+  - အကယ်လို့ cap ထိရင် banner မှာ “Still cooling down / key quota too low” message ပြပြီး user ကို App API သို့ပြောင်းရန် suggestion ပေး (UX only)
 
-B) Backend: (Optional) CORS headers ကို harden (1 file only, 2FA related)
-3) `supabase/functions/admin-2fa/index.ts`
-   - `corsHeaders` ထဲမှာ `Access-Control-Allow-Methods: "POST, OPTIONS"` ကို ထည့်ပေးမယ်။
-   - Reason: browser preflight handling ကို ပို stable ဖြစ်စေပြီး၊ တချို့ environment မှာ preflight strict ဖြစ်ရင် fail မဖြစ်အောင်။
-   - Note: ဒီ change က 2FA function တစ်ခုပဲထိပြီး တခြား tools/logic မထိပါ။
+C) Auto-drive ကို Own API အတွက် throttle လုပ် (quota hit လျော့စေမယ်)
+- လက်ရှိ auto-drive interval 3s ဖြစ်နေတာကို Own API mode မှာ:
+  - success တစ်ကြိမ်ပြီးတိုင်း next call delay ကို 8–12s လောက်တိုး
+  - quota hit တက်ရင် `retrySeconds` ကို respect လုပ် (already doing)
+- App API mode ကို မထိ
 
-C) Verification steps (end-to-end, user cost sensitive)
-4) Manual test checklist (Preview environment):
-   - Admin login → 2FA enabled admin ဖြစ်ရင် code prompt ပေါ်/မပေါ် စစ်
-   - Correct TOTP → dashboard ဝင်နိုင်
-   - /admin/dashboard → Settings/Security tab (2FA) မှာ “2FA Enabled” ပေါ်နေမှု စစ်
-   - Refresh page (hard refresh) → status မပျက်ဘဲ ဆက် enabled ပေါ်နေမှု စစ်
-   - Disable 2FA → code ထည့်ပြီး disable success, status update correctly
-   - Re-enable → setup QR / verify လုပ်ပြီး enabled ပြန်ဖြစ်
+D) Backend response ကိုပို “machine-readable” ဖြစ်အောင် (optional but recommended, novel translate function only)
+- `supabase/functions/novel-translate/index.ts` (Own API path) မှာ:
+  - 429 response payload ကို `retryAfterSeconds` (number) ထပ်ထည့်
+  - 503/overloaded type errors လည်း retryable အဖြစ် normalize လုပ်ပြီး status 200 + `{ errorCode, retryAfterSeconds, retryable:true }` ပြန်
+- ဒါလုပ်ရင် frontend က string parse မလုပ်ဘဲ numeric ကိုသုံးပြီး ပို stable ဖြစ်မယ်။
 
-<why-this-solves-the “ပြန်ပျက်” feeling>
-- 2FA record က backend ထဲမှာ အမှန်တကယ် enabled ဖြစ်နေတာကို UI က network layer မှာ function ကို reach မနိုင်လို့ “disabled/ပျက်” လိုမျိုး အမှားမြင်ခဲ့တာ ဖြစ်နိုင်ပါတယ်။
-- invoke သုံးပြီး required headers ကို standardize လုပ်တာနဲ့ function reachability ပြန် stable ဖြစ်လာပြီး status/setup/verify/disable လို flow တွေ “ပြန်ပျက်လိုက် ပြန်လုပ်လိုက်” loop မဖြစ်တော့ပါ။
+Important: ဒီ backend change က **novel-translate function** တစ်ခုထဲပဲ ထိပြီး တခြား tool/function မထိပါ။
 
-<scope-control>
-Will change only these (2FA-related) files:
-- src/components/admin/TwoFactorSetup.tsx (replace raw fetch → supabase.functions.invoke + better error handling)
-- src/pages/AdminLoginPage.tsx (replace raw fetch → supabase.functions.invoke for 2FA steps)
-- supabase/functions/admin-2fa/index.ts (optional: add Allow-Methods CORS header only)
+</solution design>
 
-Will NOT touch:
-- Credits system, tool logic, other AI tools, other pages/components, any unrelated backend functions.
-</scope-control>
+<exact scope of code changes (only requested area)>
+Will modify only:
+1) `src/pages/NovelTransPage.tsx`
+   - quota error handling (manual + auto-drive)
+   - cooldown banner/countdown UI (novel page only)
+   - pending retry refs + capped auto-retry logic
+   - own-mode auto-drive delay tuning
 
-<notes for you (non-technical)>
-- 2FA data ပျက်သွားတာမဟုတ်ပါ—အခု error က “backend function ကို browser က မရောက်နိုင်တာ” ကြောင့်ဖြစ်ပြီး အဲဒါကိုပဲ stable ဖြစ်အောင် ပြင်ပါမယ်။
-- ဒီပြင်ဆင်မှုက credit ကို မကုန်စေပါ (UI/network header ပြဿနာကို fix လုပ်တာပဲ)။
-</notes>
+2) (Optional but recommended) `supabase/functions/novel-translate/index.ts`
+   - add `retryAfterSeconds` + normalize retryable errors for Own API path
+   - keep existing app-mode logic unchanged
+
+Will NOT modify:
+- credits system / admin features / other tools (voice/transcribe/etc.)
+- general auth, other pages, other services
+- any unrelated UI components
+</exact scope of code changes>
+
+<implementation steps (sequenced)>
+Step 1 — Inspect current NovelTransPage rendering section for a good place to show cooldown UI
+- Add a small non-intrusive banner near the Translate button / progress area:
+  - Shows countdown when `cooldownSeconds > 0`
+  - Shows “Auto retry scheduled” when pending retry exists
+
+Step 2 — Add “pending retry” mechanism (NovelTransPage only)
+- Create refs:
+  - `pendingRetryRef` (stores indexToUse + progressKey + progressLabel + isFileMode + a snapshot of apiType/apiKey presence)
+  - `quotaRetryCountRef` (consecutive)
+- When QUOTA_EXCEEDED occurs:
+  - set cooldownSeconds
+  - set pendingRetryRef (so manual run can resume)
+  - do NOT alert()
+
+Step 3 — Auto-resume effect when cooldown ends
+- Add a `useEffect` watching `cooldownSeconds`
+  - When it reaches 0 AND pendingRetryRef exists AND not loading:
+    - attempt retry once
+    - clear pendingRetryRef on success
+    - if fails with quota again: set new cooldownSeconds, increment retry count, keep pending
+    - if retry count cap exceeded: clear pending, show banner message and stop auto retries
+
+Step 4 — Own API auto-drive throttling
+- In existing auto-drive loop effect:
+  - if `apiType==='own'` use longer delay
+  - ensure we never schedule calls while cooldownSeconds>0
+
+Step 5 — (Optional) Backend normalize retry payload
+- Add helper to parse `retryDelay` (“32s”, “1m”) into seconds
+- Return `{ errorCode:'QUOTA_EXCEEDED', retryAfter:'32s', retryAfterSeconds:32, retryable:true }` with HTTP 200
+
+Step 6 — End-to-end test checklist (no extra tooling required for user)
+- In /novel:
+  1) Own API mode → run once → if quota happens: verify countdown shows and auto resumes without clicking
+  2) Auto-drive ON → verify it slows down and does not spam; quota hit triggers countdown then continues
+  3) Switch to App API mode → ensure unchanged behavior
+  4) Refresh page mid-cooldown → cooldown state resets (acceptable) but should not corrupt progress history
+
+</implementation steps>
+
+<what “stable” will mean after this change>
+- Own API mode quota hit ဖြစ်လာရင်:
+  - မပြိုကျ (no repetitive alerts / no manual “retry click” loop)
+  - UI က countdown ကို တိတိကျကျပြ
+  - အချိန်ပြည့်တာနဲ့ အလိုအလျောက် ပြန် run လုပ်ပြီး ဆက်သွား
+- ဒါက user experience အရ “smooth, launch-friendly” ဖြစ်စေပြီး “error တက်လိုက်ရှင်းလိုက်” ခံစားချက်ကို တတ်နိုင်သမျှ ပျောက်စေမယ်။
+
+Note: Own API quota limitation ကို code နဲ့ “ဖျောက်” လို့ မရပေမဲ့—**သူ့အလိုအလျောက် စောင့်ပြီး ဆက်လုပ်အောင်** လုပ်လို့ “stable workflow” ဖြစ်အောင်တော့ ပြောင်းလဲနိုင်ပါတယ်။
+</what “stable” will mean after this change>
