@@ -15,32 +15,6 @@ serve(async (req) => {
   }
 
   try {
-    // ===== AUTHENTICATION =====
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Authentication required" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    
-    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } }
-    });
-
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Invalid or expired token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    console.log(`[creator-ai] Authenticated user: ${user.id}`);
-
     // ===== INPUT VALIDATION =====
     const { prompt, apiKey, type, referenceImages, aspectRatio } = await req.json();
 
@@ -61,21 +35,47 @@ serve(async (req) => {
     const validTypes = ["text", "image"];
     const sanitizedType = validTypes.includes(type) ? type : "text";
     const hasReferenceImages = Array.isArray(referenceImages) && referenceImages.length > 0;
-
-    console.log("[creator-ai] Request type:", sanitizedType, "hasRefs:", hasReferenceImages);
-
-    // ===== CREDIT CHECK (Server-side) =====
     const isOwnApiKey = !!apiKey?.trim();
+
+    console.log("[creator-ai] Request type:", sanitizedType, "hasRefs:", hasReferenceImages, "isOwnApiKey:", isOwnApiKey);
+
+    // ===== AUTHENTICATION & CREDIT CHECK =====
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const authHeader = req.headers.get("Authorization");
     
+    // If using own API key, authentication is optional
+    // If NOT using own API key, user MUST be authenticated for credit deduction
     if (!isOwnApiKey) {
-      const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      if (!authHeader) {
+        return new Response(
+          JSON.stringify({ error: "Authentication required when not using own API key" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       
+      const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } }
+      });
+      
+      const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+      if (authError || !user) {
+        return new Response(
+          JSON.stringify({ error: "Invalid or expired token" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      console.log(`[creator-ai] Authenticated user: ${user.id}`);
+      
+      // Deduct credits for authenticated users without own API key
+      const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", {
         _user_id: user.id,
         _tool_id: "creator",
         _is_own_api: false
       });
-
+      
       if (creditError) {
         console.error("[creator-ai] Credit check error:", creditError);
         return new Response(
@@ -83,7 +83,7 @@ serve(async (req) => {
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-
+      
       if (!creditResult.success) {
         return new Response(
           JSON.stringify({ 
@@ -95,8 +95,10 @@ serve(async (req) => {
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-
+      
       console.log(`[creator-ai] Credits deducted. New balance: ${creditResult.balance}`);
+    } else {
+      console.log("[creator-ai] Using own API key - skipping auth & credit check");
     }
 
     // ===== PROCESS REQUEST =====
