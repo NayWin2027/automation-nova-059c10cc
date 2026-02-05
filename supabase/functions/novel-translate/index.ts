@@ -16,34 +16,44 @@ serve(async (req) => {
   }
 
   try {
-    // ===== AUTHENTICATION =====
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Authentication required" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    // ===== INPUT VALIDATION (parse first for Own API bypass) =====
+    const { prompt, targetLang, apiKey, fileData } = await req.json();
+    
+    // Check if using own API key (bypass auth)
+    const isOwnApiKey = !!apiKey?.trim();
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     
-    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } }
-    });
+    let user: { id: string } | null = null;
 
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Invalid or expired token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // ===== AUTHENTICATION (skip if Own API key mode) =====
+    if (!isOwnApiKey) {
+      const authHeader = req.headers.get("Authorization");
+      if (!authHeader) {
+        return new Response(
+          JSON.stringify({ error: "Authentication required" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } }
+      });
+
+      const { data: { user: authUser }, error: authError } = await supabaseClient.auth.getUser();
+      if (authError || !authUser) {
+        return new Response(
+          JSON.stringify({ error: "Invalid or expired token" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      user = authUser;
+      console.log(`[novel-translate] Authenticated user: ${user.id}`);
+    } else {
+      console.log(`[novel-translate] Own API key mode - bypassing auth`);
     }
-
-    console.log(`[novel-translate] Authenticated user: ${user.id}`);
-
-    // ===== INPUT VALIDATION =====
-    const { prompt, targetLang, apiKey, fileData } = await req.json();
 
     if (!prompt || typeof prompt !== "string") {
       return new Response(
@@ -70,10 +80,8 @@ serve(async (req) => {
       }
     }
 
-    // ===== CREDIT CHECK (Server-side) =====
-    const isOwnApiKey = !!apiKey?.trim();
-    
-    if (!isOwnApiKey) {
+    // ===== CREDIT CHECK (Server-side, only for App API mode) =====
+    if (!isOwnApiKey && user) {
       const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       
       const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", {
