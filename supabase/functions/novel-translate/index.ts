@@ -180,7 +180,9 @@ CRITICAL RULES:
               errorCode: 'QUOTA_EXCEEDED',
               retryAfter: retryDelay
             }),
-            { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            // IMPORTANT: return 200 so the frontend can read the error payload reliably
+            // (supabase-js treats non-2xx as transport errors and can drop the body)
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
         
