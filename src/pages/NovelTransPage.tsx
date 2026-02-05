@@ -74,10 +74,23 @@ const NovelTransPage: React.FC = () => {
   const [isAutoDriving, setIsAutoDriving] = useState(false);
   const [autoIteration, setAutoIteration] = useState(0);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const [quotaExhaustedMessage, setQuotaExhaustedMessage] = useState<string | null>(null);
   
   // Session Refs for Strict Constraints
   const sessionStartRef = useRef<number>(0);
   const sessionProcessedRef = useRef<number>(0);
+  
+  // Pending Retry Refs (for manual mode auto-resume)
+  const pendingRetryRef = useRef<{
+    indexToUse: number;
+    currentHistory: Record<number, string>;
+    currentChunkLengths: Record<number, number>;
+    progressKey: string;
+    progressLabel: string;
+    isFileMode: boolean;
+  } | null>(null);
+  const quotaRetryCountRef = useRef<number>(0);
+  const MAX_CONSECUTIVE_RETRIES = 3;
   
   const [startIndex, setStartIndex] = useState(0);
   const [progressData, setProgressData] = useState<Record<string, TranslationProgress>>(() => {
@@ -126,15 +139,41 @@ const NovelTransPage: React.FC = () => {
     localStorage.setItem('master_novel_progress_v3', JSON.stringify(progressData));
   }, [progressData]);
 
-  // Cooldown Timer Effect
+  // Cooldown Timer Effect + Auto-Resume when cooldown ends
   useEffect(() => {
     if (cooldownSeconds > 0) {
         const interval = setInterval(() => {
-            setCooldownSeconds(prev => prev - 1);
+            setCooldownSeconds(prev => {
+              const next = prev - 1;
+              // When cooldown reaches 0, check for pending retry
+              if (next === 0 && pendingRetryRef.current && !loading) {
+                // Schedule auto-resume after state update completes
+                setTimeout(() => {
+                  if (pendingRetryRef.current && !loading) {
+                    const pending = pendingRetryRef.current;
+                    console.log('[Novel Translate] Auto-resuming after cooldown...');
+                    
+                    // Clear message on resume
+                    setQuotaExhaustedMessage(null);
+                    
+                    // Call generateContent with pending params
+                    generateContent(
+                      pending.indexToUse,
+                      pending.currentHistory,
+                      pending.currentChunkLengths,
+                      pending.progressKey,
+                      pending.progressLabel,
+                      pending.isFileMode
+                    );
+                  }
+                }, 100);
+              }
+              return next;
+            });
         }, 1000);
         return () => clearInterval(interval);
     }
-  }, [cooldownSeconds]);
+  }, [cooldownSeconds, loading]);
 
   // Check if all content has been translated
   const isTranslationComplete = () => {
@@ -204,15 +243,17 @@ const NovelTransPage: React.FC = () => {
     // Continue auto-driving if conditions are met
     if (autoDrive && !loading && translated && cooldownSeconds === 0) {
       setIsAutoDriving(true);
+      // Use longer delay for Own API mode to reduce quota hits
+      const delay = apiType === 'own' ? 10000 : 3000; // 10s for Own API, 3s for App API
       timer = window.setTimeout(() => {
         handleTranslate();
-      }, 3000);
+      }, delay);
     } else if (cooldownSeconds > 0) {
       setIsAutoDriving(false);
     }
     
     return () => clearTimeout(timer);
-  }, [translated, autoDrive, loading, startIndex, charCount, cooldownSeconds, inputMode, novelText]);
+  }, [translated, autoDrive, loading, startIndex, charCount, cooldownSeconds, inputMode, novelText, apiType]);
 
   // IMPORTANT: authLoading early return MUST be after ALL hooks
   if (authLoading) {
@@ -467,6 +508,11 @@ PREVIOUS CONTEXT (For continuity):
         if (result) {
             setTranslated(result);
             
+            // Success: clear pending retry state
+            pendingRetryRef.current = null;
+            quotaRetryCountRef.current = 0;
+            setQuotaExhaustedMessage(null);
+            
             let incrementAmount = STEP_SIZE;
             if (isChunkTextMode) {
                 const total = novelText.length;
@@ -524,26 +570,52 @@ PREVIOUS CONTEXT (For continuity):
           console.error('[Novel Translate] Error:', e);
           const errorMsg = e instanceof Error ? e.message : String(e);
           
-          // Check for quota exceeded (429) error
-          const isQuotaError = errorMsg.includes('Quota') || errorMsg.includes('429') || errorMsg.includes('QUOTA_EXCEEDED');
+          // Check for quota exceeded (429) error or retryable errors
+          const isQuotaError = errorMsg.includes('Quota') || errorMsg.includes('429') || errorMsg.includes('QUOTA_EXCEEDED') || errorMsg.includes('API_OVERLOADED') || errorMsg.includes('retryable');
           
           // Extract retry delay if present (e.g., "54s")
           const retryMatch = errorMsg.match(/(\d+)s/);
           const retrySeconds = retryMatch ? parseInt(retryMatch[1], 10) : 60;
           
-          if (isQuotaError && autoDrive) {
-              // For auto-drive: pause, wait for retry period, then resume
-              console.log(`[Auto-Drive] Quota hit. Waiting ${retrySeconds}s before retry...`);
+          if (isQuotaError) {
+              // Store pending retry info for auto-resume (both manual and auto-drive modes)
+              pendingRetryRef.current = {
+                indexToUse,
+                currentHistory,
+                currentChunkLengths,
+                progressKey,
+                progressLabel,
+                isFileMode
+              };
+              
+              quotaRetryCountRef.current += 1;
+              
+              // Check if we've exceeded max consecutive retries
+              if (quotaRetryCountRef.current > MAX_CONSECUTIVE_RETRIES) {
+                // Stop auto-retrying, show message suggesting App API
+                setQuotaExhaustedMessage('API key quota နိမ့်နေပါတယ်။ App API mode သို့ပြောင်းခြင်းကို စဉ်းစားပါ။');
+                pendingRetryRef.current = null;
+                quotaRetryCountRef.current = 0;
+                setIsAutoDriving(false);
+                setAutoDrive(false);
+                setLoading(false);
+                return;
+              }
+              
+              console.log(`[Novel Translate] Quota hit (attempt ${quotaRetryCountRef.current}/${MAX_CONSECUTIVE_RETRIES}). Waiting ${retrySeconds}s before auto-retry...`);
               setCooldownSeconds(retrySeconds);
-              // Keep autoDrive ON so it resumes after cooldown
+              setQuotaExhaustedMessage(`API Quota ပြည့်သွားပါပြီ။ ${retrySeconds}s စောင့်ပြီး အလိုအလျောက် ပြန်စပါမည်...`);
+              
+              // For auto-drive: keep autoDrive ON so it resumes after cooldown
+              // For manual mode: pendingRetryRef will trigger auto-resume when cooldown ends
               setIsAutoDriving(false);
               setLoading(false);
-              return; // Exit without disabling autoDrive - cooldown effect will resume
-          } else if (isQuotaError) {
-              // Manual mode: show user-friendly message with wait time
-              alert(`API Quota ပြည့်သွားပါပြီ။ ${retrySeconds} စက္ကန့်စောင့်ပြီး ပြန်ကြိုးစားပါ။\n\n(သို့) App API mode သို့ပြောင်းပါ။`);
+              return;
           } else {
-              // Other errors
+              // Non-quota errors: clear pending retry and show error
+              pendingRetryRef.current = null;
+              quotaRetryCountRef.current = 0;
+              setQuotaExhaustedMessage(null);
               alert('Translation failed: ' + errorMsg);
           }
           
@@ -853,6 +925,37 @@ PREVIOUS CONTEXT (For continuity):
                     <span className="text-[8px] font-black uppercase tracking-widest">Split View</span>
                 </button>
             </div>
+
+            {/* Cooldown Banner with Auto-Resume Info */}
+            {(cooldownSeconds > 0 || quotaExhaustedMessage) && (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 animate-pulse">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center">
+                      <span className="text-amber-400 text-lg">⏳</span>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black text-amber-200 uppercase tracking-widest">
+                        {cooldownSeconds > 0 ? 'API COOLDOWN' : 'QUOTA LIMIT'}
+                      </p>
+                      <p className="text-[9px] font-bold text-amber-100/80">
+                        {quotaExhaustedMessage || `${cooldownSeconds}s စောင့်ပြီး အလိုအလျောက် ပြန်စပါမည်...`}
+                      </p>
+                    </div>
+                  </div>
+                  {cooldownSeconds > 0 && (
+                    <div className="text-2xl font-black text-amber-400 tabular-nums">
+                      {cooldownSeconds}s
+                    </div>
+                  )}
+                </div>
+                {pendingRetryRef.current && cooldownSeconds > 0 && (
+                  <p className="text-[8px] font-bold text-emerald-400 mt-2 uppercase tracking-widest">
+                    ✓ Auto-Resume Scheduled • Retry {quotaRetryCountRef.current}/{MAX_CONSECUTIVE_RETRIES}
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Actions */}
             <div id="novel-actions" className="space-y-3 pt-2">
