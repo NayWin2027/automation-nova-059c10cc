@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { generateStory } from "../services/geminiService";
+import { GoogleGenAI } from "@google/genai";
 import { Home, Loader2, Lock } from "lucide-react";
 import { useSecureApiKey } from "@/hooks/useSecureApiKey";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
@@ -289,45 +290,106 @@ const StoryView: React.FC = () => {
   const isQuotaError = (error: unknown): boolean => {
     if (error instanceof Error) {
       const msg = error.message.toLowerCase();
-      return msg.includes('429') || msg.includes('quota') || msg.includes('rate') || 
-             msg.includes('limit') || msg.includes('resource_exhausted');
+      return (
+        msg.includes("429") ||
+        msg.includes("quota") ||
+        msg.includes("rate") ||
+        msg.includes("limit") ||
+        msg.includes("resource_exhausted")
+      );
     }
     return false;
+  };
+
+  // Own API mode should NOT depend on backend functions (more stable + avoids fetch failures)
+  const OWN_API_TEXT_MODELS = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash"] as const;
+
+  const generateStoryOwnApiDirect = async (prompt: string, key: string): Promise<string> => {
+    const trimmedKey = key.trim();
+    const ai = new GoogleGenAI({ apiKey: trimmedKey });
+
+    let lastError: unknown = null;
+
+    for (const model of OWN_API_TEXT_MODELS) {
+      try {
+        console.log(`[StoryCreator] Own API direct call (model=${model})`);
+        const result = await ai.models.generateContent({
+          model,
+          contents: prompt,
+          config: {
+            temperature: 0.9,
+            maxOutputTokens: 8192,
+          },
+        });
+
+        return result.text || "";
+      } catch (e) {
+        lastError = e;
+
+        const msg = e instanceof Error ? e.message.toLowerCase() : String(e).toLowerCase();
+
+        // Quota/rate-limit: let caller handle via Silent Retry
+        if (msg.includes("429") || msg.includes("quota") || msg.includes("rate") || msg.includes("resource_exhausted")) {
+          throw e;
+        }
+
+        // If model not available for this key, try next model
+        const isModelAccessIssue =
+          msg.includes("not found") ||
+          msg.includes("404") ||
+          msg.includes("model") && msg.includes("not") && msg.includes("available") ||
+          msg.includes("permission") ||
+          msg.includes("not supported");
+
+        if (isModelAccessIssue) continue;
+
+        // Other errors (invalid key, network, etc.) should stop immediately
+        throw e;
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error("Own API generation failed");
   };
 
   // Core generation function with silent retry for Own API mode
   const executeGeneration = async (prompt: string, retryCount: number = 0): Promise<string | null> => {
     try {
-      const result = await generateStory(prompt, apiType === "own" ? apiKey : undefined);
+      const result =
+        apiType === "own"
+          ? await generateStoryOwnApiDirect(prompt, apiKey)
+          : await generateStory(prompt, undefined);
+
       // Success - reset retry counter
       silentRetryCountRef.current = 0;
       isSilentRetryingRef.current = false;
       return result;
     } catch (e) {
-      console.error('[StoryCreator] Generation error:', e);
-      
+      console.error("[StoryCreator] Generation error:", e);
+
       // Own API mode: Silent retry on quota errors
       if (apiType === "own" && isQuotaError(e)) {
         if (retryCount < MAX_SILENT_RETRIES) {
-          console.log(`[StoryCreator] Own API quota hit, silent retry ${retryCount + 1}/${MAX_SILENT_RETRIES} in ${SILENT_RETRY_DELAY_MS / 1000}s`);
+          console.log(
+            `[StoryCreator] Own API quota hit, silent retry ${retryCount + 1}/${MAX_SILENT_RETRIES} in ${SILENT_RETRY_DELAY_MS / 1000}s`,
+          );
           isSilentRetryingRef.current = true;
-          
+
           // Wait and retry silently
-          await new Promise(resolve => setTimeout(resolve, SILENT_RETRY_DELAY_MS));
+          await new Promise((resolve) => setTimeout(resolve, SILENT_RETRY_DELAY_MS));
           return executeGeneration(prompt, retryCount + 1);
-        } else {
-          // Max retries exceeded - graceful stop
-          silentRetryCountRef.current = 0;
-          isSilentRetryingRef.current = false;
-          toast({
-            title: "⏸️ API Limit Reached",
-            description: "တစ်ချိန်ကြာပြီး ပြန်စပါ",
-            variant: "default",
-          });
-          return null;
         }
+
+        // Max retries exceeded - graceful stop
+        silentRetryCountRef.current = 0;
+        isSilentRetryingRef.current = false;
+        toast({
+          title: "⏸️ API Limit Reached",
+          description: "တစ်ချိန်ကြာပြီး ပြန်စပါ",
+          variant: "default",
+        });
+        return null;
       }
-      
+
       // App API mode or non-quota error: throw normally
       throw e;
     }
