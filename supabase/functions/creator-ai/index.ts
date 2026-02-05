@@ -9,6 +9,39 @@ const corsHeaders = {
 // Input validation constants
 const MAX_PROMPT_LENGTH = 50000;
 
+// Google Generative Language API helpers (Own API Key mode)
+async function listGoogleModels(apiKey: string): Promise<Array<{ name?: string; supportedGenerationMethods?: string[] }>> {
+  const resp = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
+    { method: "GET" },
+  );
+
+  if (!resp.ok) {
+    const t = await resp.text();
+    throw new Error(`ListModels failed: ${resp.status}: ${t.substring(0, 300)}`);
+  }
+
+  const data = await resp.json();
+  return Array.isArray(data?.models) ? data.models : [];
+}
+
+async function pickGenerateContentModels(apiKey: string, preferred: string[], max: number): Promise<string[]> {
+  const models = await listGoogleModels(apiKey);
+  const supported = models
+    .filter((m) => (m.supportedGenerationMethods || []).includes("generateContent"))
+    .map((m) => (m.name || "").replace(/^models\//, ""))
+    .filter(Boolean);
+
+  if (supported.length === 0) return [];
+
+  const supportedSet = new Set(supported);
+  const picked = preferred.filter((m) => supportedSet.has(m)).slice(0, max);
+
+  // If none of our preferred models are available for this key, fall back to whatever is available.
+  if (picked.length === 0) return supported.slice(0, max);
+  return picked;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -286,12 +319,37 @@ Create this image now. Output the generated image directly.`;
     } else {
       // Text generation
       if (isOwnApiKey) {
-        // Try multiple models in case one doesn't work with the user's API key
-        const textModels = [
+        // Try multiple models in case one doesn't work with the user's API key.
+        // IMPORTANT: Model availability varies per key + over time, so we auto-pick from ListModels.
+        const preferredTextModels = [
+          "gemini-3-flash-preview",
+          "gemini-3-flash",
+          "gemini-2.5-flash",
+          "gemini-2.5-pro",
           "gemini-2.0-flash",
+          "gemini-2.0-flash-lite",
           "gemini-1.5-flash",
           "gemini-1.5-pro",
         ];
+
+        let textModels: string[] = [];
+        try {
+          textModels = await pickGenerateContentModels(apiKey, preferredTextModels, 3);
+        } catch (e) {
+          console.error("[creator-ai] ListModels error:", e);
+          // If ListModels fails, we'll still attempt a conservative fallback.
+          textModels = ["gemini-2.0-flash"];
+        }
+
+        if (textModels.length === 0) {
+          return new Response(
+            JSON.stringify({
+              error:
+                "Your API key has no available text models for generateContent (please enable the Gemini API / ensure your key has model access).",
+            }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
         
         let lastError = "";
         
