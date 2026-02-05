@@ -38,10 +38,19 @@ serve(async (req) => {
       );
     }
 
-    // Validate voice name (allow any alphanumeric)
-    const sanitizedVoiceName = voiceName && /^[a-zA-Z0-9\-_]+$/.test(voiceName) 
-      ? voiceName 
-      : "Puck";
+    // Valid Gemini TTS voices (as of 2025)
+    const validVoices = [
+      "Puck", "Charon", "Kore", "Fenrir", "Aoede", "Leda", "Orus", "Zephyr",
+      "Altair", "Callirrhoe", "Autonoe", "Enceladus", "Iapetus", "Umbriel", "Algieba"
+    ];
+    
+    // Validate voice name - fallback to Puck if invalid
+    let sanitizedVoiceName = "Puck";
+    if (voiceName && /^[a-zA-Z0-9\-_]+$/.test(voiceName)) {
+      // Check if voice is in valid list (case-insensitive)
+      const matchedVoice = validVoices.find(v => v.toLowerCase() === voiceName.toLowerCase());
+      sanitizedVoiceName = matchedVoice || "Puck";
+    }
 
     // Validate language code
     const sanitizedLanguageCode = languageCode && /^[a-z]{2}(-[A-Z]{2})?$/.test(languageCode)
