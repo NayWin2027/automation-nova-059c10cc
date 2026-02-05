@@ -28,6 +28,10 @@ export function ToolCard({ icon: Icon, title, description, gradient, isPremium, 
       <div className="neon-orb-container mb-2">
         <div className="neon-orb">
           <div className="neon-orb-inner">
+           {/* Crystal reflection highlight */}
+           <div className="crystal-reflection" />
+           {/* Sparkle effect */}
+           <div className="crystal-sparkle" />
             <Icon className="w-5 h-5 text-white drop-shadow-lg" />
           </div>
           <div className="neon-orb-glow" />

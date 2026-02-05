@@ -149,31 +149,69 @@
     right: 0;
     bottom: 0;
     background: 
-      radial-gradient(ellipse at 20% 20%, hsl(250 70% 40% / 0.15) 0%, transparent 50%),
-      radial-gradient(ellipse at 80% 30%, hsl(220 80% 50% / 0.1) 0%, transparent 45%),
-      radial-gradient(ellipse at 50% 80%, hsl(270 60% 35% / 0.12) 0%, transparent 55%);
+     radial-gradient(ellipse at 30% 20%, hsl(180 100% 80% / 0.08) 0%, transparent 40%),
+     radial-gradient(ellipse at 70% 30%, hsl(300 100% 80% / 0.06) 0%, transparent 35%),
+     radial-gradient(ellipse at 50% 70%, hsl(45 100% 80% / 0.05) 0%, transparent 45%),
+     radial-gradient(ellipse at 15% 60%, hsl(220 100% 70% / 0.04) 0%, transparent 30%),
+     radial-gradient(ellipse at 85% 75%, hsl(160 100% 70% / 0.03) 0%, transparent 35%);
     pointer-events: none;
   }
 
   /* 3D Neon Glass Tool Card */
   .neon-glass-card {
-    background: linear-gradient(145deg, hsl(270 50% 12% / 0.6) 0%, hsl(240 45% 10% / 0.75) 100%);
-    border: 1px solid hsl(260 50% 40% / 0.3);
+   background: linear-gradient(
+     145deg,
+     hsl(0 0% 100% / 0.04) 0%,
+     hsl(0 0% 100% / 0.01) 50%,
+     hsl(220 50% 15% / 0.3) 100%
+   );
+   border: 1px solid transparent;
+   background-clip: padding-box;
     border-radius: 1rem;
-    backdrop-filter: blur(20px);
+   backdrop-filter: blur(24px);
+   position: relative;
     box-shadow: 
-      0 4px 20px hsl(260 70% 30% / 0.3),
-      inset 0 1px 0 hsl(270 60% 60% / 0.1);
+     0 8px 32px hsl(0 0% 0% / 0.4),
+     inset 0 1px 0 hsl(0 0% 100% / 0.1),
+     inset 0 -1px 0 hsl(0 0% 100% / 0.05);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
+ 
+   .neon-glass-card::before {
+     content: '';
+     position: absolute;
+     inset: 0;
+     border-radius: 1rem;
+     padding: 1px;
+     background: linear-gradient(
+       135deg,
+       hsl(180 100% 70% / 0.4) 0%,
+       hsl(280 100% 70% / 0.3) 50%,
+       hsl(45 100% 70% / 0.4) 100%
+     );
+     -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+     mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+     -webkit-mask-composite: xor;
+     mask-composite: exclude;
+     pointer-events: none;
+   }
 
   .neon-glass-card:hover {
-    border-color: hsl(45 100% 60% / 0.4);
     transform: translateY(-2px);
     box-shadow: 
-      0 8px 32px hsl(260 80% 50% / 0.25),
-      0 0 20px hsl(45 100% 50% / 0.15),
-      inset 0 1px 0 hsl(270 60% 70% / 0.15);
+     0 12px 40px hsl(180 80% 50% / 0.15),
+     0 0 30px hsl(300 80% 60% / 0.1),
+     0 0 60px hsl(45 100% 60% / 0.08),
+     inset 0 1px 0 hsl(0 0% 100% / 0.15);
+   }
+ 
+   .neon-glass-card:hover::before {
+     background: linear-gradient(
+       135deg,
+       hsl(180 100% 80% / 0.6) 0%,
+       hsl(300 100% 80% / 0.5) 50%,
+       hsl(45 100% 80% / 0.6) 100%
+     );
   }
 
   /* Neon Orb Container */
@@ -203,50 +241,103 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(
-      145deg,
-      hsl(270 80% 55%) 0%,
-      hsl(220 90% 50%) 50%,
-      hsl(45 100% 55%) 100%
-    );
+   background:
+     /* Bright highlight - top left shine */
+     radial-gradient(
+       ellipse at 30% 20%,
+       hsl(0 0% 100% / 0.95) 0%,
+       hsl(0 0% 100% / 0.4) 15%,
+       transparent 45%
+     ),
+     /* Secondary highlight - creates depth */
+     radial-gradient(
+       ellipse at 70% 30%,
+       hsl(0 0% 100% / 0.3) 0%,
+       transparent 30%
+     ),
+     /* Cyan reflection - bottom right */
+     radial-gradient(
+       ellipse at 70% 80%,
+       hsl(180 90% 70% / 0.5) 0%,
+       transparent 45%
+     ),
+     /* Magenta reflection - bottom left */
+     radial-gradient(
+       ellipse at 20% 70%,
+       hsl(300 90% 70% / 0.4) 0%,
+       transparent 40%
+     ),
+     /* Gold reflection - top right */
+     radial-gradient(
+       ellipse at 85% 25%,
+       hsl(45 100% 70% / 0.5) 0%,
+       transparent 35%
+     ),
+     /* Base gradient - deep crystal colors */
+     linear-gradient(
+       145deg,
+       hsl(200 70% 55%) 0%,
+       hsl(280 60% 50%) 40%,
+       hsl(340 70% 50%) 70%,
+       hsl(20 80% 55%) 100%
+     );
     box-shadow: 
-      0 4px 16px hsl(270 80% 50% / 0.5),
-      0 0 24px hsl(220 90% 50% / 0.4),
-      inset 0 2px 4px hsl(0 0% 100% / 0.3),
-      inset 0 -2px 8px hsl(270 80% 30% / 0.4);
+     /* Inner glass shine - top */
+     inset 0 6px 16px hsl(0 0% 100% / 0.6),
+     /* Inner shadow - bottom */
+     inset 0 -6px 16px hsl(240 60% 25% / 0.4),
+     /* Inner left highlight */
+     inset 4px 0 12px hsl(180 80% 70% / 0.2),
+     /* Inner right shadow */
+     inset -4px 0 12px hsl(300 60% 40% / 0.2),
+     /* Outer glow - multi-color */
+     0 0 20px hsl(180 90% 60% / 0.35),
+     0 0 40px hsl(300 80% 60% / 0.25),
+     0 0 60px hsl(45 100% 60% / 0.15),
+     /* Drop shadow */
+     0 8px 24px hsl(0 0% 0% / 0.5);
     transition: all 0.3s ease;
   }
 
   .neon-glass-card:hover .neon-orb-inner {
+   animation: gem-shimmer 2s ease infinite;
     box-shadow: 
-      0 6px 24px hsl(270 80% 50% / 0.6),
-      0 0 40px hsl(45 100% 50% / 0.5),
-      0 0 60px hsl(220 90% 50% / 0.3),
-      inset 0 2px 4px hsl(0 0% 100% / 0.4),
-      inset 0 -2px 8px hsl(270 80% 30% / 0.3);
+     inset 0 6px 20px hsl(0 0% 100% / 0.7),
+     inset 0 -6px 20px hsl(240 60% 25% / 0.3),
+     inset 4px 0 16px hsl(180 80% 70% / 0.3),
+     inset -4px 0 16px hsl(300 60% 40% / 0.3),
+     0 0 30px hsl(180 90% 60% / 0.5),
+     0 0 60px hsl(300 80% 60% / 0.4),
+     0 0 90px hsl(45 100% 60% / 0.25),
+     0 12px 32px hsl(0 0% 0% / 0.4);
     transform: scale(1.08);
   }
 
   .neon-orb-glow {
     position: absolute;
-    inset: -4px;
+   inset: -6px;
     border-radius: 50%;
-    background: linear-gradient(
-      135deg,
-      hsl(270 100% 60% / 0.4) 0%,
-      hsl(220 100% 60% / 0.3) 50%,
-      hsl(45 100% 60% / 0.4) 100%
+   background: conic-gradient(
+     from 0deg,
+     hsl(0 100% 70% / 0.3),
+     hsl(60 100% 70% / 0.3),
+     hsl(120 100% 70% / 0.3),
+     hsl(180 100% 70% / 0.3),
+     hsl(240 100% 70% / 0.3),
+     hsl(300 100% 70% / 0.3),
+     hsl(360 100% 70% / 0.3)
     );
-    filter: blur(8px);
+   filter: blur(10px);
     z-index: 0;
-    opacity: 0.7;
+   opacity: 0.6;
     transition: all 0.3s ease;
   }
 
   .neon-glass-card:hover .neon-orb-glow {
     opacity: 1;
-    filter: blur(12px);
-    inset: -8px;
+   filter: blur(14px);
+   inset: -10px;
+   animation: glow-rotate 3s linear infinite;
   }
 
   .neon-orb-ring {
@@ -254,19 +345,99 @@
     inset: -2px;
     border-radius: 50%;
     border: 2px solid transparent;
-    background: linear-gradient(135deg, hsl(270 90% 70% / 0.5), hsl(45 100% 60% / 0.5)) border-box;
+   background: conic-gradient(
+     from 0deg,
+     hsl(0 100% 70%),
+     hsl(45 100% 70%),
+     hsl(120 100% 70%),
+     hsl(180 100% 70%),
+     hsl(220 100% 70%),
+     hsl(280 100% 70%),
+     hsl(320 100% 70%),
+     hsl(360 100% 70%)
+   ) border-box;
     -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
     mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;
     mask-composite: exclude;
     z-index: 1;
-    animation: ring-rotate 4s linear infinite;
+   animation: ring-rotate 3s linear infinite;
+   opacity: 0.7;
+   }
+ 
+   .neon-glass-card:hover .neon-orb-ring {
+     opacity: 1;
   }
 
   @keyframes ring-rotate {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
   }
+ 
+   @keyframes glow-rotate {
+     from { transform: rotate(0deg); }
+     to { transform: rotate(360deg); }
+   }
+ 
+   @keyframes gem-shimmer {
+     0%, 100% { 
+       filter: hue-rotate(0deg) brightness(1) saturate(1);
+     }
+     25% {
+       filter: hue-rotate(15deg) brightness(1.15) saturate(1.1);
+     }
+     50% { 
+       filter: hue-rotate(30deg) brightness(1.25) saturate(1.2);
+     }
+     75% {
+       filter: hue-rotate(15deg) brightness(1.15) saturate(1.1);
+     }
+   }
+ 
+   @keyframes sparkle-float {
+     0%, 100% {
+       opacity: 0.3;
+       transform: translate(0, 0) scale(1);
+     }
+     50% {
+       opacity: 1;
+       transform: translate(-2px, -2px) scale(1.2);
+     }
+   }
+ 
+   /* Crystal reflection layer */
+   .crystal-reflection {
+     position: absolute;
+     top: 15%;
+     left: 20%;
+     width: 30%;
+     height: 20%;
+     background: linear-gradient(
+       135deg,
+       hsl(0 0% 100% / 0.4) 0%,
+       hsl(0 0% 100% / 0.1) 50%,
+       transparent 100%
+     );
+     border-radius: 50%;
+     filter: blur(2px);
+     pointer-events: none;
+     z-index: 3;
+   }
+ 
+   /* Sparkle effect */
+   .crystal-sparkle {
+     position: absolute;
+     top: 20%;
+     left: 25%;
+     width: 6px;
+     height: 6px;
+     background: hsl(0 0% 100%);
+     border-radius: 50%;
+     box-shadow: 0 0 8px hsl(0 0% 100%), 0 0 16px hsl(180 100% 80%);
+     animation: sparkle-float 2s ease-in-out infinite;
+     pointer-events: none;
+     z-index: 4;
+   }
 
   /* Legacy support - keep old class for compatibility */
   .premium-tool-card {
@@ -288,13 +459,41 @@
 
   /* Compact Premium Navigation Glass */
   .premium-nav-glass {
-    background: linear-gradient(180deg, hsl(250 45% 20% / 0.9) 0%, hsl(260 40% 14% / 0.95) 100%);
-    border: 1px solid hsl(250 35% 35% / 0.4);
+   background: linear-gradient(
+     180deg, 
+     hsl(0 0% 100% / 0.05) 0%, 
+     hsl(220 40% 12% / 0.9) 50%,
+     hsl(240 35% 10% / 0.95) 100%
+   );
+   border: 1px solid transparent;
     border-radius: 1.25rem;
-    backdrop-filter: blur(24px);
+   backdrop-filter: blur(30px);
+   position: relative;
     box-shadow: 
-      0 4px 20px hsl(0 0% 0% / 0.35),
-      inset 0 1px 0 hsl(250 50% 45% / 0.08);
+     0 8px 32px hsl(0 0% 0% / 0.5),
+     0 0 20px hsl(180 80% 60% / 0.1),
+     0 0 40px hsl(300 80% 60% / 0.05),
+     inset 0 1px 0 hsl(0 0% 100% / 0.15),
+     inset 0 -1px 0 hsl(0 0% 100% / 0.05);
+   }
+ 
+   .premium-nav-glass::before {
+     content: '';
+     position: absolute;
+     inset: 0;
+     border-radius: 1.25rem;
+     padding: 1px;
+     background: linear-gradient(
+       90deg,
+       hsl(180 100% 70% / 0.3) 0%,
+       hsl(280 100% 70% / 0.2) 50%,
+       hsl(45 100% 70% / 0.3) 100%
+     );
+     -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+     mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+     -webkit-mask-composite: xor;
+     mask-composite: exclude;
+     pointer-events: none;
   }
 
   /* Premium Banner */
