@@ -8,11 +8,13 @@ import { useAdmin } from "@/hooks/useAdmin";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { 
-  Settings, Palette, Save, RefreshCw, Lock, Unlock, Crown,
-  Zap, Edit3, Gift, Key, Server
+   Settings, Palette, Save, RefreshCw, Lock, Unlock, Crown,
+   Zap, Edit3, Gift, Key, Server, Shield
 } from "lucide-react";
 import TierLimitsEditor from "./TierLimitsEditor";
 import type { TierLimits } from "@/hooks/useToolSettings";
+ import { TwoFactorSetup } from "./TwoFactorSetup";
+ import { useAuth } from "@/hooks/useAuth";
 
 interface BrandingSettings {
   appName: string;
@@ -105,9 +107,10 @@ const OnOffBadge = ({ checked }: { checked: boolean }) => (
 const AdminSettingsTab: React.FC = () => {
   const { toast } = useToast();
   const { getAppSettings, updateAppSettings } = useAdmin();
+   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [activeSection, setActiveSection] = useState<'access' | 'branding' | 'tools'>('access');
+   const [activeSection, setActiveSection] = useState<'access' | 'branding' | 'tools' | 'security'>('access');
 
   const [branding, setBranding] = useState<BrandingSettings>({
     appName: "MediaMaster",
@@ -283,6 +286,15 @@ const AdminSettingsTab: React.FC = () => {
           Access Control
         </button>
         <button
+           onClick={() => setActiveSection('security')}
+           className={`px-3 py-1.5 rounded-md text-2xs font-medium transition-colors ${
+             activeSection === 'security' ? 'bg-card text-foreground' : 'text-muted-foreground hover:text-foreground'
+           }`}
+         >
+           <Shield className="w-3 h-3 inline mr-1" />
+           Security
+         </button>
+         <button
           onClick={() => setActiveSection('tools')}
           className={`px-3 py-1.5 rounded-md text-2xs font-medium transition-colors ${
             activeSection === 'tools' ? 'bg-card text-foreground' : 'text-muted-foreground hover:text-foreground'
@@ -873,6 +885,13 @@ const AdminSettingsTab: React.FC = () => {
           </CardContent>
         </Card>
       )}
+ 
+       {/* Security Section */}
+       {activeSection === 'security' && user && (
+         <div className="space-y-4">
+           <TwoFactorSetup userId={user.id} />
+         </div>
+       )}
     </div>
   );
 };

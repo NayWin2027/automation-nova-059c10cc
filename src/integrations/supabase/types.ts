@@ -59,6 +59,36 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_totp_secrets: {
+        Row: {
+          created_at: string
+          id: string
+          is_enabled: boolean
+          totp_secret: string
+          updated_at: string
+          user_id: string
+          verified_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          totp_secret: string
+          updated_at?: string
+          user_id: string
+          verified_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          totp_secret?: string
+          updated_at?: string
+          user_id?: string
+          verified_at?: string | null
+        }
+        Relationships: []
+      }
       app_settings: {
         Row: {
           id: string
@@ -297,6 +327,7 @@ export type Database = {
       }
     }
     Functions: {
+      check_admin_2fa_status: { Args: { _user_id: string }; Returns: Json }
       count_user_devices: { Args: { _user_id: string }; Returns: number }
       deduct_user_credits: {
         Args: { _is_own_api?: boolean; _tool_id: string; _user_id: string }
