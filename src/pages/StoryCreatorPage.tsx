@@ -5,6 +5,11 @@ import { Home, Loader2, Lock } from "lucide-react";
 import { useSecureApiKey } from "@/hooks/useSecureApiKey";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useApiAccess } from "@/hooks/useApiAccess";
+import { useToast } from "@/hooks/use-toast";
+
+// Silent retry configuration for Own API mode
+const MAX_SILENT_RETRIES = 3;
+const SILENT_RETRY_DELAY_MS = 30000; // 30 seconds
 
 type Archetype = "CLASSIC" | "ROUGH" | "VILLAIN" | "AI_AUTO";
 
@@ -172,12 +177,17 @@ const PLOT_FOCUS = [
 
 const StoryView: React.FC = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const { isAllowed, isLoading: authLoading } = useAuthGuard("story");
   const { appApiAllowed, ownApiAllowed, defaultApiMode, isLoading: accessLoading } = useApiAccess();
 
   const [apiType, setApiType] = useState<"app" | "own">("app");
   const { apiKey, setApiKey } = useSecureApiKey("master_story_api_key");
   const [title, setTitle] = useState("");
+
+  // Silent retry tracking for Own API mode
+  const silentRetryCountRef = useRef(0);
+  const isSilentRetryingRef = useRef(false);
 
   // Sync apiType with access control
   useEffect(() => {
@@ -273,6 +283,54 @@ const StoryView: React.FC = () => {
     setPace(randomPace);
     setEndingStyle(randomEnding);
     setCreativity(Math.floor(Math.random() * 20) + 80);
+  };
+
+  // Helper: Check if error is quota/rate limit related
+  const isQuotaError = (error: unknown): boolean => {
+    if (error instanceof Error) {
+      const msg = error.message.toLowerCase();
+      return msg.includes('429') || msg.includes('quota') || msg.includes('rate') || 
+             msg.includes('limit') || msg.includes('resource_exhausted');
+    }
+    return false;
+  };
+
+  // Core generation function with silent retry for Own API mode
+  const executeGeneration = async (prompt: string, retryCount: number = 0): Promise<string | null> => {
+    try {
+      const result = await generateStory(prompt, apiType === "own" ? apiKey : undefined);
+      // Success - reset retry counter
+      silentRetryCountRef.current = 0;
+      isSilentRetryingRef.current = false;
+      return result;
+    } catch (e) {
+      console.error('[StoryCreator] Generation error:', e);
+      
+      // Own API mode: Silent retry on quota errors
+      if (apiType === "own" && isQuotaError(e)) {
+        if (retryCount < MAX_SILENT_RETRIES) {
+          console.log(`[StoryCreator] Own API quota hit, silent retry ${retryCount + 1}/${MAX_SILENT_RETRIES} in ${SILENT_RETRY_DELAY_MS / 1000}s`);
+          isSilentRetryingRef.current = true;
+          
+          // Wait and retry silently
+          await new Promise(resolve => setTimeout(resolve, SILENT_RETRY_DELAY_MS));
+          return executeGeneration(prompt, retryCount + 1);
+        } else {
+          // Max retries exceeded - graceful stop
+          silentRetryCountRef.current = 0;
+          isSilentRetryingRef.current = false;
+          toast({
+            title: "⏸️ API Limit Reached",
+            description: "တစ်ချိန်ကြာပြီး ပြန်စပါ",
+            variant: "default",
+          });
+          return null;
+        }
+      }
+      
+      // App API mode or non-quota error: throw normally
+      throw e;
+    }
   };
 
   const handleGenerate = async () => {
@@ -384,7 +442,7 @@ const StoryView: React.FC = () => {
     `;
 
     try {
-      const result = await generateStory(prompt, apiType === "own" ? apiKey : undefined);
+      const result = await executeGeneration(prompt);
       if (result) {
         setStorySegments((prev) => [...prev, result]);
         setCurrentSegmentIndex((prev) => prev + 1);
@@ -393,7 +451,17 @@ const StoryView: React.FC = () => {
       }
       setTimeout(() => document.getElementById("story-result")?.scrollIntoView({ behavior: "smooth" }), 100);
     } catch (e) {
-      alert("Error occurred. Please check API Key.");
+      // App API mode: show error alert
+      if (apiType === "app") {
+        alert("Error occurred. Please try again later.");
+      } else {
+        // Own API: non-quota error
+        toast({
+          title: "Generation Failed",
+          description: "API Key စစ်ပြီး ပြန်စပါ",
+          variant: "destructive",
+        });
+      }
     } finally {
       setLoading(false);
     }
