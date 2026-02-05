@@ -25,10 +25,15 @@ async function listGoogleModels(apiKey: string): Promise<Array<{ name?: string; 
   return Array.isArray(data?.models) ? data.models : [];
 }
 
-async function pickGenerateContentModels(apiKey: string, preferred: string[], max: number): Promise<string[]> {
+async function pickModels(
+  apiKey: string,
+  preferred: string[],
+  method: string,
+  max: number
+): Promise<string[]> {
   const models = await listGoogleModels(apiKey);
   const supported = models
-    .filter((m) => (m.supportedGenerationMethods || []).includes("generateContent"))
+    .filter((m) => (m.supportedGenerationMethods || []).includes(method))
     .map((m) => (m.name || "").replace(/^models\//, ""))
     .filter(Boolean);
 
@@ -138,16 +143,34 @@ serve(async (req) => {
     if (sanitizedType === 'image') {
       // Image generation
       if (isOwnApiKey) {
-        const imageModels = [
+        // Dynamic model discovery for image generation
+        const preferredImageModels = [
           "gemini-2.0-flash-preview-image-generation",
-          "imagen-3.0-generate-002",
           "gemini-2.0-flash-exp-image-generation",
+          "imagen-3.0-generate-002",
         ];
-        
+
+        let imageModels: string[] = [];
+        try {
+          imageModels = await pickModels(apiKey, preferredImageModels, "generateContent", 3);
+          console.log("[creator-ai] Available image models:", imageModels);
+        } catch (e) {
+          console.error("[creator-ai] ListModels error for images:", e);
+        }
+
+        if (imageModels.length === 0) {
+          return new Response(
+            JSON.stringify({
+              error: "Your API key has no image generation models available. Image generation requires a paid Google Cloud API key with the Imagen API enabled, or use App API mode instead.",
+            }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
         let lastError = "";
         
         for (const model of imageModels) {
-          console.log("[creator-ai] Trying model:", model);
+          console.log("[creator-ai] Trying image model:", model);
           
           try {
             const response = await fetch(
@@ -189,7 +212,10 @@ serve(async (req) => {
           }
         }
         
-        throw new Error("Image generation failed - your API key may not have image generation enabled");
+        return new Response(
+          JSON.stringify({ error: `Image generation failed: ${lastError}. Try App API mode for image generation.` }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       } else {
         // Use Lovable AI Gateway
         const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -334,7 +360,7 @@ Create this image now. Output the generated image directly.`;
 
         let textModels: string[] = [];
         try {
-          textModels = await pickGenerateContentModels(apiKey, preferredTextModels, 3);
+          textModels = await pickModels(apiKey, preferredTextModels, "generateContent", 3);
         } catch (e) {
           console.error("[creator-ai] ListModels error:", e);
           // If ListModels fails, we'll still attempt a conservative fallback.
