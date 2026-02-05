@@ -1,1005 +1,496 @@
-import React, { useState, useRef, useEffect } from "react";
-import { generateThumbnail } from "@/services/geminiService";
+import React, { useState, useEffect } from "react";
+import { translateText } from "../services/geminiService";
+import {
+  Lock,
+  ChevronDown,
+  Check,
+  Copy,
+  Zap,
+  Info,
+  Loader2,
+  Sparkles,
+  Wand2,
+  MessageSquareQuote,
+  ShieldCheck,
+} from "lucide-react";
 
-type Position = "UPON LEFT" | "UPON RIGHT" | "BUTTON LEFT" | "BUTTON RIGHT" | "CENTER";
-type AspectRatio = "1:1" | "16:9" | "9:16" | "4:3" | "3:4";
-type FontEffect =
-  | "CLASSIC"
-  | "STICKER_POP"
-  | "3D_OFFSET"
-  | "CHROME_GLOW"
-  | "NEON_STROKE"
-  | "DARK_PLATE"
-  | "FIRE_GLOW"
-  | "ICY_FROST"
-  | "GOLDEN_METAL"
-  | "VAPORWAVE"
-  | "CHALK_BOARD"
-  | "COMIC_BOOM"
-  | "LUXURY_ENGRAVE"
-  | "GHOST_FADE"
-  | "ROYAL_SILK"
-  | "CYBER_GLITCH";
+type ApiType = "app" | "own";
 
-interface TextStyle {
-  id: string;
-  label: string;
-  fill: string;
-  stroke: string;
-  glow: string;
-  secondary?: string;
-}
+const LANGUAGES = [
+  "BURMESE (SPOKEN)",
+  "ENGLISH",
+  "JAPANESE",
+  "KOREAN",
+  "THAI",
+  "VIETNAMESE",
+  "CHINESE (SIMPLIFIED)",
+  "CHINESE (TRADITIONAL)",
+  "HINDI",
+  "INDONESIAN",
+  "MALAY",
+  "FRENCH",
+  "GERMAN",
+  "SPANISH",
+  "ITALIAN",
+  "RUSSIAN",
+  "PORTUGUESE",
+  "ARABIC",
+  "TURKISH",
+  "BENGALI",
+  "PUNJABI",
+  "TELUGU",
+  "MARATHI",
+  "TAMIL",
+  "URDU",
+  "GUJARATI",
+  "KANNADA",
+  "MALAYALAM",
+  "FILIPINO",
+  "KHMER",
+  "LAO",
+  "AFRIKAANS",
+  "ALBANIAN",
+  "AMHARIC",
+  "ARMENIAN",
+  "AZERBAIJANI",
+  "BASQUE",
+  "BELARUSIAN",
+  "BOSNIAN",
+  "BULGARIAN",
+  "CATALAN",
+  "CROATIAN",
+  "CZECH",
+  "DANISH",
+  "DUTCH",
+  "ESTONIAN",
+  "FINNISH",
+  "GALICIAN",
+  "GEORGIAN",
+  "GREEK",
+  "HEBREW",
+  "HUNGARIAN",
+  "ICELANDIC",
+  "IRISH",
+  "KAZAKH",
+  "KYRGYZ",
+  "LATVIAN",
+  "LITHUANIAN",
+  "MACEDONIAN",
+  "MALAGASY",
+  "MALTESE",
+  "MONGOLIAN",
+  "NEPALI",
+  "NORWEGIAN",
+  "PERSIAN",
+  "POLISH",
+  "ROMANIAN",
+  "SERBIAN",
+  "SINHALA",
+  "SLOVAK",
+  "SLOVENIAN",
+  "SOMALI",
+  "SWAHILI",
+  "SWEDISH",
+  "TAJIK",
+  "UKRAINIAN",
+  "UZBEK",
+  "ZULU",
+  "XHOSA",
+  "YORUBA",
+  "IGBO",
+  "MAORI",
+  "WELSH",
+  "LATIN",
+  "ESPERANTO",
+  "PASHTO",
+  "SINDHI",
+  "KURDISH",
+  "HAWAIIAN",
+  "SAMOAN",
+  "JAVANESE",
+  "SUNDANESE",
+  "CEBUANO",
+];
 
-const PREMIUM_COLORS: TextStyle[] = [
+const TRANSLATE_MODES = [
   {
-    id: "GOLD",
-    label: "LUXURY GOLD",
-    fill: "#FFD700",
-    stroke: "#4a3701",
-    glow: "rgba(251, 191, 36, 0.8)",
-    secondary: "#f59e0b",
+    id: 1,
+    title: "1: PURE TRANSLATION SCRIPT",
+    desc: "တိကျပြီး ပရော်ဖက်ရှင်နယ်ကျသော စကားပြောဟန်",
+    color: "bg-indigo-600",
   },
   {
-    id: "CYAN",
-    label: "ELECTRIC CYAN",
-    fill: "#00FFFF",
-    stroke: "#003333",
-    glow: "rgba(0, 255, 255, 0.9)",
-    secondary: "#0891b2",
+    id: 2,
+    title: "2: DEEP MEANING & INSIGHTS",
+    desc: "ဇာတ်ကားနှင့် သင်ခန်းစာများအတွက် အတွင်းနက် အဓိပ္ပာယ်",
+    color: "bg-violet-600",
   },
   {
-    id: "RUBY",
-    label: "VIVID RUBY",
-    fill: "#FF003F",
-    stroke: "#33000d",
-    glow: "rgba(255, 0, 63, 0.7)",
-    secondary: "#be123c",
-  },
-  {
-    id: "LIME",
-    label: "TOXIC LIME",
-    fill: "#32CD32",
-    stroke: "#0a290a",
-    glow: "rgba(50, 205, 50, 0.8)",
-    secondary: "#15803d",
-  },
-  {
-    id: "PURPLE",
-    label: "ROYAL PURPLE",
-    fill: "#BF40BF",
-    stroke: "#2e0a2e",
-    glow: "rgba(191, 64, 191, 0.8)",
-    secondary: "#7e22ce",
-  },
-  {
-    id: "PINK",
-    label: "NEON PINK",
-    fill: "#FF1493",
-    stroke: "#33001a",
-    glow: "rgba(255, 20, 147, 1)",
-    secondary: "#db2777",
-  },
-  {
-    id: "EMERALD",
-    label: "DEEP EMERALD",
-    fill: "#50C878",
-    stroke: "#064e3b",
-    glow: "rgba(16, 185, 129, 0.6)",
-    secondary: "#047857",
-  },
-  {
-    id: "ORANGE",
-    label: "PUNCHY ORANGE",
-    fill: "#FF4500",
-    stroke: "#451a03",
-    glow: "rgba(255, 69, 0, 0.7)",
-    secondary: "#ea580c",
-  },
-  {
-    id: "WHITE",
-    label: "CLEAN WHITE",
-    fill: "#FFFFFF",
-    stroke: "#222222",
-    glow: "rgba(255, 255, 255, 0.5)",
-    secondary: "#f8fafc",
-  },
-  {
-    id: "BLACK",
-    label: "VOID BLACK",
-    fill: "#000000",
-    stroke: "#FFFFFF",
-    glow: "rgba(0,0,0,0.5)",
-    secondary: "#1e293b",
-  },
-  {
-    id: "ELECTRIC_PURP",
-    label: "ELECTRIC PURPLE",
-    fill: "#A855F7",
-    stroke: "#3b0764",
-    glow: "rgba(168, 85, 247, 0.9)",
-    secondary: "#d8b4fe",
-  },
-  {
-    id: "BLOOD_MOON",
-    label: "BLOOD MOON",
-    fill: "#7F1D1D",
-    stroke: "#450a0a",
-    glow: "rgba(127, 29, 29, 0.8)",
-    secondary: "#ef4444",
-  },
-  {
-    id: "MINT_MAGIC",
-    label: "MINT MAGIC",
-    fill: "#2DD4BF",
-    stroke: "#134e4a",
-    glow: "rgba(45, 212, 191, 0.8)",
-    secondary: "#99f6e4",
-  },
-  {
-    id: "SUNSET_GLOW",
-    label: "SUNSET GLOW",
-    fill: "#F97316",
-    stroke: "#7c2d12",
-    glow: "rgba(249, 115, 22, 0.8)",
-    secondary: "#fdba74",
-  },
-  {
-    id: "COBALT_STORM",
-    label: "COBALT STORM",
-    fill: "#1D4ED8",
-    stroke: "#172554",
-    glow: "rgba(29, 78, 216, 0.8)",
-    secondary: "#60a5fa",
-  },
-  {
-    id: "ICE_CAVERN",
-    label: "ICE CAVERN",
-    fill: "#0EA5E9",
-    stroke: "#082f49",
-    glow: "rgba(14, 165, 233, 0.7)",
-    secondary: "#7dd3fc",
-  },
-  {
-    id: "VOLCANIC",
-    label: "VOLCANIC RED",
-    fill: "#B91C1C",
-    stroke: "#450a0a",
-    glow: "rgba(185, 28, 28, 0.9)",
-    secondary: "#f87171",
-  },
-  {
-    id: "OBSIDIAN",
-    label: "OBSIDIAN TEAL",
-    fill: "#0D9488",
-    stroke: "#042f2e",
-    glow: "rgba(13, 148, 136, 0.6)",
-    secondary: "#5eead4",
-  },
-  {
-    id: "AMBER_ELITE",
-    label: "AMBER ELITE",
-    fill: "#D97706",
-    stroke: "#451a03",
-    glow: "rgba(217, 119, 6, 0.8)",
-    secondary: "#fbbf24",
-  },
-  {
-    id: "ULTRA_VIOLET",
-    label: "ULTRA VIOLET",
-    fill: "#8B5CF6",
-    stroke: "#2e1065",
-    glow: "rgba(139, 92, 246, 0.9)",
-    secondary: "#c4b5fd",
+    id: 3,
+    title: "3: TITLE & THUMBNAIL HOOKS",
+    desc: "ပရိသတ်ဆွဲဆောင်မည့် Viral ခေါင်းစဉ်များ",
+    color: "bg-purple-600",
   },
 ];
 
-const ELITE_FONTS = [
-  { id: "Rubik Glitch", label: "GUTCH (GLITCH)" },
-  { id: "Pattaya", label: "HANDWRITTEN (လက်ရေးလှ)" },
-  { id: "Fascinate Inline", label: "ARTISTIC BRUSH (စုတ်တံ)" },
-  { id: "Kanit", label: "KANIT (MODERN)" },
-  { id: "Archivo Black", label: "ARCHIVO (HEAVY)" },
-  { id: "Anton", label: "ANTON (HOLLYWOOD)" },
-  { id: "Bebas Neue", label: "BEBAS (PREMIUM)" },
-  { id: "Padauk", label: "PADAUK (TRADITIONAL)" },
-  { id: "Montserrat", label: "CLEAN PRO" },
+const CREDIT_TIERS = [
+  { label: "စာလုံးရေ ၅,၀၀၀ အောက်", credits: 4 },
+  { label: "စာလုံးရေ ၁၀,၀၀၀ အောက်", credits: 8 },
+  { label: "စာလုံးရေ ၁၅,၀၀၀ အောက်", credits: 12 },
+  { label: "စာလုံးရေ ၂၀,၀၀၀ အောက်", credits: 16 },
+  { label: "စာလုံးရေ ၂၅,၀၀၀ အောက်", credits: 20 },
+  { label: "စာလုံးရေ ၃၀,၀၀၀ အောက်", credits: 24 },
 ];
 
-const LayerControl: React.FC<any> = ({
-  label,
-  text,
-  setText,
-  style,
-  setStyle,
-  effect,
-  setEffect,
-  font,
-  setFont,
-  pos,
-  setPos,
-  offset,
-  setOffset,
-  size,
-  setSize,
-  colorTheme,
-}) => {
-  const allEffects: FontEffect[] = [
-    "CLASSIC",
-    "STICKER_POP",
-    "3D_OFFSET",
-    "CHROME_GLOW",
-    "NEON_STROKE",
-    "DARK_PLATE",
-    "FIRE_GLOW",
-    "ICY_FROST",
-    "GOLDEN_METAL",
-    "VAPORWAVE",
-    "CHALK_BOARD",
-    "COMIC_BOOM",
-    "LUXURY_ENGRAVE",
-    "GHOST_FADE",
-    "ROYAL_SILK",
-    "CYBER_GLITCH",
-  ];
+const EMOTIONS = [
+  { label: "PROFESSIONAL", icon: "💎" },
+  { label: "NORMAL", icon: "😐" },
+  { label: "EXCITED", icon: "🔥" },
+  { label: "SERIOUS", icon: "💼" },
+  { label: "ROMANTIC", icon: "💖" },
+  { label: "FUNNY", icon: "🤣" },
+];
 
-  return (
-    <div className="space-y-4 bg-white/5 p-6 rounded-[32px] border border-white/5 shadow-inner backdrop-blur-sm transition-all hover:bg-white/[0.08]">
-      <div className="flex justify-between items-center px-1">
-        <label className={`text-[10px] font-black uppercase tracking-[0.2em] text-${colorTheme}-400`}>{label}</label>
-        <div className="flex items-center gap-2">
-          <span className="text-[8px] font-black text-slate-500 uppercase">Scale</span>
-          <input
-            type="range"
-            min="20"
-            max="500"
-            value={size}
-            onChange={(e) => setSize(parseInt(e.target.value))}
-            className={`w-24 h-1 accent-${colorTheme}-500 bg-white/10 rounded-lg appearance-none cursor-pointer`}
-          />
-        </div>
-      </div>
+const TranslateView: React.FC = () => {
+  const [apiType, setApiType] = useState<ApiType>("app");
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem("master_translate_api_key") || "");
+  const [text, setText] = useState("");
+  const [targetLang, setTargetLang] = useState("BURMESE (SPOKEN)");
+  const [selectedMode, setSelectedMode] = useState(1);
+  const [selectedTier, setSelectedTier] = useState<number | null>(null);
 
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder={`စာသားထည့်ပါ (${label})...`}
-        className="w-full h-16 bg-black/50 border border-white/10 rounded-2xl p-4 text-sm font-bold text-white outline-none focus:ring-1 focus:ring-blue-500/50 resize-none shadow-inner"
-      />
+  // Gift Features
+  const [selectedEmotion, setSelectedEmotion] = useState("PROFESSIONAL");
+  const [autoFormat, setAutoFormat] = useState(false);
+  const [paraphraseMode, setParaphraseMode] = useState(false);
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {/* Style Dropdown */}
-        <div className="space-y-1">
-          <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest ml-1">Color Style</p>
-          <select
-            value={style}
-            onChange={(e) => setStyle(e.target.value)}
-            className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-[10px] font-black text-white outline-none"
-          >
-            {PREMIUM_COLORS.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Effect Dropdown */}
-        <div className="space-y-1">
-          <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest ml-1">Text Effect</p>
-          <select
-            value={effect}
-            onChange={(e) => setEffect(e.target.value as FontEffect)}
-            className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-[10px] font-black text-white outline-none"
-          >
-            {allEffects.map((f) => (
-              <option key={f} value={f}>
-                {f.replace("_", " ")}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Font Dropdown */}
-        <div className="space-y-1">
-          <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest ml-1">Elite Font</p>
-          <select
-            value={font}
-            onChange={(e) => setFont(e.target.value)}
-            className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-[10px] font-black text-white outline-none"
-          >
-            {ELITE_FONTS.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 items-center border-t border-white/5 pt-3">
-        <div className="space-y-1">
-          <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest ml-1">Alignment</p>
-          <div className="grid grid-cols-5 gap-1">
-            {(["UPON LEFT", "UPON RIGHT", "CENTER", "BUTTON LEFT", "BUTTON RIGHT"] as Position[]).map((p) => (
-              <button
-                key={p}
-                onClick={() => setPos(p)}
-                className={`w-full py-2 rounded-lg text-[6px] font-black uppercase transition-all ${pos === p ? "bg-white text-black" : "bg-slate-800 text-slate-500"}`}
-                title={p}
-              >
-                {p
-                  .split(" ")
-                  .map((s) => s[0])
-                  .join("")}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="space-y-1">
-          <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest text-center">Precise Position</p>
-          <div className="flex items-center justify-center gap-2">
-            <button
-              onClick={() => setOffset((o: any) => ({ ...o, x: o.x - 5 }))}
-              className="w-6 h-6 bg-white/5 rounded text-[10px]"
-            >
-              ←
-            </button>
-            <button
-              onClick={() => setOffset((o: any) => ({ ...o, y: o.y - 5 }))}
-              className="w-6 h-6 bg-white/5 rounded text-[10px]"
-            >
-              ↑
-            </button>
-            <button
-              onClick={() => setOffset({ x: 0, y: 0 })}
-              className="px-2 py-1 bg-rose-500/10 text-rose-400 rounded text-[6px] font-black"
-            >
-              RST
-            </button>
-            <button
-              onClick={() => setOffset((o: any) => ({ ...o, y: o.y + 5 }))}
-              className="w-6 h-6 bg-white/5 rounded text-[10px]"
-            >
-              ↓
-            </button>
-            <button
-              onClick={() => setOffset((o: any) => ({ ...o, x: o.x + 5 }))}
-              className="w-6 h-6 bg-white/5 rounded text-[10px]"
-            >
-              →
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const ThumbnailView: React.FC = () => {
-  const [apiKey, setApiKey] = useState("");
-  const [genMode, setGenMode] = useState<"AUTO" | "REF">("AUTO");
-  const [selectedRatio, setSelectedRatio] = useState<AspectRatio>("16:9");
-  const [context, setContext] = useState("");
-
-  const [h1, setH1] = useState("");
-  const [h1Style, setH1Style] = useState("GOLD");
-  const [h1Effect, setH1Effect] = useState<FontEffect>("FIRE_GLOW"); // Gift Effect Default
-  const [h1Font, setH1Font] = useState("Rubik Glitch");
-  const [h1Pos, setH1Pos] = useState<Position>("CENTER");
-  const [h1Offset, setH1Offset] = useState({ x: 0, y: -15 });
-  const [h1Size, setH1Size] = useState(180);
-
-  const [h2, setH2] = useState("");
-  const [h2Style, setH2Style] = useState("CYAN");
-  const [h2Effect, setH2Effect] = useState<FontEffect>("NEON_STROKE");
-  const [h2Font, setH2Font] = useState("Padauk");
-  const [h2Pos, setH2Pos] = useState<Position>("CENTER");
-  const [h2Offset, setH2Offset] = useState({ x: 0, y: 15 });
-  const [h2Size, setH2Size] = useState(120);
-
-  const [desc, setDesc] = useState("");
-  const [descStyle, setDescStyle] = useState("WHITE");
-  const [descEffect, setDescEffect] = useState<FontEffect>("DARK_PLATE");
-  const [descFont, setDescFont] = useState("Montserrat");
-  const [descPos, setDescPos] = useState<Position>("BUTTON RIGHT");
-  const [descOffset, setDescOffset] = useState({ x: -10, y: -5 });
-  const [descSize, setDescSize] = useState(60);
-
-  const [referenceImages, setReferenceImages] = useState<string[]>([]);
-  const [logoImg, setLogoImg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [bgImage, setBgImage] = useState<string | null>(null);
-
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const bgImgRef = useRef<HTMLImageElement | null>(null);
-  const logoImgRef = useRef<HTMLImageElement | null>(null);
-
-  const RATIO_MAP: Record<AspectRatio, number> = {
-    "1:1": 1,
-    "16:9": 16 / 9,
-    "9:16": 9 / 16,
-    "4:3": 4 / 3,
-    "3:4": 3 / 4,
-  };
-
-  const drawLayer = (
-    ctx: CanvasRenderingContext2D,
-    text: string,
-    styleId: string,
-    effect: FontEffect,
-    font: string,
-    pos: Position,
-    offset: { x: number; y: number },
-    size: number,
-  ) => {
-    if (!text) return;
-    const style = PREMIUM_COLORS.find((s) => s.id === styleId) || PREMIUM_COLORS[0];
-
-    ctx.save();
-    ctx.font = `900 ${size}px '${font}', 'Padauk', sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-
-    let tx = ctx.canvas.width / 2,
-      ty = ctx.canvas.height / 2;
-    if (pos === "UPON LEFT") {
-      tx = ctx.canvas.width * 0.25;
-      ty = ctx.canvas.height * 0.25;
-    } else if (pos === "UPON RIGHT") {
-      tx = ctx.canvas.width * 0.75;
-      ty = ctx.canvas.height * 0.25;
-    } else if (pos === "BUTTON LEFT") {
-      tx = ctx.canvas.width * 0.25;
-      ty = ctx.canvas.height * 0.75;
-    } else if (pos === "BUTTON RIGHT") {
-      tx = ctx.canvas.width * 0.75;
-      ty = ctx.canvas.height * 0.75;
-    }
-
-    tx += offset.x * (ctx.canvas.width / 100);
-    ty += offset.y * (ctx.canvas.height / 100);
-
-    const lines = text.split("\n");
-    const lineHeight = size * 1.15;
-    const totalH = lines.length * lineHeight;
-    const startY = ty - totalH / 2 + lineHeight / 2;
-
-    lines.forEach((line, i) => {
-      const ly = startY + i * lineHeight;
-
-      if (effect === "FIRE_GLOW") {
-        // GIFT EFFECT: FIRING FONT
-        ctx.shadowColor = "#FF4500";
-        ctx.shadowBlur = size * 0.6;
-        const fireGrad = ctx.createLinearGradient(tx, ly - size / 2, tx, ly + size / 2);
-        fireGrad.addColorStop(0, "#FFFF00");
-        fireGrad.addColorStop(0.3, style.fill);
-        fireGrad.addColorStop(0.6, "#FF8C00");
-        fireGrad.addColorStop(1, "#FF4500");
-        ctx.fillStyle = fireGrad;
-
-        // Multi-pass for extra glow
-        ctx.strokeText(line, tx, ly);
-        ctx.fillText(line, tx, ly);
-
-        ctx.shadowColor = "#FFD700";
-        ctx.shadowBlur = size * 0.2;
-        ctx.fillText(line, tx, ly);
-      } else if (effect === "STICKER_POP") {
-        ctx.strokeStyle = "#FFFFFF";
-        ctx.lineWidth = size * 0.5;
-        ctx.lineJoin = "round";
-        ctx.strokeText(line, tx, ly);
-        ctx.shadowColor = "rgba(0,0,0,0.8)";
-        ctx.shadowBlur = 20;
-        ctx.strokeText(line, tx, ly);
-        ctx.shadowBlur = 0;
-        ctx.strokeStyle = style.stroke;
-        ctx.lineWidth = size * 0.18;
-        ctx.strokeText(line, tx, ly);
-        ctx.fillStyle = style.fill;
-        ctx.fillText(line, tx, ly);
-      } else if (effect === "3D_OFFSET") {
-        const depth = size * 0.15;
-        ctx.fillStyle = style.stroke;
-        for (let d = 1; d <= depth; d++) {
-          ctx.fillText(line, tx + d, ly + d);
-        }
-        ctx.strokeStyle = "rgba(0,0,0,0.8)";
-        ctx.lineWidth = size * 0.1;
-        ctx.strokeText(line, tx, ly);
-        ctx.fillStyle = style.fill;
-        ctx.fillText(line, tx, ly);
-      } else if (effect === "ICY_FROST") {
-        ctx.shadowColor = style.fill;
-        ctx.shadowBlur = size * 0.4;
-        const iceGrad = ctx.createLinearGradient(tx, ly - size / 2, tx, ly + size / 2);
-        iceGrad.addColorStop(0, "#FFFFFF");
-        iceGrad.addColorStop(0.5, style.secondary || style.fill);
-        iceGrad.addColorStop(1, style.fill);
-        ctx.fillStyle = iceGrad;
-        ctx.strokeStyle = "#FFFFFF";
-        ctx.lineWidth = size * 0.05;
-        ctx.strokeText(line, tx, ly);
-        ctx.fillText(line, tx, ly);
-      } else if (effect === "GOLDEN_METAL") {
-        const metalGrad = ctx.createLinearGradient(tx, ly - size / 2, tx, ly + size / 2);
-        metalGrad.addColorStop(0, style.secondary || "#FFF");
-        metalGrad.addColorStop(0.5, style.fill);
-        metalGrad.addColorStop(1, style.stroke);
-        ctx.fillStyle = metalGrad;
-        ctx.shadowColor = "rgba(0,0,0,0.8)";
-        ctx.shadowBlur = 15;
-        ctx.fillText(line, tx + 2, ly + 2);
-        ctx.fillText(line, tx, ly);
-      } else if (effect === "VAPORWAVE") {
-        ctx.fillStyle = style.secondary || "#00FFFF";
-        ctx.fillText(line, tx - 6, ly - 6);
-        ctx.fillStyle = style.fill === "#000000" ? "#FF00FF" : style.fill;
-        ctx.fillText(line, tx + 6, ly + 6);
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fillText(line, tx, ly);
-      } else if (effect === "CHALK_BOARD") {
-        ctx.strokeStyle = style.fill;
-        ctx.globalAlpha = 0.8;
-        ctx.lineWidth = size * 0.05;
-        ctx.setLineDash([5, 5]);
-        ctx.strokeText(line, tx, ly);
-        ctx.setLineDash([]);
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fillText(line, tx, ly);
-        ctx.globalAlpha = 1.0;
-      } else if (effect === "COMIC_BOOM") {
-        ctx.strokeStyle = "#000000";
-        ctx.lineWidth = size * 0.3;
-        ctx.strokeText(line, tx, ly);
-        ctx.fillStyle = style.fill;
-        ctx.fillText(line, tx, ly);
-        ctx.shadowColor = style.stroke;
-        ctx.shadowOffsetX = 8;
-        ctx.shadowOffsetY = 8;
-        ctx.fillText(line, tx, ly);
-      } else if (effect === "LUXURY_ENGRAVE") {
-        ctx.fillStyle = "rgba(0,0,0,0.6)";
-        ctx.fillText(line, tx + 4, ly + 4);
-        ctx.fillStyle = style.fill;
-        ctx.fillText(line, tx, ly);
-        ctx.globalCompositeOperation = "destination-out";
-        ctx.fillText(line, tx - 3, ly - 3);
-        ctx.globalCompositeOperation = "source-over";
-      } else if (effect === "CYBER_GLITCH") {
-        ctx.save();
-        ctx.fillStyle = style.secondary || "#00FFFF";
-        ctx.fillText(line, tx - 12, ly);
-        ctx.fillStyle = style.stroke === "#000000" ? "#FF00FF" : style.stroke;
-        ctx.fillText(line, tx + 12, ly);
-        ctx.restore();
-        ctx.fillStyle = style.fill === "#000000" ? "#FFFFFF" : style.fill;
-        ctx.fillText(line, tx, ly);
-      } else if (effect === "NEON_STROKE") {
-        ctx.shadowColor = style.glow;
-        ctx.shadowBlur = 40;
-        ctx.strokeStyle = style.fill;
-        ctx.lineWidth = size * 0.3;
-        ctx.strokeText(line, tx, ly);
-        ctx.strokeStyle = "white";
-        ctx.lineWidth = size * 0.08;
-        ctx.strokeText(line, tx, ly);
-        ctx.fillStyle = "#FFF";
-        ctx.fillText(line, tx, ly);
-      } else if (effect === "DARK_PLATE") {
-        const metrics = ctx.measureText(line);
-        const pad = size * 0.3;
-        ctx.fillStyle = "rgba(0,0,0,0.95)";
-        ctx.fillRect(tx - metrics.width / 2 - pad, ly - size / 2 - pad / 2, metrics.width + pad * 2, size + pad);
-        ctx.fillStyle = style.fill;
-        ctx.fillText(line, tx, ly);
-      } else if (effect === "CHROME_GLOW") {
-        ctx.shadowColor = style.glow;
-        ctx.shadowBlur = size * 0.6;
-        const grad = ctx.createLinearGradient(tx, ly - size / 2, tx, ly + size / 2);
-        grad.addColorStop(0, "#FFF");
-        grad.addColorStop(0.3, style.fill);
-        grad.addColorStop(0.7, style.fill);
-        grad.addColorStop(1, style.stroke);
-        ctx.fillStyle = grad;
-        ctx.strokeStyle = "black";
-        ctx.lineWidth = size * 0.2;
-        ctx.strokeText(line, tx, ly);
-        ctx.fillText(line, tx, ly);
-      } else {
-        ctx.shadowColor = "rgba(0,0,0,1)";
-        ctx.shadowBlur = 30;
-        ctx.strokeStyle = "#000";
-        ctx.lineWidth = size * 0.35;
-        ctx.strokeText(line, tx, ly);
-        ctx.fillStyle = style.fill;
-        ctx.fillText(line, tx, ly);
-      }
-    });
-    ctx.restore();
-  };
-
-  const drawThumbnail = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const w = 1280;
-    const h = 1280 / RATIO_MAP[selectedRatio];
-    canvas.width = w;
-    canvas.height = h;
-    ctx.clearRect(0, 0, w, h);
-    if (bgImgRef.current) {
-      ctx.drawImage(bgImgRef.current, 0, 0, w, h);
-    } else {
-      ctx.fillStyle = "#010409";
-      ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = "#1e293b";
-      ctx.font = "40px Anton";
-      ctx.textAlign = "center";
-      ctx.fillText("DESIGN CANVAS PREVIEW (HD)", w / 2, h / 2);
-    }
-    drawLayer(ctx, desc, descStyle, descEffect, descFont, descPos, descOffset, descSize);
-    drawLayer(ctx, h2, h2Style, h2Effect, h2Font, h2Pos, h2Offset, h2Size);
-    drawLayer(ctx, h1, h1Style, h1Effect, h1Font, h1Pos, h1Offset, h1Size);
-    if (logoImgRef.current) {
-      const lSize = w * 0.12;
-      ctx.save();
-      ctx.shadowColor = "rgba(0,0,0,0.7)";
-      ctx.shadowBlur = 40;
-      ctx.drawImage(logoImgRef.current, 50, h - lSize - 50, lSize, lSize);
-      ctx.restore();
-    }
-  };
+  const [result, setResult] = useState("");
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(drawThumbnail, 150);
-    return () => clearTimeout(timer);
-  }, [
-    h1,
-    h1Style,
-    h1Effect,
-    h1Font,
-    h1Pos,
-    h1Offset,
-    h1Size,
-    h2,
-    h2Style,
-    h2Effect,
-    h2Font,
-    h2Pos,
-    h2Offset,
-    h2Size,
-    desc,
-    descStyle,
-    descEffect,
-    descFont,
-    descPos,
-    descOffset,
-    descSize,
-    selectedRatio,
-    bgImage,
-  ]);
+    localStorage.setItem("master_translate_api_key", apiKey);
+  }, [apiKey]);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: "REF" | "LOGO") => {
-    if (e.target.files) {
-      const files = Array.from(e.target.files) as File[];
-      files.forEach((file) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = reader.result as string;
-          if (type === "REF") {
-            if (referenceImages.length < 7) setReferenceImages((prev) => [...prev, result]);
-          } else {
-            setLogoImg(result);
-            const img = new Image();
-            img.src = result;
-            img.onload = () => {
-              logoImgRef.current = img;
-              drawThumbnail();
-            };
-          }
-        };
-        reader.readAsDataURL(file);
-      });
+  const handleTranslate = async () => {
+    if (!text.trim()) return;
+    if (apiType === "app" && selectedTier === null) {
+      alert("ကျေးဇူးပြု၍ Credit Tier တစ်ခုကို အရင်ရွေးချယ်ပေးပါ။");
+      return;
     }
-  };
 
-  const handleGenerate = async () => {
-    if (!context && !h1) return alert("Vision သို့မဟုတ် Headline တစ်ခုခု အရင်ထည့်ပေးပါ။");
     setLoading(true);
+    setResult("");
+
     try {
-      const imgUrl = await generateThumbnail(context || h1, apiKey || undefined, {
-        referenceImgs: genMode === "REF" ? referenceImages : undefined,
-        aspectRatio: selectedRatio,
-      });
-      if (imgUrl) {
-        setBgImage(imgUrl);
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        img.src = imgUrl;
-        img.onload = () => {
-          bgImgRef.current = img;
-          drawThumbnail();
-          setLoading(false);
-        };
-      } else {
-        alert("AI Generation Error.");
-        setLoading(false);
-      }
-    } catch (error: any) {
-      alert(error.message);
+      const modeObj = TRANSLATE_MODES.find((m) => m.id === selectedMode);
+
+      const systemInstruction = targetLang.includes("BURMESE")
+        ? `STRICT RULE 1: Translate to SPOKEN BURMESE style. Use particles like 'တယ်', 'တာ', 'လဲ', 'ပေါ့'. 
+           STRICT RULE 2: NEVER USE THE PARTICLE 'နော်' (NAW) UNDER ANY CIRCUMSTANCES. IT IS FORBIDDEN.
+           STRICT RULE 3: NEVER use literary endings like 'သည်', '၏', '၍'.
+           TONE EMOTION: ${selectedEmotion}.
+           FORMATTING: ${autoFormat ? "Add [Visual Descriptions] and Script Formatting." : "Clean Flow."}
+           REWRITE STYLE: ${paraphraseMode ? "Use high-end creative Burmese literature terms but keep spoken particles." : "Direct Meaningful Translation."}
+           Focus: ${modeObj?.title}. ${modeObj?.desc}.`
+        : `Translate to ${targetLang}. Tone: ${selectedEmotion}. No introductory text. Focus: ${modeObj?.title}.`;
+
+      const response = await translateText(
+        `${systemInstruction}\n\nCONTENT TO PROCESS:\n${text}`,
+        targetLang,
+        apiType === "own" ? apiKey : undefined,
+      );
+
+      setResult(response || "");
+    } catch (error) {
+      console.error(error);
+      alert("AI Sync မအောင်မြင်ပါ။ API Key သို့မဟုတ် လိုင်းကို ပြန်စစ်ပေးပါ။");
+    } finally {
       setLoading(false);
     }
   };
 
+  const isReady = text.trim() && (apiType === "own" ? apiKey.trim() : selectedTier !== null);
+
   return (
-    <div className="space-y-6 pb-40 animate-in fade-in duration-500 max-w-5xl mx-auto px-2 text-white">
-      {/* 1. MONITOR PREVIEW (Sticky Top) */}
-      <div className="sticky top-20 z-[100] pb-2">
-        <div className="neon-glass rounded-[56px] p-6 space-y-5 border border-white/15 shadow-[0_0_100px_rgba(0,0,0,0.9)] overflow-hidden bg-black/80 backdrop-blur-3xl">
-          <div className="flex justify-between items-center px-4">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.5em]">LIVE HD MONITOR</span>
-            {bgImage && (
-              <button
-                onClick={() => {
-                  setBgImage(null);
-                  bgImgRef.current = null;
-                  drawThumbnail();
-                }}
-                className="text-[9px] font-black text-rose-500 uppercase hover:text-rose-400"
-              >
-                CLEAR CANVAS
-              </button>
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-40 px-1 max-w-2xl mx-auto">
+      {/* 1. API Switcher (Syncopate Font) */}
+      <div className="flex bg-slate-900/80 backdrop-blur-3xl p-1.5 rounded-[28px] border border-white/10 shadow-2xl max-w-sm mx-auto overflow-hidden">
+        <button
+          onClick={() => setApiType("app")}
+          className={`flex-1 py-3.5 rounded-2xl premium-font text-[8px] font-bold transition-all flex items-center justify-center gap-2 ${
+            apiType === "app"
+              ? "jewel-sapphire jewel-surface text-white shadow-xl scale-105"
+              : "text-slate-500 hover:text-slate-300"
+          }`}
+        >
+          APP ACCESS <Lock className="w-2.5 h-2.5 text-amber-400" />
+        </button>
+        <button
+          onClick={() => setApiType("own")}
+          className={`flex-1 py-3.5 rounded-2xl premium-font text-[8px] font-bold transition-all ${
+            apiType === "own"
+              ? "jewel-sapphire jewel-surface text-white shadow-xl scale-105"
+              : "text-slate-500 hover:text-slate-300"
+          }`}
+        >
+          PRIVATE API
+        </button>
+      </div>
+
+      {apiType === "own" && (
+        <div className="platinum-glass p-5 rounded-[32px] mb-6 animate-in zoom-in-95 duration-300 max-w-sm mx-auto border border-white/20">
+          <label className="text-[8px] font-black text-blue-500 tracking-[0.4em] uppercase mb-2 block ml-2 premium-font">
+            AUTHENTICATION KEY
+          </label>
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="PASTE AIza... KEY HERE"
+            className="w-full bg-black/50 border border-white/10 rounded-2xl px-6 h-14 text-xs font-black tracking-widest text-white outline-none focus:ring-1 focus:ring-blue-500 shadow-inner"
+          />
+        </div>
+      )}
+
+      {/* Main Interface */}
+      <div className="neon-glass rounded-[48px] p-8 md:p-12 space-y-12 border border-white/10 shadow-[0_0_100px_rgba(0,0,0,0.9)] relative overflow-hidden">
+        <div className="absolute -top-40 -left-40 w-80 h-80 bg-indigo-600/10 blur-[120px] rounded-full"></div>
+
+        {/* Source Text Input */}
+        <div className="space-y-4">
+          <div className="flex justify-between items-center px-2">
+            <label className="text-[10px] font-black text-indigo-400 tracking-[0.3em] uppercase flex items-center gap-2 premium-font">
+              <div className="w-1.5 h-3 bg-indigo-500 rounded-full animate-pulse"></div> CONTENT INPUT
+            </label>
+            <button
+              onClick={() => setText("")}
+              className="text-[8px] font-black text-rose-400 hover:text-rose-300 transition-colors uppercase tracking-widest"
+            >
+              CLEAR ALL
+            </button>
+          </div>
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="ဘာသာပြန်ဆိုလိုသော စာသားများကို ဒီနေရာတွင် ထည့်သွင်းပါ..."
+            className="w-full h-44 bg-black/40 border border-white/5 rounded-[32px] p-8 text-[14px] font-medium leading-relaxed text-slate-200 focus:border-indigo-500/50 outline-none resize-none custom-scrollbar shadow-inner"
+          />
+        </div>
+
+        {/* Surprise Feature 1: Emotion Tuner */}
+        <div className="space-y-4 bg-white/5 p-6 rounded-[36px] border border-white/5 shadow-inner">
+          <div className="flex justify-between items-center ml-2">
+            <h4 className="text-[9px] font-black text-amber-400 tracking-[0.2em] uppercase flex items-center gap-2 premium-font">
+              <Sparkles className="w-3 h-3" /> EMOTION TUNER
+            </h4>
+            {selectedEmotion === "PROFESSIONAL" && (
+              <span className="text-[7px] font-black text-emerald-400 uppercase tracking-widest flex items-center gap-1">
+                <ShieldCheck className="w-2.5 h-2.5" /> ELITE MODE ACTIVE
+              </span>
             )}
           </div>
+          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+            {EMOTIONS.map((emo) => (
+              <button
+                key={emo.label}
+                onClick={() => setSelectedEmotion(emo.label)}
+                className={`px-5 py-3 rounded-2xl shrink-0 flex items-center gap-2 transition-all border ${
+                  selectedEmotion === emo.label
+                    ? "jewel-gold text-white shadow-lg scale-105 border-white/20"
+                    : "bg-black/40 border-white/5 text-slate-500 hover:text-slate-300"
+                }`}
+              >
+                <span className="text-sm">{emo.icon}</span>
+                <span className="text-[8px] font-black tracking-tight uppercase premium-font">{emo.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
 
-          <div
-            className="bg-[#020617] rounded-[48px] overflow-hidden shadow-2xl relative border border-white/5 flex items-center justify-center max-h-[500px] group w-full"
-            style={{ aspectRatio: RATIO_MAP[selectedRatio] }}
-          >
-            <canvas
-              ref={canvasRef}
-              className="max-w-full max-h-full object-contain transition-transform duration-1000 group-hover:scale-[1.02]"
-            />
-            {!bgImage && !loading && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 opacity-30">
-                <div className="w-20 h-20 rounded-full border-2 border-dashed border-slate-700 flex items-center justify-center">
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
-                    <circle cx="9" cy="9" r="2" />
-                    <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
-                  </svg>
-                </div>
-                <span className="text-[11px] font-black uppercase tracking-[0.4em]">Ready for Generation</span>
+        {/* Target Language Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pb-2 border-b border-white/5">
+          <div className="space-y-1">
+            <h4 className="text-[11px] font-black text-white tracking-[0.3em] uppercase premium-font">
+              TARGET LANGUAGE
+            </h4>
+            <p className="text-[8px] font-bold text-slate-600 tracking-widest uppercase">
+              ၈၀ ကျော်သော ဘာသာစကားများကို ပံ့ပိုးပေးထားသည်
+            </p>
+          </div>
+          <div className="relative w-full sm:w-72">
+            <select
+              value={targetLang}
+              onChange={(e) => setTargetLang(e.target.value)}
+              className="w-full bg-slate-950 border border-white/10 rounded-2xl px-6 py-4 text-[10px] font-black text-white uppercase outline-none focus:ring-1 focus:ring-indigo-500 appearance-none cursor-pointer shadow-xl"
+            >
+              {LANGUAGES.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+          </div>
+        </div>
+
+        {/* Translation Modes (3 Types) */}
+        <div className="space-y-4">
+          {TRANSLATE_MODES.map((mode) => (
+            <button
+              key={mode.id}
+              onClick={() => setSelectedMode(mode.id)}
+              className={`w-full p-6 rounded-[32px] text-left transition-all border flex items-center gap-6 relative overflow-hidden group ${
+                selectedMode === mode.id
+                  ? `${mode.color} border-white/30 shadow-[0_0_40px_rgba(79,70,229,0.3)] scale-[1.02]`
+                  : "bg-black/40 border-white/5 hover:border-white/20"
+              }`}
+            >
+              <div
+                className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all ${selectedMode === mode.id ? "border-white bg-white/20" : "border-slate-700"}`}
+              >
+                {selectedMode === mode.id && (
+                  <div className="w-3.5 h-3.5 rounded-full bg-white shadow-xl animate-in zoom-in-50"></div>
+                )}
               </div>
-            )}
-            {loading && (
-              <div className="absolute inset-0 bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center gap-6 z-[110] animate-in fade-in">
-                <div className="relative">
-                  <div className="w-20 h-20 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
-                  <div className="absolute inset-0 flex items-center justify-center text-blue-400 text-xs font-black animate-pulse">
-                    AI
-                  </div>
-                </div>
-                <p className="text-[12px] font-black text-blue-400 uppercase tracking-[0.6em] animate-pulse">
-                  Synthesizing Masterpiece...
+              <div className="flex-1">
+                <h5
+                  className={`text-[13px] font-black uppercase tracking-tight mb-1 premium-font ${selectedMode === mode.id ? "text-white" : "text-slate-300"}`}
+                >
+                  {mode.title}
+                </h5>
+                <p
+                  className={`text-[10px] font-bold leading-relaxed ${selectedMode === mode.id ? "text-white/80" : "text-slate-600"}`}
+                >
+                  {mode.desc}
                 </p>
               </div>
-            )}
-          </div>
+            </button>
+          ))}
+        </div>
 
-          {bgImage && !loading && (
-            <div className="flex gap-4 px-2">
-              <label className="flex-1 py-4 bg-white/5 border border-white/10 rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-white/10 transition-all active:scale-95 group">
-                <span className="text-[11px] font-black text-slate-300 uppercase tracking-widest group-hover:text-white transition-colors">
-                  ADD BRAND LOGO
-                </span>
-                <input type="file" accept="image/*" onChange={(e) => handleFileUpload(e, "LOGO")} className="hidden" />
-              </label>
+        {/* Surprise Feature 2 & 3: Enhancers */}
+        <div className="grid grid-cols-2 gap-4">
+          <button
+            onClick={() => setAutoFormat(!autoFormat)}
+            className={`p-5 rounded-[32px] border transition-all flex flex-col items-center justify-center gap-2 shadow-lg ${
+              autoFormat
+                ? "bg-emerald-600/20 border-emerald-500 text-emerald-400"
+                : "bg-black/40 border-white/5 text-slate-600"
+            }`}
+          >
+            <Wand2 className={`w-5 h-5 ${autoFormat ? "animate-bounce" : ""}`} />
+            <span className="text-[8px] font-bold tracking-widest uppercase premium-font">AUTO SCRIPT FIX</span>
+          </button>
+          <button
+            onClick={() => setParaphraseMode(!paraphraseMode)}
+            className={`p-5 rounded-[32px] border transition-all flex flex-col items-center justify-center gap-2 shadow-lg ${
+              paraphraseMode
+                ? "bg-blue-600/20 border-blue-500 text-blue-400"
+                : "bg-black/40 border-white/5 text-slate-600"
+            }`}
+          >
+            <MessageSquareQuote className={`w-5 h-5 ${paraphraseMode ? "animate-pulse" : ""}`} />
+            <span className="text-[8px] font-bold tracking-widest uppercase premium-font">ELITE PHRASE</span>
+          </button>
+        </div>
+
+        {/* Credit Tiers (6 Stage Grid) */}
+        <div className="space-y-6 pt-4 border-t border-white/5">
+          <h4 className="text-[10px] font-black text-slate-500 tracking-[0.3em] uppercase ml-2 text-center md:text-left premium-font">
+            SELECT CREDIT TIER (CHAR-COUNT)
+          </h4>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {CREDIT_TIERS.map((tier, idx) => (
               <button
-                onClick={() => {
-                  const canvas = canvasRef.current;
-                  if (canvas) {
-                    const link = document.createElement("a");
-                    link.download = `ELITE_ART_${Date.now()}.png`;
-                    link.href = canvas.toDataURL("image/png", 1.0);
-                    link.click();
-                  }
-                }}
-                className="flex-1 py-4 rounded-2xl jewel-emerald jewel-surface text-white font-black text-[11px] uppercase tracking-[0.4em] shadow-3xl active:scale-95 transition-all border border-white/10"
+                key={idx}
+                onClick={() => setSelectedTier(idx)}
+                className={`p-6 rounded-[32px] flex flex-col items-center justify-center gap-1.5 transition-all border shadow-xl ${
+                  selectedTier === idx
+                    ? "bg-indigo-600 border-white/40 scale-[1.08] ring-4 ring-indigo-500/20"
+                    : "bg-black/50 border-white/5 hover:bg-slate-900"
+                }`}
               >
-                DOWNLOAD 4K HD
+                <span
+                  className={`text-[8px] font-bold tracking-widest uppercase premium-font ${selectedTier === idx ? "text-indigo-100" : "text-slate-600"}`}
+                >
+                  {tier.label}
+                </span>
+                <span className={`text-[14px] font-black ${selectedTier === idx ? "text-white" : "text-slate-400"}`}>
+                  {tier.credits} CREDITS
+                </span>
               </button>
-            </div>
-          )}
+            ))}
+          </div>
+        </div>
+
+        {/* Master Action Button */}
+        <div className="pt-4">
+          <button
+            disabled={loading || !isReady}
+            onClick={handleTranslate}
+            className={`w-full py-7 rounded-[36px] font-bold text-[12px] premium-font tracking-[0.4em] shadow-[0_0_50px_rgba(37,99,235,0.4)] transition-all active:scale-95 flex items-center justify-center gap-4 border border-white/10 ${
+              isReady
+                ? "jewel-sapphire jewel-surface text-white hover:brightness-125"
+                : "bg-slate-900 text-slate-700 border-white/5 cursor-not-allowed uppercase"
+            }`}
+          >
+            {loading ? (
+              <>
+                <Loader2 className="w-6 h-6 animate-spin" />
+                <span className="animate-pulse">ENGAGING ENGINE...</span>
+              </>
+            ) : isReady ? (
+              <>
+                <Zap className="w-5 h-5 fill-white" />
+                <span>START AI SYNC</span>
+              </>
+            ) : (
+              "TOOL DISABLED"
+            )}
+          </button>
         </div>
       </div>
 
-      {/* 2. DESIGN CONTROLS (Unified) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        <div className="lg:col-span-12 space-y-6">
-          <div className="neon-glass rounded-[56px] p-10 space-y-10 shadow-3xl border border-white/10 relative overflow-hidden">
-            <div className="text-center space-y-2">
-              <h2 className="text-3xl font-black text-white tracking-tighter uppercase drop-shadow-2xl">
-                DESIGN <span className="text-blue-500">MASTER</span> HUB
-              </h2>
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.5em] opacity-70">
-                PROFESSIONAL WORKFLOW ENGINE V9
-              </p>
-            </div>
-
-            {/* API KEY SECTION */}
-            <div className="space-y-2 max-w-md mx-auto">
-              <input
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Gemini API Key (Optional)..."
-                className="w-full bg-black/50 border border-white/10 rounded-2xl p-4 text-xs font-bold text-white outline-none focus:ring-1 focus:ring-blue-500 transition-all shadow-inner"
-              />
-            </div>
-
-            {/* TEXT LAYERS (Headline 1, 2, Desc) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-              <LayerControl
-                label="HEADLINE 1 (MAIN)"
-                text={h1}
-                setText={setH1}
-                style={h1Style}
-                setStyle={setH1Style}
-                effect={h1Effect}
-                setEffect={setH1Effect}
-                font={h1Font}
-                setFont={setH1Font}
-                pos={h1Pos}
-                setPos={setH1Pos}
-                offset={h1Offset}
-                setOffset={setH1Offset}
-                size={h1Size}
-                setSize={setH1Size}
-                colorTheme="amber"
-              />
-              <LayerControl
-                label="HEADLINE 2 (SUB)"
-                text={h2}
-                setText={setH2}
-                style={h2Style}
-                setStyle={setH2Style}
-                effect={h2Effect}
-                setEffect={setH2Effect}
-                font={h2Font}
-                setFont={setH2Font}
-                pos={h2Pos}
-                setPos={setH2Pos}
-                offset={h2Offset}
-                setOffset={setH2Offset}
-                size={h2Size}
-                setSize={setH2Size}
-                colorTheme="cyan"
-              />
-              <LayerControl
-                label="DESCRIPTION (INFO)"
-                text={desc}
-                setText={setDesc}
-                style={descStyle}
-                setStyle={setDescStyle}
-                effect={descEffect}
-                setEffect={setDescEffect}
-                font={descFont}
-                setFont={setDescFont}
-                pos={descPos}
-                setPos={setDescPos}
-                offset={descOffset}
-                setOffset={setDescOffset}
-                size={descSize}
-                setSize={setDescSize}
-                colorTheme="rose"
-              />
-            </div>
-
-            {/* AI BACKGROUND GENERATION CONTROLS */}
-            <div className="space-y-8 pt-10 border-t border-white/10">
-              <div className="flex gap-4 p-2 bg-black/40 rounded-3xl border border-white/5 max-w-xl mx-auto shadow-inner">
-                <button
-                  onClick={() => setGenMode("AUTO")}
-                  className={`flex-1 py-4 rounded-2xl text-[10px] font-black uppercase transition-all ${genMode === "AUTO" ? "jewel-sapphire text-white shadow-xl" : "text-slate-500 hover:text-slate-300"}`}
-                >
-                  AI AUTO ENGINE
-                </button>
-                <button
-                  onClick={() => setGenMode("REF")}
-                  className={`flex-1 py-4 rounded-2xl text-[10px] font-black uppercase transition-all ${genMode === "REF" ? "jewel-gold text-white shadow-xl" : "text-slate-500 hover:text-slate-300"}`}
-                >
-                  MULTI-REF (7 SLOTS)
-                </button>
-              </div>
-
-              {genMode === "REF" && (
-                <div className="space-y-4 animate-in zoom-in-95 duration-500">
-                  <div className="flex justify-between items-center px-6">
-                    <label className="text-[11px] font-black text-blue-400 uppercase tracking-widest">
-                      REFERENCE SYNTHESIS ASSETS
-                    </label>
-                    <span className="text-[9px] font-bold text-slate-600 uppercase">
-                      {referenceImages.length}/7 PHOTOS
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-4 sm:grid-cols-7 gap-3 px-4">
-                    {referenceImages.map((img, idx) => (
-                      <div
-                        key={idx}
-                        className="relative aspect-square rounded-2xl overflow-hidden border border-white/15 group shadow-xl hover:scale-105 transition-transform cursor-pointer"
-                      >
-                        <img src={img} className="w-full h-full object-cover" />
-                        <button
-                          onClick={() => setReferenceImages((prev) => prev.filter((_, i) => i !== idx))}
-                          className="absolute inset-0 bg-rose-600/70 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-2xl transition-opacity font-light"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                    {referenceImages.length < 7 && (
-                      <label className="cursor-pointer flex flex-col items-center justify-center bg-white/5 border-2 border-dashed border-white/10 rounded-2xl aspect-square hover:bg-white/10 hover:border-blue-500/30 transition-all active:scale-95 group">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          multiple
-                          onChange={(e) => handleFileUpload(e, "REF")}
-                          className="hidden"
-                        />
-                        <span className="text-2xl text-slate-600 group-hover:text-blue-400 transition-colors">+</span>
-                      </label>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              <div className="space-y-3 px-4">
-                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-2">
-                  AI SCENE VISION (DESCRIBE NICHE & ATMOSPHERE)
-                </label>
-                <textarea
-                  value={context}
-                  onChange={(e) => setContext(e.target.value)}
-                  placeholder="ဥပမာ - High-end Tech Studio, Dark Cinematic Jungle, Hollywood Movie Poster Lighting..."
-                  className="w-full h-32 bg-black/60 border border-white/10 rounded-[32px] p-6 text-sm font-bold text-white outline-none focus:ring-1 focus:ring-blue-500/50 shadow-inner custom-scrollbar"
-                />
-              </div>
-
-              <div className="grid grid-cols-5 gap-3 px-4 max-w-3xl mx-auto">
-                {(["1:1", "16:9", "9:16", "4:3", "3:4"] as AspectRatio[]).map((r) => (
-                  <button
-                    key={r}
-                    onClick={() => setSelectedRatio(r)}
-                    className={`py-3 rounded-2xl text-[10px] font-black transition-all border ${selectedRatio === r ? "bg-white text-black shadow-2xl border-transparent scale-110" : "bg-slate-900/60 border-white/5 text-slate-600 hover:text-slate-400"}`}
-                  >
-                    {r}
-                  </button>
-                ))}
-              </div>
-
-              <div className="pt-6 px-4">
-                <button
-                  disabled={loading}
-                  onClick={handleGenerate}
-                  className="w-full py-7 rounded-[36px] jewel-sapphire jewel-surface text-white font-black text-sm uppercase tracking-[0.5em] shadow-[0_0_50px_rgba(37,99,235,0.4)] active:scale-[0.98] transition-all border border-white/20"
-                >
-                  {loading
-                    ? "AI IS SYNTHESIZING MASTERPIECE..."
-                    : bgImage
-                      ? "RE-GENERATE BACKGROUND"
-                      : "START ELITE ART GENERATION"}
-                </button>
-              </div>
+      {/* Output Area */}
+      {result && (
+        <div className="mt-12 animate-in slide-in-from-bottom-8 duration-1000 space-y-6">
+          <div className="flex justify-between items-center px-10">
+            <h3 className="text-[10px] font-black text-indigo-400 tracking-[0.3em] uppercase flex items-center gap-3 premium-font">
+              <div className="w-2 h-2 bg-indigo-500 rounded-full animate-ping"></div> AI OUTPUT READY
+            </h3>
+            <button
+              onClick={async () => {
+                await navigator.clipboard.writeText(result);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }}
+              className="text-[9px] font-bold premium-font text-slate-500 hover:text-white transition-all tracking-widest uppercase flex items-center gap-3 bg-white/5 px-6 py-3 rounded-2xl border border-white/5"
+            >
+              {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}{" "}
+              {copied ? "SYNCED" : "COPY TEXT"}
+            </button>
+          </div>
+          <div className="platinum-glass rounded-[56px] p-12 md:p-16 border border-white/40 shadow-[0_0_120px_rgba(0,0,0,1)] relative overflow-hidden group">
+            <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-indigo-600 via-purple-500 to-blue-600"></div>
+            <div className="max-h-[700px] overflow-y-auto custom-scrollbar pr-6">
+              <p className="text-[17px] leading-[2.6] font-medium text-white whitespace-pre-wrap font-sans">{result}</p>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Branding Footer */}
+      <div className="max-w-md mx-auto mt-20 flex items-start gap-6 p-8 bg-indigo-500/5 rounded-[40px] border border-indigo-500/10 backdrop-blur-md">
+        <Info className="w-6 h-6 text-indigo-400 shrink-0 mt-0.5" />
+        <p className="text-[11px] font-bold text-indigo-200/40 leading-relaxed uppercase tracking-wider">
+          ကျွန်ုပ်တို့၏ AI Engine သည် လူသားစကားပြောပုံစံကို အထူးပြုပါသည်။ ရွေးချယ်ထားသော Credit Tier အလိုက် စာလုံးရေကို
+          ကန့်သတ်တွက်ချက်မည်ဖြစ်ပါသည်။ စာလုံးရေပိုများပါက ပိုမိုမြင့်မားသော Tier ကို ရွေးချယ်အသုံးပြုပေးပါ။ (နော်) ဟူသော
+          စကားလုံးအား အသုံးမပြုရန် စနစ်တွင် ကန့်သတ်ထားပါသည်။
+        </p>
       </div>
     </div>
   );
 };
 
-export default ThumbnailView;
+export default TranslateView;
