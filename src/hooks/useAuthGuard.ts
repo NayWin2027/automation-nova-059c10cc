@@ -45,13 +45,14 @@ export function useAuthGuard(toolId?: string): AuthGuardResult {
       return;
     }
 
-    // If toolId provided, check tool-specific access
-    if (toolId && isAuthenticated) {
+    // If toolId provided, check tool-specific access for BOTH authenticated AND guest users
+    if (toolId) {
+      const effectivelyAuthenticated = isAuthenticated || (!accessControl.requireLogin);
       const isPremium = userPlan === 'premium' || userPlan === 'pro';
       const usageCount = getToolUsageCount(toolId);
 
-      const accessApp = canAccessTool(toolId, isAuthenticated, isPremium, usageCount, userPlan, 'app');
-      const accessOwn = canAccessTool(toolId, isAuthenticated, isPremium, usageCount, userPlan, 'own');
+      const accessApp = canAccessTool(toolId, effectivelyAuthenticated, isPremium, usageCount, userPlan, 'app');
+      const accessOwn = canAccessTool(toolId, effectivelyAuthenticated, isPremium, usageCount, userPlan, 'own');
 
       const anyAllowed = accessApp.allowed || accessOwn.allowed;
 

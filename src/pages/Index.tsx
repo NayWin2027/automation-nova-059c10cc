@@ -147,8 +147,10 @@ const Index = () => {
     const isPremium = userPlan === 'premium' || userPlan === 'pro';
     const usageCount = getToolUsageCount(tool.id);
 
-    const accessApp = canAccessTool(tool.id, isAuthenticated, isPremium, usageCount, userPlan, 'app');
-    const accessOwn = canAccessTool(tool.id, isAuthenticated, isPremium, usageCount, userPlan, 'own');
+    // Guest users are "effectively authenticated" when requireLogin is OFF
+    const effectivelyAuthenticated = isAuthenticated || (!accessControl.requireLogin);
+    const accessApp = canAccessTool(tool.id, effectivelyAuthenticated, isPremium, usageCount, userPlan, 'app');
+    const accessOwn = canAccessTool(tool.id, effectivelyAuthenticated, isPremium, usageCount, userPlan, 'own');
     const anyAllowed = accessApp.allowed || accessOwn.allowed;
 
     if (!anyAllowed) {

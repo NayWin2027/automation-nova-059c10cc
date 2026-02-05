@@ -131,11 +131,9 @@ export function useToolSettings() {
       return { allowed: false, reason: 'ဤ Tool ကို ပိတ်ထားပါသည်' };
     }
 
-    // CRITICAL: Check requireLogin FIRST
-    // If requireLogin is OFF, treat unauthenticated users as "allowed guests"
-    const requiresLogin = accessControl.requireLogin && tool.requires_auth;
-    
-    if (requiresLogin && !isAuthenticated) {
+    // CRITICAL: Global requireLogin takes PRIORITY over individual tool.requires_auth
+    // If admin says "no login required", then no login required - period.
+    if (accessControl.requireLogin && !accessControl.freeMode && !isAuthenticated) {
       return { allowed: false, reason: 'Login ဝင်ရန်လိုအပ်ပါသည်' };
     }
 
