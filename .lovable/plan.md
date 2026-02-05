@@ -1,126 +1,155 @@
 
-<context>
-User goal (Burmese): /novel (Novel Translate) မှာ **App API mode က OK** ဖြစ်နေပြီး၊ **Own API key mode** နဲ့ run တိုင်း “system cool down / QUOTA_EXCEEDED (429)” တက်တာကြောင့် **stable + smooth (auto wait + auto resume)** ဖြစ်အောင် ပြင်ချင်တယ်။
+# Novel Translate - Own API Mode: "No Cooldown, Smooth Run" Fix
 
-Strict constraint (your instruction): **Novel translate own-api cooldown fix နဲ့ဆိုင်တဲ့ code/logic တွေကလွဲပြီး အခြားမဆိုင်တဲ့ code/logic/features တစ်ခုမှ မထိ/မပြင်/မဖြုတ်**။
-</context>
+## Goal
+/novel တွင် **Own API mode** ကို Content Creator tools များလိုပဲ cooldown/countdown မပြဘဲ error-resilient ဖြစ်အောင် ပြောင်းလဲရန်။ 
 
-<observations (from current code + logs)>
-1) Browser console မှာ novel translate own mode က:
-   - `QUOTA_EXCEEDED: API Quota ပြည့်သွားပါပြီ။ 32s စောင့်ပြီး ... (32s)` လို့ ပြနေတာတွေ့ရပါတယ်။
-   - ဒါက backend bug မဟုတ်ပဲ **Own API key ရဲ့ rate/quota limit** ကိုထိနေတာပါ။
+**App API mode ကို လုံးဝမထိပါ။**
 
-2) UI behavior problem:
-   - `NovelTransPage.tsx` မှာ quota error ဖြစ်သွားရင် manual mode မှာ `alert(...)` ထုတ်ပြီး stop သွားပါတယ်။
-   - User က countdown မမြင်ရ / auto-resume မလုပ်ပေးတဲ့အတွက် “တခါတလေ ပျက်၊ ပြန်လုပ်” loop လိုခံစားရပါတယ်။
+---
 
-3) Current code already has building blocks:
-   - `cooldownSeconds` state + timer effect ရှိနေပြီးသား
-   - Auto-drive အတွက် quota error ကို cooldown ချပြီး resume လုပ်နေတဲ့ logic ရှိပြီးသား
-   - ဒါပေမဲ့ **manual run** အတွက်က auto-wait/auto-retry မလုပ်ပေးသေးပါဘူး။
+## Problem Analysis
 
-Key conclusion:
-- “Error ကို လုံးဝမတက်အောင်” ဆိုတာ Own API key quota တကယ်ထိနေသရွေ့ မဖြစ်နိုင်ပါ (အပြင် API limitation)။
-- ဒါပေမဲ့ “**user ကို အလုပ်ပြန်လုပ်ခိုင်းစရာမလိုဘဲ** cooldown ကို UI မှာပြ + အလိုအလျောက် စောင့်ပြီး ဆက်လုပ်” ဆိုတဲ့အတိုင်း **stable/smooth UX** အဖြစ် ပြောင်းလဲနိုင်ပါတယ်။
-</observations>
+လက်ရှိ Own API mode behavior:
+1. Google API quota (429) hit ဖြစ်ရင် cooldown countdown + banner ပြ
+2. User က 32s/60s စောင့်ရ, auto-resume လုပ်ပေးပေမဲ့ disrupted ဖြစ်တယ်
+3. Auto-Drive ရပ်သွားတယ်၊ error message ထွက်လာတယ်
 
-<solution design (stable + smooth behavior)>
-We will implement a **Quota-aware retry system** for /novel Own API mode only:
+Creator tool (`/creator`) behavior (user နှစ်သက်တဲ့ pattern):
+- No visible cooldown / countdown
+- Quota error ဖြစ်ရင် silent retry
+- User experience: "smooth, just works"
 
-A) UI/UX: alert မထုတ်တော့ဘဲ “cooldown banner + countdown” ပြ
-- QUOTA_EXCEEDED / 429 / “RetryInfo: xx s” ဖြစ်လာတဲ့အခါ:
-  - `cooldownSeconds = retrySeconds` ကို set
-  - Page ထဲမှာ “Cooling down: 32s … Auto-resume will run” ဆိုတဲ့ banner/label ပြ
-  - Translate button ကို disabled လုပ် (spamming မဖြစ်အောင်)
+---
 
-B) Manual mode ကိုပါ auto-resume လုပ် (အရေးကြီးဆုံး)
-- quota error တက်တဲ့အချိန် “နောက်တစ်ခါ run ဖို့” user ကို click ပြန်မခိုင်းဘဲ:
-  - `pendingRetryRef` (useRef) ထဲမှာ “ဘာကို ပြန် run မလဲ” (indexToUse + mode + keySnapshot) ကို stash လုပ်
-  - cooldown 0 ဖြစ်တာနဲ့ pendingRetryRef ရှိသေးရင် **auto call** generateContent() ကို 1 ကြိမ် ပြန် run
-  - Infinite loop မဖြစ်စေဖို့ **consecutiveRetryCount** ကို cap (ဥပမာ 3 ကြိမ်ထက်မပို)
-  - အကယ်လို့ cap ထိရင် banner မှာ “Still cooling down / key quota too low” message ပြပြီး user ကို App API သို့ပြောင်းရန် suggestion ပေး (UX only)
+## Solution: Silent Retry Pattern
 
-C) Auto-drive ကို Own API အတွက် throttle လုပ် (quota hit လျော့စေမယ်)
-- လက်ရှိ auto-drive interval 3s ဖြစ်နေတာကို Own API mode မှာ:
-  - success တစ်ကြိမ်ပြီးတိုင်း next call delay ကို 8–12s လောက်တိုး
-  - quota hit တက်ရင် `retrySeconds` ကို respect လုပ် (already doing)
-- App API mode ကို မထိ
+Own API mode (only) အတွက် Creator-style error handling:
 
-D) Backend response ကိုပို “machine-readable” ဖြစ်အောင် (optional but recommended, novel translate function only)
-- `supabase/functions/novel-translate/index.ts` (Own API path) မှာ:
-  - 429 response payload ကို `retryAfterSeconds` (number) ထပ်ထည့်
-  - 503/overloaded type errors လည်း retryable အဖြစ် normalize လုပ်ပြီး status 200 + `{ errorCode, retryAfterSeconds, retryable:true }` ပြန်
-- ဒါလုပ်ရင် frontend က string parse မလုပ်ဘဲ numeric ကိုသုံးပြီး ပို stable ဖြစ်မယ်။
+1. **Remove visible cooldown** — `cooldownSeconds` state ကို Own API mode မှာ မသုံးတော့ဘူး
+2. **Silent backoff retry** — Quota error ဖြစ်ရင် UI မှာ cooldown မပြဘဲ delay ပြီး background မှာ retry 
+3. **Graceful stop after max retries** — 3 ကြိမ် retry ပြီး မရရင် ရပ်ပြီး toast/message ပြ (alert မဟုတ်)
+4. **Auto-Drive continues** — Own API mode မှာ quota hit ဖြစ်လည်း silent retry ပြီး ဆက် run
 
-Important: ဒီ backend change က **novel-translate function** တစ်ခုထဲပဲ ထိပြီး တခြား tool/function မထိပါ။
+---
 
-</solution design>
+## Technical Changes
 
-<exact scope of code changes (only requested area)>
-Will modify only:
-1) `src/pages/NovelTransPage.tsx`
-   - quota error handling (manual + auto-drive)
-   - cooldown banner/countdown UI (novel page only)
-   - pending retry refs + capped auto-retry logic
-   - own-mode auto-drive delay tuning
+### File: `src/pages/NovelTransPage.tsx`
 
-2) (Optional but recommended) `supabase/functions/novel-translate/index.ts`
-   - add `retryAfterSeconds` + normalize retryable errors for Own API path
-   - keep existing app-mode logic unchanged
+#### Change 1: Remove cooldown UI blocking for Own API
 
-Will NOT modify:
-- credits system / admin features / other tools (voice/transcribe/etc.)
-- general auth, other pages, other services
-- any unrelated UI components
-</exact scope of code changes>
+```typescript
+// Before (line ~392):
+if (cooldownSeconds > 0) return;
 
-<implementation steps (sequenced)>
-Step 1 — Inspect current NovelTransPage rendering section for a good place to show cooldown UI
-- Add a small non-intrusive banner near the Translate button / progress area:
-  - Shows countdown when `cooldownSeconds > 0`
-  - Shows “Auto retry scheduled” when pending retry exists
+// After:
+if (cooldownSeconds > 0 && apiType !== 'own') return;
+```
 
-Step 2 — Add “pending retry” mechanism (NovelTransPage only)
-- Create refs:
-  - `pendingRetryRef` (stores indexToUse + progressKey + progressLabel + isFileMode + a snapshot of apiType/apiKey presence)
-  - `quotaRetryCountRef` (consecutive)
-- When QUOTA_EXCEEDED occurs:
-  - set cooldownSeconds
-  - set pendingRetryRef (so manual run can resume)
-  - do NOT alert()
+#### Change 2: Error handling in `generateContent()` — Own API mode uses silent retry
 
-Step 3 — Auto-resume effect when cooldown ends
-- Add a `useEffect` watching `cooldownSeconds`
-  - When it reaches 0 AND pendingRetryRef exists AND not loading:
-    - attempt retry once
-    - clear pendingRetryRef on success
-    - if fails with quota again: set new cooldownSeconds, increment retry count, keep pending
-    - if retry count cap exceeded: clear pending, show banner message and stop auto retries
+```typescript
+// In catch block (lines ~569-626), for Own API mode:
+if (isQuotaError && apiType === 'own') {
+  // SILENT RETRY: Don't set cooldownSeconds, don't show banner
+  // Instead, delay and retry in background
+  quotaRetryCountRef.current += 1;
+  
+  if (quotaRetryCountRef.current > MAX_CONSECUTIVE_RETRIES) {
+    // Stop silently, show small toast
+    toast({ title: "⏸️ API limit reached", description: "တစ်ချိန်ကြာပြီး ပြန်စပါ" });
+    setAutoDrive(false);
+    setIsAutoDriving(false);
+    setLoading(false);
+    return;
+  }
+  
+  // Silent background wait + retry (no UI countdown)
+  const waitMs = retrySeconds * 1000;
+  setTimeout(() => {
+    generateContent(indexToUse, currentHistory, currentChunkLengths, progressKey, progressLabel, isFileMode);
+  }, waitMs);
+  
+  setLoading(false); // Keep button available visually
+  return;
+}
+```
 
-Step 4 — Own API auto-drive throttling
-- In existing auto-drive loop effect:
-  - if `apiType==='own'` use longer delay
-  - ensure we never schedule calls while cooldownSeconds>0
+#### Change 3: Don't show cooldown banner for Own API mode
 
-Step 5 — (Optional) Backend normalize retry payload
-- Add helper to parse `retryDelay` (“32s”, “1m”) into seconds
-- Return `{ errorCode:'QUOTA_EXCEEDED', retryAfter:'32s', retryAfterSeconds:32, retryable:true }` with HTTP 200
+```typescript
+// Before (line ~930):
+{(cooldownSeconds > 0 || quotaExhaustedMessage) && (
 
-Step 6 — End-to-end test checklist (no extra tooling required for user)
-- In /novel:
-  1) Own API mode → run once → if quota happens: verify countdown shows and auto resumes without clicking
-  2) Auto-drive ON → verify it slows down and does not spam; quota hit triggers countdown then continues
-  3) Switch to App API mode → ensure unchanged behavior
-  4) Refresh page mid-cooldown → cooldown state resets (acceptable) but should not corrupt progress history
+// After:
+{(cooldownSeconds > 0 || quotaExhaustedMessage) && apiType !== 'own' && (
+```
 
-</implementation steps>
+#### Change 4: Auto-drive effect — Own API doesn't check cooldown
 
-<what “stable” will mean after this change>
-- Own API mode quota hit ဖြစ်လာရင်:
-  - မပြိုကျ (no repetitive alerts / no manual “retry click” loop)
-  - UI က countdown ကို တိတိကျကျပြ
-  - အချိန်ပြည့်တာနဲ့ အလိုအလျောက် ပြန် run လုပ်ပြီး ဆက်သွား
-- ဒါက user experience အရ “smooth, launch-friendly” ဖြစ်စေပြီး “error တက်လိုက်ရှင်းလိုက်” ခံစားချက်ကို တတ်နိုင်သမျှ ပျောက်စေမယ်။
+```typescript
+// Before (line ~244):
+if (autoDrive && !loading && translated && cooldownSeconds === 0) {
 
-Note: Own API quota limitation ကို code နဲ့ “ဖျောက်” လို့ မရပေမဲ့—**သူ့အလိုအလျောက် စောင့်ပြီး ဆက်လုပ်အောင်** လုပ်လို့ “stable workflow” ဖြစ်အောင်တော့ ပြောင်းလဲနိုင်ပါတယ်။
-</what “stable” will mean after this change>
+// After:
+if (autoDrive && !loading && translated && (apiType === 'own' || cooldownSeconds === 0)) {
+```
+
+#### Change 5: Translate button not disabled during silent retry (Own API)
+
+```typescript
+// Before (line ~963):
+disabled={loading || isAutoDriving || cooldownSeconds > 0 || isOwnKeyMissing}
+
+// After:
+disabled={loading || isAutoDriving || (cooldownSeconds > 0 && apiType !== 'own') || isOwnKeyMissing}
+```
+
+#### Change 6: Button text — don't show "SYSTEM COOLDOWN" for Own API
+
+```typescript
+// Before (line ~967):
+{cooldownSeconds > 0 ? (
+
+// After:
+{cooldownSeconds > 0 && apiType !== 'own' ? (
+```
+
+---
+
+## Expected Behavior After Fix
+
+| Scenario | App API | Own API |
+|----------|---------|---------|
+| Quota 429 error | Cooldown banner + countdown + auto-resume | Silent wait, then retry (no UI disruption) |
+| Auto-Drive on quota hit | Pause with banner | Silent retry, keeps running |
+| Max retries exceeded | Show banner message | Small toast, graceful stop |
+| Button state during wait | Disabled | Enabled (can click again if needed) |
+
+---
+
+## Files to Edit (Only)
+
+| File | Scope |
+|------|-------|
+| `src/pages/NovelTransPage.tsx` | Own API cooldown/error handling logic |
+
+**Not touching:**
+- `supabase/functions/novel-translate/index.ts` (backend unchanged)
+- App API mode logic (completely preserved)
+- Credits system (unchanged)
+- Any other tools/pages
+
+---
+
+## Summary (Burmese)
+
+Own API mode မှာ:
+- ❌ Cooldown banner မပြတော့ဘူး
+- ❌ Countdown timer မပြတော့ဘူး  
+- ❌ "SYSTEM COOLDOWN" button text မပြတော့ဘူး
+- ✅ Quota hit ဖြစ်ရင် silent retry လုပ်မယ်
+- ✅ Auto-Drive ဆက် run မယ် (disruption မရှိ)
+- ✅ Max 3 ကြိမ် retry ပြီးရင် graceful stop + toast
+- ✅ Content Creator tools လိုပဲ smooth UX ဖြစ်မယ်
