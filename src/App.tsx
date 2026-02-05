@@ -14,6 +14,7 @@ import CreatorPage from "./pages/CreatorPage";
 import StoryCreatorPage from "./pages/StoryCreatorPage";
 import NovelTransPage from "./pages/NovelTransPage";
 import ThumbnailPage from "./pages/ThumbnailPage";
+ import SrtSubPage from "./pages/SrtSubPage";
 import AdminRegisterPage from "./pages/AdminRegisterPage";
 import AdminLoginPage from "./pages/AdminLoginPage";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
@@ -43,6 +44,7 @@ const App = () => (
           <Route path="/story" element={<StoryCreatorPage />} />
           <Route path="/novel" element={<NovelTransPage />} />
           <Route path="/thumbnail" element={<ThumbnailPage />} />
+           <Route path="/srt" element={<SrtSubPage />} />
           {/* Admin Routes */}
           <Route path="/admin/register" element={<AdminRegisterPage />} />
           <Route path="/admin/login" element={<AdminLoginPage />} />

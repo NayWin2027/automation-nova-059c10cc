@@ -78,8 +78,7 @@ const defaultTools = [
     title: "SRT Sub",
     description: "SRT ဖိုင်များ ဘာသာပြန်ခြင်း။",
     gradient: "rose" as const,
-    systemPrompt:
-      "You are an SRT subtitle specialist. Help users create, edit, and translate SRT subtitle files. Respond in Burmese when the user writes in Burmese.",
+     route: "/srt",
   },
   {
     id: "novel",
@@ -108,6 +107,13 @@ const defaultTools = [
 ];
 
 type Tool = (typeof defaultTools)[number];
+ 
+ // Type guard for tools with systemPrompt
+ type ToolWithSystemPrompt = Tool & { systemPrompt: string };
+ 
+ function hasSystemPrompt(tool: Tool): tool is ToolWithSystemPrompt {
+   return 'systemPrompt' in tool && typeof (tool as any).systemPrompt === 'string';
+ }
 
 const Index = () => {
   const navigate = useNavigate();
@@ -377,8 +383,8 @@ const Index = () => {
         isOpen={selectedTool !== null}
         onClose={() => setSelectedTool(null)}
         toolName={selectedTool?.title || ""}
-        systemPrompt={selectedTool?.systemPrompt || ""}
-      />
+         systemPrompt={selectedTool && hasSystemPrompt(selectedTool) ? selectedTool.systemPrompt : ""}
+       />
 
       <ContactDialog
         isOpen={showContactDialog}
