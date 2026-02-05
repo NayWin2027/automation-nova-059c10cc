@@ -1,4 +1,7 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { Lock, ArrowLeft } from "lucide-react";
+import { useApiAccess } from "@/hooks/useApiAccess";
 import { translateText } from "../services/geminiService";
 
 const LANGUAGES = [
@@ -86,7 +89,9 @@ const LANGUAGES = [
 ];
 
 const SrtTranslatorView: React.FC = () => {
-  const [apiType, setApiType] = useState<"app" | "own">("app");
+  const navigate = useNavigate();
+  const { appApiAllowed, ownApiAllowed, appApiReason, isLoading: apiAccessLoading } = useApiAccess();
+  const [apiType, setApiType] = useState<"app" | "own">("own");
   const [apiKey, setApiKey] = useState(() => localStorage.getItem("master_srt_api_key") || "");
   const [fileContent, setFileContent] = useState<string>("");
   const [fileName, setFileName] = useState<string>("");
@@ -99,6 +104,17 @@ const SrtTranslatorView: React.FC = () => {
   useEffect(() => {
     localStorage.setItem("master_srt_api_key", apiKey);
   }, [apiKey]);
+
+  // Auto-select available API mode
+  useEffect(() => {
+    if (!apiAccessLoading) {
+      if (!appApiAllowed && ownApiAllowed) {
+        setApiType("own");
+      } else if (appApiAllowed && !ownApiAllowed) {
+        setApiType("app");
+      }
+    }
+  }, [appApiAllowed, ownApiAllowed, apiAccessLoading]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -131,22 +147,45 @@ const SrtTranslatorView: React.FC = () => {
   const lineCount = fileContent ? fileContent.split("\n").filter((l) => l.trim()).length / 3 : 0;
 
   return (
-    <div className="space-y-6 pb-40 animate-in fade-in duration-700 px-1 max-w-2xl mx-auto">
+    <div className="space-y-6 pb-40 animate-in fade-in duration-700 px-1 max-w-2xl mx-auto pt-4">
+      {/* Header with Back Button */}
+      <div className="flex items-center gap-3 mb-2">
+        <button
+          onClick={() => navigate("/")}
+          className="p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all"
+        >
+          <ArrowLeft className="w-4 h-4 text-white" />
+        </button>
+        <h1 className="text-sm font-black text-white uppercase tracking-widest">SRT Translator</h1>
+      </div>
+
       {/* 1. API TYPE TABS (Premium Styling) */}
       <div className="bg-slate-950/60 backdrop-blur-3xl p-1.5 rounded-[24px] border border-white/10 shadow-2xl flex gap-2">
         <button
-          onClick={() => setApiType("app")}
-          className={`flex-1 py-4 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 ${apiType === "app" ? "jewel-sapphire shadow-[0_0_20px_rgba(37,99,235,0.4)] text-white" : "text-slate-500 hover:text-white"}`}
+          onClick={() => appApiAllowed && setApiType("app")}
+          disabled={!appApiAllowed}
+          title={appApiReason || ""}
+          className={`flex-1 py-4 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 ${!appApiAllowed ? "opacity-40 cursor-not-allowed" : ""} ${apiType === "app" && appApiAllowed ? "jewel-sapphire shadow-[0_0_20px_rgba(37,99,235,0.4)] text-white" : "text-slate-500 hover:text-white"}`}
         >
-          APP API <span className="text-[10px]">🔒</span>
+          APP API {!appApiAllowed ? <Lock className="w-3 h-3" /> : <span className="text-[10px]">🔒</span>}
         </button>
         <button
-          onClick={() => setApiType("own")}
-          className={`flex-1 py-4 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 ${apiType === "own" ? "jewel-sapphire shadow-[0_0_20px_rgba(37,99,235,0.4)] text-white" : "text-slate-500 hover:text-white"}`}
+          onClick={() => ownApiAllowed && setApiType("own")}
+          disabled={!ownApiAllowed}
+          className={`flex-1 py-4 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 ${!ownApiAllowed ? "opacity-40 cursor-not-allowed" : ""} ${apiType === "own" && ownApiAllowed ? "jewel-sapphire shadow-[0_0_20px_rgba(37,99,235,0.4)] text-white" : "text-slate-500 hover:text-white"}`}
         >
-          OWN API <span className="text-[10px]">🔒</span>
+          OWN API {!ownApiAllowed ? <Lock className="w-3 h-3" /> : <span className="text-[10px]">🔒</span>}
         </button>
       </div>
+
+      {/* API Access Warning */}
+      {!appApiAllowed && apiType === "own" && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 text-center">
+          <p className="text-xs font-bold text-amber-400">
+            {appApiReason || "App API သုံးခွင့်မရှိပါ။ Own API Key ထည့်ပြီးသုံးပါ။"}
+          </p>
+        </div>
+      )}
 
       {/* 2. QUOTA STATUS BAR */}
       <div className="neon-glass rounded-[28px] p-6 flex justify-between items-center border border-white/5 shadow-xl">
