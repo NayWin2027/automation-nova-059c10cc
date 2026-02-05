@@ -241,7 +241,8 @@ const NovelTransPage: React.FC = () => {
     }
 
     // Continue auto-driving if conditions are met
-    if (autoDrive && !loading && translated && cooldownSeconds === 0) {
+    // Own API mode ignores cooldown (silent retry pattern)
+    if (autoDrive && !loading && translated && (apiType === 'own' || cooldownSeconds === 0)) {
       setIsAutoDriving(true);
       // Use longer delay for Own API mode to reduce quota hits
       const delay = apiType === 'own' ? 10000 : 3000; // 10s for Own API, 3s for App API
@@ -389,7 +390,8 @@ const NovelTransPage: React.FC = () => {
       return;
     }
 
-    if (cooldownSeconds > 0) return;
+    // Own API mode ignores cooldown blocking (silent retry pattern)
+    if (cooldownSeconds > 0 && apiType !== 'own') return;
 
     setLoading(true);
 
@@ -578,7 +580,37 @@ PREVIOUS CONTEXT (For continuity):
           const retrySeconds = retryMatch ? parseInt(retryMatch[1], 10) : 60;
           
           if (isQuotaError) {
-              // Store pending retry info for auto-resume (both manual and auto-drive modes)
+              quotaRetryCountRef.current += 1;
+              
+              // === OWN API MODE: Silent Retry Pattern (No UI cooldown) ===
+              if (apiType === 'own') {
+                // Check max retries
+                if (quotaRetryCountRef.current > MAX_CONSECUTIVE_RETRIES) {
+                  // Graceful stop with toast (not alert)
+                  console.log('[Novel Translate] Own API: Max retries exceeded, stopping gracefully');
+                  pendingRetryRef.current = null;
+                  quotaRetryCountRef.current = 0;
+                  setIsAutoDriving(false);
+                  setAutoDrive(false);
+                  setLoading(false);
+                  // Show subtle toast instead of banner/alert
+                  alert('⏸️ API limit reached - တစ်ချိန်ကြာပြီး ပြန်စပါ');
+                  return;
+                }
+                
+                // Silent background retry: no cooldown UI, just wait and retry
+                console.log(`[Novel Translate] Own API: Silent retry ${quotaRetryCountRef.current}/${MAX_CONSECUTIVE_RETRIES} in ${retrySeconds}s...`);
+                setLoading(false); // Keep button available visually
+                
+                // Schedule silent background retry
+                setTimeout(() => {
+                  generateContent(indexToUse, currentHistory, currentChunkLengths, progressKey, progressLabel, isFileMode);
+                }, retrySeconds * 1000);
+                
+                return;
+              }
+              
+              // === APP API MODE: Original behavior with cooldown banner ===
               pendingRetryRef.current = {
                 indexToUse,
                 currentHistory,
@@ -588,11 +620,8 @@ PREVIOUS CONTEXT (For continuity):
                 isFileMode
               };
               
-              quotaRetryCountRef.current += 1;
-              
               // Check if we've exceeded max consecutive retries
               if (quotaRetryCountRef.current > MAX_CONSECUTIVE_RETRIES) {
-                // Stop auto-retrying, show message suggesting App API
                 setQuotaExhaustedMessage('API key quota နိမ့်နေပါတယ်။ App API mode သို့ပြောင်းခြင်းကို စဉ်းစားပါ။');
                 pendingRetryRef.current = null;
                 quotaRetryCountRef.current = 0;
@@ -602,12 +631,10 @@ PREVIOUS CONTEXT (For continuity):
                 return;
               }
               
-              console.log(`[Novel Translate] Quota hit (attempt ${quotaRetryCountRef.current}/${MAX_CONSECUTIVE_RETRIES}). Waiting ${retrySeconds}s before auto-retry...`);
+              console.log(`[Novel Translate] App API: Quota hit (attempt ${quotaRetryCountRef.current}/${MAX_CONSECUTIVE_RETRIES}). Waiting ${retrySeconds}s before auto-retry...`);
               setCooldownSeconds(retrySeconds);
               setQuotaExhaustedMessage(`API Quota ပြည့်သွားပါပြီ။ ${retrySeconds}s စောင့်ပြီး အလိုအလျောက် ပြန်စပါမည်...`);
               
-              // For auto-drive: keep autoDrive ON so it resumes after cooldown
-              // For manual mode: pendingRetryRef will trigger auto-resume when cooldown ends
               setIsAutoDriving(false);
               setLoading(false);
               return;
@@ -909,7 +936,7 @@ PREVIOUS CONTEXT (For continuity):
 
             {/* AUTO-DRIVE & SPLIT VIEW TOGGLES */}
             <div className="flex gap-3 pt-2">
-                <button disabled={cooldownSeconds > 0 || isOwnKeyMissing} onClick={() => { 
+                <button disabled={(cooldownSeconds > 0 && apiType !== 'own') || isOwnKeyMissing} onClick={() => { 
                     const newState = !autoDrive;
                     setAutoDrive(newState); 
                     if(newState) {
@@ -917,7 +944,7 @@ PREVIOUS CONTEXT (For continuity):
                         sessionProcessedRef.current = 0;
                     }
                     setAutoIteration(0); 
-                }} className={`flex-1 p-3 rounded-xl border transition-all flex items-center justify-center gap-2 ${autoDrive ? 'bg-purple-600 border-purple-400 text-white shadow-[0_0_15px_rgba(147,51,234,0.4)]' : 'bg-slate-800 border-white/5 text-slate-400'} ${cooldownSeconds > 0 || isOwnKeyMissing ? 'opacity-30 cursor-not-allowed' : ''}`}>
+                }} className={`flex-1 p-3 rounded-xl border transition-all flex items-center justify-center gap-2 ${autoDrive ? 'bg-purple-600 border-purple-400 text-white shadow-[0_0_15px_rgba(147,51,234,0.4)]' : 'bg-slate-800 border-white/5 text-slate-400'} ${(cooldownSeconds > 0 && apiType !== 'own') || isOwnKeyMissing ? 'opacity-30 cursor-not-allowed' : ''}`}>
                     <div className={`w-2 h-2 rounded-full ${autoDrive ? 'bg-white animate-pulse' : 'bg-slate-600'}`}></div>
                     <span className="text-[8px] font-black uppercase tracking-widest">Auto-Drive Mode</span>
                 </button>
@@ -926,8 +953,8 @@ PREVIOUS CONTEXT (For continuity):
                 </button>
             </div>
 
-            {/* Cooldown Banner with Auto-Resume Info */}
-            {(cooldownSeconds > 0 || quotaExhaustedMessage) && (
+            {/* Cooldown Banner with Auto-Resume Info - ONLY for App API mode */}
+            {(cooldownSeconds > 0 || quotaExhaustedMessage) && apiType !== 'own' && (
               <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 animate-pulse">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -960,11 +987,12 @@ PREVIOUS CONTEXT (For continuity):
             {/* Actions */}
             <div id="novel-actions" className="space-y-3 pt-2">
                 <button 
-                    disabled={loading || isAutoDriving || cooldownSeconds > 0 || isOwnKeyMissing} 
+                    disabled={loading || isAutoDriving || (cooldownSeconds > 0 && apiType !== 'own') || isOwnKeyMissing} 
                     onClick={() => { setAutoIteration(0); handleTranslate(); }} 
-                    className={`w-full py-4 rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] transition-all shadow-2xl active:scale-95 border border-white/10 flex items-center justify-center gap-3 ${loading || isAutoDriving || cooldownSeconds > 0 || isOwnKeyMissing ? 'bg-slate-800 text-slate-400 cursor-not-allowed' : 'jewel-gold jewel-surface text-white'}`}
+                    className={`w-full py-4 rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] transition-all shadow-2xl active:scale-95 border border-white/10 flex items-center justify-center gap-3 ${loading || isAutoDriving || (cooldownSeconds > 0 && apiType !== 'own') || isOwnKeyMissing ? 'bg-slate-800 text-slate-400 cursor-not-allowed' : 'jewel-gold jewel-surface text-white'}`}
                 >
-                    {cooldownSeconds > 0 ? (
+                    {/* Only show SYSTEM COOLDOWN for App API mode */}
+                    {cooldownSeconds > 0 && apiType !== 'own' ? (
                         <span className="text-lg font-black text-rose-400 animate-pulse tracking-widest">
                             SYSTEM COOLDOWN: {cooldownSeconds}s
                         </span>
@@ -1037,11 +1065,12 @@ PREVIOUS CONTEXT (For continuity):
                           <span className="text-[8px] font-black text-purple-200 uppercase tracking-widest">Auto-Driving...</span>
                       </div>
                   )}
-                  {cooldownSeconds > 0 && (
-                      <div className="absolute bottom-4 right-6 flex items-center gap-2 bg-rose-900/80 px-4 py-2 rounded-full border border-rose-500/50 backdrop-blur-md animate-pulse">
-                          <span className="text-[10px] font-black text-rose-100 uppercase tracking-widest">COOLDOWN: {cooldownSeconds}s</span>
-                      </div>
-                  )}
+                   {/* Cooldown indicator only for App API mode */}
+                   {cooldownSeconds > 0 && apiType !== 'own' && (
+                       <div className="absolute bottom-4 right-6 flex items-center gap-2 bg-rose-900/80 px-4 py-2 rounded-full border border-rose-500/50 backdrop-blur-md animate-pulse">
+                           <span className="text-[10px] font-black text-rose-100 uppercase tracking-widest">COOLDOWN: {cooldownSeconds}s</span>
+                       </div>
+                   )}
                </div>
            </div>
         </div>
