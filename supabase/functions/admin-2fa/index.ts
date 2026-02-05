@@ -135,7 +135,7 @@
            secret: OTPAuth.Secret.fromBase32(totpData.totp_secret),
          });
  
-         const delta = totp.validate({ token: code, window: 1 });
+         const delta = totp.validate({ token: code, window: 2 });
  
          if (delta === null) {
            return new Response(
@@ -199,7 +199,7 @@
            secret: OTPAuth.Secret.fromBase32(totpData.totp_secret),
          });
  
-         const delta = totp.validate({ token: code, window: 1 });
+         const delta = totp.validate({ token: code, window: 2 });
  
          if (delta === null) {
            return new Response(
@@ -262,7 +262,7 @@
            secret: OTPAuth.Secret.fromBase32(totpData.totp_secret),
          });
  
-         const delta = totp.validate({ token: code, window: 1 });
+         const delta = totp.validate({ token: code, window: 2 });
  
          if (delta === null) {
            return new Response(
