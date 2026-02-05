@@ -289,8 +289,8 @@ Create this image now. Output the generated image directly.`;
         // Try multiple models in case one doesn't work with the user's API key
         const textModels = [
           "gemini-2.0-flash",
-          "gemini-1.5-flash-latest",
-          "gemini-1.5-pro-latest",
+          "gemini-1.5-flash",
+          "gemini-1.5-pro",
         ];
         
         let lastError = "";
