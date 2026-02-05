@@ -173,15 +173,41 @@ CRITICAL RULES:
         
         if (geminiResponse.status === 429) {
           const errorData = JSON.parse(errorText);
-          const retryDelay = errorData?.error?.details?.find((d: any) => d['@type']?.includes('RetryInfo'))?.retryDelay || '60s';
+          const retryDelayStr = errorData?.error?.details?.find((d: any) => d['@type']?.includes('RetryInfo'))?.retryDelay || '60s';
+          
+          // Parse retryDelay string to seconds (e.g., "32s" -> 32, "1m30s" -> 90)
+          const parseRetryDelay = (delayStr: string): number => {
+            let totalSeconds = 0;
+            const minMatch = delayStr.match(/(\d+)m/);
+            const secMatch = delayStr.match(/(\d+)s/);
+            if (minMatch) totalSeconds += parseInt(minMatch[1], 10) * 60;
+            if (secMatch) totalSeconds += parseInt(secMatch[1], 10);
+            return totalSeconds || 60; // default 60s if parsing fails
+          };
+          const retryAfterSeconds = parseRetryDelay(retryDelayStr);
+          
           return new Response(
             JSON.stringify({ 
-              error: `API Quota ပြည့်သွားပါပြီ။ ${retryDelay} စောင့်ပြီး ပြန်ကြိုးစားပါ သို့မဟုတ် App API mode သို့ပြောင်းပါ။`,
+              error: `API Quota ပြည့်သွားပါပြီ။ ${retryAfterSeconds}s စောင့်ပြီး အလိုအလျောက် ပြန်စပါမည်။`,
               errorCode: 'QUOTA_EXCEEDED',
-              retryAfter: retryDelay
+              retryAfter: retryDelayStr,
+              retryAfterSeconds: retryAfterSeconds,
+              retryable: true
             }),
             // IMPORTANT: return 200 so the frontend can read the error payload reliably
-            // (supabase-js treats non-2xx as transport errors and can drop the body)
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Handle 503/overloaded as retryable
+        if (geminiResponse.status === 503 || geminiResponse.status === 500) {
+          return new Response(
+            JSON.stringify({ 
+              error: 'API temporarily overloaded. Will auto-retry...',
+              errorCode: 'API_OVERLOADED',
+              retryAfterSeconds: 30,
+              retryable: true
+            }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
