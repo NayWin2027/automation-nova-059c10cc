@@ -357,19 +357,27 @@ export async function translateText(
     // Handle edge function errors (non-2xx responses)
     if (error) {
       console.error('translateText invoke error:', error);
-      // Try to extract the error body from the FunctionsHttpError
+      // Try to extract the error body from the FunctionsHttpError context (Response object)
       const errContext = (error as any).context;
-      if (errContext) {
+      if (errContext && typeof errContext.json === 'function') {
         try {
           const errorBody = await errContext.json();
+          console.log('translateText error body:', errorBody);
           if (errorBody?.errorCode === 'QUOTA_EXCEEDED') {
-            throw new Error(`QUOTA_EXCEEDED: ${errorBody.error} (${errorBody.retryAfter})`);
+            throw new Error(`QUOTA_EXCEEDED: ${errorBody.error || 'API Quota ပြည့်သွားပါပြီ'} (${errorBody.retryAfter || '30s'})`);
           }
           throw new Error(errorBody?.error || error.message || 'Translation failed');
-        } catch (parseErr) {
-          // If parsing fails, throw original error
-          throw new Error(error.message || 'Translation failed');
+        } catch (parseErr: any) {
+          // If parsing fails but we have error info, use it
+          if (parseErr?.message?.includes('QUOTA_EXCEEDED')) {
+            throw parseErr;
+          }
+          console.error('translateText parse error:', parseErr);
         }
+      }
+      // Check if data was returned with error info despite the error
+      if (data?.errorCode === 'QUOTA_EXCEEDED') {
+        throw new Error(`QUOTA_EXCEEDED: ${data.error || 'API Quota ပြည့်သွားပါပြီ'} (${data.retryAfter || '30s'})`);
       }
       throw new Error(error.message || 'Translation failed');
     }
