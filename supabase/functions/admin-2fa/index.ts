@@ -6,6 +6,16 @@
    "Access-Control-Allow-Origin": "*",
    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
  };
+
+function normalizeTotpCode(input: unknown): string {
+  return String(input ?? "")
+    .replace(/\s+/g, "")
+    .trim();
+}
+
+function normalizeBase32Secret(input: string): string {
+  return input.replace(/\s+/g, "").toUpperCase();
+}
  
  serve(async (req: Request) => {
    if (req.method === "OPTIONS") {
@@ -61,6 +71,12 @@
      }
  
      const { action, code } = await req.json();
+
+      console.log("admin-2fa request", {
+        action,
+        userId,
+        at: new Date().toISOString(),
+      });
  
      // Handle different actions
      switch (action) {
@@ -104,7 +120,8 @@
  
        case "verify-setup": {
          // Verify code and enable 2FA
-         if (!code || code.length !== 6) {
+          const normalizedCode = normalizeTotpCode(code);
+          if (!/^\d{6}$/.test(normalizedCode)) {
            return new Response(
              JSON.stringify({ error: "Invalid code format" }),
              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -132,12 +149,18 @@
            algorithm: "SHA1",
            digits: 6,
            period: 30,
-           secret: OTPAuth.Secret.fromBase32(totpData.totp_secret),
+            secret: OTPAuth.Secret.fromBase32(normalizeBase32Secret(totpData.totp_secret)),
          });
  
-         const delta = totp.validate({ token: code, window: 2 });
+          // Setup is the most failure-prone step (device clock drift, copy/paste issues),
+          // so we allow a slightly larger window here.
+          const delta = totp.validate({ token: normalizedCode, window: 4 });
  
          if (delta === null) {
+            console.log("admin-2fa verify-setup invalid", {
+              userId,
+              at: new Date().toISOString(),
+            });
            return new Response(
              JSON.stringify({ error: "Invalid code. Please try again." }),
              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -168,7 +191,8 @@
  
        case "verify-login": {
          // Verify code during login (uses service client since user might not be fully authed)
-         if (!code || code.length !== 6) {
+          const normalizedCode = normalizeTotpCode(code);
+          if (!/^\d{6}$/.test(normalizedCode)) {
            return new Response(
              JSON.stringify({ error: "Invalid code format" }),
              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -196,10 +220,10 @@
            algorithm: "SHA1",
            digits: 6,
            period: 30,
-           secret: OTPAuth.Secret.fromBase32(totpData.totp_secret),
+            secret: OTPAuth.Secret.fromBase32(normalizeBase32Secret(totpData.totp_secret)),
          });
  
-         const delta = totp.validate({ token: code, window: 2 });
+          const delta = totp.validate({ token: normalizedCode, window: 3 });
  
          if (delta === null) {
            return new Response(
@@ -231,7 +255,8 @@
  
        case "disable": {
          // Disable 2FA (require current code)
-         if (!code || code.length !== 6) {
+          const normalizedCode = normalizeTotpCode(code);
+          if (!/^\d{6}$/.test(normalizedCode)) {
            return new Response(
              JSON.stringify({ error: "Current 2FA code required to disable" }),
              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -259,10 +284,10 @@
            algorithm: "SHA1",
            digits: 6,
            period: 30,
-           secret: OTPAuth.Secret.fromBase32(totpData.totp_secret),
+            secret: OTPAuth.Secret.fromBase32(normalizeBase32Secret(totpData.totp_secret)),
          });
  
-         const delta = totp.validate({ token: code, window: 2 });
+          const delta = totp.validate({ token: normalizedCode, window: 3 });
  
          if (delta === null) {
            return new Response(
