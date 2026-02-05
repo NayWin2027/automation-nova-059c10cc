@@ -2,10 +2,11 @@
  import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
  import * as OTPAuth from "https://esm.sh/otpauth@9.2.4";
  
- const corsHeaders = {
-   "Access-Control-Allow-Origin": "*",
-   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
- };
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
 
 function normalizeTotpCode(input: unknown): string {
   return String(input ?? "")

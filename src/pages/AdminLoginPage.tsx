@@ -48,46 +48,40 @@ const AdminLoginPage: React.FC = () => {
     checkSession();
   }, [navigate]);
 
-   const verify2FACode = async () => {
-     if (!pendingSession || totpCode.length !== 6) return;
-     
-     setLoading(true);
-     try {
-       const response = await fetch(
-         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-2fa`,
-         {
-           method: "POST",
-           headers: {
-             "Content-Type": "application/json",
-             Authorization: `Bearer ${pendingSession.token}`,
-           },
-           body: JSON.stringify({ action: "verify-login", code: totpCode }),
-         }
-       );
- 
-       const data = await response.json();
-       
-       if (!response.ok || !data.success) {
-         throw new Error(data.error || "Invalid 2FA code");
-       }
- 
-       toast({
-         title: "✅ Login Successful",
-         description: "Welcome to Admin Dashboard",
-       });
- 
-       navigate('/admin/dashboard');
-     } catch (err) {
-       toast({
-         title: "❌ Verification Failed",
-         description: err instanceof Error ? err.message : "Invalid code",
-         variant: "destructive",
-       });
-       setTotpCode("");
-     } finally {
-       setLoading(false);
-     }
-   };
+  const verify2FACode = async () => {
+    if (!pendingSession || totpCode.length !== 6) return;
+    
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-2fa", {
+        body: { action: "verify-login", code: totpCode },
+      });
+
+      if (error) {
+        throw new Error(error.message || "Backend connection error");
+      }
+      
+      if (!data?.success) {
+        throw new Error(data?.error || "Invalid 2FA code");
+      }
+
+      toast({
+        title: "✅ Login Successful",
+        description: "Welcome to Admin Dashboard",
+      });
+
+      navigate('/admin/dashboard');
+    } catch (err) {
+      toast({
+        title: "❌ Verification Failed",
+        description: err instanceof Error ? err.message : "Invalid code. Please try again.",
+        variant: "destructive",
+      });
+      setTotpCode("");
+    } finally {
+      setLoading(false);
+    }
+  };
  
    const cancelLogin = async () => {
      await supabase.auth.signOut();
@@ -145,31 +139,26 @@ const AdminLoginPage: React.FC = () => {
         throw new Error(`Account banned: ${profile.ban_reason || 'Contact support'}`);
       }
 
-       // Check if 2FA is enabled for this admin
-       const check2FAResponse = await fetch(
-         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-2fa`,
-         {
-           method: "POST",
-           headers: {
-             "Content-Type": "application/json",
-             Authorization: `Bearer ${authData.session.access_token}`,
-           },
-           body: JSON.stringify({ action: "status" }),
-         }
-       );
- 
-       const status2FA = await check2FAResponse.json();
- 
-       if (status2FA?.enabled) {
-         // Show 2FA verification step
-         setPendingSession({
-           userId: authData.user.id,
-           token: authData.session.access_token,
-         });
-         setShow2FA(true);
-         setLoading(false);
-         return;
-       }
+      // Check if 2FA is enabled for this admin
+      const { data: status2FA, error: status2FAError } = await supabase.functions.invoke("admin-2fa", {
+        body: { action: "status" },
+      });
+
+      if (status2FAError) {
+        console.error("Failed to check 2FA status:", status2FAError);
+        // Continue without 2FA check on error - let user proceed
+      }
+
+      if (status2FA?.enabled) {
+        // Show 2FA verification step
+        setPendingSession({
+          userId: authData.user.id,
+          token: authData.session.access_token,
+        });
+        setShow2FA(true);
+        setLoading(false);
+        return;
+      }
  
        // No 2FA, proceed directly
        toast({
