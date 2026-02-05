@@ -81,31 +81,67 @@ function normalizeBase32Secret(input: string): string {
      // Handle different actions
      switch (action) {
        case "setup": {
-         // Generate new TOTP secret
-         const totp = new OTPAuth.TOTP({
-           issuer: "MediaMaster Admin",
-           label: userEmail,
-           algorithm: "SHA1",
-           digits: 6,
-           period: 30,
-           secret: new OTPAuth.Secret({ size: 20 }),
-         });
- 
-         const secret = totp.secret.base32;
-         const otpauthUrl = totp.toString();
- 
-         // Store the secret (not enabled yet)
-         const { error: insertError } = await serviceClient
-           .from("admin_totp_secrets")
-           .upsert({
-             user_id: userId,
-             totp_secret: secret,
-             is_enabled: false,
-           }, { onConflict: "user_id" });
- 
-         if (insertError) {
-           throw new Error(`Failed to save secret: ${insertError.message}`);
-         }
+          // IMPORTANT: If a previous setup exists but isn't enabled yet, reuse it.
+          // Otherwise users can click setup multiple times, scan an older QR, and then
+          // verification will always fail because the secret got rotated.
+          const { data: existing, error: existingError } = await serviceClient
+            .from("admin_totp_secrets")
+            .select("totp_secret, is_enabled")
+            .eq("user_id", userId)
+            .maybeSingle();
+
+          if (existingError) {
+            throw new Error(`Failed to fetch existing setup: ${existingError.message}`);
+          }
+
+          let secret: string;
+          let otpauthUrl: string;
+
+          if (existing?.totp_secret && existing.is_enabled === false) {
+            secret = existing.totp_secret;
+            const totp = new OTPAuth.TOTP({
+              issuer: "MediaMaster Admin",
+              label: userEmail,
+              algorithm: "SHA1",
+              digits: 6,
+              period: 30,
+              secret: OTPAuth.Secret.fromBase32(normalizeBase32Secret(secret)),
+            });
+            otpauthUrl = totp.toString();
+
+            console.log("admin-2fa setup reused existing secret", { userId });
+          } else {
+            // Generate new TOTP secret
+            const totp = new OTPAuth.TOTP({
+              issuer: "MediaMaster Admin",
+              label: userEmail,
+              algorithm: "SHA1",
+              digits: 6,
+              period: 30,
+              secret: new OTPAuth.Secret({ size: 20 }),
+            });
+
+            secret = totp.secret.base32;
+            otpauthUrl = totp.toString();
+
+            // Store the secret (not enabled yet)
+            const { error: insertError } = await serviceClient
+              .from("admin_totp_secrets")
+              .upsert(
+                {
+                  user_id: userId,
+                  totp_secret: secret,
+                  is_enabled: false,
+                },
+                { onConflict: "user_id" }
+              );
+
+            if (insertError) {
+              throw new Error(`Failed to save secret: ${insertError.message}`);
+            }
+
+            console.log("admin-2fa setup generated new secret", { userId });
+          }
  
          return new Response(
            JSON.stringify({
