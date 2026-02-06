@@ -149,11 +149,20 @@ const SUB_COLORS = [
   { id: "LIME", label: "LIME GREEN", hex: "#A3E635" },
 ];
 
+interface VideoScene {
+  start: number;
+  end: number;
+  topic: string;
+  description: string;
+}
+
 interface ScriptSegment {
   time: number;
   text: string;
   audioStart?: number;
   audioEnd?: number;
+  videoTime?: number;
+  sceneTopic?: string;
 }
 
 interface HistoryItem {
@@ -476,6 +485,27 @@ export default function VideoRecapView() {
     }
   }, [charId]);
 
+  // Helper: Match segments to detected scenes
+  const matchSegmentsToScenes = (segments: ScriptSegment[], scenes: VideoScene[]): ScriptSegment[] => {
+    if (!scenes || scenes.length === 0) return segments;
+    
+    return segments.map(seg => {
+      const matchedScene = scenes.find(sc => 
+        seg.time >= sc.start && seg.time < sc.end
+      ) || scenes.reduce((closest, sc) => {
+        const closestDiff = Math.abs(closest.start - seg.time);
+        const thisDiff = Math.abs(sc.start - seg.time);
+        return thisDiff < closestDiff ? sc : closest;
+      }, scenes[0]);
+      
+      return {
+        ...seg,
+        videoTime: matchedScene?.start ?? seg.time,
+        sceneTopic: matchedScene?.topic,
+      };
+    });
+  };
+
   const handleProcess = async () => {
     if (!file) return;
     if (apiType === "own" && !apiKey.trim()) {
@@ -488,19 +518,22 @@ export default function VideoRecapView() {
       return;
     }
     setAnalyzing(true);
-    setStatusText("STEP 1/3: UPLOADING & ANALYZING VIDEO...");
+    setStatusText("STEP 1/4: UPLOADING & DETECTING SCENES...");
     setFullScriptText("");
     setScriptSegments([]);
     setAudioBlobUrl(null);
     try {
       const customKey = apiType === "own" ? apiKey : undefined;
-      const rawResponse = await analyzeVideo(file, file.type || "video/mp4", targetLang, customKey);
+      const result = await analyzeVideo(file, file.type || "video/mp4", targetLang, customKey);
+      
+      const { recap: rawRecap, scenes: detectedScenes } = result;
+      
       let segments: ScriptSegment[] = [];
       try {
-        segments = JSON.parse(rawResponse);
+        segments = JSON.parse(rawRecap);
         if (!Array.isArray(segments)) throw new Error("Not Array");
       } catch {
-        segments = [{ time: 0, text: rawResponse }];
+        segments = [{ time: 0, text: rawRecap }];
       }
       segments = segments
         .map((s) => ({
@@ -508,6 +541,11 @@ export default function VideoRecapView() {
           text: s.text || "",
         }))
         .sort((a, b) => a.time - b.time);
+
+      if (detectedScenes && detectedScenes.length > 0) {
+        console.log(`[Recap] Detected ${detectedScenes.length} scenes, matching to ${segments.length} segments`);
+        segments = matchSegmentsToScenes(segments, detectedScenes);
+      }
 
       const completeText = segments
         .map((s) => s.text)
