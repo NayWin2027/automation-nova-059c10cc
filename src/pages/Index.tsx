@@ -1,4 +1,5 @@
 import { useState } from "react";
+import PlansView from "@/components/PlansView";
 import { useNavigate } from "react-router-dom";
 import {
   Mic,
@@ -255,25 +256,7 @@ const Index = () => {
     </>
   );
 
-  const renderPremiumContent = () => (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-      <div className="w-10 h-10 rounded-lg icon-gradient-gold flex items-center justify-center mb-2 shadow-lg">
-        <Diamond className="w-4 h-4 text-foreground" />
-      </div>
-      <h2 className="text-sm font-bold text-gold mb-1">Premium Plans</h2>
-      <p className="text-3xs text-muted-foreground mb-3">Unlock all features with premium</p>
-      <div className="space-y-1.5 w-full max-w-xs">
-        <div className="p-2.5 rounded-lg border border-border/30 bg-card/50">
-          <h3 className="text-2xs font-semibold text-foreground">Pro Plan</h3>
-          <p className="text-3xs text-muted-foreground">Advanced features & priority</p>
-        </div>
-        <div className="p-2.5 rounded-lg border border-primary/30 bg-primary/5 shadow-lg">
-          <h3 className="text-2xs font-semibold text-primary">Premium Plan</h3>
-          <p className="text-3xs text-muted-foreground">All features + unlimited</p>
-        </div>
-      </div>
-    </div>
-  );
+  const renderPremiumContent = () => <PlansView />;
 
   const renderSettingsContent = () => (
     <div className="space-y-2">
