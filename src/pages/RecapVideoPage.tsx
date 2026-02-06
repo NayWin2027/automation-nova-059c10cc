@@ -521,46 +521,137 @@ export default function VideoRecapView() {
     }
   };
 
+  // ============ PER-SEGMENT TTS FOR ACCURATE SYNC ============
   const generateAudioFromText = async (text: string, segments: ScriptSegment[]) => {
-    setStatusText("STEP 2/3: GENERATING NARRATION...");
+    setStatusText("STEP 2/3: GENERATING NARRATION (Per-Segment)...");
     const voiceObj = VOICES.find((v) => v.id === selectedVoice) || VOICES[0];
     const customKey = apiType === "own" ? apiKey : undefined;
-    const audioB64 = await generateSpeech(text, voiceObj.apiVoice, customKey);
-    if (audioB64) {
-      setStatusText("STEP 3/3: SYNCING VISUALS...");
-      const blob = createWavBlob(audioB64);
-      const url = URL.createObjectURL(blob);
-      setAudioBlobUrl(url);
-      const tempAudio = new Audio(url);
-      tempAudio.onloadedmetadata = () => {
-        const totalDur = tempAudio.duration;
-        setAudioDuration(totalDur);
-        const totalChars = text.length;
-        let currentTimePointer = 0;
-        const mappedSegments = segments.map((seg) => {
-          const segLen = seg.text.length;
-          const segDur = (segLen / totalChars) * totalDur;
-          const s = {
-            ...seg,
-            audioStart: currentTimePointer,
-            audioEnd: currentTimePointer + segDur,
-          };
-          currentTimePointer += segDur;
-          return s;
-        });
-        setScriptSegments(mappedSegments);
-        setAnalyzing(false);
-        
-        // Save draft to history; confirm credits only after export succeeds.
-        didConfirmSuccessRef.current = false;
-        saveToHistory(text, url, mappedSegments);
-        toast.success("✨ Premium Recap ပြီးပါပြီ! (Export အောင်မြင်မှ credits ဖြတ်ပါမယ်)");
-        
-        setTimeout(() => togglePlay(), 500);
+
+    // Helper: decode base64 audio to AudioBuffer for duration measurement
+    const decodeAudioBase64 = async (b64: string): Promise<AudioBuffer> => {
+      const blob = createWavBlob(b64);
+      const arrayBuffer = await blob.arrayBuffer();
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+      audioCtx.close();
+      return decoded;
+    };
+
+    // Helper: concatenate AudioBuffers into one
+    const concatenateAudioBuffers = (buffers: AudioBuffer[]): AudioBuffer => {
+      if (buffers.length === 0) throw new Error("No audio buffers");
+      const sampleRate = buffers[0].sampleRate;
+      const totalLength = buffers.reduce((acc, b) => acc + b.length, 0);
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const result = audioCtx.createBuffer(1, totalLength, sampleRate);
+      const channel = result.getChannelData(0);
+      let offset = 0;
+      for (const buf of buffers) {
+        channel.set(buf.getChannelData(0), offset);
+        offset += buf.length;
+      }
+      audioCtx.close();
+      return result;
+    };
+
+    // Helper: encode AudioBuffer to WAV Blob
+    const audioBufferToWavBlob = (buffer: AudioBuffer): Blob => {
+      const numChannels = 1;
+      const sampleRate = buffer.sampleRate;
+      const bitsPerSample = 16;
+      const samples = buffer.getChannelData(0);
+      const dataLength = samples.length * 2;
+      const bufferLength = 44 + dataLength;
+      const wav = new ArrayBuffer(bufferLength);
+      const view = new DataView(wav);
+      const writeString = (offset: number, str: string) => {
+        for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
       };
-    } else {
-      alert("Audio Generation Failed. Showing script only.");
-      setScriptSegments(segments);
+      writeString(0, "RIFF");
+      view.setUint32(4, 36 + dataLength, true);
+      writeString(8, "WAVE");
+      writeString(12, "fmt ");
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, numChannels, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * numChannels * (bitsPerSample / 8), true);
+      view.setUint16(32, numChannels * (bitsPerSample / 8), true);
+      view.setUint16(34, bitsPerSample, true);
+      writeString(36, "data");
+      view.setUint32(40, dataLength, true);
+      let writeOffset = 44;
+      for (let i = 0; i < samples.length; i++) {
+        const s = Math.max(-1, Math.min(1, samples[i]));
+        view.setInt16(writeOffset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+        writeOffset += 2;
+      }
+      return new Blob([wav], { type: "audio/wav" });
+    };
+
+    try {
+      const audioBuffers: AudioBuffer[] = [];
+      const segmentDurations: number[] = [];
+
+      // Generate TTS for each segment individually
+      for (let i = 0; i < segments.length; i++) {
+        const seg = segments[i];
+        setStatusText(`STEP 2/3: VOICE ${i + 1}/${segments.length}...`);
+
+        const segB64 = await generateSpeech(seg.text, voiceObj.apiVoice, customKey);
+
+        // Check for WebSpeech fallback marker (sync won't be accurate)
+        if (!segB64 || segB64.startsWith("WEBSPEECH:")) {
+          toast.error("❌ Recap tool အတွက် browser voice သုံး၍မရပါ (sync မတိကျနိုင်)။ API key စစ်ပါ။");
+          setAnalyzing(false);
+          return;
+        }
+
+        const audioBuffer = await decodeAudioBase64(segB64);
+        audioBuffers.push(audioBuffer);
+        segmentDurations.push(audioBuffer.duration);
+      }
+
+      setStatusText("STEP 3/3: SYNCING VISUALS...");
+
+      // Concatenate all audio buffers
+      const combinedBuffer = concatenateAudioBuffers(audioBuffers);
+      const combinedBlob = audioBufferToWavBlob(combinedBuffer);
+      const url = URL.createObjectURL(combinedBlob);
+      setAudioBlobUrl(url);
+      setAudioDuration(combinedBuffer.duration);
+
+      // Map exact timings to segments
+      let currentTimePointer = 0;
+      const mappedSegments = segments.map((seg, idx) => {
+        const segDur = segmentDurations[idx];
+        const mapped = {
+          ...seg,
+          audioStart: currentTimePointer,
+          audioEnd: currentTimePointer + segDur,
+        };
+        currentTimePointer += segDur;
+        return mapped;
+      });
+
+      setScriptSegments(mappedSegments);
+      setAnalyzing(false);
+
+      // Save draft to history; confirm credits only after export succeeds.
+      didConfirmSuccessRef.current = false;
+      saveToHistory(text, url, mappedSegments);
+      toast.success("✨ Premium Recap ပြီးပါပြီ! (Export အောင်မြင်မှ credits ဖြတ်ပါမယ်)");
+
+      setTimeout(() => togglePlay(), 500);
+    } catch (err: any) {
+      console.error("Per-segment TTS error:", err);
+      // If quota/rate-limit, show message and stop (no retry loop)
+      const msg = err.message || "Audio generation failed";
+      if (msg.includes("429") || msg.includes("quota") || msg.includes("rate")) {
+        toast.error("⏳ TTS quota limit ဖြစ်နေပါတယ်—ခဏစောင့်ပြီး ပြန်လုပ်ပါ");
+      } else {
+        toast.error(`Audio Error: ${msg}`);
+      }
       setAnalyzing(false);
     }
   };
@@ -1149,47 +1240,35 @@ export default function VideoRecapView() {
             activeSegment = scriptSegments[scriptSegments.length - 1];
           }
 
-          let isFreezeMode = false;
-          let segmentRelativeTime = 0;
-          let crossfadeAlpha = 1.0; // 1 = full video, 0 = full photo
-
-          // Always apply 3s/3s cycle when motionZoom is enabled (even without segments)
+          // ============ 3S VIDEO / 3S PHOTO HARD-FREEZE LOOP ============
+          // Timeline is driven by audio time (as per user selection)
           const CYCLE_DUR = 6.0;
-          const cycleTime = effectiveTime % CYCLE_DUR;
-          
-          if (motionZoom) {
-            // --- SMOOTH 6S CYCLE (3S Video / 3S Photo Zoom) ---
-            isFreezeMode = cycleTime >= 3.0;
-            
-            // SMOOTH CROSSFADE (0.4s transition for professional look)
-            const FADE_DUR = 0.4;
-            if (cycleTime >= 3.0 - FADE_DUR && cycleTime < 3.0) {
-              // Transitioning TO photo
-              crossfadeAlpha = 1.0 - ((cycleTime - (3.0 - FADE_DUR)) / FADE_DUR);
-            } else if (cycleTime >= 6.0 - FADE_DUR) {
-              // Transitioning TO video (end of cycle)
-              crossfadeAlpha = (cycleTime - (6.0 - FADE_DUR)) / FADE_DUR;
-            } else if (cycleTime < FADE_DUR && effectiveTime > FADE_DUR) {
-              // Continuing from previous cycle
-              crossfadeAlpha = 0.5 + (cycleTime / FADE_DUR) * 0.5;
-            } else {
-              crossfadeAlpha = isFreezeMode ? 0.0 : 1.0;
+          const MOTION_DUR = 3.0;
+          const globalCycleTime = effectiveTime % CYCLE_DUR;
+          const inPhotoPhase = motionZoom && globalCycleTime >= MOTION_DUR;
+          const cycleIndex = Math.floor(effectiveTime / CYCLE_DUR);
+
+          // Hard video control: pause during photo phase, play during video phase
+          if (motionZoom && isPlaying) {
+            if (inPhotoPhase && !video.paused) {
+              video.pause();
+            } else if (!inPhotoPhase && video.paused) {
+              video.play().catch(() => {});
             }
-            
-            // Easing for smoother feel
-            const easeInOut = (t: number) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-            crossfadeAlpha = easeInOut(Math.max(0, Math.min(1, crossfadeAlpha)));
+          }
+
+          // Clamp video.currentTime during photo phase to prevent drift
+          if (motionZoom && inPhotoPhase) {
+            const baseCycleStart = Math.floor(effectiveTime / CYCLE_DUR) * CYCLE_DUR;
+            const desiredVideoTime = (baseCycleStart + MOTION_DUR) % (video.duration || 1);
+            const drift = Math.abs(video.currentTime - desiredVideoTime);
+            if (drift > 0.05 && video.duration > 0) {
+              video.currentTime = desiredVideoTime;
+            }
           }
 
           if (activeSegment) {
             video.playbackRate = videoSpeed;
-            segmentRelativeTime = effectiveTime - (activeSegment.audioStart || 0);
-
-            if (!isFreezeMode && isPlaying && scriptSegments.length > 0) {
-              const targetVideoTime = activeSegment.time + (segmentRelativeTime % video.duration);
-              const drift = Math.abs(video.currentTime - targetVideoTime);
-              if (drift > 0.1) video.currentTime = targetVideoTime;
-            }
           }
 
           if (canvas.width !== targetW || canvas.height !== targetH) {
@@ -1216,12 +1295,10 @@ export default function VideoRecapView() {
           const dx = (targetW - dw) / 2;
           const dy = (targetH - dh) / 2;
 
-          // ===== 3S VIDEO / 3S PHOTO ZOOM LOOP (COPYRIGHT BYPASS) =====
-          // Capture freeze frame exactly once per 6s cycle (entering photo phase) so the photo stays stable.
+          // ===== CAPTURE FREEZE FRAME (once per cycle, at photo phase entry) =====
           const sizeChanged = freezeCanvas.width !== targetW || freezeCanvas.height !== targetH;
-          const cycleIndex = Math.floor(effectiveTime / 6.0);
-          const enteringFreezeMode = motionZoom && isFreezeMode && !wasFreezeModeRef.current;
-          const shouldCaptureForCycle = motionZoom && isFreezeMode && freezeCapturedCycleRef.current !== cycleIndex;
+          const enteringFreezeMode = motionZoom && inPhotoPhase && !wasFreezeModeRef.current;
+          const shouldCaptureForCycle = motionZoom && inPhotoPhase && freezeCapturedCycleRef.current !== cycleIndex;
           const needsCapture =
             sizeChanged ||
             enteringFreezeMode ||
@@ -1233,33 +1310,25 @@ export default function VideoRecapView() {
             freezeCanvas.height = targetH;
             freezeCtx.fillStyle = "#000";
             freezeCtx.fillRect(0, 0, targetW, targetH);
-
-            // Capture current video frame (store unflipped; main ctx flipVideo transform is applied at render time)
+            // Capture current video frame (store raw, unflipped)
             freezeCtx.drawImage(video, dx, dy, dw, dh);
-
-            // Mark this cycle as captured to keep the frame stable for the whole 3s photo phase
             freezeCapturedCycleRef.current = cycleIndex;
           }
 
-          // ===== RENDER LAYERS BASED ON 3S/3S CYCLE =====
+          // ===== RENDER BASED ON PHASE =====
           if (motionZoom) {
-            // 3S Video / 3S Photo cycle active
-            const globalCycleTime = effectiveTime % 6.0;
-            const inPhotoPhase = globalCycleTime >= 3.0;
-            
-            if (inPhotoPhase) {
-              // === PHOTO PHASE (3s - 6s of each cycle) ===
-              // Requirement: NO zoom — keep photo perfectly stable for the full 3 seconds.
+            // CROSSFADE CONSTANTS
+            const FADE_DUR = 0.4;
 
-              // Crossfade transition (0.4s smooth)
-              const FADE_DUR = 0.4;
+            if (inPhotoPhase) {
+              // === PHOTO PHASE (3s - 6s): STABLE, NO ZOOM/PAN ===
               let photoAlpha = 1.0;
-              if (globalCycleTime < 3.0 + FADE_DUR) {
+              if (globalCycleTime < MOTION_DUR + FADE_DUR) {
                 // Fading INTO photo
-                photoAlpha = (globalCycleTime - 3.0) / FADE_DUR;
-              } else if (globalCycleTime > 6.0 - FADE_DUR) {
+                photoAlpha = (globalCycleTime - MOTION_DUR) / FADE_DUR;
+              } else if (globalCycleTime > CYCLE_DUR - FADE_DUR) {
                 // Fading OUT of photo (back to video)
-                photoAlpha = (6.0 - globalCycleTime) / FADE_DUR;
+                photoAlpha = (CYCLE_DUR - globalCycleTime) / FADE_DUR;
               }
               photoAlpha = Math.max(0, Math.min(1, photoAlpha));
 
@@ -1269,19 +1338,16 @@ export default function VideoRecapView() {
                 ctx.drawImage(video, dx, dy, dw, dh);
               }
 
-              // Draw stable photo on top (already letterboxed inside freezeCanvas)
+              // Draw stable freeze frame on top (NO zoom, NO pan — forever stable)
               ctx.globalAlpha = photoAlpha;
               ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH);
             } else {
-              // === VIDEO PHASE (0s - 3s of each cycle) ===
-              const FADE_DUR = 0.4;
+              // === VIDEO PHASE (0s - 3s): Motion video ===
               let videoAlpha = 1.0;
 
-              // Handle crossfade at cycle boundaries
+              // Handle crossfade from photo phase at cycle boundary
               if (globalCycleTime < FADE_DUR && effectiveTime > FADE_DUR) {
-                // Just came from photo phase
                 videoAlpha = globalCycleTime / FADE_DUR;
-
                 // Draw fading photo underneath (stable, NO zoom)
                 ctx.globalAlpha = 1.0 - videoAlpha;
                 ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH);
@@ -1292,7 +1358,7 @@ export default function VideoRecapView() {
               ctx.drawImage(video, dx, dy, dw, dh);
             }
           } else {
-            // Motion zoom disabled - just show video normally
+            // Motion zoom disabled - show video normally
             ctx.globalAlpha = 1.0;
             ctx.drawImage(video, dx, dy, dw, dh);
           }
@@ -1313,64 +1379,8 @@ export default function VideoRecapView() {
           }
           ctx.restore();
 
-          // --- OVERLAYS ---
-          if (blurEnabled) {
-            const by = targetH * (blurY / 100);
-            const bh = targetH * (blurH / 100);
-            ctx.fillStyle = `rgba(0,0,0,${blurOpacity})`;
-            ctx.fillRect(0, by, targetW, bh);
-          }
-
-          if (charImgRef.current) {
-            let volumeScale = 0;
-            if (analyserRef.current && dataArrayRef.current && isPlaying) {
-              analyserRef.current.getByteFrequencyData(dataArrayRef.current);
-              let sum = 0;
-              for (let i = 2; i < 16; i++) sum += dataArrayRef.current[i];
-              volumeScale = sum / 14 / 255;
-            }
-            const cw = targetW * 0.25;
-            const ch = cw;
-            let cx = 20,
-              cy = 20;
-            if (charPos === "TL") {
-              cx = 20;
-              cy = 20;
-            }
-            if (charPos === "TR") {
-              cx = targetW - cw - 20;
-              cy = 20;
-            }
-            if (charPos === "BL") {
-              cx = 20;
-              cy = targetH - ch - 20;
-            }
-            if (charPos === "BR") {
-              cx = targetW - cw - 20;
-              cy = targetH - ch - 20;
-            }
-            ctx.save();
-            const animScale = 1 + volumeScale * 0.08;
-            ctx.translate(cx + cw / 2, cy + ch / 2);
-            ctx.scale(animScale, animScale);
-            ctx.translate(-(cx + cw / 2), -(cy + ch / 2));
-            ctx.beginPath();
-            ctx.arc(cx + cw / 2, cy + ch / 2, cw / 2, 0, Math.PI * 2);
-            ctx.clip();
-            ctx.drawImage(charImgRef.current, cx, cy, cw, ch);
-            if (volumeScale > 0.04) {
-              const mouthH = ch * 0.08 * (0.2 + volumeScale * 0.8);
-              const mouthY = cy + ch * 0.72;
-              ctx.fillStyle = "rgba(0,0,0,0.6)";
-              ctx.beginPath();
-              ctx.ellipse(cx + cw / 2, mouthY, cw * 0.08, mouthH, 0, 0, Math.PI * 2);
-              ctx.fill();
-            }
-            ctx.strokeStyle = "#fff";
-            ctx.lineWidth = 4;
-            ctx.stroke();
-            ctx.restore();
-          }
+          // Track freeze mode state across frames
+          wasFreezeModeRef.current = inPhotoPhase;
 
           if (logoSrc) {
             const logoImg = new Image();
@@ -1547,8 +1557,7 @@ export default function VideoRecapView() {
             }
           }
 
-          // Track freeze mode state across frames
-          wasFreezeModeRef.current = isFreezeMode;
+          // (freeze mode tracking is now done inside the render logic above)
         }
       }
       reqRef.current = requestAnimationFrame(render);
