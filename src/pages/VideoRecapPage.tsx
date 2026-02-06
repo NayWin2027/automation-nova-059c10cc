@@ -1,300 +1,11 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2 } from "lucide-react";
-import { generateSpeech } from "../services/geminiService";
+import { analyzeVideo, generateSpeech, confirmRecapSuccess } from "../services/geminiService";
+import { useAuthGuard } from "../hooks/useAuthGuard";
+import { useApiAccess } from "@/hooks/useApiAccess";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuthGuard } from "@/hooks/useAuthGuard";
-
-// File size limits
-const APP_MODE_MAX_MB = 500;
-const OWN_API_MAX_MB = 1024; // 1GB
-const APP_MODE_MAX_BYTES = APP_MODE_MAX_MB * 1024 * 1024;
-const OWN_API_MAX_BYTES = OWN_API_MAX_MB * 1024 * 1024;
-
-// Small file threshold - use base64 for files under this size
-const SMALL_FILE_THRESHOLD_MB = 15;
-const SMALL_FILE_THRESHOLD_BYTES = SMALL_FILE_THRESHOLD_MB * 1024 * 1024;
-
-// Upload file to Google Files API using resumable upload
-async function uploadToGoogleFilesApi(file: File, apiKey: string, onProgress?: (pct: number) => void): Promise<string> {
-  // Step 1: Initiate resumable upload
-  const initResponse = await fetch(`https://generativelanguage.googleapis.com/upload/v1beta/files?key=${apiKey}`, {
-    method: "POST",
-    headers: {
-      "X-Goog-Upload-Protocol": "resumable",
-      "X-Goog-Upload-Command": "start",
-      "X-Goog-Upload-Header-Content-Length": String(file.size),
-      "X-Goog-Upload-Header-Content-Type": file.type || "video/mp4",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      file: { display_name: file.name },
-    }),
-  });
-
-  if (!initResponse.ok) {
-    const errText = await initResponse.text();
-    throw new Error(`Upload init failed: ${errText}`);
-  }
-
-  const uploadUrl = initResponse.headers.get("X-Goog-Upload-URL");
-  if (!uploadUrl) {
-    throw new Error("No upload URL returned from Google");
-  }
-
-  // Step 2: Upload file content
-  const arrayBuffer = await file.arrayBuffer();
-  const uploadResponse = await fetch(uploadUrl, {
-    method: "PUT",
-    headers: {
-      "Content-Length": String(file.size),
-      "X-Goog-Upload-Offset": "0",
-      "X-Goog-Upload-Command": "upload, finalize",
-    },
-    body: arrayBuffer,
-  });
-
-  if (!uploadResponse.ok) {
-    const errText = await uploadResponse.text();
-    throw new Error(`Upload failed: ${errText}`);
-  }
-
-  const uploadResult = await uploadResponse.json();
-  const fileUri = uploadResult.file?.uri;
-
-  if (!fileUri) {
-    throw new Error("No file URI returned from upload");
-  }
-
-  // Step 3: Wait for file to be processed
-  const fileName = uploadResult.file?.name;
-  if (fileName) {
-    let attempts = 0;
-    const maxAttempts = 60; // 60 seconds max wait
-    while (attempts < maxAttempts) {
-      const statusResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${apiKey}`);
-      if (statusResponse.ok) {
-        const statusData = await statusResponse.json();
-        if (statusData.state === "ACTIVE") {
-          if (onProgress) onProgress(100);
-          return fileUri;
-        }
-        if (statusData.state === "FAILED") {
-          throw new Error("File processing failed on Google servers");
-        }
-      }
-      if (onProgress) onProgress(Math.min(90, 50 + attempts));
-      await new Promise((r) => setTimeout(r, 1000));
-      attempts++;
-    }
-    throw new Error("File processing timeout");
-  }
-
-  return fileUri;
-}
-
-// Analyze video using video-recap edge function
-async function analyzeVideo(
-  file: File,
-  mimeType: string,
-  targetLang: string,
-  useOwnApi: boolean = false,
-  apiKey?: string,
-  onProgress?: (pct: number) => void,
-): Promise<string> {
-  const maxBytes = useOwnApi ? OWN_API_MAX_BYTES : APP_MODE_MAX_BYTES;
-  const maxMB = useOwnApi ? OWN_API_MAX_MB : APP_MODE_MAX_MB;
-
-  if (file.size > maxBytes) {
-    throw new Error(`ဗီဒီယိုဖိုင်ကြီးလွန်းသည်။ ${maxMB}MB အောက်ဖိုင်သုံးပါ။`);
-  }
-
-  // For large files, use Google Files API
-  if (file.size > SMALL_FILE_THRESHOLD_BYTES) {
-    if (useOwnApi && apiKey) {
-      // Own API Key mode - upload directly from frontend
-      if (onProgress) onProgress(10);
-      const fileUri = await uploadToGoogleFilesApi(file, apiKey, (p) => onProgress?.(10 + p * 0.4));
-      if (onProgress) onProgress(60);
-
-      // Call Gemini with file URI
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              {
-                role: "user",
-                parts: [
-                  { fileData: { mimeType: file.type || "video/mp4", fileUri: fileUri } },
-                  { text: getSystemPrompt(targetLang) + "\n\nPlease analyze this video and create a detailed recap." },
-                ],
-              },
-            ],
-            generationConfig: { temperature: 0.7, maxOutputTokens: 4096 },
-          }),
-        },
-      );
-
-      if (!response.ok) {
-        const errText = await response.text();
-        if (errText.includes("RESOURCE_EXHAUSTED") || response.status === 429) {
-          throw new Error("API quota ကုန်သွားပါပြီ။ ခဏစောင့်ပါ။");
-        }
-        throw new Error(`Gemini API error: ${errText.substring(0, 200)}`);
-      }
-
-      const data = await response.json();
-      if (onProgress) onProgress(100);
-      return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    } else {
-      // App Mode - use edge function with Files API
-      if (onProgress) onProgress(10);
-
-      // Step 1: Get upload session from edge function
-      const { data: sessionData, error: sessionError } = await supabase.functions.invoke("video-recap", {
-        body: {
-          action: "initUpload",
-          fileName: file.name,
-          fileSize: file.size,
-          mimeType: file.type || "video/mp4",
-        },
-      });
-
-      if (sessionError || sessionData?.error) {
-        throw new Error(sessionData?.error || sessionError?.message || "Failed to init upload");
-      }
-
-      const uploadUrl = sessionData?.uploadUrl;
-      if (!uploadUrl) {
-        throw new Error("No upload URL returned");
-      }
-
-      if (onProgress) onProgress(20);
-
-      // Step 2: Upload directly to Google
-      const arrayBuffer = await file.arrayBuffer();
-      const uploadResponse = await fetch(uploadUrl, {
-        method: "PUT",
-        headers: {
-          "Content-Length": String(file.size),
-          "X-Goog-Upload-Offset": "0",
-          "X-Goog-Upload-Command": "upload, finalize",
-        },
-        body: arrayBuffer,
-      });
-
-      if (!uploadResponse.ok) {
-        const errText = await uploadResponse.text();
-        throw new Error(`Upload failed: ${errText}`);
-      }
-
-      const uploadResult = await uploadResponse.json();
-      const fileUri = uploadResult.file?.uri;
-      const fileName = uploadResult.file?.name;
-
-      if (!fileUri) {
-        throw new Error("No file URI from upload");
-      }
-
-      if (onProgress) onProgress(60);
-
-      // Step 3: Wait for processing and analyze
-      const { data, error } = await supabase.functions.invoke("video-recap", {
-        body: {
-          action: "analyzeFile",
-          fileUri: fileUri,
-          fileName: fileName,
-          targetLang: targetLang,
-        },
-      });
-
-      if (error) {
-        throw new Error(error.message || "Analysis failed");
-      }
-
-      if (data?.error) {
-        throw new Error(data.error);
-      }
-
-      if (onProgress) onProgress(100);
-      return data?.recap || "";
-    }
-  }
-
-  // For small files, use base64 (original approach)
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        if (onProgress) onProgress(30);
-        const base64 = reader.result as string;
-        const { data, error } = await supabase.functions.invoke("video-recap", {
-          body: {
-            videoUrl: base64,
-            useOwnApi: useOwnApi,
-            apiKey: apiKey,
-            targetLang: targetLang,
-          },
-        });
-
-        if (error) {
-          if (error.message?.includes("WORKER_LIMIT") || error.message?.includes("compute resources")) {
-            reject(new Error(`ဗီဒီယိုဖိုင်ကြီးလွန်းသည်။ ${SMALL_FILE_THRESHOLD_MB}MB အောက်ဖိုင်သုံးပါ။`));
-            return;
-          }
-          reject(new Error(error.message || "Video analysis failed"));
-          return;
-        }
-
-        if (data?.error) {
-          reject(new Error(data.error));
-          return;
-        }
-
-        if (onProgress) onProgress(100);
-        resolve(data?.recap || "");
-      } catch (err: any) {
-        if (err.message?.includes("WORKER_LIMIT") || err.message?.includes("546")) {
-          reject(new Error(`ဗီဒီယိုဖိုင်ကြီးလွန်းသည်။ Files API သုံးပါ။`));
-          return;
-        }
-        reject(err);
-      }
-    };
-    reader.onerror = () => reject(new Error("Failed to read video file"));
-    reader.readAsDataURL(file);
-  });
-}
-
-// System prompt for video analysis
-function getSystemPrompt(targetLang: string): string {
-  return `You are a professional video content summarizer. Create a comprehensive recap.
-
-INSTRUCTIONS:
-1. Analyze the video content thoroughly
-2. Include key points, main topics, and important takeaways
-3. Structure the recap with clear sections
-4. Write in ${targetLang || "Burmese"} with proper spelling
-5. Keep the recap informative yet concise
-
-FORMAT:
-📺 ဗီဒီယို အကျဉ်းချုပ်
-[Brief overview]
-
-🔑 အဓိက အချက်များ
-- [Key point 1]
-- [Key point 2]
-- [Key point 3]
-
-📝 အသေးစိတ် အကြောင်းအရာ
-[Detailed content summary]
-
-💡 သုံးသပ်ချက်
-[Key takeaways and insights]`;
-}
+import { toast } from "sonner";
+import { Home, Lock } from "lucide-react";
 
 // --- DATA SETS ---
 const VOICES = [
@@ -322,36 +33,10 @@ const VOICES = [
 
 const CHARACTERS = [
   { id: "none", label: "မပြပါ (None)", src: "" },
-  {
-    id: "c1",
-    label: "Char 1 (Male Denim)",
-    src: "https://images.unsplash.com/photo-1614283233556-f35b0c801ef1?w=400&h=400&fit=crop&crop=faces",
-  },
-  {
-    id: "c2",
-    label: "Char 2 (Female Hoodie)",
-    src: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400&h=400&fit=crop&crop=faces",
-  },
-  {
-    id: "c3",
-    label: "Char 3 (Male Green)",
-    src: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&h=400&fit=crop&crop=faces",
-  },
-  {
-    id: "c4",
-    label: "Char 4 (Female Black)",
-    src: "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=400&h=400&fit=crop&crop=faces",
-  },
-  {
-    id: "c5",
-    label: "Char 5 (Male Grey)",
-    src: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop&crop=faces",
-  },
-  {
-    id: "c6",
-    label: "Char 6 (Female Yellow)",
-    src: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&h=400&fit=crop&crop=faces",
-  },
+  { id: "c1", label: "ဒီကောင်လေး (Boy)", src: "https://cdn-icons-png.flaticon.com/512/4140/4140048.png" },
+  { id: "c2", label: "ဒီကောင်မလေး (Girl)", src: "https://cdn-icons-png.flaticon.com/512/4140/4140047.png" },
+  { id: "c3", label: "ဒီလူကြီး (Adult M)", src: "https://cdn-icons-png.flaticon.com/512/4140/4140037.png" },
+  { id: "c4", label: "ဒီအမျိုးသမီး (Adult F)", src: "https://cdn-icons-png.flaticon.com/512/4140/4140051.png" },
 ];
 
 const LANGUAGES = [
@@ -471,32 +156,48 @@ interface ScriptSegment {
   audioEnd?: number;
 }
 
-const AccordionItem = ({
-  title,
-  isOpen,
-  onClick,
-  children,
-}: {
+interface HistoryItem {
+  id: string;
+  timestamp: number;
+  fileName: string;
+  script: string;
+  audioBlobUrl: string | null;
+  segments: ScriptSegment[];
+  thumbnail?: string;
+}
+
+interface AccordionItemProps {
   title: string;
   isOpen: boolean;
   onClick: () => void;
   children?: React.ReactNode;
-}) => (
-  <div className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0a0a] transition-all duration-300">
-    <button
-      onClick={onClick}
-      className="w-full p-4 flex justify-between items-center bg-white/5 hover:bg-white/10 active:bg-white/20 transition-colors"
-    >
-      <span className="text-[9px] font-black text-white uppercase tracking-widest">{title}</span>
-      <span className={`text-white transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`}>▼</span>
-    </button>
+}
+
+// Fix: silence "Function components cannot be given refs" warnings by forwarding any ref.
+const AccordionItem = React.forwardRef<HTMLDivElement, AccordionItemProps>(function AccordionItem(
+  { title, isOpen, onClick, children },
+  ref
+) {
+  return (
     <div
-      className={`transition-[max-height] duration-500 ease-in-out overflow-hidden ${isOpen ? "max-h-[800px]" : "max-h-0"}`}
+      ref={ref}
+      className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0a0a] transition-all duration-300"
     >
-      <div className="p-4 space-y-4 border-t border-white/5">{children}</div>
+      <button
+        onClick={onClick}
+        className="w-full p-4 flex justify-between items-center bg-white/5 hover:bg-white/10 active:bg-white/20 transition-colors"
+      >
+        <span className="text-[9px] font-black text-white uppercase tracking-widest">{title}</span>
+        <span className={`text-white transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`}>▼</span>
+      </button>
+      <div
+        className={`transition-[max-height] duration-500 ease-in-out overflow-hidden ${isOpen ? "max-h-[800px]" : "max-h-0"}`}
+      >
+        <div className="p-4 space-y-4 border-t border-white/5">{children}</div>
+      </div>
     </div>
-  </div>
-);
+  );
+});
 
 const createWavBlob = (base64Audio: string) => {
   const binaryString = atob(base64Audio);
@@ -536,11 +237,13 @@ const createWavBlob = (base64Audio: string) => {
 };
 
 export default function VideoRecapView() {
+  // Auth guard (redirects when needed). Don't render a blocking spinner here;
+  // we keep UI state alive to avoid "blink" resets during long processes.
+  useAuthGuard("video-recap");
   const navigate = useNavigate();
-  const { isAllowed, isLoading: authLoading } = useAuthGuard("recap");
-
   const [file, setFile] = useState<File | null>(null);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
+  const [videoDataUrl, setVideoDataUrl] = useState<string | null>(null); // Persist video as base64
   const [analyzing, setAnalyzing] = useState(false);
   const [statusText, setStatusText] = useState("");
   const [scriptSegments, setScriptSegments] = useState<ScriptSegment[]>([]);
@@ -558,15 +261,6 @@ export default function VideoRecapView() {
   const [timelineColor, setTimelineColor] = useState(COLORS[0].hex);
   const [timelineHeight, setTimelineHeight] = useState(3);
   const [borderColor, setBorderColor] = useState(COLORS[2].hex);
-
-  // Show loading while checking auth
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
   const [borderWidth, setBorderWidth] = useState(10);
   const [charId, setCharId] = useState("none");
   const [charPos, setCharPos] = useState<"TL" | "TR" | "BL" | "BR">("BR");
@@ -579,7 +273,6 @@ export default function VideoRecapView() {
   const [filmGrain, setFilmGrain] = useState(true);
   const [borderEnabled, setBorderEnabled] = useState(false);
   const [videoSpeed, setVideoSpeed] = useState(1.0);
-  const [isAutoSync, setIsAutoSync] = useState(false);
   const [motionZoom, setMotionZoom] = useState(true);
   const [flipVideo, setFlipVideo] = useState(false);
   const [audioSpeed, setAudioSpeed] = useState(1.0);
@@ -591,6 +284,71 @@ export default function VideoRecapView() {
   const [logoNeon, setLogoNeon] = useState(false);
   const [channelName, setChannelName] = useState("");
   const [tickerMode, setTickerMode] = useState<"OFF" | "SCROLL" | "BOUNCE">("OFF");
+ 
+  // History state
+  const [history, setHistory] = useState<HistoryItem[]>(() => {
+    try {
+      const saved = localStorage.getItem("video_recap_history");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [showHistory, setShowHistory] = useState(false);
+  const [currentFileName, setCurrentFileName] = useState("");
+
+  // Keep session alive during long-running steps to prevent token expiry → 401 → redirect → state reset.
+  useEffect(() => {
+    if (!analyzing && !isExporting) return;
+    let disposed = false;
+
+    const ensureFreshSession = async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const session = data.session;
+        if (!session) return;
+
+        // If expiring soon (next 2 minutes), refresh.
+        const expiresAtMs = (session.expires_at ?? 0) * 1000;
+        if (expiresAtMs && expiresAtMs - Date.now() < 2 * 60 * 1000) {
+          await supabase.auth.refreshSession();
+        }
+      } catch {
+        // ignore; auth guard will handle if the user truly loses session
+      }
+    };
+
+    const onVisible = () => {
+      if (disposed) return;
+      if (document.visibilityState === "visible") {
+        void ensureFreshSession();
+      }
+    };
+
+    void ensureFreshSession();
+    document.addEventListener("visibilitychange", onVisible);
+    const id = window.setInterval(() => {
+      void ensureFreshSession();
+    }, 60 * 1000);
+
+    return () => {
+      disposed = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(id);
+    };
+  }, [analyzing, isExporting]);
+
+  // API Access Control
+  const { appApiAllowed, ownApiAllowed, defaultApiMode, isLoading: accessLoading } = useApiAccess();
+  const [apiType, setApiType] = useState<"app" | "own">("app");
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem("master_recap_api_key") || "");
+
+  // Sync apiType with access control
+  useEffect(() => {
+    if (!accessLoading) {
+      setApiType(defaultApiMode);
+    }
+  }, [accessLoading, defaultApiMode]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -598,6 +356,7 @@ export default function VideoRecapView() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const reqRef = useRef<number>();
+  const lastProgressUpdateRef = useRef<number>(0);
   const logoAngleRef = useRef(0);
   const tickerXRef = useRef(0);
   const tickerYRef = useRef(0);
@@ -605,26 +364,86 @@ export default function VideoRecapView() {
   const tickerVelYRef = useRef(1);
   const charImgRef = useRef<HTMLImageElement | null>(null);
   const freezeCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const wasFreezeModeRef = useRef(false);
+  const didConfirmSuccessRef = useRef(false);
 
   // Animation States for Lip-sync
   const analyserRef = useRef<AnalyserNode | null>(null);
+  // WebAudio expects a Uint8Array backed by ArrayBuffer (not SharedArrayBuffer)
   const dataArrayRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem("master_recap_api_key", apiKey);
+  }, [apiKey]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const f = e.target.files[0];
       setFile(f);
-      const url = URL.createObjectURL(f);
-      setVideoSrc(url);
+      setCurrentFileName(f.name);
+     
+      // Convert to Base64 Data URL for persistence (survives browser tab switches)
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        setVideoDataUrl(dataUrl);
+        setVideoSrc(dataUrl); // Use data URL instead of blob URL
+      };
+      reader.onerror = () => {
+        // Fallback to blob URL if base64 fails
+        setVideoSrc(URL.createObjectURL(f));
+      };
+      reader.readAsDataURL(f);
+     
       setFullScriptText("");
       setScriptSegments([]);
       setAudioBlobUrl(null);
       setIsPlaying(false);
       setProgress(0);
       setIsVideoReady(false);
-      setIsAutoSync(false);
     }
+  };
+
+  // Save to history
+  const saveToHistory = useCallback((script: string, audioUrl: string | null, segments: ScriptSegment[]) => {
+    if (!currentFileName || !script) return;
+   
+    const newItem: HistoryItem = {
+      id: Date.now().toString(),
+      timestamp: Date.now(),
+      fileName: currentFileName,
+      script,
+      audioBlobUrl: audioUrl,
+      segments,
+    };
+   
+    setHistory(prev => {
+      const updated = [newItem, ...prev.slice(0, 19)]; // Keep last 20
+      localStorage.setItem("video_recap_history", JSON.stringify(updated));
+      return updated;
+    });
+   
+    toast.success("History ထဲမှာ သိမ်းပြီးပါပြီ!");
+  }, [currentFileName]);
+
+  // Load from history
+  const loadFromHistory = (item: HistoryItem) => {
+    setFullScriptText(item.script);
+    setScriptSegments(item.segments);
+    setAudioBlobUrl(item.audioBlobUrl);
+    setShowHistory(false);
+    toast.success(`"${item.fileName}" ပြန်ဖွင့်ပြီးပါပြီ`);
+  };
+
+  // Delete from history
+  const deleteFromHistory = (id: string) => {
+    setHistory(prev => {
+      const updated = prev.filter(h => h.id !== id);
+      localStorage.setItem("video_recap_history", JSON.stringify(updated));
+      return updated;
+    });
+    toast.success("History မှ ဖျက်ပြီးပါပြီ");
   };
 
   const handleVideoLoaded = () => {
@@ -643,40 +462,6 @@ export default function VideoRecapView() {
     }
   };
 
-  // --- REFINED AUTO SYNC FUNCTION ---
-  const calculateAndApplySync = () => {
-    if (videoRef.current && audioDuration > 0) {
-      const vDur = videoRef.current.duration;
-      const aDur = audioDuration;
-      if (vDur > 0 && isFinite(vDur)) {
-        const exactRate = vDur / aDur;
-        // Clamping 0.1 to 9.0x
-        const finalRate = Math.min(Math.max(exactRate, 0.1), 9.0);
-        setVideoSpeed(parseFloat(finalRate.toFixed(2)));
-        return true;
-      }
-    }
-    return false;
-  };
-
-  const toggleAutoSync = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent bubbling issues
-
-    // Feedback for user if they click before ready
-    if (!audioBlobUrl || audioDuration === 0) {
-      alert("⚠️ Audio generation is still in progress. Auto-Sync will activate once audio is ready.");
-    }
-
-    setIsAutoSync(!isAutoSync);
-  };
-
-  // Automatic recalculation if ON and dependencies become ready
-  useEffect(() => {
-    if (isAutoSync && isVideoReady && audioDuration > 0) {
-      calculateAndApplySync();
-    }
-  }, [isAutoSync, audioDuration, isVideoReady]);
-
   useEffect(() => {
     const char = CHARACTERS.find((c) => c.id === charId);
     if (char && char.src) {
@@ -693,37 +478,23 @@ export default function VideoRecapView() {
 
   const handleProcess = async () => {
     if (!file) return;
-
-    // File size check based on mode
-    const maxBytes = APP_MODE_MAX_BYTES; // App mode limit (500MB)
-    const maxMB = APP_MODE_MAX_MB;
-
-    if (file.size > maxBytes) {
-      alert(`⚠️ ဗီဒီယိုဖိုင်ကြီးလွန်းသည်။ ${maxMB}MB အောက်ဖိုင်သုံးပါ။`);
+    if (apiType === "own" && !apiKey.trim()) {
+      alert("GEMINI API KEY အရင်ထည့်ပေးပါ။");
       return;
     }
-
+    // UPGRADED: 1GB LIMIT
+    if (file.size > 1024 * 1024 * 1024) {
+      alert("⚠️ Video file is too large! Maximum limit is 1GB.");
+      return;
+    }
     setAnalyzing(true);
     setStatusText("STEP 1/3: UPLOADING & ANALYZING VIDEO...");
     setFullScriptText("");
     setScriptSegments([]);
     setAudioBlobUrl(null);
-
     try {
-      const rawResponse = await analyzeVideo(
-        file,
-        file.type || "video/mp4",
-        targetLang,
-        false, // useOwnApi
-        undefined, // apiKey
-        (pct) => {
-          if (pct < 50) {
-            setStatusText(`STEP 1/3: UPLOADING VIDEO... ${pct}%`);
-          } else {
-            setStatusText(`STEP 1/3: ANALYZING VIDEO... ${pct}%`);
-          }
-        },
-      );
+      const customKey = apiType === "own" ? apiKey : undefined;
+      const rawResponse = await analyzeVideo(file, file.type || "video/mp4", targetLang, customKey);
       let segments: ScriptSegment[] = [];
       try {
         segments = JSON.parse(rawResponse);
@@ -737,6 +508,7 @@ export default function VideoRecapView() {
           text: s.text || "",
         }))
         .sort((a, b) => a.time - b.time);
+
       const completeText = segments
         .map((s) => s.text)
         .join(" ")
@@ -754,7 +526,8 @@ export default function VideoRecapView() {
   const generateAudioFromText = async (text: string, segments: ScriptSegment[]) => {
     setStatusText("STEP 2/3: GENERATING NARRATION...");
     const voiceObj = VOICES.find((v) => v.id === selectedVoice) || VOICES[0];
-    const audioB64 = await generateSpeech(text, voiceObj.apiVoice);
+    const customKey = apiType === "own" ? apiKey : undefined;
+    const audioB64 = await generateSpeech(text, voiceObj.apiVoice, customKey);
     if (audioB64) {
       setStatusText("STEP 3/3: SYNCING VISUALS...");
       const blob = createWavBlob(audioB64);
@@ -779,6 +552,12 @@ export default function VideoRecapView() {
         });
         setScriptSegments(mappedSegments);
         setAnalyzing(false);
+       
+        // Save draft to history; confirm credits only after export succeeds.
+        didConfirmSuccessRef.current = false;
+        saveToHistory(text, url, mappedSegments);
+        toast.success("✨ Premium Recap ပြီးပါပြီ! (Export အောင်မြင်မှ credits ဖြတ်ပါမယ်)");
+       
         setTimeout(() => togglePlay(), 500);
       };
     } else {
@@ -847,62 +626,494 @@ export default function VideoRecapView() {
     setProgress(val);
   };
 
-  const handleExport = async () => {
-    if (!videoRef.current || !canvasRef.current || !audioRef.current) return;
-    setIsExporting(true);
-    setIsPlaying(true);
-    videoRef.current.currentTime = 0;
-    audioRef.current.currentTime = 0;
-    videoRef.current.play();
-    audioRef.current.play();
-    const canvasStream = canvasRef.current.captureStream(30);
-    let audioStream;
-    try {
-      const stream = (audioRef.current as any).captureStream
-        ? (audioRef.current as any).captureStream()
-        : (audioRef.current as any).mozCaptureStream();
-      audioStream = stream;
-    } catch (e) {
-      console.warn("Audio capture failed");
+  // FAST REAL-TIME RECORDING: Record during preview playback (no frame-by-frame)
+  const handleAutoSaveRecord = useCallback(async () => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const audio = audioRef.current;
+   
+    if (!video || !canvas || !audio || !audioBlobUrl) {
+      toast.error("Video/Audio မ ready ဖြစ်သေးပါ");
+      return;
     }
-    const tracks = [...canvasStream.getVideoTracks()];
-    if (audioStream) tracks.push(...audioStream.getAudioTracks());
-    const combinedStream = new MediaStream(tracks);
-    const recorder = new MediaRecorder(combinedStream, { mimeType: "video/webm;codecs=vp9" });
+   
+    // Basic capability checks (avoid hard crashes on mobile browsers)
+    if (typeof MediaRecorder === "undefined") {
+      toast.error("ဒီ browser မှာ Auto Save မထောက်ပံ့ပါ (MediaRecorder မရှိပါ)။ Chrome (Android/Desktop) နဲ့ စမ်းပါ");
+      return;
+    }
+
+    // Stop any previous recording cleanly
+    try {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+        mediaRecorderRef.current.stop();
+      }
+    } catch {
+      // ignore
+    }
+
+    const waitForPlayable = (el: HTMLMediaElement, label: string) =>
+      new Promise<void>((resolve, reject) => {
+        // HAVE_CURRENT_DATA = 2
+        if (el.readyState >= 2 && Number.isFinite(el.duration) && el.duration > 0) return resolve();
+
+        let done = false;
+        const cleanup = () => {
+          if (done) return;
+          done = true;
+          el.removeEventListener("loadedmetadata", onReady);
+          el.removeEventListener("canplay", onReady);
+          el.removeEventListener("canplaythrough", onReady);
+          el.removeEventListener("error", onErr);
+          window.clearTimeout(t);
+        };
+        const onReady = () => {
+          if (el.readyState >= 2 && Number.isFinite(el.duration) && el.duration > 0) {
+            cleanup();
+            resolve();
+          }
+        };
+        const onErr = () => {
+          cleanup();
+          reject(new Error(`${label} load error`));
+        };
+        const t = window.setTimeout(() => {
+          cleanup();
+          reject(new Error(`${label} timed out`));
+        }, 12000);
+
+        el.addEventListener("loadedmetadata", onReady);
+        el.addEventListener("canplay", onReady);
+        el.addEventListener("canplaythrough", onReady);
+        el.addEventListener("error", onErr);
+      });
+
+    const pickMimeType = () => {
+      // Prefer MP4 when supported (plays in more phone galleries), otherwise VP8 WebM.
+      const candidates = [
+        // Some Android devices support MP4/H264 recording via MediaRecorder
+        "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+        "video/mp4",
+        "video/webm;codecs=vp8,opus",
+        "video/webm;codecs=vp9,opus",
+        "video/webm;codecs=vp8",
+        "video/webm;codecs=vp9",
+        "video/webm",
+      ];
+      for (const t of candidates) {
+        if ((MediaRecorder as any).isTypeSupported?.(t)) return t;
+      }
+      return "";
+    };
+
+    setIsExporting(true);
+    setProgress(0);
+    didConfirmSuccessRef.current = false;
+
+    try {
+      // Ensure media is actually ready (prevents instant-ended → tiny 0s file)
+      await Promise.all([waitForPlayable(video, "Video"), waitForPlayable(audio, "Audio")]);
+    } catch {
+      toast.error("Audio/Video load မပြီးသေးပါ—ခဏစောင့်ပြီး ပြန်နှိပ်ပါ");
+      setIsExporting(false);
+      return;
+    }
+
+    // Reset to start (after ready)
+    video.currentTime = 0;
+    audio.currentTime = 0;
+
+    // Capture canvas stream at 30fps
+    const fps = 30;
+    const stream = canvas.captureStream(fps);
+
+    // Add audio track if supported
+    try {
+      const audioStream = (audio as any).captureStream?.() || (audio as any).mozCaptureStream?.();
+      if (audioStream) {
+        audioStream.getAudioTracks().forEach((track: MediaStreamTrack) => stream.addTrack(track));
+      }
+    } catch {
+      // Some browsers don't support captureStream on audio; we still record video and warn.
+      console.warn("Audio capture not supported");
+    }
+
+    const mimeType = pickMimeType();
+
+    let recorder: MediaRecorder;
+    try {
+      recorder = new MediaRecorder(
+        stream,
+        mimeType
+          ? { mimeType, videoBitsPerSecond: 6000000 }
+          : { videoBitsPerSecond: 6000000 }
+      );
+    } catch {
+      toast.error("ဒီ browser မှာ recording format မထောက်ပံ့ပါ—Chrome နဲ့ စမ်းပါ");
+      setIsExporting(false);
+      return;
+    }
+
     mediaRecorderRef.current = recorder;
     recordedChunksRef.current = [];
+
     recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) recordedChunksRef.current.push(e.data);
+      if (e.data && e.data.size > 0) recordedChunksRef.current.push(e.data);
     };
+
+    recorder.onerror = () => {
+      toast.error("Recording error ဖြစ်သွားပါတယ်—ပြန်စမ်းပါ");
+    };
+
+    const cleanupAfterStop = () => {
+      setIsExporting(false);
+      setProgress(100);
+      setIsPlaying(false);
+    };
+
     recorder.onstop = () => {
-      const blob = new Blob(recordedChunksRef.current, { type: "video/webm" });
+      const finalType = mimeType || "video/webm";
+      const blob = new Blob(recordedChunksRef.current, { type: finalType });
+
+      // If ended immediately / no frames were encoded, this will be tiny and unreadable.
+      if (blob.size < 200 * 1024) {
+        toast.error("❌ Auto Save မအောင်မြင်ပါ (0s/empty) — Preview ပြီးသွားမှ Stop ဖြစ်အောင် ပြန်နှိပ်ပါ");
+        cleanupAfterStop();
+        return;
+      }
+
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `MASTER_AI_VIDEO_${Date.now()}.webm`;
+      const ext = finalType.includes("mp4") ? "mp4" : "webm";
+      a.download = `MASTER_AI_VIDEO_${Date.now()}.${ext}`;
+      document.body.appendChild(a);
       a.click();
-      setIsExporting(false);
-      setIsPlaying(false);
+      document.body.removeChild(a);
+
+      // Delay revoke so mobile browsers can finish downloading
+      window.setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+      if (!didConfirmSuccessRef.current) {
+        didConfirmSuccessRef.current = true;
+        const customKeyForConfirm = apiType === "own" ? apiKey : undefined;
+        confirmRecapSuccess(customKeyForConfirm);
+        toast.success(`✅ Auto-save ပြီးပါပြီ! (${(blob.size / 1024 / 1024).toFixed(1)} MB)`);
+      }
+
+      cleanupAfterStop();
     };
-    audioRef.current.onended = () => recorder.stop();
-    recorder.start();
+
+    // Start playback + recording
+    toast.info("🎬 Download recording started...");
+    recorder.start(250);
+
+    setupAudioAnalyzer();
+    setIsPlaying(true);
+
+    // Start video/audio (must be within user gesture; button click already)
+    video.play().catch(() => {});
+    audio.play().catch(() => {});
+
+    // Used for progress + safety timeout
+    const totalDur =
+      (Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : audioDuration) ||
+      video.duration ||
+      10;
+
+    // Stop when audio ends OR reaches end (some browsers don't fire ended reliably)
+    const stopRecording = () => {
+      try {
+        video.pause();
+        audio.pause();
+      } catch {
+        // ignore
+      }
+      try {
+        if (recorder.state === "recording") {
+          // Helps some browsers finalize a playable file (duration/headers).
+          try {
+            recorder.requestData();
+          } catch {
+            // ignore
+          }
+          window.setTimeout(() => {
+            try {
+              if (recorder.state === "recording") recorder.stop();
+            } catch {
+              cleanupAfterStop();
+            }
+          }, 80);
+        }
+      } catch {
+        cleanupAfterStop();
+      }
+    };
+
+    const onAudioEnd = () => stopRecording();
+    audio.addEventListener("ended", onAudioEnd, { once: true });
+
+    // Safety timeout: duration + small buffer
+    const safetyMs = Math.max(2000, Math.round(totalDur * 1000) + 1500);
+    window.setTimeout(() => {
+      if (mediaRecorderRef.current === recorder && recorder.state === "recording") {
+        stopRecording();
+      }
+    }, safetyMs);
+   
+  }, [audioBlobUrl, audioDuration, apiType, apiKey, setupAudioAnalyzer]);
+
+  // Legacy download handler (unused but kept for reference)
+  const handleDownload = handleAutoSaveRecord;
+ 
+  // Unified frame render function (same logic for preview and export)
+  const renderFrameToCanvas = (
+    ctx: CanvasRenderingContext2D,
+    freezeCtx: CanvasRenderingContext2D,
+    freezeCanvas: HTMLCanvasElement,
+    video: HTMLVideoElement,
+    effectiveTime: number,
+    wasFreezePrev: boolean,
+    setWasFreeze: (val: boolean) => void
+  ) => {
+    const targetW = ctx.canvas.width;
+    const targetH = ctx.canvas.height;
+   
+    // Find active segment
+    let activeSegment = scriptSegments.find(
+      (s) => effectiveTime >= (s.audioStart || 0) && effectiveTime < (s.audioEnd || Infinity),
+    );
+    if (!activeSegment && scriptSegments.length > 0 && effectiveTime >= (scriptSegments[scriptSegments.length - 1].audioEnd || 0)) {
+      activeSegment = scriptSegments[scriptSegments.length - 1];
+    }
+   
+    let isFreezeMode = false;
+    let crossfadeAlpha = 1.0; // 1 = full video, 0 = full photo
+   
+    if (activeSegment) {
+      const segmentRelativeTime = effectiveTime - (activeSegment.audioStart || 0);
+      const CYCLE_DUR = 6.0;
+      const cycleTime = segmentRelativeTime % CYCLE_DUR;
+     
+      // Smooth 6-second cycle: 0-3s video, 3-6s photo zoom
+      isFreezeMode = cycleTime >= 3.0 && motionZoom;
+     
+      // SMOOTH CROSSFADE (0.4s transition)
+      const FADE_DUR = 0.4;
+      if (cycleTime >= 3.0 - FADE_DUR && cycleTime < 3.0) {
+        // Transitioning TO photo
+        crossfadeAlpha = 1.0 - ((cycleTime - (3.0 - FADE_DUR)) / FADE_DUR);
+      } else if (cycleTime >= 6.0 - FADE_DUR || cycleTime < FADE_DUR) {
+        // Transitioning TO video (wrap-around)
+        if (cycleTime >= 6.0 - FADE_DUR) {
+          crossfadeAlpha = (cycleTime - (6.0 - FADE_DUR)) / FADE_DUR;
+        } else {
+          crossfadeAlpha = 0.5 + (cycleTime / FADE_DUR) * 0.5;
+        }
+      } else {
+        crossfadeAlpha = isFreezeMode ? 0.0 : 1.0;
+      }
+    }
+   
+    // Easing for smoother feel
+    const easeInOut = (t: number) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    crossfadeAlpha = easeInOut(Math.max(0, Math.min(1, crossfadeAlpha)));
+   
+    // Calculate video dimensions
+    const vw = video.videoWidth || 1280;
+    const vh = video.videoHeight || 720;
+    let scale = smartZoom ? Math.max(targetW / vw, targetH / vh) : Math.min(targetW / vw, targetH / vh);
+    const dw = vw * scale;
+    const dh = vh * scale;
+    const dx = (targetW - dw) / 2;
+    const dy = (targetH - dh) / 2;
+   
+    // Clear and fill black
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, targetW, targetH);
+   
+    ctx.save();
+    if (flipVideo) {
+      ctx.translate(targetW, 0);
+      ctx.scale(-1, 1);
+    }
+   
+    // Capture freeze frame at transition point
+    const needsCapture = (isFreezeMode && !wasFreezePrev) ||
+      (freezeCanvas.width !== targetW || freezeCanvas.height !== targetH);
+   
+    if (needsCapture && freezeCtx) {
+      freezeCanvas.width = targetW;
+      freezeCanvas.height = targetH;
+      freezeCtx.fillStyle = "#000";
+      freezeCtx.fillRect(0, 0, targetW, targetH);
+      if (flipVideo) {
+        freezeCtx.save();
+        freezeCtx.translate(targetW, 0);
+        freezeCtx.scale(-1, 1);
+      }
+      freezeCtx.drawImage(video, dx, dy, dw, dh);
+      if (flipVideo) freezeCtx.restore();
+    }
+   
+    // Draw video layer with crossfade
+    if (crossfadeAlpha > 0.01) {
+      ctx.globalAlpha = crossfadeAlpha;
+      ctx.drawImage(video, dx, dy, dw, dh);
+    }
+   
+    // Draw photo zoom layer with crossfade
+    if (crossfadeAlpha < 0.99 && motionZoom) {
+      const segmentRelativeTime = activeSegment ? (effectiveTime - (activeSegment.audioStart || 0)) : 0;
+      const cycleTime = segmentRelativeTime % 6.0;
+      const progressInFreeze = cycleTime >= 3.0 ? (cycleTime - 3.0) / 3.0 : 0;
+     
+      // Cinematic Ken Burns zoom with easing
+      const easedProgress = easeInOut(progressInFreeze);
+      const currentZoom = 1.0 + easedProgress * 0.2; // Subtle 1.2x zoom
+     
+      const zoomedW = targetW * currentZoom;
+      const zoomedH = targetH * currentZoom;
+      const centerX = (targetW - zoomedW) / 2;
+      const centerY = (targetH - zoomedH) / 2;
+     
+      ctx.globalAlpha = 1.0 - crossfadeAlpha;
+      ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH, centerX, centerY, zoomedW, zoomedH);
+    }
+   
+    ctx.globalAlpha = 1.0;
+    ctx.restore();
+   
+    // Apply color grading
+    if (autoColor) {
+      ctx.fillStyle = "rgba(255, 160, 0, 0.08)";
+      ctx.globalCompositeOperation = "overlay";
+      ctx.fillRect(0, 0, targetW, targetH);
+      ctx.globalCompositeOperation = "source-over";
+    }
+   
+    // Film grain
+    if (filmGrain) {
+      const noiseCount = targetW * targetH * 0.003;
+      ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
+      for (let i = 0; i < noiseCount; i++) {
+        ctx.fillRect(Math.random() * targetW, Math.random() * targetH, 1, 1);
+      }
+    }
+   
+    // Blur band
+    if (blurEnabled) {
+      const by = targetH * (blurY / 100);
+      const bh = targetH * (blurH / 100);
+      ctx.fillStyle = `rgba(0,0,0,${blurOpacity})`;
+      ctx.fillRect(0, by, targetW, bh);
+    }
+   
+    // Subtitle rendering
+    if (activeSegment) {
+      const chunk = String(activeSegment.text || "")
+        .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, "")
+        .replace(/\[[^\]]*\d[^\]]*\]/g, "")
+        .replace(/```[\s\S]*?```/g, "")
+        .replace(/[•●◆▶️➡️]+/g, " ")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+     
+      if (chunk) {
+        const by = targetH * (blurY / 100);
+        const bh = targetH * (blurH / 100);
+        const bandPadding = Math.max(8, targetH * 0.015);
+        const clipY = by + bandPadding;
+        const clipH = Math.max(1, bh - bandPadding * 2);
+        const ty = clipY + clipH / 2;
+        const maxWidth = targetW * 0.92;
+        const maxLines = 2;
+        const lineSpacing = 1.15;
+       
+        let fs = targetH * 0.038 * subScale;
+        const minFs = targetH * 0.022;
+       
+        const wrapText = (text: string, fontSize: number): string[] => {
+          ctx.font = `900 ${fontSize}px 'Padauk', sans-serif`;
+          const words = text.split(/\s+/).filter(Boolean);
+          const lines: string[] = [];
+          let currentLine = "";
+          for (const word of words) {
+            const testLine = currentLine ? `${currentLine} ${word}` : word;
+            if (ctx.measureText(testLine).width > maxWidth && currentLine) {
+              lines.push(currentLine);
+              currentLine = word;
+            } else {
+              currentLine = testLine;
+            }
+          }
+          if (currentLine) lines.push(currentLine);
+          return lines;
+        };
+       
+        let wrappedLines = wrapText(chunk, fs);
+        while (wrappedLines.length > maxLines && fs > minFs) {
+          fs -= 1;
+          wrappedLines = wrapText(chunk, fs);
+        }
+        const finalLines = wrappedLines.slice(0, maxLines);
+       
+        ctx.font = `900 ${fs}px 'Padauk', sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.shadowColor = "rgba(0,0,0,0.85)";
+        ctx.shadowBlur = 5;
+       
+        if (subColor === "GOLD") {
+          const g = ctx.createLinearGradient(0, ty - fs, 0, ty + fs);
+          g.addColorStop(0, "#FFD700");
+          g.addColorStop(1, "#B8860B");
+          ctx.fillStyle = g;
+        } else if (subColor === "NEON") {
+          ctx.fillStyle = "#00FFFF";
+          ctx.shadowBlur = 15;
+          ctx.shadowColor = "#00FFFF";
+        } else {
+          ctx.fillStyle = SUB_COLORS.find((c) => c.id === subColor)?.hex || "white";
+        }
+       
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, clipY, targetW, clipH);
+        ctx.clip();
+       
+        const totalTextHeight = finalLines.length * fs * lineSpacing;
+        const startY = ty - (totalTextHeight / 2) + (fs * lineSpacing / 2);
+        finalLines.forEach((l, i) => {
+          ctx.fillText(l, targetW / 2, startY + i * fs * lineSpacing);
+        });
+        ctx.restore();
+      }
+    }
+   
+    setWasFreeze(isFreezeMode);
   };
 
   useEffect(() => {
     if (!freezeCanvasRef.current) freezeCanvasRef.current = document.createElement("canvas");
+
+    // --- SHARED MASTER RENDERER (LOCK PREVIEW TO EXPORT) ---
     const render = () => {
       const video = videoRef.current;
       const canvas = canvasRef.current;
       const audio = audioRef.current;
       const freezeCanvas = freezeCanvasRef.current;
+
       if (video && canvas && freezeCanvas && audio && video.readyState >= 2) {
         const ctx = canvas.getContext("2d", { alpha: false });
         const freezeCtx = freezeCanvas.getContext("2d", { alpha: false });
+
         if (ctx && freezeCtx) {
           if (audioDuration > 0 && !audio.paused) audio.playbackRate = audioSpeed;
 
           let targetW = video.videoWidth;
           let targetH = video.videoHeight;
+
           const MAX_RES = 1080;
           if (targetH > MAX_RES) {
             targetW = targetW * (MAX_RES / targetH);
@@ -913,32 +1124,81 @@ export default function VideoRecapView() {
             targetW = baseH * (aspectRatio.w / aspectRatio.h);
             targetH = baseH;
           }
-          if (isNaN(targetW) || isNaN(targetH) || targetW <= 0 || targetH <= 0) {
-            targetW = 1280;
-            targetH = 720;
-          }
+
+          if (isNaN(targetW) || targetW <= 0) targetW = 1280;
+          if (isNaN(targetH) || targetH <= 0) targetH = 720;
 
           const effectiveTime = audioBlobUrl && !audio.paused ? audio.currentTime : video.currentTime;
 
-          if (isPlaying) {
-            const totalDur = audioDuration || video.duration || 1;
-            setProgress((effectiveTime / totalDur) * 100);
+           // Avoid updating React state every frame (causes stutter). Throttle to ~10fps.
+           if (isPlaying) {
+             const now = performance.now();
+             if (now - lastProgressUpdateRef.current > 100) {
+               lastProgressUpdateRef.current = now;
+               const totalDur = audioDuration || video.duration || 1;
+               setProgress((effectiveTime / totalDur) * 100);
+             }
+           }
+
+          let activeSegment = scriptSegments.find(
+            (s) => effectiveTime >= (s.audioStart || 0) && effectiveTime < (s.audioEnd || Infinity),
+          );
+          if (
+            !activeSegment &&
+            scriptSegments.length > 0 &&
+            effectiveTime >= (scriptSegments[scriptSegments.length - 1].audioEnd || 0)
+          ) {
+            activeSegment = scriptSegments[scriptSegments.length - 1];
           }
 
-          // --- 3S VIDEO / 3S PHOTO ZOOM LOGIC ---
-          const CYCLE_DURATION = 6.0;
-          const VIDEO_PHASE = 3.0; // Seconds
-          const cycleTime = effectiveTime % CYCLE_DURATION; // 0 to 6
-          const isPhotoPhase = cycleTime >= VIDEO_PHASE && motionZoom; // 3 to 6
+          let isFreezeMode = false;
+          let segmentRelativeTime = 0;
+          let crossfadeAlpha = 1.0; // 1 = full video, 0 = full photo
 
-          // Update canvas dimensions if needed
+          // Always apply 3s/3s cycle when motionZoom is enabled (even without segments)
+          const CYCLE_DUR = 6.0;
+          const cycleTime = effectiveTime % CYCLE_DUR;
+         
+          if (motionZoom) {
+            // --- SMOOTH 6S CYCLE (3S Video / 3S Photo Zoom) ---
+            isFreezeMode = cycleTime >= 3.0;
+           
+            // SMOOTH CROSSFADE (0.4s transition for professional look)
+            const FADE_DUR = 0.4;
+            if (cycleTime >= 3.0 - FADE_DUR && cycleTime < 3.0) {
+              // Transitioning TO photo
+              crossfadeAlpha = 1.0 - ((cycleTime - (3.0 - FADE_DUR)) / FADE_DUR);
+            } else if (cycleTime >= 6.0 - FADE_DUR) {
+              // Transitioning TO video (end of cycle)
+              crossfadeAlpha = (cycleTime - (6.0 - FADE_DUR)) / FADE_DUR;
+            } else if (cycleTime < FADE_DUR && effectiveTime > FADE_DUR) {
+              // Continuing from previous cycle
+              crossfadeAlpha = 0.5 + (cycleTime / FADE_DUR) * 0.5;
+            } else {
+              crossfadeAlpha = isFreezeMode ? 0.0 : 1.0;
+            }
+           
+            // Easing for smoother feel
+            const easeInOut = (t: number) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+            crossfadeAlpha = easeInOut(Math.max(0, Math.min(1, crossfadeAlpha)));
+          }
+
+          if (activeSegment) {
+            video.playbackRate = videoSpeed;
+            segmentRelativeTime = effectiveTime - (activeSegment.audioStart || 0);
+
+            if (!isFreezeMode && isPlaying && scriptSegments.length > 0) {
+              const targetVideoTime = activeSegment.time + (segmentRelativeTime % video.duration);
+              const drift = Math.abs(video.currentTime - targetVideoTime);
+              if (drift > 0.1) video.currentTime = targetVideoTime;
+            }
+          }
+
           if (canvas.width !== targetW || canvas.height !== targetH) {
             canvas.width = targetW;
             canvas.height = targetH;
-            if (freezeCanvas.width !== targetW || freezeCanvas.height !== targetH) {
-              freezeCanvas.width = targetW;
-              freezeCanvas.height = targetH;
-            }
+            freezeCanvas.width = targetW;
+            freezeCanvas.height = targetH;
           }
 
           ctx.fillStyle = "#000";
@@ -958,59 +1218,53 @@ export default function VideoRecapView() {
           const dx = (targetW - dw) / 2;
           const dy = (targetH - dh) / 2;
 
-          // SYNC LOGIC
-          if (isPlaying && !video.paused) {
-            if (audioBlobUrl) {
-              const targetVideoTime = effectiveTime * videoSpeed;
-              video.playbackRate = videoSpeed * audioSpeed;
-              if (targetVideoTime < video.duration) {
-                const drift = Math.abs(video.currentTime - targetVideoTime);
-                if (drift > 0.15) video.currentTime = targetVideoTime;
-              }
-            } else {
-              video.playbackRate = videoSpeed;
+          // Capture freeze frame at transition (or if empty)
+          const sizeChanged = freezeCanvas.width !== targetW || freezeCanvas.height !== targetH;
+          const needsCapture = sizeChanged || (isFreezeMode && !wasFreezeModeRef.current);
+         
+          if (needsCapture) {
+            freezeCanvas.width = targetW;
+            freezeCanvas.height = targetH;
+            freezeCtx.fillStyle = "#000";
+            freezeCtx.fillRect(0, 0, targetW, targetH);
+
+            // Match flip transform for freeze frame (prevents blank/incorrect freeze on some devices)
+            if (flipVideo) {
+              freezeCtx.save();
+              freezeCtx.translate(targetW, 0);
+              freezeCtx.scale(-1, 1);
             }
-          }
-
-          if (!isPhotoPhase) {
-            freezeCtx.clearRect(0, 0, targetW, targetH);
             freezeCtx.drawImage(video, dx, dy, dw, dh);
+            if (flipVideo) freezeCtx.restore();
           }
 
-          let opacityPhoto = 0.0;
-          const FADE_DURATION = 0.5;
-
-          if (isPhotoPhase) {
-            opacityPhoto = 1.0;
-            if (cycleTime < VIDEO_PHASE + FADE_DURATION) opacityPhoto = (cycleTime - VIDEO_PHASE) / FADE_DURATION;
-          } else {
-            opacityPhoto = 0.0;
-            if (cycleTime < FADE_DURATION) opacityPhoto = 1.0 - cycleTime / FADE_DURATION;
+          // RENDER VIDEO LAYER with crossfade
+          if (crossfadeAlpha > 0.01) {
+            ctx.globalAlpha = crossfadeAlpha;
+            ctx.drawImage(video, dx, dy, dw, dh);
           }
 
-          ctx.drawImage(video, dx, dy, dw, dh);
+          // RENDER PHOTO ZOOM LAYER with crossfade
+          if (crossfadeAlpha < 0.99 && motionZoom) {
+            // Use global cycle time (not segment-relative) for consistent zoom
+            const globalCycleTime = effectiveTime % 6.0;
+            const progressInFreeze = globalCycleTime >= 3.0 ? (globalCycleTime - 3.0) / 3.0 : 0;
 
-          if (opacityPhoto > 0.01 && freezeCanvas.width > 0) {
-            const timeInPhase = isPhotoPhase ? cycleTime - VIDEO_PHASE : 3.0;
-            const progressInFreeze = timeInPhase / 3.0;
-            const zoomStart = 1.0;
-            const zoomEnd = 1.25;
-            const easedProgress = progressInFreeze * progressInFreeze * (3 - 2 * progressInFreeze);
-            const currentZoom = zoomStart + easedProgress * (zoomEnd - zoomStart);
+            // Cinematic Ken Burns zoom with easing
+            const easeInOut = (t: number) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+            const easedProgress = easeInOut(progressInFreeze);
+            const currentZoom = 1.0 + easedProgress * 0.2; // Subtle 1.2x zoom
+
             const zoomedW = targetW * currentZoom;
             const zoomedH = targetH * currentZoom;
             const centerX = (targetW - zoomedW) / 2;
             const centerY = (targetH - zoomedH) / 2;
 
-            ctx.save();
-            ctx.globalAlpha = opacityPhoto;
+            ctx.globalAlpha = 1.0 - crossfadeAlpha;
             ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH, centerX, centerY, zoomedW, zoomedH);
-            if (isPhotoPhase && timeInPhase < 0.1) {
-              ctx.fillStyle = `rgba(255, 255, 255, ${0.15 * (1 - timeInPhase / 0.1)})`;
-              ctx.fillRect(0, 0, targetW, targetH);
-            }
-            ctx.restore();
           }
+
+          ctx.globalAlpha = 1.0;
 
           if (autoColor) {
             ctx.fillStyle = "rgba(255, 160, 0, 0.08)";
@@ -1019,34 +1273,14 @@ export default function VideoRecapView() {
             ctx.globalCompositeOperation = "source-over";
           }
 
-          // --- ENHANCED CINEMATIC FILM GRAIN & SCRATCHES ---
           if (filmGrain) {
-            ctx.save();
-            // 1. Dynamic Noise
-            const noiseDensity = 0.04;
-            const noiseCount = targetW * targetH * noiseDensity;
-            ctx.fillStyle = `rgba(255, 255, 255, ${0.05 + Math.random() * 0.05})`;
-            for (let i = 0; i < noiseCount; i++) {
-              const size = Math.random() * 1.5;
-              ctx.fillRect(Math.random() * targetW, Math.random() * targetH, size, size);
-            }
-            // 2. Vertical Scratches (Rare/Random)
-            if (Math.random() > 0.95) {
-              const sx = Math.random() * targetW;
-              ctx.strokeStyle = `rgba(255, 255, 255, ${Math.random() * 0.15})`;
-              ctx.lineWidth = 0.5 + Math.random();
-              ctx.beginPath();
-              ctx.moveTo(sx, 0);
-              ctx.lineTo(sx + (Math.random() - 0.5) * 10, targetH);
-              ctx.stroke();
-            }
-            // 3. Vignette-ish flickering
-            ctx.fillStyle = `rgba(0, 0, 0, ${Math.random() * 0.03})`;
-            ctx.fillRect(0, 0, targetW, targetH);
-            ctx.restore();
+            const noiseCount = targetW * targetH * 0.005;
+            ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
+            for (let i = 0; i < noiseCount; i++) ctx.fillRect(Math.random() * targetW, Math.random() * targetH, 1, 1);
           }
           ctx.restore();
 
+          // --- OVERLAYS ---
           if (blurEnabled) {
             const by = targetH * (blurY / 100);
             const bh = targetH * (blurH / 100);
@@ -1055,16 +1289,14 @@ export default function VideoRecapView() {
           }
 
           if (charImgRef.current) {
-            // --- REALISTIC LIP SYNC & MOVEMENT ---
             let volumeScale = 0;
             if (analyserRef.current && dataArrayRef.current && isPlaying) {
               analyserRef.current.getByteFrequencyData(dataArrayRef.current);
               let sum = 0;
-              for (let i = 2; i < 20; i++) sum += dataArrayRef.current[i];
-              volumeScale = sum / 18 / 255;
+              for (let i = 2; i < 16; i++) sum += dataArrayRef.current[i];
+              volumeScale = sum / 14 / 255;
             }
-
-            const cw = targetW * 0.28;
+            const cw = targetW * 0.25;
             const ch = cw;
             let cx = 20,
               cy = 20;
@@ -1084,41 +1316,23 @@ export default function VideoRecapView() {
               cx = targetW - cw - 20;
               cy = targetH - ch - 20;
             }
-
             ctx.save();
-            // Subtle Breathing & Talking Body Tilt
-            const bodyOsc = Math.sin(Date.now() / 400) * 0.015;
-            const talkTilt = volumeScale * 0.05;
+            const animScale = 1 + volumeScale * 0.08;
             ctx.translate(cx + cw / 2, cy + ch / 2);
-            ctx.rotate(bodyOsc + talkTilt);
-            ctx.scale(1 + volumeScale * 0.02, 1 + volumeScale * 0.02);
+            ctx.scale(animScale, animScale);
             ctx.translate(-(cx + cw / 2), -(cy + ch / 2));
-
             ctx.beginPath();
             ctx.arc(cx + cw / 2, cy + ch / 2, cw / 2, 0, Math.PI * 2);
             ctx.clip();
             ctx.drawImage(charImgRef.current, cx, cy, cw, ch);
-
-            // --- ENHANCED REALISTIC MOUTH SYNC ---
-            if (volumeScale > 0.05) {
-              const mouthH = ch * 0.08 * (0.3 + volumeScale * 0.8);
-              const mouthW = cw * 0.14 * (0.8 + volumeScale * 0.4);
-              const mouthY = cy + ch * 0.73;
-
-              // Mouth Shadow (Inner)
-              ctx.fillStyle = "rgba(20,0,0,0.8)";
+            if (volumeScale > 0.04) {
+              const mouthH = ch * 0.08 * (0.2 + volumeScale * 0.8);
+              const mouthY = cy + ch * 0.72;
+              ctx.fillStyle = "rgba(0,0,0,0.6)";
               ctx.beginPath();
-              ctx.ellipse(cx + cw / 2, mouthY, mouthW / 2, mouthH, 0, 0, Math.PI * 2);
+              ctx.ellipse(cx + cw / 2, mouthY, cw * 0.08, mouthH, 0, 0, Math.PI * 2);
               ctx.fill();
-
-              // Upper Lip Highlight
-              ctx.strokeStyle = "rgba(255,255,255,0.15)";
-              ctx.lineWidth = 1;
-              ctx.beginPath();
-              ctx.ellipse(cx + cw / 2, mouthY - mouthH * 0.5, mouthW / 2.2, 1, 0, 0, Math.PI * 2);
-              ctx.stroke();
             }
-
             ctx.strokeStyle = "#fff";
             ctx.lineWidth = 4;
             ctx.stroke();
@@ -1133,23 +1347,15 @@ export default function VideoRecapView() {
               const margin = 20;
               const lx = targetW - size - margin;
               const ly = margin;
-              const centerX = lx + size / 2;
-              const centerY = ly + size / 2;
               ctx.save();
-              ctx.translate(centerX, centerY);
+              ctx.translate(lx + size / 2, ly + size / 2);
               if (logoSpin) {
                 logoAngleRef.current += 0.05;
                 ctx.rotate(logoAngleRef.current);
               }
               if (logoNeon) {
-                const h = (Date.now() / 10) % 360;
-                ctx.shadowColor = `hsl(${h}, 100%, 50%)`;
+                ctx.shadowColor = `hsl(${(Date.now() / 10) % 360}, 100%, 50%)`;
                 ctx.shadowBlur = 30;
-                ctx.strokeStyle = `hsl(${h}, 100%, 50%)`;
-                ctx.lineWidth = 5;
-                ctx.beginPath();
-                ctx.arc(0, 0, size / 2 + 5, 0, Math.PI * 2);
-                ctx.stroke();
               }
               ctx.beginPath();
               ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
@@ -1159,61 +1365,127 @@ export default function VideoRecapView() {
             }
           }
 
+          // ===== CHANNEL NAME RENDERING (BOUNCE/SCROLL/STATIC) =====
           if (channelName && tickerMode !== "OFF") {
-            const fontSize = targetH * 0.04;
-            ctx.font = `900 ${fontSize}px sans-serif`;
-            ctx.fillStyle = "#fff";
-            ctx.shadowColor = "black";
-            ctx.shadowBlur = 4;
-            const textMetrics = ctx.measureText(channelName);
-            const textW = textMetrics.width;
+            const tickerFs = targetH * 0.04;
+            ctx.font = `900 ${tickerFs}px 'Padauk', sans-serif`;
+            ctx.shadowColor = "rgba(0,0,0,0.9)";
+            ctx.shadowBlur = 6;
+           
+            // Gradient fill for channel name
+            const tickerGrad = ctx.createLinearGradient(0, 0, 0, tickerFs);
+            tickerGrad.addColorStop(0, "#FFD700");
+            tickerGrad.addColorStop(1, "#FF8C00");
+            ctx.fillStyle = tickerGrad;
+            ctx.textAlign = "left";
+            ctx.textBaseline = "top";
+           
+            const textWidth = ctx.measureText(channelName).width;
+            const padding = 20;
+           
             if (tickerMode === "SCROLL") {
-              tickerXRef.current -= 3;
-              if (tickerXRef.current < -textW) tickerXRef.current = targetW;
-              const y = fontSize + 20;
-              ctx.fillText(channelName, tickerXRef.current, y);
+              // Horizontal scroll from right to left
+              tickerXRef.current -= 2;
+              if (tickerXRef.current < -textWidth - padding) {
+                tickerXRef.current = targetW + padding;
+              }
+              ctx.fillText(channelName, tickerXRef.current, padding);
             } else if (tickerMode === "BOUNCE") {
+              // Bounce animation (DVD logo style)
               tickerXRef.current += tickerVelXRef.current;
               tickerYRef.current += tickerVelYRef.current;
-              if (tickerXRef.current <= 0 || tickerXRef.current >= targetW - textW) tickerVelXRef.current *= -1;
-              if (tickerYRef.current <= fontSize || tickerYRef.current >= targetH) tickerVelYRef.current *= -1;
-              if (tickerYRef.current === 0) tickerYRef.current = targetH / 2;
+             
+              // Boundary checks
+              if (tickerXRef.current <= 0 || tickerXRef.current + textWidth >= targetW) {
+                tickerVelXRef.current *= -1;
+                tickerXRef.current = Math.max(0, Math.min(tickerXRef.current, targetW - textWidth));
+              }
+              if (tickerYRef.current <= 0 || tickerYRef.current + tickerFs >= targetH) {
+                tickerVelYRef.current *= -1;
+                tickerYRef.current = Math.max(0, Math.min(tickerYRef.current, targetH - tickerFs));
+              }
+             
+              // Neon glow effect for bounce
+              ctx.shadowColor = `hsl(${(Date.now() / 20) % 360}, 100%, 50%)`;
+              ctx.shadowBlur = 15;
               ctx.fillText(channelName, tickerXRef.current, tickerYRef.current);
             }
-            ctx.shadowBlur = 0;
+          } else if (channelName) {
+            // STATIC mode - bottom left
+            const tickerFs = targetH * 0.035;
+            ctx.font = `800 ${tickerFs}px 'Padauk', sans-serif`;
+            ctx.fillStyle = "#FFFFFF";
+            ctx.shadowColor = "rgba(0,0,0,0.8)";
+            ctx.shadowBlur = 4;
+            ctx.textAlign = "left";
+            ctx.textBaseline = "bottom";
+            ctx.fillText(channelName, 20, targetH - 20);
           }
 
-          let activeSegment = scriptSegments.find(
-            (s) => effectiveTime >= (s.audioStart || 0) && effectiveTime < (s.audioEnd || Infinity),
-          );
-          if (
-            !activeSegment &&
-            scriptSegments.length > 0 &&
-            effectiveTime >= (scriptSegments[scriptSegments.length - 1].audioEnd || 0)
-          ) {
-            activeSegment = scriptSegments[scriptSegments.length - 1];
-          }
-
+          // ===== SUBTITLE RENDERING =====
           if (activeSegment && (isPlaying || effectiveTime > 0)) {
-            const chunk = activeSegment.text;
-            const segmentDuration = (activeSegment.audioEnd || 1) - (activeSegment.audioStart || 0);
-            const segmentRelativeTime = effectiveTime - (activeSegment.audioStart || 0);
-            const segmentProgress = segmentRelativeTime / (segmentDuration || 1);
+            const chunk = String(activeSegment.text || "")
+              // Remove junk: timestamps, bracketed timecodes, markdown fences, bullet-ish symbols
+              .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, "")
+              .replace(/\[[^\]]*\d[^\]]*\]/g, "")
+              .replace(/```[\s\S]*?```/g, "")
+              .replace(/[•●◆▶️➡️]+/g, " ")
+              .replace(/\s{2,}/g, " ")
+              .trim();
+
             if (chunk) {
-              const fs = targetH * 0.05 * subScale;
+              // Keep subtitles strictly inside the blur band.
+              const by = targetH * (blurY / 100);
+              const bh = targetH * (blurH / 100);
+              const bandPadding = Math.max(8, targetH * 0.015);
+              const clipY = by + bandPadding;
+              const clipH = Math.max(1, bh - bandPadding * 2);
+              const ty = clipY + clipH / 2;
+              const maxWidth = targetW * 0.92;
+              const maxLines = 2;
+              const lineSpacing = 1.15;
+             
+              // Auto-fit font size: start with base size and shrink until text fits in 2 lines
+              let fs = targetH * 0.038 * subScale; // Smaller base size
+              const minFs = targetH * 0.022; // Minimum readable size
+             
+              const wrapText = (text: string, fontSize: number): string[] => {
+                ctx.font = `900 ${fontSize}px 'Padauk', sans-serif`;
+                const words = text.split(/\s+/).filter(Boolean);
+                const lines: string[] = [];
+                let currentLine = "";
+               
+                for (const word of words) {
+                  const testLine = currentLine ? `${currentLine} ${word}` : word;
+                  if (ctx.measureText(testLine).width > maxWidth && currentLine) {
+                    lines.push(currentLine);
+                    currentLine = word;
+                  } else {
+                    currentLine = testLine;
+                  }
+                }
+                if (currentLine) lines.push(currentLine);
+                return lines;
+              };
+             
+              // Find optimal font size that fits all text in maxLines
+              let wrappedLines = wrapText(chunk, fs);
+              while (wrappedLines.length > maxLines && fs > minFs) {
+                fs -= 1;
+                wrappedLines = wrapText(chunk, fs);
+              }
+             
+              // If still too many lines, take first 2 lines (no ellipsis - text auto-changes with audio)
+              const finalLines = wrappedLines.slice(0, maxLines);
+             
               ctx.font = `900 ${fs}px 'Padauk', sans-serif`;
               ctx.textAlign = "center";
               ctx.textBaseline = "middle";
-              const tx = targetW / 2;
-              const by = targetH * (blurY / 100);
-              const bh = targetH * (blurH / 100);
-              const ty = by + bh / 2;
-              ctx.shadowColor = "rgba(0,0,0,0.8)";
-              ctx.shadowBlur = 4;
-              ctx.shadowOffsetX = 2;
-              ctx.shadowOffsetY = 2;
+              ctx.shadowColor = "rgba(0,0,0,0.85)";
+              ctx.shadowBlur = 5;
+             
               if (subColor === "GOLD") {
-                const g = ctx.createLinearGradient(0, ty - fs, 0, ty);
+                const g = ctx.createLinearGradient(0, ty - fs, 0, ty + fs);
                 g.addColorStop(0, "#FFD700");
                 g.addColorStop(1, "#B8860B");
                 ctx.fillStyle = g;
@@ -1221,45 +1493,29 @@ export default function VideoRecapView() {
                 ctx.fillStyle = "#00FFFF";
                 ctx.shadowBlur = 15;
                 ctx.shadowColor = "#00FFFF";
-              } else ctx.fillStyle = SUB_COLORS.find((c) => c.id === subColor)?.hex || "white";
-              const maxWidth = targetW * 0.9;
-              let words: string[] = [];
-              if (typeof Intl !== "undefined" && (Intl as any).Segmenter) {
-                const segmenter = new (Intl as any).Segmenter("my", { granularity: "word" });
-                words = Array.from(segmenter.segment(chunk)).map((s: any) => s.segment);
               } else {
-                words = chunk.split(" ");
-                if (words.length === 1) words = chunk.split("");
+                ctx.fillStyle = SUB_COLORS.find((c) => c.id === subColor)?.hex || "white";
               }
-              let line = "";
-              let lines = [];
-              for (let i = 0; i < words.length; i++) {
-                const testLine = line + words[i];
-                const metrics = ctx.measureText(testLine);
-                if (metrics.width > maxWidth && i > 0) {
-                  lines.push(line);
-                  line = words[i];
-                } else line = testLine;
-              }
-              lines.push(line);
-              let displayLines = lines;
-              if (lines.length > 2) {
-                const maxScroll = lines.length - 2;
-                const scrollIdx = Math.floor(segmentProgress * (maxScroll + 1));
-                displayLines = lines.slice(scrollIdx, scrollIdx + 2);
-              }
-              displayLines.forEach((l, i) => {
-                const yOff = ty - (displayLines.length - 1) * fs * 0.6 + i * fs * 1.2;
-                ctx.fillText(l, tx, yOff);
+
+              ctx.save();
+              ctx.beginPath();
+              ctx.rect(0, clipY, targetW, clipH);
+              ctx.clip();
+             
+              // Center lines vertically within clip area
+              const totalTextHeight = finalLines.length * fs * lineSpacing;
+              const startY = ty - (totalTextHeight / 2) + (fs * lineSpacing / 2);
+             
+              finalLines.forEach((l, i) => {
+                const yOff = startY + i * fs * lineSpacing;
+                ctx.fillText(l, targetW / 2, yOff);
               });
-              ctx.shadowBlur = 0;
+              ctx.restore();
             }
           }
-          if (borderEnabled) {
-            ctx.lineWidth = borderWidth;
-            ctx.strokeStyle = borderColor;
-            ctx.strokeRect(0, 0, targetW, targetH);
-          }
+
+          // Track freeze mode state across frames
+          wasFreezeModeRef.current = isFreezeMode;
         }
       }
       reqRef.current = requestAnimationFrame(render);
@@ -1302,8 +1558,152 @@ export default function VideoRecapView() {
     audioBlobUrl,
   ]);
 
+  // NOTE: no authLoading gate here; avoids UI "blink" and state reset.
+
   return (
     <div className="flex flex-col gap-5 pb-32 max-w-lg mx-auto px-2 animate-in fade-in duration-500">
+      {/* Header with Home Button */}
+      <div className="flex items-center justify-between py-2">
+        <button
+          onClick={() => navigate("/")}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-all"
+        >
+          <Home className="w-4 h-4" />
+          <span className="text-[9px] font-black uppercase tracking-widest">Home</span>
+        </button>
+        <h1 className="text-[11px] font-black text-white uppercase tracking-widest">
+          VIDEO <span className="text-blue-500">RECAP</span>
+        </h1>
+        <div className="w-16" /> {/* Spacer for centering */}
+      </div>
+     
+      {/* History Toggle Button */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => setShowHistory(!showHistory)}
+          className={`flex-1 py-3 rounded-2xl font-black text-[9px] uppercase tracking-widest transition-all border ${
+            showHistory
+              ? "bg-amber-500/20 border-amber-500/50 text-amber-300"
+              : "bg-white/5 border-white/10 text-slate-400 hover:text-white"
+          }`}
+        >
+          📚 HISTORY ({history.length})
+        </button>
+        {history.length > 0 && (
+          <button
+            onClick={() => {
+              if (confirm("History အကုန်ဖျက်မှာလား?")) {
+                setHistory([]);
+                localStorage.removeItem("video_recap_history");
+                toast.success("History အကုန်ဖျက်ပြီးပါပြီ");
+              }
+            }}
+            className="px-4 py-3 rounded-2xl bg-red-500/20 border border-red-500/30 text-red-400 font-black text-[9px] uppercase tracking-widest"
+          >
+            🗑️
+          </button>
+        )}
+      </div>
+
+      {/* History Panel */}
+      {showHistory && (
+        <div className="bg-[#0a0a0a] rounded-2xl border border-white/10 overflow-hidden animate-in slide-in-from-top duration-300">
+          <div className="p-3 bg-white/5 border-b border-white/10">
+            <h3 className="text-[10px] font-black text-white uppercase tracking-widest">
+              📼 RECENT RECAPS
+            </h3>
+          </div>
+          <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
+            {history.length === 0 ? (
+              <div className="p-6 text-center text-slate-500 text-xs">
+                History မရှိသေးပါ
+              </div>
+            ) : (
+              history.map((item) => (
+                <div
+                  key={item.id}
+                  className="p-3 border-b border-white/5 hover:bg-white/5 transition-colors"
+                >
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] font-bold text-white truncate">
+                        {item.fileName}
+                      </p>
+                      <p className="text-[8px] text-slate-500 mt-0.5">
+                        {new Date(item.timestamp).toLocaleString("my-MM")}
+                      </p>
+                      <p className="text-[9px] text-slate-400 mt-1 line-clamp-2">
+                        {item.script.substring(0, 100)}...
+                      </p>
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      <button
+                        onClick={() => loadFromHistory(item)}
+                        className="px-2 py-1 rounded bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[7px] font-bold"
+                      >
+                        LOAD
+                      </button>
+                      <button
+                        onClick={() => deleteFromHistory(item.id)}
+                        className="px-2 py-1 rounded bg-red-500/20 border border-red-500/30 text-red-400 text-[7px] font-bold"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* API Switcher Section */}
+      <div className="flex bg-slate-900/60 backdrop-blur-xl p-1 rounded-2xl border border-white/10 shadow-lg">
+        <button
+          onClick={() => appApiAllowed && setApiType("app")}
+          disabled={!appApiAllowed}
+          className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${
+            !appApiAllowed
+              ? "opacity-40 cursor-not-allowed text-slate-500"
+              : apiType === "app"
+                ? "jewel-sapphire shadow-[0_0_15px_rgba(37,99,235,0.4)] text-white"
+                : "text-slate-400 hover:text-white"
+          }`}
+        >
+          {!appApiAllowed && <Lock className="w-3 h-3" />}
+          APP API
+        </button>
+        <button
+          onClick={() => ownApiAllowed && setApiType("own")}
+          disabled={!ownApiAllowed}
+          className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${
+            !ownApiAllowed
+              ? "opacity-40 cursor-not-allowed text-slate-500"
+              : apiType === "own"
+                ? "jewel-sapphire shadow-[0_0_15px_rgba(37,99,235,0.4)] text-white"
+                : "text-slate-400 hover:text-white"
+          }`}
+        >
+          {!ownApiAllowed && <Lock className="w-3 h-3" />}
+          OWN API
+        </button>
+      </div>
+
+      {/* Custom API Input Box */}
+      {apiType === "own" && (
+        <div className="neon-glass rounded-2xl p-4 border border-amber-500/20 space-y-2 shadow-inner animate-in zoom-in-95 duration-300">
+          <h4 className="text-[9px] font-black text-amber-200 uppercase tracking-widest ml-1">GEMINI API KEY</h4>
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="Paste your Gemini API Key here..."
+            className="w-full bg-black/40 border border-amber-500/30 rounded-xl p-3 text-xs font-bold text-white focus:ring-1 focus:ring-amber-500 outline-none transition-all placeholder:text-slate-600 shadow-inner"
+          />
+        </div>
+      )}
+
       <div className="flex items-center gap-3 bg-[#050505] p-2 rounded-2xl border border-white/10">
         <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -1316,12 +1716,13 @@ export default function VideoRecapView() {
           </h2>
           <input
             type="text"
-            placeholder="Video Link..."
+            placeholder="1GB Video Max..."
             disabled
             className="w-full bg-transparent text-[9px] text-slate-500 outline-none border-none p-0 h-auto font-bold"
           />
         </div>
       </div>
+
       <div className="bg-black rounded-[32px] overflow-hidden border border-white/10 shadow-2xl relative group">
         <div className="relative w-full aspect-square bg-black flex items-center justify-center">
           {!videoSrc ? (
@@ -1344,7 +1745,9 @@ export default function VideoRecapView() {
                   <line x1="12" x2="12" y1="15" y2="3" />
                 </svg>
               </div>
-              <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">TAP TO UPLOAD</span>
+              <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">
+                TAP TO UPLOAD (1GB MAX)
+              </span>
               <input id="vid" type="file" accept="video/*" onChange={handleFileChange} className="hidden" />
             </div>
           ) : (
@@ -1409,6 +1812,7 @@ export default function VideoRecapView() {
           )}
         </div>
       </div>
+
       <div className="space-y-2">
         <AccordionItem
           title="1. SETTINGS & FORMAT"
@@ -1436,28 +1840,16 @@ export default function VideoRecapView() {
             </div>
             <div className="flex gap-4 pt-2">
               <div className="flex-1 space-y-1">
-                <div className="flex justify-between items-center">
-                  <label className="text-[7px] font-black text-slate-500 uppercase tracking-widest">
-                    VIDEO SPEED ({videoSpeed.toFixed(2)}x)
-                  </label>
-                  <button
-                    type="button"
-                    onClick={toggleAutoSync}
-                    className={`text-[6px] font-black text-white px-2 py-1 rounded shadow-xl transition-all flex items-center justify-center gap-1 active:scale-95 cursor-pointer z-[60] pointer-events-auto border ${isAutoSync ? "bg-emerald-500 shadow-[0_0_15px_#10b981] border-emerald-400" : "bg-slate-700 border-slate-600 opacity-60"}`}
-                  >
-                    <span>⚡</span> {isAutoSync ? "SYNC: ON" : "AUTO SYNC"}
-                  </button>
-                </div>
+                <label className="text-[7px] font-black text-slate-500 uppercase tracking-widest">
+                  VIDEO PLAYBACK SPEED ({videoSpeed}x)
+                </label>
                 <input
                   type="range"
-                  min="0.1"
-                  max="9.0"
-                  step="0.01"
+                  min="0.5"
+                  max="2.0"
+                  step="0.1"
                   value={videoSpeed}
-                  onChange={(e) => {
-                    setVideoSpeed(parseFloat(e.target.value));
-                    setIsAutoSync(false); // Disable auto-sync on manual move
-                  }}
+                  onChange={(e) => setVideoSpeed(parseFloat(e.target.value))}
                   className="w-full h-1.5 bg-white/10 rounded-full appearance-none accent-blue-500"
                 />
               </div>
@@ -1545,7 +1937,7 @@ export default function VideoRecapView() {
                 <button
                   key={c.id}
                   onClick={() => setCharId(c.id)}
-                  className={`w-12 h-12 rounded-full border-2 shrink-0 overflow-hidden transition-all ${charId === c.id ? "border-blue-500 scale-110 shadow-lg" : "border-white/10 opacity-50"}`}
+                  className={`w-12 h-12 rounded-full border-2 shrink-0 overflow-hidden transition-all ${charId === c.id ? "border-blue-500 scale-110" : "border-white/10 opacity-50"}`}
                 >
                   {c.id === "none" ? (
                     <span className="text-[5px] text-white font-bold flex items-center justify-center h-full">
@@ -1700,148 +2092,5 @@ export default function VideoRecapView() {
                     type="color"
                     value={borderColor}
                     onChange={(e) => setBorderColor(e.target.value)}
-                    className="w-6 h-6 rounded bg-transparent border-none cursor-pointer"
-                  />
-                )}
-              </div>
-              {borderEnabled && (
-                <div className="flex items-center gap-2">
-                  <span className="text-[7px] text-slate-500 w-12">WIDTH</span>
-                  <input
-                    type="range"
-                    min="1"
-                    max="50"
-                    value={borderWidth}
-                    onChange={(e) => setBorderWidth(parseInt(e.target.value))}
-                    className="flex-1 h-1.5 bg-black rounded-full appearance-none accent-white"
-                  />
-                </div>
-              )}
-              {borderEnabled && (
-                <div className="flex gap-2 pt-1">
-                  {COLORS.map((c) => (
-                    <button
-                      key={c.id}
-                      onClick={() => setBorderColor(c.hex)}
-                      className={`w-4 h-4 rounded-full border ${borderColor === c.hex ? "border-white scale-125" : "border-transparent opacity-40"}`}
-                      style={{ backgroundColor: c.hex }}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="border-t border-white/5 pt-2 space-y-2">
-              <label className="text-[7px] font-black text-slate-500 uppercase">CHANNEL LOGO</label>
-              <div className="flex gap-2">
-                <label className="flex-1 py-2 border border-dashed border-white/20 rounded-xl flex items-center justify-center gap-1 cursor-pointer hover:bg-white/5">
-                  <span className="text-[7px] font-black text-white uppercase">UPLOAD IMG</span>
-                  <input type="file" onChange={handleLogoUpload} className="hidden" />
-                </label>
-                {logoSrc && (
-                  <>
-                    <button
-                      onClick={() => setLogoNeon(!logoNeon)}
-                      className={`px-2 rounded-xl text-[6px] font-black border ${logoNeon ? "border-purple-500 text-purple-400" : "border-white/10 text-slate-500"}`}
-                    >
-                      NEON
-                    </button>
-                    <button
-                      onClick={() => setLogoSpin(!logoSpin)}
-                      className={`px-2 rounded-xl text-[6px] font-black border ${logoSpin ? "border-blue-500 text-blue-400" : "border-white/10 text-slate-500"}`}
-                    >
-                      SPIN
-                    </button>
-                  </>
-                )}
-              </div>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={channelName}
-                  onChange={(e) => setChannelName(e.target.value)}
-                  placeholder="Ticker Text..."
-                  className="flex-1 bg-black/40 border border-white/10 rounded-xl px-2 text-[8px] text-white outline-none"
-                />
-                <button
-                  onClick={() =>
-                    setTickerMode(tickerMode === "OFF" ? "SCROLL" : tickerMode === "SCROLL" ? "BOUNCE" : "OFF")
-                  }
-                  className="px-3 rounded-xl bg-white/5 border border-white/10 text-[7px] font-black text-white w-16"
-                >
-                  {tickerMode}
-                </button>
-              </div>
-            </div>
-          </div>
-        </AccordionItem>
-        <AccordionItem
-          title="6. SUBTITLE STYLING"
-          isOpen={openSection === "sub"}
-          onClick={() => setOpenSection(openSection === "sub" ? null : "sub")}
-        >
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <label className="text-[7px] font-black text-slate-500 uppercase tracking-widest">TEXT COLOR</label>
-              <select
-                value={subColor}
-                onChange={(e) => setSubColor(e.target.value)}
-                className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl p-3 text-[9px] font-black text-white outline-none"
-              >
-                {SUB_COLORS.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-[7px] font-black text-slate-500 uppercase tracking-widest">
-                TEXT SIZE ({subScale}x)
-              </label>
-              <select
-                value={subScale}
-                onChange={(e) => setSubScale(parseFloat(e.target.value))}
-                className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl p-3 text-[9px] font-black text-white outline-none"
-              >
-                <option value="0.5">XS - Tiny</option>
-                <option value="0.8">S - Small</option>
-                <option value="1.0">M - Normal</option>
-                <option value="1.2">L - Large</option>
-                <option value="1.5">XL - Extra Large</option>
-                <option value="2.0">XXL - Huge</option>
-              </select>
-            </div>
-          </div>
-        </AccordionItem>
-      </div>
-      <div className="flex gap-3 pt-4 sticky bottom-4 z-50">
-        <button
-          onClick={() => {
-            if (!audioBlobUrl && !analyzing) {
-              handleProcess();
-            } else {
-              togglePlay();
-            }
-          }}
-          disabled={!videoSrc || isExporting}
-          className={`flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all ${isPlaying ? "bg-rose-600 text-white" : "bg-blue-600 text-white"}`}
-        >
-          {analyzing
-            ? "PROCESSING..."
-            : audioBlobUrl
-              ? isPlaying
-                ? "PAUSE PREVIEW"
-                : "▶ PLAY RESULT"
-              : "⚡ PROCESS AI"}
-        </button>
-        <button
-          onClick={handleExport}
-          disabled={!audioBlobUrl || isExporting || isPlaying}
-          className="flex-1 py-4 rounded-2xl bg-[#1a202c] border border-white/10 text-white font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all disabled:opacity-50"
-        >
-          {isExporting ? "SAVE AS..." : "📥 SAVE AS"}
-        </button>
-      </div>
-    </div>
-  );
-}
+                    className="w-6 h-6 rounded bg-transparent border-none cursor-pointer"<
+...
