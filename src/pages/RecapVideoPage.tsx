@@ -1453,6 +1453,35 @@ export default function VideoRecapView() {
           // Track freeze mode state across frames
           wasFreezeModeRef.current = inPhotoPhase;
 
+          // ===== VIDEO BORDER =====
+          if (borderEnabled && borderWidth > 0) {
+            ctx.save();
+            ctx.strokeStyle = borderColor;
+            ctx.lineWidth = borderWidth * 2; // doubled because half is clipped outside
+            ctx.strokeRect(0, 0, targetW, targetH);
+            ctx.restore();
+          }
+
+          // ===== BLUR BAND (dark overlay for subtitle readability) =====
+          if (blurEnabled) {
+            const by = targetH * (blurY / 100);
+            const bh = targetH * (blurH / 100);
+            ctx.fillStyle = `rgba(0,0,0,${blurOpacity})`;
+            ctx.fillRect(0, by, targetW, bh);
+          }
+
+          // ===== TIMELINE BAR ON CANVAS (for export) =====
+          if (timelineHeight > 0 && isPlaying) {
+            const tlH = timelineHeight * 2;
+            const tlY = targetH - tlH;
+            // Background
+            ctx.fillStyle = "rgba(255,255,255,0.15)";
+            ctx.fillRect(0, tlY, targetW, tlH);
+            // Progress fill
+            ctx.fillStyle = timelineColor;
+            ctx.fillRect(0, tlY, targetW * (progress / 100), tlH);
+          }
+
           if (logoSrc) {
             const logoImg = new Image();
             logoImg.src = logoSrc;
