@@ -30,38 +30,86 @@ const QUOTA_ERROR_PATTERNS = [
   "too many requests",
 ];
 
+// Non-retryable billing patterns (retry won't help)
+const BILLING_REQUIRED_PATTERNS = [
+  "check your plan and billing",
+  "billing details",
+  "exceeded your current quota",
+  "limit: 0",
+];
+
+/**
+ * Parse Google API error for structured details
+ */
+export function parseGoogleApiError(err: unknown): {
+  code: number | null;
+  status: string | null;
+  message: string;
+  isBillingRequired: boolean;
+} {
+  const rawMessage = err instanceof Error ? err.message : String(err);
+  
+  // Try to extract JSON from error message
+  let code: number | null = null;
+  let status: string | null = null;
+  
+  try {
+    const jsonMatch = rawMessage.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      code = parsed?.error?.code || null;
+      status = parsed?.error?.status || null;
+    }
+  } catch {
+    // Fallback: check for 429 in message
+    if (rawMessage.includes("429")) code = 429;
+  }
+  
+  // Check if billing is required (non-retryable)
+  const isBillingRequired = BILLING_REQUIRED_PATTERNS.some(p => 
+    rawMessage.toLowerCase().includes(p.toLowerCase())
+  );
+  
+  return { code, status, message: rawMessage, isBillingRequired };
+}
+
 /**
  * Check if an error is a quota/rate limit error
  */
 export function isQuotaError(err: unknown): boolean {
-  const message = err instanceof Error ? err.message : String(err);
-  return QUOTA_ERROR_PATTERNS.some(pattern => message.includes(pattern));
+  const { code, status, message } = parseGoogleApiError(err);
+  return code === 429 || status === "RESOURCE_EXHAUSTED" || 
+    QUOTA_ERROR_PATTERNS.some(pattern => message.includes(pattern));
+}
+
+/**
+ * Check if an error is non-retryable (billing required)
+ */
+export function isNonRetryableQuotaError(err: unknown): boolean {
+  const { isBillingRequired } = parseGoogleApiError(err);
+  return isBillingRequired;
 }
 
 /**
  * Check if an error is a model availability error
  */
 export function isModelNotAvailableError(err: unknown): boolean {
-  const message = err instanceof Error ? err.message : String(err);
-  return (
+  const { code, message } = parseGoogleApiError(err);
+  return code === 404 ||
     message.includes("not found") ||
     message.includes("not available") ||
-    message.includes("does not support") ||
-    message.includes("404")
-  );
+    message.includes("does not support");
 }
 
 /**
  * Check if an error is an invalid API key error
  */
 export function isInvalidApiKeyError(err: unknown): boolean {
-  const message = err instanceof Error ? err.message : String(err);
-  return (
+  const { code, message } = parseGoogleApiError(err);
+  return code === 401 ||
     message.includes("API_KEY_INVALID") ||
     message.includes("API key not valid") ||
-    message.includes("Invalid API key") ||
-    message.includes("401")
-  );
+    message.includes("Invalid API key");
 }
 
 interface SilentRetryOptions {
@@ -73,6 +121,7 @@ interface SilentRetryOptions {
 /**
  * Silent retry wrapper for quota errors
  * Retries in background without disruptive alerts
+ * IMPORTANT: Does NOT retry if billing is required (non-retryable)
  */
 export async function silentRetry<T>(
   fn: () => Promise<T>,
@@ -87,6 +136,11 @@ export async function silentRetry<T>(
       return await fn();
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
+      
+      // Check if non-retryable (billing required) - fail immediately
+      if (isNonRetryableQuotaError(err)) {
+        throw new Error("BILLING_REQUIRED");
+      }
       
       // Only retry on quota errors
       if (!isQuotaError(err)) {
@@ -284,14 +338,27 @@ Rules:
  * User-friendly error message extraction
  */
 export function getOwnApiErrorMessage(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  
+  // Special case: BILLING_REQUIRED (thrown by silentRetry)
+  if (message === "BILLING_REQUIRED") {
+    return "ဤ API Key မှာ Quota ကုန်သွားပါပြီ။ Billing enable ထားသော Key သုံးပါ၊ မဖြစ်ရင် App API Mode သို့ပြောင်းပါ။";
+  }
+  
   if (isInvalidApiKeyError(err)) {
     return "API Key မမှန်ပါ။ Google AI Studio မှ ရယူထားသော မှန်ကန်သည့် Key ထည့်ပေးပါ။";
   }
+  
+  // Check if billing is required (non-retryable)
+  if (isNonRetryableQuotaError(err)) {
+    return "ဤ API Key မှာ Quota ကုန်သွားပါပြီ။ Billing enable ထားသော Key သုံးပါ၊ မဖြစ်ရင် App API Mode သို့ပြောင်းပါ။";
+  }
+  
   if (isQuotaError(err)) {
     return "API Quota ပြည့်သွားပါပြီ။ ခဏစောင့်ပါ သို့မဟုတ် billing enable ထားသော API Key သုံးပါ။";
   }
   if (isModelNotAvailableError(err)) {
     return "Model မရရှိနိုင်ပါ။ API Key ကို စစ်ဆေးပါ။";
   }
-  return err instanceof Error ? err.message : "AI Sync မအောင်မြင်ပါ။";
+  return message || "AI Sync မအောင်မြင်ပါ။";
 }
