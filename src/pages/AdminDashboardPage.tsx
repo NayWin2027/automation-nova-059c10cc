@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAdmin } from "@/hooks/useAdmin";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import { 
   Shield, Users, Activity, Settings, LogOut, 
   RefreshCw, Home, Sparkles, BarChart3
@@ -28,6 +29,7 @@ const AdminDashboardPage: React.FC = () => {
   } = useAdmin();
 
   const [refreshing, setRefreshing] = useState(false);
+  const [twoFAChecked, setTwoFAChecked] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -42,13 +44,64 @@ const AdminDashboardPage: React.FC = () => {
     }
   }, [loading, user, isAdmin, navigate, toast]);
 
+  // SECURITY FIX: Verify 2FA on page load
   useEffect(() => {
-    if (isAdmin) {
+    const verify2FAStatus = async () => {
+      if (!user || !isAdmin) return;
+      
+      try {
+        const { data: status2FA, error } = await supabase.functions.invoke("admin-2fa", {
+          body: { action: "status" },
+        });
+        
+        if (error) {
+          // Security check failed - redirect to login
+          toast({ 
+            title: "Security Check Failed", 
+            description: "Please login again",
+            variant: "destructive" 
+          });
+          await signOut();
+          navigate('/admin/login');
+          return;
+        }
+        
+        if (status2FA?.enabled) {
+          // Check if 2FA was verified in this session
+          const verified = sessionStorage.getItem(`2fa_verified_${user.id}`);
+          if (!verified) {
+            // 2FA not verified - redirect to login
+            toast({ 
+              title: "2FA Required", 
+              description: "Please verify your identity",
+              variant: "destructive" 
+            });
+            await signOut();
+            navigate('/admin/login');
+            return;
+          }
+        }
+        
+        setTwoFAChecked(true);
+      } catch (err) {
+        console.error("2FA check error:", err);
+        await signOut();
+        navigate('/admin/login');
+      }
+    };
+    
+    if (!loading && isAdmin && user) {
+      verify2FAStatus();
+    }
+  }, [loading, isAdmin, user, navigate, toast, signOut]);
+
+  useEffect(() => {
+    if (isAdmin && twoFAChecked) {
       fetchStats();
       fetchProfiles();
       fetchActivityLogs();
     }
-  }, [isAdmin]);
+  }, [isAdmin, twoFAChecked]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -69,7 +122,8 @@ const AdminDashboardPage: React.FC = () => {
     navigate('/admin/login');
   };
 
-  if (loading) {
+  // Show loading while checking auth OR 2FA
+  if (loading || !twoFAChecked) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="animate-pulse flex flex-col items-center gap-3">
