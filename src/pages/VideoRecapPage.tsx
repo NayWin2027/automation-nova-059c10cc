@@ -2092,5 +2092,39 @@ export default function VideoRecapView() {
                     type="color"
                     value={borderColor}
                     onChange={(e) => setBorderColor(e.target.value)}
-                    className="w-6 h-6 rounded bg-transparent border-none cursor-pointer"<
-...
+                    className="w-6 h-6 rounded bg-transparent border-none cursor-pointer"
+                  />
+                )}
+              </div>
+              {borderEnabled && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[7px] text-slate-500 w-12">THICKNESS</span>
+                  <input
+                    type="range"
+                    min="1"
+                    max="20"
+                    value={borderWidth}
+                    onChange={(e) => setBorderWidth(parseInt(e.target.value))}
+                    className="flex-1 h-1.5 bg-black rounded-full appearance-none accent-white"
+                  />
+                </div>
+              )}
+              {borderEnabled && (
+                <div className="flex gap-2 pt-1">
+                  {COLORS.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => setBorderColor(c.hex)}
+                      className={`w-4 h-4 rounded-full border ${borderColor === c.hex ? "border-white scale-125" : "border-transparent opacity-40"}`}
+                      style={{ backgroundColor: c.hex }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </AccordionItem>
+      </div>
+    </div>
+  );
+};
