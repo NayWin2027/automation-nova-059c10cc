@@ -77,17 +77,40 @@ export async function generateSpeech(
     isUsingWebSpeech = false;
     const lang = languageCode || currentLanguageCode;
 
-    const { data, error } = await invokeWithAuthRetry<TTSResponse>('gemini-tts', {
+    const { data, error } = await invokeWithAuthRetry<TTSResponse>("gemini-tts", {
       text,
       voiceName,
       apiKey,
-      performance: performance || 'PROFESSIONAL',
+      performance: performance || "PROFESSIONAL",
       languageCode: lang,
     });
 
+    // If the backend function is missing / network fails, do a safe fallback to Web Speech.
+    // This keeps Video Recap stable even if the backend is temporarily unavailable.
     if (error) {
-      console.error('TTS Error:', error);
-      throw new Error(error.message || 'TTS generation failed');
+      const status = (error as any)?.context?.status;
+      const msg = String((error as any)?.message ?? "");
+      const isNetworkish =
+        status === 404 ||
+        status === 502 ||
+        status === 503 ||
+        status === 504 ||
+        msg.toLowerCase().includes("failed to fetch") ||
+        msg.toLowerCase().includes("failed to send a request");
+
+      // If user explicitly provided their own API key, surface the error (they expect AI voice).
+      // Otherwise (App API / no key), fallback to Web Speech to avoid blocking the flow.
+      if (!apiKey?.trim() && isNetworkish) {
+        console.warn("[generateSpeech] TTS backend unavailable; falling back to Web Speech", {
+          status,
+          msg,
+        });
+        isUsingWebSpeech = true;
+        return `WEBSPEECH:${lang}:${text}`;
+      }
+
+      console.error("TTS Error:", error);
+      throw new Error((error as any)?.message || "TTS generation failed");
     }
 
     if (data?.error) {
@@ -96,7 +119,7 @@ export async function generateSpeech(
 
     // Check if we should use client-side TTS (App API mode)
     if (data?.useClientTTS) {
-      console.log('Using client-side Web Speech API for TTS with language:', lang);
+      console.log("Using client-side Web Speech API for TTS with language:", lang);
       isUsingWebSpeech = true;
       // Return the text with language marker
       return `WEBSPEECH:${lang}:${text}`;
@@ -104,7 +127,7 @@ export async function generateSpeech(
 
     return data?.audio || null;
   } catch (err) {
-    console.error('generateSpeech error:', err);
+    console.error("generateSpeech error:", err);
     throw err;
   }
 }
