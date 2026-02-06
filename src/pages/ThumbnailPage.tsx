@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import { generateThumbnail } from "../services/geminiService";
 import { useNavigate } from "react-router-dom";
-
+import { useSecureApiKey } from "../hooks/useSecureApiKey";
+import { toast } from "sonner";
 type Position = "UPON LEFT" | "UPON RIGHT" | "BUTTON LEFT" | "BUTTON RIGHT" | "CENTER";
 type AspectRatio = "1:1" | "16:9" | "9:16" | "4:3" | "3:4";
 type FontEffect =
@@ -378,7 +379,7 @@ const LayerControl: React.FC<any> = ({
 
 const ThumbnailView: React.FC = () => {
   const navigate = useNavigate();
-  const [apiKey, setApiKey] = useState("");
+  const { apiKey, setApiKey } = useSecureApiKey("master_thumbnail_api_key");
   const [genMode, setGenMode] = useState<"AUTO" | "REF">("AUTO");
   const [selectedRatio, setSelectedRatio] = useState<AspectRatio>("16:9");
   const [context, setContext] = useState("");
