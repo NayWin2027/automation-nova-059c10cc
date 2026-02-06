@@ -1234,15 +1234,8 @@ export default function VideoRecapView() {
             freezeCtx.fillStyle = "#000";
             freezeCtx.fillRect(0, 0, targetW, targetH);
 
-            // Apply same flip as main canvas for consistency
-            freezeCtx.save();
-            if (flipVideo) {
-              freezeCtx.translate(targetW, 0);
-              freezeCtx.scale(-1, 1);
-            }
-            // Capture current video frame
+            // Capture current video frame (store unflipped; main ctx flipVideo transform is applied at render time)
             freezeCtx.drawImage(video, dx, dy, dw, dh);
-            freezeCtx.restore();
 
             // Mark this cycle as captured to keep the frame stable for the whole 3s photo phase
             freezeCapturedCycleRef.current = cycleIndex;
@@ -1255,23 +1248,8 @@ export default function VideoRecapView() {
             const inPhotoPhase = globalCycleTime >= 3.0;
             
             if (inPhotoPhase) {
-              // === PHOTO ZOOM PHASE (3s - 6s of each cycle) ===
-              const progressInFreeze = (globalCycleTime - 3.0) / 3.0;
-              
-              // Cinematic Ken Burns zoom with easing (more visible, still natural)
-              const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
-              const easedProgress = easeInOut(progressInFreeze);
-              const currentZoom = 1.02 + easedProgress * 0.28; // 1.02x → 1.30x
-
-              const zoomedW = targetW * currentZoom;
-              const zoomedH = targetH * currentZoom;
-
-              // Small pan so the "photo phase" is clearly noticeable while staying stable
-              const panX = (easedProgress - 0.5) * targetW * 0.04;
-              const panY = (0.5 - easedProgress) * targetH * 0.02;
-
-              const centerX = (targetW - zoomedW) / 2 + panX;
-              const centerY = (targetH - zoomedH) / 2 + panY;
+              // === PHOTO PHASE (3s - 6s of each cycle) ===
+              // Requirement: NO zoom — keep photo perfectly stable for the full 3 seconds.
 
               // Crossfade transition (0.4s smooth)
               const FADE_DUR = 0.4;
@@ -1290,30 +1268,25 @@ export default function VideoRecapView() {
                 ctx.globalAlpha = 1.0 - photoAlpha;
                 ctx.drawImage(video, dx, dy, dw, dh);
               }
-              
-              // Draw zooming photo on top
+
+              // Draw stable photo on top (already letterboxed inside freezeCanvas)
               ctx.globalAlpha = photoAlpha;
-              ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH, centerX, centerY, zoomedW, zoomedH);
+              ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH);
             } else {
               // === VIDEO PHASE (0s - 3s of each cycle) ===
               const FADE_DUR = 0.4;
               let videoAlpha = 1.0;
-              
+
               // Handle crossfade at cycle boundaries
               if (globalCycleTime < FADE_DUR && effectiveTime > FADE_DUR) {
                 // Just came from photo phase
                 videoAlpha = globalCycleTime / FADE_DUR;
-                
-                // Draw fading photo underneath
+
+                // Draw fading photo underneath (stable, NO zoom)
                 ctx.globalAlpha = 1.0 - videoAlpha;
-                const prevZoom = 1.3; // end zoom from previous photo phase
-                const zoomedW = targetW * prevZoom;
-                const zoomedH = targetH * prevZoom;
-                const centerX = (targetW - zoomedW) / 2;
-                const centerY = (targetH - zoomedH) / 2;
-                ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH, centerX, centerY, zoomedW, zoomedH);
+                ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH);
               }
-              
+
               // Draw video
               ctx.globalAlpha = Math.max(0.01, videoAlpha);
               ctx.drawImage(video, dx, dy, dw, dh);
