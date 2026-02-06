@@ -1,9 +1,6 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Download, ChevronDown, Loader2, Copy, Check } from "lucide-react";
 import { transcribeAudio } from "../services/geminiService";
-import { transcribeOwnApi, getOwnApiErrorMessage } from "../services/ownApiService";
-import { useSecureApiKey } from "../hooks/useSecureApiKey";
-import { toast } from "sonner";
 
 const LANGUAGES = [
   "BURMESE",
@@ -105,9 +102,13 @@ export default function TranscriptionView() {
   const [result, setResult] = useState("");
   const [copied, setCopied] = useState(false);
 
-  // API Mode States - using secure session storage
+  // New API Mode States
   const [apiType, setApiType] = useState<"app" | "own">("app");
-  const { apiKey, setApiKey } = useSecureApiKey("master_transcribe_api_key");
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem("master_transcribe_api_key") || "");
+
+  useEffect(() => {
+    localStorage.setItem("master_transcribe_api_key", apiKey);
+  }, [apiKey]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -119,12 +120,12 @@ export default function TranscriptionView() {
 
   const handleTranscribe = async () => {
     if (!selectedFile || selectedTier === null) {
-      toast.error("Please select a file and a credit tier first.");
+      alert("Please select a file and a credit tier first.");
       return;
     }
 
     if (apiType === "own" && !apiKey.trim()) {
-      toast.error("GEMINI API KEY အရင်ထည့်ပေးပါ။");
+      alert("GEMINI API KEY အရင်ထည့်ပေးပါ။");
       return;
     }
 
@@ -135,49 +136,24 @@ export default function TranscriptionView() {
       const reader = new FileReader();
       reader.readAsDataURL(selectedFile);
       reader.onload = async () => {
-        try {
-          const base64 = (reader.result as string).split(",")[1];
-          let text: string | null = null;
-          
-          if (apiType === "own") {
-            // Direct client-side transcription with silent retry + model fallback
-            text = await transcribeOwnApi(
-              base64,
-              selectedFile.type,
-              selectedLanguage,
-              apiKey
-            );
-          } else {
-            // App API mode - use backend
-            text = await transcribeAudio(
-              base64,
-              selectedFile.type,
-              selectedLanguage,
-              undefined
-            );
-          }
-          
-          if (text) {
-            setResult(text);
-          } else {
-            toast.error("Transcription failed. AI returned no text.");
-          }
-        } catch (err) {
-          console.error(err);
-          const errorMsg = getOwnApiErrorMessage(err);
-          toast.error(errorMsg);
-        } finally {
-          setIsTranscribing(false);
+        const base64 = (reader.result as string).split(",")[1];
+        // Pass apiKey only if apiType is 'own'
+        const text = await transcribeAudio(
+          base64,
+          selectedFile.type,
+          selectedLanguage,
+          apiType === "own" ? apiKey : undefined,
+        );
+        if (text) {
+          setResult(text);
+        } else {
+          alert("Transcription failed. AI returned no text.");
         }
-      };
-      reader.onerror = () => {
-        toast.error("Failed to read file.");
         setIsTranscribing(false);
       };
     } catch (err) {
       console.error(err);
-      const errorMsg = getOwnApiErrorMessage(err);
-      toast.error(errorMsg);
+      alert("Error occurred during transcription.");
       setIsTranscribing(false);
     }
   };
@@ -219,7 +195,6 @@ export default function TranscriptionView() {
             placeholder="Paste your API key here..."
             className="w-full bg-black/40 border border-indigo-500/30 rounded-xl p-3 text-xs font-bold text-indigo-100 outline-none focus:ring-1 focus:ring-indigo-500 placeholder:text-slate-600 shadow-inner"
           />
-          <p className="text-[8px] text-indigo-300/60 ml-1">Tab ပိတ်လိုက်ရင် Key ပျောက်သွားပါမယ်</p>
         </div>
       )}
 

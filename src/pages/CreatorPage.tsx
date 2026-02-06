@@ -2,12 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Loader2, Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { generateStory, generateThumbnail } from '@/services/geminiService';
-import { generateOwnApiText, getOwnApiErrorMessage } from '@/services/ownApiService';
 import { BottomNav } from '@/components/BottomNav';
 import { useSecureApiKey } from '@/hooks/useSecureApiKey';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { useApiAccess } from '@/hooks/useApiAccess';
-import { toast } from 'sonner';
 
 const LANGUAGES = [
   "BURMESE", "ENGLISH", "JAPANESE", "KOREAN", "CHINESE (SIMPLIFIED)", 
@@ -105,16 +103,9 @@ const CreatorPage: React.FC = () => {
 
   const handleGenerate = async () => {
     if (!topic) return;
-    
-    if (apiType === 'own' && !apiKey.trim()) {
-      toast.error("GEMINI API KEY အရင်ထည့်ပေးပါ။");
-      return;
-    }
-    
     setLoading(true);
     setResult('');
     setGeneratedImg(null);
-    
     try {
       const prompt = `
         Task: Create a high-quality ${contentType} in ${language} language.
@@ -131,25 +122,11 @@ const CreatorPage: React.FC = () => {
         3. No meta-talk. Only output the final content result.
       `;
       
-      let response: string | null = null;
-      
-      if (apiType === 'own') {
-        // Direct client-side generation with silent retry + model fallback
-        response = await generateOwnApiText(prompt, apiKey, {
-          temperature: 0.8,
-          maxRetries: 3,
-          delayMs: 30000,
-        });
-      } else {
-        // App API mode - use backend
-        response = await generateStory(prompt);
-      }
-      
+      const response = await generateStory(prompt, apiType === 'own' ? apiKey : undefined);
       setResult(response || '');
 
       if (withImage) {
         const imagePrompt = `A professional cinematic ${category} thumbnail for: ${topic}. Style: Vivid, Neon, High-contrast, Visual masterpiece. No text overlay.`;
-        // Image generation still uses backend (requires special handling)
         const imgResult = await generateThumbnail(imagePrompt, apiType === 'own' ? apiKey : undefined);
         if (imgResult) {
           setGeneratedImg(imgResult);
@@ -158,8 +135,7 @@ const CreatorPage: React.FC = () => {
 
     } catch (e) {
       console.error(e);
-      const errorMsg = getOwnApiErrorMessage(e);
-      toast.error(errorMsg);
+      alert("Generation failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -209,7 +185,6 @@ const CreatorPage: React.FC = () => {
               placeholder="Paste Private Key..." 
               className="w-full bg-background/60 border border-border/50 rounded-lg p-2 text-[10px] font-bold text-foreground outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/50" 
             />
-            <p className="text-[7px] text-muted-foreground/70 ml-1">Tab ပိတ်လိုက်ရင် Key ပျောက်သွားပါမယ်</p>
           </div>
         )}
 

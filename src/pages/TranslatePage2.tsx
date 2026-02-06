@@ -1,8 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { translateText } from "../services/geminiService";
-import { generateOwnApiText, getOwnApiErrorMessage } from "../services/ownApiService";
-import { useSecureApiKey } from "../hooks/useSecureApiKey";
-import { toast } from "sonner";
+import { GoogleGenAI } from "@google/genai";
 import {
   Lock,
   ChevronDown,
@@ -156,7 +154,7 @@ const EMOTIONS = [
 
 const TranslateView: React.FC = () => {
   const [apiType, setApiType] = useState<ApiType>("app");
-  const { apiKey, setApiKey } = useSecureApiKey("master_translate_api_key");
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem("master_translate_api_key") || "");
   const [text, setText] = useState("");
   const [targetLang, setTargetLang] = useState("BURMESE (SPOKEN)");
   const [selectedMode, setSelectedMode] = useState(1);
@@ -171,14 +169,18 @@ const TranslateView: React.FC = () => {
   const [result, setResult] = useState("");
   const [copied, setCopied] = useState(false);
 
+  useEffect(() => {
+    localStorage.setItem("master_translate_api_key", apiKey);
+  }, [apiKey]);
+
   const handleTranslate = async () => {
     if (!text.trim()) return;
     if (apiType === "app" && selectedTier === null) {
-      toast.error("ကျေးဇူးပြု၍ Credit Tier တစ်ခုကို အရင်ရွေးချယ်ပေးပါ။");
+      alert("ကျေးဇူးပြု၍ Credit Tier တစ်ခုကို အရင်ရွေးချယ်ပေးပါ။");
       return;
     }
     if (apiType === "own" && !apiKey.trim()) {
-      toast.error("ကျေးဇူးပြု၍ API Key ထည့်ပေးပါ။");
+      alert("ကျေးဇူးပြု၍ API Key ထည့်ပေးပါ။");
       return;
     }
 
@@ -201,17 +203,17 @@ const TranslateView: React.FC = () => {
       let response: string | null = null;
 
       if (apiType === "own") {
-        // Direct client-side generation with silent retry + model fallback
-        response = await generateOwnApiText(
-          `${systemInstruction}\n\nCONTENT TO PROCESS:\n${text}`,
-          apiKey,
-          {
+        // Own API Key mode: call Gemini API directly from client (bypass edge function)
+        const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
+        const result = await ai.models.generateContent({
+          model: "gemini-2.0-flash",
+          contents: `${systemInstruction}\n\nCONTENT TO PROCESS:\n${text}`,
+          config: {
             temperature: 0.7,
             maxOutputTokens: 8192,
-            maxRetries: 3,
-            delayMs: 30000,
-          }
-        );
+          },
+        });
+        response = result.text || "";
       } else {
         // App API mode: use edge function
         response = await translateText(
@@ -224,8 +226,14 @@ const TranslateView: React.FC = () => {
       setResult(response || "");
     } catch (error: any) {
       console.error(error);
-      const errorMsg = getOwnApiErrorMessage(error);
-      toast.error(errorMsg);
+      const errMsg = error?.message || "";
+      if (errMsg.includes("API_KEY_INVALID") || errMsg.includes("API key not valid")) {
+        alert("API Key မမှန်ပါ။ ကျေးဇူးပြု၍ Google AI Studio မှ ရယူထားသော မှန်ကန်သည့် API Key ထည့်ပေးပါ။");
+      } else if (errMsg.includes("QUOTA") || errMsg.includes("429") || errMsg.includes("quota")) {
+        alert("API Quota ပြည့်သွားပါပြီ။ ခဏစောင့်ပြီး ပြန်ကြိုးစားပါ သို့မဟုတ် billing enable ထားသော API Key သုံးပါ။");
+      } else {
+        alert("AI Sync မအောင်မြင်ပါ။ API Key သို့မဟုတ် လိုင်းကို ပြန်စစ်ပေးပါ။");
+      }
     } finally {
       setLoading(false);
     }
@@ -271,7 +279,6 @@ const TranslateView: React.FC = () => {
             placeholder="PASTE AIza... KEY HERE"
             className="w-full bg-black/50 border border-white/10 rounded-2xl px-6 h-14 text-xs font-black tracking-widest text-white outline-none focus:ring-1 focus:ring-blue-500 shadow-inner"
           />
-          <p className="text-[8px] text-blue-300/60 mt-2 ml-2">Tab ပိတ်လိုက်ရင် Key ပျောက်သွားပါမယ်</p>
         </div>
       )}
 

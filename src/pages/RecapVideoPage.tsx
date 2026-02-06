@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { analyzeVideo, generateSpeech, confirmRecapSuccess } from "../services/geminiService";
 import { useAuthGuard } from "../hooks/useAuthGuard";
 import { useApiAccess } from "@/hooks/useApiAccess";
-import { useSecureApiKey } from "@/hooks/useSecureApiKey";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Home, Lock } from "lucide-react";
@@ -342,7 +341,7 @@ export default function VideoRecapView() {
   // API Access Control
   const { appApiAllowed, ownApiAllowed, defaultApiMode, isLoading: accessLoading } = useApiAccess();
   const [apiType, setApiType] = useState<"app" | "own">("app");
-  const { apiKey, setApiKey } = useSecureApiKey("master_recap_api_key");
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem("master_recap_api_key") || "");
 
   // Sync apiType with access control
   useEffect(() => {
@@ -373,6 +372,10 @@ export default function VideoRecapView() {
   // WebAudio expects a Uint8Array backed by ArrayBuffer (not SharedArrayBuffer)
   const dataArrayRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem("master_recap_api_key", apiKey);
+  }, [apiKey]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {

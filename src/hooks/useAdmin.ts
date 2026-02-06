@@ -214,14 +214,6 @@ export function useAdmin() {
   };
 
   const signOut = async () => {
-    // SECURITY FIX: Clear all 2FA verification markers on sign out
-    const keys = Object.keys(sessionStorage);
-    keys.forEach(key => {
-      if (key.startsWith('2fa_verified_')) {
-        sessionStorage.removeItem(key);
-      }
-    });
-    
     return supabase.auth.signOut();
   };
 
