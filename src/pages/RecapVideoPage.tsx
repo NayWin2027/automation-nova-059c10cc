@@ -163,6 +163,8 @@ interface ScriptSegment {
   audioStart?: number;
   audioEnd?: number;
   videoTime?: number; // Scene timestamp to seek video to when this segment plays
+  sceneStart?: number; // Matched scene start (seconds)
+  sceneEnd?: number; // Matched scene end (seconds)
   sceneTopic?: string; // Matched scene topic for debugging
 }
 
@@ -502,6 +504,8 @@ export default function VideoRecapView() {
       return {
         ...seg,
         videoTime: matchedScene?.start ?? seg.time,
+        sceneStart: matchedScene?.start,
+        sceneEnd: matchedScene?.end,
         sceneTopic: matchedScene?.topic,
       };
     });
@@ -1283,13 +1287,37 @@ export default function VideoRecapView() {
             activeSegment = scriptSegments[scriptSegments.length - 1];
           }
 
-          // ============ 3S VIDEO / 3S PHOTO HARD-FREEZE LOOP ============
-          // Timeline is driven by audio time (as per user selection)
+          // ============ 3S VIDEO / 3S PHOTO LOOP (SEGMENT-ANCHORED + SEMANTIC) ============
+          // CRITICAL FIX: Do NOT drive video.currentTime from global audio time.
+          // Instead anchor each narration segment to its matched sceneStart and run a 6s cycle inside that scene.
           const CYCLE_DUR = 6.0;
           const MOTION_DUR = 3.0;
-          const globalCycleTime = effectiveTime % CYCLE_DUR;
-          const inPhotoPhase = motionZoom && globalCycleTime >= MOTION_DUR;
-          const cycleIndex = Math.floor(effectiveTime / CYCLE_DUR);
+          const segAudioStart = activeSegment?.audioStart ?? 0;
+          const segLocalTime = Math.max(0, effectiveTime - segAudioStart);
+          const phase = segLocalTime % CYCLE_DUR;
+          const inPhotoPhase = motionZoom && phase >= MOTION_DUR;
+          const cycleIndex = Math.floor(segLocalTime / CYCLE_DUR);
+
+          const sceneStart =
+            activeSegment?.sceneStart ?? activeSegment?.videoTime ?? activeSegment?.time ?? 0;
+          const sceneEnd = activeSegment?.sceneEnd;
+
+          const clampTime = (t: number) => {
+            if (!Number.isFinite(t)) return 0;
+            if (video.duration > 0) return Math.min(Math.max(0, t), Math.max(0, video.duration - 0.1));
+            return Math.max(0, t);
+          };
+
+          const motionElapsed = cycleIndex * MOTION_DUR + Math.min(phase, MOTION_DUR);
+          const freezeElapsed = (cycleIndex + 1) * MOTION_DUR;
+
+          const freezeTargetUnclamped = sceneEnd
+            ? Math.min(sceneStart + freezeElapsed, Math.max(sceneStart, sceneEnd - 0.1))
+            : sceneStart + freezeElapsed;
+
+          const desiredMotionTime = clampTime(sceneStart + motionElapsed);
+          const desiredFreezeTime = clampTime(freezeTargetUnclamped);
+          const desiredTimeNow = inPhotoPhase ? desiredFreezeTime : desiredMotionTime;
 
           // Hard video control: pause during photo phase, play during video phase
           if (motionZoom && isPlaying) {
@@ -1300,31 +1328,13 @@ export default function VideoRecapView() {
             }
           }
 
-          // Clamp video.currentTime during photo phase to prevent drift
-          if (motionZoom && inPhotoPhase) {
-            const baseCycleStart = Math.floor(effectiveTime / CYCLE_DUR) * CYCLE_DUR;
-            const desiredVideoTime = (baseCycleStart + MOTION_DUR) % (video.duration || 1);
-            const drift = Math.abs(video.currentTime - desiredVideoTime);
-            if (drift > 0.05 && video.duration > 0) {
-              video.currentTime = desiredVideoTime;
-            }
-          }
-
-          // ===== SEMANTIC VIDEO SEEKING: Jump to matching scene when segment changes =====
-          const activeSegmentIndex = activeSegment ? scriptSegments.indexOf(activeSegment) : -1;
-          if (activeSegment && activeSegmentIndex !== lastActiveSegmentIndexRef.current) {
-            lastActiveSegmentIndexRef.current = activeSegmentIndex;
-            
-            // If segment has a videoTime (matched scene), seek video to that timestamp
-            const targetVideoTime = activeSegment.videoTime ?? activeSegment.time;
-            if (typeof targetVideoTime === 'number' && video.duration > 0) {
-              const clampedTime = Math.min(targetVideoTime, video.duration - 0.1);
-              const currentDrift = Math.abs(video.currentTime - clampedTime);
-              // Only seek if drift is significant (avoid jitter)
-              if (currentDrift > 1.0) {
-                console.log(`[SemanticSeek] Segment ${activeSegmentIndex}: seeking video to ${clampedTime.toFixed(1)}s (topic: ${activeSegment.sceneTopic || 'unknown'})`);
-                video.currentTime = clampedTime;
-              }
+          // Keep video aligned to the active segment's matched scene.
+          // This prevents "voice on segment 1 but video showing segment 3/4" drift.
+          if (isPlaying && activeSegment && video.duration > 0) {
+            const drift = Math.abs(video.currentTime - desiredTimeNow);
+            const threshold = inPhotoPhase ? 0.03 : 0.2;
+            if (drift > threshold) {
+              video.currentTime = desiredTimeNow;
             }
           }
 
@@ -1384,12 +1394,12 @@ export default function VideoRecapView() {
             if (inPhotoPhase) {
               // === PHOTO PHASE (3s - 6s): STABLE, NO ZOOM/PAN ===
               let photoAlpha = 1.0;
-              if (globalCycleTime < MOTION_DUR + FADE_DUR) {
+              if (phase < MOTION_DUR + FADE_DUR) {
                 // Fading INTO photo
-                photoAlpha = (globalCycleTime - MOTION_DUR) / FADE_DUR;
-              } else if (globalCycleTime > CYCLE_DUR - FADE_DUR) {
+                photoAlpha = (phase - MOTION_DUR) / FADE_DUR;
+              } else if (phase > CYCLE_DUR - FADE_DUR) {
                 // Fading OUT of photo (back to video)
-                photoAlpha = (CYCLE_DUR - globalCycleTime) / FADE_DUR;
+                photoAlpha = (CYCLE_DUR - phase) / FADE_DUR;
               }
               photoAlpha = Math.max(0, Math.min(1, photoAlpha));
 
@@ -1407,8 +1417,8 @@ export default function VideoRecapView() {
               let videoAlpha = 1.0;
 
               // Handle crossfade from photo phase at cycle boundary
-              if (globalCycleTime < FADE_DUR && effectiveTime > FADE_DUR) {
-                videoAlpha = globalCycleTime / FADE_DUR;
+              if (phase < FADE_DUR && segLocalTime > FADE_DUR) {
+                videoAlpha = phase / FADE_DUR;
                 // Draw fading photo underneath (stable, NO zoom)
                 ctx.globalAlpha = 1.0 - videoAlpha;
                 ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH);
