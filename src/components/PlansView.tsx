@@ -1,13 +1,69 @@
 import React, { useState, useEffect } from "react";
-import { db, PlanSettings, TopUpPackage } from "./supabaseService";
-import { User } from "./types";
+import { supabase } from "@/integrations/supabase/client";
+import { useAdmin } from "@/hooks/useAdmin";
+
+interface TopUpPackage {
+  credits: number;
+  rate: string;
+  price: string;
+  priceColor: string;
+}
+
+interface PlanSettings {
+  id: string;
+  headerTitle: string; headerTitleColor: string; headerTitleSize?: number;
+  headerSub: string; headerSubColor: string; headerSubSize?: number;
+  headerBg: string;
+  pPlusTitle: string; pPlusTitleColor: string; pPlusTitleSize?: number;
+  pPlusPrice: string; pPlusPriceColor: string; pPlusPriceSize?: number;
+  pPlusAppApi: string; pPlusOwnApi: string;
+  pPlusFeatures: string; pPlusTextColor: string; pPlusTextSize?: number;
+  pTitle: string; pTitleColor: string; pTitleSize?: number;
+  pPrice: string; pPriceColor: string; pPriceSize?: number;
+  pAppApi: string; pOwnApi: string;
+  pFeatures: string; pTextColor: string; pTextSize?: number;
+  topUpTitle: string; topUpTitleColor: string;
+  topUpPackages: TopUpPackage[];
+  recTitle: string; recTitleColor: string; recTitleSize?: number;
+  recText: string; recTextColor: string; recTextSize?: number; recBg: string;
+  rulesTitle: string; rulesTitleColor: string; rulesTitleSize?: number;
+  rulesText: string; rulesTextColor: string; rulesTextSize?: number;
+  kpayNumber: string; kpayName: string;
+  waveNumber: string; waveName: string;
+  thaiBankName: string; thaiBankAcc: string; thaiBankHolder: string;
+  messengerLink: string; messengerLink2: string;
+  [key: string]: any;
+}
+
+const db = {
+  async getPlanSettings(): Promise<PlanSettings | null> {
+    const { data } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'plan_settings')
+      .single();
+    return data?.value as PlanSettings | null;
+  },
+  async upsertPlanSettings(settings: PlanSettings) {
+    const { data: existing } = await supabase
+      .from('app_settings')
+      .select('id')
+      .eq('key', 'plan_settings')
+      .single();
+    if (existing) {
+      await supabase.from('app_settings').update({ value: settings as any }).eq('key', 'plan_settings');
+    } else {
+      await supabase.from('app_settings').insert({ key: 'plan_settings', value: settings as any });
+    }
+  }
+};
 
 const PlansView: React.FC = () => {
   const [settings, setSettings] = useState<PlanSettings | null>(null);
   const [editData, setEditData] = useState<PlanSettings | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ role?: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
   const defaultDefaults: PlanSettings = {
