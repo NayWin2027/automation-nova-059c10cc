@@ -1,131 +1,99 @@
 
-Goal (Own API mode only)
-- Make “Own API Key” mode stable across all tools so it does not randomly break after refresh/day changes, and so quota/rate-limit errors do not cause disruptive popups or hard-stops.
-- Do not change App API logic/business rules (credits, gateways, admin access matrix). Only touch the Own API paths + error handling.
+ရည်ရွယ်ချက် (သင်ခိုင်းထားတဲ့ /recap ပိုင်းပဲ)
+- 3S Video → 3S Photo (အငြိမ်) ကို 100% တိတိကျကျ loop ဖြစ်အောင် “forever stable” ပြန်တည့်မယ် (zoom/pan မပါ)။
+- Video + Script + Voice + Subtitle ကို သဘာဝကျကျ “တကယ်” ကိုက်ညီအောင် sync ကို “Segment တစ်ခုချင်း TTS” နည်းလမ်းနဲ့ အတိအကျ ပြန်လုပ်မယ် (သင်ရွေးထားတဲ့ Accurate per‑segment)။
+- မဆိုင်တဲ့ tool / business rules / credits logic မထိဘဲ `src/pages/RecapVideoPage.tsx` ထဲက logic ပိုင်းပဲ အဓိက ပြင်မယ်။
 
-What I found (why it “worked last night, broke this morning”)
-1) Own API keys are stored in sessionStorage for some tools (via useSecureApiKey)
-   - sessionStorage clears when the tab/window is closed.
-   - If you used the app last night, closed the tab, then opened this morning: the Own API key fields can be empty again. That can feel like “Own API broke”.
-   - Some other tools still use localStorage, so behavior is inconsistent across tools.
+ဘာကြောင့် အခု “video သီးသန့်” ဖြစ်နေသလဲ (တွေ့ရှိချက်)
+- `/recap` မှာ မြင်နေရတာက `<canvas>` ပါ။ 3S/3S logic က canvas renderer ထဲမှာ ရှိပေမယ့်
+  1) “photo phase” ထဲမှာ video element ကို တကယ် မရပ်ထားဘဲ ဆက် play နေပြီး  
+  2) video currentTime ကို “photo phase” အတွင်း drift‑sync မလုပ်တော့တာ (freeze mode မှာ sync skip) ကြောင့်  
+  3) freezeCanvas overlay မတက်/မဖုံးသလို ဖြစ်ရင် မျက်စိမြင်ထဲမှာ video ဆက်တိုက်တက်နေသလိုပဲ မြင်နိုင်ပါတယ်။
+- Sync လွဲတာက လက်ရှိ audio segment timing ကို “စာလုံးအလျား proportion” နဲ့ ခန့်မှန်းထားလို့ voice အမှန်တကယ် ပြောသလို subtitle timing မကိုက်နိုင်တာကြောင့်ပါ။
 
-2) Some tools still depend on backend functions even in Own API mode
-   - Example: /creator (CreatorPage) calls generateStory() in geminiService which invokes backend function creator-ai even when apiKey is present.
-   - If the backend function is temporarily unavailable, not deployed on the environment you are using, or returns non-200 on upstream 429/503, Own API appears “dead” even though your key is fine.
+ပြင်မယ့်အချက်များ (Files & Scope)
+- ပြင်မယ့်ဖိုင်: `src/pages/RecapVideoPage.tsx` တစ်ဖိုင်တည်းကို အဓိကထားပြီး ပြင်မယ်  
+  (အခြား tools/services တွေ မထိ)
+- `src/services/geminiService.ts` ကို မပြင်ဘဲ /recap page ထဲမှာပဲ WebSpeech fallback ကို “sync မတိကျနိုင်” ဆိုပြီး stop/warn လုပ်မယ် (recap tool အတွက်သာ)။
 
-3) A real breaking bug exists in /transcribe path
-   - src/services/geminiService.ts calls backend function “transcribe-google” with JSON {audioData,...}
-   - But supabase/functions/transcribe-google expects FormData(file, apiKey, languageName) and requires auth.
-   - This mismatch will cause failures (and it affects both Own + App depending on how it’s used).
+အကောင်အထည်ဖော်မယ့် Implementation Design
 
-4) Model volatility without fallback in some client-side Own API calls
-   - Some pages call a single model name (e.g. gemini-2.0-flash) with no fallback.
-   - If a key’s model access changes or Google changes availability, Own API breaks unless we retry/fallback like we already do in Story Creator.
+1) 3S Video / 3S Photo (Stable) ကို “overlay မယုံ” ပဲ “အတင်း freeze ဖြစ်အောင်” လုပ်မယ်
+- Timeline ကို သင်ရွေးထားသလို “audio time” ကို အခြေခံမယ်  
+  `effectiveTime = (audioBlobUrl && !audio.paused) ? audio.currentTime : video.currentTime`
+- motionZoom (3S FREEZE ON) ဖြစ်ရင် loop ကို ဒီပုံစံနဲ့ တိတိကျကျ enforce လုပ်မယ်
+  - `CYCLE = 6.0s`, `MOTION = 3.0s`
+  - `phase = effectiveTime % CYCLE`
+  - `inPhotoPhase = phase >= MOTION`
+- “video ဆက်တိုက်” မဖြစ်အောင် video element ကိုတောင် phase အလိုက် hard‑control လုပ်မယ်
+  - `inPhotoPhase && isPlaying` → `video.pause()` (အတင်းရပ်)
+  - `!inPhotoPhase && isPlaying` → `video.play()` (user play ထားတုန်း)
+- အရေးကြီး: “photo phase” အတွင်း video frame မရွေ့အောင် `video.currentTime` ကိုပါ clamp လုပ်မယ်  
+  (overlay fail ဖြစ်ရင်တောင် မရွေ့နိုင်တော့)
+  - `desiredVideoTime = base + min(phase, MOTION)`
+  - `base = floor(effectiveTime / CYCLE) * CYCLE`
+  - `desiredVideoTime` ကို `video.duration` ထဲက valid range အတွင်း `mod`/`clamp` လုပ်ပြီး `drift > threshold` ဖြစ်ရင်သာ set (မဟုတ်ရင် seeking လှုပ်ရှားလို့ jitter ဖြစ်နိုင်)
+- Freeze frame capture ကို “photo phase စဝင်တဲ့ချိန်” မှာပဲ ၁ ကြိမ်တည်း capture လုပ်ပြီး 3S တစ်လျှောက် “တကယ်” stable ဖြစ်အောင်ထားမယ်
+  - Capture မလုပ်ခင် `video.currentTime` ကို desired နားမှာ stable ဖြစ်နေပြီလား စစ်မယ် (drift နည်းတဲ့ frame မှသာ capture)  
+  - Capture မအောင်မြင်သေးရင် photo phase ပထမ frame တချို့မှာ fallback draw လုပ်ပြီး capture ကို re‑try (တစ်ခါတည်းတန်းမရလို့ video ပဲမြင်သွားတဲ့ issue ကို ပိတ်)
+- Rendering ကို “hard switch” လုပ်မယ် (သင်တောင်းထားတဲ့ stable အတွက်)
+  - Photo phase: `ctx.drawImage(freezeCanvas, 0,0,targetW,targetH)` (alpha=1, zoom/pan မရှိ)
+  - Video phase: `ctx.drawImage(video, dx,dy,dw,dh)`
+  - Crossfade/zoom logic (မလိုတော့တဲ့ အပိုင်း) ကို recap tool အတွက် ဖယ်ပြီး deterministic ဖြစ်အောင် လုပ်မယ်  
+    (ဒါက “အရင်နေ့တွေက ရတယ်” စတိုင် stable ကို ပြန်ရအောင်လုပ်တဲ့ core fix)
 
-Solution design (standardized Own API stability layer)
-A) Unify Own API behavior across tools
-- Own API mode should prefer direct client-side generation using @google/genai wherever possible:
-  - Removes dependency on backend availability.
-  - Avoids backend auth requirements for guest users.
-  - Gives us consistent silent-retry handling.
-- Only keep backend calls in Own mode when truly necessary (e.g., heavy server-side processing). If unavoidable, implement the same “Graceful Failure (HTTP 200 with retryable payload)” pattern.
+2) Script/Voice/Subtitle “တကယ်” ကိုက်ညီအောင် Accurate per‑segment TTS + Exact timings
+- လက်ရှိ: TTS ကို script တစ်ကြိမ်တည်း generate → subtitle timing ကို စာလုံးအလျားနဲ့ ခန့်မှန်း (လွဲနိုင်)
+- ပြင်မယ်: `segments` တစ်ခုချင်းစီကို TTS generate လုပ်မယ်
+  - Segment တစ်ခုချင်းစီအတွက်:
+    - `generateSpeech(seg.text, voice, apiKey)` ကိုခေါ်
+    - ပြန်လာတဲ့ base64 ကို `createWavBlob()` နဲ့ Blob လုပ်
+    - Browser `AudioContext.decodeAudioData()` နဲ့ AudioBuffer အဖြစ် decode
+    - `segDuration = audioBuffer.duration` ကို “အမှန်” အချိန်အဖြစ်ယူ
+  - အားလုံးပြီးရင်:
+    - AudioBuffer တွေကို single continuous AudioBuffer အဖြစ် concatenate
+    - WAV encode (PCM16 little‑endian, mono) လုပ်ပြီး Blob URL တစ်ခု ထုတ်
+    - `audioStart/audioEnd` ကို cumulative durations နဲ့တိတိကျကျ fill
+    - Subtitle selection logic က အဲဒီ audioStart/audioEnd ကိုအခြေခံပြီး voice နဲ့ sync သေချာကိုက်မယ်
+- Error/Quota handling (ပိုက်ဆံ မပေါအောင်)
+  - Segment TTS တစ်ခု error တက်ရင်:
+    - “ထပ်ထုတ်” မလုပ်ဘဲ ချက်ချင်း ရပ် (silent retry loop မလုပ်)
+    - UI မှာ အကြောင်းရင်းကို statusText/ toast နဲ့ပြ (quota/rate limit ဖြစ်ရင် “ခဏစောင့်ပြီးပြန်လုပ်”)
+  - Credits deduction logic မပြောင်းဘူး (export success မှသာ confirm ဖြစ်တဲ့ flow ကို ဆက်ထား)
 
-B) Implement a reusable “Silent Retry + Model Fallback” utility
-- Create a small shared module (new file) for Own API calls:
-  - isQuotaError(err): detects 429 / RESOURCE_EXHAUSTED / rate limit patterns.
-  - silentRetry(fn, {maxRetries=3, delayMs=30000}): retries in background for quota errors only.
-  - generateTextWithFallback(prompt, apiKey, modelList): tries multiple models, skipping “model not available” errors.
-  - (Optional) generateImageWithFallback for tools that generate images, with clear “your key needs Imagen enabled” messaging.
+3) WebSpeech fallback ကြောင့် sync လွဲမှုကို Recap tool ထဲမှာပဲ ထိန်းမယ် (အခြား tools မထိ)
+- `generateSpeech()` က backend မရရင် `WEBSPEECH:...` marker ပြန်ပေးနိုင်ပါတယ်
+- `/recap` အတွက်တော့ Accurate sync လိုတာကြောင့်
+  - marker တွေ့ရင် “browser voice သုံးရင် timing အမှန်မရနိုင်” လို့ toast ပြပြီး process ကို stop လုပ်မယ်
+  - ဒါဟာ recap tool ထဲမှာပဲ (မတူတဲ့ tools တွေ “flow မပြတ်” အောင်ထားတဲ့ global fallback ကို မဖျက်ဘူး)
 
-C) Make API key persistence behavior explicit (without reducing security)
-- Keep sessionStorage for keys (security policy already adopted).
-- Add a small, non-blocking hint under each Own API key input:
-  - “Key is saved for this tab only; closing the tab clears it.”
-- This directly addresses the “morning it broke again” confusion.
+4) Testing Checklist (အတိုချုံး၊ end‑to‑end)
+- /recap → Video upload → Generate → Preview play
+  - 0–3s motion video (တကယ်ရွေ့)
+  - 3–6s photo stable (လုံးဝမရွေ့)
+  - Loop ဆက်တိတိကျကျ ပြန်ဖြစ်
+- Script/Voice/Subtitles
+  - Subtitle စာကြောင်းက voice ပြောတဲ့အချိန်နဲ့ ကိုက် (segment boundaries မလွဲ)
+- Export/Download
+  - Download ထွက်တဲ့ video ထဲမှာလည်း 3S motion / 3S photo stable အတိအကျ ပါ
+  - Audio track + subtitles timing ကိုက်
 
-Implementation scope (files that will change)
-Frontend (Own API paths only)
-1) src/pages/CreatorPage.tsx
-- Change Own API path to bypass backend:
-  - For apiType === 'own': call direct @google/genai with model fallback list (similar to Story Creator).
-  - Add Silent Retry (no alert loops; use toast/banner/status text).
-- Keep App API path unchanged (still uses existing generateStory / creator-ai backend for shared key + credits).
+နည်းပညာပိုင်း (Dev Note)
+- ပြင်မယ့် core areas (RecapVideoPage.tsx)
+  - `generateAudioFromText()` ကို “per‑segment pipeline” သို့ပြောင်း
+  - Renderer useEffect ထဲက 3S logic ကို “audio‑time‑driven + hard freeze (pause+clamp)” သို့ပြောင်း
+  - Freeze capture ကို “seek stable then capture” pattern နဲ့ deterministic လုပ်
+- မထိမယ့်အရာများ
+  - အခြား pages/tools
+  - credits/RPC rules
+  - backend function prompts (script generation) မပြောင်း (သင်မခိုင်းထားတဲ့အပိုင်း)
 
-2) src/pages/TranslatePage2.tsx
-- Replace localStorage key storage with useSecureApiKey('master_translate_api_key') for consistency.
-- Own API mode:
-  - Add model fallback list (2.0-flash, 2.5-flash, 1.5-flash).
-  - Add silent retry on quota errors (cap at 3, then show a small toast).
-- App API mode unchanged.
+အန္တရာယ်/Trade‑off
+- Per‑segment TTS က request အရေအတွက် တိုးလို့ processing အချိန် ပိုကြာနိုင်တယ် (ဒါပေမယ့် သင်လိုတဲ့ “match” အတွက် လိုအပ်)
+- Quota အားနည်းတဲ့အချိန်မှာ segment အများကြီးဆို ပိုမြန်မြန် limit မိနိုင် → အဲဒီအခါ retry loop မလုပ်ဘဲ ချက်ချင်း stop + message ပေးမယ် (ပိုက်ဆံ/အချိန် မပေါအောင်)
 
-3) src/pages/TranscribePage.tsx  (Own mode stability + fix broken integration)
-- Own API mode:
-  - Implement direct transcription via @google/genai using inlineData audio + prompt.
-  - Add silent retry on quota errors.
-- Keep App API mode as-is functionally, but we must fix the current broken call chain so the page doesn’t “look dead”.
+အလုပ်ဆက်စဉ် (Sequencing)
+1) 3S loop ကို hard‑freeze (pause+clamp) + stable photo render (zoom/crossfade မပါ) လုပ် → preview မှာ “video သီးသန့်” issue ကို ပိတ်
+2) Per‑segment TTS + concatenate + exact audioStart/audioEnd mapping လုပ် → voice/subtitle sync ကို fix
+3) Export end‑to‑end စမ်း (preview == export) ကို အတည်ပြု
 
-4) src/services/geminiService.ts (targeted fix to remove the transcribe mismatch)
-- Update transcribeAudio() implementation to match reality:
-  - Either (preferred) stop using “transcribe-google” here and instead:
-    - Use direct client transcription for Own mode (done in TranscribePage), AND
-    - Use backend function “transcribe” (the one that already exists) for App mode via proper FormData upload.
-  - This is a localized fix inside transcribe feature; not changing any other tools’ logic.
-
-5) src/pages/SrtSubPage.tsx
-- Own API mode:
-  - Switch to useSecureApiKey("master_srt_api_key") for consistency (currently localStorage).
-  - Add silent retry pattern for quota errors (no repetitive error dialogs).
-  - Optionally: if this tool is frequently used by guests, move Own mode translation to direct client generation to avoid backend dependency (still keep App mode using existing backend).
-
-6) src/pages/ThumbnailPage.tsx (Own API mode stability)
-- Currently uses generateThumbnail() → creator-ai backend even for Own API.
-- Options:
-  - Minimal: keep backend but add better error parsing + silent retry on retryable errors.
-  - Stronger stability: implement direct image generation attempts in Own mode (with clear messaging that image gen requires Imagen enabled/paid key).
-- We will choose the minimal approach first to avoid breaking complex image flows, and only add direct generation if needed.
-
-7) src/pages/RecapVideoPage.tsx (route /recap) and src/pages/VideoRecapPage.tsx (route /video-recap)
-- Ensure Own mode does not fail for guest users due to backend auth requirements:
-  - For Own mode: prefer direct Google Files API upload + Gemini analysis (client-side) where already present (VideoRecapPage already has some of this).
-  - For small-file paths that still call backend in Own mode, route them to the direct client path too.
-- App mode unchanged.
-
-Backend (only if required to remove Own-mode dependency)
-- If any tool still must call backend in Own mode (due to large-file chunking or special processing), we will:
-  - Add conditional auth-bypass: if user provided apiKey, skip JWT verification and skip credits.
-  - Return HTTP 200 with structured JSON for upstream failures (retryable, retryAfterSeconds) to prevent “FunctionsHttpError drops body” issues.
-- We will limit this to only the specific functions that block Own mode today.
-
-Non-goals (will not touch)
-- App API credit deduction rules and RPC usage
-- Admin access control matrix / tier logic
-- Any tool’s core prompt content and business rules beyond what’s necessary to re-route Own mode calls and handle errors silently
-- Unrelated UI/UX changes
-
-Rollout steps (sequence)
-1) Fix the hard break in /transcribe
-- Update TranscribePage Own mode to direct client generation + silent retry.
-- Update geminiService.transcribeAudio to use the correct backend (or correct request format) for App mode.
-
-2) Convert /creator Own mode to direct client + silent retry + model fallback
-- This is your current route (/creator) and likely the most visible “it broke again” symptom.
-
-3) Sweep remaining tools with Own mode
-- TranslatePage2, SrtSubPage, ThumbnailPage, Recap pages:
-  - Standardize key storage hook
-  - Add silent retry (max 3)
-  - Add model fallback where text models are used
-
-Testing checklist (end-to-end)
-- For each tool: test Own mode with a valid key:
-  1) Fresh tab → paste key → run once
-  2) Trigger quota (or simulate by forcing retries) → verify silent retry happens without repeated blocking alerts
-  3) Refresh page → verify key behavior is explained (key may clear if tab was closed; must not “mysteriously” fail)
-- Test both environments you use (Preview vs Published). Own API keys are stored per-domain; switching domains requires pasting key again.
-
-Notes / expectations
-- If your key has no billing / quota=0, silent retry cannot “fix” it. In that case, the tool will stop gracefully after max retries and show a small non-blocking message telling you the real reason.
-
-Deliverables
-- Own API mode for all major tools works reliably without backend dependency (where possible), with unified silent retry and model fallback.
-- Clear, consistent key storage behavior messaging to prevent “overnight broke” confusion.
