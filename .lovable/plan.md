@@ -1,289 +1,131 @@
 
-# 2FA Security Hardening - Complete Fix Plan
+Goal (Own API mode only)
+- Make “Own API Key” mode stable across all tools so it does not randomly break after refresh/day changes, and so quota/rate-limit errors do not cause disruptive popups or hard-stops.
+- Do not change App API logic/business rules (credits, gateways, admin access matrix). Only touch the Own API paths + error handling.
 
-## 🔴 Critical Vulnerabilities Identified
+What I found (why it “worked last night, broke this morning”)
+1) Own API keys are stored in sessionStorage for some tools (via useSecureApiKey)
+   - sessionStorage clears when the tab/window is closed.
+   - If you used the app last night, closed the tab, then opened this morning: the Own API key fields can be empty again. That can feel like “Own API broke”.
+   - Some other tools still use localStorage, so behavior is inconsistent across tools.
 
-| Location | Issue | Risk Level |
-|----------|-------|------------|
-| AdminLoginPage.tsx L147-149 | 2FA status error = bypass allowed | **CRITICAL** |
-| AdminLoginPage.tsx L34-49 | Existing session = no 2FA check | **CRITICAL** |
-| AdminDashboardPage.tsx | No 2FA verification on page load | **HIGH** |
+2) Some tools still depend on backend functions even in Own API mode
+   - Example: /creator (CreatorPage) calls generateStory() in geminiService which invokes backend function creator-ai even when apiKey is present.
+   - If the backend function is temporarily unavailable, not deployed on the environment you are using, or returns non-200 on upstream 429/503, Own API appears “dead” even though your key is fine.
 
----
+3) A real breaking bug exists in /transcribe path
+   - src/services/geminiService.ts calls backend function “transcribe-google” with JSON {audioData,...}
+   - But supabase/functions/transcribe-google expects FormData(file, apiKey, languageName) and requires auth.
+   - This mismatch will cause failures (and it affects both Own + App depending on how it’s used).
 
-## Solution Architecture
+4) Model volatility without fallback in some client-side Own API calls
+   - Some pages call a single model name (e.g. gemini-2.0-flash) with no fallback.
+   - If a key’s model access changes or Google changes availability, Own API breaks unless we retry/fallback like we already do in Story Creator.
 
-### Core Principle: **2FA Must Be Verified on EVERY Admin Access**
+Solution design (standardized Own API stability layer)
+A) Unify Own API behavior across tools
+- Own API mode should prefer direct client-side generation using @google/genai wherever possible:
+  - Removes dependency on backend availability.
+  - Avoids backend auth requirements for guest users.
+  - Gives us consistent silent-retry handling.
+- Only keep backend calls in Own mode when truly necessary (e.g., heavy server-side processing). If unavoidable, implement the same “Graceful Failure (HTTP 200 with retryable payload)” pattern.
 
-```text
-┌─────────────────────┐
-│   Admin Request     │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  Session Valid?     │──No──▶ Redirect to /admin/login
-└──────────┬──────────┘
-           │Yes
-           ▼
-┌─────────────────────┐
-│  Is Admin Role?     │──No──▶ Redirect to /admin/login
-└──────────┬──────────┘
-           │Yes
-           ▼
-┌─────────────────────┐
-│  2FA Enabled?       │──No──▶ Allow Access (2FA not set up)
-└──────────┬──────────┘
-           │Yes
-           ▼
-┌─────────────────────┐
-│  2FA Verified       │──No──▶ Show 2FA Prompt (Block Access)
-│  This Session?      │
-└──────────┬──────────┘
-           │Yes
-           ▼
-┌─────────────────────┐
-│  Grant Access       │
-└─────────────────────┘
-```
+B) Implement a reusable “Silent Retry + Model Fallback” utility
+- Create a small shared module (new file) for Own API calls:
+  - isQuotaError(err): detects 429 / RESOURCE_EXHAUSTED / rate limit patterns.
+  - silentRetry(fn, {maxRetries=3, delayMs=30000}): retries in background for quota errors only.
+  - generateTextWithFallback(prompt, apiKey, modelList): tries multiple models, skipping “model not available” errors.
+  - (Optional) generateImageWithFallback for tools that generate images, with clear “your key needs Imagen enabled” messaging.
 
----
+C) Make API key persistence behavior explicit (without reducing security)
+- Keep sessionStorage for keys (security policy already adopted).
+- Add a small, non-blocking hint under each Own API key input:
+  - “Key is saved for this tab only; closing the tab clears it.”
+- This directly addresses the “morning it broke again” confusion.
 
-## Implementation Plan
+Implementation scope (files that will change)
+Frontend (Own API paths only)
+1) src/pages/CreatorPage.tsx
+- Change Own API path to bypass backend:
+  - For apiType === 'own': call direct @google/genai with model fallback list (similar to Story Creator).
+  - Add Silent Retry (no alert loops; use toast/banner/status text).
+- Keep App API path unchanged (still uses existing generateStory / creator-ai backend for shared key + credits).
 
-### Fix 1: AdminLoginPage.tsx - Block on 2FA Status Error
+2) src/pages/TranslatePage2.tsx
+- Replace localStorage key storage with useSecureApiKey('master_translate_api_key') for consistency.
+- Own API mode:
+  - Add model fallback list (2.0-flash, 2.5-flash, 1.5-flash).
+  - Add silent retry on quota errors (cap at 3, then show a small toast).
+- App API mode unchanged.
 
-**File:** `src/pages/AdminLoginPage.tsx`
+3) src/pages/TranscribePage.tsx  (Own mode stability + fix broken integration)
+- Own API mode:
+  - Implement direct transcription via @google/genai using inlineData audio + prompt.
+  - Add silent retry on quota errors.
+- Keep App API mode as-is functionally, but we must fix the current broken call chain so the page doesn’t “look dead”.
 
-**Current (VULNERABLE):**
-```typescript
-if (status2FAError) {
-  console.error("Failed to check 2FA status:", status2FAError);
-  // Continue without 2FA check on error - let user proceed
-}
-```
+4) src/services/geminiService.ts (targeted fix to remove the transcribe mismatch)
+- Update transcribeAudio() implementation to match reality:
+  - Either (preferred) stop using “transcribe-google” here and instead:
+    - Use direct client transcription for Own mode (done in TranscribePage), AND
+    - Use backend function “transcribe” (the one that already exists) for App mode via proper FormData upload.
+  - This is a localized fix inside transcribe feature; not changing any other tools’ logic.
 
-**After (SECURE):**
-```typescript
-if (status2FAError) {
-  console.error("Failed to check 2FA status:", status2FAError);
-  // SECURITY: Do NOT allow bypass - sign out and show error
-  await supabase.auth.signOut();
-  throw new Error("Security check failed. Please try again.");
-}
-```
+5) src/pages/SrtSubPage.tsx
+- Own API mode:
+  - Switch to useSecureApiKey("master_srt_api_key") for consistency (currently localStorage).
+  - Add silent retry pattern for quota errors (no repetitive error dialogs).
+  - Optionally: if this tool is frequently used by guests, move Own mode translation to direct client generation to avoid backend dependency (still keep App mode using existing backend).
 
----
+6) src/pages/ThumbnailPage.tsx (Own API mode stability)
+- Currently uses generateThumbnail() → creator-ai backend even for Own API.
+- Options:
+  - Minimal: keep backend but add better error parsing + silent retry on retryable errors.
+  - Stronger stability: implement direct image generation attempts in Own mode (with clear messaging that image gen requires Imagen enabled/paid key).
+- We will choose the minimal approach first to avoid breaking complex image flows, and only add direct generation if needed.
 
-### Fix 2: AdminLoginPage.tsx - Existing Session Must Check 2FA
+7) src/pages/RecapVideoPage.tsx (route /recap) and src/pages/VideoRecapPage.tsx (route /video-recap)
+- Ensure Own mode does not fail for guest users due to backend auth requirements:
+  - For Own mode: prefer direct Google Files API upload + Gemini analysis (client-side) where already present (VideoRecapPage already has some of this).
+  - For small-file paths that still call backend in Own mode, route them to the direct client path too.
+- App mode unchanged.
 
-**Current (VULNERABLE):**
-```typescript
-useEffect(() => {
-  const checkSession = async () => {
-    // ... checks admin role only
-    if (isAdmin) {
-      navigate('/admin/dashboard'); // NO 2FA CHECK!
-    }
-  };
-  checkSession();
-}, [navigate]);
-```
+Backend (only if required to remove Own-mode dependency)
+- If any tool still must call backend in Own mode (due to large-file chunking or special processing), we will:
+  - Add conditional auth-bypass: if user provided apiKey, skip JWT verification and skip credits.
+  - Return HTTP 200 with structured JSON for upstream failures (retryable, retryAfterSeconds) to prevent “FunctionsHttpError drops body” issues.
+- We will limit this to only the specific functions that block Own mode today.
 
-**After (SECURE):**
-```typescript
-useEffect(() => {
-  const checkSession = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
-      const { data: isAdmin } = await supabase.rpc('has_role', {
-        _user_id: session.user.id,
-        _role: 'admin'
-      });
-      
-      if (isAdmin) {
-        // Check if 2FA is enabled for this admin
-        const { data: status2FA, error: status2FAError } = await supabase.functions.invoke("admin-2fa", {
-          body: { action: "status" },
-        });
-        
-        if (status2FAError) {
-          // Security check failed - do not auto-navigate
-          console.error("2FA status check failed:", status2FAError);
-          return;
-        }
-        
-        if (status2FA?.enabled) {
-          // 2FA is enabled - check if this session has verified 2FA
-          const verified = sessionStorage.getItem(`2fa_verified_${session.user.id}`);
-          if (!verified) {
-            // Need to verify 2FA - show 2FA prompt
-            setPendingSession({
-              userId: session.user.id,
-              token: session.access_token,
-            });
-            setShow2FA(true);
-            return;
-          }
-        }
-        
-        // Either no 2FA or already verified
-        navigate('/admin/dashboard');
-      }
-    }
-  };
-  checkSession();
-}, [navigate]);
-```
+Non-goals (will not touch)
+- App API credit deduction rules and RPC usage
+- Admin access control matrix / tier logic
+- Any tool’s core prompt content and business rules beyond what’s necessary to re-route Own mode calls and handle errors silently
+- Unrelated UI/UX changes
 
----
+Rollout steps (sequence)
+1) Fix the hard break in /transcribe
+- Update TranscribePage Own mode to direct client generation + silent retry.
+- Update geminiService.transcribeAudio to use the correct backend (or correct request format) for App mode.
 
-### Fix 3: Store 2FA Verification Status in Session Storage
+2) Convert /creator Own mode to direct client + silent retry + model fallback
+- This is your current route (/creator) and likely the most visible “it broke again” symptom.
 
-**After successful 2FA verification in `verify2FACode()`:**
-```typescript
-const verify2FACode = async () => {
-  // ... existing verification code ...
-  
-  if (!data?.success) {
-    throw new Error(data?.error || "Invalid 2FA code");
-  }
-  
-  // Mark this session as 2FA verified
-  if (pendingSession?.userId) {
-    sessionStorage.setItem(`2fa_verified_${pendingSession.userId}`, Date.now().toString());
-  }
-  
-  toast({ title: "✅ Login Successful", description: "Welcome to Admin Dashboard" });
-  navigate('/admin/dashboard');
-};
-```
+3) Sweep remaining tools with Own mode
+- TranslatePage2, SrtSubPage, ThumbnailPage, Recap pages:
+  - Standardize key storage hook
+  - Add silent retry (max 3)
+  - Add model fallback where text models are used
 
----
+Testing checklist (end-to-end)
+- For each tool: test Own mode with a valid key:
+  1) Fresh tab → paste key → run once
+  2) Trigger quota (or simulate by forcing retries) → verify silent retry happens without repeated blocking alerts
+  3) Refresh page → verify key behavior is explained (key may clear if tab was closed; must not “mysteriously” fail)
+- Test both environments you use (Preview vs Published). Own API keys are stored per-domain; switching domains requires pasting key again.
 
-### Fix 4: AdminDashboardPage.tsx - Verify 2FA on Page Load
+Notes / expectations
+- If your key has no billing / quota=0, silent retry cannot “fix” it. In that case, the tool will stop gracefully after max retries and show a small non-blocking message telling you the real reason.
 
-**File:** `src/pages/AdminDashboardPage.tsx`
-
-**Add 2FA verification check:**
-```typescript
-const [twoFAChecked, setTwoFAChecked] = useState(false);
-
-useEffect(() => {
-  const verify2FAStatus = async () => {
-    if (!user || !isAdmin) return;
-    
-    try {
-      const { data: status2FA, error } = await supabase.functions.invoke("admin-2fa", {
-        body: { action: "status" },
-      });
-      
-      if (error) {
-        // Security check failed - redirect to login
-        toast({ 
-          title: "Security Check Failed", 
-          description: "Please login again",
-          variant: "destructive" 
-        });
-        await signOut();
-        navigate('/admin/login');
-        return;
-      }
-      
-      if (status2FA?.enabled) {
-        // Check if 2FA was verified in this session
-        const verified = sessionStorage.getItem(`2fa_verified_${user.id}`);
-        if (!verified) {
-          // 2FA not verified - redirect to login
-          toast({ 
-            title: "2FA Required", 
-            description: "Please verify your identity",
-            variant: "destructive" 
-          });
-          await signOut();
-          navigate('/admin/login');
-          return;
-        }
-      }
-      
-      setTwoFAChecked(true);
-    } catch (err) {
-      console.error("2FA check error:", err);
-      await signOut();
-      navigate('/admin/login');
-    }
-  };
-  
-  if (!loading && isAdmin) {
-    verify2FAStatus();
-  }
-}, [loading, isAdmin, user]);
-
-// Update loading check
-if (loading || !twoFAChecked) {
-  return (/* Loading UI */);
-}
-```
-
----
-
-### Fix 5: Clear 2FA Verification on Sign Out
-
-**In useAdmin.ts `signOut` function:**
-```typescript
-const signOut = async () => {
-  // Clear all 2FA verification markers
-  const keys = Object.keys(sessionStorage);
-  keys.forEach(key => {
-    if (key.startsWith('2fa_verified_')) {
-      sessionStorage.removeItem(key);
-    }
-  });
-  
-  return supabase.auth.signOut();
-};
-```
-
----
-
-## Files to Modify
-
-| File | Changes |
-|------|---------|
-| `src/pages/AdminLoginPage.tsx` | Fix 1, 2, 3 - Block bypass, check 2FA on existing session, store verification |
-| `src/pages/AdminDashboardPage.tsx` | Fix 4 - Verify 2FA on page load |
-| `src/hooks/useAdmin.ts` | Fix 5 - Clear 2FA on sign out |
-
----
-
-## Security Guarantees After Fix
-
-| Scenario | Before | After |
-|----------|--------|-------|
-| 2FA status check fails | ❌ User bypasses 2FA | ✅ Sign out + error |
-| Already has session | ❌ No 2FA check | ✅ Must verify 2FA |
-| Direct URL to dashboard | ❌ No 2FA check | ✅ Must verify 2FA |
-| Session expires | N/A | ✅ 2FA marker cleared |
-| Sign out | ❌ 2FA marker stays | ✅ 2FA marker cleared |
-
----
-
-## Testing Checklist
-
-1. ✅ Login with 2FA enabled → Must show 2FA prompt
-2. ✅ Wrong 2FA code → Must reject
-3. ✅ Correct 2FA code → Must allow access
-4. ✅ Already logged in (session exists) → Must still check 2FA
-5. ✅ Direct URL to /admin/dashboard → Must check 2FA
-6. ✅ 2FA status check fails → Must NOT bypass
-7. ✅ Sign out → Must require 2FA on next login
-
----
-
-## မထိတဲ့အရာများ
-
-- App API mode
-- User login page
-- Other tools/pages
-- Edge function logic (already correct)
-- Database/RLS policies
+Deliverables
+- Own API mode for all major tools works reliably without backend dependency (where possible), with unified silent retry and model fallback.
+- Clear, consistent key storage behavior messaging to prevent “overnight broke” confusion.
