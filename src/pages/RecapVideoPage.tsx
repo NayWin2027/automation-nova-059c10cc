@@ -150,11 +150,20 @@ const SUB_COLORS = [
   { id: "LIME", label: "LIME GREEN", hex: "#A3E635" },
 ];
 
+interface VideoScene {
+  start: number;
+  end: number;
+  topic: string;
+  description: string;
+}
+
 interface ScriptSegment {
   time: number;
   text: string;
   audioStart?: number;
   audioEnd?: number;
+  videoTime?: number; // Scene timestamp to seek video to when this segment plays
+  sceneTopic?: string; // Matched scene topic for debugging
 }
 
 interface HistoryItem {
@@ -368,6 +377,7 @@ export default function VideoRecapView() {
   const wasFreezeModeRef = useRef(false);
   const freezeCapturedCycleRef = useRef<number>(-1); // ensures photo phase stays stable for the full 3s
   const didConfirmSuccessRef = useRef(false);
+  const lastActiveSegmentIndexRef = useRef<number>(-1); // Track segment changes for semantic video seeking
 
   // Animation States for Lip-sync
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -474,6 +484,29 @@ export default function VideoRecapView() {
     }
   }, [charId]);
 
+  // Helper: Match segments to detected scenes for semantic video seeking
+  const matchSegmentsToScenes = (segments: ScriptSegment[], scenes: VideoScene[]): ScriptSegment[] => {
+    if (!scenes || scenes.length === 0) return segments;
+    
+    return segments.map(seg => {
+      // Find the scene that best matches this segment's timestamp
+      // The segment.time from AI should already be aligned to scene timestamps
+      const matchedScene = scenes.find(sc => 
+        seg.time >= sc.start && seg.time < sc.end
+      ) || scenes.reduce((closest, sc) => {
+        const closestDiff = Math.abs(closest.start - seg.time);
+        const thisDiff = Math.abs(sc.start - seg.time);
+        return thisDiff < closestDiff ? sc : closest;
+      }, scenes[0]);
+      
+      return {
+        ...seg,
+        videoTime: matchedScene?.start ?? seg.time,
+        sceneTopic: matchedScene?.topic,
+      };
+    });
+  };
+
   const handleProcess = async () => {
     if (!file) return;
     if (apiType === "own" && !apiKey.trim()) {
@@ -486,19 +519,23 @@ export default function VideoRecapView() {
       return;
     }
     setAnalyzing(true);
-    setStatusText("STEP 1/3: UPLOADING & ANALYZING VIDEO...");
+    setStatusText("STEP 1/4: UPLOADING & DETECTING SCENES...");
     setFullScriptText("");
     setScriptSegments([]);
     setAudioBlobUrl(null);
     try {
       const customKey = apiType === "own" ? apiKey : undefined;
-      const rawResponse = await analyzeVideo(file, file.type || "video/mp4", targetLang, customKey);
+      const result = await analyzeVideo(file, file.type || "video/mp4", targetLang, customKey);
+      
+      // Extract recap string and scenes
+      const { recap: rawRecap, scenes: detectedScenes } = result;
+      
       let segments: ScriptSegment[] = [];
       try {
-        segments = JSON.parse(rawResponse);
+        segments = JSON.parse(rawRecap);
         if (!Array.isArray(segments)) throw new Error("Not Array");
       } catch {
-        segments = [{ time: 0, text: rawResponse }];
+        segments = [{ time: 0, text: rawRecap }];
       }
       segments = segments
         .map((s) => ({
@@ -506,6 +543,12 @@ export default function VideoRecapView() {
           text: s.text || "",
         }))
         .sort((a, b) => a.time - b.time);
+
+      // Match segments to detected scenes for semantic video seeking
+      if (detectedScenes && detectedScenes.length > 0) {
+        console.log(`[Recap] Detected ${detectedScenes.length} scenes, matching to ${segments.length} segments`);
+        segments = matchSegmentsToScenes(segments, detectedScenes);
+      }
 
       const completeText = segments
         .map((s) => s.text)
@@ -1264,6 +1307,24 @@ export default function VideoRecapView() {
             const drift = Math.abs(video.currentTime - desiredVideoTime);
             if (drift > 0.05 && video.duration > 0) {
               video.currentTime = desiredVideoTime;
+            }
+          }
+
+          // ===== SEMANTIC VIDEO SEEKING: Jump to matching scene when segment changes =====
+          const activeSegmentIndex = activeSegment ? scriptSegments.indexOf(activeSegment) : -1;
+          if (activeSegment && activeSegmentIndex !== lastActiveSegmentIndexRef.current) {
+            lastActiveSegmentIndexRef.current = activeSegmentIndex;
+            
+            // If segment has a videoTime (matched scene), seek video to that timestamp
+            const targetVideoTime = activeSegment.videoTime ?? activeSegment.time;
+            if (typeof targetVideoTime === 'number' && video.duration > 0) {
+              const clampedTime = Math.min(targetVideoTime, video.duration - 0.1);
+              const currentDrift = Math.abs(video.currentTime - clampedTime);
+              // Only seek if drift is significant (avoid jitter)
+              if (currentDrift > 1.0) {
+                console.log(`[SemanticSeek] Segment ${activeSegmentIndex}: seeking video to ${clampedTime.toFixed(1)}s (topic: ${activeSegment.sceneTopic || 'unknown'})`);
+                video.currentTime = clampedTime;
+              }
             }
           }
 

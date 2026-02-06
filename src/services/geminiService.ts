@@ -420,15 +420,29 @@ export async function translateText(
   }
 }
 
+// Scene/segment info from backend
+export interface VideoScene {
+  start: number;
+  end: number;
+  topic: string;
+  description: string;
+}
+
+export interface AnalyzeVideoResult {
+  recap: string;
+  scenes?: VideoScene[];
+}
+
 // Analyze video for Recap Video tool
 // UPGRADED: Handles files up to 1GB by streaming chunks to backend
+// Returns both recap script and detected scenes for semantic matching
 export async function analyzeVideo(
   file: File,
   mimeType: string,
   targetLang: string,
   apiKey?: string,
   onProgress?: (percent: number, status: string) => void
-): Promise<string> {
+): Promise<AnalyzeVideoResult> {
   try {
     const MB = 1024 * 1024;
     
@@ -441,6 +455,7 @@ export async function analyzeVideo(
       onProgress?.(30, "Analyzing with AI...");
       const { data, error } = await invokeWithAuthRetry<{ 
         recap?: string; 
+        scenes?: VideoScene[];
         error?: string;
         retryable?: boolean;
         retryAfterSeconds?: number;
@@ -464,7 +479,7 @@ export async function analyzeVideo(
       }
 
       onProgress?.(100, "Complete!");
-      return data?.recap || '';
+      return { recap: data?.recap || '', scenes: data?.scenes };
     }
 
     // For larger files, use chunked upload through backend
@@ -580,10 +595,11 @@ export async function analyzeVideo(
     }
 
     // Step 3: Analyze the uploaded file
-    onProgress?.(60, "Processing video with AI...");
+    onProgress?.(60, "Detecting scenes & generating script...");
     
     const { data: analyzeData, error: analyzeError } = await invokeWithAuthRetry<{ 
       recap?: string; 
+      scenes?: VideoScene[];
       error?: string;
       retryable?: boolean;
       retryAfterSeconds?: number;
@@ -604,7 +620,7 @@ export async function analyzeVideo(
     }
 
     onProgress?.(100, "Complete!");
-    return analyzeData?.recap || '';
+    return { recap: analyzeData?.recap || '', scenes: analyzeData?.scenes };
   } catch (err) {
     console.error('analyzeVideo error:', err);
     throw err;

@@ -59,13 +59,48 @@ function normalizeRecapJson(raw: string): string | null {
   }
 }
 
-// ===== PREMIUM TRANSFORMATIVE SYSTEM PROMPT =====
-const getSystemPrompt = (targetLang: string) => `You are a world-class TRANSFORMATIVE content creator specializing in premium video recap and educational commentary production.
+// ===== SCENE DETECTION PROMPT =====
+const getSceneDetectionPrompt = () => `You are a professional video editor AI. Analyze this video and detect all distinct SCENES/SEGMENTS.
+
+For each scene, identify:
+1. START timestamp (in seconds from 0)
+2. END timestamp (in seconds)
+3. Main TOPIC/SUBJECT of that scene (e.g., "cat playing", "house exterior", "person talking", "product demo")
+4. Brief DESCRIPTION of what's happening
+
+Return a JSON array of scenes:
+[
+  {"start": 0, "end": 8, "topic": "cat playing with toy", "description": "A fluffy orange cat plays with a ball"},
+  {"start": 8, "end": 15, "topic": "house exterior", "description": "Modern two-story house with garden"},
+  {"start": 15, "end": 22, "topic": "kitchen interior", "description": "Spacious kitchen with marble counters"}
+]
+
+RULES:
+- Return ONLY the JSON array, no markdown, no extra text
+- Each scene should be 3-15 seconds long
+- Use simple, searchable topic keywords
+- Cover the ENTIRE video duration
+- Topics must be specific enough to match with narration content`;
+
+// ===== PREMIUM TRANSFORMATIVE SYSTEM PROMPT WITH SCENE AWARENESS =====
+const getSystemPrompt = (targetLang: string, scenes?: any[]) => {
+  const sceneContext = scenes && scenes.length > 0 
+    ? `\n\nDETECTED VIDEO SCENES (use these timestamps to match your narration):
+${scenes.map((s, i) => `Scene ${i + 1}: ${s.start}s-${s.end}s → "${s.topic}" (${s.description})`).join('\n')}
+
+CRITICAL: Your script segments MUST reference these scene timestamps! 
+- When writing about a topic, use the "time" that matches the scene showing that topic
+- Example: If scene at 8-15s shows "house exterior", your segment about houses should have "time": 8`
+    : '';
+
+  return `You are a world-class TRANSFORMATIVE content creator specializing in premium video recap and educational commentary production.
 
 🎯 CORE MISSION - COPYRIGHT-SAFE TRANSFORMATIVE CONTENT:
 1. ANALYZE the video to detect CONTENT TYPE (Movie/Drama, Documentary, News, Tech, Education, Sports, Horror, Cooking, Travel, Relationship, Vlog, Gaming, Business, Science, History, Nature, etc.)
 2. Generate a TRANSFORMATIVE script with YOUR OWN CREATIVE COMMENTARY + EDUCATIONAL INSIGHTS
 3. Script must be in ${targetLang} with 100% natural flow
+4. **CRITICAL**: Match your narration topics to the actual video scenes/timestamps!
+${sceneContext}
 
 ⚠️ COPYRIGHT PROTECTION STRATEGY (CRITICAL):
 Your script MUST add these TRANSFORMATIVE elements to be legally protected:
@@ -132,9 +167,9 @@ CONTENT-ADAPTIVE STYLES WITH COMMENTARY:
 
 OUTPUT FORMAT (JSON Array):
 [
-  {"time": 0, "text": "Opening hook with your perspective..."},
-  {"time": 6, "text": "Scene description + educational insight..."},
-  {"time": 12, "text": "Your analysis + commentary..."},
+  {"time": 0, "text": "Opening hook with your perspective...", "sceneMatch": "topic from scene"},
+  {"time": 6, "text": "Scene description + educational insight...", "sceneMatch": "topic from scene"},
+  {"time": 12, "text": "Your analysis + commentary...", "sceneMatch": "topic from scene"},
   ...
 ]
 
@@ -143,16 +178,18 @@ OUTPUT FORMAT (JSON Array):
 - NO timestamps inside text
 - NO symbols (#, *, -, •)
 - Each "text" = clean narration only
+- **"time" MUST match the video scene that shows the topic you're talking about!**
 
 ✅ GOLDEN RULES:
 1. Each segment = 5-8 seconds narration (fit within 6-sec visual cycle)
 2. NEVER copy original dialogue - ALWAYS TRANSFORM
 3. 30%+ of content = YOUR OWN INSIGHTS (educational/commentary)
 4. Maintain professional, engaging tone
-5. Script syncs with visual scenes
+5. **Script syncs with visual scenes - talk about cats when cat scene plays!**
 6. Use natural ${targetLang} speaking patterns
 7. Approx 1 segment per 6 seconds of video
 8. Make viewers feel they're LEARNING, not just watching`;
+};
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -568,7 +605,55 @@ serve(async (req) => {
         }
       }
 
-      const systemPrompt = getSystemPrompt(targetLang || 'Burmese');
+      // ===== STEP 1: DETECT SCENES =====
+      console.log("[video-recap] Step 1: Detecting scenes...");
+      let detectedScenes: any[] = [];
+      
+      try {
+        const sceneResponse = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${BACKEND_GEMINI_KEY}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{
+                role: "user",
+                parts: [
+                  { fileData: { mimeType: "video/mp4", fileUri: fileUri } },
+                  { text: getSceneDetectionPrompt() }
+                ]
+              }],
+              generationConfig: {
+                temperature: 0.3,
+                maxOutputTokens: 4096,
+              },
+            }),
+          }
+        );
+
+        if (sceneResponse.ok) {
+          const sceneData = await sceneResponse.json();
+          let sceneText = sceneData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          sceneText = sceneText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+          
+          try {
+            const start = sceneText.indexOf("[");
+            const end = sceneText.lastIndexOf("]");
+            if (start !== -1 && end > start) {
+              detectedScenes = JSON.parse(sceneText.slice(start, end + 1));
+              console.log(`[video-recap] Detected ${detectedScenes.length} scenes`);
+            }
+          } catch (parseErr) {
+            console.warn("[video-recap] Scene detection parse failed, continuing without scenes");
+          }
+        }
+      } catch (sceneErr) {
+        console.warn("[video-recap] Scene detection failed, continuing without scenes:", sceneErr);
+      }
+
+      // ===== STEP 2: GENERATE SCENE-AWARE SCRIPT =====
+      console.log("[video-recap] Step 2: Generating scene-aware script...");
+      const systemPrompt = getSystemPrompt(targetLang || 'Burmese', detectedScenes);
       
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${BACKEND_GEMINI_KEY}`,
@@ -580,7 +665,7 @@ serve(async (req) => {
               role: "user",
               parts: [
                 { fileData: { mimeType: "video/mp4", fileUri: fileUri } },
-                { text: systemPrompt + "\n\nAnalyze this video, detect its content type, and create a premium transformative recap script. Return ONLY the JSON array." }
+                { text: systemPrompt + "\n\nAnalyze this video, detect its content type, and create a premium transformative recap script. IMPORTANT: Match your narration timestamps to the detected scenes! Return ONLY the JSON array." }
               ]
             }],
             generationConfig: {
@@ -627,8 +712,12 @@ serve(async (req) => {
         );
       }
 
+      // Include detected scenes in response for frontend to use
       return new Response(
-        JSON.stringify({ recap: normalized }),
+        JSON.stringify({ 
+          recap: normalized,
+          scenes: detectedScenes.length > 0 ? detectedScenes : undefined
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
