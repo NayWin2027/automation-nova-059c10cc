@@ -366,6 +366,7 @@ export default function VideoRecapView() {
   const charImgRef = useRef<HTMLImageElement | null>(null);
   const freezeCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const wasFreezeModeRef = useRef(false);
+  const freezeCapturedCycleRef = useRef<number>(-1); // ensures photo phase stays stable for the full 3s
   const didConfirmSuccessRef = useRef(false);
 
   // Animation States for Lip-sync
@@ -1216,12 +1217,17 @@ export default function VideoRecapView() {
           const dy = (targetH - dh) / 2;
 
           // ===== 3S VIDEO / 3S PHOTO ZOOM LOOP (COPYRIGHT BYPASS) =====
-          // Capture freeze frame BEFORE any transforms - critical for photo zoom phase
-          // Must capture when: size changes OR transitioning INTO freeze mode OR first frame
+          // Capture freeze frame exactly once per 6s cycle (entering photo phase) so the photo stays stable.
           const sizeChanged = freezeCanvas.width !== targetW || freezeCanvas.height !== targetH;
+          const cycleIndex = Math.floor(effectiveTime / 6.0);
           const enteringFreezeMode = motionZoom && isFreezeMode && !wasFreezeModeRef.current;
-          const needsCapture = sizeChanged || enteringFreezeMode || (motionZoom && freezeCanvas.width === 0);
-          
+          const shouldCaptureForCycle = motionZoom && isFreezeMode && freezeCapturedCycleRef.current !== cycleIndex;
+          const needsCapture =
+            sizeChanged ||
+            enteringFreezeMode ||
+            shouldCaptureForCycle ||
+            (motionZoom && (freezeCanvas.width === 0 || freezeCanvas.height === 0));
+
           if (needsCapture && motionZoom) {
             freezeCanvas.width = targetW;
             freezeCanvas.height = targetH;
@@ -1237,6 +1243,9 @@ export default function VideoRecapView() {
             // Capture current video frame
             freezeCtx.drawImage(video, dx, dy, dw, dh);
             freezeCtx.restore();
+
+            // Mark this cycle as captured to keep the frame stable for the whole 3s photo phase
+            freezeCapturedCycleRef.current = cycleIndex;
           }
 
           // ===== RENDER LAYERS BASED ON 3S/3S CYCLE =====
@@ -1249,15 +1258,20 @@ export default function VideoRecapView() {
               // === PHOTO ZOOM PHASE (3s - 6s of each cycle) ===
               const progressInFreeze = (globalCycleTime - 3.0) / 3.0;
               
-              // Cinematic Ken Burns zoom with easing
-              const easeInOut = (t: number) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+              // Cinematic Ken Burns zoom with easing (more visible, still natural)
+              const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
               const easedProgress = easeInOut(progressInFreeze);
-              const currentZoom = 1.0 + easedProgress * 0.2; // Subtle 1.2x zoom
+              const currentZoom = 1.02 + easedProgress * 0.28; // 1.02x → 1.30x
 
               const zoomedW = targetW * currentZoom;
               const zoomedH = targetH * currentZoom;
-              const centerX = (targetW - zoomedW) / 2;
-              const centerY = (targetH - zoomedH) / 2;
+
+              // Small pan so the "photo phase" is clearly noticeable while staying stable
+              const panX = (easedProgress - 0.5) * targetW * 0.04;
+              const panY = (0.5 - easedProgress) * targetH * 0.02;
+
+              const centerX = (targetW - zoomedW) / 2 + panX;
+              const centerY = (targetH - zoomedH) / 2 + panY;
 
               // Crossfade transition (0.4s smooth)
               const FADE_DUR = 0.4;
@@ -1292,7 +1306,7 @@ export default function VideoRecapView() {
                 
                 // Draw fading photo underneath
                 ctx.globalAlpha = 1.0 - videoAlpha;
-                const prevZoom = 1.2; // End zoom from previous photo phase
+                const prevZoom = 1.3; // end zoom from previous photo phase
                 const zoomedW = targetW * prevZoom;
                 const zoomedH = targetH * prevZoom;
                 const centerX = (targetW - zoomedW) / 2;
