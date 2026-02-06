@@ -2,8 +2,10 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Lock, ArrowLeft } from "lucide-react";
 import { useApiAccess } from "@/hooks/useApiAccess";
+import { useSecureApiKey } from "@/hooks/useSecureApiKey";
+import { generateOwnApiText, getOwnApiErrorMessage } from "@/services/ownApiService";
 import { translateText } from "../services/geminiService";
-
+import { toast } from "sonner";
 const LANGUAGES = [
   "BURMESE",
   "ENGLISH",
@@ -92,7 +94,7 @@ const SrtTranslatorView: React.FC = () => {
   const navigate = useNavigate();
   const { appApiAllowed, ownApiAllowed, appApiReason, isLoading: apiAccessLoading } = useApiAccess();
   const [apiType, setApiType] = useState<"app" | "own">("own");
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem("master_srt_api_key") || "");
+  const { apiKey, setApiKey } = useSecureApiKey("master_srt_api_key");
   const [fileContent, setFileContent] = useState<string>("");
   const [fileName, setFileName] = useState<string>("");
   const [targetLang, setTargetLang] = useState("BURMESE");
@@ -102,10 +104,6 @@ const SrtTranslatorView: React.FC = () => {
   const [translated, setTranslated] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [retryCountdown, setRetryCountdown] = useState(0);
-
-  useEffect(() => {
-    localStorage.setItem("master_srt_api_key", apiKey);
-  }, [apiKey]);
 
   // Auto-select available API mode
   useEffect(() => {
@@ -148,28 +146,38 @@ const SrtTranslatorView: React.FC = () => {
 
   const handleTranslate = async () => {
     if (!fileContent) return;
+    if (apiType === "own" && !apiKey.trim()) {
+      toast.error("GEMINI API KEY အရင်ထည့်ပေးပါ။");
+      return;
+    }
+    
     setLoading(true);
     setTranslated("");
     setErrorMessage("");
+    
     try {
       const finalInput = `Translate the following SRT content to ${targetLang}. Keep SRT format exactly. ${dualMode ? "Rule: Output Original Line followed by Translated Line." : "Rule: Replace original text with translation."}\n\nCONTENT:\n${fileContent}`;
-      const result = await translateText(finalInput, targetLang, apiType === "own" ? apiKey : undefined);
+      
+      let result: string | null = null;
+      
+      if (apiType === "own") {
+        // Direct client-side generation with silent retry + model fallback
+        result = await generateOwnApiText(finalInput, apiKey, {
+          temperature: 0.5,
+          maxOutputTokens: 8192,
+          maxRetries: 3,
+          delayMs: 30000,
+        });
+      } else {
+        // App API mode: use edge function
+        result = await translateText(finalInput, targetLang, undefined);
+      }
+      
       setTranslated(result || "");
     } catch (e: any) {
-      const errMsg = e?.message || "Translation failed";
-      
-      // Parse quota exceeded error
-      if (errMsg.includes("QUOTA_EXCEEDED") || errMsg.includes("429") || errMsg.includes("quota")) {
-        // Extract retry seconds from error message
-        const retryMatch = errMsg.match(/(\d+)s/);
-        const retrySeconds = retryMatch ? parseInt(retryMatch[1], 10) : 30;
-        setRetryCountdown(retrySeconds);
-        setErrorMessage(`API Quota ပြည့်သွားပါပြီ။ ${retrySeconds} seconds စောင့်ပြီး ပြန်ကြိုးစားပါ။`);
-      } else if (errMsg.includes("401") || errMsg.includes("Unauthorized")) {
-        setErrorMessage("API Key မမှန်ကန်ပါ။ စစ်ဆေးပြီး ပြန်ထည့်ပါ။");
-      } else {
-        setErrorMessage(errMsg);
-      }
+      const errMsg = getOwnApiErrorMessage(e);
+      setErrorMessage(errMsg);
+      toast.error(errMsg);
     } finally {
       setLoading(false);
     }
@@ -262,6 +270,7 @@ const SrtTranslatorView: React.FC = () => {
             placeholder="Paste Private Key..."
             className="w-full bg-black/50 border border-white/5 rounded-xl p-4 text-xs font-bold text-white outline-none focus:ring-1 focus:ring-emerald-500"
           />
+          <p className="text-[8px] text-emerald-300/60 ml-1">Tab ပိတ်လိုက်ရင် Key ပျောက်သွားပါမယ်</p>
         </div>
       )}
 
