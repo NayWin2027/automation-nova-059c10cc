@@ -1215,50 +1215,99 @@ export default function VideoRecapView() {
           const dx = (targetW - dw) / 2;
           const dy = (targetH - dh) / 2;
 
-          // Capture freeze frame at transition (or if empty)
+          // ===== 3S VIDEO / 3S PHOTO ZOOM LOOP (COPYRIGHT BYPASS) =====
+          // Capture freeze frame BEFORE any transforms - critical for photo zoom phase
+          // Must capture when: size changes OR transitioning INTO freeze mode OR first frame
           const sizeChanged = freezeCanvas.width !== targetW || freezeCanvas.height !== targetH;
-          const needsCapture = sizeChanged || (isFreezeMode && !wasFreezeModeRef.current);
+          const enteringFreezeMode = motionZoom && isFreezeMode && !wasFreezeModeRef.current;
+          const needsCapture = sizeChanged || enteringFreezeMode || (motionZoom && freezeCanvas.width === 0);
           
-          if (needsCapture) {
+          if (needsCapture && motionZoom) {
             freezeCanvas.width = targetW;
             freezeCanvas.height = targetH;
             freezeCtx.fillStyle = "#000";
             freezeCtx.fillRect(0, 0, targetW, targetH);
 
-            // Match flip transform for freeze frame (prevents blank/incorrect freeze on some devices)
+            // Apply same flip as main canvas for consistency
+            freezeCtx.save();
             if (flipVideo) {
-              freezeCtx.save();
               freezeCtx.translate(targetW, 0);
               freezeCtx.scale(-1, 1);
             }
+            // Capture current video frame
             freezeCtx.drawImage(video, dx, dy, dw, dh);
-            if (flipVideo) freezeCtx.restore();
+            freezeCtx.restore();
           }
 
-          // RENDER VIDEO LAYER with crossfade
-          if (crossfadeAlpha > 0.01) {
-            ctx.globalAlpha = crossfadeAlpha;
-            ctx.drawImage(video, dx, dy, dw, dh);
-          }
-
-          // RENDER PHOTO ZOOM LAYER with crossfade
-          if (crossfadeAlpha < 0.99 && motionZoom) {
-            // Use global cycle time (not segment-relative) for consistent zoom
+          // ===== RENDER LAYERS BASED ON 3S/3S CYCLE =====
+          if (motionZoom) {
+            // 3S Video / 3S Photo cycle active
             const globalCycleTime = effectiveTime % 6.0;
-            const progressInFreeze = globalCycleTime >= 3.0 ? (globalCycleTime - 3.0) / 3.0 : 0;
+            const inPhotoPhase = globalCycleTime >= 3.0;
+            
+            if (inPhotoPhase) {
+              // === PHOTO ZOOM PHASE (3s - 6s of each cycle) ===
+              const progressInFreeze = (globalCycleTime - 3.0) / 3.0;
+              
+              // Cinematic Ken Burns zoom with easing
+              const easeInOut = (t: number) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+              const easedProgress = easeInOut(progressInFreeze);
+              const currentZoom = 1.0 + easedProgress * 0.2; // Subtle 1.2x zoom
 
-            // Cinematic Ken Burns zoom with easing
-            const easeInOut = (t: number) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-            const easedProgress = easeInOut(progressInFreeze);
-            const currentZoom = 1.0 + easedProgress * 0.2; // Subtle 1.2x zoom
+              const zoomedW = targetW * currentZoom;
+              const zoomedH = targetH * currentZoom;
+              const centerX = (targetW - zoomedW) / 2;
+              const centerY = (targetH - zoomedH) / 2;
 
-            const zoomedW = targetW * currentZoom;
-            const zoomedH = targetH * currentZoom;
-            const centerX = (targetW - zoomedW) / 2;
-            const centerY = (targetH - zoomedH) / 2;
+              // Crossfade transition (0.4s smooth)
+              const FADE_DUR = 0.4;
+              let photoAlpha = 1.0;
+              if (globalCycleTime < 3.0 + FADE_DUR) {
+                // Fading INTO photo
+                photoAlpha = (globalCycleTime - 3.0) / FADE_DUR;
+              } else if (globalCycleTime > 6.0 - FADE_DUR) {
+                // Fading OUT of photo (back to video)
+                photoAlpha = (6.0 - globalCycleTime) / FADE_DUR;
+              }
+              photoAlpha = Math.max(0, Math.min(1, photoAlpha));
 
-            ctx.globalAlpha = 1.0 - crossfadeAlpha;
-            ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH, centerX, centerY, zoomedW, zoomedH);
+              // Draw video underneath during crossfade
+              if (photoAlpha < 1.0) {
+                ctx.globalAlpha = 1.0 - photoAlpha;
+                ctx.drawImage(video, dx, dy, dw, dh);
+              }
+              
+              // Draw zooming photo on top
+              ctx.globalAlpha = photoAlpha;
+              ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH, centerX, centerY, zoomedW, zoomedH);
+            } else {
+              // === VIDEO PHASE (0s - 3s of each cycle) ===
+              const FADE_DUR = 0.4;
+              let videoAlpha = 1.0;
+              
+              // Handle crossfade at cycle boundaries
+              if (globalCycleTime < FADE_DUR && effectiveTime > FADE_DUR) {
+                // Just came from photo phase
+                videoAlpha = globalCycleTime / FADE_DUR;
+                
+                // Draw fading photo underneath
+                ctx.globalAlpha = 1.0 - videoAlpha;
+                const prevZoom = 1.2; // End zoom from previous photo phase
+                const zoomedW = targetW * prevZoom;
+                const zoomedH = targetH * prevZoom;
+                const centerX = (targetW - zoomedW) / 2;
+                const centerY = (targetH - zoomedH) / 2;
+                ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH, centerX, centerY, zoomedW, zoomedH);
+              }
+              
+              // Draw video
+              ctx.globalAlpha = Math.max(0.01, videoAlpha);
+              ctx.drawImage(video, dx, dy, dw, dh);
+            }
+          } else {
+            // Motion zoom disabled - just show video normally
+            ctx.globalAlpha = 1.0;
+            ctx.drawImage(video, dx, dy, dw, dh);
           }
 
           ctx.globalAlpha = 1.0;
