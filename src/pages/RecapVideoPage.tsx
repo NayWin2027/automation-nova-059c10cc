@@ -694,6 +694,11 @@ export default function VideoRecapView() {
         const audioBuffer = await decodeAudioBase64(segB64);
         audioBuffers.push(audioBuffer);
         segmentDurations.push(audioBuffer.duration);
+
+        // Throttle: 2s delay between TTS calls to prevent 429 rate limiting
+        if (i < segments.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
       }
 
       setStatusText("STEP 3/3: SYNCING VISUALS...");
