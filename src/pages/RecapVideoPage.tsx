@@ -664,11 +664,29 @@ export default function VideoRecapView() {
         const seg = segments[i];
         setStatusText(`STEP 2/3: VOICE ${i + 1}/${segments.length}...`);
 
-        const segB64 = await generateSpeech(seg.text, voiceObj.apiVoice, customKey);
+        let segB64: string | null = null;
+        try {
+          segB64 = await generateSpeech(seg.text, voiceObj.apiVoice, customKey);
+        } catch (ttsErr: any) {
+          console.error("[RecapVideo] TTS error for segment", i, ttsErr);
+          const errMsg = ttsErr?.message || "";
+          if (errMsg.includes("Authentication") || errMsg.includes("token") || errMsg.includes("401")) {
+            toast.error("❌ Login ဝင်ထားရန်လိုအပ်ပါသည်။ /login မှ Login ဝင်ပြီး ပြန်လုပ်ပါ။");
+          } else {
+            toast.error(`❌ Voice generation failed: ${errMsg.substring(0, 100)}`);
+          }
+          setAnalyzing(false);
+          return;
+        }
 
         // Check for WebSpeech fallback marker (sync won't be accurate)
         if (!segB64 || segB64.startsWith("WEBSPEECH:")) {
-          toast.error("❌ Recap tool အတွက် browser voice သုံး၍မရပါ (sync မတိကျနိုင်)။ API key စစ်ပါ။");
+          const isLoggedIn = !!(await supabase.auth.getUser()).data?.user;
+          if (!isLoggedIn) {
+            toast.error("❌ Login ဝင်ထားရန်လိုအပ်ပါသည်။ App API သုံးရန် /login မှ Login ဝင်ပါ။");
+          } else {
+            toast.error("❌ Recap tool အတွက် browser voice သုံး၍မရပါ (sync မတိကျနိုင်)။ API key စစ်ပါ။");
+          }
           setAnalyzing(false);
           return;
         }
