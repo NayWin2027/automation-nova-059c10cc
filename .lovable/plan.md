@@ -1,50 +1,43 @@
 
 
-## Script Prompt Optimization - Shorter, Faithful, Niche-Adaptive
+## Fix: TTS Rate Limiting - Add Throttle Between Segment Calls
 
-### Problem
-Current prompt (lines 96-191) forces AI to generate 30%+ original commentary, educational insights, comparative analysis, and value-added teaching. This makes the script extremely long, causing:
-- Too many TTS segments = too many API calls = quota exhaustion
-- Script doesn't faithfully represent the source video
-- Movie clips and other niches fail because the bloated script overwhelms the API key
+### Root Cause (from logs)
+The edge function logs confirm: every `gemini-tts` call returns **429 (rate limited)**. The system fires 17 TTS requests rapidly one after another. Even with the retry logic (wait 30s, retry 3x), the API stays saturated because:
+- All segments fire as fast as possible in a `for` loop
+- No cooldown between successful calls either
+- The retry waits 30-60s but then the next segment immediately fires again
 
-### Solution
-Rewrite the `getSystemPrompt()` function (lines 86-192) in `supabase/functions/video-recap/index.ts` to:
+### What Will Change
 
-1. **Faithfully translate/recap the source video** - no added commentary, no educational padding
-2. **Niche-adaptive professional tone** - Movie = premium movie recap style, Travel = travel style, Tech = tech style, etc.
-3. **Short and concise** - each segment is 2-4 sentences max, tight and punchy
-4. **Fewer segments** - 1 segment per 6 seconds of video (same as before) but each segment is much shorter text
-5. **Keep scene matching logic** intact for timestamp accuracy
+**File: `src/pages/RecapVideoPage.tsx`** (TTS loop only, lines ~662-697)
 
-### What Changes
-- `supabase/functions/video-recap/index.ts` - Only the `getSystemPrompt()` function (lines 86-192)
+Add a **2-second delay between each successful TTS segment call** to prevent rate limiting. This is a simple `await sleep(2000)` after each successful `generateSpeech()` call in the for-loop.
 
-### What Does NOT Change
-- Scene detection prompt (lines 62-83) - untouched
-- All upload/chunk/analyze logic - untouched
-- `cleanNarrationText`, `normalizeRecapJson` - untouched
-- Frontend RecapVideoPage - untouched
-- All other tools, services, pages - untouched
+This means for 10 segments: ~20 seconds of throttle delay, but ZERO rate limit failures = much faster overall than the current approach of hitting 429 repeatedly and waiting 30-60s per retry.
 
-### New Prompt Strategy
+### What Will NOT Change
+- Prompt logic (already optimized)
+- Video logic, sync, export, overlays
+- geminiService.ts retry logic
+- Edge functions
+- Any other tools, pages, or services
+- Credit deduction logic
+
+### Technical Detail
 
 ```text
-Core instruction:
-- Detect the video's niche/content type automatically
-- Faithfully recap what happens in the video - translate and narrate the actual content
-- Use professional, engaging tone matching the niche
-- Keep each segment SHORT: 2-4 sentences, 15-30 words max per segment
-- No added commentary, no educational padding, no personal opinions
-- Natural {targetLang} flow
-- 1 segment per 6 seconds of video
+Current flow (broken):
+  Segment 1 → TTS call → 429 → wait 30s → retry → 429 → wait 60s → retry → fail/webspeech
+  Segment 2 → (immediately) → TTS call → 429 → ...
+  Total: 17 segments × minutes of retries = timeout/failure
 
-Niche adaptation (auto-detected):
-- Movie/Drama: cinematic recap narration style
-- Tech: clean analytical recap style  
-- Travel/Food: vivid descriptive recap style
-- News/Politics: factual briefing style
-- All others: professional recap matching content tone
+Fixed flow:
+  Segment 1 → TTS call → success → wait 2s
+  Segment 2 → TTS call → success → wait 2s  
+  Segment 3 → TTS call → success → wait 2s
+  ...
+  Total: 17 segments × ~4s each = ~68 seconds (fast and stable)
 ```
 
-This will produce scripts that are roughly 50-70% shorter than current output, dramatically reducing TTS API calls and eliminating quota exhaustion.
+The 2-second gap gives Google's API breathing room between requests, preventing the 429 cascade entirely.
