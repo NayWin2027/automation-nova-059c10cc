@@ -8,6 +8,9 @@ interface TTSResponse {
   voiceName?: string;
   languageCode?: string;
   error?: string;
+  retryAfterSeconds?: number;
+  retryable?: boolean;
+  errorCode?: string;
 }
 
 // Store for tracking if speech synthesis is being used
@@ -119,6 +122,29 @@ export async function generateSpeech(
 
     // Check if we should use client-side TTS (App API mode)
     if (data?.useClientTTS) {
+      // If rate-limited with retryAfterSeconds, auto-retry silently instead of falling back
+      const retryDelay = data?.retryAfterSeconds;
+      if (retryDelay && retryDelay > 0 && retryDelay <= 120) {
+        const maxRetries = 3;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          const waitSec = Math.min(retryDelay * attempt, 60);
+          console.log(`[generateSpeech] Rate limited. Retry ${attempt}/${maxRetries} after ${waitSec}s...`);
+          await new Promise(r => setTimeout(r, waitSec * 1000));
+
+          const { data: retryData, error: retryError } = await invokeWithAuthRetry<TTSResponse>("gemini-tts", {
+            text, voiceName, apiKey,
+            performance: performance || "PROFESSIONAL",
+            languageCode: lang,
+          });
+
+          if (!retryError && retryData?.audio && !retryData?.useClientTTS) {
+            return retryData.audio;
+          }
+          // If still rate-limited, continue loop
+          console.warn(`[generateSpeech] Retry ${attempt} still rate-limited`);
+        }
+      }
+
       console.log("Using client-side Web Speech API for TTS with language:", lang);
       isUsingWebSpeech = true;
       // Return the text with language marker
