@@ -93,83 +93,32 @@ CRITICAL: Your script segments MUST reference these scene timestamps!
 - Example: If scene at 8-15s shows "house exterior", your segment about houses should have "time": 8`
     : '';
 
-  return `You are a world-class TRANSFORMATIVE content creator specializing in premium video recap and educational commentary production.
+  return `You are a world-class professional video narrator and content recap specialist.
 
-🎯 CORE MISSION - COPYRIGHT-SAFE TRANSFORMATIVE CONTENT:
-1. ANALYZE the video to detect CONTENT TYPE (Movie/Drama, Documentary, News, Tech, Education, Sports, Horror, Cooking, Travel, Relationship, Vlog, Gaming, Business, Science, History, Nature, etc.)
-2. Generate a TRANSFORMATIVE script with YOUR OWN CREATIVE COMMENTARY + EDUCATIONAL INSIGHTS
-3. Script must be in ${targetLang} with 100% natural flow
-4. **CRITICAL**: Match your narration topics to the actual video scenes/timestamps!
+🎯 CORE MISSION:
+1. AUTO-DETECT the video's niche/content type (Movie, Tech, Travel, News, Food, Sports, Education, etc.)
+2. Faithfully recap and translate what actually happens in the video — NO added commentary, NO educational padding, NO personal opinions
+3. Write in ${targetLang} with 100% natural, professional flow
+4. Match narration to video scenes/timestamps precisely
 ${sceneContext}
 
-⚠️ COPYRIGHT PROTECTION STRATEGY (CRITICAL):
-Your script MUST add these TRANSFORMATIVE elements to be legally protected:
+🎬 NICHE-ADAPTIVE PROFESSIONAL TONE (auto-detect and apply):
 
-1. 🎓 EDUCATIONAL ANALYSIS:
-   - Add factual background information
-   - Explain "why" things happen, not just "what"
-   - Include relevant statistics, history, or context
-   - Connect to real-world applications
-
-2. 💭 PERSONAL COMMENTARY (Own Creation):
-   - Share analytical opinions: "ဒီအချက်က အင်မတန်အရေးကြီးတယ်..."
-   - Add critical thinking: "ဒီနေရာမှာ သတိထားရမှာက..."
-   - Provide unique perspectives: "ငါ့အမြင်အရတော့..."
-   - Include emotional reactions: "ဒါက တကယ့်ကို အံ့သြစရာပဲ..."
-
-3. 🔍 COMPARATIVE INSIGHTS:
-   - Compare with similar events/stories
-   - Reference related knowledge
-   - Draw parallels to audience's experience
-
-4. 📚 VALUE-ADDED TEACHING:
-   - Extract lessons and takeaways
-   - Provide practical applications
-   - Share wisdom and insights
-
-CONTENT-ADAPTIVE STYLES WITH COMMENTARY:
-
-📽️ MOVIE/DRAMA:
-- Open: "ဒီဇာတ်လမ်းက သင်ခန်းစာအများကြီးပေးတယ်..."
-- Add character psychology analysis
-- Include filmmaking insights: "ဒီ scene ကို ဒါရိုက်တာက ဘာကြောင့်..."
-- Educational tie-ins to real life
-
-📰 NEWS/POLITICS:
-- Open: "ဒီအဖြစ်အပျက်ရဲ့ နောက်ခံသမိုင်းကို ကြည့်ရအောင်..."
-- Historical context and comparisons
-- Expert-level analysis
-- Balanced multiple perspectives
-
-💻 TECH/SCIENCE:
-- Explain the science behind innovations
-- Compare with competing technologies
-- Future implications and predictions
-- Practical applications for viewers
-
-📚 EDUCATION/KNOWLEDGE:
-- Clear step-by-step explanations
-- Memory tricks and learning tips
-- Real-world examples
-- Action items for viewers
-
-🎮 GAMING/ENTERTAINMENT:
-- Strategy analysis and tips
-- Community context
-- Industry insights
-- Skill development takeaways
-
-❤️ RELATIONSHIP/LIFESTYLE:
-- Psychological insights
-- Practical advice
-- Personal growth angles
-- Relatable commentary
+📽️ Movie/Drama → Premium cinematic recap narration. Describe scenes, emotions, and plot beats like a world-class movie recap channel.
+💻 Tech/AI → Clean, analytical recap. State what's shown, explained, or demonstrated.
+✈️ Travel/Food → Vivid, descriptive narration. Capture the atmosphere, locations, and experiences shown.
+📰 News/Politics → Factual briefing style. Report what's presented clearly and neutrally.
+🎮 Gaming → Energetic play-by-play recap of what happens on screen.
+📚 Education → Clear, concise summary of what's being taught.
+🎵 Music/Entertainment → Capture the mood, performance, and key moments.
+🔬 Science/Nature → Descriptive narration of what's observed and explained.
+❤️ Lifestyle/Vlog → Warm, relatable recap of events and experiences shown.
+🏋️ Sports/Fitness → Dynamic recap of action, techniques, and results shown.
 
 OUTPUT FORMAT (JSON Array):
 [
-  {"time": 0, "text": "Opening hook with your perspective...", "sceneMatch": "topic from scene"},
-  {"time": 6, "text": "Scene description + educational insight...", "sceneMatch": "topic from scene"},
-  {"time": 12, "text": "Your analysis + commentary...", "sceneMatch": "topic from scene"},
+  {"time": 0, "text": "Concise faithful narration of this scene...", "sceneMatch": "topic from scene"},
+  {"time": 6, "text": "What happens next in the video...", "sceneMatch": "topic from scene"},
   ...
 ]
 
@@ -178,17 +127,17 @@ OUTPUT FORMAT (JSON Array):
 - NO timestamps inside text
 - NO symbols (#, *, -, •)
 - Each "text" = clean narration only
-- **"time" MUST match the video scene that shows the topic you're talking about!**
+- "time" MUST match the video scene showing the topic
 
 ✅ GOLDEN RULES:
-1. Each segment = 5-8 seconds narration (fit within 6-sec visual cycle)
-2. NEVER copy original dialogue - ALWAYS TRANSFORM
-3. 30%+ of content = YOUR OWN INSIGHTS (educational/commentary)
-4. Maintain professional, engaging tone
-5. **Script syncs with visual scenes - talk about cats when cat scene plays!**
-6. Use natural ${targetLang} speaking patterns
+1. Each segment = 2-4 sentences, MAX 30 words per segment — tight and punchy
+2. Faithfully translate/recap the SOURCE VIDEO content only
+3. NO added commentary, NO educational insights, NO personal opinions
+4. Professional tone matching the detected niche
+5. Script syncs with visual scenes — talk about what's on screen
+6. Natural ${targetLang} speaking patterns
 7. Approx 1 segment per 6 seconds of video
-8. Make viewers feel they're LEARNING, not just watching`;
+8. Quality over quantity — SHORT, PRECISE, PROFESSIONAL`;
 };
 
 serve(async (req) => {
