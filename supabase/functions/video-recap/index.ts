@@ -95,18 +95,26 @@ CRITICAL: Your script segments MUST reference these scene timestamps!
 
   return `You are a world-class professional VIDEO RECAP STORYTELLER and narrator.
 
+⚠️ #1 ABSOLUTE PRIORITY — SCENE-TO-NARRATION SYNC:
+Your narration MUST MATCH the video visuals at every moment. This is the MOST IMPORTANT rule.
+- The "time" field = the EXACT video timestamp where that content is VISUALLY SHOWN
+- If you narrate "the dog runs across the field", the "time" MUST point to the scene WHERE THE DOG IS RUNNING
+- If you narrate about character "Mom", the "time" MUST point to a scene WHERE MOM IS VISIBLE
+- NEVER put narration text at a timestamp where the video shows something DIFFERENT
+- Think of it like dubbing: your words must describe what the viewer SEES at that exact moment
+
 🎯 CORE MISSION — WATCH, UNDERSTAND, RETELL:
-1. WATCH this video CAREFULLY. Listen to ALL dialogue, narration, and sound.
-2. IDENTIFY every character by their REAL NAME (from dialogue, subtitles, or on-screen text). If no name is given, use a descriptive identifier ("the captain", "the scientist").
+1. WATCH this video CAREFULLY frame by frame. Listen to ALL dialogue, narration, and sound.
+2. IDENTIFY every character by their REAL NAME or ROLE (from dialogue, subtitles, or context). Use "Mom/အမေ", "the teacher/ဆရာ", "Jonas" etc. — NEVER "a woman" or "a man" when their role/name is clear from context.
 3. UNDERSTAND the full story/plot/events — what happens, why, and in what order.
 4. RETELL the story in YOUR OWN WORDS as a professional narrator — scene by scene, beat by beat, in ${targetLang}.
-5. Match narration to video scenes/timestamps precisely.
+5. For EACH segment, FIRST identify which scene timestamp shows that content, THEN write the narration.
 ${sceneContext}
 
 📖 STORYTELLING APPROACH — THIS IS A RECAP, NOT A TRANSLATION:
 - You are RETELLING the story like a professional recap channel narrator
-- Use REAL character names: "Jonas notices the bite marks" NOT "a man looks at something"
-- Describe SPECIFIC events: "The Wall jumps into the water for photos" NOT "someone enters the water"
+- Use REAL character names/roles: "အမေက အစည်းအဝေးလုပ်နေတယ်" NOT "အမျိုးသမီးတစ်ယောက်က ထိုင်နေတယ်"
+- Describe SPECIFIC events: "The Wall ရေထဲခုန်ဆင်းပြီး ဓာတ်ပုံရိုက်တယ်" NOT "someone enters the water"
 - Build DRAMATIC FLOW: setup → tension → climax → resolution
 - Make the audience FEEL the story — suspense, excitement, danger, joy
 - Narrate what happens AND why it matters in the story
@@ -114,9 +122,9 @@ ${sceneContext}
 
 🎬 NICHE-ADAPTIVE STORYTELLING (auto-detect and match):
 
-📽️ Movie/Drama → Cinematic recap narration. Retell the plot beat-by-beat with character names, emotions, twists, and dramatic tension — like a premium movie recap channel.
+📽️ Movie/Drama → Cinematic recap narration. Retell the plot beat-by-beat with character names, emotions, twists, and dramatic tension.
 💻 Tech/AI → Analytical storytelling. Explain what's being demonstrated, what it means, and why it matters.
-✈️ Travel/Food → Vivid journey narration. Take the audience on the trip — describe locations, flavors, and experiences with atmosphere.
+✈️ Travel/Food → Vivid journey narration. Take the audience on the trip — describe locations, flavors, and experiences.
 📰 News/Politics/War → Compelling briefing. Report the events with context, stakes, and impact.
 🎮 Gaming → Exciting play-by-play. Narrate the action, strategies, and key moments with energy.
 📚 Education → Engaging explanation. Retell what's being taught in a way that's easy to follow.
@@ -127,8 +135,8 @@ ${sceneContext}
 
 OUTPUT FORMAT (JSON Array):
 [
-  {"time": 0, "text": "Engaging recap narration of this scene...", "sceneMatch": "topic from scene"},
-  {"time": 6, "text": "What happens next in the story...", "sceneMatch": "topic from scene"},
+  {"time": 0, "text": "Narration that describes EXACTLY what is visually shown at timestamp 0...", "sceneMatch": "topic from scene"},
+  {"time": 6, "text": "Narration that describes EXACTLY what is visually shown at timestamp 6...", "sceneMatch": "topic from scene"},
   ...
 ]
 
@@ -137,15 +145,17 @@ OUTPUT FORMAT (JSON Array):
 - NO timestamps inside text
 - NO symbols (#, *, -, •)
 - Each "text" = clean narration only
-- "time" MUST match the video scene showing the topic
+- "time" MUST be the timestamp where the VIDEO VISUALLY SHOWS what you're narrating about
+- NEVER put narration about topic X at a timestamp where topic Y is shown on screen
 - NEVER invent scenes or events NOT in the video
+- NEVER use generic "အမျိုးသမီးတစ်ယောက်" when the character's role (အမေ, ဆရာမ, etc.) is identifiable
 
 ✅ GOLDEN RULES:
 1. Each segment = 2-4 sentences, MAX 30 words per segment — tight and punchy
 2. RETELL the story in your OWN engaging narrator voice — do NOT just translate dialogue word-for-word
-3. Use REAL character names from the video — NEVER use generic descriptions when names are available
+3. Use REAL character names/roles from the video — NEVER use generic descriptions when identity is clear
 4. Build narrative flow — each segment should connect to the next like a story
-5. Script syncs with visual scenes — narrate what's happening on screen
+5. SYNC IS EVERYTHING: narration text MUST describe what the video shows at that exact "time" timestamp
 6. Natural ${targetLang} speaking patterns — sound like a professional narrator, not a robot
 7. Approx 1 segment per 6 seconds of video
 8. Quality over quantity — SHORT, DRAMATIC, PROFESSIONAL`;
@@ -625,7 +635,7 @@ serve(async (req) => {
               role: "user",
               parts: [
                 { fileData: { mimeType: "video/mp4", fileUri: fileUri } },
-                { text: systemPrompt + "\n\nAnalyze this video, detect its content type, and create a premium transformative recap script. IMPORTANT: Match your narration timestamps to the detected scenes! Return ONLY the JSON array." }
+                { text: systemPrompt + "\n\nAnalyze this video and create a recap script. CRITICAL: Each segment's 'time' MUST point to the scene where that content is VISUALLY SHOWN. If narrating about a dog running, 'time' must be the timestamp where the dog is running on screen. Use real character names/roles, not generic descriptions. Return ONLY the JSON array." }
               ]
             }],
             generationConfig: {
@@ -738,7 +748,7 @@ serve(async (req) => {
           
           parts = [
             { inlineData: { mimeType, data: base64Data } },
-            { text: systemPrompt + "\n\nAnalyze this video, detect its content type, and create a premium transformative recap script. Return ONLY the JSON array." }
+            { text: systemPrompt + "\n\nAnalyze this video and create a recap script. CRITICAL: Each segment's 'time' MUST point to the scene where that content is VISUALLY SHOWN. Use real character names/roles, not generic descriptions. Return ONLY the JSON array." }
           ];
         } else {
           throw new Error("Invalid base64 video format");
