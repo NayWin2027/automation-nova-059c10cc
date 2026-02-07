@@ -1,42 +1,50 @@
 
 
-## Movie Clip File Permission Error Fix
+## Script Prompt Optimization - Shorter, Faithful, Niche-Adaptive
 
 ### Problem
-Movie clips (and any video) fail with "The requested file could not be read, typically due to permission problems" error. This happens because the browser's `File` object reference goes stale -- especially on mobile browsers or after tab switching. The `handleProcess` function at line 514 still passes the original `File` object to `analyzeVideo()`, which then tries to read it (via `fileToBase64()` or `file.slice()` for chunked upload).
-
-### Root Cause
-- Line 532: `analyzeVideo(file, ...)` uses the original `File` object
-- The `File` object loses browser read permission over time
-- Even though `videoDataUrl` (base64) is already stored and persistent, it is NOT used for the upload process
+Current prompt (lines 96-191) forces AI to generate 30%+ original commentary, educational insights, comparative analysis, and value-added teaching. This makes the script extremely long, causing:
+- Too many TTS segments = too many API calls = quota exhaustion
+- Script doesn't faithfully represent the source video
+- Movie clips and other niches fail because the bloated script overwhelms the API key
 
 ### Solution
-Add a "resilient file getter" at the start of `handleProcess` that:
-1. First tries to read the original `File` object (fastest path)
-2. If that fails, reconstructs a new `File` from the already-stored `videoDataUrl` (base64 Data URL)
-3. This ensures any niche (Movie, Food, Travel, Tech, etc.) can be processed without file permission errors
+Rewrite the `getSystemPrompt()` function (lines 86-192) in `supabase/functions/video-recap/index.ts` to:
 
-### File to Edit
-- `src/pages/RecapVideoPage.tsx` only
+1. **Faithfully translate/recap the source video** - no added commentary, no educational padding
+2. **Niche-adaptive professional tone** - Movie = premium movie recap style, Travel = travel style, Tech = tech style, etc.
+3. **Short and concise** - each segment is 2-4 sentences max, tight and punchy
+4. **Fewer segments** - 1 segment per 6 seconds of video (same as before) but each segment is much shorter text
+5. **Keep scene matching logic** intact for timestamp accuracy
 
-### What Will NOT Be Touched
-- Script logic, video sync, audio/TTS, credits, transitions, timeline, overlays, other tools -- absolutely nothing else
+### What Changes
+- `supabase/functions/video-recap/index.ts` - Only the `getSystemPrompt()` function (lines 86-192)
 
-### Technical Details
+### What Does NOT Change
+- Scene detection prompt (lines 62-83) - untouched
+- All upload/chunk/analyze logic - untouched
+- `cleanNarrationText`, `normalizeRecapJson` - untouched
+- Frontend RecapVideoPage - untouched
+- All other tools, services, pages - untouched
 
-**Changes in `handleProcess()` (around lines 514-532):**
-
-1. Add a helper function `getReliableFile()` that:
-   - Attempts to read a small slice of the original `File` to test if it is still accessible
-   - If the read fails, converts `videoDataUrl` (base64 string) back into a `File` object using `fetch()` + `blob`
-   - Returns the working `File` object
-
-2. Replace line 532's `file` usage with the result from `getReliableFile()`
+### New Prompt Strategy
 
 ```text
-Before:  const result = await analyzeVideo(file, file.type || "video/mp4", ...)
-After:   const reliableFile = await getReliableFile();
-         const result = await analyzeVideo(reliableFile, reliableFile.type || "video/mp4", ...)
+Core instruction:
+- Detect the video's niche/content type automatically
+- Faithfully recap what happens in the video - translate and narrate the actual content
+- Use professional, engaging tone matching the niche
+- Keep each segment SHORT: 2-4 sentences, 15-30 words max per segment
+- No added commentary, no educational padding, no personal opinions
+- Natural {targetLang} flow
+- 1 segment per 6 seconds of video
+
+Niche adaptation (auto-detected):
+- Movie/Drama: cinematic recap narration style
+- Tech: clean analytical recap style  
+- Travel/Food: vivid descriptive recap style
+- News/Politics: factual briefing style
+- All others: professional recap matching content tone
 ```
 
-This is a minimal, targeted fix that leverages the existing `videoDataUrl` persistence architecture already in place.
+This will produce scripts that are roughly 50-70% shorter than current output, dramatically reducing TTS API calls and eliminating quota exhaustion.
