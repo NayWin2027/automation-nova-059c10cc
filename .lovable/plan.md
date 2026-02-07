@@ -1,43 +1,52 @@
 
 
-## Fix: TTS Rate Limiting - Add Throttle Between Segment Calls
+## Script Quality Fix - Storytelling Recap Style
 
-### Root Cause (from logs)
-The edge function logs confirm: every `gemini-tts` call returns **429 (rate limited)**. The system fires 17 TTS requests rapidly one after another. Even with the retry logic (wait 30s, retry 3x), the API stays saturated because:
-- All segments fire as fast as possible in a `for` loop
-- No cooldown between successful calls either
-- The retry waits 30-60s but then the next segment immediately fires again
+### Problem
+Current prompt says "faithfully translate, NO commentary, NO opinions" which makes the AI produce dry, literal descriptions ("A woman stands. A man talks on phone"). The user wants a **storytelling recap** style - like professional movie recap channels that retell the story with:
+- Real character names (Jonas, The Wall, etc.)
+- Plot progression and dramatic tension
+- Scene-by-scene story narration in the narrator's own engaging words
+- Niche-appropriate storytelling (movie = cinematic recap, travel = vivid journey narration, etc.)
+
+### Example the User Provided (Movie Recap Style)
+The sample script narrates a Megalodon movie scene beat-by-beat: the crew catches a shark, The Wall jumps in the water for photos, Jonas notices bite marks from something bigger, danger emerges, a massive Megalodon attacks, the boat capsizes. This is **storytelling** - not literal translation.
 
 ### What Will Change
 
-**File: `src/pages/RecapVideoPage.tsx`** (TTS loop only, lines ~662-697)
+**File: `supabase/functions/video-recap/index.ts`** - Only `getSystemPrompt()` (lines 96-141)
 
-Add a **2-second delay between each successful TTS segment call** to prevent rate limiting. This is a simple `await sleep(2000)` after each successful `generateSpeech()` call in the for-loop.
+Rewrite the prompt to instruct AI to:
+1. **WATCH the video carefully** - identify characters by name, understand the plot/events
+2. **RETELL the story** in engaging recap narration style - not translate word-for-word
+3. **Use character names** mentioned in dialogue or on screen
+4. **Build dramatic flow** - setup, tension, climax, resolution
+5. **Niche-adaptive storytelling** - movie recap = cinematic narration, travel = journey narration, tech = analysis narration
+6. Keep segments concise (2-4 sentences, max 30 words) for TTS stability
 
-This means for 10 segments: ~20 seconds of throttle delay, but ZERO rate limit failures = much faster overall than the current approach of hitting 429 repeatedly and waiting 30-60s per retry.
+### New Prompt Core Concept
 
-### What Will NOT Change
-- Prompt logic (already optimized)
-- Video logic, sync, export, overlays
-- geminiService.ts retry logic
-- Edge functions
-- Any other tools, pages, or services
-- Credit deduction logic
+```text
+OLD: "Faithfully translate/recap the SOURCE VIDEO content only. 
+      NO added commentary, NO educational insights, NO personal opinions"
+
+NEW: "WATCH this video carefully. Identify characters, events, and story beats.
+      RETELL the story in your own professional narrator voice.
+      Use REAL character names from the video.
+      Narrate what happens scene by scene with engaging flow.
+      Match the niche: movie = cinematic recap, travel = journey story, etc."
+```
+
+### What Does NOT Change
+- Scene detection prompt (lines 62-83) - untouched
+- Upload/chunk/analyze logic - untouched
+- `cleanNarrationText`, `normalizeRecapJson` - untouched
+- Frontend RecapVideoPage.tsx - untouched
+- TTS throttling logic - untouched
+- geminiService.ts - untouched
+- All other tools, services, pages - untouched
+- Video logic, sync, export, overlays - untouched
 
 ### Technical Detail
 
-```text
-Current flow (broken):
-  Segment 1 → TTS call → 429 → wait 30s → retry → 429 → wait 60s → retry → fail/webspeech
-  Segment 2 → (immediately) → TTS call → 429 → ...
-  Total: 17 segments × minutes of retries = timeout/failure
-
-Fixed flow:
-  Segment 1 → TTS call → success → wait 2s
-  Segment 2 → TTS call → success → wait 2s  
-  Segment 3 → TTS call → success → wait 2s
-  ...
-  Total: 17 segments × ~4s each = ~68 seconds (fast and stable)
-```
-
-The 2-second gap gives Google's API breathing room between requests, preventing the 429 cascade entirely.
+Only the text content of `getSystemPrompt()` function (lines 96-141) changes. The function signature, scene context block (lines 87-94), and JSON output format remain identical. No logic changes anywhere.
