@@ -511,6 +511,24 @@ export default function VideoRecapView() {
     });
   };
 
+  const getReliableFile = async (): Promise<File> => {
+    // Try reading the original File object first (fastest path)
+    try {
+      const testSlice = file!.slice(0, 1);
+      await testSlice.arrayBuffer();
+      return file!;
+    } catch {
+      // Original File is stale — reconstruct from persistent videoDataUrl
+      console.warn("[RecapVideo] Original File stale, reconstructing from videoDataUrl...");
+      if (!videoDataUrl) throw new Error("No video data available to reconstruct file.");
+      const res = await fetch(videoDataUrl);
+      const blob = await res.blob();
+      const mimeType = file?.type || blob.type || "video/mp4";
+      const fileName = file?.name || "video.mp4";
+      return new File([blob], fileName, { type: mimeType });
+    }
+  };
+
   const handleProcess = async () => {
     if (!file) return;
     if (apiType === "own" && !apiKey.trim()) {
@@ -528,8 +546,9 @@ export default function VideoRecapView() {
     setScriptSegments([]);
     setAudioBlobUrl(null);
     try {
+      const reliableFile = await getReliableFile();
       const customKey = apiType === "own" ? apiKey : undefined;
-      const result = await analyzeVideo(file, file.type || "video/mp4", targetLang, customKey);
+      const result = await analyzeVideo(reliableFile, reliableFile.type || "video/mp4", targetLang, customKey);
       
       // Extract recap string and scenes
       const { recap: rawRecap, scenes: detectedScenes } = result;
