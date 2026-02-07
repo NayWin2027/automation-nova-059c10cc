@@ -1023,37 +1023,19 @@ export default function VideoRecapView() {
       activeSegment = scriptSegments[scriptSegments.length - 1];
     }
     
-    let isFreezeMode = false;
-    let crossfadeAlpha = 1.0; // 1 = full video, 0 = full photo
+    // Phase calculation — matching main renderer exactly
+    let inPhotoPhase = false;
+    let phase = 0;
+    let segLocalTime = 0;
+    const CYCLE_DUR = 6.0;
+    const MOTION_DUR = 3.0;
+    const FADE_DUR = 0.4;
     
     if (activeSegment) {
-      const segmentRelativeTime = effectiveTime - (activeSegment.audioStart || 0);
-      const CYCLE_DUR = 6.0;
-      const cycleTime = segmentRelativeTime % CYCLE_DUR;
-      
-      // Smooth 6-second cycle: 0-3s video, 3-6s photo zoom
-      isFreezeMode = cycleTime >= 3.0 && motionZoom;
-      
-      // SMOOTH CROSSFADE (0.4s transition)
-      const FADE_DUR = 0.4;
-      if (cycleTime >= 3.0 - FADE_DUR && cycleTime < 3.0) {
-        // Transitioning TO photo
-        crossfadeAlpha = 1.0 - ((cycleTime - (3.0 - FADE_DUR)) / FADE_DUR);
-      } else if (cycleTime >= 6.0 - FADE_DUR || cycleTime < FADE_DUR) {
-        // Transitioning TO video (wrap-around)
-        if (cycleTime >= 6.0 - FADE_DUR) {
-          crossfadeAlpha = (cycleTime - (6.0 - FADE_DUR)) / FADE_DUR;
-        } else {
-          crossfadeAlpha = 0.5 + (cycleTime / FADE_DUR) * 0.5;
-        }
-      } else {
-        crossfadeAlpha = isFreezeMode ? 0.0 : 1.0;
-      }
+      segLocalTime = effectiveTime - (activeSegment.audioStart || 0);
+      phase = segLocalTime % CYCLE_DUR;
+      inPhotoPhase = phase >= MOTION_DUR && motionZoom;
     }
-    
-    // Easing for smoother feel
-    const easeInOut = (t: number) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-    crossfadeAlpha = easeInOut(Math.max(0, Math.min(1, crossfadeAlpha)));
     
     // Calculate video dimensions
     const vw = video.videoWidth || 1280;
@@ -1075,7 +1057,7 @@ export default function VideoRecapView() {
     }
     
     // Capture freeze frame at transition point
-    const needsCapture = (isFreezeMode && !wasFreezePrev) || 
+    const needsCapture = (inPhotoPhase && !wasFreezePrev) || 
       (freezeCanvas.width !== targetW || freezeCanvas.height !== targetH);
     
     if (needsCapture && freezeCtx) {
@@ -1092,16 +1074,38 @@ export default function VideoRecapView() {
       if (flipVideo) freezeCtx.restore();
     }
     
-    // Draw video layer with crossfade
-    if (crossfadeAlpha > 0.01) {
-      ctx.globalAlpha = crossfadeAlpha;
+    // ===== RENDER BASED ON PHASE — identical to main renderer =====
+    if (motionZoom && activeSegment) {
+      if (inPhotoPhase) {
+        // === PHOTO PHASE (3s - 6s): STABLE, NO ZOOM/PAN ===
+        let photoAlpha = 1.0;
+        if (phase < MOTION_DUR + FADE_DUR) {
+          photoAlpha = (phase - MOTION_DUR) / FADE_DUR;
+        } else if (phase > CYCLE_DUR - FADE_DUR) {
+          photoAlpha = (CYCLE_DUR - phase) / FADE_DUR;
+        }
+        photoAlpha = Math.max(0, Math.min(1, photoAlpha));
+
+        if (photoAlpha < 1.0) {
+          ctx.globalAlpha = 1.0 - photoAlpha;
+          ctx.drawImage(video, dx, dy, dw, dh);
+        }
+        ctx.globalAlpha = photoAlpha;
+        ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH);
+      } else {
+        // === VIDEO PHASE (0s - 3s): Motion video ===
+        let videoAlpha = 1.0;
+        if (phase < FADE_DUR && segLocalTime > FADE_DUR) {
+          videoAlpha = phase / FADE_DUR;
+          ctx.globalAlpha = 1.0 - videoAlpha;
+          ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH);
+        }
+        ctx.globalAlpha = Math.max(0.01, videoAlpha);
+        ctx.drawImage(video, dx, dy, dw, dh);
+      }
+    } else {
+      ctx.globalAlpha = 1.0;
       ctx.drawImage(video, dx, dy, dw, dh);
-    }
-    
-    // Draw stable photo layer with crossfade (NO zoom, NO pan — matching main renderer)
-    if (crossfadeAlpha < 0.99 && motionZoom) {
-      ctx.globalAlpha = 1.0 - crossfadeAlpha;
-      ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH);
     }
     
     ctx.globalAlpha = 1.0;
@@ -1214,7 +1218,7 @@ export default function VideoRecapView() {
       }
     }
     
-    setWasFreeze(isFreezeMode);
+    setWasFreeze(inPhotoPhase);
   };
 
   useEffect(() => {
