@@ -122,12 +122,12 @@ export async function generateSpeech(
 
     // Check if we should use client-side TTS (App API mode)
     if (data?.useClientTTS) {
-      // If rate-limited with retryAfterSeconds, auto-retry silently instead of falling back
+      // If rate-limited with retryAfterSeconds, auto-retry with shorter waits
       const retryDelay = data?.retryAfterSeconds;
       if (retryDelay && retryDelay > 0 && retryDelay <= 120) {
-        const maxRetries = 3;
+        const maxRetries = 2;
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
-          const waitSec = Math.min(retryDelay * attempt, 60);
+          const waitSec = Math.min(retryDelay, 15); // Cap at 15s per retry
           console.log(`[generateSpeech] Rate limited. Retry ${attempt}/${maxRetries} after ${waitSec}s...`);
           await new Promise(r => setTimeout(r, waitSec * 1000));
 
@@ -140,10 +140,11 @@ export async function generateSpeech(
           if (!retryError && retryData?.audio && !retryData?.useClientTTS) {
             return retryData.audio;
           }
-          // If still rate-limited, continue loop
           console.warn(`[generateSpeech] Retry ${attempt} still rate-limited`);
         }
       }
+      // Signal rate limit so caller can handle retry at a higher level
+      throw new Error("RATE_LIMITED");
 
       console.log("Using client-side Web Speech API for TTS with language:", lang);
       isUsingWebSpeech = true;
