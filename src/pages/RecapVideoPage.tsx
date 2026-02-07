@@ -661,28 +661,53 @@ export default function VideoRecapView() {
       const audioBuffers: AudioBuffer[] = [];
       const segmentDurations: number[] = [];
 
-      // Generate TTS for each segment individually
+      // Generate TTS for each segment individually with rate-limit resilience
+      const MAX_SEGMENT_RETRIES = 5;
       for (let i = 0; i < segments.length; i++) {
         const seg = segments[i];
         setStatusText(`STEP 2/3: VOICE ${i + 1}/${segments.length}...`);
 
         let segB64: string | null = null;
-        try {
-          segB64 = await generateSpeech(seg.text, voiceObj.apiVoice, customKey);
-        } catch (ttsErr: any) {
-          console.error("[RecapVideo] TTS error for segment", i, ttsErr);
-          const errMsg = ttsErr?.message || "";
-          if (errMsg.includes("Authentication") || errMsg.includes("token") || errMsg.includes("401")) {
-            toast.error("❌ Login ဝင်ထားရန်လိုအပ်ပါသည်။ /login မှ Login ဝင်ပြီး ပြန်လုပ်ပါ။");
-          } else {
-            toast.error(`❌ Voice generation failed: ${errMsg.substring(0, 100)}`);
+        let segmentSuccess = false;
+
+        for (let retryAttempt = 0; retryAttempt <= MAX_SEGMENT_RETRIES; retryAttempt++) {
+          try {
+            segB64 = await generateSpeech(seg.text, voiceObj.apiVoice, customKey);
+            segmentSuccess = true;
+            break; // Success - exit retry loop
+          } catch (ttsErr: any) {
+            const errMsg = ttsErr?.message || "";
+            
+            // Rate limited - wait and retry with countdown UI
+            if (errMsg === "RATE_LIMITED" && retryAttempt < MAX_SEGMENT_RETRIES) {
+              const waitSec = 20 + (retryAttempt * 10); // 20s, 30s, 40s, 50s, 60s
+              for (let countdown = waitSec; countdown > 0; countdown--) {
+                setStatusText(`⏳ Rate limit - ${countdown}s စောင့်နေသည်... (${i + 1}/${segments.length})`);
+                await new Promise(r => setTimeout(r, 1000));
+              }
+              continue; // Retry this segment
+            }
+            
+            // Non-rate-limit error - fail immediately
+            console.error("[RecapVideo] TTS error for segment", i, ttsErr);
+            if (errMsg.includes("Authentication") || errMsg.includes("token") || errMsg.includes("401")) {
+              toast.error("❌ Login ဝင်ထားရန်လိုအပ်ပါသည်။ /login မှ Login ဝင်ပြီး ပြန်လုပ်ပါ။");
+            } else {
+              toast.error(`❌ Voice generation failed: ${errMsg.substring(0, 100)}`);
+            }
+            setAnalyzing(false);
+            return;
           }
+        }
+
+        if (!segmentSuccess || !segB64) {
+          toast.error("⏳ TTS quota limit ဖြစ်နေပါတယ်—ခဏစောင့်ပြီး ပြန်လုပ်ပါ");
           setAnalyzing(false);
           return;
         }
 
         // Check for WebSpeech fallback marker (sync won't be accurate)
-        if (!segB64 || segB64.startsWith("WEBSPEECH:")) {
+        if (segB64.startsWith("WEBSPEECH:")) {
           const isLoggedIn = !!(await supabase.auth.getUser()).data?.user;
           if (!isLoggedIn) {
             toast.error("❌ Login ဝင်ထားရန်လိုအပ်ပါသည်။ App API သုံးရန် /login မှ Login ဝင်ပါ။");
@@ -697,9 +722,10 @@ export default function VideoRecapView() {
         audioBuffers.push(audioBuffer);
         segmentDurations.push(audioBuffer.duration);
 
-        // Throttle: 2s delay between TTS calls to prevent 429 rate limiting
+        // Throttle: 3s delay between TTS calls to prevent 429 rate limiting
         if (i < segments.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          setStatusText(`STEP 2/3: VOICE ${i + 1}/${segments.length} ✓ — next...`);
+          await new Promise(resolve => setTimeout(resolve, 3000));
         }
       }
 
