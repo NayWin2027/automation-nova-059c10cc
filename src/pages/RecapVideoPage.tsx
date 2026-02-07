@@ -380,6 +380,8 @@ export default function VideoRecapView() {
   const freezeCapturedCycleRef = useRef<number>(-1); // ensures photo phase stays stable for the full 3s
   const didConfirmSuccessRef = useRef(false);
   const lastActiveSegmentIndexRef = useRef<number>(-1); // Track segment changes for semantic video seeking
+  const lastSeekedSegmentRef = useRef<number>(-1); // Prevent repeated seeking within same segment
+  const lastPhaseWasPhotoRef = useRef(false); // Track phase transitions to avoid play/pause spam
 
   // Animation States for Lip-sync
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -1199,8 +1201,8 @@ export default function VideoRecapView() {
         const maxLines = 2;
         const lineSpacing = 1.15;
         
-        let fs = targetH * 0.038 * subScale;
-        const minFs = targetH * 0.022;
+        // FIXED font size — consistent across all segments
+        const fs = targetH * 0.036 * subScale;
         
         const wrapText = (text: string, fontSize: number): string[] => {
           ctx.font = `900 ${fontSize}px 'Padauk', sans-serif`;
@@ -1220,11 +1222,7 @@ export default function VideoRecapView() {
           return lines;
         };
         
-        let wrappedLines = wrapText(chunk, fs);
-        while (wrappedLines.length > maxLines && fs > minFs) {
-          fs -= 1;
-          wrappedLines = wrapText(chunk, fs);
-        }
+        const wrappedLines = wrapText(chunk, fs);
         const finalLines = wrappedLines.slice(0, maxLines);
         
         ctx.font = `900 ${fs}px 'Padauk', sans-serif`;
@@ -1352,22 +1350,32 @@ export default function VideoRecapView() {
           const desiredFreezeTime = clampTime(freezeTargetUnclamped);
           const desiredTimeNow = inPhotoPhase ? desiredFreezeTime : desiredMotionTime;
 
-          // Hard video control: pause during photo phase, play during video phase
+          // Hard video control: only toggle play/pause on PHASE TRANSITIONS (not every frame)
           if (motionZoom && isPlaying) {
-            if (inPhotoPhase && !video.paused) {
+            if (inPhotoPhase && !lastPhaseWasPhotoRef.current) {
+              // Transitioning INTO photo phase — pause once
               video.pause();
-            } else if (!inPhotoPhase && video.paused) {
+              video.currentTime = desiredFreezeTime;
+              lastPhaseWasPhotoRef.current = true;
+            } else if (!inPhotoPhase && lastPhaseWasPhotoRef.current) {
+              // Transitioning INTO motion phase — play once & seek to scene
+              video.currentTime = desiredMotionTime;
               video.play().catch(() => {});
+              lastPhaseWasPhotoRef.current = false;
             }
           }
 
-          // Keep video aligned to the active segment's matched scene.
-          // This prevents "voice on segment 1 but video showing segment 3/4" drift.
+          // Segment-level seeking: only seek when the ACTIVE SEGMENT CHANGES
+          // This prevents per-frame seeking that causes stutter
           if (isPlaying && activeSegment && video.duration > 0) {
-            const drift = Math.abs(video.currentTime - desiredTimeNow);
-            const threshold = inPhotoPhase ? 0.03 : 0.2;
-            if (drift > threshold) {
-              video.currentTime = desiredTimeNow;
+            const segIdx = scriptSegments.indexOf(activeSegment);
+            if (segIdx !== lastSeekedSegmentRef.current) {
+              // New segment — seek to its scene start
+              lastSeekedSegmentRef.current = segIdx;
+              video.currentTime = clampTime(sceneStart);
+              if (!inPhotoPhase && video.paused) {
+                video.play().catch(() => {});
+              }
             }
           }
 
@@ -1623,9 +1631,8 @@ export default function VideoRecapView() {
               const maxLines = 2;
               const lineSpacing = 1.15;
               
-              // Auto-fit font size: start with base size and shrink until text fits in 2 lines
-              let fs = targetH * 0.038 * subScale; // Smaller base size
-              const minFs = targetH * 0.022; // Minimum readable size
+              // FIXED font size — no auto-shrink to prevent size jumping between segments
+              const fs = targetH * 0.036 * subScale;
               
               const wrapText = (text: string, fontSize: number): string[] => {
                 ctx.font = `900 ${fontSize}px 'Padauk', sans-serif`;
@@ -1646,14 +1653,8 @@ export default function VideoRecapView() {
                 return lines;
               };
               
-              // Find optimal font size that fits all text in maxLines
-              let wrappedLines = wrapText(chunk, fs);
-              while (wrappedLines.length > maxLines && fs > minFs) {
-                fs -= 1;
-                wrappedLines = wrapText(chunk, fs);
-              }
-              
-              // If still too many lines, take first 2 lines (no ellipsis - text auto-changes with audio)
+              const wrappedLines = wrapText(chunk, fs);
+              // Take first 2 lines only — consistent size, no jumping
               const finalLines = wrappedLines.slice(0, maxLines);
               
               ctx.font = `900 ${fs}px 'Padauk', sans-serif`;
