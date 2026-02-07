@@ -1098,23 +1098,10 @@ export default function VideoRecapView() {
       ctx.drawImage(video, dx, dy, dw, dh);
     }
     
-    // Draw photo zoom layer with crossfade
+    // Draw stable photo layer with crossfade (NO zoom, NO pan — matching main renderer)
     if (crossfadeAlpha < 0.99 && motionZoom) {
-      const segmentRelativeTime = activeSegment ? (effectiveTime - (activeSegment.audioStart || 0)) : 0;
-      const cycleTime = segmentRelativeTime % 6.0;
-      const progressInFreeze = cycleTime >= 3.0 ? (cycleTime - 3.0) / 3.0 : 0;
-      
-      // Cinematic Ken Burns zoom with easing
-      const easedProgress = easeInOut(progressInFreeze);
-      const currentZoom = 1.0 + easedProgress * 0.2; // Subtle 1.2x zoom
-      
-      const zoomedW = targetW * currentZoom;
-      const zoomedH = targetH * currentZoom;
-      const centerX = (targetW - zoomedW) / 2;
-      const centerY = (targetH - zoomedH) / 2;
-      
       ctx.globalAlpha = 1.0 - crossfadeAlpha;
-      ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH, centerX, centerY, zoomedW, zoomedH);
+      ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH);
     }
     
     ctx.globalAlpha = 1.0;
@@ -1471,15 +1458,17 @@ export default function VideoRecapView() {
           }
 
           // ===== TIMELINE BAR ON CANVAS (for export) =====
-          if (timelineHeight > 0 && isPlaying) {
+          if (timelineHeight > 0) {
             const tlH = timelineHeight * 2;
             const tlY = targetH - tlH;
             // Background
             ctx.fillStyle = "rgba(255,255,255,0.15)";
             ctx.fillRect(0, tlY, targetW, tlH);
-            // Progress fill
+            // Progress fill — use effectiveTime for frame-accurate progress during export
+            const totalDur = audioDuration || video.duration || 1;
+            const tlProgress = totalDur > 0 ? Math.min(1, effectiveTime / totalDur) : 0;
             ctx.fillStyle = timelineColor;
-            ctx.fillRect(0, tlY, targetW * (progress / 100), tlH);
+            ctx.fillRect(0, tlY, targetW * tlProgress, tlH);
           }
 
           if (logoSrc) {
