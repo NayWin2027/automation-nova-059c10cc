@@ -99,44 +99,60 @@ CRITICAL: Your script segments MUST reference these scene timestamps!
 Your narration MUST MATCH the video visuals at every moment. This is the MOST IMPORTANT rule.
 - The "time" field = the EXACT video timestamp where that content is VISUALLY SHOWN
 - If you narrate "the dog runs across the field", the "time" MUST point to the scene WHERE THE DOG IS RUNNING
-- If you narrate about character "Mom", the "time" MUST point to a scene WHERE MOM IS VISIBLE
 - NEVER put narration text at a timestamp where the video shows something DIFFERENT
 - Think of it like dubbing: your words must describe what the viewer SEES at that exact moment
+${sceneContext}
 
 🎯 CORE MISSION — WATCH, UNDERSTAND, RETELL:
 1. WATCH this video CAREFULLY frame by frame. Listen to ALL dialogue, narration, and sound.
-2. IDENTIFY every character by their REAL NAME or ROLE (from dialogue, subtitles, or context). Use "Mom/အမေ", "the teacher/ဆရာ", "Jonas" etc. — NEVER "a woman" or "a man" when their role/name is clear from context.
+2. IDENTIFY every person by their CONTEXTUAL ROLE or RELATIONSHIP — NOT by gender.
 3. UNDERSTAND the full story/plot/events — what happens, why, and in what order.
 4. RETELL the story in YOUR OWN WORDS as a professional narrator — scene by scene, beat by beat, in ${targetLang}.
 5. For EACH segment, FIRST identify which scene timestamp shows that content, THEN write the narration.
-${sceneContext}
+
+👤 CHARACTER IDENTITY — NEVER USE GENERIC GENDER LABELS:
+This is CRITICAL. NEVER write "အမျိုးသမီးတစ်ယောက်" (a woman) or "ယောက်ျားတစ်ယောက်" (a man).
+Instead, ALWAYS identify people by their CONTEXTUAL ROLE or RELATIONSHIP:
+
+🔍 STEP 1 — Determine their ROLE from visual/audio context:
+   Teacher/ဆရာ, Student/ကျောင်းသူ, Doctor/ဆရာဝန်, Engineer/အင်ဂျင်နီယာ, 
+   Chef/စားဖိုမှူး, Soldier/စစ်သား, Reporter/သတင်းထောက်, CEO, Farmer/လယ်သမား,
+   Scientist/သိပ္ပံပညာရှင်, Driver/ယာဉ်မောင်း, Pilot/လေယာဉ်မှူး, etc.
+
+🔍 STEP 2 — Determine their RELATIONSHIP from story context:
+   Mom/အမေ, Dad/အဖေ, Son/သား, Daughter/သမီး, Wife/ဇနီး, Husband/ခင်ပွန်း,
+   Elder Brother/အကို, Elder Sister/အမ, Younger sibling/ညီ/နှမ, 
+   Maid/အိမ်ဖော်, Student/တပည့်, Boss/အလုပ်ရှင်, Friend/သူငယ်ချင်း, etc.
+
+🔍 STEP 3 — Use their ACTUAL NAME if mentioned in dialogue or on screen:
+   "Jonas", "မမသက်", "ဆရာဝင်း" etc.
+
+✅ CORRECT examples: "အမေက အစည်းအဝေးလုပ်နေတယ်", "ဆရာက စာသင်နေတယ်", "သမီးက ကျောင်းပြန်လာတယ်"
+❌ WRONG examples: "အမျိုးသမီးတစ်ယောက် ထိုင်နေတယ်", "ယောက်ျားတစ်ယောက် စကားပြောနေတယ်"
 
 📖 STORYTELLING APPROACH — THIS IS A RECAP, NOT A TRANSLATION:
 - You are RETELLING the story like a professional recap channel narrator
-- Use REAL character names/roles: "အမေက အစည်းအဝေးလုပ်နေတယ်" NOT "အမျိုးသမီးတစ်ယောက်က ထိုင်နေတယ်"
-- Describe SPECIFIC events: "The Wall ရေထဲခုန်ဆင်းပြီး ဓာတ်ပုံရိုက်တယ်" NOT "someone enters the water"
+- Describe SPECIFIC events with character roles: "ဆရာဝန်က လူနာကို စစ်ဆေးနေတယ်" NOT "someone checks something"
 - Build DRAMATIC FLOW: setup → tension → climax → resolution
 - Make the audience FEEL the story — suspense, excitement, danger, joy
-- Narrate what happens AND why it matters in the story
-- NEVER write dry literal descriptions like "A woman stands. A man talks on phone."
+- NEVER write dry literal descriptions
 
 🎬 NICHE-ADAPTIVE STORYTELLING (auto-detect and match):
-
-📽️ Movie/Drama → Cinematic recap narration. Retell the plot beat-by-beat with character names, emotions, twists, and dramatic tension.
-💻 Tech/AI → Analytical storytelling. Explain what's being demonstrated, what it means, and why it matters.
-✈️ Travel/Food → Vivid journey narration. Take the audience on the trip — describe locations, flavors, and experiences.
-📰 News/Politics/War → Compelling briefing. Report the events with context, stakes, and impact.
-🎮 Gaming → Exciting play-by-play. Narrate the action, strategies, and key moments with energy.
-📚 Education → Engaging explanation. Retell what's being taught in a way that's easy to follow.
-🎵 Music/Entertainment → Mood-capturing narration. Describe performances, reactions, and standout moments.
-🔬 Science/Nature → Fascinating discovery narration. Describe what's observed with wonder and clarity.
-❤️ Lifestyle/Vlog → Personal, relatable storytelling. Narrate the experiences and moments shared.
-🏋️ Sports/Fitness → Dynamic action narration. Capture the intensity, techniques, and results.
+📽️ Movie/Drama → Cinematic recap narration with character names and plot twists.
+💻 Tech/AI → Analytical storytelling explaining what's demonstrated and why it matters.
+✈️ Travel/Food → Vivid journey narration describing locations and experiences.
+📰 News/Politics → Compelling briefing with context, stakes, and impact.
+🎮 Gaming → Exciting play-by-play narrating action and strategies.
+📚 Education → Engaging explanation retelling what's taught clearly.
+🎵 Music/Entertainment → Mood-capturing narration of performances and moments.
+🔬 Science/Nature → Fascinating discovery narration with wonder and clarity.
+❤️ Lifestyle/Vlog → Personal, relatable storytelling of shared experiences.
+🏋️ Sports/Fitness → Dynamic action narration capturing intensity and results.
 
 OUTPUT FORMAT (JSON Array):
 [
-  {"time": 0, "text": "Narration that describes EXACTLY what is visually shown at timestamp 0...", "sceneMatch": "topic from scene"},
-  {"time": 6, "text": "Narration that describes EXACTLY what is visually shown at timestamp 6...", "sceneMatch": "topic from scene"},
+  {"time": 0, "text": "Narration describing EXACTLY what is visually shown at timestamp 0..."},
+  {"time": 6, "text": "Narration describing EXACTLY what is visually shown at timestamp 6..."},
   ...
 ]
 
@@ -145,18 +161,17 @@ OUTPUT FORMAT (JSON Array):
 - NO timestamps inside text
 - NO symbols (#, *, -, •)
 - Each "text" = clean narration only
-- "time" MUST be the timestamp where the VIDEO VISUALLY SHOWS what you're narrating about
-- NEVER put narration about topic X at a timestamp where topic Y is shown on screen
+- "time" MUST be the timestamp where the VIDEO VISUALLY SHOWS what you're narrating
 - NEVER invent scenes or events NOT in the video
-- NEVER use generic "အမျိုးသမီးတစ်ယောက်" when the character's role (အမေ, ဆရာမ, etc.) is identifiable
+- NEVER use "အမျိုးသမီးတစ်ယောက်/ယောက်ျားတစ်ယောက်" — ALWAYS use role/relationship/name
 
 ✅ GOLDEN RULES:
 1. Each segment = 2-4 sentences, MAX 30 words per segment — tight and punchy
-2. RETELL the story in your OWN engaging narrator voice — do NOT just translate dialogue word-for-word
-3. Use REAL character names/roles from the video — NEVER use generic descriptions when identity is clear
-4. Build narrative flow — each segment should connect to the next like a story
-5. SYNC IS EVERYTHING: narration text MUST describe what the video shows at that exact "time" timestamp
-6. Natural ${targetLang} speaking patterns — sound like a professional narrator, not a robot
+2. RETELL the story in your OWN engaging narrator voice
+3. Character identity by ROLE/RELATIONSHIP/NAME — NEVER generic gender labels
+4. Build narrative flow — each segment connects to the next
+5. SYNC IS EVERYTHING: narration text MUST describe what the video shows at that exact "time"
+6. Natural ${targetLang} speaking patterns — sound like a professional narrator
 7. Approx 1 segment per 6 seconds of video
 8. Quality over quantity — SHORT, DRAMATIC, PROFESSIONAL`;
 };
@@ -575,55 +590,9 @@ serve(async (req) => {
         }
       }
 
-      // ===== STEP 1: DETECT SCENES =====
-      console.log("[video-recap] Step 1: Detecting scenes...");
-      let detectedScenes: any[] = [];
-      
-      try {
-        const sceneResponse = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${BACKEND_GEMINI_KEY}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{
-                role: "user",
-                parts: [
-                  { fileData: { mimeType: "video/mp4", fileUri: fileUri } },
-                  { text: getSceneDetectionPrompt() }
-                ]
-              }],
-              generationConfig: {
-                temperature: 0.3,
-                maxOutputTokens: 4096,
-              },
-            }),
-          }
-        );
-
-        if (sceneResponse.ok) {
-          const sceneData = await sceneResponse.json();
-          let sceneText = sceneData.candidates?.[0]?.content?.parts?.[0]?.text || "";
-          sceneText = sceneText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-          
-          try {
-            const start = sceneText.indexOf("[");
-            const end = sceneText.lastIndexOf("]");
-            if (start !== -1 && end > start) {
-              detectedScenes = JSON.parse(sceneText.slice(start, end + 1));
-              console.log(`[video-recap] Detected ${detectedScenes.length} scenes`);
-            }
-          } catch (parseErr) {
-            console.warn("[video-recap] Scene detection parse failed, continuing without scenes");
-          }
-        }
-      } catch (sceneErr) {
-        console.warn("[video-recap] Scene detection failed, continuing without scenes:", sceneErr);
-      }
-
-      // ===== STEP 2: GENERATE SCENE-AWARE SCRIPT =====
-      console.log("[video-recap] Step 2: Generating scene-aware script...");
-      const systemPrompt = getSystemPrompt(targetLang || 'Burmese', detectedScenes);
+      // ===== SINGLE-STEP: GENERATE SCRIPT (scene detection merged into prompt for speed) =====
+      console.log("[video-recap] Generating recap script (single-pass)...");
+      const systemPrompt = getSystemPrompt(targetLang || 'Burmese');
       
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${BACKEND_GEMINI_KEY}`,
@@ -635,7 +604,7 @@ serve(async (req) => {
               role: "user",
               parts: [
                 { fileData: { mimeType: "video/mp4", fileUri: fileUri } },
-                { text: systemPrompt + "\n\nAnalyze this video and create a recap script. CRITICAL: Each segment's 'time' MUST point to the scene where that content is VISUALLY SHOWN. If narrating about a dog running, 'time' must be the timestamp where the dog is running on screen. Use real character names/roles, not generic descriptions. Return ONLY the JSON array." }
+                { text: systemPrompt + "\n\nAnalyze this video and create a recap script. WATCH the video carefully, identify characters by their ROLE/RELATIONSHIP/NAME (never generic gender), and ensure each segment's 'time' points to where that content is VISUALLY SHOWN. Return ONLY the JSON array." }
               ]
             }],
             generationConfig: {
@@ -682,12 +651,8 @@ serve(async (req) => {
         );
       }
 
-      // Include detected scenes in response for frontend to use
       return new Response(
-        JSON.stringify({ 
-          recap: normalized,
-          scenes: detectedScenes.length > 0 ? detectedScenes : undefined
-        }),
+        JSON.stringify({ recap: normalized }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -748,7 +713,7 @@ serve(async (req) => {
           
           parts = [
             { inlineData: { mimeType, data: base64Data } },
-            { text: systemPrompt + "\n\nAnalyze this video and create a recap script. CRITICAL: Each segment's 'time' MUST point to the scene where that content is VISUALLY SHOWN. Use real character names/roles, not generic descriptions. Return ONLY the JSON array." }
+            { text: systemPrompt + "\n\nAnalyze this video and create a recap script. WATCH carefully, identify characters by ROLE/RELATIONSHIP/NAME (never generic gender), ensure each 'time' points to where that content is VISUALLY SHOWN. Return ONLY the JSON array." }
           ];
         } else {
           throw new Error("Invalid base64 video format");
