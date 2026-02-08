@@ -1,52 +1,83 @@
 
 
-## Script Quality Fix - Storytelling Recap Style
+## Video Recap - Two-Phase Workflow + Custom Audio Upload
 
 ### Problem
-Current prompt says "faithfully translate, NO commentary, NO opinions" which makes the AI produce dry, literal descriptions ("A woman stands. A man talks on phone"). The user wants a **storytelling recap** style - like professional movie recap channels that retell the story with:
-- Real character names (Jonas, The Wall, etc.)
-- Plot progression and dramatic tension
-- Scene-by-scene story narration in the narrator's own engaging words
-- Niche-appropriate storytelling (movie = cinematic recap, travel = vivid journey narration, etc.)
+Current flow tries to do everything in one go (script + TTS + video) which causes rate limit failures at Step 3. The user wants a split workflow that saves API calls and adds flexibility.
 
-### Example the User Provided (Movie Recap Style)
-The sample script narrates a Megalodon movie scene beat-by-beat: the crew catches a shark, The Wall jumps in the water for photos, Jonas notices bite marks from something bigger, danger emerges, a massive Megalodon attacks, the boat capsizes. This is **storytelling** - not literal translation.
-
-### What Will Change
-
-**File: `supabase/functions/video-recap/index.ts`** - Only `getSystemPrompt()` (lines 96-141)
-
-Rewrite the prompt to instruct AI to:
-1. **WATCH the video carefully** - identify characters by name, understand the plot/events
-2. **RETELL the story** in engaging recap narration style - not translate word-for-word
-3. **Use character names** mentioned in dialogue or on screen
-4. **Build dramatic flow** - setup, tension, climax, resolution
-5. **Niche-adaptive storytelling** - movie recap = cinematic narration, travel = journey narration, tech = analysis narration
-6. Keep segments concise (2-4 sentences, max 30 words) for TTS stability
-
-### New Prompt Core Concept
+### New Workflow
 
 ```text
-OLD: "Faithfully translate/recap the SOURCE VIDEO content only. 
-      NO added commentary, NO educational insights, NO personal opinions"
+Phase 1: Script Generation Only
+  Video Upload --> AI Analyzes --> Script appears in textarea --> STOP
+  (User can edit script, paste from other tools, etc.)
 
-NEW: "WATCH this video carefully. Identify characters, events, and story beats.
-      RETELL the story in your own professional narrator voice.
-      Use REAL character names from the video.
-      Narrate what happens scene by scene with engaging flow.
-      Match the niche: movie = cinematic recap, travel = journey story, etc."
+Phase 2: Video Generation (from script + audio)
+  Option A: Generate TTS audio from script --> Create recap video
+  Option B: Upload custom audio file --> Create recap video
 ```
 
+### Changes (ONLY in `src/pages/RecapVideoPage.tsx`)
+
+**1. Split "PROCESS AI" into two buttons:**
+- "GENERATE SCRIPT" - Only calls AI to analyze video and generate script, then stops (no TTS, no video processing)
+- "CREATE RECAP VIDEO" - Takes the script (from textarea) + audio (TTS or uploaded) and creates the 3s/3s recap video
+
+**2. Add Custom Audio Upload feature:**
+- New state: `customAudioFile` and `customAudioUrl`
+- Audio source toggle: "AI VOICE" vs "CUSTOM AUDIO" 
+- File input for uploading .mp3/.wav/.m4a audio files
+- When custom audio is selected, skip TTS entirely and use the uploaded audio for subtitle timing
+
+**3. Custom Audio subtitle sync logic:**
+- Use the uploaded audio's total duration
+- Divide duration evenly across script segments to create `audioStart`/`audioEnd` timestamps
+- This gives approximate subtitle timing that follows the audio
+
+**4. Bottom buttons change:**
+- Before script exists: Show "GENERATE SCRIPT" button
+- After script exists but no audio: Show "CREATE RECAP (AI VOICE)" and "CREATE RECAP (CUSTOM AUDIO)" or a toggle
+- After audio is ready: Show "PREVIEW" and "DOWNLOAD" as before
+
 ### What Does NOT Change
-- Scene detection prompt (lines 62-83) - untouched
-- Upload/chunk/analyze logic - untouched
-- `cleanNarrationText`, `normalizeRecapJson` - untouched
-- Frontend RecapVideoPage.tsx - untouched
-- TTS throttling logic - untouched
+- Video rendering/canvas logic (3s video, 3s photo zoom-in) - untouched
+- Export/recording logic - untouched
+- All visual effects, overlays, blur, branding - untouched
+- Edge function `video-recap` - untouched
+- All other tools, pages, services - untouched
 - geminiService.ts - untouched
-- All other tools, services, pages - untouched
-- Video logic, sync, export, overlays - untouched
+- Subtitle styling, colors, character overlays - untouched
 
-### Technical Detail
+### Technical Details
 
-Only the text content of `getSystemPrompt()` function (lines 96-141) changes. The function signature, scene context block (lines 87-94), and JSON output format remain identical. No logic changes anywhere.
+**New state variables:**
+```typescript
+const [customAudioFile, setCustomAudioFile] = useState<File | null>(null);
+const [customAudioUrl, setCustomAudioUrl] = useState<string | null>(null);
+const [audioMode, setAudioMode] = useState<"ai" | "custom">("ai");
+```
+
+**"GENERATE SCRIPT" button handler:**
+- Calls existing `analyzeVideo()` 
+- Parses segments, sets `fullScriptText`
+- Does NOT call `generateAudioFromText()` - just stops
+
+**"CREATE RECAP" button handler (AI Voice):**
+- Takes `fullScriptText`, splits into segments
+- Calls `generateAudioFromText()` as before (with existing retry logic)
+
+**"CREATE RECAP" button handler (Custom Audio):**
+- Reads uploaded audio file duration via AudioContext
+- Splits script text into segments
+- Calculates even `audioStart`/`audioEnd` for each segment
+- Sets `audioBlobUrl` to the uploaded file's object URL
+- Proceeds directly to preview (no API calls needed)
+
+**Custom Audio UI (inside Settings accordion):**
+```text
+[AI VOICE] [CUSTOM AUDIO]  <-- toggle buttons
+  If Custom Audio selected:
+    [Upload Audio File (.mp3, .wav, .m4a)]
+    Audio loaded: filename.mp3 (2:34) [X Remove]
+```
+
