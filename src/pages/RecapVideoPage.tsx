@@ -290,6 +290,10 @@ export default function VideoRecapView() {
   const [audioSpeed, setAudioSpeed] = useState(1.0);
   const [smartZoom, setSmartZoom] = useState(true);
   const [autoColor, setAutoColor] = useState(false);
+  // Custom Audio Upload states
+  const [audioMode, setAudioMode] = useState<"ai" | "custom">("ai");
+  const [customAudioFile, setCustomAudioFile] = useState<File | null>(null);
+  const [customAudioUrl, setCustomAudioUrl] = useState<string | null>(null);
   const [logoSrc, setLogoSrc] = useState<string | null>(null);
   const [logoSize, setLogoSize] = useState(15);
   const [logoSpin, setLogoSpin] = useState(false);
@@ -543,7 +547,7 @@ export default function VideoRecapView() {
       return;
     }
     setAnalyzing(true);
-    setStatusText("STEP 1/4: UPLOADING & DETECTING SCENES...");
+    setStatusText("STEP 1: ANALYZING VIDEO & GENERATING SCRIPT...");
     setFullScriptText("");
     setScriptSegments([]);
     setAudioBlobUrl(null);
@@ -581,11 +585,84 @@ export default function VideoRecapView() {
         .replace(/(\d+),(?=\d{3})/g, "$1")
         .replace(/(\d)\s?,\s?(\d)/g, "$1$2");
       setFullScriptText(completeText);
-      await generateAudioFromText(completeText, segments);
+      setScriptSegments(segments);
+      setAnalyzing(false);
+      toast.success("✅ Script ထွက်ပါပြီ! ပြင်ချင်ရင်ပြင်ပြီး CREATE RECAP နှိပ်ပါ။");
     } catch (err: any) {
       console.error(err);
       alert("Error: " + (err.message || "Process Failed."));
       setAnalyzing(false);
+    }
+  };
+
+  // Phase 2A: Create recap with AI Voice (TTS)
+  const handleCreateRecapAI = async () => {
+    if (!fullScriptText.trim()) return;
+    setAnalyzing(true);
+    // Re-parse segments from current scriptSegments or create single segment
+    const segments = scriptSegments.length > 0 ? scriptSegments : [{ time: 0, text: fullScriptText }];
+    try {
+      await generateAudioFromText(fullScriptText, segments);
+    } catch (e) {
+      alert("Audio Generation Failed");
+      setAnalyzing(false);
+    }
+  };
+
+  // Phase 2B: Create recap with Custom Audio
+  const handleCreateRecapCustom = async () => {
+    if (!fullScriptText.trim() || !customAudioFile) {
+      toast.error("Script နှင့် Audio ဖိုင် နှစ်ခုလုံး လိုအပ်ပါသည်");
+      return;
+    }
+    setAnalyzing(true);
+    setStatusText("CUSTOM AUDIO: ANALYZING DURATION...");
+    try {
+      // Get audio duration via AudioContext
+      const arrayBuffer = await customAudioFile.arrayBuffer();
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+      const totalDuration = decoded.duration;
+      audioCtx.close();
+
+      // Parse segments
+      const segments = scriptSegments.length > 0 ? scriptSegments : [{ time: 0, text: fullScriptText }];
+      const segDur = totalDuration / segments.length;
+
+      // Map even audioStart/audioEnd timestamps
+      const mappedSegments = segments.map((seg, idx) => ({
+        ...seg,
+        audioStart: idx * segDur,
+        audioEnd: (idx + 1) * segDur,
+      }));
+
+      // Use custom audio URL
+      const url = customAudioUrl || URL.createObjectURL(customAudioFile);
+      setAudioBlobUrl(url);
+      setAudioDuration(totalDuration);
+      setScriptSegments(mappedSegments);
+      setAnalyzing(false);
+
+      didConfirmSuccessRef.current = false;
+      saveToHistory(fullScriptText, url, mappedSegments);
+      toast.success("✨ Custom Audio Recap ပြီးပါပြီ!");
+
+      setTimeout(() => togglePlay(), 500);
+    } catch (err: any) {
+      console.error("Custom audio error:", err);
+      toast.error("Custom Audio Error: " + (err.message || "Failed"));
+      setAnalyzing(false);
+    }
+  };
+
+  // Custom audio file handler
+  const handleCustomAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const f = e.target.files[0];
+      setCustomAudioFile(f);
+      const url = URL.createObjectURL(f);
+      setCustomAudioUrl(url);
+      toast.success(`🎵 Audio loaded: ${f.name}`);
     }
   };
 
@@ -2064,16 +2141,72 @@ export default function VideoRecapView() {
               <textarea
                 value={fullScriptText}
                 onChange={(e) => setFullScriptText(e.target.value)}
-                placeholder="Script will appear here after analysis..."
+                placeholder="Script will appear here after analysis... (or paste your own script)"
                 className="w-full h-32 bg-[#1a1a1a] border border-white/10 rounded-xl p-3 text-[9px] font-medium text-white outline-none focus:border-blue-500/50 resize-none opacity-90 custom-scrollbar"
               />
-              <button
-                disabled={!fullScriptText || analyzing}
-                onClick={handleRegenerateAudio}
-                className="w-full py-3 rounded-xl bg-amber-600/20 border border-amber-500/30 text-amber-300 font-black text-[9px] uppercase tracking-widest hover:bg-amber-600 hover:text-white transition-all shadow-lg active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                🔄 REGENERATE AUDIO FROM EDITED SCRIPT
-              </button>
+            </div>
+
+            {/* Audio Source Toggle */}
+            <div className="space-y-2 pt-2">
+              <label className="text-[7px] font-black text-slate-500 uppercase tracking-widest">
+                AUDIO SOURCE
+              </label>
+              <div className="flex bg-black/40 p-1 rounded-xl border border-white/10">
+                <button
+                  onClick={() => setAudioMode("ai")}
+                  className={`flex-1 py-2 rounded-lg font-black text-[8px] uppercase tracking-widest transition-all ${
+                    audioMode === "ai"
+                      ? "bg-blue-600 text-white shadow-lg"
+                      : "text-slate-500 hover:text-white"
+                  }`}
+                >
+                  🤖 AI VOICE
+                </button>
+                <button
+                  onClick={() => setAudioMode("custom")}
+                  className={`flex-1 py-2 rounded-lg font-black text-[8px] uppercase tracking-widest transition-all ${
+                    audioMode === "custom"
+                      ? "bg-purple-600 text-white shadow-lg"
+                      : "text-slate-500 hover:text-white"
+                  }`}
+                >
+                  🎵 CUSTOM AUDIO
+                </button>
+              </div>
+
+              {/* Custom Audio Upload */}
+              {audioMode === "custom" && (
+                <div className="space-y-2 mt-2 p-3 rounded-xl bg-purple-500/5 border border-purple-500/20">
+                  {!customAudioFile ? (
+                    <label className="flex items-center justify-center gap-2 py-4 rounded-xl border border-dashed border-purple-500/30 bg-black/20 cursor-pointer hover:border-purple-500/60 transition-all">
+                      <input
+                        type="file"
+                        accept=".mp3,.wav,.m4a,audio/*"
+                        onChange={handleCustomAudioUpload}
+                        className="hidden"
+                      />
+                      <span className="text-[8px] text-purple-300 font-bold">📂 UPLOAD AUDIO (.mp3, .wav, .m4a)</span>
+                    </label>
+                  ) : (
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-[8px] text-purple-300">🎵</span>
+                        <span className="text-[8px] text-white font-bold truncate">{customAudioFile.name}</span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setCustomAudioFile(null);
+                          if (customAudioUrl) URL.revokeObjectURL(customAudioUrl);
+                          setCustomAudioUrl(null);
+                        }}
+                        className="px-2 py-1 rounded bg-red-500/20 border border-red-500/30 text-red-400 text-[7px] font-black shrink-0"
+                      >
+                        ✕ REMOVE
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </AccordionItem>
@@ -2455,40 +2588,87 @@ export default function VideoRecapView() {
         </AccordionItem>
       </div>
 
-      <div className="flex gap-3 pt-4 sticky bottom-4 z-50">
-        {!audioBlobUrl ? (
+      <div className="flex flex-col gap-2 pt-4 sticky bottom-4 z-50">
+        {/* Phase 1: Generate Script */}
+        {!audioBlobUrl && !fullScriptText && (
           <button
             onClick={handleProcess}
             disabled={!videoSrc || analyzing}
-            className={`flex-1 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all ${
+            className={`w-full py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all ${
               analyzing ? "bg-blue-600/80 text-white animate-pulse" : "bg-blue-600 text-white"
             }`}
           >
-            {analyzing ? "PROCESSING..." : "⚡ PROCESS AI"}
-          </button>
-        ) : (
-          <button
-            onClick={togglePlay}
-            disabled={analyzing || isExporting}
-            className={`flex-1 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all ${
-              isPlaying ? "bg-rose-600 text-white" : "bg-gradient-to-r from-emerald-600 to-teal-600 text-white"
-            }`}
-          >
-            {isPlaying ? "⏸ PAUSE" : "▶ PREVIEW"}
+            {analyzing ? statusText || "ANALYZING..." : "📝 GENERATE SCRIPT"}
           </button>
         )}
 
-        <button
-          onClick={handleDownload}
-          disabled={!audioBlobUrl || analyzing || isExporting}
-          className={`w-[44%] py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all border ${
-            !audioBlobUrl || analyzing || isExporting
-              ? "bg-white/5 border-white/10 text-slate-500"
-              : "bg-white/10 border-white/20 text-white hover:bg-white/15 active:scale-[0.99]"
-          }`}
-        >
-          {isExporting ? `⬇ EXPORTING... ${Math.round(progress)}%` : "⬇ DOWNLOAD"}
-        </button>
+        {/* Phase 2: Create Recap (after script exists, before audio) */}
+        {!audioBlobUrl && fullScriptText && !analyzing && (
+          <div className="flex gap-2">
+            {audioMode === "ai" ? (
+              <button
+                onClick={handleCreateRecapAI}
+                className="flex-1 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white active:scale-[0.98] transition-all"
+              >
+                🤖 CREATE RECAP (AI VOICE)
+              </button>
+            ) : (
+              <button
+                onClick={handleCreateRecapCustom}
+                disabled={!customAudioFile}
+                className={`flex-1 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all ${
+                  customAudioFile
+                    ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white active:scale-[0.98]"
+                    : "bg-white/5 text-slate-500 cursor-not-allowed"
+                }`}
+              >
+                🎵 CREATE RECAP (CUSTOM AUDIO)
+              </button>
+            )}
+            <button
+              onClick={() => {
+                setFullScriptText("");
+                setScriptSegments([]);
+              }}
+              className="px-4 py-3 rounded-2xl bg-white/5 border border-white/10 text-slate-400 font-black text-[9px] uppercase"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {/* Processing state */}
+        {analyzing && fullScriptText && (
+          <button disabled className="w-full py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl bg-blue-600/80 text-white animate-pulse">
+            {statusText || "PROCESSING..."}
+          </button>
+        )}
+
+        {/* Phase 3: Preview & Download (after audio ready) */}
+        {audioBlobUrl && (
+          <div className="flex gap-3">
+            <button
+              onClick={togglePlay}
+              disabled={analyzing || isExporting}
+              className={`flex-1 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all ${
+                isPlaying ? "bg-rose-600 text-white" : "bg-gradient-to-r from-emerald-600 to-teal-600 text-white"
+              }`}
+            >
+              {isPlaying ? "⏸ PAUSE" : "▶ PREVIEW"}
+            </button>
+            <button
+              onClick={handleDownload}
+              disabled={analyzing || isExporting}
+              className={`w-[44%] py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all border ${
+                analyzing || isExporting
+                  ? "bg-white/5 border-white/10 text-slate-500"
+                  : "bg-white/10 border-white/20 text-white hover:bg-white/15 active:scale-[0.99]"
+              }`}
+            >
+              {isExporting ? `⬇ EXPORTING... ${Math.round(progress)}%` : "⬇ DOWNLOAD"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
