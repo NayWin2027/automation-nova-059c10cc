@@ -1,8 +1,9 @@
 import React, { useState, useRef } from "react";
-import { Download, ChevronDown, Loader2, Copy, Check } from "lucide-react";
+import { Download, ChevronDown, Loader2, Copy, Check, Sparkles, X } from "lucide-react";
 import { transcribeAudio } from "../services/geminiService";
 import { transcribeOwnApi, getOwnApiErrorMessage } from "../services/ownApiService";
 import { useSecureApiKey } from "../hooks/useSecureApiKey";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 const LANGUAGES = [
@@ -96,6 +97,23 @@ const CREDIT_TIERS = [
   { label: "UNDER 20 MINUTES", credits: 16, value: 20 },
 ];
 
+const SCRIPT_NICHES = [
+  "MOVIE RECAP",
+  "TECH / AI",
+  "DOCUMENTARY",
+  "TRUE CRIME",
+  "RELIGIOUS / SPIRITUAL",
+  "POLITICAL COMMENTARY",
+  "TRAVEL / FOOD",
+  "EDUCATIONAL",
+  "ENTERTAINMENT / GOSSIP",
+  "SPORTS",
+  "BUSINESS / FINANCE",
+  "HEALTH / WELLNESS",
+  "MUSIC / CONCERT",
+  "GENERAL",
+];
+
 export default function TranscriptionView() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedLanguage, setSelectedLanguage] = useState("BURMESE");
@@ -104,6 +122,10 @@ export default function TranscriptionView() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [result, setResult] = useState("");
   const [copied, setCopied] = useState(false);
+  const [scriptNiche, setScriptNiche] = useState("MOVIE RECAP");
+  const [isGeneratingScript, setIsGeneratingScript] = useState(false);
+  const [generatedScript, setGeneratedScript] = useState("");
+  const [scriptCopied, setScriptCopied] = useState(false);
 
   // API Mode States - using secure session storage
   const [apiType, setApiType] = useState<"app" | "own">("app");
@@ -182,10 +204,40 @@ export default function TranscriptionView() {
     }
   };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(result);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleGenerateScript = async () => {
+    if (!result.trim()) {
+      toast.error("Transcript text မရှိပါ။");
+      return;
+    }
+    setIsGeneratingScript(true);
+    setGeneratedScript("");
+    try {
+      const { data, error } = await supabase.functions.invoke("recap-script-generator", {
+        body: {
+          transcript: result,
+          niche: scriptNiche,
+          language: selectedLanguage,
+        },
+      });
+      if (error) throw error;
+      if (data?.script) {
+        setGeneratedScript(data.script);
+        toast.success("Script အောင်မြင်စွာ ထွက်လာပါပြီ!");
+      } else {
+        toast.error("Script generation failed.");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Script generation failed. Please try again.");
+    } finally {
+      setIsGeneratingScript(false);
+    }
+  };
+
+  const handleCopyScript = () => {
+    navigator.clipboard.writeText(generatedScript);
+    setScriptCopied(true);
+    setTimeout(() => setScriptCopied(false), 2000);
   };
 
   return (
@@ -325,7 +377,11 @@ export default function TranscriptionView() {
             <h3 className="text-[10px] font-black text-blue-400 uppercase tracking-widest">RESULT OUTPUT</h3>
             <div className="flex gap-2">
               <button
-                onClick={handleCopy}
+                onClick={() => {
+                  navigator.clipboard.writeText(result);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
                 className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-slate-400 transition-colors"
               >
                 {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
@@ -345,6 +401,88 @@ export default function TranscriptionView() {
           <div className="bg-[#0a0f1d] border border-blue-500/20 rounded-[32px] p-8 shadow-2xl">
             <p className="text-sm font-medium leading-relaxed text-slate-100 whitespace-pre-wrap">{result}</p>
           </div>
+        </div>
+      )}
+
+      {/* SCRIPT GENERATOR SECTION */}
+      {result && (
+        <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300">
+          <div className="flex items-center gap-3 px-2">
+            <Sparkles className="w-4 h-4 text-amber-400" />
+            <h3 className="text-[10px] font-black text-amber-400 uppercase tracking-widest">
+              AI NARRATION SCRIPT GENERATOR
+            </h3>
+          </div>
+
+          <div className="bg-[#0a0f1d] border border-amber-500/20 rounded-2xl p-5 space-y-4">
+            <div className="space-y-2">
+              <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">SELECT NICHE</label>
+              <div className="relative">
+                <select
+                  value={scriptNiche}
+                  onChange={(e) => setScriptNiche(e.target.value)}
+                  className="w-full bg-black/40 border border-amber-500/20 rounded-xl p-3 text-xs font-bold text-white appearance-none outline-none focus:border-amber-500/50 transition-all uppercase"
+                >
+                  {SCRIPT_NICHES.map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+              </div>
+            </div>
+
+            <button
+              onClick={handleGenerateScript}
+              disabled={isGeneratingScript}
+              className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl transition-all active:scale-95 flex items-center justify-center gap-3 ${
+                isGeneratingScript
+                  ? "bg-slate-800 text-slate-500"
+                  : "bg-gradient-to-r from-amber-600 to-orange-600 text-white hover:from-amber-500 hover:to-orange-500"
+              }`}
+            >
+              {isGeneratingScript ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>GENERATING SCRIPT...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  <span>GENERATE NARRATION SCRIPT</span>
+                </>
+              )}
+            </button>
+
+            <p className="text-[8px] text-amber-300/50 text-center">
+              Transcript ကို analyze လုပ်ပြီး niche အလိုက် professional narration script ထုတ်ပေးပါမယ်
+            </p>
+          </div>
+
+          {/* GENERATED SCRIPT OUTPUT */}
+          {generatedScript && (
+            <div className="space-y-3 animate-in fade-in zoom-in-95 duration-500">
+              <div className="flex justify-between items-center px-2">
+                <h3 className="text-[10px] font-black text-amber-400 uppercase tracking-widest">NARRATION SCRIPT</h3>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleCopyScript}
+                    className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-slate-400 transition-colors"
+                  >
+                    {scriptCopied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                  <button
+                    onClick={() => setGeneratedScript("")}
+                    className="p-2 bg-rose-500/10 hover:bg-rose-500/20 rounded-lg text-rose-400 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+              <div className="bg-[#0a0f1d] border border-amber-500/30 rounded-[32px] p-8 shadow-2xl shadow-amber-500/5">
+                <p className="text-sm font-medium leading-relaxed text-slate-100 whitespace-pre-wrap">{generatedScript}</p>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
