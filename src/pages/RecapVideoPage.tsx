@@ -1757,7 +1757,7 @@ export default function VideoRecapView() {
           }
 
           // ===== SUBTITLE RENDERING =====
-          if (activeSegment && (isPlaying || effectiveTime > 0)) {
+          if (activeSegment) {
             const chunk = String(activeSegment.text || "")
               // Remove junk: timestamps, bracketed timecodes, markdown fences, bullet-ish symbols
               .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, "")
