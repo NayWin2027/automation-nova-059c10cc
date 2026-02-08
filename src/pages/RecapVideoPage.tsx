@@ -691,13 +691,10 @@ export default function VideoRecapView() {
             break;
           }
 
-          // Rate-limited or fallback — retry with countdown
+          // Rate-limited or fallback — silent retry with 3s wait
           if (attempt < MAX_RETRIES) {
-            const waitSec = 20 + (attempt * 10); // 20s, 30s, 40s, 50s, 60s
-            for (let s = waitSec; s > 0; s--) {
-              setStatusText(`⏳ Rate limit - ${s}s စောင့်နေသည်... (${i + 1}/${segments.length})`);
-              await new Promise(r => setTimeout(r, 1000));
-            }
+            setStatusText(`⏳ Retry ${attempt + 1}/${MAX_RETRIES}... (${i + 1}/${segments.length})`);
+            await new Promise(r => setTimeout(r, 3000));
           }
         }
 
