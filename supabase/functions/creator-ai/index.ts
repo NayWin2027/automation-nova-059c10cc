@@ -85,6 +85,9 @@ serve(async (req) => {
     
     // If using own API key, authentication is optional
     // If NOT using own API key, user MUST be authenticated for credit deduction
+    let authenticatedUserId: string | null = null;
+    let supabaseAdmin: any = null;
+    
     if (!isOwnApiKey) {
       if (!authHeader) {
         return new Response(
@@ -105,40 +108,72 @@ serve(async (req) => {
         );
       }
       
+      authenticatedUserId = user.id;
+      supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       console.log(`[creator-ai] Authenticated user: ${user.id}`);
       
-      // Deduct credits for authenticated users without own API key
-      const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-      const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", {
-        _user_id: user.id,
-        _tool_id: "creator",
-        _is_own_api: false
-      });
+      // CHECK credits upfront (query only, no deduction yet)
+      const { data: profile, error: profileError } = await supabaseAdmin
+        .from("profiles")
+        .select("credits, plan, is_banned, ban_reason")
+        .eq("user_id", user.id)
+        .single();
       
-      if (creditError) {
-        console.error("[creator-ai] Credit check error:", creditError);
+      if (profileError || !profile) {
         return new Response(
-          JSON.stringify({ error: "Failed to process credits" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ error: "User profile not found" }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       
-      if (!creditResult.success) {
+      if (profile.is_banned) {
+        return new Response(
+          JSON.stringify({ error: `Account banned: ${profile.ban_reason || "Contact support"}` }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      // Get tool credit cost
+      const { data: toolSettings } = await supabaseAdmin
+        .from("tool_settings")
+        .select("credit_cost")
+        .eq("tool_id", "creator")
+        .single();
+      const creditCost = toolSettings?.credit_cost || 10;
+      
+      // Premium users skip credit check
+      if (profile.plan !== "premium" && profile.credits < creditCost) {
         return new Response(
           JSON.stringify({ 
-            error: creditResult.error,
-            balance: creditResult.balance,
-            required: creditResult.required,
+            error: "Credits မလုံလောက်ပါ။",
+            balance: profile.credits,
+            required: creditCost,
             errorCode: "INSUFFICIENT_CREDITS"
           }),
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       
-      console.log(`[creator-ai] Credits deducted. New balance: ${creditResult.balance}`);
+      console.log(`[creator-ai] Credit check passed. Balance: ${profile.credits}, Cost: ${creditCost}`);
     } else {
       console.log("[creator-ai] Using own API key - skipping auth & credit check");
     }
+
+    // Helper: deduct credits after successful API call (only for app API mode)
+    const deductCreditsAfterSuccess = async () => {
+      if (isOwnApiKey || !authenticatedUserId || !supabaseAdmin) return;
+      try {
+        const { data, error } = await supabaseAdmin.rpc("deduct_user_credits", {
+          _user_id: authenticatedUserId,
+          _tool_id: "creator",
+          _is_own_api: false
+        });
+        if (error) console.error("[creator-ai] Post-success credit deduction error:", error);
+        else console.log("[creator-ai] Credits deducted after success. Balance:", data?.balance);
+      } catch (e) {
+        console.error("[creator-ai] Credit deduction failed:", e);
+      }
+    };
 
     // ===== PROCESS REQUEST =====
     if (sanitizedType === 'image') {
@@ -306,6 +341,7 @@ Create this image now. Output the generated image directly.`;
           const imageUrl = message.images[0]?.image_url?.url;
           if (imageUrl) {
             console.log("[creator-ai] Image extracted from images array");
+            await deductCreditsAfterSuccess();
             return new Response(
               JSON.stringify({ image: imageUrl }),
               { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -317,6 +353,7 @@ Create this image now. Output the generated image directly.`;
         const content = message?.content;
         if (content && typeof content === "string" && content.includes("data:image")) {
           console.log("[creator-ai] Image extracted from content string");
+          await deductCreditsAfterSuccess();
           return new Response(
             JSON.stringify({ image: content }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -328,6 +365,7 @@ Create this image now. Output the generated image directly.`;
           for (const part of content) {
             if (part.type === "image_url" && part.image_url?.url) {
               console.log("[creator-ai] Image extracted from content array");
+              await deductCreditsAfterSuccess();
               return new Response(
                 JSON.stringify({ image: part.image_url.url }),
                 { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -470,6 +508,7 @@ Create this image now. Output the generated image directly.`;
         const data = await response.json();
         const text = data.choices?.[0]?.message?.content || "";
         
+        await deductCreditsAfterSuccess();
         return new Response(
           JSON.stringify({ text }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
