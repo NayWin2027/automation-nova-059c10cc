@@ -494,35 +494,40 @@ export default function VideoRecapView() {
   }, [charId]);
 
   // Helper: Match segments to detected scenes for semantic video seeking
+  // Priority: 1) Exact timestamp match, 2) Nearest scene by time, 3) Sequential fallback
   const matchSegmentsToScenes = (segments: ScriptSegment[], scenes: VideoScene[]): ScriptSegment[] => {
     if (!scenes || scenes.length === 0) return segments;
     
+    // Sort scenes by start time for reliable nearest-match
+    const sortedScenes = [...scenes].sort((a, b) => a.start - b.start);
+    
     return segments.map((seg, idx) => {
-      // 1. First try exact timestamp match (AI-provided seg.time falls within a scene)
-      let matchedScene = scenes.find(sc => 
+      // 1. Exact timestamp match: seg.time falls within a scene's range
+      let matchedScene = sortedScenes.find(sc => 
         seg.time >= sc.start && seg.time < sc.end
       );
       
       if (!matchedScene) {
-        // 2. Proportional distribution: spread segments evenly across scenes
-        // This ensures each segment maps to a unique scene in sequence
-        const sceneIdx = Math.min(
-          Math.floor((idx / segments.length) * scenes.length),
-          scenes.length - 1
-        );
-        matchedScene = scenes[sceneIdx];
+        // 2. Nearest scene by timestamp: find the scene whose start is closest to seg.time
+        let minDist = Infinity;
+        for (const sc of sortedScenes) {
+          const dist = Math.abs(seg.time - sc.start);
+          if (dist < minDist) {
+            minDist = dist;
+            matchedScene = sc;
+          }
+        }
       }
       
-      // 3. Calculate precise seek point within the scene (not just scene start)
-      // Use a fraction into the scene for variety across cycles
-      const sceneStart = matchedScene.start;
-      const sceneDur = matchedScene.end - matchedScene.start;
-      // Offset slightly into the scene to avoid always landing on the exact start
-      const seekOffset = Math.min(0.5, sceneDur * 0.1);
+      if (!matchedScene) {
+        // 3. Final fallback: sequential assignment
+        matchedScene = sortedScenes[Math.min(idx, sortedScenes.length - 1)];
+      }
       
+      // Use exact scene start (no arbitrary offset) for precise matching
       return {
         ...seg,
-        videoTime: sceneStart + seekOffset,
+        videoTime: matchedScene.start,
         sceneStart: matchedScene.start,
         sceneEnd: matchedScene.end,
         sceneTopic: matchedScene.topic,
@@ -1448,8 +1453,8 @@ export default function VideoRecapView() {
           }
 
           // ============ 3S VIDEO / 3S PHOTO LOOP (SEGMENT-ANCHORED + SEMANTIC) ============
-          // CRITICAL FIX: Do NOT drive video.currentTime from global audio time.
-          // Instead anchor each narration segment to its matched sceneStart and run a 6s cycle inside that scene.
+          // Anchor each narration segment to its matched sceneStart and run a 6s cycle inside that scene.
+          // SMOOTHNESS PRIORITY: minimize seeks, only seek on segment/phase transitions.
           const CYCLE_DUR = 6.0;
           const MOTION_DUR = 3.0;
           const segAudioStart = activeSegment?.audioStart ?? 0;
@@ -1477,38 +1482,46 @@ export default function VideoRecapView() {
 
           const desiredMotionTime = clampTime(sceneStart + motionElapsed);
           const desiredFreezeTime = clampTime(freezeTargetUnclamped);
-          const desiredTimeNow = inPhotoPhase ? desiredFreezeTime : desiredMotionTime;
 
-          // Hard video control: only toggle play/pause on PHASE TRANSITIONS (not every frame)
+          // SMOOTH video control: minimize play/pause toggling
+          // Only act on PHASE TRANSITIONS — never call play/pause every frame
           if (motionZoom && isPlaying) {
             if (inPhotoPhase && !lastPhaseWasPhotoRef.current) {
-              // Transitioning INTO photo phase — pause once
+              // Entering photo phase — pause video once and set freeze frame position
               video.pause();
               video.currentTime = desiredFreezeTime;
               lastPhaseWasPhotoRef.current = true;
             } else if (!inPhotoPhase && lastPhaseWasPhotoRef.current) {
-              // Transitioning INTO motion phase — play once & seek to scene
+              // Entering motion phase — resume video playback once (no seek if within scene)
               video.currentTime = desiredMotionTime;
               video.play().catch(() => {});
               lastPhaseWasPhotoRef.current = false;
             }
           }
 
-          // Segment-level seeking: seek when ACTIVE SEGMENT CHANGES + drift correction
+          // SEGMENT-LEVEL SEEKING: only seek when segment actually changes
+          // This is the key to smoothness — don't seek within the same segment during motion
           if (isPlaying && activeSegment && video.duration > 0) {
             const segIdx = scriptSegments.indexOf(activeSegment);
             if (segIdx !== lastSeekedSegmentRef.current) {
-              // New segment — seek to its scene start immediately
+              // New segment — seek to its scene start
               lastSeekedSegmentRef.current = segIdx;
-              video.currentTime = clampTime(sceneStart);
+              const targetSeekTime = clampTime(sceneStart);
+              // Only seek if we're not already near the target (avoid stutter from tiny seeks)
+              const currentDiff = Math.abs(video.currentTime - targetSeekTime);
+              if (currentDiff > 0.5) {
+                video.currentTime = targetSeekTime;
+              }
               if (!inPhotoPhase && video.paused) {
                 video.play().catch(() => {});
               }
             } else if (!inPhotoPhase) {
-              // Drift correction: if video drifted too far from the desired motion time,
-              // snap it back to prevent scene mismatch during playback
-              const drift = Math.abs(video.currentTime - desiredMotionTime);
-              if (drift > 2.0) {
+              // Drift correction: only correct if video is showing the WRONG SCENE entirely
+              // Use tight threshold (0.5s) but only check against scene boundaries, not motion time
+              const isOutsideScene = sceneEnd
+                ? (video.currentTime < sceneStart - 0.3 || video.currentTime > sceneEnd + 0.3)
+                : Math.abs(video.currentTime - desiredMotionTime) > 3.0;
+              if (isOutsideScene) {
                 video.currentTime = desiredMotionTime;
               }
             }
