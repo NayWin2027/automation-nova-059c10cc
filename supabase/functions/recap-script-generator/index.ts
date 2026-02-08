@@ -46,7 +46,15 @@ Rules:
 - The script must be READY TO READ as narration (no stage directions, no brackets)
 - Analyze the transcript deeply to extract the core story, key moments, and emotional arc
 - Transform raw transcript into compelling storytelling narration
-- Adapt tone and style to the "${nicheLabel}" niche`;
+- Adapt tone and style to the "${nicheLabel}" niche
+
+CRITICAL CHARACTER IDENTITY RULES (applies to ALL niches):
+- NEVER use generic labels like "ယောကျ်ား" (man), "အမျိုးသမီး" (woman), "အဖွဲ့သား" (group member) to refer to characters
+- ALWAYS identify characters by their contextual role from the source: ဆရာ (teacher), ဆရာဝန် (doctor), ကျောင်းသူ (student), အင်ဂျင်နီယာ (engineer), မင်းသား (actor), မင်းသမီး (actress), etc.
+- ALWAYS identify characters by their relationship when applicable: အမေ (mother), အဖေ (father), သား (son), သမီး (daughter), အကို (elder brother), အမ (elder sister), ဇနီး (wife), တပည့် (disciple), အိမ်ဖော် (housekeeper), etc.
+- If character names appear in the transcript/dialogue, USE THEIR ACTUAL NAMES
+- Analyze the source content carefully to determine each character's exact role, profession, or relationship before writing
+- This makes the story vivid and specific - readers must know exactly WHO each character is`;
 
     const userPrompt = `Niche: ${nicheLabel}
 
