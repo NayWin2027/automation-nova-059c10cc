@@ -683,10 +683,15 @@ export default function VideoRecapView() {
         }
 
         const segDur = totalDuration / segments.length;
+        const videoDur = videoRef.current?.duration || totalDuration;
         mappedSegments = segments.map((seg, idx) => ({
           ...seg,
           audioStart: idx * segDur,
           audioEnd: (idx + 1) * segDur,
+          // CRITICAL: Add scene matching data so renderer syncs video to correct scene
+          videoTime: seg.videoTime ?? (idx / segments.length) * videoDur,
+          sceneStart: seg.sceneStart ?? (idx / segments.length) * videoDur,
+          sceneEnd: seg.sceneEnd ?? ((idx + 1) / segments.length) * videoDur,
         }));
       } else {
         // No script: create empty segments (no subtitles) distributed evenly across video
