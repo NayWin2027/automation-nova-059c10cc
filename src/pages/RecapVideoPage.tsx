@@ -383,10 +383,6 @@ export default function VideoRecapView() {
   const wasFreezeModeRef = useRef(false);
   const freezeCapturedCycleRef = useRef<number>(-1); // ensures photo phase stays stable for the full 3s
   const didConfirmSuccessRef = useRef(false);
-  const fullScriptTextRef = useRef(fullScriptText);
-  fullScriptTextRef.current = fullScriptText;
-  const scriptSegmentsRef = useRef(scriptSegments);
-  scriptSegmentsRef.current = scriptSegments;
   const lastActiveSegmentIndexRef = useRef<number>(-1); // Track segment changes for semantic video seeking
   const lastSeekedSegmentRef = useRef<number>(-1); // Prevent repeated seeking within same segment
   const lastPhaseWasPhotoRef = useRef(false); // Track phase transitions to avoid play/pause spam
@@ -649,39 +645,9 @@ export default function VideoRecapView() {
 
       let mappedSegments: ScriptSegment[];
 
-      if (fullScriptTextRef.current.trim()) {
+      if (fullScriptText.trim()) {
         // Has script: distribute segments across audio duration
-        // Use refs to avoid stale closure issues with fullScriptText/scriptSegments
-        const currentScript = fullScriptTextRef.current;
-        const currentSegments = scriptSegmentsRef.current;
-        console.log("[CUSTOM-AUDIO] fullScriptText length:", currentScript.length, "scriptSegments:", currentSegments.length, "validSegments:", currentSegments.filter(s => s.text && s.text.trim() !== "").length);
-        // Filter to only segments with actual text content (avoid stale empty segments)
-        const validSegments = currentSegments.filter(s => s.text && s.text.trim() !== "");
-        let segments: { time: number; text: string; videoTime?: number; sceneStart?: number; sceneEnd?: number }[];
-
-        if (validSegments.length > 0) {
-          segments = validSegments;
-        } else {
-          // No valid segments: split fullScriptText into ~6s segments
-          const sentences = currentScript.split(/(?<=[။\.\!\?])\s*/g).filter(s => s.trim());
-          const partCount = Math.max(1, Math.ceil(totalDuration / 6));
-          if (sentences.length >= partCount) {
-            // Distribute sentences evenly across parts
-            const perPart = Math.ceil(sentences.length / partCount);
-            segments = [];
-            for (let i = 0; i < partCount; i++) {
-              const chunk = sentences.slice(i * perPart, (i + 1) * perPart).join(" ");
-              if (chunk.trim()) segments.push({ time: 0, text: chunk.trim() });
-            }
-          } else {
-            // Fewer sentences than parts: one segment per sentence
-            segments = sentences.map(s => ({ time: 0, text: s.trim() }));
-          }
-          if (segments.length === 0) {
-            segments = [{ time: 0, text: currentScript.trim() }];
-          }
-        }
-
+        const segments = scriptSegments.length > 0 ? scriptSegments : [{ time: 0, text: fullScriptText }];
         const segDur = totalDuration / segments.length;
         mappedSegments = segments.map((seg, idx) => ({
           ...seg,
@@ -1160,18 +1126,8 @@ export default function VideoRecapView() {
     setIsPlaying(true);
 
     // Start video/audio (must be within user gesture; button click already)
-    // CRITICAL: Ensure audio actually starts playing before recording begins.
-    // If audio.play() fails, the recording would have no audio timeline and subtitles would break.
-    try {
-      await audio.play();
-    } catch (audioPlayErr) {
-      console.error("[RecapExport] Audio play failed:", audioPlayErr);
-      toast.error("Audio play မရပါ—ပြန်စမ်းပါ");
-      setIsExporting(false);
-      try { recorder.stop(); } catch {}
-      return;
-    }
     video.play().catch(() => {});
+    audio.play().catch(() => {});
 
     // Used for progress + safety timeout
     const totalDur =
@@ -1359,10 +1315,6 @@ export default function VideoRecapView() {
     }
     
     // Subtitle rendering
-    ctx.globalAlpha = 1.0;
-    ctx.globalCompositeOperation = "source-over";
-    ctx.shadowBlur = 0;
-    ctx.shadowColor = "transparent";
     if (activeSegment) {
       const chunk = String(activeSegment.text || "")
         .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, "")
@@ -1477,9 +1429,7 @@ export default function VideoRecapView() {
           if (isNaN(targetW) || targetW <= 0) targetW = 1280;
           if (isNaN(targetH) || targetH <= 0) targetH = 720;
 
-          // CRITICAL: Always use audio.currentTime when audioBlobUrl exists, even when paused.
-          // Segments are timed to audio timeline; falling back to video.currentTime misaligns subtitles.
-          const effectiveTime = audioBlobUrl ? audio.currentTime : video.currentTime;
+          const effectiveTime = audioBlobUrl && !audio.paused ? audio.currentTime : video.currentTime;
 
            // Avoid updating React state every frame (causes stutter). Throttle to ~10fps.
            if (isPlaying) {
@@ -1500,15 +1450,6 @@ export default function VideoRecapView() {
             effectiveTime >= (scriptSegments[scriptSegments.length - 1].audioEnd || 0)
           ) {
             activeSegment = scriptSegments[scriptSegments.length - 1];
-          }
-
-          // DEBUG: Log subtitle state every 2 seconds to diagnose missing subtitles
-          if (isPlaying && Math.floor(effectiveTime * 10) % 20 === 0) {
-            console.log("[SUBTITLE-DEBUG] effectiveTime:", effectiveTime.toFixed(2),
-              "segments:", scriptSegments.length,
-              "activeText:", activeSegment?.text?.substring(0, 30) || "NONE",
-              "audioStart:", activeSegment?.audioStart, "audioEnd:", activeSegment?.audioEnd,
-              "audioBlobUrl:", !!audioBlobUrl, "audio.ct:", audio.currentTime.toFixed(2));
           }
 
           // ============ 3S VIDEO / 3S PHOTO LOOP (SEGMENT-ANCHORED + SEMANTIC) ============
@@ -1816,11 +1757,6 @@ export default function VideoRecapView() {
           }
 
           // ===== SUBTITLE RENDERING =====
-          // Reset canvas state to ensure subtitles are always fully visible
-          ctx.globalAlpha = 1.0;
-          ctx.globalCompositeOperation = "source-over";
-          ctx.shadowBlur = 0;
-          ctx.shadowColor = "transparent";
           if (activeSegment) {
             const chunk = String(activeSegment.text || "")
               // Remove junk: timestamps, bracketed timecodes, markdown fences, bullet-ish symbols
