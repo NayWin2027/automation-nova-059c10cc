@@ -281,39 +281,147 @@ serve(async (req) => {
 
     console.log(`[transcribe-google] Authenticated user: ${user.id}`);
 
-    const formData = await req.formData();
-    const file = formData.get("file") as File;
-    const apiKey = formData.get("apiKey") as string;
-    const languageName = (formData.get("languageName") as string || "BURMESE").replace(/[<>\"'&]/g, "").substring(0, 50);
+    // Support both JSON body (from supabase.functions.invoke) and FormData
+    let audioData: string | null = null;
+    let apiKey: string | null = null;
+    let languageName = "BURMESE";
+    let mimeTypeFromBody: string | null = null;
+    let fileObj: File | null = null;
+
+    const contentType = req.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      const body = await req.json();
+      audioData = body.audioData || null;
+      apiKey = body.apiKey || null;
+      languageName = (body.language || body.languageName || "BURMESE").replace(/[<>\"'&]/g, "").substring(0, 50);
+      mimeTypeFromBody = body.mimeType || null;
+    } else {
+      const formData = await req.formData();
+      fileObj = formData.get("file") as File;
+      apiKey = formData.get("apiKey") as string;
+      languageName = ((formData.get("languageName") as string) || "BURMESE").replace(/[<>\"'&]/g, "").substring(0, 50);
+    }
 
     // ===== INPUT VALIDATION =====
-    if (!file) {
+    if (!audioData && !fileObj) {
       return new Response(
         JSON.stringify({ error: "ဖိုင်မပေးထားပါ", retryable: false }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    if (!apiKey) {
+    // For App API mode (no user apiKey), use LOVABLE_API_KEY via gateway
+    const isOwnApi = !!apiKey;
+    if (!isOwnApi) {
+      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+      if (!LOVABLE_API_KEY) {
+        return new Response(
+          JSON.stringify({ error: "Server API key not configured", retryable: false }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Use Lovable AI gateway for App API mode
+      const resolvedMime = mimeTypeFromBody || (fileObj ? getMimeType(fileObj) : "audio/mpeg");
+      let base64: string;
+      if (audioData) {
+        base64 = audioData;
+      } else {
+        const arrayBuffer = await fileObj!.arrayBuffer();
+        base64 = btoa(new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ""));
+      }
+
+      // Credit check
+      const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", {
+        _user_id: user.id,
+        _tool_id: "transcribe",
+        _is_own_api: false,
+      });
+
+      if (creditError) {
+        console.error("[transcribe-google] Credit check error:", creditError);
+        return new Response(
+          JSON.stringify({ error: "Credit စစ်ဆေးမှု မအောင်မြင်ပါ", retryable: false }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (!creditResult.success) {
+        return new Response(
+          JSON.stringify({ error: creditResult.error, errorCode: "INSUFFICIENT_CREDITS", retryable: false }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log(`[transcribe-google] App API mode. Credits deducted. Balance: ${creditResult.balance}`);
+
+      const isBurmese = languageName.toUpperCase() === "BURMESE";
+      const prompt = isBurmese
+        ? `🇲🇲 ဤ audio/video ဖိုင်ထဲရှိ ပြောဆိုချက်အားလုံးကို တိကျစွာ ဗမာစာဖြင့် ရေးချပါ။ မြန်မာစာသတ်ပုံကျမ်း အတိုင်း စာလုံးပေါင်း သတ်ပုံ မှန်ကန်ရမည်။ ဘာသာပြန်ခြင်း၊ အနှစ်ချုပ်ခြင်း လုံးဝမလုပ်ပါနဲ့။ ပြောသည့်အတိုင်း အတိအကျ ရေးပါ။ Speaker ပြောင်းရင် line break ခံပါ။`
+        : `Transcribe all spoken words accurately in ${languageName}. Return ONLY the transcription. Do not translate or summarize. Indicate speaker changes with line breaks.`;
+
+      const gatewayResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [{
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              { type: "image_url", image_url: { url: `data:${resolvedMime};base64,${base64}` } },
+            ],
+          }],
+        }),
+      });
+
+      if (!gatewayResponse.ok) {
+        console.error("Gateway error:", gatewayResponse.status);
+        return new Response(
+          JSON.stringify({ error: "Transcription မအောင်မြင်ပါ။ ပြန်စမ်းပါ။", retryable: true }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const gatewayData = await gatewayResponse.json();
+      const text = gatewayData.choices?.[0]?.message?.content || "";
+      console.log("[transcribe-google] App API transcription success, length:", text.length);
+
       return new Response(
-        JSON.stringify({ error: "API Key မပေးထားပါ", retryable: false }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ text }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    if (file.size > MAX_FILE_SIZE) {
+    // ===== OWN API MODE =====
+    // Reconstruct a File object from base64 if needed
+    if (audioData && !fileObj) {
+      const binaryString = atob(audioData);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const resolvedMime = mimeTypeFromBody || "audio/mpeg";
+      fileObj = new File([bytes], "audio_file", { type: resolvedMime });
+    }
+
+    if (fileObj!.size > MAX_FILE_SIZE) {
       return new Response(
         JSON.stringify({ error: "ဖိုင်အရွယ်အစား 100MB ထက်မကျော်ရပါ။", retryable: false }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log("Processing file:", file.name, "Size:", file.size, "bytes");
+    console.log("Processing file (Own API):", fileObj!.name, "Size:", fileObj!.size, "bytes");
 
     // Preflight for large files
-    if (file.size >= 8 * 1024 * 1024) {
+    if (fileObj!.size >= 8 * 1024 * 1024) {
       try {
-        await preflightGenerateCheck(apiKey);
+        await preflightGenerateCheck(apiKey!);
       } catch (preflightError) {
         const errorMessage = preflightError instanceof Error ? preflightError.message : "Unknown error";
         console.error("Preflight check failed:", errorMessage);
@@ -353,12 +461,12 @@ serve(async (req) => {
       }
     }
 
-    const mimeType = getMimeType(file);
+    const mimeType = getMimeType(fileObj!);
     
     // Upload file to Google Files API
     let fileUri: string;
     try {
-      fileUri = await uploadToGoogleFiles(apiKey, file, mimeType);
+      fileUri = await uploadToGoogleFiles(apiKey!, fileObj!, mimeType);
     } catch (uploadError) {
       console.error("File upload failed:", uploadError);
       return new Response(
