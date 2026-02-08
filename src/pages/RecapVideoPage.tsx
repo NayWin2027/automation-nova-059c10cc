@@ -647,7 +647,33 @@ export default function VideoRecapView() {
 
       if (fullScriptText.trim()) {
         // Has script: distribute segments across audio duration
-        const segments = scriptSegments.length > 0 ? scriptSegments : [{ time: 0, text: fullScriptText }];
+        // Filter to only segments with actual text content (avoid stale empty segments)
+        const validSegments = scriptSegments.filter(s => s.text && s.text.trim() !== "");
+        let segments: { time: number; text: string; videoTime?: number; sceneStart?: number; sceneEnd?: number }[];
+
+        if (validSegments.length > 0) {
+          segments = validSegments;
+        } else {
+          // No valid segments: split fullScriptText into ~6s segments
+          const sentences = fullScriptText.split(/(?<=[။\.\!\?])\s*/g).filter(s => s.trim());
+          const partCount = Math.max(1, Math.ceil(totalDuration / 6));
+          if (sentences.length >= partCount) {
+            // Distribute sentences evenly across parts
+            const perPart = Math.ceil(sentences.length / partCount);
+            segments = [];
+            for (let i = 0; i < partCount; i++) {
+              const chunk = sentences.slice(i * perPart, (i + 1) * perPart).join(" ");
+              if (chunk.trim()) segments.push({ time: 0, text: chunk.trim() });
+            }
+          } else {
+            // Fewer sentences than parts: one segment per sentence
+            segments = sentences.map(s => ({ time: 0, text: s.trim() }));
+          }
+          if (segments.length === 0) {
+            segments = [{ time: 0, text: fullScriptText.trim() }];
+          }
+        }
+
         const segDur = totalDuration / segments.length;
         mappedSegments = segments.map((seg, idx) => ({
           ...seg,
