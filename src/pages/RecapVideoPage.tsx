@@ -383,6 +383,10 @@ export default function VideoRecapView() {
   const wasFreezeModeRef = useRef(false);
   const freezeCapturedCycleRef = useRef<number>(-1); // ensures photo phase stays stable for the full 3s
   const didConfirmSuccessRef = useRef(false);
+  const fullScriptTextRef = useRef(fullScriptText);
+  fullScriptTextRef.current = fullScriptText;
+  const scriptSegmentsRef = useRef(scriptSegments);
+  scriptSegmentsRef.current = scriptSegments;
   const lastActiveSegmentIndexRef = useRef<number>(-1); // Track segment changes for semantic video seeking
   const lastSeekedSegmentRef = useRef<number>(-1); // Prevent repeated seeking within same segment
   const lastPhaseWasPhotoRef = useRef(false); // Track phase transitions to avoid play/pause spam
@@ -645,17 +649,21 @@ export default function VideoRecapView() {
 
       let mappedSegments: ScriptSegment[];
 
-      if (fullScriptText.trim()) {
+      if (fullScriptTextRef.current.trim()) {
         // Has script: distribute segments across audio duration
+        // Use refs to avoid stale closure issues with fullScriptText/scriptSegments
+        const currentScript = fullScriptTextRef.current;
+        const currentSegments = scriptSegmentsRef.current;
+        console.log("[CUSTOM-AUDIO] fullScriptText length:", currentScript.length, "scriptSegments:", currentSegments.length, "validSegments:", currentSegments.filter(s => s.text && s.text.trim() !== "").length);
         // Filter to only segments with actual text content (avoid stale empty segments)
-        const validSegments = scriptSegments.filter(s => s.text && s.text.trim() !== "");
+        const validSegments = currentSegments.filter(s => s.text && s.text.trim() !== "");
         let segments: { time: number; text: string; videoTime?: number; sceneStart?: number; sceneEnd?: number }[];
 
         if (validSegments.length > 0) {
           segments = validSegments;
         } else {
           // No valid segments: split fullScriptText into ~6s segments
-          const sentences = fullScriptText.split(/(?<=[။\.\!\?])\s*/g).filter(s => s.trim());
+          const sentences = currentScript.split(/(?<=[။\.\!\?])\s*/g).filter(s => s.trim());
           const partCount = Math.max(1, Math.ceil(totalDuration / 6));
           if (sentences.length >= partCount) {
             // Distribute sentences evenly across parts
@@ -670,7 +678,7 @@ export default function VideoRecapView() {
             segments = sentences.map(s => ({ time: 0, text: s.trim() }));
           }
           if (segments.length === 0) {
-            segments = [{ time: 0, text: fullScriptText.trim() }];
+            segments = [{ time: 0, text: currentScript.trim() }];
           }
         }
 
