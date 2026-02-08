@@ -311,22 +311,25 @@ Create this image now. Output the generated image directly.`;
         });
 
         if (!response.ok) {
-          if (response.status === 429) {
+          const statusCode = response.status;
+          console.error("[creator-ai] Gateway error status:", statusCode);
+          
+          if (statusCode === 429 || statusCode === 402) {
             return new Response(
-              JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
-              { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-          }
-          if (response.status === 402) {
-            return new Response(
-              JSON.stringify({ error: "Payment required. Please add credits." }),
-              { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              JSON.stringify({ 
+                error: statusCode === 429 
+                  ? "Rate limit exceeded. ခဏစောင့်ပြီး ပြန်လုပ်ပါ။" 
+                  : "Server quota limit reached. ခဏစောင့်ပြီး ပြန်လုပ်ပါ။",
+                retryable: true,
+                retryAfterSeconds: statusCode === 429 ? 30 : 60
+              }),
+              { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
           }
           
           return new Response(
-            JSON.stringify({ error: "Image generation failed" }),
-            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            JSON.stringify({ error: "Image generation failed. ပြန်ကြိုးစားပါ။" }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
 
@@ -490,16 +493,19 @@ Create this image now. Output the generated image directly.`;
         });
 
         if (!response.ok) {
-          if (response.status === 429) {
+          const statusCode = response.status;
+          console.error("[creator-ai] Text gateway error:", statusCode);
+          
+          if (statusCode === 429 || statusCode === 402) {
             return new Response(
-              JSON.stringify({ error: "Rate limit exceeded" }),
-              { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-          }
-          if (response.status === 402) {
-            return new Response(
-              JSON.stringify({ error: "Payment required" }),
-              { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              JSON.stringify({ 
+                error: statusCode === 429 
+                  ? "Rate limit exceeded. ခဏစောင့်ပြီး ပြန်လုပ်ပါ။"
+                  : "Server quota limit reached. ခဏစောင့်ပြီး ပြန်လုပ်ပါ။",
+                retryable: true,
+                retryAfterSeconds: statusCode === 429 ? 30 : 60
+              }),
+              { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
           }
           throw new Error("AI gateway error");
