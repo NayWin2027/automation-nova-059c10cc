@@ -392,6 +392,7 @@ export default function VideoRecapView() {
   // WebAudio expects a Uint8Array backed by ArrayBuffer (not SharedArrayBuffer)
   const dataArrayRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const mediaStreamDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -496,23 +497,35 @@ export default function VideoRecapView() {
   const matchSegmentsToScenes = (segments: ScriptSegment[], scenes: VideoScene[]): ScriptSegment[] => {
     if (!scenes || scenes.length === 0) return segments;
     
-    return segments.map(seg => {
-      // Find the scene that best matches this segment's timestamp
-      // The segment.time from AI should already be aligned to scene timestamps
-      const matchedScene = scenes.find(sc => 
+    return segments.map((seg, idx) => {
+      // 1. First try exact timestamp match (AI-provided seg.time falls within a scene)
+      let matchedScene = scenes.find(sc => 
         seg.time >= sc.start && seg.time < sc.end
-      ) || scenes.reduce((closest, sc) => {
-        const closestDiff = Math.abs(closest.start - seg.time);
-        const thisDiff = Math.abs(sc.start - seg.time);
-        return thisDiff < closestDiff ? sc : closest;
-      }, scenes[0]);
+      );
+      
+      if (!matchedScene) {
+        // 2. Proportional distribution: spread segments evenly across scenes
+        // This ensures each segment maps to a unique scene in sequence
+        const sceneIdx = Math.min(
+          Math.floor((idx / segments.length) * scenes.length),
+          scenes.length - 1
+        );
+        matchedScene = scenes[sceneIdx];
+      }
+      
+      // 3. Calculate precise seek point within the scene (not just scene start)
+      // Use a fraction into the scene for variety across cycles
+      const sceneStart = matchedScene.start;
+      const sceneDur = matchedScene.end - matchedScene.start;
+      // Offset slightly into the scene to avoid always landing on the exact start
+      const seekOffset = Math.min(0.5, sceneDur * 0.1);
       
       return {
         ...seg,
-        videoTime: matchedScene?.start ?? seg.time,
-        sceneStart: matchedScene?.start,
-        sceneEnd: matchedScene?.end,
-        sceneTopic: matchedScene?.topic,
+        videoTime: sceneStart + seekOffset,
+        sceneStart: matchedScene.start,
+        sceneEnd: matchedScene.end,
+        sceneTopic: matchedScene.topic,
       };
     });
   };
@@ -609,10 +622,10 @@ export default function VideoRecapView() {
     }
   };
 
-  // Phase 2B: Create recap with Custom Audio
+  // Phase 2B: Create recap with Custom Audio (with or without script)
   const handleCreateRecapCustom = async () => {
-    if (!fullScriptText.trim() || !customAudioFile) {
-      toast.error("Script နှင့် Audio ဖိုင် နှစ်ခုလုံး လိုအပ်ပါသည်");
+    if (!customAudioFile) {
+      toast.error("Audio ဖိုင် လိုအပ်ပါသည်");
       return;
     }
     setAnalyzing(true);
@@ -625,16 +638,33 @@ export default function VideoRecapView() {
       const totalDuration = decoded.duration;
       audioCtx.close();
 
-      // Parse segments
-      const segments = scriptSegments.length > 0 ? scriptSegments : [{ time: 0, text: fullScriptText }];
-      const segDur = totalDuration / segments.length;
+      let mappedSegments: ScriptSegment[];
 
-      // Map even audioStart/audioEnd timestamps
-      const mappedSegments = segments.map((seg, idx) => ({
-        ...seg,
-        audioStart: idx * segDur,
-        audioEnd: (idx + 1) * segDur,
-      }));
+      if (fullScriptText.trim()) {
+        // Has script: distribute segments across audio duration
+        const segments = scriptSegments.length > 0 ? scriptSegments : [{ time: 0, text: fullScriptText }];
+        const segDur = totalDuration / segments.length;
+        mappedSegments = segments.map((seg, idx) => ({
+          ...seg,
+          audioStart: idx * segDur,
+          audioEnd: (idx + 1) * segDur,
+        }));
+      } else {
+        // No script: create empty segments (no subtitles) distributed evenly across video
+        // This enables video+audio merge without script generation
+        const videoDur = videoRef.current?.duration || totalDuration;
+        const numSegments = Math.max(1, Math.ceil(totalDuration / 6)); // ~6s per segment to match 3s+3s cycle
+        const segDur = totalDuration / numSegments;
+        mappedSegments = Array.from({ length: numSegments }, (_, idx) => ({
+          time: (idx / numSegments) * videoDur,
+          text: "", // No subtitle text
+          audioStart: idx * segDur,
+          audioEnd: (idx + 1) * segDur,
+          videoTime: (idx / numSegments) * videoDur,
+          sceneStart: (idx / numSegments) * videoDur,
+          sceneEnd: ((idx + 1) / numSegments) * videoDur,
+        }));
+      }
 
       // Use custom audio URL
       const url = customAudioUrl || URL.createObjectURL(customAudioFile);
@@ -644,7 +674,7 @@ export default function VideoRecapView() {
       setAnalyzing(false);
 
       didConfirmSuccessRef.current = false;
-      saveToHistory(fullScriptText, url, mappedSegments);
+      saveToHistory(fullScriptText || "(Custom Audio - No Script)", url, mappedSegments);
       toast.success("✨ Custom Audio Recap ပြီးပါပြီ!");
 
       setTimeout(() => togglePlay(), 500);
@@ -864,6 +894,10 @@ export default function VideoRecapView() {
     analyser.fftSize = 256;
     source.connect(analyser);
     analyser.connect(ctx.destination);
+    // Create MediaStream destination for reliable audio capture during recording
+    const dest = ctx.createMediaStreamDestination();
+    analyser.connect(dest);
+    mediaStreamDestRef.current = dest;
     analyserRef.current = analyser;
     dataArrayRef.current = new Uint8Array(analyser.frequencyBinCount);
     audioCtxRef.current = ctx;
@@ -996,14 +1030,21 @@ export default function VideoRecapView() {
     const stream = canvas.captureStream(fps);
 
     // Add audio track if supported
-    try {
-      const audioStream = (audio as any).captureStream?.() || (audio as any).mozCaptureStream?.();
-      if (audioStream) {
-        audioStream.getAudioTracks().forEach((track: MediaStreamTrack) => stream.addTrack(track));
+    // Use WebAudio MediaStreamDestination for reliable audio capture (works across all browsers)
+    if (mediaStreamDestRef.current) {
+      mediaStreamDestRef.current.stream.getAudioTracks().forEach((track: MediaStreamTrack) => {
+        stream.addTrack(track);
+      });
+    } else {
+      // Fallback to captureStream if WebAudio dest not ready
+      try {
+        const audioStream = (audio as any).captureStream?.() || (audio as any).mozCaptureStream?.();
+        if (audioStream) {
+          audioStream.getAudioTracks().forEach((track: MediaStreamTrack) => stream.addTrack(track));
+        }
+      } catch {
+        console.warn("Audio capture not supported");
       }
-    } catch {
-      // Some browsers don't support captureStream on audio; we still record video and warn.
-      console.warn("Audio capture not supported");
     }
 
     const mimeType = pickMimeType();
@@ -1453,16 +1494,22 @@ export default function VideoRecapView() {
             }
           }
 
-          // Segment-level seeking: only seek when the ACTIVE SEGMENT CHANGES
-          // This prevents per-frame seeking that causes stutter
+          // Segment-level seeking: seek when ACTIVE SEGMENT CHANGES + drift correction
           if (isPlaying && activeSegment && video.duration > 0) {
             const segIdx = scriptSegments.indexOf(activeSegment);
             if (segIdx !== lastSeekedSegmentRef.current) {
-              // New segment — seek to its scene start
+              // New segment — seek to its scene start immediately
               lastSeekedSegmentRef.current = segIdx;
               video.currentTime = clampTime(sceneStart);
               if (!inPhotoPhase && video.paused) {
                 video.play().catch(() => {});
+              }
+            } else if (!inPhotoPhase) {
+              // Drift correction: if video drifted too far from the desired motion time,
+              // snap it back to prevent scene mismatch during playback
+              const drift = Math.abs(video.currentTime - desiredMotionTime);
+              if (drift > 2.0) {
+                video.currentTime = desiredMotionTime;
               }
             }
           }
@@ -2589,8 +2636,8 @@ export default function VideoRecapView() {
       </div>
 
       <div className="flex flex-col gap-2 pt-4 sticky bottom-4 z-50">
-        {/* Phase 1: Generate Script */}
-        {!audioBlobUrl && !fullScriptText && (
+        {/* Phase 1: Generate Script (skip if custom audio mode with file uploaded) */}
+        {!audioBlobUrl && !fullScriptText && !(audioMode === "custom" && customAudioFile) && (
           <button
             onClick={handleProcess}
             disabled={!videoSrc || analyzing}
@@ -2600,6 +2647,29 @@ export default function VideoRecapView() {
           >
             {analyzing ? statusText || "ANALYZING..." : "📝 GENERATE SCRIPT"}
           </button>
+        )}
+
+        {/* Custom Audio Direct Create (skip script step entirely) */}
+        {!audioBlobUrl && !fullScriptText && audioMode === "custom" && customAudioFile && !analyzing && (
+          <div className="flex gap-2">
+            <button
+              onClick={handleCreateRecapCustom}
+              disabled={!videoSrc}
+              className="flex-1 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white active:scale-[0.98] transition-all"
+            >
+              🎵 CREATE RECAP (DIRECT AUDIO)
+            </button>
+            <button
+              onClick={() => {
+                setCustomAudioFile(null);
+                if (customAudioUrl) URL.revokeObjectURL(customAudioUrl);
+                setCustomAudioUrl(null);
+              }}
+              className="px-4 py-3 rounded-2xl bg-white/5 border border-white/10 text-slate-400 font-black text-[9px] uppercase"
+            >
+              ✕
+            </button>
+          </div>
         )}
 
         {/* Phase 2: Create Recap (after script exists, before audio) */}
