@@ -1468,6 +1468,15 @@ export default function VideoRecapView() {
             activeSegment = scriptSegments[scriptSegments.length - 1];
           }
 
+          // DEBUG: Log subtitle state every 2 seconds to diagnose missing subtitles
+          if (isPlaying && Math.floor(effectiveTime * 10) % 20 === 0) {
+            console.log("[SUBTITLE-DEBUG] effectiveTime:", effectiveTime.toFixed(2),
+              "segments:", scriptSegments.length,
+              "activeText:", activeSegment?.text?.substring(0, 30) || "NONE",
+              "audioStart:", activeSegment?.audioStart, "audioEnd:", activeSegment?.audioEnd,
+              "audioBlobUrl:", !!audioBlobUrl, "audio.ct:", audio.currentTime.toFixed(2));
+          }
+
           // ============ 3S VIDEO / 3S PHOTO LOOP (SEGMENT-ANCHORED + SEMANTIC) ============
           // Anchor each narration segment to its matched sceneStart and run a 6s cycle inside that scene.
           // SMOOTHNESS PRIORITY: minimize seeks, only seek on segment/phase transitions.
