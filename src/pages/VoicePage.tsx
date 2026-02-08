@@ -72,7 +72,18 @@ const VoicePage: React.FC = () => {
   const playbackTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
-    localStorage.setItem('master_voice_history_v2', JSON.stringify(history));
+    try {
+      // Strip large audio data before saving to avoid QuotaExceededError
+      const lightweight = history.slice(0, 50).map(({ audio, ...rest }) => rest);
+      localStorage.setItem('master_voice_history_v2', JSON.stringify(lightweight));
+    } catch (e) {
+      try {
+        const trimmed = history.slice(0, 10).map(({ audio, ...rest }) => rest);
+        localStorage.setItem('master_voice_history_v2', JSON.stringify(trimmed));
+      } catch {
+        localStorage.removeItem('master_voice_history_v2');
+      }
+    }
   }, [history]);
 
   useEffect(() => {
