@@ -1126,8 +1126,18 @@ export default function VideoRecapView() {
     setIsPlaying(true);
 
     // Start video/audio (must be within user gesture; button click already)
+    // CRITICAL: Ensure audio actually starts playing before recording begins.
+    // If audio.play() fails, the recording would have no audio timeline and subtitles would break.
+    try {
+      await audio.play();
+    } catch (audioPlayErr) {
+      console.error("[RecapExport] Audio play failed:", audioPlayErr);
+      toast.error("Audio play မရပါ—ပြန်စမ်းပါ");
+      setIsExporting(false);
+      try { recorder.stop(); } catch {}
+      return;
+    }
     video.play().catch(() => {});
-    audio.play().catch(() => {});
 
     // Used for progress + safety timeout
     const totalDur =
@@ -1315,6 +1325,10 @@ export default function VideoRecapView() {
     }
     
     // Subtitle rendering
+    ctx.globalAlpha = 1.0;
+    ctx.globalCompositeOperation = "source-over";
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = "transparent";
     if (activeSegment) {
       const chunk = String(activeSegment.text || "")
         .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, "")
@@ -1429,7 +1443,9 @@ export default function VideoRecapView() {
           if (isNaN(targetW) || targetW <= 0) targetW = 1280;
           if (isNaN(targetH) || targetH <= 0) targetH = 720;
 
-          const effectiveTime = audioBlobUrl && !audio.paused ? audio.currentTime : video.currentTime;
+          // CRITICAL: Always use audio.currentTime when audioBlobUrl exists, even when paused.
+          // Segments are timed to audio timeline; falling back to video.currentTime misaligns subtitles.
+          const effectiveTime = audioBlobUrl ? audio.currentTime : video.currentTime;
 
            // Avoid updating React state every frame (causes stutter). Throttle to ~10fps.
            if (isPlaying) {
@@ -1757,6 +1773,11 @@ export default function VideoRecapView() {
           }
 
           // ===== SUBTITLE RENDERING =====
+          // Reset canvas state to ensure subtitles are always fully visible
+          ctx.globalAlpha = 1.0;
+          ctx.globalCompositeOperation = "source-over";
+          ctx.shadowBlur = 0;
+          ctx.shadowColor = "transparent";
           if (activeSegment) {
             const chunk = String(activeSegment.text || "")
               // Remove junk: timestamps, bracketed timecodes, markdown fences, bullet-ish symbols
