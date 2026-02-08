@@ -483,14 +483,65 @@ const VoicePage: React.FC = () => {
             <button 
               className="py-3 rounded-[16px] bg-white/5 border border-white/10 text-[8px] font-black text-foreground uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95"
               onClick={() => {
+                if (resultAudio.startsWith('WEBSPEECH:')) {
+                  alert('Web Speech API အသံကို download လုပ်၍မရပါ။');
+                  return;
+                }
                 const binaryString = atob(resultAudio);
                 const bytes = new Uint8Array(binaryString.length);
                 for (let i = 0; i < binaryString.length; i++) {
                   bytes[i] = binaryString.charCodeAt(i);
                 }
-                const blob = new Blob([bytes], { type: 'audio/wav' });
+                // Check if it's already a proper audio format (MP3/WAV/OGG) by checking magic bytes
+                const isMP3 = bytes[0] === 0xFF && (bytes[1] & 0xE0) === 0xE0;
+                const isWAV = bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46;
+                const isOGG = bytes[0] === 0x4F && bytes[1] === 0x67 && bytes[2] === 0x67 && bytes[3] === 0x53;
+                
+                let blob: Blob;
+                let filename: string;
+                if (isMP3) {
+                  blob = new Blob([bytes], { type: 'audio/mpeg' });
+                  filename = 'voice.mp3';
+                } else if (isWAV) {
+                  blob = new Blob([bytes], { type: 'audio/wav' });
+                  filename = 'voice.wav';
+                } else if (isOGG) {
+                  blob = new Blob([bytes], { type: 'audio/ogg' });
+                  filename = 'voice.ogg';
+                } else {
+                  // Raw PCM data - wrap in proper WAV container
+                  const pcmData = new Int16Array(bytes.buffer);
+                  const sampleRate = 24000;
+                  const numChannels = 1;
+                  const bitsPerSample = 16;
+                  const dataSize = pcmData.length * 2;
+                  const headerSize = 44;
+                  const wavBuffer = new ArrayBuffer(headerSize + dataSize);
+                  const view = new DataView(wavBuffer);
+                  // RIFF header
+                  view.setUint32(0, 0x52494646, false); // "RIFF"
+                  view.setUint32(4, 36 + dataSize, true);
+                  view.setUint32(8, 0x57415645, false); // "WAVE"
+                  // fmt chunk
+                  view.setUint32(12, 0x666d7420, false); // "fmt "
+                  view.setUint32(16, 16, true);
+                  view.setUint16(20, 1, true); // PCM
+                  view.setUint16(22, numChannels, true);
+                  view.setUint32(24, sampleRate, true);
+                  view.setUint32(28, sampleRate * numChannels * bitsPerSample / 8, true);
+                  view.setUint16(32, numChannels * bitsPerSample / 8, true);
+                  view.setUint16(34, bitsPerSample, true);
+                  // data chunk
+                  view.setUint32(36, 0x64617461, false); // "data"
+                  view.setUint32(40, dataSize, true);
+                  const wavBytes = new Uint8Array(wavBuffer);
+                  wavBytes.set(new Uint8Array(pcmData.buffer), headerSize);
+                  blob = new Blob([wavBytes], { type: 'audio/wav' });
+                  filename = 'voice.wav';
+                }
                 const url = URL.createObjectURL(blob);
-                const a = document.createElement('a'); a.href = url; a.download = `voice.wav`; a.click();
+                const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+                URL.revokeObjectURL(url);
               }}
             >
               DOWNLOAD AUDIO
@@ -527,7 +578,7 @@ const VoicePage: React.FC = () => {
             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
               {history.map(item => (
                 <div key={item.id} className="bg-white/5 border border-white/5 p-4 rounded-2xl flex items-center justify-between group animate-in slide-in-from-right-2 duration-300">
-                  <div className="flex-1 min-w-0 pr-4 cursor-pointer" onClick={() => playHistoryItem(item.audio, item.text)}>
+                  <div className="flex-1 min-w-0 pr-4 cursor-pointer" onClick={() => item.audio ? playHistoryItem(item.audio, item.text) : alert('ဤမှတ်တမ်းတွင် အသံဖိုင်မရှိတော့ပါ။ (Session ပြီးဆုံးပြီ)')}>
                     <p className="text-[10px] font-bold text-foreground/80 truncate">{item.text}</p>
                     <div className="flex gap-2 mt-1">
                       <span className="text-[7px] font-black text-primary uppercase tracking-widest">{item.voice}</span>
@@ -535,7 +586,7 @@ const VoicePage: React.FC = () => {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={() => playHistoryItem(item.audio, item.text)} className="w-7 h-7 flex items-center justify-center bg-primary/10 rounded-lg text-primary hover:bg-primary hover:text-white transition-all">
+                    <button onClick={() => item.audio ? playHistoryItem(item.audio, item.text) : alert('ဤမှတ်တမ်းတွင် အသံဖိုင်မရှိတော့ပါ။')} className={`w-7 h-7 flex items-center justify-center rounded-lg transition-all ${item.audio ? 'bg-primary/10 text-primary hover:bg-primary hover:text-white' : 'bg-muted/20 text-muted-foreground/40 cursor-not-allowed'}`}>
                       <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="m7 4 12 8-12 8V4z"/></svg>
                     </button>
                     <button onClick={() => deleteHistoryItem(item.id)} className="w-7 h-7 flex items-center justify-center bg-destructive/10 rounded-lg text-destructive hover:bg-destructive hover:text-white transition-all">
