@@ -1526,21 +1526,26 @@ export default function VideoRecapView() {
             activeSegment?.sceneStart ?? activeSegment?.videoTime ?? activeSegment?.time ?? 0;
           const sceneEnd = activeSegment?.sceneEnd;
 
+          // Scene duration — used to CLAMP motion within scene bounds (prevents seeking to unrelated scenes)
+          const sceneDuration = (sceneEnd && sceneEnd > sceneStart) ? (sceneEnd - sceneStart) : 6.0;
+
           const clampTime = (t: number) => {
             if (!Number.isFinite(t)) return 0;
             if (video.duration > 0) return Math.min(Math.max(0, t), Math.max(0, video.duration - 0.1));
             return Math.max(0, t);
           };
 
-          const motionElapsed = cycleIndex * MOTION_DUR + Math.min(phase, MOTION_DUR);
-          const freezeElapsed = (cycleIndex + 1) * MOTION_DUR;
+          // CRITICAL FIX: Clamp motion within scene bounds using modulo wrap
+          // This prevents video from seeking past scene end into unrelated scenes
+          const rawMotionElapsed = cycleIndex * MOTION_DUR + Math.min(phase, MOTION_DUR);
+          const motionElapsed = sceneDuration > 0 ? (rawMotionElapsed % sceneDuration) : 0;
 
-          const freezeTargetUnclamped = sceneEnd
-            ? Math.min(sceneStart + freezeElapsed, Math.max(sceneStart, sceneEnd - 0.1))
-            : sceneStart + freezeElapsed;
+          // Freeze frame: capture at end of current motion period within scene bounds
+          const rawFreezeElapsed = (cycleIndex + 1) * MOTION_DUR;
+          const freezeElapsed = sceneDuration > 0 ? (rawFreezeElapsed % sceneDuration) : 0;
 
           const desiredMotionTime = clampTime(sceneStart + motionElapsed);
-          const desiredFreezeTime = clampTime(freezeTargetUnclamped);
+          const desiredFreezeTime = clampTime(sceneStart + Math.min(freezeElapsed, Math.max(0, sceneDuration - 0.1)));
 
           // SMOOTH video control: minimize play/pause toggling
           // Only act on PHASE TRANSITIONS — never call play/pause every frame
@@ -1551,7 +1556,7 @@ export default function VideoRecapView() {
               video.currentTime = desiredFreezeTime;
               lastPhaseWasPhotoRef.current = true;
             } else if (!inPhotoPhase && lastPhaseWasPhotoRef.current) {
-              // Entering motion phase — resume video playback once (no seek if within scene)
+              // Entering motion phase — resume video playback once
               video.currentTime = desiredMotionTime;
               video.play().catch(() => {});
               lastPhaseWasPhotoRef.current = false;
@@ -1568,25 +1573,26 @@ export default function VideoRecapView() {
               const targetSeekTime = clampTime(sceneStart);
               // Only seek if we're not already near the target (avoid stutter from tiny seeks)
               const currentDiff = Math.abs(video.currentTime - targetSeekTime);
-              if (currentDiff > 0.5) {
+              if (currentDiff > 1.0) {
                 video.currentTime = targetSeekTime;
               }
               if (!inPhotoPhase && video.paused) {
                 video.play().catch(() => {});
               }
             } else if (!inPhotoPhase) {
-              // Drift correction: only correct if video is showing the WRONG SCENE entirely
-              // Use tight threshold (0.5s) but only check against scene boundaries, not motion time
+              // Drift correction: only correct if video is OUTSIDE the scene bounds entirely
+              // Wider tolerance (1s) to prevent micro-seeks that cause stutter
               const isOutsideScene = sceneEnd
-                ? (video.currentTime < sceneStart - 0.3 || video.currentTime > sceneEnd + 0.3)
-                : Math.abs(video.currentTime - desiredMotionTime) > 3.0;
+                ? (video.currentTime < sceneStart - 1.0 || video.currentTime > sceneEnd + 1.0)
+                : Math.abs(video.currentTime - desiredMotionTime) > 5.0;
               if (isOutsideScene) {
                 video.currentTime = desiredMotionTime;
               }
             }
           }
 
-          if (activeSegment) {
+          // Only set playbackRate when it actually changes (avoid per-frame overhead)
+          if (activeSegment && video.playbackRate !== videoSpeed) {
             video.playbackRate = videoSpeed;
           }
 
