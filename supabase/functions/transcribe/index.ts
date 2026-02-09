@@ -41,9 +41,9 @@ serve(async (req) => {
 
     console.log(`[transcribe] Authenticated user: ${user.id}`);
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY not configured");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY not configured");
     }
 
     const formData = await req.formData();
@@ -137,36 +137,28 @@ Return ONLY the transcription text in ${sanitizedLanguageName} without any addit
 If there are multiple speakers, indicate speaker changes with line breaks.
 Transcribe exactly what is spoken - do not translate or summarize.`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: transcriptionPrompt,
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:${mimeType};base64,${base64}`,
-                },
-              },
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: transcriptionPrompt },
+              { inlineData: { mimeType, data: base64 } },
             ],
+          }],
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 16384,
           },
-        ],
-      }),
-    });
+        }),
+      }
+    );
 
     if (!response.ok) {
-      console.error("AI gateway error:", response.status);
+      console.error("Gemini API error:", response.status);
       
       if (response.status === 429) {
         return new Response(
@@ -174,19 +166,12 @@ Transcribe exactly what is spoken - do not translate or summarize.`;
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Payment required. Please add credits." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
 
       throw new Error("Transcription failed");
     }
 
     const data = await response.json();
-    const transcription = data.choices?.[0]?.message?.content || "";
+    const transcription = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
     console.log("Transcription successful, length:", transcription.length);
 

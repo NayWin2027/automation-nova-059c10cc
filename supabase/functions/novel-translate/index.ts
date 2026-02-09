@@ -219,12 +219,12 @@ CRITICAL RULES:
       translatedText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
     } else {
-      // Use Lovable AI Gateway (App API mode)
-      console.log('[Novel Translate] Using App API mode via Lovable Gateway');
+      // Use GEMINI_API_KEY directly (App API mode)
+      console.log('[Novel Translate] Using App API mode via GEMINI_API_KEY');
       
-      const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-      if (!LOVABLE_API_KEY) {
-        throw new Error('LOVABLE_API_KEY is not configured');
+      const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+      if (!GEMINI_API_KEY) {
+        throw new Error('GEMINI_API_KEY is not configured');
       }
 
       const systemPrompt = `You are a professional novel translator. Your task is to translate novels with literary quality while maintaining the original style, character names consistency, and narrative flow.
@@ -236,22 +236,21 @@ CRITICAL RULES:
 4. Translate dialogue naturally in the target language
 5. Keep paragraph structure intact`;
 
-      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-3-flash-preview',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: prompt }
-          ],
-          max_tokens: 8192,
-          temperature: 0.7,
-        }),
-      });
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: systemPrompt }] },
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 8192,
+            },
+          }),
+        }
+      );
 
       if (!response.ok) {
         if (response.status === 429) {
@@ -260,19 +259,13 @@ CRITICAL RULES:
             { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        if (response.status === 402) {
-          return new Response(
-            JSON.stringify({ error: 'Payment required. Please add funds to your account.' }),
-            { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
         const errorText = await response.text();
-        console.error('[Novel Translate] Gateway error:', errorText);
-        throw new Error(`AI Gateway error: ${response.status}`);
+        console.error('[Novel Translate] Gemini API error:', errorText);
+        throw new Error(`Gemini API error: ${response.status}`);
       }
 
       const data = await response.json();
-      translatedText = data.choices?.[0]?.message?.content || '';
+      translatedText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     }
 
     console.log('[Novel Translate] Success, output length:', translatedText.length);

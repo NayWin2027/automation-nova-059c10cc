@@ -103,9 +103,9 @@ serve(async (req) => {
 
     console.log(`[transformative-translate] Credits deducted. New balance: ${creditResult.balance}`);
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY is not configured");
     }
 
     const prompt = segments
@@ -124,24 +124,27 @@ Follow Myanmar Sar Dictionary (မြန်မာစာသတ်ပုံကျ�
 Important: Use natural ${sanitizedTargetLang} phrasing, not word-by-word translation.
 Follow Myanmar Sar Dictionary (မြန်မာစာသတ်ပုံကျမ်း) spelling standards.`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: "You are a professional translator specializing in natural, fluent translations. For Burmese, follow official Myanmar Sar orthography." },
-          { role: "user", content: prompt },
-        ],
-      }),
-    });
+    const systemInstruction = "You are a professional translator specializing in natural, fluent translations. For Burmese, follow official Myanmar Sar orthography.";
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemInstruction }] },
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 8192,
+          },
+        }),
+      }
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("AI Gateway error:", response.status, errorText);
+      console.error("Gemini API error:", response.status, errorText);
       
       if (response.status === 429) {
         return new Response(
@@ -149,18 +152,12 @@ Follow Myanmar Sar Dictionary (မြန်မာစာသတ်ပုံကျ�
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Credits exhausted. Please add credits to your workspace." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
       
       throw new Error("Translation failed");
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || "";
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
     // Parse the response
     let translatedSegments: Array<{ start: number; end: number; text: string }> = [];

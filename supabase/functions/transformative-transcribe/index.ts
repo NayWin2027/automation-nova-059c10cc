@@ -94,10 +94,12 @@ serve(async (req) => {
 
     console.log(`[transformative-transcribe] Credits deducted. New balance: ${creditResult.balance}`);
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY is not configured");
     }
+
+    const resolvedMimeType = mimeType || "audio/mp3";
 
     const prompt = `Transcribe this audio with precise timestamps for subtitles.
                   
@@ -115,38 +117,29 @@ Rules:
 - Include all spoken words accurately
 - ${sanitizedLanguage !== "auto" ? `The audio is in ${sanitizedLanguage}` : "Detect the language automatically"}`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "audio",
-                audio: {
-                  data: audioBase64,
-                  format: mimeType?.replace("audio/", "") || "mp3",
-                },
-              },
-              {
-                type: "text",
-                text: prompt,
-              },
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: prompt },
+              { inlineData: { mimeType: resolvedMimeType, data: audioBase64 } },
             ],
+          }],
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 16384,
           },
-        ],
-      }),
-    });
+        }),
+      }
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("AI Gateway error:", response.status, errorText);
+      console.error("Gemini API error:", response.status, errorText);
       
       if (response.status === 429) {
         return new Response(
@@ -154,18 +147,12 @@ Rules:
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Credits exhausted. Please add credits to your workspace." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
       
       throw new Error("Transcription failed");
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || "";
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
     // Parse the response
     let segments: Array<{ start: number; end: number; text: string }> = [];

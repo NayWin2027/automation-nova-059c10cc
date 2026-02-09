@@ -310,18 +310,18 @@ serve(async (req) => {
       );
     }
 
-    // For App API mode (no user apiKey), use LOVABLE_API_KEY via gateway
+    // For App API mode (no user apiKey), use GEMINI_API_KEY directly
     const isOwnApi = !!apiKey;
     if (!isOwnApi) {
-      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-      if (!LOVABLE_API_KEY) {
+      const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+      if (!GEMINI_API_KEY) {
         return new Response(
           JSON.stringify({ error: "Server API key not configured", retryable: false }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      // Use Lovable AI gateway for App API mode
+      // Use GEMINI_API_KEY directly for App API mode
       const resolvedMime = mimeTypeFromBody || (fileObj ? getMimeType(fileObj) : "audio/mpeg");
       let base64: string;
       if (audioData) {
@@ -361,34 +361,36 @@ serve(async (req) => {
         ? `🇲🇲 ဤ audio/video ဖိုင်ထဲရှိ ပြောဆိုချက်အားလုံးကို တိကျစွာ ဗမာစာဖြင့် ရေးချပါ။ မြန်မာစာသတ်ပုံကျမ်း အတိုင်း စာလုံးပေါင်း သတ်ပုံ မှန်ကန်ရမည်။ ဘာသာပြန်ခြင်း၊ အနှစ်ချုပ်ခြင်း လုံးဝမလုပ်ပါနဲ့။ ပြောသည့်အတိုင်း အတိအကျ ရေးပါ။ Speaker ပြောင်းရင် line break ခံပါ။`
         : `Transcribe all spoken words accurately in ${languageName}. Return ONLY the transcription. Do not translate or summarize. Indicate speaker changes with line breaks.`;
 
-      const gatewayResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [{
-            role: "user",
-            content: [
-              { type: "text", text: prompt },
-              { type: "image_url", image_url: { url: `data:${resolvedMime};base64,${base64}` } },
-            ],
-          }],
-        }),
-      });
+      const geminiResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                { text: prompt },
+                { inlineData: { mimeType: resolvedMime, data: base64 } },
+              ],
+            }],
+            generationConfig: {
+              temperature: 0.1,
+              maxOutputTokens: 16384,
+            },
+          }),
+        }
+      );
 
-      if (!gatewayResponse.ok) {
-        console.error("Gateway error:", gatewayResponse.status);
+      if (!geminiResponse.ok) {
+        console.error("Gemini API error:", geminiResponse.status);
         return new Response(
           JSON.stringify({ error: "Transcription မအောင်မြင်ပါ။ ပြန်စမ်းပါ။", retryable: true }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const gatewayData = await gatewayResponse.json();
-      const text = gatewayData.choices?.[0]?.message?.content || "";
+      const geminiData = await geminiResponse.json();
+      const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
       console.log("[transcribe-google] App API transcription success, length:", text.length);
 
       return new Response(
