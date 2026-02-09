@@ -192,6 +192,16 @@ const UserLoginPage: React.FC = () => {
             </p>
           </div>
 
+          {/* Admin Link - subtle */}
+          <div className="mt-3 text-center">
+            <button
+              type="button"
+              onClick={() => navigate("/admin/login")}
+              className="text-2xs text-white/20 hover:text-white/40 transition-colors"
+            >
+              Admin
+            </button>
+          </div>
         </div>
 
         {/* Footer text */}
