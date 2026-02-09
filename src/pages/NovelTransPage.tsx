@@ -475,11 +475,16 @@ const NovelTransPage: React.FC = () => {
 
       try {
         const toneInstructions = {
-            WUXIA: "STRICT LITERARY STYLE. Translate using Chinese Wuxia/Xianxia webnovel style with epic literary Burmese terms. Use terms like 'သိုင်းလောက', 'ဂိုဏ်းချုပ်'.",
-            ROMANTIC: "Translate with a soft, emotional, and poetic Burmese tone. Focus on feelings and atmosphere.",
-            CLASSIC: "Use formal, high-standard literary Burmese style (သည်/၏/သော). Appropriate for historical novels.",
-            MODERN: "STRICT CONVERSATIONAL STYLE (စကားပြောဟန်). Do NOT use formal literary endings like 'သည်', '၏', 'သနည်း'. Use casual particles like 'တယ်', 'တာ', 'လဲ', 'နေတယ်'. Translate naturally as a human would speak.",
-            FANTASY: "Use imaginative and magical terms, epic scale. Focus on world-building descriptions."
+            WUXIA: "STRICT WUXIA/XIANXIA LITERARY STYLE. Translate using Chinese martial arts webnovel conventions with epic literary Burmese terms. Use terms like 'သိုင်းလောက', 'ဂိုဏ်းချုပ်', 'အတွင်းအား'. Write in a dramatic, grand narrative voice befitting wuxia novels.",
+            ROMANTIC: "Translate with a soft, emotional, and poetic Burmese tone. Focus on feelings and atmosphere. Use gentle, expressive language.",
+            CLASSIC: "Use formal, high-standard literary Burmese style (သည်/၏/သော). Appropriate for historical novels and classical literature.",
+            MODERN: `STRICT MODERN CONVERSATIONAL BURMESE (ခေတ်ပေါ်စကားပြောဟန်).
+ABSOLUTELY FORBIDDEN: Do NOT use ANY formal literary endings: 'သည်', '၏', '၍', 'လေ၏', 'သတည်း', 'သနည်း', 'ရာ', 'တော့သည်', 'ပေသည်', 'လေသည်'. These are VIOLATIONS.
+MANDATORY: Use ONLY modern spoken Burmese particles: 'တယ်', 'တာ', 'လဲ', 'နေတယ်', 'မယ်', 'ပါတယ်', 'ခဲ့တယ်', 'နေတာ', 'တာပဲ', 'လိုက်တယ်', 'သွားတယ်', 'ရတယ်'.
+CRITICAL: Do NOT translate word-by-word or literally. Instead, use MODERN everyday Burmese expressions, slang, and phrasing that real Myanmar people use in ${new Date().getFullYear()}. 
+Replace stiff/archaic words with their modern equivalents. The translation must sound like a modern Myanmar Netflix series script — natural, conversational, easy to understand for everyone.
+Preserve the original meaning and essence 100% accurately, but express it in the most natural modern Burmese way possible.`,
+            FANTASY: "Use imaginative and magical terms, epic scale. Focus on world-building descriptions and fantastical vocabulary."
         };
 
         let contextTranslated = "";
@@ -507,7 +512,18 @@ CHAPTER TITLE & NUMBERING RULES (ABSOLUTELY CRITICAL - FOLLOW EXACTLY):
 - If the source chunk starts in the MIDDLE of a chapter (no chapter heading visible), do NOT add any chapter heading. Just continue translating the content.
 - NEVER invent, repeat, or reassign chapter numbers. The chapter numbers come from the SOURCE DOCUMENT only.
 - If a chapter heading appears in the source text (e.g., "Chapter 9" or "第九章"), translate it as the equivalent heading in ${targetLang}.
-- Display chapter titles as clear HEADINGS with blank lines above and below.
+
+CHAPTER TITLE FORMATTING (ABSOLUTELY CRITICAL):
+- Chapter titles/headings MUST be on their OWN SEPARATE LINE, ABOVE the paragraph content.
+- NEVER merge or mix a chapter title into the same line as paragraph text.
+- Format: TWO blank lines before the chapter title, the title on its own line, ONE blank line after the title, then the paragraph content starts on the next line.
+- Example correct format:
+  [blank line]
+  [blank line]
+  အခန်း ၄၃ မျှော်ဝင် ပြတင်းပေါက်
+  [blank line]
+  အင်္ဂလိပ်စကားပြော- ပုံပြင်တိုများ...
+- VIOLATION: Writing "၄၃ အင်္ဂလိပ်စကားပြော..." (title merged with paragraph text) is WRONG.
 - Each chapter number should appear EXACTLY ONCE across all chunks. If "Chapter 9" was already translated in a previous chunk, do NOT output it again.
 
 PREVIOUS CONTEXT (tells you what was already translated - DO NOT repeat this content):
