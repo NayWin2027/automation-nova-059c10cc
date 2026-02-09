@@ -1,118 +1,113 @@
-import React, { useState, useRef } from "react";
-import { Download, ChevronDown, Loader2, Copy, Check, Sparkles, X } from "lucide-react";
+import React, { useState, useRef, useEffect } from "react";
+import { Download, ChevronDown, Loader2, Copy, Check, Sparkles, X, Edit3, Save } from "lucide-react";
 import { transcribeAudio } from "../services/geminiService";
 import { transcribeOwnApi, getOwnApiErrorMessage } from "../services/ownApiService";
 import { useSecureApiKey } from "../hooks/useSecureApiKey";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
-const LANGUAGES = [
-  "BURMESE",
-  "ENGLISH",
-  "JAPANESE",
-  "KOREAN",
-  "CHINESE (SIMPLIFIED)",
-  "CHINESE (TRADITIONAL)",
-  "THAI",
-  "VIETNAMESE",
-  "HINDI",
-  "INDONESIAN",
-  "MALAY",
-  "FRENCH",
-  "GERMAN",
-  "SPANISH",
-  "ITALIAN",
-  "RUSSIAN",
-  "PORTUGUESE",
-  "ARABIC",
-  "TURKISH",
-  "BENGALI",
-  "PUNJABI",
-  "TELUGU",
-  "MARATHI",
-  "TAMIL",
-  "URDU",
-  "GUJARATI",
-  "KANNADA",
-  "MALAYALAM",
-  "FILIPINO",
-  "KHMER",
-  "LAO",
-  "AFRIKAANS",
-  "ALBANIAN",
-  "AMHARIC",
-  "ARMENIAN",
-  "AZERBAIJANI",
-  "BASQUE",
-  "BELARUSIAN",
-  "BOSNIAN",
-  "BULGARIAN",
-  "CATALAN",
-  "CROATIAN",
-  "CZECH",
-  "DANISH",
-  "DUTCH",
-  "ESTONIAN",
-  "FINNISH",
-  "GALICIAN",
-  "GEORGIAN",
-  "GREEK",
-  "HEBREW",
-  "HUNGARIAN",
-  "ICELANDIC",
-  "IRISH",
-  "KAZAKH",
-  "KYRGYZ",
-  "LATVIAN",
-  "LITHUANIAN",
-  "MACEDONIAN",
-  "MALAGASY",
-  "MALTESE",
-  "MONGOLIAN",
-  "NEPALI",
-  "NORWEGIAN",
-  "PERSIAN",
-  "POLISH",
-  "ROMANIAN",
-  "SERBIAN",
-  "SINHALA",
-  "SLOVAK",
-  "SLOVENIAN",
-  "SOMALI",
-  "SWAHILI",
-  "SWEDISH",
-  "TAJIK",
-  "UKRAINIAN",
-  "UZBEK",
-  "ZULU",
-  "XHOSA",
-  "YORUBA",
-  "IGBO",
-];
+// ============ ADMIN CMS TYPES ============
+interface TranscribeSettings {
+  pageTitle: string;
+  languageLabel: string;
+  uploadText: string;
+  tierLabel: string;
+  startButtonText: string;
+  helpLinkText: string;
+  resultTitle: string;
+  howToUseTitle: string;
+  howToUseSteps: string[];
+  proTipsTitle: string;
+  proTips: string[];
+  scriptGeneratorTitle: string;
+  scriptNicheLabel: string;
+  scriptButtonText: string;
+  scriptHelpText: string;
+  scriptResultTitle: string;
+  creditTiers: { label: string; credits: number; value: number }[];
+}
 
-const CREDIT_TIERS = [
-  { label: "UNDER 5 MINUTES", credits: 4, value: 5 },
-  { label: "UNDER 10 MINUTES", credits: 8, value: 10 },
-  { label: "UNDER 15 MINUTES", credits: 12, value: 15 },
-  { label: "UNDER 20 MINUTES", credits: 16, value: 20 },
+const DEFAULT_SETTINGS: TranscribeSettings = {
+  pageTitle: "TRANSCRIBE MEDIA",
+  languageLabel: "SELECT LANGUAGE",
+  uploadText: "SELECT VIDEO OR AUDIO",
+  tierLabel: "SELECT DURATION TIER",
+  startButtonText: "START TRANSCRIPTION",
+  helpLinkText: "HOW TO USE TRANSCRIPT MASTER",
+  resultTitle: "RESULT OUTPUT",
+  howToUseTitle: "HOW TO USE",
+  howToUseSteps: [
+    "၁။ Transcript ထုတ်မယ့် Video or Audio ကိုထည့်ပါ။",
+    "၂။ ကြာချိန်နဲ့ကိုက်ညီတဲ့ Credit ပမာဏကိုရွေးပါ။",
+    "၃။ ထုတ်နှိပ်လိုက်ပြီ။",
+  ],
+  proTipsTitle: "PRO TIPS & WARNINGS",
+  proTips: [
+    "! Video or Audio က ၁၅ မိနစ်ထက်ကျော်ရင် နှစ်ပိုင်းခွဲထုတ်ပါ။",
+    "! Video က File Size ကြီးရင် Audio အဖြစ်ပြောင်းပြီးထုတ်ပါ။",
+    "! History တွေအရမ်းများလာရင်ဖျက်ပေးပါ။",
+  ],
+  scriptGeneratorTitle: "AI NARRATION SCRIPT GENERATOR",
+  scriptNicheLabel: "SELECT NICHE",
+  scriptButtonText: "GENERATE NARRATION SCRIPT",
+  scriptHelpText: "Transcript ကို analyze လုပ်ပြီး niche အလိုက် professional narration script ထုတ်ပေးပါမယ်",
+  scriptResultTitle: "NARRATION SCRIPT",
+  creditTiers: [
+    { label: "UNDER 5 MINUTES", credits: 4, value: 5 },
+    { label: "UNDER 10 MINUTES", credits: 8, value: 10 },
+    { label: "UNDER 15 MINUTES", credits: 12, value: 15 },
+    { label: "UNDER 20 MINUTES", credits: 16, value: 20 },
+  ],
+};
+
+const LANGUAGES = [
+  "BURMESE","ENGLISH","JAPANESE","KOREAN","CHINESE (SIMPLIFIED)","CHINESE (TRADITIONAL)",
+  "THAI","VIETNAMESE","HINDI","INDONESIAN","MALAY","FRENCH","GERMAN","SPANISH","ITALIAN",
+  "RUSSIAN","PORTUGUESE","ARABIC","TURKISH","BENGALI","PUNJABI","TELUGU","MARATHI","TAMIL",
+  "URDU","GUJARATI","KANNADA","MALAYALAM","FILIPINO","KHMER","LAO","AFRIKAANS","ALBANIAN",
+  "AMHARIC","ARMENIAN","AZERBAIJANI","BASQUE","BELARUSIAN","BOSNIAN","BULGARIAN","CATALAN",
+  "CROATIAN","CZECH","DANISH","DUTCH","ESTONIAN","FINNISH","GALICIAN","GEORGIAN","GREEK",
+  "HEBREW","HUNGARIAN","ICELANDIC","IRISH","KAZAKH","KYRGYZ","LATVIAN","LITHUANIAN",
+  "MACEDONIAN","MALAGASY","MALTESE","MONGOLIAN","NEPALI","NORWEGIAN","PERSIAN","POLISH",
+  "ROMANIAN","SERBIAN","SINHALA","SLOVAK","SLOVENIAN","SOMALI","SWAHILI","SWEDISH","TAJIK",
+  "UKRAINIAN","UZBEK","ZULU","XHOSA","YORUBA","IGBO",
 ];
 
 const SCRIPT_NICHES = [
-  "MOVIE RECAP",
-  "TECH / AI",
-  "DOCUMENTARY",
-  "TRUE CRIME",
-  "RELIGIOUS / SPIRITUAL",
-  "POLITICAL COMMENTARY",
-  "TRAVEL / FOOD",
-  "EDUCATIONAL",
-  "ENTERTAINMENT / GOSSIP",
-  "SPORTS",
-  "BUSINESS / FINANCE",
-  "HEALTH / WELLNESS",
-  "MUSIC / CONCERT",
-  "GENERAL",
+  "MOVIE RECAP","TECH / AI","DOCUMENTARY","TRUE CRIME","RELIGIOUS / SPIRITUAL",
+  "POLITICAL COMMENTARY","TRAVEL / FOOD","EDUCATIONAL","ENTERTAINMENT / GOSSIP",
+  "SPORTS","BUSINESS / FINANCE","HEALTH / WELLNESS","MUSIC / CONCERT","GENERAL",
 ];
+
+// ============ LOCAL DB HELPER ============
+const db = {
+  async getSettings(): Promise<TranscribeSettings> {
+    try {
+      const { data } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", "transcribe_settings")
+        .maybeSingle();
+      if (data?.value) {
+        return { ...DEFAULT_SETTINGS, ...(data.value as any) };
+      }
+    } catch {}
+    return { ...DEFAULT_SETTINGS };
+  },
+  async saveSettings(settings: TranscribeSettings, userId: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from("app_settings")
+        .upsert(
+          { key: "transcribe_settings", value: settings as any, updated_by: userId, updated_at: new Date().toISOString() },
+          { onConflict: "key" }
+        );
+      return !error;
+    } catch {
+      return false;
+    }
+  },
+};
 
 export default function TranscriptionView() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -127,9 +122,55 @@ export default function TranscriptionView() {
   const [generatedScript, setGeneratedScript] = useState("");
   const [scriptCopied, setScriptCopied] = useState(false);
 
-  // API Mode States - using secure session storage
+  // API Mode States
   const [apiType, setApiType] = useState<"app" | "own">("app");
   const { apiKey, setApiKey } = useSecureApiKey("master_transcribe_api_key");
+
+  // Admin CMS States
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [settings, setSettings] = useState<TranscribeSettings>(DEFAULT_SETTINGS);
+  const [editSettings, setEditSettings] = useState<TranscribeSettings>(DEFAULT_SETTINGS);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Load settings & check admin
+  useEffect(() => {
+    db.getSettings().then(setSettings);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUserId(session.user.id);
+        supabase.rpc("has_role", { _user_id: session.user.id, _role: "admin" })
+          .then(({ data }) => setIsAdmin(data === true));
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    setEditSettings({ ...settings });
+  }, [settings]);
+
+  const handleSaveSettings = async () => {
+    if (!userId) return;
+    setIsSaving(true);
+    const ok = await db.saveSettings(editSettings, userId);
+    if (ok) {
+      setSettings({ ...editSettings });
+      setIsEditing(false);
+      toast.success("Settings saved!");
+    } else {
+      toast.error("Failed to save settings");
+    }
+    setIsSaving(false);
+  };
+
+  const CREDIT_TIERS = settings.creditTiers;
+
+  const getSelectedTierCredits = (): number | undefined => {
+    if (selectedTier === null) return undefined;
+    const tier = CREDIT_TIERS.find(t => t.value === selectedTier);
+    return tier?.credits;
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -162,21 +203,11 @@ export default function TranscriptionView() {
           let text: string | null = null;
           
           if (apiType === "own") {
-            // Direct client-side transcription with silent retry + model fallback
-            text = await transcribeOwnApi(
-              base64,
-              selectedFile.type,
-              selectedLanguage,
-              apiKey
-            );
+            text = await transcribeOwnApi(base64, selectedFile.type, selectedLanguage, apiKey);
           } else {
-            // App API mode - use backend
-            text = await transcribeAudio(
-              base64,
-              selectedFile.type,
-              selectedLanguage,
-              undefined
-            );
+            // App API mode - pass the selected tier's credit cost
+            const tierCredits = getSelectedTierCredits();
+            text = await transcribeAudio(base64, selectedFile.type, selectedLanguage, undefined, tierCredits);
           }
           
           if (text) {
@@ -213,11 +244,7 @@ export default function TranscriptionView() {
     setGeneratedScript("");
     try {
       const { data, error } = await supabase.functions.invoke("recap-script-generator", {
-        body: {
-          transcript: result,
-          niche: scriptNiche,
-          language: selectedLanguage,
-        },
+        body: { transcript: result, niche: scriptNiche, language: selectedLanguage },
       });
       if (error) throw error;
       if (data?.script) {
@@ -240,8 +267,82 @@ export default function TranscriptionView() {
     setTimeout(() => setScriptCopied(false), 2000);
   };
 
+  // ============ ADMIN EDIT HELPERS ============
+  const EditableText = ({ value, onChange, className = "", as = "span" }: {
+    value: string; onChange: (v: string) => void; className?: string; as?: string;
+  }) => {
+    if (!isEditing) {
+      const Tag = as as any;
+      return <Tag className={className}>{value}</Tag>;
+    }
+    return (
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`${className} bg-yellow-500/20 border border-yellow-500/50 rounded px-1 outline-none`}
+        style={{ width: "100%" }}
+      />
+    );
+  };
+
+  const updateTier = (idx: number, field: keyof typeof CREDIT_TIERS[0], val: string) => {
+    const newTiers = [...editSettings.creditTiers];
+    if (field === "credits" || field === "value") {
+      (newTiers[idx] as any)[field] = parseInt(val) || 0;
+    } else {
+      (newTiers[idx] as any)[field] = val;
+    }
+    setEditSettings({ ...editSettings, creditTiers: newTiers });
+  };
+
+  const updateStep = (idx: number, val: string) => {
+    const newSteps = [...editSettings.howToUseSteps];
+    newSteps[idx] = val;
+    setEditSettings({ ...editSettings, howToUseSteps: newSteps });
+  };
+
+  const updateTip = (idx: number, val: string) => {
+    const newTips = [...editSettings.proTips];
+    newTips[idx] = val;
+    setEditSettings({ ...editSettings, proTips: newTips });
+  };
+
+  const s = isEditing ? editSettings : settings;
+
   return (
     <div className="min-h-screen bg-[#020617] text-slate-200 p-4 space-y-6 animate-in fade-in duration-500 pb-32">
+      {/* ADMIN EDIT BAR */}
+      {isAdmin && (
+        <div className="fixed top-2 right-2 z-50 flex gap-2">
+          {isEditing ? (
+            <>
+              <button
+                onClick={handleSaveSettings}
+                disabled={isSaving}
+                className="flex items-center gap-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-lg hover:bg-emerald-500 transition-all"
+              >
+                {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                SAVE
+              </button>
+              <button
+                onClick={() => { setIsEditing(false); setEditSettings({ ...settings }); }}
+                className="flex items-center gap-1 px-3 py-2 bg-rose-600 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-lg hover:bg-rose-500 transition-all"
+              >
+                <X className="w-3 h-3" /> CANCEL
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setIsEditing(true)}
+              className="flex items-center gap-1 px-3 py-2 bg-amber-600 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-lg hover:bg-amber-500 transition-all"
+            >
+              <Edit3 className="w-3 h-3" /> EDIT PAGE
+            </button>
+          )}
+        </div>
+      )}
+
       {/* API TOGGLE DECK */}
       <div className="bg-[#121826]/80 backdrop-blur-2xl p-1.5 rounded-[40px] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex gap-2 max-w-sm mx-auto">
         <button
@@ -277,10 +378,14 @@ export default function TranscriptionView() {
 
       {/* HEADER SECTION */}
       <div className="space-y-4">
-        <h2 className="text-sm font-black text-white uppercase tracking-wider">TRANSCRIBE MEDIA</h2>
+        <h2 className="text-sm font-black text-white uppercase tracking-wider">
+          <EditableText value={s.pageTitle} onChange={(v) => setEditSettings({ ...editSettings, pageTitle: v })} />
+        </h2>
 
         <div className="space-y-2">
-          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">SELECT LANGUAGE</label>
+          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+            <EditableText value={s.languageLabel} onChange={(v) => setEditSettings({ ...editSettings, languageLabel: v })} />
+          </label>
           <div className="relative">
             <select
               value={selectedLanguage}
@@ -288,9 +393,7 @@ export default function TranscriptionView() {
               className="w-full bg-[#0a0f1d] border border-white/5 rounded-lg p-4 text-xs font-bold text-white appearance-none outline-none focus:border-blue-500/50 transition-all uppercase"
             >
               {LANGUAGES.map((l) => (
-                <option key={l} value={l}>
-                  {l}
-                </option>
+                <option key={l} value={l}>{l}</option>
               ))}
             </select>
             <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
@@ -313,7 +416,9 @@ export default function TranscriptionView() {
             <Download className="w-6 h-6" />
           </div>
           <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 group-hover:text-blue-400 transition-colors text-center">
-            {selectedFile ? selectedFile.name.toUpperCase() : "SELECT VIDEO OR AUDIO"}
+            {selectedFile ? selectedFile.name.toUpperCase() : (
+              <EditableText value={s.uploadText} onChange={(v) => setEditSettings({ ...editSettings, uploadText: v })} />
+            )}
           </p>
         </div>
 
@@ -321,28 +426,84 @@ export default function TranscriptionView() {
         {selectedFile && !result && (
           <div className="space-y-4 animate-in zoom-in-95 duration-300">
             <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block text-center">
-              SELECT DURATION TIER
+              <EditableText value={s.tierLabel} onChange={(v) => setEditSettings({ ...editSettings, tierLabel: v })} />
             </label>
             <div className="grid grid-cols-2 gap-2">
-              {CREDIT_TIERS.map((tier, idx) => (
+              {(isEditing ? editSettings.creditTiers : CREDIT_TIERS).map((tier, idx) => (
                 <button
                   key={idx}
-                  onClick={() => setSelectedTier(tier.value)}
+                  onClick={() => !isEditing && setSelectedTier(tier.value)}
                   className={`p-4 rounded-xl border transition-all flex flex-col items-center justify-center gap-1 ${selectedTier === tier.value ? "bg-blue-600 border-blue-400 shadow-lg shadow-blue-500/20" : "bg-white/5 border-white/5 text-slate-500 hover:border-white/10"}`}
                 >
-                  <span
-                    className={`text-[8px] font-black uppercase ${selectedTier === tier.value ? "text-blue-100" : ""}`}
-                  >
-                    {tier.label}
-                  </span>
-                  <span
-                    className={`text-xs font-black ${selectedTier === tier.value ? "text-white" : "text-slate-400"}`}
-                  >
-                    {tier.credits} CRD
-                  </span>
+                  {isEditing ? (
+                    <>
+                      <input
+                        type="text"
+                        value={tier.label}
+                        onChange={(e) => updateTier(idx, "label", e.target.value)}
+                        className="text-[8px] font-black uppercase text-center bg-yellow-500/20 border border-yellow-500/50 rounded px-1 w-full outline-none"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          value={tier.credits}
+                          onChange={(e) => updateTier(idx, "credits", e.target.value)}
+                          className="text-xs font-black text-center bg-yellow-500/20 border border-yellow-500/50 rounded px-1 w-12 outline-none"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <span className="text-[8px] font-black">CRD</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-[7px] text-slate-500">val:</span>
+                        <input
+                          type="number"
+                          value={tier.value}
+                          onChange={(e) => updateTier(idx, "value", e.target.value)}
+                          className="text-[8px] font-black text-center bg-yellow-500/20 border border-yellow-500/50 rounded px-1 w-10 outline-none"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <span className={`text-[8px] font-black uppercase ${selectedTier === tier.value ? "text-blue-100" : ""}`}>
+                        {tier.label}
+                      </span>
+                      <span className={`text-xs font-black ${selectedTier === tier.value ? "text-white" : "text-slate-400"}`}>
+                        {tier.credits} CRD
+                      </span>
+                    </>
+                  )}
                 </button>
               ))}
             </div>
+
+            {/* Add/Remove tier buttons in edit mode */}
+            {isEditing && (
+              <div className="flex gap-2 justify-center">
+                <button
+                  onClick={() => setEditSettings({
+                    ...editSettings,
+                    creditTiers: [...editSettings.creditTiers, { label: "NEW TIER", credits: 20, value: 25 }]
+                  })}
+                  className="px-3 py-1 bg-emerald-600/30 text-emerald-400 rounded text-[9px] font-black"
+                >
+                  + ADD TIER
+                </button>
+                {editSettings.creditTiers.length > 1 && (
+                  <button
+                    onClick={() => setEditSettings({
+                      ...editSettings,
+                      creditTiers: editSettings.creditTiers.slice(0, -1)
+                    })}
+                    className="px-3 py-1 bg-rose-600/30 text-rose-400 rounded text-[9px] font-black"
+                  >
+                    - REMOVE LAST
+                  </button>
+                )}
+              </div>
+            )}
 
             <button
               onClick={handleTranscribe}
@@ -355,7 +516,7 @@ export default function TranscriptionView() {
                   <span>TRANSCRIBING...</span>
                 </div>
               ) : (
-                "START TRANSCRIPTION"
+                <EditableText value={s.startButtonText} onChange={(v) => setEditSettings({ ...editSettings, startButtonText: v })} />
               )}
             </button>
           </div>
@@ -365,7 +526,7 @@ export default function TranscriptionView() {
         <div className="flex items-center justify-center gap-2 py-2 border-y border-white/5 bg-[#0a0f1d]/30 rounded-full">
           <div className="w-2 h-2 rounded-full bg-blue-500"></div>
           <button className="text-[9px] font-black text-blue-400 uppercase tracking-widest hover:text-blue-300 transition-colors">
-            HOW TO USE TRANSCRIPT MASTER
+            <EditableText value={s.helpLinkText} onChange={(v) => setEditSettings({ ...editSettings, helpLinkText: v })} />
           </button>
         </div>
       </div>
@@ -374,7 +535,9 @@ export default function TranscriptionView() {
       {result && (
         <div className="space-y-4 animate-in fade-in zoom-in-95 duration-500">
           <div className="flex justify-between items-center px-2">
-            <h3 className="text-[10px] font-black text-blue-400 uppercase tracking-widest">RESULT OUTPUT</h3>
+            <h3 className="text-[10px] font-black text-blue-400 uppercase tracking-widest">
+              <EditableText value={s.resultTitle} onChange={(v) => setEditSettings({ ...editSettings, resultTitle: v })} />
+            </h3>
             <div className="flex gap-2">
               <button
                 onClick={() => {
@@ -410,13 +573,15 @@ export default function TranscriptionView() {
           <div className="flex items-center gap-3 px-2">
             <Sparkles className="w-4 h-4 text-amber-400" />
             <h3 className="text-[10px] font-black text-amber-400 uppercase tracking-widest">
-              AI NARRATION SCRIPT GENERATOR
+              <EditableText value={s.scriptGeneratorTitle} onChange={(v) => setEditSettings({ ...editSettings, scriptGeneratorTitle: v })} />
             </h3>
           </div>
 
           <div className="bg-[#0a0f1d] border border-amber-500/20 rounded-2xl p-5 space-y-4">
             <div className="space-y-2">
-              <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">SELECT NICHE</label>
+              <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
+                <EditableText value={s.scriptNicheLabel} onChange={(v) => setEditSettings({ ...editSettings, scriptNicheLabel: v })} />
+              </label>
               <div className="relative">
                 <select
                   value={scriptNiche}
@@ -448,13 +613,13 @@ export default function TranscriptionView() {
               ) : (
                 <>
                   <Sparkles className="w-4 h-4" />
-                  <span>GENERATE NARRATION SCRIPT</span>
+                  <EditableText value={s.scriptButtonText} onChange={(v) => setEditSettings({ ...editSettings, scriptButtonText: v })} />
                 </>
               )}
             </button>
 
             <p className="text-[8px] text-amber-300/50 text-center">
-              Transcript ကို analyze လုပ်ပြီး niche အလိုက် professional narration script ထုတ်ပေးပါမယ်
+              <EditableText value={s.scriptHelpText} onChange={(v) => setEditSettings({ ...editSettings, scriptHelpText: v })} />
             </p>
           </div>
 
@@ -462,7 +627,9 @@ export default function TranscriptionView() {
           {generatedScript && (
             <div className="space-y-3 animate-in fade-in zoom-in-95 duration-500">
               <div className="flex justify-between items-center px-2">
-                <h3 className="text-[10px] font-black text-amber-400 uppercase tracking-widest">NARRATION SCRIPT</h3>
+                <h3 className="text-[10px] font-black text-amber-400 uppercase tracking-widest">
+                  <EditableText value={s.scriptResultTitle} onChange={(v) => setEditSettings({ ...editSettings, scriptResultTitle: v })} />
+                </h3>
                 <div className="flex gap-2">
                   <button
                     onClick={handleCopyScript}
@@ -490,16 +657,37 @@ export default function TranscriptionView() {
       <div className="bg-[#0a0f1d] border border-white/5 rounded-2xl p-6 space-y-4">
         <div className="flex items-center gap-3">
           <div className="w-1 h-4 bg-blue-500 rounded-full"></div>
-          <h3 className="text-[10px] font-black text-white uppercase tracking-widest">HOW TO USE</h3>
+          <h3 className="text-[10px] font-black text-white uppercase tracking-widest">
+            <EditableText value={s.howToUseTitle} onChange={(v) => setEditSettings({ ...editSettings, howToUseTitle: v })} />
+          </h3>
         </div>
         <div className="space-y-3">
-          <p className="text-[11px] font-medium text-slate-400 leading-relaxed">
-            ၁။ Transcript ထုတ်မယ့် Video or Audio ကိုထည့်ပါ။
-          </p>
-          <p className="text-[11px] font-medium text-slate-400 leading-relaxed">
-            ၂။ ကြာချိန်နဲ့ကိုက်ညီတဲ့ Credit ပမာဏကိုရွေးပါ။
-          </p>
-          <p className="text-[11px] font-medium text-slate-400 leading-relaxed">၃။ ထုတ်နှိပ်လိုက်ပြီ။</p>
+          {s.howToUseSteps.map((step, idx) => (
+            <p key={idx} className="text-[11px] font-medium text-slate-400 leading-relaxed">
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={editSettings.howToUseSteps[idx] || ""}
+                  onChange={(e) => updateStep(idx, e.target.value)}
+                  className="w-full bg-yellow-500/20 border border-yellow-500/50 rounded px-2 py-1 text-[11px] text-slate-300 outline-none"
+                />
+              ) : step}
+            </p>
+          ))}
+          {isEditing && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => setEditSettings({ ...editSettings, howToUseSteps: [...editSettings.howToUseSteps, ""] })}
+                className="px-2 py-1 bg-emerald-600/30 text-emerald-400 rounded text-[8px] font-black"
+              >+ ADD</button>
+              {editSettings.howToUseSteps.length > 1 && (
+                <button
+                  onClick={() => setEditSettings({ ...editSettings, howToUseSteps: editSettings.howToUseSteps.slice(0, -1) })}
+                  className="px-2 py-1 bg-rose-600/30 text-rose-400 rounded text-[8px] font-black"
+                >- REMOVE</button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -507,18 +695,37 @@ export default function TranscriptionView() {
       <div className="bg-[#0a0f1d] border border-white/5 rounded-2xl p-6 space-y-4">
         <div className="flex items-center gap-3">
           <div className="w-1 h-4 bg-blue-500 rounded-full"></div>
-          <h3 className="text-[10px] font-black text-white uppercase tracking-widest">PRO TIPS & WARNINGS</h3>
+          <h3 className="text-[10px] font-black text-white uppercase tracking-widest">
+            <EditableText value={s.proTipsTitle} onChange={(v) => setEditSettings({ ...editSettings, proTipsTitle: v })} />
+          </h3>
         </div>
         <div className="space-y-3">
-          <p className="text-[11px] font-medium text-amber-500/80 leading-relaxed">
-            ! Video or Audio က ၁၅ မိနစ်ထက်ကျော်ရင် နှစ်ပိုင်းခွဲထုတ်ပါ။
-          </p>
-          <p className="text-[11px] font-medium text-amber-500/80 leading-relaxed">
-            ! Video က File Size ကြီးရင် Audio အဖြစ်ပြောင်းပြီးထုတ်ပါ။
-          </p>
-          <p className="text-[11px] font-medium text-amber-500/80 leading-relaxed">
-            ! History တွေအရမ်းများလာရင်ဖျက်ပေးပါ။
-          </p>
+          {s.proTips.map((tip, idx) => (
+            <p key={idx} className="text-[11px] font-medium text-amber-500/80 leading-relaxed">
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={editSettings.proTips[idx] || ""}
+                  onChange={(e) => updateTip(idx, e.target.value)}
+                  className="w-full bg-yellow-500/20 border border-yellow-500/50 rounded px-2 py-1 text-[11px] text-amber-300 outline-none"
+                />
+              ) : tip}
+            </p>
+          ))}
+          {isEditing && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => setEditSettings({ ...editSettings, proTips: [...editSettings.proTips, ""] })}
+                className="px-2 py-1 bg-emerald-600/30 text-emerald-400 rounded text-[8px] font-black"
+              >+ ADD</button>
+              {editSettings.proTips.length > 1 && (
+                <button
+                  onClick={() => setEditSettings({ ...editSettings, proTips: editSettings.proTips.slice(0, -1) })}
+                  className="px-2 py-1 bg-rose-600/30 text-rose-400 rounded text-[8px] font-black"
+                >- REMOVE</button>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -744,18 +744,24 @@ export async function transcribeAudio(
   base64Data: string,
   mimeType: string,
   language: string,
-  apiKey?: string
+  apiKey?: string,
+  customCreditCost?: number
 ): Promise<string | null> {
   try {
-    const { data, error } = await invokeWithAuthRetry<{ 
-      text?: string; 
-      error?: string;
-    }>('transcribe-google', {
+    const body: any = {
       audioData: base64Data,
       mimeType,
       language,
       apiKey,
-    });
+    };
+    if (customCreditCost !== undefined && customCreditCost !== null) {
+      body.customCreditCost = customCreditCost;
+    }
+
+    const { data, error } = await invokeWithAuthRetry<{ 
+      text?: string; 
+      error?: string;
+    }>('transcribe-google', body);
 
     if (error) {
       console.error('transcribeAudio error:', error);

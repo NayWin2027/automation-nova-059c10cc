@@ -287,6 +287,7 @@ serve(async (req) => {
     let languageName = "BURMESE";
     let mimeTypeFromBody: string | null = null;
     let fileObj: File | null = null;
+    let customCreditCost: number | null = null;
 
     const contentType = req.headers.get("content-type") || "";
     if (contentType.includes("application/json")) {
@@ -295,6 +296,9 @@ serve(async (req) => {
       apiKey = body.apiKey || null;
       languageName = (body.language || body.languageName || "BURMESE").replace(/[<>\"'&]/g, "").substring(0, 50);
       mimeTypeFromBody = body.mimeType || null;
+      if (body.customCreditCost !== undefined && body.customCreditCost !== null) {
+        customCreditCost = Number(body.customCreditCost);
+      }
     } else {
       const formData = await req.formData();
       fileObj = formData.get("file") as File;
@@ -331,13 +335,17 @@ serve(async (req) => {
         base64 = btoa(new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ""));
       }
 
-      // Credit check
+      // Credit check - use custom cost from frontend if provided
       const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-      const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", {
+      const rpcParams: any = {
         _user_id: user.id,
         _tool_id: "transcribe",
         _is_own_api: false,
-      });
+      };
+      if (customCreditCost !== null && !isNaN(customCreditCost)) {
+        rpcParams._custom_cost = customCreditCost;
+      }
+      const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", rpcParams);
 
       if (creditError) {
         console.error("[transcribe-google] Credit check error:", creditError);
