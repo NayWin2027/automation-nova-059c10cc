@@ -20,6 +20,8 @@ const UserLoginPage: React.FC = () => {
   });
   const [showGateDialog, setShowGateDialog] = useState(false);
   const [gateCode, setGateCode] = useState("");
+  const [gateAttempts, setGateAttempts] = useState(0);
+  const [gateLocked, setGateLocked] = useState(false);
 
   useEffect(() => {
     // Check if already logged in
@@ -197,23 +199,25 @@ const UserLoginPage: React.FC = () => {
           </div>
 
           {/* Admin Link - subtle */}
-          <div className="mt-3 text-center">
-            <button
-              type="button"
-              onClick={() => setShowGateDialog(true)}
-              className="text-2xs text-white/20 hover:text-white/40 transition-colors"
-            >
-              Admin
-            </button>
-          </div>
+          {!gateLocked && (
+            <div className="mt-3 text-center">
+              <button
+                type="button"
+                onClick={() => setShowGateDialog(true)}
+                className="text-2xs text-white/20 hover:text-white/40 transition-colors"
+              >
+                Admin
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Admin Gate Dialog */}
-        {showGateDialog && (
+        {showGateDialog && !gateLocked && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
             <div className="relative w-full max-w-xs mx-4 premium-tool-card rounded-2xl p-5 border border-white/10">
               <h3 className="text-sm font-semibold text-white text-center mb-1">🔐 Security Gate</h3>
-              <p className="text-2xs text-white/50 text-center mb-4">Access Code ထည့်ပါ</p>
+              <p className="text-2xs text-white/50 text-center mb-4">Access Code ထည့်ပါ ({3 - gateAttempts} ခါ ကျန်ပါသေးသည်)</p>
               <input
                 type="password"
                 value={gateCode}
@@ -226,10 +230,19 @@ const UserLoginPage: React.FC = () => {
                     if (gateCode === ADMIN_GATE_CODE) {
                       setShowGateDialog(false);
                       setGateCode("");
+                      setGateAttempts(0);
                       navigate("/admin/login");
                     } else {
-                      toast({ title: "❌ Access Denied", description: "Code မှားနေပါသည်", variant: "destructive" });
+                      const newAttempts = gateAttempts + 1;
+                      setGateAttempts(newAttempts);
                       setGateCode("");
+                      if (newAttempts >= 3) {
+                        setShowGateDialog(false);
+                        setGateLocked(true);
+                        toast({ title: "🔒 Locked", description: "ခွင့်ပြုချက် ပိတ်ထားပါသည်", variant: "destructive" });
+                      } else {
+                        toast({ title: "❌ Access Denied", description: `Code မှားနေပါသည် (${3 - newAttempts} ခါ ကျန်)`, variant: "destructive" });
+                      }
                     }
                   }
                 }}
@@ -246,10 +259,19 @@ const UserLoginPage: React.FC = () => {
                     if (gateCode === ADMIN_GATE_CODE) {
                       setShowGateDialog(false);
                       setGateCode("");
+                      setGateAttempts(0);
                       navigate("/admin/login");
                     } else {
-                      toast({ title: "❌ Access Denied", description: "Code မှားနေပါသည်", variant: "destructive" });
+                      const newAttempts = gateAttempts + 1;
+                      setGateAttempts(newAttempts);
                       setGateCode("");
+                      if (newAttempts >= 3) {
+                        setShowGateDialog(false);
+                        setGateLocked(true);
+                        toast({ title: "🔒 Locked", description: "ခွင့်ပြုချက် ပိတ်ထားပါသည်", variant: "destructive" });
+                      } else {
+                        toast({ title: "❌ Access Denied", description: `Code မှားနေပါသည် (${3 - newAttempts} ခါ ကျန်)`, variant: "destructive" });
+                      }
                     }
                   }}
                   className="flex-1 h-9 rounded-lg bg-gradient-to-r from-violet-600 to-blue-600 text-2xs text-white font-semibold hover:from-violet-500 hover:to-blue-500 transition-all"
