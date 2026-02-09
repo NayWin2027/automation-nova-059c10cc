@@ -120,33 +120,39 @@ serve(async (req) => {
     console.log(`[ai-chat] Credits deducted. New balance: ${creditResult.balance}`);
 
     // ===== PROCESS REQUEST =====
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
 
-    if (!LOVABLE_API_KEY) {
-      console.error("LOVABLE_API_KEY is not configured");
-      throw new Error("LOVABLE_API_KEY is not configured");
+    if (!GEMINI_API_KEY) {
+      console.error("GEMINI_API_KEY is not configured");
+      throw new Error("GEMINI_API_KEY is not configured");
     }
 
     console.log("Received messages:", messages?.length);
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: sanitizedSystemPrompt },
-          ...messages,
-        ],
-        stream: true,
-      }),
-    });
+    // Convert OpenAI-style messages to Google Generative Language API format
+    const geminiContents = messages.map((msg: any) => ({
+      role: msg.role === "assistant" ? "model" : "user",
+      parts: [{ text: msg.content }],
+    }));
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: sanitizedSystemPrompt }] },
+          contents: geminiContents,
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 8192,
+          },
+        }),
+      }
+    );
 
     if (!response.ok) {
-      console.error("AI gateway error:", response.status);
+      console.error("Gemini API error:", response.status);
       
       if (response.status === 429) {
         return new Response(
@@ -154,22 +160,54 @@ serve(async (req) => {
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Payment required" }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
 
       const text = await response.text();
       console.error("Response text:", text);
-      throw new Error("AI gateway error");
+      throw new Error("Gemini API error");
     }
 
-    console.log("AI response successful, streaming...");
+    console.log("Gemini response successful, streaming...");
 
-    return new Response(response.body, {
+    // Transform Google SSE format to OpenAI-compatible SSE format
+    const transformStream = new TransformStream({
+      transform(chunk, controller) {
+        const text = new TextDecoder().decode(chunk);
+        const lines = text.split("\n");
+        
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const jsonStr = line.slice(6).trim();
+          if (!jsonStr || jsonStr === "[DONE]") {
+            if (jsonStr === "[DONE]") controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+            continue;
+          }
+          
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const content = parsed.candidates?.[0]?.content?.parts?.[0]?.text || "";
+            if (content) {
+              const openAiChunk = {
+                choices: [{ delta: { content }, index: 0 }],
+              };
+              controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(openAiChunk)}\n\n`));
+            }
+            
+            // Check if stream is done
+            const finishReason = parsed.candidates?.[0]?.finishReason;
+            if (finishReason && finishReason !== "STOP" || (finishReason === "STOP" && parsed.candidates?.[0]?.content?.parts?.[0]?.text === undefined)) {
+              controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+            }
+          } catch {
+            // Skip unparseable lines
+          }
+        }
+      },
+      flush(controller) {
+        controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+      }
+    });
+
+    return new Response(response.body!.pipeThrough(transformStream), {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (error) {

@@ -874,45 +874,37 @@ serve(async (req) => {
         );
       }
 
-      // Fallback to Lovable AI Gateway for URL-only
-      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-      if (!LOVABLE_API_KEY) {
-        throw new Error("LOVABLE_API_KEY is not configured");
+      // Fallback: use GEMINI_API_KEY for URL-only mode
+      if (!BACKEND_GEMINI_KEY) {
+        throw new Error("GEMINI_API_KEY is not configured");
       }
 
-      response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: `Analyze and create a premium transformative recap for this video: ${videoUrl}. Return ONLY the JSON array.` },
-          ],
-        }),
-      });
+      console.log("App Mode: URL-only fallback with GEMINI_API_KEY");
+
+      response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${BACKEND_GEMINI_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: systemPrompt }] },
+            contents: [{ parts: [{ text: `Analyze and create a premium transformative recap for this video: ${videoUrl}. Return ONLY the JSON array.` }] }],
+            generationConfig: { temperature: 0.7, maxOutputTokens: 8192 },
+          }),
+        }
+      );
 
       if (!response.ok) {
-        if (response.status === 429) {
+        const errorText = await response.text();
+        console.error("Gemini API error (URL fallback):", response.status, errorText);
+        
+        if (response.status === 429 || errorText.includes("RESOURCE_EXHAUSTED")) {
           return new Response(
             JSON.stringify({
               recap: null,
-              error: "Rate limit exceeded. Please try again later.",
+              error: "API quota ကုန်သွားပါပြီ။ ခဏစောင့်ပါ။",
               retryable: true,
               retryAfterSeconds: 30,
-            }),
-            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-        if (response.status === 402) {
-          return new Response(
-            JSON.stringify({
-              recap: null,
-              error: "Payment required. Please add credits.",
-              retryable: false,
             }),
             { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
@@ -929,7 +921,7 @@ serve(async (req) => {
       }
 
       const data = await response.json();
-      let recap = data.choices?.[0]?.message?.content || "";
+      let recap = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
       recap = recap.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
 
       const normalized = normalizeRecapJson(recap);

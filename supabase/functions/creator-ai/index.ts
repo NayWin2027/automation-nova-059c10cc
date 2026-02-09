@@ -261,74 +261,55 @@ serve(async (req) => {
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       } else {
-        // Use Lovable AI Gateway
-        const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-        if (!LOVABLE_API_KEY) {
+        // Use GEMINI_API_KEY directly (App API mode)
+        const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+        if (!GEMINI_API_KEY) {
           return new Response(
-            JSON.stringify({ error: "LOVABLE_API_KEY is not configured" }),
+            JSON.stringify({ error: "GEMINI_API_KEY is not configured" }),
             { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
 
-        // Build message content - multimodal if reference images provided
-        let messageContent: any;
+        const imageModel = "gemini-2.0-flash-preview-image-generation";
+        console.log("[creator-ai] App API image generation with model:", imageModel);
+
+        // Build parts - multimodal if reference images provided
+        const parts: any[] = [];
         
         if (hasReferenceImages) {
-          // Multimodal content with images + text
-          const contentParts: any[] = [];
-          
-          // Add reference images first
           for (const imgData of referenceImages) {
             if (typeof imgData === "string" && imgData.startsWith("data:")) {
-              contentParts.push({
-                type: "image_url",
-                image_url: { url: imgData }
-              });
+              const matches = imgData.match(/^data:([^;]+);base64,(.+)$/);
+              if (matches) {
+                parts.push({ inlineData: { mimeType: matches[1], data: matches[2] } });
+              }
             }
           }
-          
-          // Add explicit image generation instruction
-          const enhancedPrompt = `IMPORTANT: You MUST generate a NEW image based on the style and elements from the reference images above.
-
-${prompt}
-
-Generate a high-quality image now. Do not ask questions or provide text-only responses.`;
-          
-          contentParts.push({ type: "text", text: enhancedPrompt });
-          messageContent = contentParts;
-          
-          console.log("[creator-ai] Sending multimodal request with", referenceImages.length, "reference images");
+          parts.push({ text: `IMPORTANT: Generate a NEW image based on the style and elements from the reference images above.\n\n${prompt}\n\nGenerate a high-quality image now.` });
         } else {
-          // Simple text prompt with explicit generation instruction
-          messageContent = `Generate an image: ${prompt}
-
-Create this image now. Output the generated image directly.`;
+          parts.push({ text: `Generate an image: ${prompt}\n\nCreate this image now. Output the generated image directly.` });
         }
 
-        const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-3-pro-image-preview",
-            messages: [{ role: "user", content: messageContent }],
-            modalities: ["image", "text"],
-          }),
-        });
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${imageModel}:generateContent?key=${GEMINI_API_KEY}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts }],
+              generationConfig: { responseModalities: ["Text", "Image"] },
+            }),
+          }
+        );
 
         if (!response.ok) {
+          const errorText = await response.text();
+          console.error("[creator-ai] Image generation error:", response.status, errorText);
+          
           if (response.status === 429) {
             return new Response(
               JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
               { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-          }
-          if (response.status === 402) {
-            return new Response(
-              JSON.stringify({ error: "Payment required. Please add credits." }),
-              { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
           }
           
@@ -339,50 +320,18 @@ Create this image now. Output the generated image directly.`;
         }
 
         const data = await response.json();
-        console.log("[creator-ai] Gateway response:", JSON.stringify(data).substring(0, 500));
+        const responseParts = data.candidates?.[0]?.content?.parts || [];
         
-        // Try multiple extraction paths for image data
-        const message = data.choices?.[0]?.message;
-        
-        // Path 1: images array (standard format)
-        if (message?.images && message.images.length > 0) {
-          const imageUrl = message.images[0]?.image_url?.url;
-          if (imageUrl) {
-            console.log("[creator-ai] Image extracted from images array");
+        for (const part of responseParts) {
+          if (part.inlineData?.mimeType?.startsWith("image/")) {
+            console.log("[creator-ai] Image generated successfully (App API)");
             await deductCreditsAfterSuccess(req);
             return new Response(
-              JSON.stringify({ image: imageUrl }),
+              JSON.stringify({ image: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}` }),
               { headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
           }
         }
-        
-        // Path 2: content contains base64 image directly
-        const content = message?.content;
-        if (content && typeof content === "string" && content.includes("data:image")) {
-          console.log("[creator-ai] Image extracted from content string");
-          await deductCreditsAfterSuccess(req);
-          return new Response(
-            JSON.stringify({ image: content }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-        
-        // Path 3: content is an array with image parts (multimodal response)
-        if (Array.isArray(content)) {
-          for (const part of content) {
-            if (part.type === "image_url" && part.image_url?.url) {
-              console.log("[creator-ai] Image extracted from content array");
-              await deductCreditsAfterSuccess(req);
-              return new Response(
-                JSON.stringify({ image: part.image_url.url }),
-                { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-              );
-            }
-          }
-        }
-        
-        console.error("[creator-ai] No image found in response. Message structure:", JSON.stringify(message).substring(0, 300));
         
         return new Response(
           JSON.stringify({ error: "No image was generated. Please try a different prompt." }),
@@ -475,61 +424,58 @@ Create this image now. Output the generated image directly.`;
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       } else {
-        const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-        if (!LOVABLE_API_KEY) {
-          throw new Error("LOVABLE_API_KEY is not configured");
+        // Use GEMINI_API_KEY directly (App API mode)
+        const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+        if (!GEMINI_API_KEY) {
+          throw new Error("GEMINI_API_KEY is not configured");
         }
 
-        const systemPrompt = `You are the "Fast-Response Burmese Linguist & Content Specialist," a high-speed AI engine powered by Gemini 3 Flash, optimized for rapid and accurate Myanmar language processing. Use the Official Myanmar Sar Dictionary (မြန်မာစာသတ်ပုံကျမ်း) as the absolute gold standard. Ensure natural language flow, 100% accurate Burmese orthography, and contextual translations.`;
+        const systemPrompt = `You are the "Fast-Response Burmese Linguist & Content Specialist," a high-speed AI engine powered by Gemini, optimized for rapid and accurate Myanmar language processing. Use the Official Myanmar Sar Dictionary (မြန်မာစာသတ်ပုံကျမ်း) as the absolute gold standard. Ensure natural language flow, 100% accurate Burmese orthography, and contextual translations.`;
 
-        // Try multiple models with fallback
-        const modelsToTry = ["google/gemini-3-flash-preview", "google/gemini-2.5-flash", "google/gemini-2.5-flash-lite", "openai/gpt-5-mini"];
-        let lastGatewayError = "";
-        
-        for (const model of modelsToTry) {
-          console.log("[creator-ai] Trying gateway model:", model);
-          
-          const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        const textModel = "gemini-2.5-flash";
+        console.log("[creator-ai] App API text generation with model:", textModel);
+
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${textModel}:generateContent?key=${GEMINI_API_KEY}`,
+          {
             method: "POST",
-            headers: {
-              Authorization: `Bearer ${LOVABLE_API_KEY}`,
-              "Content-Type": "application/json",
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              model,
-              messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: prompt }
-              ],
+              system_instruction: { parts: [{ text: systemPrompt }] },
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: {
+                temperature: 0.9,
+                maxOutputTokens: 8192,
+              },
             }),
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            const text = data.choices?.[0]?.message?.content || "";
-            
-            if (text) {
-              // SUCCESS - now deduct credits
-              await deductCreditsAfterSuccess(req);
-              
-              return new Response(
-                JSON.stringify({ text }),
-                { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-              );
-            }
-            lastGatewayError = "No text in response";
-          } else {
-            lastGatewayError = `${model}: ${response.status}`;
-            console.error(`[creator-ai] Model ${model} failed:`, response.status);
-            // Continue to next model on 402/429
-            if (response.status !== 402 && response.status !== 429) {
-              break;
-            }
           }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          
+          if (text) {
+            await deductCreditsAfterSuccess(req);
+            return new Response(
+              JSON.stringify({ text }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+        }
+
+        const errorText = await response.text();
+        console.error("[creator-ai] App API text generation failed:", response.status, errorText);
+        
+        if (response.status === 429) {
+          return new Response(
+            JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
+            { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
         
         return new Response(
-          JSON.stringify({ error: `AI service temporarily unavailable (${lastGatewayError}). Please try again.` }),
+          JSON.stringify({ error: `Content generation failed` }),
           { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
