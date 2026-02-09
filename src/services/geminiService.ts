@@ -328,26 +328,58 @@ export function playWithWebSpeech(text: string, languageCode: string = 'en-US'):
 }
 
 // Generate story/content using Creator AI
+// Implements silent retry for Own API 429 quota errors
 export async function generateStory(prompt: string, apiKey?: string): Promise<string | null> {
-  try {
-    const { data, error } = await supabase.functions.invoke<{ text?: string; error?: string }>('creator-ai', {
-      body: { prompt, apiKey, type: 'text' }
-    });
+  const maxRetries = apiKey ? 3 : 0;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const { data, error } = await supabase.functions.invoke<{ 
+        text?: string; error?: string; retryable?: boolean; retryAfterSeconds?: number; isBillingRequired?: boolean 
+      }>('creator-ai', {
+        body: { prompt, apiKey, type: 'text' }
+      });
 
-    if (error) {
-      console.error('generateStory error:', error);
-      throw new Error(error.message || 'Story generation failed');
+      if (error) {
+        console.error('generateStory error:', error);
+        throw new Error(error.message || 'Story generation failed');
+      }
+
+      if (data?.text) {
+        return data.text;
+      }
+
+      if (data?.error) {
+        // Non-retryable billing error - fail immediately
+        if (data.isBillingRequired) {
+          throw new Error("BILLING_REQUIRED");
+        }
+        // Retryable 429 - silent retry
+        if (data.retryable && attempt < maxRetries) {
+          const waitSec = data.retryAfterSeconds || 30;
+          console.log(`[generateStory] Quota limit. Silent retry ${attempt + 1}/${maxRetries} after ${waitSec}s...`);
+          await new Promise(r => setTimeout(r, waitSec * 1000));
+          continue;
+        }
+        throw new Error(data.error);
+      }
+
+      return null;
+    } catch (err) {
+      if (attempt >= maxRetries) {
+        console.error('generateStory error:', err);
+        throw err;
+      }
+      // For unexpected errors, don't retry
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === "BILLING_REQUIRED" || !msg.includes("429")) {
+        throw err;
+      }
+      console.log(`[generateStory] Retrying after unexpected 429...`);
+      await new Promise(r => setTimeout(r, 30000));
     }
-
-    if (data?.error) {
-      throw new Error(data.error);
-    }
-
-    return data?.text || null;
-  } catch (err) {
-    console.error('generateStory error:', err);
-    throw err;
   }
+  return null;
 }
 
 // Generate thumbnail/image using Creator AI

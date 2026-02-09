@@ -418,11 +418,18 @@ serve(async (req) => {
           }
         }
         
-        // If all models failed, return the last error
+        // If all models failed, return retryable error for 429
         console.error("[creator-ai] All text models failed. Last error:", lastError);
+        const is429 = lastError.includes("429") || lastError.includes("RESOURCE_EXHAUSTED");
+        const isBillingRequired = lastError.includes("exceeded your current quota") || lastError.includes("check your plan and billing");
         return new Response(
-          JSON.stringify({ error: `Content generation failed: ${lastError}` }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ 
+            error: `Content generation failed: ${lastError}`,
+            retryable: is429 && !isBillingRequired,
+            retryAfterSeconds: is429 ? 30 : 0,
+            isBillingRequired
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       } else {
         // Use GEMINI_API_KEY directly (App API mode)
