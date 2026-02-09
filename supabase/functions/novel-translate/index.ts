@@ -141,7 +141,12 @@ CHAPTER TITLE & NUMBERING (ABSOLUTELY CRITICAL):
 - If the source starts mid-chapter (no heading visible), do NOT add any chapter heading.
 - NEVER invent, repeat, or reassign chapter numbers.
 - Each chapter number must appear EXACTLY ONCE. Do NOT duplicate chapter numbers across chunks.
-- Display chapter titles as clear HEADINGS with blank lines above/below.
+
+CHAPTER TITLE FORMATTING (ABSOLUTELY CRITICAL):
+- Chapter titles/headings MUST be on their OWN SEPARATE LINE, ABOVE the paragraph content.
+- NEVER merge or mix a chapter title into the same paragraph or line as body text.
+- Format: TWO blank lines before the chapter title, the title alone on its own line, ONE blank line after the title, then body text starts on the next line.
+- VIOLATION: Writing chapter number merged with paragraph text is STRICTLY FORBIDDEN.
 
 TRANSLATION QUALITY:
 - Translate as if a native speaker and literary scholar wrote this originally.
@@ -257,7 +262,12 @@ CHAPTER TITLE & NUMBERING (ABSOLUTELY CRITICAL):
 - If the source starts mid-chapter (no heading visible), do NOT add any chapter heading.
 - NEVER invent, repeat, or reassign chapter numbers.
 - Each chapter number must appear EXACTLY ONCE. Do NOT duplicate.
-- Display chapter titles as clear HEADINGS with blank lines above/below.
+
+CHAPTER TITLE FORMATTING (ABSOLUTELY CRITICAL):
+- Chapter titles/headings MUST be on their OWN SEPARATE LINE, ABOVE the paragraph content.
+- NEVER merge or mix a chapter title into the same paragraph or line as body text.
+- Format: TWO blank lines before the chapter title, the title alone on its own line, ONE blank line after the title, then body text starts on the next line.
+- VIOLATION: Writing chapter number merged with paragraph text is STRICTLY FORBIDDEN.
 
 TRANSLATION QUALITY:
 - Translate as if a native speaker and literary scholar wrote this originally.
