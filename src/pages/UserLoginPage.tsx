@@ -7,6 +7,8 @@ import {
   LogIn, Home
 } from "lucide-react";
 
+const ADMIN_GATE_CODE = "MM@2025#ADM";
+
 const UserLoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -16,6 +18,8 @@ const UserLoginPage: React.FC = () => {
     userId: "",
     password: "",
   });
+  const [showGateDialog, setShowGateDialog] = useState(false);
+  const [gateCode, setGateCode] = useState("");
 
   useEffect(() => {
     // Check if already logged in
@@ -196,13 +200,66 @@ const UserLoginPage: React.FC = () => {
           <div className="mt-3 text-center">
             <button
               type="button"
-              onClick={() => navigate("/admin/login")}
+              onClick={() => setShowGateDialog(true)}
               className="text-2xs text-white/20 hover:text-white/40 transition-colors"
             >
               Admin
             </button>
           </div>
         </div>
+
+        {/* Admin Gate Dialog */}
+        {showGateDialog && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="relative w-full max-w-xs mx-4 premium-tool-card rounded-2xl p-5 border border-white/10">
+              <h3 className="text-sm font-semibold text-white text-center mb-1">🔐 Security Gate</h3>
+              <p className="text-2xs text-white/50 text-center mb-4">Access Code ထည့်ပါ</p>
+              <input
+                type="password"
+                value={gateCode}
+                onChange={(e) => setGateCode(e.target.value)}
+                placeholder="Secret Code"
+                className="w-full h-10 px-3 rounded-lg bg-white/5 border border-white/10 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-violet-500/50 focus:bg-white/10 transition-all mb-3"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    if (gateCode === ADMIN_GATE_CODE) {
+                      setShowGateDialog(false);
+                      setGateCode("");
+                      navigate("/admin/login");
+                    } else {
+                      toast({ title: "❌ Access Denied", description: "Code မှားနေပါသည်", variant: "destructive" });
+                      setGateCode("");
+                    }
+                  }
+                }}
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setShowGateDialog(false); setGateCode(""); }}
+                  className="flex-1 h-9 rounded-lg bg-white/5 border border-white/10 text-2xs text-white/60 hover:bg-white/10 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    if (gateCode === ADMIN_GATE_CODE) {
+                      setShowGateDialog(false);
+                      setGateCode("");
+                      navigate("/admin/login");
+                    } else {
+                      toast({ title: "❌ Access Denied", description: "Code မှားနေပါသည်", variant: "destructive" });
+                      setGateCode("");
+                    }
+                  }}
+                  className="flex-1 h-9 rounded-lg bg-gradient-to-r from-violet-600 to-blue-600 text-2xs text-white font-semibold hover:from-violet-500 hover:to-blue-500 transition-all"
+                >
+                  Verify
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Footer text */}
         <p className="text-center mt-4 text-2xs text-white/30">
