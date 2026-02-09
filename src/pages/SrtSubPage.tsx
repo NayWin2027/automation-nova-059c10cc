@@ -169,8 +169,9 @@ const SrtTranslatorView: React.FC = () => {
           delayMs: 30000,
         });
       } else {
-        // App API mode: use edge function
-        result = await translateText(finalInput, targetLang, undefined);
+        // App API mode: use edge function with tier-based credit cost
+        const tierCredits = selectedTier ? Math.round(selectedTier / 150) : undefined;
+        result = await translateText(finalInput, targetLang, undefined, undefined, tierCredits);
       }
       
       setTranslated(result || "");

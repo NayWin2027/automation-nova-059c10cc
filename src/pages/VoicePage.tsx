@@ -196,8 +196,9 @@ const VoicePage: React.FC = () => {
       const selectedVoiceObj = voices.find(v => v.name === voiceName) || voices[0];
       const actualVoiceValue = selectedVoiceObj.value;
 
-      // Use user's API key if Own API mode, otherwise use backend shared key
-      const pcmData = await generateSpeech(text, actualVoiceValue, apiType === 'own' ? apiKey : undefined, performance, selectedLanguage);
+      // Voice tiers are FREE (0 credits), SRT subtitle adds +2 credits
+      const voiceCreditCost = apiType === 'app' ? (proSubtitles ? 2 : 0) : undefined;
+      const pcmData = await generateSpeech(text, actualVoiceValue, apiType === 'own' ? apiKey : undefined, performance, selectedLanguage, voiceCreditCost);
       if (pcmData) {
         setResultAudio(pcmData);
         

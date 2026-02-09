@@ -74,19 +74,25 @@ export async function generateSpeech(
   voiceName: string,
   apiKey?: string,
   performance?: string,
-  languageCode?: string
+  languageCode?: string,
+  customCreditCost?: number
 ): Promise<string | null> {
   try {
     isUsingWebSpeech = false;
     const lang = languageCode || currentLanguageCode;
 
-    const { data, error } = await invokeWithAuthRetry<TTSResponse>("gemini-tts", {
+    const body: any = {
       text,
       voiceName,
       apiKey,
       performance: performance || "PROFESSIONAL",
       languageCode: lang,
-    });
+    };
+    if (customCreditCost !== undefined) {
+      body.customCreditCost = customCreditCost;
+    }
+
+    const { data, error } = await invokeWithAuthRetry<TTSResponse>("gemini-tts", body);
 
     // If the backend function is missing / network fails, do a safe fallback to Web Speech.
     // This keeps Video Recap stable even if the backend is temporarily unavailable.
@@ -423,16 +429,21 @@ export async function translateText(
   prompt: string,
   targetLang: string,
   apiKey?: string,
-  fileData?: { data: string; mimeType: string }
+  fileData?: { data: string; mimeType: string },
+  customCreditCost?: number
 ): Promise<string | null> {
   try {
+    const body: any = { prompt, targetLang, apiKey, fileData };
+    if (customCreditCost !== undefined) {
+      body.customCreditCost = customCreditCost;
+    }
     const { data, error } = await supabase.functions.invoke<{ 
       text?: string; 
       error?: string; 
       errorCode?: string;
       retryAfter?: string;
     }>('novel-translate', {
-      body: { prompt, targetLang, apiKey, fileData }
+      body
     });
 
     // Handle edge function errors (non-2xx responses)

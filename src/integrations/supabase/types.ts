@@ -329,10 +329,20 @@ export type Database = {
     Functions: {
       check_admin_2fa_status: { Args: { _user_id: string }; Returns: Json }
       count_user_devices: { Args: { _user_id: string }; Returns: number }
-      deduct_user_credits: {
-        Args: { _is_own_api?: boolean; _tool_id: string; _user_id: string }
-        Returns: Json
-      }
+      deduct_user_credits:
+        | {
+            Args: { _is_own_api?: boolean; _tool_id: string; _user_id: string }
+            Returns: Json
+          }
+        | {
+            Args: {
+              _custom_cost?: number
+              _is_own_api?: boolean
+              _tool_id: string
+              _user_id: string
+            }
+            Returns: Json
+          }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

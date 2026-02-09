@@ -17,7 +17,7 @@ serve(async (req) => {
 
   try {
     // ===== INPUT VALIDATION (parse first for Own API bypass) =====
-    const { prompt, targetLang, apiKey, fileData } = await req.json();
+    const { prompt, targetLang, apiKey, fileData, customCreditCost } = await req.json();
     
     // Check if using own API key (bypass auth)
     const isOwnApiKey = !!apiKey?.trim();
@@ -84,11 +84,15 @@ serve(async (req) => {
     if (!isOwnApiKey && user) {
       const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       
-      const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", {
+      const rpcParams: any = {
         _user_id: user.id,
         _tool_id: "novel-translate",
         _is_own_api: false
-      });
+      };
+      if (customCreditCost !== undefined && customCreditCost !== null) {
+        rpcParams._custom_cost = Number(customCreditCost);
+      }
+      const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", rpcParams);
 
       if (creditError) {
         console.error("[novel-translate] Credit check error:", creditError);
