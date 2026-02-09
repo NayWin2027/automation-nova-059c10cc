@@ -489,18 +489,6 @@ const NovelTransPage: React.FC = () => {
             contextTranslated = currentHistory[prevKey].slice(-1500);
         }
 
-        // Extract already-translated chapter numbers from history to prevent duplication
-        const translatedChapters: string[] = [];
-        for (const key of historyKeys) {
-          if (currentHistory[key]) {
-            const chapterMatches = currentHistory[key].match(/(?:အခန်း|Chapter|章|제|บท)\s*[\d၁-၉၀]+/gi);
-            if (chapterMatches) translatedChapters.push(...chapterMatches);
-          }
-        }
-        const alreadyTranslatedInfo = translatedChapters.length > 0
-          ? `\nALREADY TRANSLATED CHAPTERS (DO NOT OUTPUT THESE AGAIN): ${[...new Set(translatedChapters)].join(', ')}`
-          : '';
-
         const instruction = `Task: Translate the next section of this novel to ${targetLang}.
 Title: ${novelTitle || 'Untitled Novel'}
 Tone: ${toneInstructions[novelTone]}
@@ -512,27 +500,25 @@ IMPORTANT RULES:
 1. This is part of a larger work being translated in sequential chunks. You are translating starting from character offset ${indexToUse}.
 2. Translate continuously until you hit your output limit. Do NOT summarize. Full detail.
 3. If the input is cut off in the middle of a sentence, translate up to the last complete thought.
-4. Output ONLY the translation — no meta-commentary, no "continued from..." notes.
+4. Output ONLY the translation.
 
-CHAPTER TITLE & NUMBERING RULES (ABSOLUTELY CRITICAL - VIOLATION = FAILURE):
-- SCAN the source text chunk below FIRST. Does it contain a chapter heading (e.g., "Chapter 9", "第九章", "บทที่ 9")? 
-  → YES: Translate that heading as a clear HEADING with blank lines above/below.
-  → NO: Do NOT add any chapter heading. Start translating the body text immediately.
-- NEVER invent, fabricate, or guess chapter numbers. They MUST come from the source text.
-- NEVER repeat a chapter number that was already translated in a previous chunk.
-${alreadyTranslatedInfo}
+CHAPTER TITLE & NUMBERING RULES (ABSOLUTELY CRITICAL - FOLLOW EXACTLY):
+- ONLY output a chapter title/number if it ACTUALLY APPEARS in the source text chunk you are given below.
+- If the source chunk starts in the MIDDLE of a chapter (no chapter heading visible), do NOT add any chapter heading. Just continue translating the content.
+- NEVER invent, repeat, or reassign chapter numbers. The chapter numbers come from the SOURCE DOCUMENT only.
+- If a chapter heading appears in the source text (e.g., "Chapter 9" or "第九章"), translate it as the equivalent heading in ${targetLang}.
+- Display chapter titles as clear HEADINGS with blank lines above and below.
+- Each chapter number should appear EXACTLY ONCE across all chunks. If "Chapter 9" was already translated in a previous chunk, do NOT output it again.
 
-PREVIOUS CONTEXT (DO NOT repeat — continue from where this left off):
+PREVIOUS CONTEXT (tells you what was already translated - DO NOT repeat this content):
 "...${contextTranslated}"
 
-TRANSLATION QUALITY (MOST CRITICAL — THIS DEFINES SUCCESS):
-- You are a world-class native ${targetLang} literary translator and linguist.
-- Translate as if a native-born ${targetLang} literary scholar wrote this work originally — NOT a translation.
-- Every sentence must sound 100% natural to a native ${targetLang} speaker. Zero robotic or awkward phrasing.
-- Use the most authentic, fluent, and culturally appropriate ${targetLang} expressions.
-- For Burmese (မြန်မာ): You are a ဗမာစာပေပညာရှင် — follow the Official Myanmar Sar Dictionary (မြန်မာစာသတ်ပုံကျမ်း) spelling standards with 100% accuracy. Use natural ဗမာစကားပြော style.
-- For ALL languages: Use current ${new Date().getFullYear()} modern expressions. Translate meaning and emotion, not just words.
-- Preserve the author's literary style, rhythm, and emotional impact.`;
+TRANSLATION QUALITY (CRITICAL):
+- You are a native-level ${targetLang} linguist and literary translation expert.
+- Translate as if a native ${targetLang} speaker and literary scholar wrote this originally.
+- Use the most natural, fluent, and authentic ${targetLang} phrasing — NOT word-by-word translation.
+- For Burmese: Follow the Official Myanmar Sar Dictionary (မြန်မာစာသတ်ပုံကျမ်း) spelling standards strictly.
+- For all languages: Use current ${new Date().getFullYear()} modern expressions and natural conversational flow appropriate to the tone setting.`;
 
         const hasTextSource = novelText.trim().length > 0;
         const isChunkTextMode = inputMode === 'PASTE' || (inputMode === 'UPLOAD' && hasTextSource);
