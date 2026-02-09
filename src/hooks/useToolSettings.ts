@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface TierApiLimit {
@@ -113,7 +113,7 @@ export function useToolSettings() {
     return tierLimit ? tierLimit[apiMode] : null;
   };
 
-  const canAccessTool = (
+  const canAccessTool = useCallback((
     toolId: string, 
     isAuthenticated: boolean, 
     isPremiumUser: boolean,
@@ -121,37 +121,30 @@ export function useToolSettings() {
     userPlan: 'free' | 'pro' | 'premium' = 'free',
     apiMode: 'app' | 'own' = 'app'
   ): { allowed: boolean; reason?: string } => {
-    const tool = getToolSetting(toolId);
+    const tool = toolSettings.find(t => t.tool_id === toolId);
     
     if (!tool) {
-      return { allowed: true }; // Default allow if no settings
+      return { allowed: true };
     }
 
     if (!tool.is_enabled) {
       return { allowed: false, reason: 'ဤ Tool ကို ပိတ်ထားပါသည်' };
     }
 
-    // CRITICAL: Global requireLogin takes PRIORITY over individual tool.requires_auth
-    // If admin says "no login required", then no login required - period.
     if (accessControl.requireLogin && !accessControl.freeMode && !isAuthenticated) {
       return { allowed: false, reason: 'Login ဝင်ရန်လိုအပ်ပါသည်' };
     }
 
-    // Determine effective user state
-    // If not authenticated but requireLogin is OFF, they're a "guest" with free access
     const effectivelyAuthenticated = isAuthenticated || !accessControl.requireLogin;
     const effectivePlan = isAuthenticated ? userPlan : 'free';
 
-    // Check API mode access control
     const apiAccess = apiMode === 'app' ? accessControl.appApiAccess : accessControl.ownApiAccess;
     
     if (apiAccess) {
-      // Free Mode rule: App API is not allowed for free/guest users
       if (accessControl.freeMode && apiMode === 'app' && effectivePlan === 'free') {
         return { allowed: false, reason: 'Free Mode တွင် App API မသုံးနိုင်ပါ' };
       }
 
-      // Check plan-specific access
       if (effectivePlan === 'premium' && apiAccess.premium === false) {
         return { allowed: false, reason: `Premium users အတွက် ${apiMode === 'app' ? 'App API' : 'Own API'} ပိတ်ထားပါသည်` };
       }
@@ -163,22 +156,18 @@ export function useToolSettings() {
       }
     }
 
-    // Premium users can access everything
     if (isPremiumUser) {
       return { allowed: true };
     }
 
-    // Check if tool is premium-only
     if (tool.is_premium && !accessControl.freeMode && !accessControl.promotionMode) {
       return { allowed: false, reason: 'Premium Plan လိုအပ်ပါသည်' };
     }
 
-    // **OWN API MODE BYPASS**: Own API users are NOT subject to daily limits
     if (apiMode === 'own') {
       return { allowed: true };
     }
 
-    // Check daily limit in promotion mode (only for App API)
     if (accessControl.promotionMode && !accessControl.freeMode) {
       const limit = tool.daily_free_limit || accessControl.promotionDailyLimit;
       if (todayUsageCount >= limit) {
@@ -190,7 +179,7 @@ export function useToolSettings() {
     }
 
     return { allowed: true };
-  };
+  }, [toolSettings, accessControl]);
 
   // Helper to check API mode access only
   const canUseApiMode = (

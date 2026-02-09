@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { User, Session } from '@supabase/supabase-js';
 
@@ -85,16 +85,14 @@ export function useAuth() {
     }
   };
 
-  const recordToolUsage = async (toolId: string) => {
+  const recordToolUsage = useCallback(async (toolId: string) => {
     if (!user) return { error: new Error('Not authenticated') };
 
     const today = new Date().toISOString().split('T')[0];
     
-    // Check if there's already a record for today
     const existing = todayUsage.find(u => u.tool_id === toolId);
     
     if (existing) {
-      // Update existing record
       const { error } = await supabase
         .from('user_tool_usage')
         .update({ usage_count: existing.usage_count + 1 })
@@ -112,7 +110,6 @@ export function useAuth() {
       }
       return { error };
     } else {
-      // Insert new record
       const { error } = await supabase
         .from('user_tool_usage')
         .insert({
@@ -127,23 +124,28 @@ export function useAuth() {
       }
       return { error };
     }
-  };
+  }, [user, todayUsage]);
 
-  const getToolUsageCount = (toolId: string): number => {
+  const getToolUsageCount = useCallback((toolId: string): number => {
     const usage = todayUsage.find(u => u.tool_id === toolId);
     return usage?.usage_count || 0;
-  };
+  }, [todayUsage]);
 
-  const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (!error) {
-      setUser(null);
-      setSession(null);
-      setProfile(null);
-      setTodayUsage([]);
+  const signOut = useCallback(async () => {
+    // Always clear local state first, regardless of server response
+    setUser(null);
+    setSession(null);
+    setProfile(null);
+    setTodayUsage([]);
+    
+    // Then attempt server-side signout (may fail if session expired - that's OK)
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // Silent - local state already cleared
     }
-    return { error };
-  };
+    return { error: null };
+  }, []);
 
   return {
     user,
