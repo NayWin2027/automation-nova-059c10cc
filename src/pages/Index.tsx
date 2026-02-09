@@ -253,11 +253,13 @@ const Index = () => {
           </div>
         </button>
 
-        {/* Admin Panel */}
-        <button onClick={() => navigate("/admin/login")} className="w-full p-2.5 rounded-lg border border-gold/20 bg-card/50 text-left hover:bg-card transition-colors">
-          <h3 className="text-2xs font-semibold text-gold">Admin Panel</h3>
-          <p className="text-3xs text-muted-foreground">Access admin dashboard</p>
-        </button>
+        {/* Admin Panel - only visible to admins */}
+        {isAdmin && (
+          <button onClick={() => navigate("/admin/login")} className="w-full p-2.5 rounded-lg border border-gold/20 bg-card/50 text-left hover:bg-card transition-colors">
+            <h3 className="text-2xs font-semibold text-gold">Admin Panel</h3>
+            <p className="text-3xs text-muted-foreground">Access admin dashboard</p>
+          </button>
+        )}
 
         {isAuthenticated && <div className="p-2.5 rounded-lg border border-border/30 bg-card/50">
             <h3 className="text-2xs font-semibold text-foreground">Account</h3>
