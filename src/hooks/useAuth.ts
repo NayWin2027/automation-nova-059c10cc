@@ -132,15 +132,16 @@ export function useAuth() {
   }, [todayUsage]);
 
   const signOut = useCallback(async () => {
-    // Always clear local state first, regardless of server response
+    // Clear local state immediately
     setUser(null);
     setSession(null);
     setProfile(null);
     setTodayUsage([]);
     
-    // Then attempt server-side signout (may fail if session expired - that's OK)
+    // Use 'local' scope to ensure local tokens are always cleared
+    // 'global' scope fails with 403 if session is expired on server
     try {
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: 'local' });
     } catch {
       // Silent - local state already cleared
     }
