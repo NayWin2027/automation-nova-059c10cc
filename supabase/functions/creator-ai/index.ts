@@ -385,6 +385,7 @@ serve(async (req) => {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
+                  system_instruction: { parts: [{ text: `CRITICAL: Today's date is ${new Date().toISOString().split('T')[0]}. Current year is ${new Date().getFullYear()}. Always provide the most current, up-to-date information. Never use outdated data from previous years.` }] },
                   contents: [{ parts: [{ text: prompt }] }],
                   generationConfig: {
                     temperature: 0.9,
@@ -430,7 +431,10 @@ serve(async (req) => {
           throw new Error("GEMINI_API_KEY is not configured");
         }
 
-        const systemPrompt = `You are the "Fast-Response Burmese Linguist & Content Specialist," a high-speed AI engine powered by Gemini, optimized for rapid and accurate Myanmar language processing. Use the Official Myanmar Sar Dictionary (မြန်မာစာသတ်ပုံကျမ်း) as the absolute gold standard. Ensure natural language flow, 100% accurate Burmese orthography, and contextual translations.`;
+        const today = new Date().toISOString().split('T')[0];
+        const systemPrompt = `You are the "Fast-Response Burmese Linguist & Content Specialist," a high-speed AI engine powered by Gemini, optimized for rapid and accurate Myanmar language processing. Use the Official Myanmar Sar Dictionary (မြန်မာစာသတ်ပုံကျမ်း) as the absolute gold standard. Ensure natural language flow, 100% accurate Burmese orthography, and contextual translations.
+
+CRITICAL: Today's date is ${today}. Always provide the most current, up-to-date information. Never reference outdated years or data. If the user asks about travel, events, prices, or any time-sensitive topic, always use the latest ${new Date().getFullYear()} information and trends.`;
 
         const textModel = "gemini-2.5-flash";
         console.log("[creator-ai] App API text generation with model:", textModel);
