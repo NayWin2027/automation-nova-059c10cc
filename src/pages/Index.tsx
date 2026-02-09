@@ -12,6 +12,7 @@ import { useToolSettings } from "@/hooks/useToolSettings";
 import { useToast } from "@/hooks/use-toast";
 import { useAdmin } from "@/hooks/useAdmin";
 import ToolLimitsBadge from "@/components/ToolLimitsBadge";
+import AccountInfoCard from "@/components/AccountInfoCard";
 const defaultTools = [{
   id: "recap",
   icon: Video,
@@ -261,12 +262,15 @@ const Index = () => {
           </button>
         )}
 
-        {isAuthenticated && <div className="p-2.5 rounded-lg border border-border/30 bg-card/50">
-            <h3 className="text-2xs font-semibold text-foreground">Account</h3>
-            <p className="text-3xs text-muted-foreground">
-              {profile?.email} • {profile?.plan?.toUpperCase()} Plan
-            </p>
-          </div>}
+        {isAuthenticated && <>
+            <AccountInfoCard />
+            <div className="p-2.5 rounded-lg border border-border/30 bg-card/50">
+              <h3 className="text-2xs font-semibold text-foreground">Account</h3>
+              <p className="text-3xs text-muted-foreground">
+                {profile?.email} • {profile?.plan?.toUpperCase()} Plan
+              </p>
+            </div>
+          </>}
 
         <div className="p-2.5 rounded-lg border border-border/30 bg-card/50">
           <h3 className="text-2xs font-semibold text-foreground">Version</h3>
