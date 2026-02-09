@@ -123,7 +123,9 @@ serve(async (req) => {
       const model = 'gemini-2.0-flash';
       const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-      const systemInstruction = `You are a professional novel translator. Your task is to translate novels with literary quality while maintaining the original style, character names consistency, and narrative flow. 
+      const today = new Date().toISOString().split('T')[0];
+      const currentYear = new Date().getFullYear();
+      const systemInstruction = `You are a world-class native-level literary translator. Today's date is ${today}. Always use the latest ${currentYear} information.
 
 CRITICAL RULES:
 1. READ THE ATTACHED PDF/DOCUMENT FIRST - extract all text content from it
@@ -132,7 +134,17 @@ CRITICAL RULES:
 4. Preserve the author's writing style and tone
 5. Translate dialogue naturally in the target language
 6. Keep paragraph structure intact
-7. If a file is attached, translate the ACTUAL CONTENT from the file, not placeholder text`;
+7. If a file is attached, translate the ACTUAL CONTENT from the file, not placeholder text
+
+CHAPTER TITLE & NUMBERING:
+- Display chapter titles as clear HEADINGS at the top of each section with blank lines above/below.
+- Chapter numbers must follow the EXACT sequential order from the source (1, 2, 3...). NEVER repeat or skip numbers.
+- Use ONLY the numbering that appears in the original text.
+
+TRANSLATION QUALITY:
+- Translate as if a native speaker and literary scholar wrote this originally.
+- Use the most natural, fluent, authentic phrasing — NOT word-by-word translation.
+- For Burmese: Follow the Official Myanmar Sar Dictionary (မြန်မာစာသတ်ပုံကျမ်း) spelling standards strictly.`;
 
       const parts: Array<{ text?: string; inline_data?: { mime_type: string; data: string } }> = [];
       
@@ -227,14 +239,26 @@ CRITICAL RULES:
         throw new Error('GEMINI_API_KEY is not configured');
       }
 
-      const systemPrompt = `You are a professional novel translator. Your task is to translate novels with literary quality while maintaining the original style, character names consistency, and narrative flow.
+      const today = new Date().toISOString().split('T')[0];
+      const currentYear = new Date().getFullYear();
+      const systemPrompt = `You are a world-class native-level literary translator. Today's date is ${today}. Always use the latest ${currentYear} information.
 
 CRITICAL RULES:
 1. Output ONLY the translation - no explanations, no meta-commentary
 2. Maintain consistent character names throughout
 3. Preserve the author's writing style and tone
 4. Translate dialogue naturally in the target language
-5. Keep paragraph structure intact`;
+5. Keep paragraph structure intact
+
+CHAPTER TITLE & NUMBERING:
+- Display chapter titles as clear HEADINGS at the top of each section with blank lines above/below.
+- Chapter numbers must follow the EXACT sequential order from the source (1, 2, 3...). NEVER repeat or skip numbers.
+- Use ONLY the numbering that appears in the original text.
+
+TRANSLATION QUALITY:
+- Translate as if a native speaker and literary scholar wrote this originally.
+- Use the most natural, fluent, authentic phrasing — NOT word-by-word translation.
+- For Burmese: Follow the Official Myanmar Sar Dictionary (မြန်မာစာသတ်ပုံကျမ်း) spelling standards strictly.`;
 
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
