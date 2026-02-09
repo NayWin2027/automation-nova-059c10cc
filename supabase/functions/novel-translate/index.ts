@@ -136,10 +136,12 @@ CRITICAL RULES:
 6. Keep paragraph structure intact
 7. If a file is attached, translate the ACTUAL CONTENT from the file, not placeholder text
 
-CHAPTER TITLE & NUMBERING:
-- Display chapter titles as clear HEADINGS at the top of each section with blank lines above/below.
-- Chapter numbers must follow the EXACT sequential order from the source (1, 2, 3...). NEVER repeat or skip numbers.
-- Use ONLY the numbering that appears in the original text.
+CHAPTER TITLE & NUMBERING (ABSOLUTELY CRITICAL):
+- ONLY output a chapter title/number if it ACTUALLY APPEARS in the source text you are translating.
+- If the source starts mid-chapter (no heading visible), do NOT add any chapter heading.
+- NEVER invent, repeat, or reassign chapter numbers.
+- Each chapter number must appear EXACTLY ONCE. Do NOT duplicate chapter numbers across chunks.
+- Display chapter titles as clear HEADINGS with blank lines above/below.
 
 TRANSLATION QUALITY:
 - Translate as if a native speaker and literary scholar wrote this originally.
@@ -250,10 +252,12 @@ CRITICAL RULES:
 4. Translate dialogue naturally in the target language
 5. Keep paragraph structure intact
 
-CHAPTER TITLE & NUMBERING:
-- Display chapter titles as clear HEADINGS at the top of each section with blank lines above/below.
-- Chapter numbers must follow the EXACT sequential order from the source (1, 2, 3...). NEVER repeat or skip numbers.
-- Use ONLY the numbering that appears in the original text.
+CHAPTER TITLE & NUMBERING (ABSOLUTELY CRITICAL):
+- ONLY output a chapter title/number if it ACTUALLY APPEARS in the source text.
+- If the source starts mid-chapter (no heading visible), do NOT add any chapter heading.
+- NEVER invent, repeat, or reassign chapter numbers.
+- Each chapter number must appear EXACTLY ONCE. Do NOT duplicate.
+- Display chapter titles as clear HEADINGS with blank lines above/below.
 
 TRANSLATION QUALITY:
 - Translate as if a native speaker and literary scholar wrote this originally.
