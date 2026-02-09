@@ -21,7 +21,7 @@ serve(async (req) => {
 
   try {
     // ===== INPUT VALIDATION =====
-    const { text, voiceName, apiKey: userApiKey, languageCode } = await req.json();
+    const { text, voiceName, apiKey: userApiKey, languageCode, customCreditCost } = await req.json();
 
     // Validate text
     if (!text || typeof text !== "string" || !text.trim()) {
@@ -92,11 +92,15 @@ serve(async (req) => {
       // Credit check and deduction
       const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       
-      const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", {
+      const rpcParams: any = {
         _user_id: userId,
         _tool_id: "voice",
         _is_own_api: false
-      });
+      };
+      if (customCreditCost !== undefined && customCreditCost !== null) {
+        rpcParams._custom_cost = Number(customCreditCost);
+      }
+      const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", rpcParams);
 
       if (creditError) {
         console.error("[gemini-tts] Credit check error:", creditError);

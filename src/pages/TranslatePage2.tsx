@@ -213,11 +213,14 @@ const TranslateView: React.FC = () => {
           }
         );
       } else {
-        // App API mode: use edge function
+        // App API mode: use edge function with selected tier credit cost
+        const tierCredits = selectedTier !== null ? CREDIT_TIERS[selectedTier].credits : undefined;
         response = await translateText(
           `${systemInstruction}\n\nCONTENT TO PROCESS:\n${text}`,
           targetLang,
           undefined,
+          undefined,
+          tierCredits,
         );
       }
 
