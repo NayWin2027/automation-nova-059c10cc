@@ -18,6 +18,7 @@ import ThumbnailPage from "./pages/ThumbnailPage";
 import AdminRegisterPage from "./pages/AdminRegisterPage";
 import AdminLoginPage from "./pages/AdminLoginPage";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
+import AdminRoute from "./components/AdminRoute";
 import UserLoginPage from "./pages/UserLoginPage";
 import TermsPage from "./pages/TermsPage";
 import PrivacyPage from "./pages/PrivacyPage";
@@ -46,9 +47,9 @@ const App = () => (
           <Route path="/thumbnail" element={<ThumbnailPage />} />
            <Route path="/srt" element={<SrtSubPage />} />
           {/* Admin Routes */}
-          <Route path="/admin/register" element={<AdminRegisterPage />} />
+          <Route path="/admin/register" element={<AdminRoute><AdminRegisterPage /></AdminRoute>} />
           <Route path="/admin/login" element={<AdminLoginPage />} />
-          <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+          <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboardPage /></AdminRoute>} />
           {/* User Routes */}
           <Route path="/login" element={<UserLoginPage />} />
           {/* Legal Pages */}
