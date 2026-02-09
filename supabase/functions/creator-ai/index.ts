@@ -47,6 +47,30 @@ async function pickModels(
   if (picked.length === 0) return supported.slice(0, max);
   return picked;
 }
+// Helper: deduct credits only after successful API response
+async function deductCreditsAfterSuccess(req: Request): Promise<void> {
+  const userId = (req as any)._userId;
+  const supabaseAdmin = (req as any)._supabaseAdmin;
+  const isAppApi = (req as any)._isAppApi;
+  
+  if (!isAppApi || !userId || !supabaseAdmin) return;
+  
+  try {
+    const { data, error } = await supabaseAdmin.rpc("deduct_user_credits", {
+      _user_id: userId,
+      _tool_id: "creator",
+      _is_own_api: false
+    });
+    
+    if (error) {
+      console.error("[creator-ai] Post-success credit deduction error:", error);
+    } else {
+      console.log(`[creator-ai] Credits deducted after success. New balance: ${data?.balance}`);
+    }
+  } catch (e) {
+    console.error("[creator-ai] Credit deduction failed:", e);
+  }
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -107,35 +131,54 @@ serve(async (req) => {
       
       console.log(`[creator-ai] Authenticated user: ${user.id}`);
       
-      // Deduct credits for authenticated users without own API key
+      // Pre-check credits (read-only) before calling API
       const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-      const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", {
-        _user_id: user.id,
-        _tool_id: "creator",
-        _is_own_api: false
-      });
+      const { data: profile, error: profileError } = await supabaseAdmin
+        .from("profiles")
+        .select("credits, plan, is_banned, ban_reason")
+        .eq("user_id", user.id)
+        .single();
       
-      if (creditError) {
-        console.error("[creator-ai] Credit check error:", creditError);
+      if (profileError || !profile) {
         return new Response(
-          JSON.stringify({ error: "Failed to process credits" }),
+          JSON.stringify({ error: "User profile not found" }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       
-      if (!creditResult.success) {
+      if (profile.is_banned) {
+        return new Response(
+          JSON.stringify({ error: `Account banned: ${profile.ban_reason || "Contact support"}` }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      // Get tool credit cost
+      const { data: toolSettings } = await supabaseAdmin
+        .from("tool_settings")
+        .select("credit_cost")
+        .eq("tool_id", "creator")
+        .single();
+      const creditCost = toolSettings?.credit_cost || 10;
+      
+      if (profile.plan !== "premium" && profile.credits < creditCost) {
         return new Response(
           JSON.stringify({ 
-            error: creditResult.error,
-            balance: creditResult.balance,
-            required: creditResult.required,
+            error: "Insufficient credits",
+            balance: profile.credits,
+            required: creditCost,
             errorCode: "INSUFFICIENT_CREDITS"
           }),
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       
-      console.log(`[creator-ai] Credits deducted. New balance: ${creditResult.balance}`);
+      // Store user info for post-success deduction
+      (req as any)._userId = user.id;
+      (req as any)._supabaseAdmin = supabaseAdmin;
+      (req as any)._isAppApi = true;
+      
+      console.log(`[creator-ai] Credit pre-check passed. Balance: ${profile.credits}, Cost: ${creditCost}`);
     } else {
       console.log("[creator-ai] Using own API key - skipping auth & credit check");
     }
@@ -269,7 +312,7 @@ Create this image now. Output the generated image directly.`;
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "google/gemini-2.5-flash-image",
+            model: "google/gemini-3-pro-image-preview",
             messages: [{ role: "user", content: messageContent }],
             modalities: ["image", "text"],
           }),
@@ -306,6 +349,7 @@ Create this image now. Output the generated image directly.`;
           const imageUrl = message.images[0]?.image_url?.url;
           if (imageUrl) {
             console.log("[creator-ai] Image extracted from images array");
+            await deductCreditsAfterSuccess(req);
             return new Response(
               JSON.stringify({ image: imageUrl }),
               { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -317,6 +361,7 @@ Create this image now. Output the generated image directly.`;
         const content = message?.content;
         if (content && typeof content === "string" && content.includes("data:image")) {
           console.log("[creator-ai] Image extracted from content string");
+          await deductCreditsAfterSuccess(req);
           return new Response(
             JSON.stringify({ image: content }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -328,6 +373,7 @@ Create this image now. Output the generated image directly.`;
           for (const part of content) {
             if (part.type === "image_url" && part.image_url?.url) {
               console.log("[creator-ai] Image extracted from content array");
+              await deductCreditsAfterSuccess(req);
               return new Response(
                 JSON.stringify({ image: part.image_url.url }),
                 { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -436,43 +482,55 @@ Create this image now. Output the generated image directly.`;
 
         const systemPrompt = `You are the "Fast-Response Burmese Linguist & Content Specialist," a high-speed AI engine powered by Gemini 3 Flash, optimized for rapid and accurate Myanmar language processing. Use the Official Myanmar Sar Dictionary (မြန်မာစာသတ်ပုံကျမ်း) as the absolute gold standard. Ensure natural language flow, 100% accurate Burmese orthography, and contextual translations.`;
 
-        const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-3-flash-preview",
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: prompt }
-            ],
-          }),
-        });
+        // Try multiple models with fallback
+        const modelsToTry = ["google/gemini-3-flash-preview", "google/gemini-2.5-flash", "google/gemini-2.5-flash-lite", "openai/gpt-5-mini"];
+        let lastGatewayError = "";
+        
+        for (const model of modelsToTry) {
+          console.log("[creator-ai] Trying gateway model:", model);
+          
+          const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${LOVABLE_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model,
+              messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: prompt }
+              ],
+            }),
+          });
 
-        if (!response.ok) {
-          if (response.status === 429) {
-            return new Response(
-              JSON.stringify({ error: "Rate limit exceeded" }),
-              { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
+          if (response.ok) {
+            const data = await response.json();
+            const text = data.choices?.[0]?.message?.content || "";
+            
+            if (text) {
+              // SUCCESS - now deduct credits
+              await deductCreditsAfterSuccess(req);
+              
+              return new Response(
+                JSON.stringify({ text }),
+                { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              );
+            }
+            lastGatewayError = "No text in response";
+          } else {
+            lastGatewayError = `${model}: ${response.status}`;
+            console.error(`[creator-ai] Model ${model} failed:`, response.status);
+            // Continue to next model on 402/429
+            if (response.status !== 402 && response.status !== 429) {
+              break;
+            }
           }
-          if (response.status === 402) {
-            return new Response(
-              JSON.stringify({ error: "Payment required" }),
-              { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-          }
-          throw new Error("AI gateway error");
         }
-
-        const data = await response.json();
-        const text = data.choices?.[0]?.message?.content || "";
         
         return new Response(
-          JSON.stringify({ text }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ error: `AI service temporarily unavailable (${lastGatewayError}). Please try again.` }),
+          { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
     }
