@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from './useAuth';
 import { useToolSettings } from './useToolSettings';
@@ -13,27 +13,47 @@ interface AuthGuardResult {
 
 /**
  * Hook that enforces authentication and access control for tool pages.
- * Automatically redirects to login if requireLogin is true and user is not authenticated.
- * Returns loading state, access status, and user info.
+ * Deterministic: derives allowed state from current auth + settings.
+ * Redirects once when access is denied.
  */
 export function useAuthGuard(toolId?: string): AuthGuardResult {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, profile, loading: authLoading, isAuthenticated, getToolUsageCount } = useAuth();
   const { accessControl, canAccessTool, loading: settingsLoading } = useToolSettings();
-  const [hasChecked, setHasChecked] = useState(false);
 
   const isLoading = authLoading || settingsLoading;
   const userPlan = profile?.plan || 'free';
 
+  // Deterministic: compute isAllowed purely from current state
+  const isAllowed = useMemo(() => {
+    if (isLoading) return false;
+
+    const requireLogin = accessControl.requireLogin && !accessControl.freeMode;
+
+    // If login is required and user is not authenticated → not allowed
+    if (requireLogin && !isAuthenticated) return false;
+
+    // If toolId provided, check tool-specific access
+    if (toolId) {
+      const effectivelyAuthenticated = isAuthenticated || !accessControl.requireLogin;
+      const isPremium = userPlan === 'premium' || userPlan === 'pro';
+      const usageCount = getToolUsageCount(toolId);
+
+      const accessApp = canAccessTool(toolId, effectivelyAuthenticated, isPremium, usageCount, userPlan, 'app');
+      const accessOwn = canAccessTool(toolId, effectivelyAuthenticated, isPremium, usageCount, userPlan, 'own');
+
+      if (!accessApp.allowed && !accessOwn.allowed) return false;
+    }
+
+    return true;
+  }, [isLoading, isAuthenticated, accessControl, toolId, userPlan, canAccessTool, getToolUsageCount]);
+
+  // Redirect effect: only fires when not loading and not allowed
   useEffect(() => {
-    // Wait for both auth and settings to load
     if (isLoading) return;
-    if (hasChecked) return;
+    if (isAllowed) return;
 
-    setHasChecked(true);
-
-    // Check if login is required
     const requireLogin = accessControl.requireLogin && !accessControl.freeMode;
 
     if (requireLogin && !isAuthenticated) {
@@ -45,40 +65,23 @@ export function useAuthGuard(toolId?: string): AuthGuardResult {
       return;
     }
 
-    // If toolId provided, check tool-specific access for BOTH authenticated AND guest users
+    // Tool-specific denial
     if (toolId) {
-      const effectivelyAuthenticated = isAuthenticated || (!accessControl.requireLogin);
+      const effectivelyAuthenticated = isAuthenticated || !accessControl.requireLogin;
       const isPremium = userPlan === 'premium' || userPlan === 'pro';
       const usageCount = getToolUsageCount(toolId);
-
       const accessApp = canAccessTool(toolId, effectivelyAuthenticated, isPremium, usageCount, userPlan, 'app');
       const accessOwn = canAccessTool(toolId, effectivelyAuthenticated, isPremium, usageCount, userPlan, 'own');
+      const reason = accessApp.reason || accessOwn.reason;
 
-      const anyAllowed = accessApp.allowed || accessOwn.allowed;
-
-      if (!anyAllowed) {
-        const reason = accessApp.reason || accessOwn.reason;
-        toast({
-          title: "⚠️ Access Denied",
-          description: reason,
-          variant: "destructive",
-        });
-        navigate('/', { replace: true });
-        return;
-      }
+      toast({
+        title: "⚠️ Access Denied",
+        description: reason,
+        variant: "destructive",
+      });
+      navigate('/', { replace: true });
     }
-  }, [isLoading, isAuthenticated, accessControl, toolId, userPlan, hasChecked, navigate, toast, canAccessTool, getToolUsageCount]);
-
-  // Reset check when user changes
-  useEffect(() => {
-    setHasChecked(false);
-  }, [user?.id]);
-
-  const isAllowed = !isLoading && (
-    !accessControl.requireLogin || 
-    accessControl.freeMode || 
-    isAuthenticated
-  );
+  }, [isLoading, isAllowed, isAuthenticated, accessControl, toolId, userPlan, navigate, toast, canAccessTool, getToolUsageCount]);
 
   return {
     isAllowed,
