@@ -478,6 +478,19 @@ IMPORTANT RULES:
 3. If the input is cut off in the middle of a sentence, translate up to the last complete thought.
 4. Output ONLY the translation.
 
+CHAPTER TITLE & NUMBERING RULES (CRITICAL):
+- When a chapter title appears in the source text, display it as a clear TITLE/HEADING at the top of that section, separated by a blank line above and below.
+- Chapter numbers MUST follow the EXACT sequential order from the source document (e.g., Chapter 1, Chapter 2, Chapter 3...). NEVER repeat or skip chapter numbers.
+- If the source says "Chapter 8", translate it as the equivalent in ${targetLang} (e.g., "အခန်း ၈" for Burmese). Follow the source numbering exactly.
+- Do NOT invent or reassign chapter numbers. Use ONLY what appears in the original text.
+
+TRANSLATION QUALITY (CRITICAL):
+- You are a native-level ${targetLang} linguist and literary translation expert.
+- Translate as if a native ${targetLang} speaker and literary scholar wrote this originally.
+- Use the most natural, fluent, and authentic ${targetLang} phrasing — NOT word-by-word translation.
+- For Burmese: Follow the Official Myanmar Sar Dictionary (မြန်မာစာသတ်ပုံကျမ်း) spelling standards strictly.
+- For all languages: Use current ${new Date().getFullYear()} modern expressions and natural conversational flow appropriate to the tone setting.
+
 PREVIOUS CONTEXT (For continuity):
 "...${contextTranslated}"`;
 
