@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { translateText } from '../services/geminiService';
 import { BottomNav } from '@/components/BottomNav';
 import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist';
 import PdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
-import { Home, Loader2, Lock } from 'lucide-react';
+import { Home, Loader2, Lock, Square } from 'lucide-react';
 import { useSecureApiKey } from '@/hooks/useSecureApiKey';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { useApiAccess } from '@/hooks/useApiAccess';
@@ -80,6 +80,10 @@ const NovelTransPage: React.FC = () => {
   const sessionStartRef = useRef<number>(0);
   const sessionProcessedRef = useRef<number>(0);
   
+  // Abort controller for stopping translation
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const isStoppingRef = useRef(false);
+
   // Pending Retry Refs (for manual mode auto-resume)
   const pendingRetryRef = useRef<{
     indexToUse: number;
@@ -255,6 +259,26 @@ const NovelTransPage: React.FC = () => {
     
     return () => clearTimeout(timer);
   }, [translated, autoDrive, loading, startIndex, charCount, cooldownSeconds, inputMode, novelText, apiType]);
+
+  // Stop translation process
+  const handleStop = useCallback(() => {
+    isStoppingRef.current = true;
+    setAutoDrive(false);
+    setIsAutoDriving(false);
+    setLoading(false);
+    pendingRetryRef.current = null;
+    quotaRetryCountRef.current = 0;
+    setCooldownSeconds(0);
+    setQuotaExhaustedMessage(null);
+    sessionStartRef.current = 0;
+    sessionProcessedRef.current = 0;
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    console.log('[Novel Translate] Stopped by user');
+    setTimeout(() => { isStoppingRef.current = false; }, 200);
+  }, []);
 
   // IMPORTANT: authLoading early return MUST be after ALL hooks
   if (authLoading) {
@@ -473,26 +497,28 @@ CRITICAL GLOSSARY (Consistency is Key):
 ${glossary ? glossary : "No specific glossary provided. Maintain consistent names based on context."}
 
 IMPORTANT RULES:
-1. This is part of a larger work. Start exactly from offset ${indexToUse}.
+1. This is part of a larger work being translated in sequential chunks. You are translating starting from character offset ${indexToUse}.
 2. Translate continuously until you hit your output limit. Do NOT summarize. Full detail.
 3. If the input is cut off in the middle of a sentence, translate up to the last complete thought.
 4. Output ONLY the translation.
 
-CHAPTER TITLE & NUMBERING RULES (CRITICAL):
-- When a chapter title appears in the source text, display it as a clear TITLE/HEADING at the top of that section, separated by a blank line above and below.
-- Chapter numbers MUST follow the EXACT sequential order from the source document (e.g., Chapter 1, Chapter 2, Chapter 3...). NEVER repeat or skip chapter numbers.
-- If the source says "Chapter 8", translate it as the equivalent in ${targetLang} (e.g., "အခန်း ၈" for Burmese). Follow the source numbering exactly.
-- Do NOT invent or reassign chapter numbers. Use ONLY what appears in the original text.
+CHAPTER TITLE & NUMBERING RULES (ABSOLUTELY CRITICAL - FOLLOW EXACTLY):
+- ONLY output a chapter title/number if it ACTUALLY APPEARS in the source text chunk you are given below.
+- If the source chunk starts in the MIDDLE of a chapter (no chapter heading visible), do NOT add any chapter heading. Just continue translating the content.
+- NEVER invent, repeat, or reassign chapter numbers. The chapter numbers come from the SOURCE DOCUMENT only.
+- If a chapter heading appears in the source text (e.g., "Chapter 9" or "第九章"), translate it as the equivalent heading in ${targetLang}.
+- Display chapter titles as clear HEADINGS with blank lines above and below.
+- Each chapter number should appear EXACTLY ONCE across all chunks. If "Chapter 9" was already translated in a previous chunk, do NOT output it again.
+
+PREVIOUS CONTEXT (tells you what was already translated - DO NOT repeat this content):
+"...${contextTranslated}"
 
 TRANSLATION QUALITY (CRITICAL):
 - You are a native-level ${targetLang} linguist and literary translation expert.
 - Translate as if a native ${targetLang} speaker and literary scholar wrote this originally.
 - Use the most natural, fluent, and authentic ${targetLang} phrasing — NOT word-by-word translation.
 - For Burmese: Follow the Official Myanmar Sar Dictionary (မြန်မာစာသတ်ပုံကျမ်း) spelling standards strictly.
-- For all languages: Use current ${new Date().getFullYear()} modern expressions and natural conversational flow appropriate to the tone setting.
-
-PREVIOUS CONTEXT (For continuity):
-"...${contextTranslated}"`;
+- For all languages: Use current ${new Date().getFullYear()} modern expressions and natural conversational flow appropriate to the tone setting.`;
 
         const hasTextSource = novelText.trim().length > 0;
         const isChunkTextMode = inputMode === 'PASTE' || (inputMode === 'UPLOAD' && hasTextSource);
@@ -666,8 +692,11 @@ PREVIOUS CONTEXT (For continuity):
       }
   };
 
+
+
   const reset = () => {
     if(!window.confirm("Progress အားလုံးကို ဖျက်ပစ်မှာ သေချာပါသလား?")) return;
+    handleStop();
     clearAllHistory();
     setFile(null);
     setFileBase64(null);
@@ -676,12 +705,7 @@ PREVIOUS CONTEXT (For continuity):
     setTranslated('');
     setCharCount(0);
     setStartIndex(0);
-    setAutoDrive(false);
-    setIsAutoDriving(false);
     setAutoIteration(0);
-    sessionStartRef.current = 0;
-    sessionProcessedRef.current = 0;
-    setCooldownSeconds(0);
   };
 
   const isOwnKeyMissing = apiType === 'own' && !apiKey.trim();
@@ -1015,6 +1039,16 @@ PREVIOUS CONTEXT (For continuity):
                         loading ? 'PROCESSING CHUNK...' : (startIndex > 0 ? 'CONTINUE NEXT PART ▶' : 'START NOVEL TRANSLATION')
                     )}
                 </button>
+                {/* Stop Button - visible when processing or auto-driving */}
+                {(loading || isAutoDriving || cooldownSeconds > 0) && (
+                  <button 
+                    onClick={handleStop}
+                    className="w-full py-3 rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] transition-all shadow-lg active:scale-95 border border-rose-500/30 bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center gap-2"
+                  >
+                    <Square className="w-4 h-4 fill-current" />
+                    STOP TRANSLATION
+                  </button>
+                )}
                 <button onClick={reset} className="w-full py-2 text-[8px] font-black text-rose-500 hover:text-white uppercase tracking-widest transition-colors opacity-60 hover:opacity-100">RESET ALL PROGRESS</button>
             </div>
 
