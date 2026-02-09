@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Loader2, Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { generateStory, generateThumbnail } from '@/services/geminiService';
-import { generateOwnApiText, getOwnApiErrorMessage } from '@/services/ownApiService';
+import { getOwnApiErrorMessage } from '@/services/ownApiService';
 import { BottomNav } from '@/components/BottomNav';
 import { useSecureApiKey } from '@/hooks/useSecureApiKey';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
@@ -134,12 +134,8 @@ const CreatorPage: React.FC = () => {
       let response: string | null = null;
       
       if (apiType === 'own') {
-        // Direct client-side generation with silent retry + model fallback
-        response = await generateOwnApiText(prompt, apiKey, {
-          temperature: 0.8,
-          maxRetries: 3,
-          delayMs: 30000,
-        });
+        // Use edge function with user's own API key (same pattern as Voice tool)
+        response = await generateStory(prompt, apiKey);
       } else {
         // App API mode - use backend
         response = await generateStory(prompt);
