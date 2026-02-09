@@ -47,14 +47,27 @@ const AccountInfoCard: React.FC = () => {
         setDevices(deviceData as DeviceInfo[]);
       }
 
-      // Fetch IP address
-      try {
-        const res = await fetch('https://api.ipify.org?format=json');
-        const json = await res.json();
-        setIpAddress(json.ip);
-      } catch {
-        setIpAddress('N/A');
+      // Fetch real IP address with fallbacks
+      const ipApis = [
+        { url: 'https://api.ipify.org?format=json', key: 'ip' },
+        { url: 'https://api.my-ip.io/v2/ip.json', key: 'ip' },
+        { url: 'https://ipinfo.io/json', key: 'ip' },
+      ];
+      let ipFound = false;
+      for (const api of ipApis) {
+        try {
+          const res = await fetch(api.url, { signal: AbortSignal.timeout(5000) });
+          const json = await res.json();
+          if (json[api.key]) {
+            setIpAddress(json[api.key]);
+            ipFound = true;
+            break;
+          }
+        } catch {
+          continue;
+        }
       }
+      if (!ipFound) setIpAddress('N/A');
 
       setLoading(false);
     };
