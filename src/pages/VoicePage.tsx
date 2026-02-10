@@ -408,8 +408,23 @@ const VoicePage: React.FC = () => {
       const selectedVoiceObj = voices.find(v => v.name === voiceName) || voices[0];
       const actualVoiceValue = selectedVoiceObj.value;
 
-      // Voice tiers are FREE (0 credits), SRT subtitle adds +2 credits
-      const voiceCreditCost = apiType === 'app' ? (proSubtitles ? 2 : 0) : undefined;
+      // Calculate credit cost from selected tier's CMS credit text + SRT addon
+      let voiceCreditCost: number | undefined = undefined;
+      if (apiType === 'app') {
+        let tierCredits = 0;
+        if (selectedTier !== null) {
+          const s = voiceSettings || defaultVoiceSettings;
+          let creditText = '';
+          if (selectedTier === (s.tier1Value || 1500)) creditText = s.tier1Credits;
+          else if (selectedTier === (s.tier2Value || 2500)) creditText = s.tier2Credits;
+          else if (selectedTier === (s.tier3Value || 3500)) creditText = s.tier3Credits;
+          else if (selectedTier === (s.tier4Value || 4500)) creditText = s.tier4Credits;
+          const match = creditText.match(/(\d+)/);
+          tierCredits = match ? parseInt(match[1], 10) : 0;
+        }
+        const srtAddon = proSubtitles ? 2 : 0;
+        voiceCreditCost = tierCredits + srtAddon;
+      }
       const pcmData = await generateSpeech(text, actualVoiceValue, apiType === 'own' ? apiKey : undefined, performance, selectedLanguage, voiceCreditCost);
       if (pcmData) {
         setResultAudio(pcmData);
