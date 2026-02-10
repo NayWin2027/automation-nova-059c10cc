@@ -15,7 +15,7 @@ export function ToolCard({
   isPremium,
   onClick
 }: ToolCardProps) {
-  return <button onClick={onClick} className="neon-glass-card group p-3 text-left transition-all duration-300 w-full relative border-primary-foreground border-solid rounded-md shadow-inner bg-[#18010a] px-[5px] pl-[5px] pt-[5px] pb-[5px] pr-[5px] mx-0 gap-0 border-0 opacity-100 text-popover-foreground flex-col flex items-center justify-start">
+  return <button onClick={onClick} className="neon-glass-card group p-3 transition-all duration-300 w-full relative border-primary-foreground border-solid rounded-md shadow-inner mx-0 gap-0 border-0 opacity-100 flex-col flex items-center justify-start text-platinum my-0 px-0 py-0 bg-gray-950 hover:bg-gray-800 text-center pl-0 pt-0 pr-0 pb-0">
       {isPremium && <div className="absolute top-1.5 right-1.5 z-10">
           <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500/30 to-yellow-400/20 border border-amber-400/40">
             <Crown className="w-2.5 h-2.5 text-amber-300" />
