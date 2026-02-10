@@ -57,12 +57,46 @@ serve(async (req) => {
       ? languageCode
       : "en-US";
 
-    // ===== AUTHENTICATION & CREDITS (Only if NOT using own API key) =====
+    // ===== CHECK PROMOTION MODE =====
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+    let isPromotionMode = false;
+    try {
+      const { data: accessSetting } = await supabaseAdmin
+        .from("app_settings")
+        .select("value")
+        .eq("key", "access_control")
+        .single();
+      if (accessSetting?.value && typeof accessSetting.value === "object") {
+        isPromotionMode = !!(accessSetting.value as any).promotionMode;
+      }
+    } catch (e) {
+      console.error("[gemini-tts] Failed to check promotion mode:", e);
+    }
+
+    // ===== AUTHENTICATION & CREDITS =====
     const isOwnApiKey = !!userApiKey?.trim();
     let userId: string | null = null;
-    
-    if (!isOwnApiKey) {
-      // Authentication required for App API mode (credit deduction)
+
+    if (isPromotionMode) {
+      // Promotion Mode: skip auth & credits for ALL users
+      console.log("[gemini-tts] Promotion Mode active - skipping auth & credit check");
+      
+      // Try to get user ID if auth header exists (optional)
+      const authHeader = req.headers.get("Authorization");
+      if (authHeader) {
+        try {
+          const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+            global: { headers: { Authorization: authHeader } }
+          });
+          const { data: { user } } = await supabaseClient.auth.getUser();
+          if (user) userId = user.id;
+        } catch (_) { /* ignore */ }
+      }
+    } else if (!isOwnApiKey) {
+      // Normal Mode: Authentication required for App API mode (credit deduction)
       const authHeader = req.headers.get("Authorization");
       if (!authHeader) {
         return new Response(
@@ -71,9 +105,6 @@ serve(async (req) => {
         );
       }
 
-      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-      const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-      
       const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
         global: { headers: { Authorization: authHeader } }
       });
@@ -90,8 +121,6 @@ serve(async (req) => {
       console.log(`[gemini-tts] Authenticated user: ${userId}`);
 
       // Credit check and deduction
-      const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-      
       const rpcParams: any = {
         _user_id: userId,
         _tool_id: "voice",
