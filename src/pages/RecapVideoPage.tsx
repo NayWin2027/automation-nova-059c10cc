@@ -35,10 +35,11 @@ const VOICES = [
 
 const CHARACTERS = [
   { id: "none", label: "မပြပါ (None)", src: "" },
-  { id: "c1", label: "ဒီကောင်လေး (Boy)", src: "https://cdn-icons-png.flaticon.com/512/4140/4140048.png" },
-  { id: "c2", label: "ဒီကောင်မလေး (Girl)", src: "https://cdn-icons-png.flaticon.com/512/4140/4140047.png" },
-  { id: "c3", label: "ဒီလူကြီး (Adult M)", src: "https://cdn-icons-png.flaticon.com/512/4140/4140037.png" },
-  { id: "c4", label: "ဒီအမျိုးသမီး (Adult F)", src: "https://cdn-icons-png.flaticon.com/512/4140/4140051.png" },
+  { id: "c1", label: "ယောကျ်ား ၁ (Male 1)", src: "/images/char-male1.png" },
+  { id: "c2", label: "မိန်းမ ၁ (Female 1)", src: "/images/char-female1.png" },
+  { id: "c3", label: "ယောကျ်ား ၂ (Male 2)", src: "/images/char-male2.png" },
+  { id: "c4", label: "မိန်းမ ၂ (Female 2)", src: "/images/char-female2.png" },
+  { id: "c5", label: "ယောကျ်ား ၃ (Male 3)", src: "/images/char-male3.png" },
 ];
 
 const LANGUAGES = [
