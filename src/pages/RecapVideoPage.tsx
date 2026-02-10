@@ -1502,23 +1502,6 @@ export default function VideoRecapView() {
       const imgY = centerY - radius - speakBounce;
       ctx.drawImage(charImg, centerX - radius, imgY, charSize, charSize);
 
-      if (audioLevel > 0.05) {
-        const mouthCX = centerX;
-        const mouthCY = centerY + radius * 0.35;
-        const mouthW = radius * 0.45;
-        const mouthH = radius * 0.12 + audioLevel * radius * 0.35;
-        ctx.fillStyle = `rgba(30, 10, 10, ${0.7 + audioLevel * 0.25})`;
-        ctx.beginPath();
-        ctx.ellipse(mouthCX, mouthCY, mouthW, mouthH, 0, 0, Math.PI);
-        ctx.fill();
-        if (audioLevel > 0.2) {
-          ctx.fillStyle = `rgba(180, 60, 60, ${audioLevel * 0.6})`;
-          ctx.beginPath();
-          ctx.ellipse(mouthCX, mouthCY + mouthH * 0.2, mouthW * 0.5, mouthH * 0.4, 0, 0, Math.PI);
-          ctx.fill();
-        }
-      }
-
       ctx.restore();
       ctx.shadowBlur = 0;
       ctx.shadowColor = "transparent";
@@ -2042,27 +2025,6 @@ export default function VideoRecapView() {
             const speakBounce = audioLevel * charSize * 0.06;
             const imgY = centerY - radius - speakBounce;
             ctx.drawImage(charImg, centerX - radius, imgY, charSize, charSize);
-
-            // Mouth overlay (dark semi-circle that opens based on audio)
-            if (audioLevel > 0.05) {
-              const mouthCX = centerX;
-              const mouthCY = centerY + radius * 0.35;
-              const mouthW = radius * 0.45;
-              const mouthH = radius * 0.12 + audioLevel * radius * 0.35;
-
-              ctx.fillStyle = `rgba(30, 10, 10, ${0.7 + audioLevel * 0.25})`;
-              ctx.beginPath();
-              ctx.ellipse(mouthCX, mouthCY, mouthW, mouthH, 0, 0, Math.PI);
-              ctx.fill();
-
-              // Tongue/inner mouth
-              if (audioLevel > 0.2) {
-                ctx.fillStyle = `rgba(180, 60, 60, ${audioLevel * 0.6})`;
-                ctx.beginPath();
-                ctx.ellipse(mouthCX, mouthCY + mouthH * 0.2, mouthW * 0.5, mouthH * 0.4, 0, 0, Math.PI);
-                ctx.fill();
-              }
-            }
 
             ctx.restore();
             ctx.shadowBlur = 0;
