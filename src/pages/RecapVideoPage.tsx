@@ -7,6 +7,7 @@ import { useSecureApiKey } from "@/hooks/useSecureApiKey";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Home, Lock } from "lucide-react";
+import { preCheckCredits } from "@/utils/creditPreCheck";
 
 // --- DATA SETS ---
 const VOICES = [
@@ -568,6 +569,13 @@ export default function VideoRecapView() {
       alert("⚠️ Video file is too large! Maximum limit is 1GB.");
       return;
     }
+
+    // Pre-check credits before running in App API mode
+    if (apiType === "app") {
+      const allowed = await preCheckCredits("recap-video");
+      if (!allowed) return;
+    }
+
     setAnalyzing(true);
     setStatusText("STEP 1: ANALYZING VIDEO & GENERATING SCRIPT...");
     setFullScriptText("");
@@ -620,6 +628,13 @@ export default function VideoRecapView() {
   // Phase 2A: Create recap with AI Voice (TTS)
   const handleCreateRecapAI = async () => {
     if (!fullScriptText.trim()) return;
+
+    // Pre-check credits before running in App API mode
+    if (apiType === "app") {
+      const allowed = await preCheckCredits("recap-video-audio");
+      if (!allowed) return;
+    }
+
     setAnalyzing(true);
     // Re-parse segments from current scriptSegments or create single segment
     const segments = scriptSegments.length > 0 ? scriptSegments : [{ time: 0, text: fullScriptText }];

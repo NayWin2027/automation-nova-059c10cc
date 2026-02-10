@@ -1,0 +1,57 @@
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+
+/**
+ * Pre-check credits before running any Generate action in App API mode.
+ * Returns true if the user has sufficient, non-expired credits.
+ * Shows a toast and returns false otherwise.
+ */
+export async function preCheckCredits(toolId: string, customCost?: number): Promise<boolean> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("Login လုပ်ပြီးမှ App API သုံးပါ။");
+      return false;
+    }
+
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('credits, plan')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (error || !profile) {
+      toast.error("Profile ရှာမတွေ့ပါ။");
+      return false;
+    }
+
+    // Check if admin (admins are exempt)
+    const { data: isAdmin } = await supabase.rpc('has_role', {
+      _user_id: user.id,
+      _role: 'admin' as const,
+    });
+    if (isAdmin) return true;
+
+    // Determine cost
+    let cost = customCost;
+    if (cost === undefined || cost === null) {
+      const { data: toolSetting } = await supabase
+        .from('tool_settings')
+        .select('credit_cost')
+        .eq('tool_id', toolId)
+        .maybeSingle();
+      cost = toolSetting?.credit_cost || 10;
+    }
+
+    // Check sufficient credits
+    if (profile.credits < cost) {
+      toast.error("Credit မလုံလောက်ပါသဖြင့် Credit ထပ်ဖြည့်ပါ။");
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.error('Credit pre-check error:', err);
+    return true; // Allow on error to not block UX
+  }
+}

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { preCheckCredits } from "@/utils/creditPreCheck";
 import {
   ArrowLeft,
   Link2,
@@ -714,6 +715,12 @@ export default function TransformativeVideoPage() {
     if (apiMode === "own" && !apiKey.trim()) {
       toast.error("Google AI API Key ထည့်ပါ");
       return;
+    }
+
+    // Pre-check credits before running in App API mode
+    if (apiMode === "app") {
+      const allowed = await preCheckCredits("transformative-video");
+      if (!allowed) return;
     }
 
     setIsProcessing(true);

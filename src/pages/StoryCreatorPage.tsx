@@ -7,6 +7,7 @@ import { useSecureApiKey } from "@/hooks/useSecureApiKey";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useApiAccess } from "@/hooks/useApiAccess";
 import { useToast } from "@/hooks/use-toast";
+import { preCheckCredits } from "@/utils/creditPreCheck";
 
 // Silent retry configuration for Own API mode
 const MAX_SILENT_RETRIES = 3;
@@ -398,6 +399,12 @@ const StoryView: React.FC = () => {
   const handleGenerate = async () => {
     if (!title) return alert("Novel Title ထည့်သွင်းပေးပါ။");
     if (apiType === "own" && !apiKey) return alert("API Key ထည့်ပေးပါ။");
+
+    // Pre-check credits before running in App API mode
+    if (apiType === "app") {
+      const allowed = await preCheckCredits("story-creator");
+      if (!allowed) return;
+    }
 
     setLoading(true);
 

@@ -8,6 +8,7 @@ import { useSecureApiKey } from '@/hooks/useSecureApiKey';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { useApiAccess } from '@/hooks/useApiAccess';
 import { toast } from 'sonner';
+import { preCheckCredits } from '@/utils/creditPreCheck';
 
 const LANGUAGES = [
   "BURMESE", "ENGLISH", "JAPANESE", "KOREAN", "CHINESE (SIMPLIFIED)", 
@@ -109,6 +110,12 @@ const CreatorPage: React.FC = () => {
     if (apiType === 'own' && !apiKey.trim()) {
       toast.error("GEMINI API KEY အရင်ထည့်ပေးပါ။");
       return;
+    }
+
+    // Pre-check credits before running in App API mode
+    if (apiType === 'app') {
+      const allowed = await preCheckCredits('creator');
+      if (!allowed) return;
     }
     
     setLoading(true);

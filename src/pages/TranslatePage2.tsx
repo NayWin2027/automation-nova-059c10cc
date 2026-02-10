@@ -3,6 +3,7 @@ import { translateText } from "../services/geminiService";
 import { generateOwnApiText, getOwnApiErrorMessage } from "../services/ownApiService";
 import { useSecureApiKey } from "../hooks/useSecureApiKey";
 import { toast } from "sonner";
+import { preCheckCredits } from "@/utils/creditPreCheck";
 import {
   Lock,
   ChevronDown,
@@ -180,6 +181,12 @@ const TranslateView: React.FC = () => {
     if (apiType === "own" && !apiKey.trim()) {
       toast.error("ကျေးဇူးပြု၍ API Key ထည့်ပေးပါ။");
       return;
+    }
+
+    // Pre-check credits before running in App API mode
+    if (apiType === "app") {
+      const allowed = await preCheckCredits('translate');
+      if (!allowed) return;
     }
 
     setLoading(true);
