@@ -14,7 +14,8 @@ import {
 import { useApiAccess } from '@/hooks/useApiAccess';
 import { useSecureApiKey } from '@/hooks/useSecureApiKey';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
- import { usePageStability } from '@/hooks/usePageStability';
+import { usePageStability } from '@/hooks/usePageStability';
+import { supabase } from '@/integrations/supabase/client';
 
 type SubStyle = 'GOLD' | 'BLUE' | 'RUBY' | 'DIAMOND' | 'EMERALD';
 
@@ -26,6 +27,94 @@ interface HistoryItem {
   timestamp: number;
   language?: string;
 }
+
+interface VoiceSettings {
+  [key: string]: any;
+  id: string;
+  // Header
+  pageTitle: string;
+  pageTitleColor: string;
+  pageTitleSize: number;
+  // Section labels
+  apiKeyLabel: string;
+  apiKeyLabelColor: string;
+  languageLabel: string;
+  languageLabelColor: string;
+  scriptLabel: string;
+  scriptLabelColor: string;
+  performanceLabel: string;
+  performanceLabelColor: string;
+  characterLabel: string;
+  characterLabelColor: string;
+  // Buttons
+  appApiBtnText: string;
+  ownApiBtnText: string;
+  pasteBtnText: string;
+  clearBtnText: string;
+  checkWordBtnText: string;
+  checkWordBtnColor: string;
+  // Pro subtitles
+  proSubtitleTitle: string;
+  proSubtitleSub: string;
+  proSubtitleSubColor: string;
+  // Generate
+  generateAudioOnlyText: string;
+  generateWithSubsText: string;
+  generateBtnColor: string;
+  // Download
+  downloadAudioText: string;
+  downloadSrtText: string;
+  // History
+  historyTitle: string;
+  historyTitleColor: string;
+  clearHistoryText: string;
+  noHistoryText: string;
+  // How to use
+  howToUseTitle: string;
+  howToUseTitleColor: string;
+  howToUseText: string;
+  howToUseTextColor: string;
+  howToUseTextSize: number;
+  // Pro tips
+  proTipsTitle: string;
+  proTipsTitleColor: string;
+  proTipsText: string;
+  proTipsTextColor: string;
+  proTipsTextSize: number;
+  // Footer
+  footerText: string;
+  footerTextColor: string;
+  // Blocked notice
+  blockedNoticeText: string;
+}
+
+const voiceDb = {
+  getVoiceSettings: async (): Promise<VoiceSettings | null> => {
+    const { data } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "voice_settings")
+      .maybeSingle();
+    return data?.value as VoiceSettings | null;
+  },
+  upsertVoiceSettings: async (settings: VoiceSettings) => {
+    const { data: existing } = await supabase
+      .from("app_settings")
+      .select("id")
+      .eq("key", "voice_settings")
+      .maybeSingle();
+    if (existing) {
+      await supabase
+        .from("app_settings")
+        .update({ value: settings as never })
+        .eq("key", "voice_settings");
+    } else {
+      await supabase
+        .from("app_settings")
+        .insert({ key: "voice_settings", value: settings as never });
+    }
+  },
+};
 
 const VoicePage: React.FC = () => {
   const navigate = useNavigate();
@@ -71,9 +160,63 @@ const VoicePage: React.FC = () => {
   
   const playbackTimeoutRef = useRef<number | null>(null);
 
+  // Admin CMS states
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [voiceSettings, setVoiceSettings] = useState<VoiceSettings | null>(null);
+  const [editData, setEditData] = useState<VoiceSettings | null>(null);
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  const defaultVoiceSettings: VoiceSettings = {
+    id: "voice_v1",
+    pageTitle: "AI VOICE",
+    pageTitleColor: "#ffffff",
+    pageTitleSize: 14,
+    apiKeyLabel: "GEMINI API KEY",
+    apiKeyLabelColor: "#9ca3af",
+    languageLabel: "SELECT LANGUAGE (80+ OPTIONS)",
+    languageLabelColor: "#9ca3af",
+    scriptLabel: "SCRIPT TEXT",
+    scriptLabelColor: "#9ca3af",
+    performanceLabel: "VOICE PERFORMANCE",
+    performanceLabelColor: "#9ca3af",
+    characterLabel: "SELECT CHARACTER (20 OPTIONS)",
+    characterLabelColor: "#9ca3af",
+    appApiBtnText: "APP API",
+    ownApiBtnText: "OWN API",
+    pasteBtnText: "PASTE",
+    clearBtnText: "CLEAR",
+    checkWordBtnText: "CHECK WORD COUNT (MANDATORY)",
+    checkWordBtnColor: "from-cyan-500 to-blue-600",
+    proSubtitleTitle: "GENERATE PRO SUBTITLES",
+    proSubtitleSub: "SRT FILE (+2 CREDITS)",
+    proSubtitleSubColor: "#3b82f6",
+    generateAudioOnlyText: "Generate Audio Only",
+    generateWithSubsText: "Generate Audio + Live Subs",
+    generateBtnColor: "#ffffff",
+    downloadAudioText: "DOWNLOAD AUDIO",
+    downloadSrtText: "DOWNLOAD .SRT",
+    historyTitle: "VOICE HISTORY",
+    historyTitleColor: "#ffffff",
+    clearHistoryText: "CLEAR HISTORY",
+    noHistoryText: "မှတ်တမ်းများ မရှိသေးပါ။",
+    howToUseTitle: "HOW TO USE",
+    howToUseTitleColor: "#ffffff",
+    howToUseText: "၁။ Ai အသံထုတ်မည့် စာသားကိုထည့်ပါ။\n၂။ Ai Character ရွေးပါ။ (ကျား/မ ၂၀ ဦးအထိ ရွေးချယ်နိုင်သည်)\n၃။ Ai Character ရဲ့ အသံ Tone ကိုရွေးပါ။\n၄။ စာသားအရေအတွက်စစ်ပါ။\n၅။ ပါဝင်တဲ့စာသားအရေအတွက်နဲ့ကိုက်ညီတဲ့ Credit ကိုရွေးပါ။\n၆။ စာတန်းထိုးဖိုင်ပါ ပူးတွဲလိုချင်ပါက ဖွင့်ပါ။ (+2 credits ပေးရပါမည်)\n၇။ စတင်ထုတ်နိုင်ပါပြီ။",
+    howToUseTextColor: "#9ca3af",
+    howToUseTextSize: 11,
+    proTipsTitle: "PRO TIPS & WARNINGS",
+    proTipsTitleColor: "#fcd34d",
+    proTipsText: "! စာသားအရေအတွက် ၄၅၀၀ ထက်ပိုမရပါ။\n! App API မှာ အသံထုတ်တဲ့အကြိမ်ရေ အကန့်အသတ်ရှိတာကြောင့် ထုတ်မရခဲ့ရင် Own API ဘက်ကို ပြောင်းသုံးပေးပါ။\n! History တွေအရမ်းများလာရင် ဖျက်ပေးဖို့ မမေ့ပါနဲ့။ (မှတ်တမ်း ၂၀ အထိသာ သိမ်းဆည်းပေးမည်)",
+    proTipsTextColor: "#fbbf2480",
+    proTipsTextSize: 11,
+    footerText: "© 2026 TRANSCRIPT MASTER AI",
+    footerTextColor: "#ffffff33",
+    blockedNoticeText: "API နှစ်မျိုးလုံး ပိတ်ထားပါသည်။ Admin ကို ဆက်သွယ်ပါ။",
+  };
+
   useEffect(() => {
     try {
-      // Strip large audio data before saving to avoid QuotaExceededError
       const lightweight = history.slice(0, 50).map(({ audio, ...rest }) => rest);
       localStorage.setItem('master_voice_history_v2', JSON.stringify(lightweight));
     } catch (e) {
@@ -90,6 +233,44 @@ const VoicePage: React.FC = () => {
     localStorage.setItem('master_voice_language', selectedLanguage);
     setTTSLanguage(selectedLanguage);
   }, [selectedLanguage]);
+
+  // Admin check + load voice settings
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        supabase.rpc("has_role", { _user_id: session.user.id, _role: "admin" })
+          .then(({ data }) => setIsAdmin(data === true));
+      }
+    });
+
+    const loadVoiceSettings = async () => {
+      const res = await voiceDb.getVoiceSettings();
+      if (res) {
+        const merged = { ...defaultVoiceSettings, ...res };
+        setVoiceSettings(merged);
+        setEditData(merged);
+      } else {
+        setVoiceSettings(defaultVoiceSettings);
+        setEditData(defaultVoiceSettings);
+      }
+    };
+    loadVoiceSettings();
+  }, []);
+
+  const handleSaveSettings = async () => {
+    if (!editData) return;
+    setSavingSettings(true);
+    try {
+      await voiceDb.upsertVoiceSettings(editData);
+      setVoiceSettings(editData);
+      setIsEditing(false);
+      alert("✅ Voice page settings saved!");
+    } catch (e) {
+      alert("Error saving settings.");
+    } finally {
+      setSavingSettings(false);
+    }
+  };
 
   // IMPORTANT: authLoading early return MUST be after ALL hooks
   if (authLoading) {
@@ -270,8 +451,110 @@ const VoicePage: React.FC = () => {
 
   const currentStyle = subStyles.find(s => s.id === activeSubStyle)!;
 
+  // Use settings data (editing or saved)
+  const vs = isEditing ? editData : voiceSettings;
+
+  // Helper for editable text field with color picker
+  const EditableField = ({ fieldKey, colorKey, sizeKey, label }: { fieldKey: string; colorKey?: string; sizeKey?: string; label?: string }) => {
+    if (!isEditing || !editData) return null;
+    return (
+      <div className="flex gap-2 items-center w-full">
+        <input
+          value={editData[fieldKey] || ''}
+          onChange={(e) => setEditData({ ...editData, [fieldKey]: e.target.value })}
+          className="flex-1 bg-black/40 border border-white/10 rounded-xl p-2 text-xs font-black outline-none text-white"
+          placeholder={label || fieldKey}
+        />
+        {colorKey && (
+          <input
+            type="color"
+            value={editData[colorKey] || '#ffffff'}
+            onChange={(e) => setEditData({ ...editData, [colorKey]: e.target.value })}
+            className="w-10 h-8 rounded-lg bg-slate-800 border-none cursor-pointer shrink-0"
+          />
+        )}
+        {sizeKey && (
+          <input
+            type="number"
+            value={editData[sizeKey] || 12}
+            onChange={(e) => setEditData({ ...editData, [sizeKey]: parseInt(e.target.value) || 8 })}
+            className="w-12 h-8 bg-black/40 border border-white/10 rounded-lg text-[10px] text-white text-center shrink-0"
+          />
+        )}
+      </div>
+    );
+  };
+
+  // Helper for editable textarea field
+  const EditableTextarea = ({ fieldKey, colorKey, sizeKey, label }: { fieldKey: string; colorKey?: string; sizeKey?: string; label?: string }) => {
+    if (!isEditing || !editData) return null;
+    return (
+      <div className="space-y-1 w-full">
+        {label && <label className="text-[8px] font-black text-white/50 uppercase tracking-widest">{label}</label>}
+        <div className="flex gap-2 items-start">
+          <textarea
+            value={editData[fieldKey] || ''}
+            onChange={(e) => setEditData({ ...editData, [fieldKey]: e.target.value })}
+            className="flex-1 bg-black/40 border border-white/10 rounded-xl p-3 text-xs font-bold outline-none text-white min-h-[80px] resize-y"
+          />
+          <div className="flex flex-col gap-1 shrink-0">
+            {colorKey && (
+              <input
+                type="color"
+                value={editData[colorKey] || '#ffffff'}
+                onChange={(e) => setEditData({ ...editData, [colorKey]: e.target.value })}
+                className="w-10 h-8 rounded-t-lg bg-slate-800 border-none cursor-pointer"
+              />
+            )}
+            {sizeKey && (
+              <input
+                type="number"
+                value={editData[sizeKey] || 11}
+                onChange={(e) => setEditData({ ...editData, [sizeKey]: parseInt(e.target.value) || 8 })}
+                className="w-10 h-6 bg-black/40 border border-white/10 rounded-b-lg text-[9px] text-white text-center"
+              />
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-background pb-24">
+      {/* Admin CMS Bar */}
+      {isAdmin && (
+        <div className="sticky top-0 z-50 bg-gradient-to-r from-rose-600 via-purple-600 to-indigo-600 px-4 py-2 flex items-center justify-between shadow-lg">
+          <span className="text-[9px] font-black text-white uppercase tracking-widest">🔧 ADMIN CMS</span>
+          <div className="flex gap-2">
+            {!isEditing ? (
+              <button
+                onClick={() => setIsEditing(true)}
+                className="px-4 py-1.5 bg-white/20 rounded-lg text-[9px] font-black text-white uppercase tracking-widest hover:bg-white/30 transition-all"
+              >
+                ✏️ EDIT PAGE & COLORS
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={() => { setIsEditing(false); setEditData(voiceSettings); }}
+                  className="px-4 py-1.5 bg-white/10 rounded-lg text-[9px] font-black text-white/70 uppercase tracking-widest hover:bg-white/20 transition-all"
+                >
+                  ✖ CANCEL
+                </button>
+                <button
+                  onClick={handleSaveSettings}
+                  disabled={savingSettings}
+                  className="px-4 py-1.5 bg-emerald-600 rounded-lg text-[9px] font-black text-white uppercase tracking-widest shadow-lg shadow-emerald-600/30 hover:scale-105 active:scale-95 transition-all"
+                >
+                  {savingSettings ? "SAVING..." : "💾 SAVE EVERYTHING"}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="p-4 flex items-center gap-3">
         <button 
@@ -280,7 +563,19 @@ const VoicePage: React.FC = () => {
         >
           <ArrowLeft className="w-4 h-4 text-foreground" />
         </button>
-        <h1 className="text-sm font-bold tracking-wider text-foreground">AI VOICE</h1>
+        {isEditing ? (
+          <EditableField fieldKey="pageTitle" colorKey="pageTitleColor" sizeKey="pageTitleSize" label="Page Title" />
+        ) : (
+          <h1 
+            className="font-bold tracking-wider text-foreground"
+            style={{ 
+              color: vs?.pageTitleColor || defaultVoiceSettings.pageTitleColor,
+              fontSize: (vs?.pageTitleSize || defaultVoiceSettings.pageTitleSize) + 'px'
+            }}
+          >
+            {vs?.pageTitle || defaultVoiceSettings.pageTitle}
+          </h1>
+        )}
       </header>
 
       <main className="px-4 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -300,7 +595,7 @@ const VoicePage: React.FC = () => {
             title={appApiReason}
           >
             {!appApiAllowed && <Lock className="w-3 h-3 text-rose-400" />}
-            APP API <span className="text-[8px]">🔒</span>
+            {vs?.appApiBtnText || defaultVoiceSettings.appApiBtnText} <span className="text-[8px]">🔒</span>
           </button>
           <button 
             onClick={() => ownApiAllowed && setApiType('own')} 
@@ -315,23 +610,44 @@ const VoicePage: React.FC = () => {
             title={ownApiReason}
           >
             {!ownApiAllowed && <Lock className="w-3 h-3 text-rose-400" />}
-            OWN API
+            {vs?.ownApiBtnText || defaultVoiceSettings.ownApiBtnText}
           </button>
         </div>
+
+        {/* Editing for API button texts */}
+        {isEditing && (
+          <div className="bg-purple-900/20 border border-purple-500/20 rounded-xl p-3 space-y-2">
+            <label className="text-[8px] font-black text-purple-300 uppercase tracking-widest">API Button Texts</label>
+            <div className="grid grid-cols-2 gap-2">
+              <input value={editData?.appApiBtnText || ''} onChange={(e) => setEditData({ ...editData!, appApiBtnText: e.target.value })} className="bg-black/40 border border-white/10 rounded-lg p-2 text-[10px] font-black text-white outline-none" placeholder="App API text" />
+              <input value={editData?.ownApiBtnText || ''} onChange={(e) => setEditData({ ...editData!, ownApiBtnText: e.target.value })} className="bg-black/40 border border-white/10 rounded-lg p-2 text-[10px] font-black text-white outline-none" placeholder="Own API text" />
+            </div>
+          </div>
+        )}
 
         {/* Blocked API Notice */}
         {!appApiAllowed && !ownApiAllowed && (
           <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-3 text-center">
-            <p className="text-[10px] font-bold text-destructive">
-              API နှစ်မျိုးလုံး ပိတ်ထားပါသည်။ Admin ကို ဆက်သွယ်ပါ။
-            </p>
+            {isEditing ? (
+              <EditableField fieldKey="blockedNoticeText" label="Blocked Notice" />
+            ) : (
+              <p className="text-[10px] font-bold text-destructive">
+                {vs?.blockedNoticeText || defaultVoiceSettings.blockedNoticeText}
+              </p>
+            )}
           </div>
         )}
 
         {/* 2. OWN API KEY BOX */}
         {apiType === 'own' && ownApiAllowed && (
           <div className="bg-white/5 backdrop-blur-2xl rounded-[28px] p-6 border border-white/10 space-y-3 shadow-xl animate-in zoom-in-95 duration-300">
-            <h4 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">GEMINI API KEY</h4>
+            {isEditing ? (
+              <EditableField fieldKey="apiKeyLabel" colorKey="apiKeyLabelColor" label="API Key Label" />
+            ) : (
+              <h4 className="text-[10px] font-black uppercase tracking-widest ml-1" style={{ color: vs?.apiKeyLabelColor || defaultVoiceSettings.apiKeyLabelColor }}>
+                {vs?.apiKeyLabel || defaultVoiceSettings.apiKeyLabel}
+              </h4>
+            )}
             <div className="relative">
               <input 
                 type="password"
@@ -344,11 +660,17 @@ const VoicePage: React.FC = () => {
           </div>
         )}
 
-        {/* Language Selector - 80+ Languages */}
+        {/* Language Selector */}
         <div className="bg-white/5 backdrop-blur-2xl rounded-[28px] p-5 border border-white/10 space-y-3 shadow-xl">
           <div className="flex items-center gap-2 px-1">
             <Globe className="w-4 h-4 text-primary" />
-            <h4 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">SELECT LANGUAGE (80+ OPTIONS)</h4>
+            {isEditing ? (
+              <EditableField fieldKey="languageLabel" colorKey="languageLabelColor" label="Language Label" />
+            ) : (
+              <h4 className="text-[10px] font-black uppercase tracking-widest" style={{ color: vs?.languageLabelColor || defaultVoiceSettings.languageLabelColor }}>
+                {vs?.languageLabel || defaultVoiceSettings.languageLabel}
+              </h4>
+            )}
           </div>
           <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
             <SelectTrigger className="w-full bg-white/5 border-white/10 rounded-2xl h-12 text-foreground">
@@ -377,14 +699,28 @@ const VoicePage: React.FC = () => {
         <div className="bg-white/5 backdrop-blur-2xl rounded-[28px] p-5 border border-white/10 space-y-3 shadow-xl">
           <div className="flex justify-between items-center px-1">
             <div className="flex items-center gap-3">
-              <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">SCRIPT TEXT</label>
+              {isEditing ? (
+                <EditableField fieldKey="scriptLabel" colorKey="scriptLabelColor" label="Script Label" />
+              ) : (
+                <label className="text-[9px] font-black uppercase tracking-widest" style={{ color: vs?.scriptLabelColor || defaultVoiceSettings.scriptLabelColor }}>
+                  {vs?.scriptLabel || defaultVoiceSettings.scriptLabel}
+                </label>
+              )}
               <span className="bg-background/50 px-2 py-0.5 rounded-lg text-[8px] font-black text-muted-foreground">{text.length}/4500</span>
             </div>
-            <div className="flex gap-4">
-              <button onClick={async () => setText(await navigator.clipboard.readText())} className="text-[9px] font-black text-primary uppercase tracking-widest">PASTE</button>
-              <button onClick={() => { setText(''); setShowOptions(false); setResultAudio(null); }} className="text-[9px] font-black text-destructive uppercase tracking-widest">CLEAR</button>
-            </div>
+            {!isEditing && (
+              <div className="flex gap-4">
+                <button onClick={async () => setText(await navigator.clipboard.readText())} className="text-[9px] font-black text-primary uppercase tracking-widest">{vs?.pasteBtnText || defaultVoiceSettings.pasteBtnText}</button>
+                <button onClick={() => { setText(''); setShowOptions(false); setResultAudio(null); }} className="text-[9px] font-black text-destructive uppercase tracking-widest">{vs?.clearBtnText || defaultVoiceSettings.clearBtnText}</button>
+              </div>
+            )}
           </div>
+          {isEditing && (
+            <div className="grid grid-cols-2 gap-2">
+              <input value={editData?.pasteBtnText || ''} onChange={(e) => setEditData({ ...editData!, pasteBtnText: e.target.value })} className="bg-black/40 border border-white/10 rounded-lg p-2 text-[10px] font-black text-white outline-none" placeholder="Paste btn" />
+              <input value={editData?.clearBtnText || ''} onChange={(e) => setEditData({ ...editData!, clearBtnText: e.target.value })} className="bg-black/40 border border-white/10 rounded-lg p-2 text-[10px] font-black text-white outline-none" placeholder="Clear btn" />
+            </div>
+          )}
           <textarea
             value={text}
             onChange={(e) => { setText(e.target.value); setShowOptions(false); setResultAudio(null); }}
@@ -396,7 +732,13 @@ const VoicePage: React.FC = () => {
         {/* 4. Selection Buttons */}
         <div className="space-y-4">
           <div className="space-y-2">
-            <h4 className="text-[8px] font-black text-muted-foreground uppercase tracking-widest ml-1">VOICE PERFORMANCE</h4>
+            {isEditing ? (
+              <EditableField fieldKey="performanceLabel" colorKey="performanceLabelColor" label="Performance Label" />
+            ) : (
+              <h4 className="text-[8px] font-black uppercase tracking-widest ml-1" style={{ color: vs?.performanceLabelColor || defaultVoiceSettings.performanceLabelColor }}>
+                {vs?.performanceLabel || defaultVoiceSettings.performanceLabel}
+              </h4>
+            )}
             <div className="grid grid-cols-4 gap-1.5">
               {['EXCITING', 'CALM', 'PROFESSIONAL', 'NARRATIVE'].map((perf) => (
                 <button key={perf} onClick={() => setPerformance(perf)} className={`py-2 rounded-[10px] font-black text-[7px] uppercase tracking-tighter transition-all border ${performance === perf ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white border-transparent shadow-sm' : 'bg-white/5 border-white/5 text-muted-foreground'}`}>{perf}</button>
@@ -405,7 +747,13 @@ const VoicePage: React.FC = () => {
           </div>
           
           <div className="space-y-2">
-            <h4 className="text-[8px] font-black text-muted-foreground uppercase tracking-widest ml-1">SELECT CHARACTER (20 OPTIONS)</h4>
+            {isEditing ? (
+              <EditableField fieldKey="characterLabel" colorKey="characterLabelColor" label="Character Label" />
+            ) : (
+              <h4 className="text-[8px] font-black uppercase tracking-widest ml-1" style={{ color: vs?.characterLabelColor || defaultVoiceSettings.characterLabelColor }}>
+                {vs?.characterLabel || defaultVoiceSettings.characterLabel}
+              </h4>
+            )}
             <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide px-0.5">
               {voices.map((v, idx) => (
                 <button 
@@ -423,15 +771,29 @@ const VoicePage: React.FC = () => {
 
         {/* 5. Logic Section */}
         {!showOptions ? (
-          <button disabled={!text} onClick={handleCheckWordCount} className="w-full py-4 rounded-[20px] bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 disabled:opacity-30">
-            CHECK WORD COUNT (MANDATORY)
-          </button>
+          <>
+            {isEditing && (
+              <EditableField fieldKey="checkWordBtnText" label="Check Word Button Text" />
+            )}
+            <button disabled={!text} onClick={handleCheckWordCount} className="w-full py-4 rounded-[20px] bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 disabled:opacity-30">
+              {vs?.checkWordBtnText || defaultVoiceSettings.checkWordBtnText}
+            </button>
+          </>
         ) : (
           <div className="space-y-4 animate-in fade-in zoom-in-95 duration-500">
             <div className="bg-white/5 backdrop-blur-2xl rounded-[24px] p-4 border border-white/10 flex justify-between items-center">
               <div className="space-y-0.5">
-                <h4 className="text-[10px] font-black text-foreground uppercase tracking-widest">GENERATE PRO SUBTITLES</h4>
-                <p className="text-[7px] font-black text-primary uppercase tracking-widest">SRT FILE (+2 CREDITS)</p>
+                {isEditing ? (
+                  <div className="space-y-1">
+                    <EditableField fieldKey="proSubtitleTitle" label="Pro Subtitle Title" />
+                    <EditableField fieldKey="proSubtitleSub" colorKey="proSubtitleSubColor" label="Pro Subtitle Sub" />
+                  </div>
+                ) : (
+                  <>
+                    <h4 className="text-[10px] font-black text-foreground uppercase tracking-widest">{vs?.proSubtitleTitle || defaultVoiceSettings.proSubtitleTitle}</h4>
+                    <p className="text-[7px] font-black uppercase tracking-widest" style={{ color: vs?.proSubtitleSubColor || defaultVoiceSettings.proSubtitleSubColor }}>{vs?.proSubtitleSub || defaultVoiceSettings.proSubtitleSub}</p>
+                  </>
+                )}
               </div>
               <button onClick={() => setProSubtitles(!proSubtitles)} className={`w-10 h-6 rounded-full p-1 transition-all duration-300 ${proSubtitles ? 'bg-primary' : 'bg-muted'}`}>
                 <div className={`w-4 h-4 rounded-full bg-white transition-transform duration-300 ${proSubtitles ? 'translate-x-4' : 'translate-x-0'}`}></div>
@@ -450,8 +812,15 @@ const VoicePage: React.FC = () => {
               ))}
             </div>
 
+            {isEditing && (
+              <div className="grid grid-cols-2 gap-2">
+                <input value={editData?.generateAudioOnlyText || ''} onChange={(e) => setEditData({ ...editData!, generateAudioOnlyText: e.target.value })} className="bg-black/40 border border-white/10 rounded-lg p-2 text-[10px] font-black text-white outline-none" placeholder="Audio Only text" />
+                <input value={editData?.generateWithSubsText || ''} onChange={(e) => setEditData({ ...editData!, generateWithSubsText: e.target.value })} className="bg-black/40 border border-white/10 rounded-lg p-2 text-[10px] font-black text-white outline-none" placeholder="With Subs text" />
+              </div>
+            )}
+
             <button disabled={loading} onClick={handleGenerate} className="w-full py-4 rounded-[20px] bg-foreground text-background font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all">
-              {loading ? 'PROCESSING...' : (proSubtitles ? 'Generate Audio + Live Subs' : 'Generate Audio Only')}
+              {loading ? 'PROCESSING...' : (proSubtitles ? (vs?.generateWithSubsText || defaultVoiceSettings.generateWithSubsText) : (vs?.generateAudioOnlyText || defaultVoiceSettings.generateAudioOnlyText))}
             </button>
           </div>
         )}
@@ -481,6 +850,12 @@ const VoicePage: React.FC = () => {
         {/* Download Buttons Section */}
         {resultAudio && (
           <div className="grid grid-cols-2 gap-2 animate-in fade-in duration-300">
+            {isEditing && (
+              <div className="col-span-2 grid grid-cols-2 gap-2 mb-1">
+                <input value={editData?.downloadAudioText || ''} onChange={(e) => setEditData({ ...editData!, downloadAudioText: e.target.value })} className="bg-black/40 border border-white/10 rounded-lg p-2 text-[10px] font-black text-white outline-none" placeholder="Download Audio text" />
+                <input value={editData?.downloadSrtText || ''} onChange={(e) => setEditData({ ...editData!, downloadSrtText: e.target.value })} className="bg-black/40 border border-white/10 rounded-lg p-2 text-[10px] font-black text-white outline-none" placeholder="Download SRT text" />
+              </div>
+            )}
             <button 
               className="py-3 rounded-[16px] bg-white/5 border border-white/10 text-[8px] font-black text-foreground uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95"
               onClick={() => {
@@ -493,7 +868,6 @@ const VoicePage: React.FC = () => {
                 for (let i = 0; i < binaryString.length; i++) {
                   bytes[i] = binaryString.charCodeAt(i);
                 }
-                // Check if it's already a proper audio format (MP3/WAV/OGG) by checking magic bytes
                 const isMP3 = bytes[0] === 0xFF && (bytes[1] & 0xE0) === 0xE0;
                 const isWAV = bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46;
                 const isOGG = bytes[0] === 0x4F && bytes[1] === 0x67 && bytes[2] === 0x67 && bytes[3] === 0x53;
@@ -510,7 +884,6 @@ const VoicePage: React.FC = () => {
                   blob = new Blob([bytes], { type: 'audio/ogg' });
                   filename = 'voice.ogg';
                 } else {
-                  // Raw PCM data - wrap in proper WAV container
                   const pcmData = new Int16Array(bytes.buffer);
                   const sampleRate = 24000;
                   const numChannels = 1;
@@ -519,21 +892,18 @@ const VoicePage: React.FC = () => {
                   const headerSize = 44;
                   const wavBuffer = new ArrayBuffer(headerSize + dataSize);
                   const view = new DataView(wavBuffer);
-                  // RIFF header
-                  view.setUint32(0, 0x52494646, false); // "RIFF"
+                  view.setUint32(0, 0x52494646, false);
                   view.setUint32(4, 36 + dataSize, true);
-                  view.setUint32(8, 0x57415645, false); // "WAVE"
-                  // fmt chunk
-                  view.setUint32(12, 0x666d7420, false); // "fmt "
+                  view.setUint32(8, 0x57415645, false);
+                  view.setUint32(12, 0x666d7420, false);
                   view.setUint32(16, 16, true);
-                  view.setUint16(20, 1, true); // PCM
+                  view.setUint16(20, 1, true);
                   view.setUint16(22, numChannels, true);
                   view.setUint32(24, sampleRate, true);
                   view.setUint32(28, sampleRate * numChannels * bitsPerSample / 8, true);
                   view.setUint16(32, numChannels * bitsPerSample / 8, true);
                   view.setUint16(34, bitsPerSample, true);
-                  // data chunk
-                  view.setUint32(36, 0x64617461, false); // "data"
+                  view.setUint32(36, 0x64617461, false);
                   view.setUint32(40, dataSize, true);
                   const wavBytes = new Uint8Array(wavBuffer);
                   wavBytes.set(new Uint8Array(pcmData.buffer), headerSize);
@@ -545,7 +915,7 @@ const VoicePage: React.FC = () => {
                 URL.revokeObjectURL(url);
               }}
             >
-              DOWNLOAD AUDIO
+              {vs?.downloadAudioText || defaultVoiceSettings.downloadAudioText}
             </button>
             {resultSubtitles && proSubtitles && (
               <button 
@@ -556,7 +926,7 @@ const VoicePage: React.FC = () => {
                   const a = document.createElement('a'); a.href = url; a.download = `subtitles.srt`; a.click();
                 }}
               >
-                DOWNLOAD .SRT
+                {vs?.downloadSrtText || defaultVoiceSettings.downloadSrtText}
               </button>
             )}
           </div>
@@ -565,15 +935,29 @@ const VoicePage: React.FC = () => {
         {/* 7. History Section */}
         <div className="space-y-3 pt-2">
           <div className="flex justify-between items-center px-1">
-            <h4 className="text-[10px] font-black text-foreground uppercase tracking-widest">VOICE HISTORY</h4>
-            {history.length > 0 && (
-              <button onClick={clearHistory} className="text-[8px] font-black text-destructive uppercase tracking-widest border border-destructive/20 px-2 py-1 rounded-lg hover:bg-destructive/10 transition-colors">CLEAR HISTORY</button>
+            {isEditing ? (
+              <EditableField fieldKey="historyTitle" colorKey="historyTitleColor" label="History Title" />
+            ) : (
+              <h4 className="text-[10px] font-black uppercase tracking-widest" style={{ color: vs?.historyTitleColor || defaultVoiceSettings.historyTitleColor }}>
+                {vs?.historyTitle || defaultVoiceSettings.historyTitle}
+              </h4>
+            )}
+            {history.length > 0 && !isEditing && (
+              <button onClick={clearHistory} className="text-[8px] font-black text-destructive uppercase tracking-widest border border-destructive/20 px-2 py-1 rounded-lg hover:bg-destructive/10 transition-colors">
+                {vs?.clearHistoryText || defaultVoiceSettings.clearHistoryText}
+              </button>
             )}
           </div>
+          {isEditing && (
+            <div className="grid grid-cols-2 gap-2">
+              <input value={editData?.clearHistoryText || ''} onChange={(e) => setEditData({ ...editData!, clearHistoryText: e.target.value })} className="bg-black/40 border border-white/10 rounded-lg p-2 text-[10px] font-black text-white outline-none" placeholder="Clear History btn" />
+              <input value={editData?.noHistoryText || ''} onChange={(e) => setEditData({ ...editData!, noHistoryText: e.target.value })} className="bg-black/40 border border-white/10 rounded-lg p-2 text-[10px] font-black text-white outline-none" placeholder="No history text" />
+            </div>
+          )}
           
           {history.length === 0 ? (
             <div className="bg-white/5 border border-white/5 rounded-2xl p-6 text-center italic text-muted-foreground text-[10px]">
-              မှတ်တမ်းများ မရှိသေးပါ။
+              {vs?.noHistoryText || defaultVoiceSettings.noHistoryText}
             </div>
           ) : (
             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
@@ -605,34 +989,56 @@ const VoicePage: React.FC = () => {
           <div className="bg-white/5 border border-white/10 rounded-[28px] p-6 space-y-3 shadow-inner">
             <div className="flex items-center gap-2">
               <div className="w-1 h-4 bg-primary rounded-full"></div>
-              <h4 className="font-black text-[10px] uppercase tracking-[0.2em] text-foreground">HOW TO USE</h4>
+              {isEditing ? (
+                <EditableField fieldKey="howToUseTitle" colorKey="howToUseTitleColor" label="How To Use Title" />
+              ) : (
+                <h4 className="font-black text-[10px] uppercase tracking-[0.2em]" style={{ color: vs?.howToUseTitleColor || defaultVoiceSettings.howToUseTitleColor }}>
+                  {vs?.howToUseTitle || defaultVoiceSettings.howToUseTitle}
+                </h4>
+              )}
             </div>
-            <div className="space-y-2 text-[11px] font-bold text-muted-foreground leading-relaxed">
-              <p>၁။ Ai အသံထုတ်မည့် စာသားကိုထည့်ပါ။</p>
-              <p>၂။ Ai Character ရွေးပါ။ (ကျား/မ ၂၀ ဦးအထိ ရွေးချယ်နိုင်သည်)</p>
-              <p>၃။ Ai Character ရဲ့ အသံ Tone ကိုရွေးပါ။</p>
-              <p>၄။ စာသားအရေအတွက်စစ်ပါ။</p>
-              <p>၅။ ပါဝင်တဲ့စာသားအရေအတွက်နဲ့ကိုက်ညီတဲ့ Credit ကိုရွေးပါ။</p>
-              <p>၆။ စာတန်းထိုးဖိုင်ပါ ပူးတွဲလိုချင်ပါက ဖွင့်ပါ။ (+2 credits ပေးရပါမည်)</p>
-              <p>၇။ စတင်ထုတ်နိုင်ပါပြီ။</p>
-            </div>
+            {isEditing ? (
+              <EditableTextarea fieldKey="howToUseText" colorKey="howToUseTextColor" sizeKey="howToUseTextSize" label="How To Use Content (\\n = new line)" />
+            ) : (
+              <div className="space-y-2 font-bold leading-relaxed" style={{ color: vs?.howToUseTextColor || defaultVoiceSettings.howToUseTextColor, fontSize: (vs?.howToUseTextSize || defaultVoiceSettings.howToUseTextSize) + 'px' }}>
+                {(vs?.howToUseText || defaultVoiceSettings.howToUseText).split('\n').map((line: string, i: number) => (
+                  <p key={i}>{line}</p>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="bg-amber-400/5 border border-amber-400/20 rounded-[28px] p-6 space-y-3">
             <div className="flex items-center gap-2">
               <div className="w-1 h-4 bg-amber-400 rounded-full shadow-[0_0_8px_rgba(251,191,36,0.5)]"></div>
-              <h4 className="font-black text-[10px] uppercase tracking-[0.2em] text-amber-300">PRO TIPS & WARNINGS</h4>
+              {isEditing ? (
+                <EditableField fieldKey="proTipsTitle" colorKey="proTipsTitleColor" label="Pro Tips Title" />
+              ) : (
+                <h4 className="font-black text-[10px] uppercase tracking-[0.2em]" style={{ color: vs?.proTipsTitleColor || defaultVoiceSettings.proTipsTitleColor }}>
+                  {vs?.proTipsTitle || defaultVoiceSettings.proTipsTitle}
+                </h4>
+              )}
             </div>
-            <div className="space-y-2 text-[11px] font-bold text-amber-200/50 leading-relaxed">
-              <p>! စာသားအရေအတွက် ၄၅၀၀ ထက်ပိုမရပါ။</p>
-              <p>! App API မှာ အသံထုတ်တဲ့အကြိမ်ရေ အကန့်အသတ်ရှိတာကြောင့် ထုတ်မရခဲ့ရင် Own API ဘက်ကို ပြောင်းသုံးပေးပါ။</p>
-              <p>! History တွေအရမ်းများလာရင် ဖျက်ပေးဖို့ မမေ့ပါနဲ့။ (မှတ်တမ်း ၂၀ အထိသာ သိမ်းဆည်းပေးမည်)</p>
-            </div>
+            {isEditing ? (
+              <EditableTextarea fieldKey="proTipsText" colorKey="proTipsTextColor" sizeKey="proTipsTextSize" label="Pro Tips Content (\\n = new line)" />
+            ) : (
+              <div className="space-y-2 font-bold leading-relaxed" style={{ color: vs?.proTipsTextColor || defaultVoiceSettings.proTipsTextColor, fontSize: (vs?.proTipsTextSize || defaultVoiceSettings.proTipsTextSize) + 'px' }}>
+                {(vs?.proTipsText || defaultVoiceSettings.proTipsText).split('\n').map((line: string, i: number) => (
+                  <p key={i}>{line}</p>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
         <div className="text-center pt-6 opacity-20">
-          <p className="text-[7px] font-black tracking-[0.4em] uppercase">© 2026 TRANSCRIPT MASTER AI</p>
+          {isEditing ? (
+            <EditableField fieldKey="footerText" colorKey="footerTextColor" label="Footer Text" />
+          ) : (
+            <p className="text-[7px] font-black tracking-[0.4em] uppercase" style={{ color: vs?.footerTextColor || defaultVoiceSettings.footerTextColor }}>
+              {vs?.footerText || defaultVoiceSettings.footerText}
+            </p>
+          )}
         </div>
       </main>
 
