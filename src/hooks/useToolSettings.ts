@@ -160,8 +160,8 @@ export function useToolSettings() {
       return { allowed: true };
     }
 
-    // Premium Only check MUST come before own API bypass
-    if (tool.is_premium && !accessControl.freeMode && !accessControl.promotionMode) {
+    // Premium Only check - ABSOLUTE PRIORITY, blocks all non-premium users regardless of any mode
+    if (tool.is_premium) {
       return { allowed: false, reason: 'Premium Plan လိုအပ်ပါသည်' };
     }
 
