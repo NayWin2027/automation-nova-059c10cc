@@ -86,6 +86,19 @@ interface VoiceSettings {
   footerTextColor: string;
   // Blocked notice
   blockedNoticeText: string;
+  // Tiers
+  tier1Label: string;
+  tier1Credits: string;
+  tier1Value: number;
+  tier2Label: string;
+  tier2Credits: string;
+  tier2Value: number;
+  tier3Label: string;
+  tier3Credits: string;
+  tier3Value: number;
+  tier4Label: string;
+  tier4Credits: string;
+  tier4Value: number;
 }
 
 const voiceDb = {
@@ -213,6 +226,18 @@ const VoicePage: React.FC = () => {
     footerText: "© 2026 TRANSCRIPT MASTER AI",
     footerTextColor: "#ffffff33",
     blockedNoticeText: "API နှစ်မျိုးလုံး ပိတ်ထားပါသည်။ Admin ကို ဆက်သွယ်ပါ။",
+    tier1Label: "UNDER 1,500 CHARS",
+    tier1Credits: "0 Credits (FREE)",
+    tier1Value: 1500,
+    tier2Label: "UNDER 2,500 CHARS",
+    tier2Credits: "0 Credits (FREE)",
+    tier2Value: 2500,
+    tier3Label: "UNDER 3,500 CHARS",
+    tier3Credits: "0 Credits (FREE)",
+    tier3Value: 3500,
+    tier4Label: "UNDER 4,500 CHARS",
+    tier4Credits: "0 Credits (FREE)",
+    tier4Value: 4500,
   };
 
   useEffect(() => {
@@ -434,11 +459,13 @@ const VoicePage: React.FC = () => {
     }
   };
 
+  const dv = defaultVoiceSettings;
+  const tierSrc = isEditing ? editData : voiceSettings;
   const tiers = [
-    { label: 'UNDER 1,500 CHARS', credits: '0 Credits (FREE)', value: 1500 },
-    { label: 'UNDER 2,500 CHARS', credits: '0 Credits (FREE)', value: 2500 },
-    { label: 'UNDER 3,500 CHARS', credits: '0 Credits (FREE)', value: 3500 },
-    { label: 'UNDER 4,500 CHARS', credits: '0 Credits (FREE)', value: 4500 },
+    { label: tierSrc?.tier1Label || dv.tier1Label, credits: tierSrc?.tier1Credits || dv.tier1Credits, value: tierSrc?.tier1Value || dv.tier1Value },
+    { label: tierSrc?.tier2Label || dv.tier2Label, credits: tierSrc?.tier2Credits || dv.tier2Credits, value: tierSrc?.tier2Value || dv.tier2Value },
+    { label: tierSrc?.tier3Label || dv.tier3Label, credits: tierSrc?.tier3Credits || dv.tier3Credits, value: tierSrc?.tier3Value || dv.tier3Value },
+    { label: tierSrc?.tier4Label || dv.tier4Label, credits: tierSrc?.tier4Credits || dv.tier4Credits, value: tierSrc?.tier4Value || dv.tier4Value },
   ];
 
   const subStyles: { id: SubStyle; name: string; class: string; glow: string; textClass: string }[] = [
@@ -812,6 +839,34 @@ const VoicePage: React.FC = () => {
               ))}
             </div>
 
+            {isEditing && (
+              <div className="space-y-2 p-3 rounded-xl border border-white/10 bg-black/30">
+                <p className="text-[8px] font-black text-amber-400 uppercase tracking-widest">✏️ EDIT TIERS (Label / Credits Text / Char Value)</p>
+                {[1,2,3,4].map(i => (
+                  <div key={i} className="grid grid-cols-3 gap-1.5">
+                    <input
+                      value={editData?.[`tier${i}Label` as keyof VoiceSettings] as string || ''}
+                      onChange={(e) => setEditData({ ...editData!, [`tier${i}Label`]: e.target.value })}
+                      className="bg-black/40 border border-white/10 rounded-lg p-1.5 text-[9px] font-black text-white outline-none"
+                      placeholder={`Tier ${i} Label`}
+                    />
+                    <input
+                      value={editData?.[`tier${i}Credits` as keyof VoiceSettings] as string || ''}
+                      onChange={(e) => setEditData({ ...editData!, [`tier${i}Credits`]: e.target.value })}
+                      className="bg-black/40 border border-white/10 rounded-lg p-1.5 text-[9px] font-black text-white outline-none"
+                      placeholder={`Credits text`}
+                    />
+                    <input
+                      type="number"
+                      value={editData?.[`tier${i}Value` as keyof VoiceSettings] as number || 0}
+                      onChange={(e) => setEditData({ ...editData!, [`tier${i}Value`]: parseInt(e.target.value) || 0 })}
+                      className="bg-black/40 border border-white/10 rounded-lg p-1.5 text-[9px] font-black text-white outline-none text-center"
+                      placeholder={`Value`}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
             {isEditing && (
               <div className="grid grid-cols-2 gap-2">
                 <input value={editData?.generateAudioOnlyText || ''} onChange={(e) => setEditData({ ...editData!, generateAudioOnlyText: e.target.value })} className="bg-black/40 border border-white/10 rounded-lg p-2 text-[10px] font-black text-white outline-none" placeholder="Audio Only text" />
