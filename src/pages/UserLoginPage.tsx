@@ -7,7 +7,7 @@ import {
   LogIn, Home
 } from "lucide-react";
 
-const ADMIN_GATE_CODE = "MM@2025#ADM";
+const ADMIN_GATE_CODE = "k$@w$@n008060964999777999";
 
 const UserLoginPage: React.FC = () => {
   const navigate = useNavigate();
