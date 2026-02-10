@@ -160,6 +160,7 @@ export function useToolSettings() {
       return { allowed: true };
     }
 
+    // Premium Only check MUST come before own API bypass
     if (tool.is_premium && !accessControl.freeMode && !accessControl.promotionMode) {
       return { allowed: false, reason: 'Premium Plan လိုအပ်ပါသည်' };
     }
