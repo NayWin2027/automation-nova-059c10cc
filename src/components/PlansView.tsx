@@ -1,6 +1,51 @@
 import React, { useState, useEffect } from "react";
-import { db, PlanSettings, TopUpPackage } from "./supabaseService";
-import { User } from "./types";
+import { supabase } from "@/integrations/supabase/client";
+
+interface TopUpPackage {
+  credits: number;
+  rate: string;
+  price: string;
+  priceColor: string;
+}
+
+interface PlanSettings {
+  [key: string]: any;
+  id: string;
+  topUpPackages: TopUpPackage[];
+}
+
+interface User {
+  email?: string;
+  role?: string;
+}
+
+const db = {
+  getPlanSettings: async (): Promise<PlanSettings | null> => {
+    const { data } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "plan_settings")
+      .maybeSingle();
+    return data?.value as PlanSettings | null;
+  },
+  upsertPlanSettings: async (settings: PlanSettings) => {
+    const { data: existing } = await supabase
+      .from("app_settings")
+      .select("id")
+      .eq("key", "plan_settings")
+      .maybeSingle();
+    if (existing) {
+      await supabase
+        .from("app_settings")
+        .update({ value: settings as never })
+        .eq("key", "plan_settings");
+    } else {
+      await supabase
+        .from("app_settings")
+        .insert({ key: "plan_settings", value: settings as never });
+    }
+  },
+};
 
 const PlansView: React.FC = () => {
   const [settings, setSettings] = useState<PlanSettings | null>(null);
