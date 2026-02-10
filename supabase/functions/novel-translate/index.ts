@@ -319,38 +319,46 @@ TRANSLATION QUALITY:
       const calculatedCost = Math.ceil(charCount / 2000) * 2;
       console.log(`[novel-translate] Output chars: ${charCount}, calculated cost: ${calculatedCost} credits`);
 
-      const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", {
-        _user_id: user.id,
-        _tool_id: "novel-translate",
-        _is_own_api: false,
-        _custom_cost: calculatedCost
-      });
+      // Get current balance to cap the deduction (translation already happened, can't undo)
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('credits')
+        .eq('user_id', user.id)
+        .single();
 
-      if (creditError) {
-        console.error("[novel-translate] Credit deduction error:", creditError);
-        // Translation succeeded but credit deduction failed - still return the text
-        // but warn the user
-        return new Response(
-          JSON.stringify({ text: translatedText, outputCharCount: charCount, creditsDeducted: 0, creditWarning: "Credit ဖြတ်ရာတွင် အမှားဖြစ်ပါသည်။" }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+      const currentBalance = profile?.credits ?? 0;
+      const actualCost = Math.min(calculatedCost, currentBalance);
+
+      if (actualCost > 0) {
+        const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", {
+          _user_id: user.id,
+          _tool_id: "novel-translate",
+          _is_own_api: false,
+          _custom_cost: actualCost
+        });
+
+        if (creditError) {
+          console.error("[novel-translate] Credit deduction error:", creditError);
+          return new Response(
+            JSON.stringify({ text: translatedText, outputCharCount: charCount, creditsDeducted: 0, creditWarning: "Credit ဖြတ်ရာတွင် အမှားဖြစ်ပါသည်။" }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        if (!creditResult.success) {
+          // Edge case: balance changed between read and deduct — still return translation
+          console.warn("[novel-translate] Deduction failed after balance read, returning text anyway");
+          return new Response(
+            JSON.stringify({ text: translatedText, outputCharCount: charCount, creditsDeducted: 0, creditWarning: "Credit ဖြတ်၍ မရပါ။" }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        creditsDeducted = actualCost;
+        console.log(`[novel-translate] Credits deducted: ${actualCost} (calculated: ${calculatedCost}). New balance: ${creditResult.balance}`);
+      } else {
+        console.log(`[novel-translate] User has 0 credits, skipping deduction. Calculated cost was: ${calculatedCost}`);
       }
-
-      if (!creditResult.success) {
-        // Insufficient credits for the calculated cost
-        return new Response(
-          JSON.stringify({ 
-            error: creditResult.error,
-            balance: creditResult.balance,
-            required: calculatedCost,
-            errorCode: "INSUFFICIENT_CREDITS"
-          }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      creditsDeducted = calculatedCost;
-      console.log(`[novel-translate] Credits deducted: ${calculatedCost}. New balance: ${creditResult.balance}`);
     }
 
     return new Response(
