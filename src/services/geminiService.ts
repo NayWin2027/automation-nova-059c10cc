@@ -432,13 +432,20 @@ export async function generateThumbnail(
 }
 
 // Translate text for Novel Translator
+export interface TranslateTextResult {
+  text: string | null;
+  creditsDeducted?: number;
+  outputCharCount?: number;
+  creditWarning?: string;
+}
+
 export async function translateText(
   prompt: string,
   targetLang: string,
   apiKey?: string,
   fileData?: { data: string; mimeType: string },
   customCreditCost?: number
-): Promise<string | null> {
+): Promise<TranslateTextResult> {
   try {
     const body: any = { prompt, targetLang, apiKey, fileData };
     if (customCreditCost !== undefined) {
@@ -449,6 +456,9 @@ export async function translateText(
       error?: string; 
       errorCode?: string;
       retryAfter?: string;
+      creditsDeducted?: number;
+      outputCharCount?: number;
+      creditWarning?: string;
     }>('novel-translate', {
       body
     });
@@ -456,7 +466,6 @@ export async function translateText(
     // Handle edge function errors (non-2xx responses)
     if (error) {
       console.error('translateText invoke error:', error);
-      // Try to extract the error body from the FunctionsHttpError context (Response object)
       const errContext = (error as any).context;
       if (errContext && typeof errContext.json === 'function') {
         try {
@@ -467,14 +476,12 @@ export async function translateText(
           }
           throw new Error(errorBody?.error || error.message || 'Translation failed');
         } catch (parseErr: any) {
-          // If parsing fails but we have error info, use it
           if (parseErr?.message?.includes('QUOTA_EXCEEDED')) {
             throw parseErr;
           }
           console.error('translateText parse error:', parseErr);
         }
       }
-      // Check if data was returned with error info despite the error
       if (data?.errorCode === 'QUOTA_EXCEEDED') {
         throw new Error(`QUOTA_EXCEEDED: ${data.error || 'API Quota ပြည့်သွားပါပြီ'} (${data.retryAfter || '30s'})`);
       }
@@ -489,7 +496,12 @@ export async function translateText(
       throw new Error(data.error);
     }
 
-    return data?.text || null;
+    return {
+      text: data?.text || null,
+      creditsDeducted: data?.creditsDeducted,
+      outputCharCount: data?.outputCharCount,
+      creditWarning: data?.creditWarning,
+    };
   } catch (err) {
     console.error('translateText error:', err);
     throw err;

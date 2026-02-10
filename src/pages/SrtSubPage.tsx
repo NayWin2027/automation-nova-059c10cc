@@ -178,7 +178,8 @@ const SrtTranslatorView: React.FC = () => {
       } else {
         // App API mode: use edge function with tier-based credit cost
         const tierCredits = selectedTier ? Math.round(selectedTier / 150) : undefined;
-        result = await translateText(finalInput, targetLang, undefined, undefined, tierCredits);
+        const translateResult = await translateText(finalInput, targetLang, undefined, undefined, tierCredits);
+        result = translateResult.text || "";
       }
       
       setTranslated(result || "");

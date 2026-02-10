@@ -80,41 +80,39 @@ serve(async (req) => {
       }
     }
 
-    // ===== CREDIT CHECK (Server-side, only for App API mode) =====
+    // ===== CREDIT PRE-CHECK (Server-side, only for App API mode) =====
+    // We only verify the user has at least 2 credits (minimum possible cost).
+    // Actual deduction happens AFTER translation, based on output character count.
+    const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    
     if (!isOwnApiKey && user) {
-      const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-      
-      const rpcParams: any = {
-        _user_id: user.id,
-        _tool_id: "novel-translate",
-        _is_own_api: false
-      };
-      if (customCreditCost !== undefined && customCreditCost !== null) {
-        rpcParams._custom_cost = Number(customCreditCost);
-      }
-      const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", rpcParams);
+      const { data: profile, error: profileError } = await supabaseAdmin
+        .from('profiles')
+        .select('credits')
+        .eq('user_id', user.id)
+        .single();
 
-      if (creditError) {
-        console.error("[novel-translate] Credit check error:", creditError);
+      if (profileError || !profile) {
+        console.error("[novel-translate] Profile lookup error:", profileError);
         return new Response(
-          JSON.stringify({ error: "Failed to process credits" }),
+          JSON.stringify({ error: "User profile not found" }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      if (!creditResult.success) {
+      if (profile.credits < 2) {
         return new Response(
           JSON.stringify({ 
-            error: creditResult.error,
-            balance: creditResult.balance,
-            required: creditResult.required,
+            error: "Credits မလုံလောက်ပါ။ အနည်းဆုံး 2 credits လိုအပ်ပါသည်။",
+            balance: profile.credits,
+            required: 2,
             errorCode: "INSUFFICIENT_CREDITS"
           }),
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      console.log(`[novel-translate] Credits deducted. New balance: ${creditResult.balance}`);
+      console.log(`[novel-translate] Pre-check passed. Current balance: ${profile.credits}`);
     }
 
     // ===== PROCESS TRANSLATION =====
@@ -312,8 +310,51 @@ TRANSLATION QUALITY:
 
     console.log('[Novel Translate] Success, output length:', translatedText.length);
 
+    // ===== POST-TRANSLATION CREDIT DEDUCTION (App API mode only) =====
+    let creditsDeducted = 0;
+    let outputCharCount = translatedText.length;
+
+    if (!isOwnApiKey && user) {
+      const charCount = translatedText.length;
+      const calculatedCost = Math.ceil(charCount / 2000) * 2;
+      console.log(`[novel-translate] Output chars: ${charCount}, calculated cost: ${calculatedCost} credits`);
+
+      const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", {
+        _user_id: user.id,
+        _tool_id: "novel-translate",
+        _is_own_api: false,
+        _custom_cost: calculatedCost
+      });
+
+      if (creditError) {
+        console.error("[novel-translate] Credit deduction error:", creditError);
+        // Translation succeeded but credit deduction failed - still return the text
+        // but warn the user
+        return new Response(
+          JSON.stringify({ text: translatedText, outputCharCount: charCount, creditsDeducted: 0, creditWarning: "Credit ဖြတ်ရာတွင် အမှားဖြစ်ပါသည်။" }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (!creditResult.success) {
+        // Insufficient credits for the calculated cost
+        return new Response(
+          JSON.stringify({ 
+            error: creditResult.error,
+            balance: creditResult.balance,
+            required: calculatedCost,
+            errorCode: "INSUFFICIENT_CREDITS"
+          }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      creditsDeducted = calculatedCost;
+      console.log(`[novel-translate] Credits deducted: ${calculatedCost}. New balance: ${creditResult.balance}`);
+    }
+
     return new Response(
-      JSON.stringify({ text: translatedText }),
+      JSON.stringify({ text: translatedText, creditsDeducted, outputCharCount }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
