@@ -8,6 +8,18 @@ import { toast } from 'sonner';
  */
 export async function preCheckCredits(toolId: string, customCost?: number): Promise<boolean> {
   try {
+    // Check if Promotion Mode is active - skip credit check entirely
+    const { data: appSettings } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'access_control')
+      .maybeSingle();
+
+    if (appSettings?.value) {
+      const ac = appSettings.value as any;
+      if (ac.promotionMode) return true; // No credits needed during promotion
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       toast.error("Login လုပ်ပြီးမှ App API သုံးပါ။");

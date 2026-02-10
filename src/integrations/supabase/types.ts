@@ -155,6 +155,39 @@ export type Database = {
         }
         Relationships: []
       }
+      promotion_usage_tracking: {
+        Row: {
+          created_at: string
+          device_fingerprint: string
+          device_model: string | null
+          id: string
+          ip_address: string
+          tool_id: string
+          usage_count: number
+          usage_date: string
+        }
+        Insert: {
+          created_at?: string
+          device_fingerprint: string
+          device_model?: string | null
+          id?: string
+          ip_address: string
+          tool_id: string
+          usage_count?: number
+          usage_date?: string
+        }
+        Update: {
+          created_at?: string
+          device_fingerprint?: string
+          device_model?: string | null
+          id?: string
+          ip_address?: string
+          tool_id?: string
+          usage_count?: number
+          usage_date?: string
+        }
+        Relationships: []
+      }
       tool_settings: {
         Row: {
           created_at: string | null
