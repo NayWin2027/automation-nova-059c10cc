@@ -313,10 +313,14 @@ const VoicePage: React.FC = () => {
     }
     setShowOptions(true);
     const len = text.length;
-    if (len <= 1500) setSelectedTier(1500);
-    else if (len <= 2500) setSelectedTier(2500);
-    else if (len <= 3500) setSelectedTier(3500);
-    else setSelectedTier(4500);
+    const t1 = voiceSettings?.tier1Value || defaultVoiceSettings.tier1Value;
+    const t2 = voiceSettings?.tier2Value || defaultVoiceSettings.tier2Value;
+    const t3 = voiceSettings?.tier3Value || defaultVoiceSettings.tier3Value;
+    const t4 = voiceSettings?.tier4Value || defaultVoiceSettings.tier4Value;
+    if (len <= t1) setSelectedTier(t1);
+    else if (len <= t2) setSelectedTier(t2);
+    else if (len <= t3) setSelectedTier(t3);
+    else setSelectedTier(t4);
   };
 
   const startLiveSubtitles = (fullText: string, duration: number) => {
@@ -831,6 +835,7 @@ const VoicePage: React.FC = () => {
               {tiers.map((tier) => (
                 <button
                   key={tier.value}
+                  onClick={() => setSelectedTier(tier.value)}
                   className={`p-3 rounded-[16px] flex flex-col items-center justify-center gap-0.5 transition-all border ${selectedTier === tier.value ? 'bg-white/10 border-primary/50 shadow-sm' : 'bg-white/5 border-transparent opacity-40'}`}
                 >
                   <span className="text-[7px] font-black uppercase tracking-widest text-muted-foreground">{tier.label}</span>
