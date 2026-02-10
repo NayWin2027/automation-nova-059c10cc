@@ -14,10 +14,6 @@ interface PlanSettings {
   topUpPackages: TopUpPackage[];
 }
 
-interface User {
-  email?: string;
-  role?: string;
-}
 
 const db = {
   getPlanSettings: async (): Promise<PlanSettings | null> => {
@@ -52,7 +48,7 @@ const PlansView: React.FC = () => {
   const [editData, setEditData] = useState<PlanSettings | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const defaultDefaults: PlanSettings = {
@@ -130,8 +126,12 @@ const PlansView: React.FC = () => {
   };
 
   useEffect(() => {
-    const savedAuth = localStorage.getItem("tm_auth_session");
-    if (savedAuth) setCurrentUser(JSON.parse(savedAuth));
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        supabase.rpc("has_role", { _user_id: session.user.id, _role: "admin" })
+          .then(({ data }) => setIsAdmin(data === true));
+      }
+    });
 
     const loadSettings = async () => {
       const res = await db.getPlanSettings();
@@ -187,7 +187,6 @@ const PlansView: React.FC = () => {
     });
   };
 
-  const isAdmin = currentUser?.role === "ADMIN";
   const data = isEditing ? editData : settings;
 
   if (!data)
