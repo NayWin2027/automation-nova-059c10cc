@@ -323,10 +323,10 @@ const Index = () => {
       <div className="premium-rays" />
       
       <header className="px-3 py-2 flex items-center justify-between relative z-10">
-        <h1 className="text-xs font-black tracking-wider uppercase">
-          <span className="bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent drop-shadow-lg">Automation</span>{" "}
-          <span className="bg-gradient-to-r from-accent via-primary to-accent bg-clip-text text-transparent drop-shadow-lg">Nova</span>{" "}
-          <span className="text-primary drop-shadow-[0_0_8px_hsl(var(--primary)/0.6)]">AI</span>
+        <h1 className="text-xl font-black tracking-widest uppercase">
+          <span className="bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-500 bg-clip-text text-transparent drop-shadow-[0_0_12px_hsl(45,100%,60%)] animate-pulse-glow">Automation</span>{" "}
+          <span className="bg-gradient-to-r from-cyan-300 via-sky-400 to-blue-500 bg-clip-text text-transparent drop-shadow-[0_0_12px_hsl(200,100%,60%)]">Nova</span>{" "}
+          <span className="bg-gradient-to-r from-rose-400 via-pink-500 to-purple-500 bg-clip-text text-transparent drop-shadow-[0_0_14px_hsl(330,100%,60%)]">AI</span>
         </h1>
       </header>
 
