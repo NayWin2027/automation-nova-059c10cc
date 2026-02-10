@@ -129,8 +129,19 @@ const Index = () => {
   });
   const handleToolClick = (tool: Tool) => {
     const userPlan = profile?.plan || 'free';
-    const isPremium = userPlan === 'premium' || userPlan === 'pro';
+    const isPremium = userPlan === 'premium';
     const usageCount = getToolUsageCount(tool.id);
+
+    // Admins always have access
+    if (isAdmin) {
+      recordToolUsage(tool.id).catch(console.error);
+      if (tool.route) {
+        navigate(tool.route);
+      } else {
+        setSelectedTool(tool);
+      }
+      return;
+    }
 
     // Guest users are "effectively authenticated" when requireLogin is OFF
     const effectivelyAuthenticated = isAuthenticated || !accessControl.requireLogin;
