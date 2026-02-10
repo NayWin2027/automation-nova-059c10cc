@@ -1459,6 +1459,70 @@ export default function VideoRecapView() {
         ctx.restore();
       }
     }
+
+    // ===== CHARACTER OVERLAY WITH LIP-SYNC (EXPORT) =====
+    if (charImgRef.current && charId !== "none") {
+      const charImg = charImgRef.current;
+      const charSize = targetH * 0.22;
+      const margin = targetH * 0.04;
+      let cx = 0, cy = 0;
+      if (charPos === "TL") { cx = margin; cy = margin; }
+      else if (charPos === "TR") { cx = targetW - charSize - margin; cy = margin; }
+      else if (charPos === "BL") { cx = margin; cy = targetH - charSize - margin; }
+      else { cx = targetW - charSize - margin; cy = targetH - charSize - margin; }
+
+      let audioLevel = 0;
+      if (analyserRef.current && dataArrayRef.current) {
+        analyserRef.current.getByteFrequencyData(dataArrayRef.current);
+        const sum = dataArrayRef.current.reduce((a: number, b: number) => a + b, 0);
+        audioLevel = sum / (dataArrayRef.current.length * 255);
+      }
+
+      const breathe = Math.sin(Date.now() / 800) * 2;
+      const centerX = cx + charSize / 2;
+      const centerY = cy + charSize / 2 + breathe;
+      const radius = charSize / 2;
+
+      ctx.save();
+      const glowIntensity = 8 + audioLevel * 25;
+      const hue = (Date.now() / 30) % 360;
+      ctx.shadowColor = `hsla(${hue}, 90%, 60%, ${0.4 + audioLevel * 0.5})`;
+      ctx.shadowBlur = glowIntensity;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius + 3, 0, Math.PI * 2);
+      ctx.strokeStyle = `hsla(${hue}, 85%, 65%, ${0.6 + audioLevel * 0.3})`;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+      ctx.clip();
+
+      const speakBounce = audioLevel * charSize * 0.06;
+      const imgY = centerY - radius - speakBounce;
+      ctx.drawImage(charImg, centerX - radius, imgY, charSize, charSize);
+
+      if (audioLevel > 0.05) {
+        const mouthCX = centerX;
+        const mouthCY = centerY + radius * 0.35;
+        const mouthW = radius * 0.45;
+        const mouthH = radius * 0.12 + audioLevel * radius * 0.35;
+        ctx.fillStyle = `rgba(30, 10, 10, ${0.7 + audioLevel * 0.25})`;
+        ctx.beginPath();
+        ctx.ellipse(mouthCX, mouthCY, mouthW, mouthH, 0, 0, Math.PI);
+        ctx.fill();
+        if (audioLevel > 0.2) {
+          ctx.fillStyle = `rgba(180, 60, 60, ${audioLevel * 0.6})`;
+          ctx.beginPath();
+          ctx.ellipse(mouthCX, mouthCY + mouthH * 0.2, mouthW * 0.5, mouthH * 0.4, 0, 0, Math.PI);
+          ctx.fill();
+        }
+      }
+
+      ctx.restore();
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = "transparent";
+    }
     
     setWasFreeze(inPhotoPhase);
   };
@@ -1929,6 +1993,80 @@ export default function VideoRecapView() {
               });
               ctx.restore();
             }
+          }
+
+          // ===== CHARACTER OVERLAY WITH LIP-SYNC ANIMATION =====
+          if (charImgRef.current && charId !== "none") {
+            const charImg = charImgRef.current;
+            const charSize = targetH * 0.22;
+            const margin = targetH * 0.04;
+            let cx = 0, cy = 0;
+            if (charPos === "TL") { cx = margin; cy = margin; }
+            else if (charPos === "TR") { cx = targetW - charSize - margin; cy = margin; }
+            else if (charPos === "BL") { cx = margin; cy = targetH - charSize - margin - (timelineHeight * 2); }
+            else { cx = targetW - charSize - margin; cy = targetH - charSize - margin - (timelineHeight * 2); }
+
+            // Audio level for lip-sync
+            let audioLevel = 0;
+            if (analyserRef.current && dataArrayRef.current && isPlaying) {
+              analyserRef.current.getByteFrequencyData(dataArrayRef.current);
+              const sum = dataArrayRef.current.reduce((a: number, b: number) => a + b, 0);
+              audioLevel = sum / (dataArrayRef.current.length * 255);
+            }
+
+            // Breathing idle animation
+            const breathe = Math.sin(Date.now() / 800) * 2;
+            const centerX = cx + charSize / 2;
+            const centerY = cy + charSize / 2 + breathe;
+            const radius = charSize / 2;
+
+            ctx.save();
+
+            // Glow ring effect
+            const glowIntensity = 8 + audioLevel * 25;
+            const hue = (Date.now() / 30) % 360;
+            ctx.shadowColor = `hsla(${hue}, 90%, 60%, ${0.4 + audioLevel * 0.5})`;
+            ctx.shadowBlur = glowIntensity;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius + 3, 0, Math.PI * 2);
+            ctx.strokeStyle = `hsla(${hue}, 85%, 65%, ${0.6 + audioLevel * 0.3})`;
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // Circular mask clip
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            ctx.clip();
+
+            // Draw character image with speaking bounce
+            const speakBounce = audioLevel * charSize * 0.06;
+            const imgY = centerY - radius - speakBounce;
+            ctx.drawImage(charImg, centerX - radius, imgY, charSize, charSize);
+
+            // Mouth overlay (dark semi-circle that opens based on audio)
+            if (audioLevel > 0.05) {
+              const mouthCX = centerX;
+              const mouthCY = centerY + radius * 0.35;
+              const mouthW = radius * 0.45;
+              const mouthH = radius * 0.12 + audioLevel * radius * 0.35;
+
+              ctx.fillStyle = `rgba(30, 10, 10, ${0.7 + audioLevel * 0.25})`;
+              ctx.beginPath();
+              ctx.ellipse(mouthCX, mouthCY, mouthW, mouthH, 0, 0, Math.PI);
+              ctx.fill();
+
+              // Tongue/inner mouth
+              if (audioLevel > 0.2) {
+                ctx.fillStyle = `rgba(180, 60, 60, ${audioLevel * 0.6})`;
+                ctx.beginPath();
+                ctx.ellipse(mouthCX, mouthCY + mouthH * 0.2, mouthW * 0.5, mouthH * 0.4, 0, 0, Math.PI);
+                ctx.fill();
+              }
+            }
+
+            ctx.restore();
+            ctx.shadowBlur = 0;
+            ctx.shadowColor = "transparent";
           }
 
           // (freeze mode tracking is now done inside the render logic above)
