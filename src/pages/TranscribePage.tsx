@@ -188,6 +188,15 @@ export default function TranscriptionView() {
       media.onloadedmetadata = () => {
         URL.revokeObjectURL(url);
         const durationMinutes = media.duration / 60;
+
+        // Reject files longer than 20 minutes
+        if (durationMinutes > 20) {
+          toast.error("20 မိနစ်ထက်ကျော်တဲ့ ဖိုင်ကို လက်မခံပါ။ ဖိုင်ကို ခွဲပြီး ထပ်ကြိုးစားပါ။");
+          setSelectedFile(null);
+          if (fileInputRef.current) fileInputRef.current.value = "";
+          return;
+        }
+
         const tiers = [...settings.creditTiers].sort((a, b) => a.value - b.value);
         let matched: typeof tiers[0] | null = null;
         for (const tier of tiers) {
@@ -282,6 +291,38 @@ export default function TranscriptionView() {
       if (error) throw error;
       if (data?.script) {
         setGeneratedScript(data.script);
+
+        // === Auto credit deduction based on script character count ===
+        if (apiType === "app") {
+          const charCount = data.script.length;
+          let scriptCreditCost = 0;
+          if (charCount < 2000) scriptCreditCost = 2;
+          else if (charCount < 4000) scriptCreditCost = 4;
+          else if (charCount < 6000) scriptCreditCost = 6;
+          else scriptCreditCost = 8;
+
+          try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              const { data: deductResult, error: deductError } = await supabase.rpc("deduct_user_credits", {
+                _user_id: user.id,
+                _tool_id: "narration-script",
+                _is_own_api: false,
+                _custom_cost: scriptCreditCost,
+              });
+              if (deductError) {
+                console.error("Script credit deduction error:", deductError);
+              } else if (deductResult && typeof deductResult === "object" && !Array.isArray(deductResult) && !(deductResult as any).success) {
+                toast.error(`Credits မလုံလောက်ပါ။ လိုအပ်သော: ${scriptCreditCost}`);
+              } else {
+                toast.success(`Script (${charCount} chars) → ${scriptCreditCost} Credits ဖြတ်ပြီး`);
+              }
+            }
+          } catch (creditErr) {
+            console.error("Script credit deduction failed:", creditErr);
+          }
+        }
+
         toast.success("Script အောင်မြင်စွာ ထွက်လာပါပြီ!");
       } else {
         toast.error("Script generation failed.");
