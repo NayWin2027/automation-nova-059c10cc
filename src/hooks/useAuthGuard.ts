@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from './useAuth';
 import { useToolSettings } from './useToolSettings';
 import { useToast } from './use-toast';
+import { useAdmin } from './useAdmin';
 
 interface AuthGuardResult {
   isAllowed: boolean;
@@ -21,6 +22,7 @@ export function useAuthGuard(toolId?: string): AuthGuardResult {
   const { toast } = useToast();
   const { user, profile, loading: authLoading, isAuthenticated, getToolUsageCount } = useAuth();
   const { accessControl, canAccessTool, loading: settingsLoading } = useToolSettings();
+  const { isAdmin } = useAdmin();
 
   const isLoading = authLoading || settingsLoading;
   const userPlan = profile?.plan || 'free';
@@ -28,6 +30,9 @@ export function useAuthGuard(toolId?: string): AuthGuardResult {
   // Deterministic: compute isAllowed purely from current state
   const isAllowed = useMemo(() => {
     if (isLoading) return false;
+
+    // Admins always have access
+    if (isAdmin) return true;
 
     const requireLogin = accessControl.requireLogin && !accessControl.freeMode;
 
@@ -37,7 +42,7 @@ export function useAuthGuard(toolId?: string): AuthGuardResult {
     // If toolId provided, check tool-specific access
     if (toolId) {
       const effectivelyAuthenticated = isAuthenticated || !accessControl.requireLogin;
-      const isPremium = userPlan === 'premium' || userPlan === 'pro';
+      const isPremium = userPlan === 'premium';
       const usageCount = getToolUsageCount(toolId);
 
       const accessApp = canAccessTool(toolId, effectivelyAuthenticated, isPremium, usageCount, userPlan, 'app');
@@ -47,7 +52,7 @@ export function useAuthGuard(toolId?: string): AuthGuardResult {
     }
 
     return true;
-  }, [isLoading, isAuthenticated, accessControl, toolId, userPlan, canAccessTool, getToolUsageCount]);
+  }, [isLoading, isAuthenticated, isAdmin, accessControl, toolId, userPlan, canAccessTool, getToolUsageCount]);
 
   // Redirect effect: only fires when not loading and not allowed
   useEffect(() => {
