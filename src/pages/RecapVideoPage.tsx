@@ -372,6 +372,7 @@ export default function VideoRecapView() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const canvasStreamTrackRef = useRef<any>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const reqRef = useRef<number>();
   const lastProgressUpdateRef = useRef<number>(0);
@@ -1085,10 +1086,12 @@ export default function VideoRecapView() {
     video.currentTime = 0;
     audio.currentTime = 0;
 
-    // Capture canvas stream at 30fps
-    const fps = 30;
-    const stream = canvas.captureStream(fps);
-
+    // Capture canvas stream – use 0 (manual frame capture on every rAF paint)
+    // to ensure every rendered frame is captured without drops
+    const stream = canvas.captureStream(0);
+    // Store the video track so the render loop can call requestFrame() on it
+    const videoTrack = stream.getVideoTracks()[0];
+    canvasStreamTrackRef.current = videoTrack;
     // Add audio track if supported
     // Use WebAudio MediaStreamDestination for reliable audio capture (works across all browsers)
     if (mediaStreamDestRef.current) {
@@ -1114,8 +1117,8 @@ export default function VideoRecapView() {
       recorder = new MediaRecorder(
         stream,
         mimeType
-          ? { mimeType, videoBitsPerSecond: 6000000 }
-          : { videoBitsPerSecond: 6000000 }
+          ? { mimeType, videoBitsPerSecond: 8000000 }
+          : { videoBitsPerSecond: 8000000 }
       );
     } catch {
       toast.error("ဒီ browser မှာ recording format မထောက်ပံ့ပါ—Chrome နဲ့ စမ်းပါ");
@@ -1135,6 +1138,7 @@ export default function VideoRecapView() {
     };
 
     const cleanupAfterStop = () => {
+      canvasStreamTrackRef.current = null;
       setIsExporting(false);
       setProgress(100);
       setIsPlaying(false);
@@ -1175,7 +1179,7 @@ export default function VideoRecapView() {
 
     // Start playback + recording
     toast.info("🎬 Download recording started...");
-    recorder.start(250);
+    recorder.start(100);
 
     setupAudioAnalyzer();
     setIsPlaying(true);
@@ -2033,6 +2037,12 @@ export default function VideoRecapView() {
           }
 
           // (freeze mode tracking is now done inside the render logic above)
+
+          // When exporting with captureStream(0), manually request a frame
+          // so MediaRecorder captures every paint without drops
+          if (isExporting && canvasStreamTrackRef.current?.requestFrame) {
+            canvasStreamTrackRef.current.requestFrame();
+          }
         }
       }
       reqRef.current = requestAnimationFrame(render);
