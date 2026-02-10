@@ -407,14 +407,6 @@ const SrtTranslatorView: React.FC = () => {
           </div>
         )}
 
-        <div className="pt-4 text-center">
-          <button className="px-6 py-3 bg-blue-600/10 border border-blue-500/20 rounded-2xl flex items-center gap-2 mx-auto hover:bg-blue-600/20 transition-all group">
-            <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></div>
-            <span className="text-[8px] font-black text-blue-300 uppercase tracking-[0.2em] group-hover:text-white transition-colors">
-              HOW TO USE TRANSCRIPT MASTER
-            </span>
-          </button>
-        </div>
       </div>
 
       {/* 4. INSTRUCTIONS SECTION */}
