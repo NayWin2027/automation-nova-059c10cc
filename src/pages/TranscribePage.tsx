@@ -114,6 +114,7 @@ export default function TranscriptionView() {
   const [selectedLanguage, setSelectedLanguage] = useState("BURMESE");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedTier, setSelectedTier] = useState<number | null>(null);
+  const [tierLocked, setTierLocked] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [result, setResult] = useState("");
   const [copied, setCopied] = useState(false);
@@ -177,6 +178,38 @@ export default function TranscriptionView() {
     if (file) {
       setSelectedFile(file);
       setResult("");
+      setSelectedTier(null);
+      setTierLocked(false);
+
+      // Auto-detect duration and select correct tier
+      const url = URL.createObjectURL(file);
+      const media = file.type.startsWith("video/") ? document.createElement("video") : document.createElement("audio");
+      media.preload = "metadata";
+      media.onloadedmetadata = () => {
+        URL.revokeObjectURL(url);
+        const durationMinutes = media.duration / 60;
+        const tiers = [...settings.creditTiers].sort((a, b) => a.value - b.value);
+        let matched: typeof tiers[0] | null = null;
+        for (const tier of tiers) {
+          if (durationMinutes <= tier.value) {
+            matched = tier;
+            break;
+          }
+        }
+        // If longer than all tiers, select the largest tier
+        if (!matched && tiers.length > 0) {
+          matched = tiers[tiers.length - 1];
+        }
+        if (matched) {
+          setSelectedTier(matched.value);
+          setTierLocked(true);
+        }
+      };
+      media.onerror = () => {
+        URL.revokeObjectURL(url);
+        // If metadata can't be read, let user select manually
+      };
+      media.src = url;
     }
   };
 
@@ -432,8 +465,9 @@ export default function TranscriptionView() {
               {(isEditing ? editSettings.creditTiers : CREDIT_TIERS).map((tier, idx) => (
                 <button
                   key={idx}
-                  onClick={() => !isEditing && setSelectedTier(tier.value)}
-                  className={`p-4 rounded-xl border transition-all flex flex-col items-center justify-center gap-1 ${selectedTier === tier.value ? "bg-blue-600 border-blue-400 shadow-lg shadow-blue-500/20" : "bg-white/5 border-white/5 text-slate-500 hover:border-white/10"}`}
+                  onClick={() => !isEditing && !tierLocked && setSelectedTier(tier.value)}
+                  disabled={tierLocked && selectedTier !== tier.value}
+                  className={`p-4 rounded-xl border transition-all flex flex-col items-center justify-center gap-1 ${selectedTier === tier.value ? "bg-blue-600 border-blue-400 shadow-lg shadow-blue-500/20" : "bg-white/5 border-white/5 text-slate-500 hover:border-white/10"} ${tierLocked && selectedTier !== tier.value ? "opacity-30 cursor-not-allowed" : ""}`}
                 >
                   {isEditing ? (
                     <>
