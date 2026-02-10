@@ -270,7 +270,7 @@ serve(async (req) => {
           );
         }
 
-        const imageModel = "gemini-2.0-flash-preview-image-generation";
+        const imageModel = "gemini-2.5-flash-image";
         console.log("[creator-ai] App API image generation with model:", imageModel);
 
         // Build parts - multimodal if reference images provided
