@@ -418,9 +418,9 @@ const NovelTransPage: React.FC = () => {
     // Own API mode ignores cooldown blocking (silent retry pattern)
     if (cooldownSeconds > 0 && apiType !== 'own') return;
 
-    // Pre-check credits before running in App API mode
+    // Pre-check credits before running in App API mode (minimum 2 credits needed)
     if (apiType === 'app') {
-      const allowed = await preCheckCredits('novel-translate');
+      const allowed = await preCheckCredits('novel-translate', 2);
       if (!allowed) return;
     }
 
@@ -562,15 +562,22 @@ TRANSLATION QUALITY (CRITICAL):
           return;
         }
 
-        const result = await translateText(
+        const translateResult = await translateText(
             instruction + (isChunkTextMode ? `\n\nCONTENT TO TRANSLATE:\n${sourceChunk}` : ""), 
             targetLang, 
             apiType === 'own' ? apiKey : undefined,
             isFileMode ? { data: fileBase64!, mimeType: file?.type || 'application/pdf' } : undefined
         );
+        const result = translateResult.text;
       
         if (result) {
             setTranslated(result);
+            
+            // Show credit deduction info toast (App API mode only)
+            if (apiType === 'app' && translateResult.creditsDeducted && translateResult.creditsDeducted > 0) {
+              const chars = translateResult.outputCharCount || 0;
+              console.log(`[Novel Translate] Deducted ${translateResult.creditsDeducted} credits for ${chars} chars`);
+            }
             
             // Success: clear pending retry state
             pendingRetryRef.current = null;
