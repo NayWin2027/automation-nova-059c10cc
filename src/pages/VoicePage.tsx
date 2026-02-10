@@ -159,6 +159,7 @@ const VoicePage: React.FC = () => {
   const [showOptions, setShowOptions] = useState(false);
   const [proSubtitles, setProSubtitles] = useState(false);
   const [selectedTier, setSelectedTier] = useState<number | null>(null);
+  const [tierLocked, setTierLocked] = useState(false);
 
   const [history, setHistory] = useState<HistoryItem[]>(() => {
     const saved = localStorage.getItem('master_voice_history_v2');
@@ -321,6 +322,7 @@ const VoicePage: React.FC = () => {
     else if (len <= t2) setSelectedTier(t2);
     else if (len <= t3) setSelectedTier(t3);
     else setSelectedTier(t4);
+    setTierLocked(true);
   };
 
   const startLiveSubtitles = (fullText: string, duration: number) => {
@@ -742,7 +744,7 @@ const VoicePage: React.FC = () => {
             {!isEditing && (
               <div className="flex gap-4">
                 <button onClick={async () => setText(await navigator.clipboard.readText())} className="text-[9px] font-black text-primary uppercase tracking-widest">{vs?.pasteBtnText || defaultVoiceSettings.pasteBtnText}</button>
-                <button onClick={() => { setText(''); setShowOptions(false); setResultAudio(null); }} className="text-[9px] font-black text-destructive uppercase tracking-widest">{vs?.clearBtnText || defaultVoiceSettings.clearBtnText}</button>
+                <button onClick={() => { setText(''); setShowOptions(false); setResultAudio(null); setTierLocked(false); setSelectedTier(null); }} className="text-[9px] font-black text-destructive uppercase tracking-widest">{vs?.clearBtnText || defaultVoiceSettings.clearBtnText}</button>
               </div>
             )}
           </div>
@@ -754,7 +756,7 @@ const VoicePage: React.FC = () => {
           )}
           <textarea
             value={text}
-            onChange={(e) => { setText(e.target.value); setShowOptions(false); setResultAudio(null); }}
+            onChange={(e) => { setText(e.target.value); setShowOptions(false); setResultAudio(null); setTierLocked(false); setSelectedTier(null); }}
             placeholder="Enter script content here..."
             className="w-full h-32 bg-transparent border-none focus:ring-0 text-sm font-bold leading-relaxed text-foreground placeholder:text-muted-foreground/30 resize-none"
           />
@@ -835,8 +837,9 @@ const VoicePage: React.FC = () => {
               {tiers.map((tier) => (
                 <button
                   key={tier.value}
-                  onClick={() => setSelectedTier(tier.value)}
-                  className={`p-3 rounded-[16px] flex flex-col items-center justify-center gap-0.5 transition-all border ${selectedTier === tier.value ? 'bg-white/10 border-primary/50 shadow-sm' : 'bg-white/5 border-transparent opacity-40'}`}
+                  disabled={tierLocked}
+                  onClick={() => { if (!tierLocked) setSelectedTier(tier.value); }}
+                  className={`p-3 rounded-[16px] flex flex-col items-center justify-center gap-0.5 transition-all border ${selectedTier === tier.value ? 'bg-white/10 border-primary/50 shadow-sm' : 'bg-white/5 border-transparent opacity-40'} ${tierLocked ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                 >
                   <span className="text-[7px] font-black uppercase tracking-widest text-muted-foreground">{tier.label}</span>
                   <span className="text-[9px] font-black text-foreground uppercase tracking-tighter">{tier.credits}</span>
