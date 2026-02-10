@@ -28,6 +28,18 @@ export function useApiAccess(): ApiAccessResult {
   const isLoading = settingsLoading || authLoading;
   const isFreeMode = accessControl.freeMode;
   
+  // PROMOTION MODE: Both API modes available for ANY user
+  if (accessControl.promotionMode) {
+    return {
+      appApiAllowed: true,
+      ownApiAllowed: true,
+      anyApiAvailable: true,
+      defaultApiMode: 'app',
+      isLoading,
+      isFreeMode: false,
+    };
+  }
+
   // Determine user plan - guest users are treated as 'free'
   const userPlan: 'free' | 'pro' | 'premium' = profile?.plan || 'free';
   const isGuest = !isAuthenticated;

@@ -34,12 +34,7 @@ export function useAuthGuard(toolId?: string): AuthGuardResult {
     // Admins always have access
     if (isAdmin) return true;
 
-    const requireLogin = accessControl.requireLogin && !accessControl.freeMode;
-
-    // If login is required and user is not authenticated → not allowed
-    if (requireLogin && !isAuthenticated) return false;
-
-    // If toolId provided, check tool-specific access
+    // If toolId provided, check tool-specific access first
     if (toolId) {
       const effectivelyAuthenticated = isAuthenticated || !accessControl.requireLogin;
       const isPremium = userPlan === 'premium';
@@ -48,8 +43,21 @@ export function useAuthGuard(toolId?: string): AuthGuardResult {
       const accessApp = canAccessTool(toolId, effectivelyAuthenticated, isPremium, usageCount, userPlan, 'app');
       const accessOwn = canAccessTool(toolId, effectivelyAuthenticated, isPremium, usageCount, userPlan, 'own');
 
+      // If neither mode is allowed, block
       if (!accessApp.allowed && !accessOwn.allowed) return false;
+
+      // If allowed (including promotion mode), permit access
+      return true;
     }
+
+    // No toolId: just check login requirement
+    const requireLogin = accessControl.requireLogin && !accessControl.freeMode;
+
+    // Promotion Mode ON: allow any user to access tool pages
+    if (accessControl.promotionMode) return true;
+
+    // If login is required and user is not authenticated → not allowed
+    if (requireLogin && !isAuthenticated) return false;
 
     return true;
   }, [isLoading, isAuthenticated, isAdmin, accessControl, toolId, userPlan, canAccessTool, getToolUsageCount]);

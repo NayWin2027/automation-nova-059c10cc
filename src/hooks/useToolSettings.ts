@@ -156,27 +156,28 @@ export function useToolSettings() {
       }
     }
 
+    // 1. ABSOLUTE PRIORITY: Premium Only check
+    // Blocks ALL non-premium users regardless of Promotion Mode, Free Mode, or API mode
+    if (tool.is_premium) {
+      if (isPremiumUser) {
+        return { allowed: true };
+      }
+      return { allowed: false, reason: 'Premium Plan လိုအပ်ပါသည်' };
+    }
+
+    // 2. PROMOTION MODE: When ON, allow ANY user (both API modes, no credit needed)
+    // Actual usage limits (tool count + daily limit) are enforced via usePromotionTracking
+    if (accessControl.promotionMode) {
+      return { allowed: true };
+    }
+
+    // 3. NORMAL MODE (Promotion OFF): Standard access control
     if (isPremiumUser) {
       return { allowed: true };
     }
 
-    // Premium Only check - ABSOLUTE PRIORITY, blocks all non-premium users regardless of any mode
-    if (tool.is_premium) {
-      return { allowed: false, reason: 'Premium Plan လိုအပ်ပါသည်' };
-    }
-
     if (apiMode === 'own') {
       return { allowed: true };
-    }
-
-    if (accessControl.promotionMode && !accessControl.freeMode) {
-      const limit = tool.daily_free_limit || accessControl.promotionDailyLimit;
-      if (todayUsageCount >= limit) {
-        return { 
-          allowed: false, 
-          reason: `တစ်နေ့လျှင် ${limit} ကြိမ်သာ အသုံးပြုနိုင်ပါသည်` 
-        };
-      }
     }
 
     return { allowed: true };

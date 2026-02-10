@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToolSettings } from "@/hooks/useToolSettings";
 import { useToast } from "@/hooks/use-toast";
 import { useAdmin } from "@/hooks/useAdmin";
+import { usePromotionTracking } from "@/hooks/usePromotionTracking";
 import ToolLimitsBadge from "@/components/ToolLimitsBadge";
 import AccountInfoCard from "@/components/AccountInfoCard";
 const defaultTools = [{
@@ -108,6 +109,10 @@ const Index = () => {
   const {
     isAdmin
   } = useAdmin();
+  const {
+    checkPromotionAccess,
+    recordPromotionUsage,
+  } = usePromotionTracking();
   const [activeTab, setActiveTab] = useState<"home" | "premium" | "settings">("home");
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
   const [showContactDialog, setShowContactDialog] = useState(false);
@@ -151,7 +156,6 @@ const Index = () => {
     if (!anyAllowed) {
       const reason = accessApp.reason || accessOwn.reason;
       if (reason === 'Login ဝင်ရန်လိုအပ်ပါသည်') {
-        // Instant redirect - no toast delay
         navigate('/login');
         return;
       }
@@ -163,8 +167,33 @@ const Index = () => {
       return;
     }
 
-    // Record usage in background
-    recordToolUsage(tool.id).catch(console.error);
+    // PROMOTION MODE: Check IP/device-based promotion limits
+    if (accessControl.promotionMode) {
+      const setting = toolSettings.find(s => s.tool_id === tool.id);
+      // Skip promotion limit check for premium-only tools (already handled above)
+      if (!setting?.is_premium) {
+        const promoCheck = checkPromotionAccess(
+          tool.id,
+          accessControl.promotionDailyLimit || 3,
+          accessControl.promotionToolCount || 3,
+        );
+        if (!promoCheck.allowed) {
+          toast({
+            title: "⚠️ Promotion Limit",
+            description: promoCheck.reason,
+            variant: "destructive"
+          });
+          return;
+        }
+        // Record promotion usage by IP + device
+        recordPromotionUsage(tool.id).catch(console.error);
+      }
+    }
+
+    // Record usage in background (for authenticated users)
+    if (isAuthenticated) {
+      recordToolUsage(tool.id).catch(console.error);
+    }
     if (tool.route) {
       navigate(tool.route);
     } else {
