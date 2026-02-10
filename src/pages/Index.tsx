@@ -210,14 +210,7 @@ const Index = () => {
   const renderHomeContent = () => <>
       <GatewayBanner />
       <div className="mb-3 flex items-start justify-between">
-        <div>
-          <h1 className="text-sm font-bold text-foreground">
-            Media<span className="text-primary">Master.</span>
-          </h1>
-          <p className="text-3xs font-medium tracking-[0.12em] text-primary/60 uppercase mt-0.5">
-            Pro Edition V8.0
-          </p>
-        </div>
+        <div />
         <div className="flex items-center gap-1.5">
           {isAuthenticated ? <>
               <div className="px-2 py-1 rounded-md bg-primary/10 border border-primary/20">
@@ -322,13 +315,7 @@ const Index = () => {
       {/* Light rays overlay */}
       <div className="premium-rays" />
       
-      <header className="px-3 py-2 flex items-center justify-between relative z-10">
-        <h1 className="text-xl font-black tracking-widest uppercase">
-          <span className="bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-500 bg-clip-text text-transparent drop-shadow-[0_0_12px_hsl(45,100%,60%)] animate-pulse-glow">Automation</span>{" "}
-          <span className="bg-gradient-to-r from-cyan-300 via-sky-400 to-blue-500 bg-clip-text text-transparent drop-shadow-[0_0_12px_hsl(200,100%,60%)]">Nova</span>{" "}
-          <span className="bg-gradient-to-r from-rose-400 via-pink-500 to-purple-500 bg-clip-text text-transparent drop-shadow-[0_0_14px_hsl(330,100%,60%)]">AI</span>
-        </h1>
-      </header>
+      <header className="px-3 py-1 relative z-10" />
 
       <main className="px-3 relative z-10">
         {activeTab === "home" && renderHomeContent()}
