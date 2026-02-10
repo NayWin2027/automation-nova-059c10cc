@@ -126,12 +126,15 @@ export async function generateSpeech(
       throw new Error(data.error);
     }
 
-    // Check if we should use client-side TTS (App API mode)
+    // Check if we should use client-side TTS
     if (data?.useClientTTS) {
-      // If rate-limited with retryAfterSeconds, auto-retry silently instead of falling back
-      const retryDelay = data?.retryAfterSeconds;
-      if (retryDelay && retryDelay > 0 && retryDelay <= 120) {
-        const maxRetries = 3;
+      // If user has Own API key, NEVER fall back to Web Speech (robotic voice)
+      // Instead, do aggressive silent retries to get real Gemini TTS audio
+      const isOwnKey = !!apiKey?.trim();
+      const retryDelay = data?.retryAfterSeconds || 30;
+      const maxRetries = isOwnKey ? 5 : 3;
+
+      if (retryDelay > 0 && retryDelay <= 120) {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
           const waitSec = Math.min(retryDelay * attempt, 60);
           console.log(`[generateSpeech] Rate limited. Retry ${attempt}/${maxRetries} after ${waitSec}s...`);
@@ -146,14 +149,18 @@ export async function generateSpeech(
           if (!retryError && retryData?.audio && !retryData?.useClientTTS) {
             return retryData.audio;
           }
-          // If still rate-limited, continue loop
           console.warn(`[generateSpeech] Retry ${attempt} still rate-limited`);
         }
       }
 
+      // Own API key: throw error instead of falling back to robotic Web Speech
+      if (isOwnKey) {
+        throw new Error("API Quota ပြည့်နေပါသည်။ ခဏစောင့်ပြီး ပြန်ကြိုးစားပါ။ Billing enable ထားသော Key သုံးပါ။");
+      }
+
+      // App API mode only: fall back to Web Speech
       console.log("Using client-side Web Speech API for TTS with language:", lang);
       isUsingWebSpeech = true;
-      // Return the text with language marker
       return `WEBSPEECH:${lang}:${text}`;
     }
 
