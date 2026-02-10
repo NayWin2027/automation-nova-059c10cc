@@ -118,6 +118,7 @@ export type Database = {
           ban_reason: string | null
           created_at: string
           credits: number
+          credits_started_at: string | null
           display_name: string | null
           email: string
           id: string
@@ -130,6 +131,7 @@ export type Database = {
           ban_reason?: string | null
           created_at?: string
           credits?: number
+          credits_started_at?: string | null
           display_name?: string | null
           email: string
           id?: string
@@ -142,6 +144,7 @@ export type Database = {
           ban_reason?: string | null
           created_at?: string
           credits?: number
+          credits_started_at?: string | null
           display_name?: string | null
           email?: string
           id?: string

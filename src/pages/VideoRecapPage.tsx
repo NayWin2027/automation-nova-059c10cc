@@ -6,6 +6,7 @@ import { useApiAccess } from "@/hooks/useApiAccess";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Home, Lock } from "lucide-react";
+import { preCheckCredits } from "@/utils/creditPreCheck";
 
 // --- DATA SETS ---
 const VOICES = [
@@ -517,6 +518,13 @@ export default function VideoRecapView() {
       alert("⚠️ Video file is too large! Maximum limit is 1GB.");
       return;
     }
+
+    // Pre-check credits before running in App API mode
+    if (apiType === "app") {
+      const allowed = await preCheckCredits("video-recap");
+      if (!allowed) return;
+    }
+
     setAnalyzing(true);
     setStatusText("STEP 1/4: UPLOADING & DETECTING SCENES...");
     setFullScriptText("");
@@ -607,6 +615,13 @@ export default function VideoRecapView() {
 
   const handleRegenerateAudio = async () => {
     if (!fullScriptText.trim()) return;
+
+    // Pre-check credits before running in App API mode
+    if (apiType === "app") {
+      const allowed = await preCheckCredits("video-recap-audio");
+      if (!allowed) return;
+    }
+
     setAnalyzing(true);
     setStatusText("REGENERATING AUDIO...");
     const singleSegment: ScriptSegment[] = [{ time: 0, text: fullScriptText }];

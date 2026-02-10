@@ -6,6 +6,7 @@ import { useSecureApiKey } from "@/hooks/useSecureApiKey";
 import { generateOwnApiText, getOwnApiErrorMessage } from "@/services/ownApiService";
 import { translateText } from "../services/geminiService";
 import { toast } from "sonner";
+import { preCheckCredits } from "@/utils/creditPreCheck";
 const LANGUAGES = [
   "BURMESE",
   "ENGLISH",
@@ -149,6 +150,12 @@ const SrtTranslatorView: React.FC = () => {
     if (apiType === "own" && !apiKey.trim()) {
       toast.error("GEMINI API KEY အရင်ထည့်ပေးပါ။");
       return;
+    }
+
+    // Pre-check credits before running in App API mode
+    if (apiType === "app") {
+      const allowed = await preCheckCredits('srt-translate');
+      if (!allowed) return;
     }
     
     setLoading(true);

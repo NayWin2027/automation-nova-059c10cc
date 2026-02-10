@@ -8,6 +8,7 @@ import { Home, Loader2, Lock, Square } from 'lucide-react';
 import { useSecureApiKey } from '@/hooks/useSecureApiKey';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { useApiAccess } from '@/hooks/useApiAccess';
+import { preCheckCredits } from '@/utils/creditPreCheck';
 
 type InputMode = 'UPLOAD' | 'PASTE';
 type NovelTone = 'WUXIA' | 'ROMANTIC' | 'CLASSIC' | 'MODERN' | 'FANTASY';
@@ -416,6 +417,12 @@ const NovelTransPage: React.FC = () => {
 
     // Own API mode ignores cooldown blocking (silent retry pattern)
     if (cooldownSeconds > 0 && apiType !== 'own') return;
+
+    // Pre-check credits before running in App API mode
+    if (apiType === 'app') {
+      const allowed = await preCheckCredits('novel-translate');
+      if (!allowed) return;
+    }
 
     setLoading(true);
 

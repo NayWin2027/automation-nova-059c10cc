@@ -5,6 +5,7 @@ import { transcribeOwnApi, getOwnApiErrorMessage } from "../services/ownApiServi
 import { useSecureApiKey } from "../hooks/useSecureApiKey";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { preCheckCredits } from "@/utils/creditPreCheck";
 
 // ============ ADMIN CMS TYPES ============
 interface TranscribeSettings {
@@ -233,6 +234,13 @@ export default function TranscriptionView() {
       return;
     }
 
+    // Pre-check credits before running in App API mode
+    if (apiType === "app") {
+      const tierCredits = getSelectedTierCredits();
+      const allowed = await preCheckCredits("transcribe", tierCredits);
+      if (!allowed) return;
+    }
+
     setIsTranscribing(true);
     setResult("");
 
@@ -282,6 +290,13 @@ export default function TranscriptionView() {
       toast.error("Transcript text မရှိပါ။");
       return;
     }
+
+    // Pre-check credits for script generation (min 2 credits)
+    if (apiType === "app") {
+      const allowed = await preCheckCredits("narration-script", 2);
+      if (!allowed) return;
+    }
+
     setIsGeneratingScript(true);
     setGeneratedScript("");
     try {
