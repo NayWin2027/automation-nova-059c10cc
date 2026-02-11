@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Shield, Eye, EyeOff, Lock, Mail, Smartphone, ArrowLeft } from "lucide-react";
+import { AppLogo } from "@/components/AppLogo";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { z } from "zod";
@@ -293,11 +294,22 @@ const AdminLoginPage: React.FC = () => {
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 mb-4">
-            <Shield className="w-8 h-8 text-white" />
+          <div className="flex justify-center mb-4">
+            <AppLogo size={64} />
           </div>
-          <h1 className="text-2xl font-bold text-foreground">Admin Login</h1>
-          <p className="text-muted-foreground mt-2">Access the control panel</p>
+          <h1
+            className="text-3xl font-black"
+            style={{
+              fontFamily: "'Caveat', cursive",
+              backgroundImage: "linear-gradient(135deg, hsl(0 0% 92%), hsl(220 30% 80%), hsl(245 80% 72%), hsl(200 100% 70%))",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              filter: "drop-shadow(0 0 18px hsl(200 100% 65% / 0.6))",
+            }}
+          >
+            Automation Nova AI
+          </h1>
+          <p className="text-muted-foreground mt-2">Admin Login</p>
         </div>
 
         <Card className="border-border/50 bg-card/50 backdrop-blur">
