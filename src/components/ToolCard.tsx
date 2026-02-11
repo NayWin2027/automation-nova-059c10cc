@@ -15,7 +15,7 @@ export function ToolCard({
   isPremium,
   onClick
 }: ToolCardProps) {
-  return <button onClick={onClick} className="keyboard-key group w-full relative">
+  return <button onClick={onClick} className="keyboard-key group w-full relative pl-[5px] pt-[5px] pr-[5px] pb-[5px] mx-0 my-0 px-px py-px font-sans border-solid bg-neon-rose">
       {isPremium && <div className="absolute -top-1 -right-1 z-10">
           <div className="flex items-center gap-0.5 px-1 py-0.5 rounded-full bg-gradient-to-r from-amber-500/30 to-yellow-400/20 border border-amber-400/40">
             <Crown className="w-2.5 h-2.5 text-amber-300" />
