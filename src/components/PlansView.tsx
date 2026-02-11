@@ -14,14 +14,9 @@ interface PlanSettings {
   topUpPackages: TopUpPackage[];
 }
 
-
 const db = {
   getPlanSettings: async (): Promise<PlanSettings | null> => {
-    const { data } = await supabase
-      .from("app_settings")
-      .select("value")
-      .eq("key", "plan_settings")
-      .maybeSingle();
+    const { data } = await supabase.from("app_settings").select("value").eq("key", "plan_settings").maybeSingle();
     return data?.value as PlanSettings | null;
   },
   upsertPlanSettings: async (settings: PlanSettings) => {
@@ -36,9 +31,7 @@ const db = {
         .update({ value: settings as never })
         .eq("key", "plan_settings");
     } else {
-      await supabase
-        .from("app_settings")
-        .insert({ key: "plan_settings", value: settings as never });
+      await supabase.from("app_settings").insert({ key: "plan_settings", value: settings as never });
     }
   },
 };
@@ -118,9 +111,9 @@ const PlansView: React.FC = () => {
     kpayName: "NAY WIN KYAW",
     waveNumber: "09967793288",
     waveName: "NAY WIN",
-    thaiBankName: "Krungsri Bank (BAY)",
-    thaiBankAcc: "0874055798",
-    thaiBankHolder: "MISS SANDAR THANT ZIN",
+    thaiBankName: "Krungsri Bank)",
+    thaiBankAcc: "6654523725",
+    thaiBankHolder: "MR TUN TUN OO",
     messengerLink: "https://m.me/NAYWIN2027",
     messengerLink2: "https://m.me/koyeswan.tds",
   };
@@ -128,7 +121,8 @@ const PlansView: React.FC = () => {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
-        supabase.rpc("has_role", { _user_id: session.user.id, _role: "admin" })
+        supabase
+          .rpc("has_role", { _user_id: session.user.id, _role: "admin" })
           .then(({ data }) => setIsAdmin(data === true));
       }
     });
