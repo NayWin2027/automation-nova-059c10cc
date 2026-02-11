@@ -24,7 +24,7 @@ export function GatewayBanner() {
 
       <h2 className="relative text-center text-4xl font-black tracking-[0.12em]">
         <span
-          className="bg-clip-text text-5xl font-sans text-card"
+          className="bg-clip-text font-sans text-6xl text-card-foreground"
           style={{
             fontFamily: "'Caveat', cursive",
             backgroundImage:
