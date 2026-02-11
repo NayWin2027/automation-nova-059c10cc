@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { generateThumbnail } from "../services/geminiService";
 import { useNavigate } from "react-router-dom";
 import { useSecureApiKey } from "../hooks/useSecureApiKey";
@@ -379,6 +380,7 @@ const LayerControl: React.FC<any> = ({
 
 const ThumbnailView: React.FC = () => {
   const navigate = useNavigate();
+  const { isAllowed, isLoading: authLoading } = useAuthGuard('thumbnail');
   const { apiKey, setApiKey } = useSecureApiKey("master_thumbnail_api_key");
   const [genMode, setGenMode] = useState<"AUTO" | "REF">("AUTO");
   const [selectedRatio, setSelectedRatio] = useState<AspectRatio>("16:9");
@@ -736,6 +738,9 @@ const ThumbnailView: React.FC = () => {
       setLoading(false);
     }
   };
+
+  if (authLoading) return <div className="min-h-screen bg-[#020617] flex items-center justify-center"><div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full" /></div>;
+  if (!isAllowed) return null;
 
   return (
     <div className="space-y-6 pb-40 animate-in fade-in duration-500 max-w-5xl mx-auto px-2 text-white">
