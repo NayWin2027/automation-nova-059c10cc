@@ -1,4 +1,14 @@
 import { LucideIcon, Crown } from "lucide-react";
+
+const GRADIENT_MAP: Record<string, string> = {
+  cyan: "from-cyan-500/25 via-blue-600/20 to-teal-500/15",
+  rose: "from-rose-500/25 via-pink-600/20 to-red-500/15",
+  amber: "from-amber-500/25 via-orange-600/20 to-yellow-500/15",
+  violet: "from-violet-500/25 via-purple-600/20 to-indigo-500/15",
+  emerald: "from-emerald-500/25 via-green-600/20 to-teal-500/15",
+  blue: "from-blue-500/25 via-indigo-600/20 to-sky-500/15",
+};
+
 interface ToolCardProps {
   icon: LucideIcon;
   title: string;
@@ -16,6 +26,9 @@ export function ToolCard({
   onClick
 }: ToolCardProps) {
   return <button onClick={onClick} className="keyboard-key group relative font-sans">
+      {/* Gradient fill covering entire key surface */}
+      <div className={`absolute inset-0 rounded-[inherit] bg-gradient-to-br ${GRADIENT_MAP[gradient] || GRADIENT_MAP.cyan} z-[1] pointer-events-none`} />
+
       {isPremium && <div className="absolute -top-2 -right-2 z-10">
           <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500/40 to-yellow-400/30 border border-amber-400/50 backdrop-blur-sm">
             <Crown className="w-2.5 h-2.5 text-amber-300 drop-shadow-[0_0_4px_hsl(45,100%,60%,0.6)]" />
