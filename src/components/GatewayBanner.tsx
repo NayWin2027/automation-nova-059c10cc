@@ -14,13 +14,17 @@ export function GatewayBanner() {
           }}
         />
       </div>
-      <h2 className="relative text-center text-4xl font-black tracking-[0.2em] uppercase">
+      <h2 className="relative text-center text-4xl font-black tracking-[0.12em]">
         <span
           className="bg-clip-text text-transparent"
           style={{
+            fontFamily: "'Caveat', cursive",
             backgroundImage:
-              "linear-gradient(135deg, hsl(0 0% 85%), hsl(220 20% 75%), hsl(245 60% 65%), hsl(230 70% 58%))",
-            filter: "drop-shadow(0 0 20px hsl(235 80% 65% / 0.4))",
+              "linear-gradient(135deg, hsl(0 0% 92%), hsl(220 30% 80%), hsl(245 80% 72%), hsl(200 100% 70%))",
+            filter: "drop-shadow(0 0 24px hsl(200 100% 65% / 0.6))",
+            textShadow: "0 0 30px hsl(200,100%,70%,0.4)",
+            fontSize: "2.5rem",
+            lineHeight: "1.2",
           }}
         >
           Automation Nova AI
