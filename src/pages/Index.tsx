@@ -227,7 +227,7 @@ const Index = () => {
         {tools.map((tool) => {
         const setting = toolSettings.find((s) => s.tool_id === tool.id);
         const isPremiumTool = setting?.is_premium && !accessControl.freeMode;
-        return <div key={tool.id} className="relative bg-card pl-[5px] pr-[20px] pb-[20px] pt-0 mx-[20px]">
+        return <div key={tool.id} className="relative pl-[5px] pr-[20px] pb-[20px] pt-0 mx-[20px] bg-inherit">
               {/* Admin-only tier limits badge */}
               {isAdmin && setting?.tier_limits && <ToolLimitsBadge tierLimits={setting.tier_limits} toolTitle={tool.title} />}
               <ToolCard icon={tool.icon} title={tool.title} description={tool.description} gradient={tool.gradient} isPremium={isPremiumTool} onClick={() => handleToolClick(tool)} />
