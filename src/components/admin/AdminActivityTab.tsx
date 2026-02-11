@@ -7,33 +7,21 @@ import { useAdmin } from "@/hooks/useAdmin";
 import { supabase } from "@/integrations/supabase/client";
 import { Activity, Search, Calendar, User, Wrench, Smartphone, Globe, Hash, CreditCard } from "lucide-react";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-
-interface DeviceRecord {
-  user_id: string;
-  device_fingerprint: string;
-  device_info: Record<string, any> | null;
-  last_used_at: string;
-}
 
 interface PromotionRecord {
   device_fingerprint: string;
   ip_address: string;
   device_model: string | null;
   usage_date: string;
+  tool_id: string;
 }
 
 const AdminActivityTab: React.FC = () => {
   const { activityLogs, profiles, fetchActivityLogs } = useAdmin();
   const [search, setSearch] = useState("");
   const [selectedUser, setSelectedUser] = useState<string>("all");
-  const [allDevices, setAllDevices] = useState<DeviceRecord[]>([]);
   const [promotionData, setPromotionData] = useState<PromotionRecord[]>([]);
 
   useEffect(() => {
@@ -44,64 +32,59 @@ const AdminActivityTab: React.FC = () => {
     }
   }, [selectedUser]);
 
-  // Fetch devices and promotion tracking data for IP/model
+  // Fetch promotion tracking data as fallback for IP/device
   useEffect(() => {
-    const fetchExtra = async () => {
-      const { data: devData } = await supabase
-        .from("user_devices")
-        .select("user_id, device_fingerprint, device_info, last_used_at")
-        .order("last_used_at", { ascending: false });
-      if (devData) setAllDevices(devData as DeviceRecord[]);
-
-      const { data: promoData } = await supabase
+    const fetchPromo = async () => {
+      const { data } = await supabase
         .from("promotion_usage_tracking")
-        .select("device_fingerprint, ip_address, device_model, usage_date")
-        .order("usage_date", { ascending: false });
-      if (promoData) setPromotionData(promoData as PromotionRecord[]);
+        .select("device_fingerprint, ip_address, device_model, usage_date, tool_id")
+        .order("usage_date", { ascending: false })
+        .limit(500);
+      if (data) setPromotionData(data as PromotionRecord[]);
     };
-    fetchExtra();
+    fetchPromo();
   }, []);
 
   const getProfile = (userId: string) => profiles.find((p) => p.user_id === userId);
   const getProfileEmail = (userId: string) => getProfile(userId)?.email || "Unknown";
+  
+  // Show the profile ID (first 8 chars uppercase) as account ID
   const getShortId = (userId: string) => {
     const p = getProfile(userId);
+    // If email is like "100000@internal.user", show the number part
+    if (p?.email && p.email.includes("@internal.user")) {
+      return p.email.split("@")[0];
+    }
     return p?.id?.slice(0, 8).toUpperCase() || "N/A";
   };
+
   const getStartDate = (userId: string) => {
     const p = getProfile(userId);
     if (!p?.created_at) return "N/A";
     return new Date(p.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
   };
 
-  // Get latest device info for a user
-  const getUserDevice = (userId: string) => {
-    const dev = allDevices.find((d) => d.user_id === userId);
-    if (!dev?.device_info) return null;
-    const info = dev.device_info as Record<string, any>;
-    const model = info.model || info.device_model || info.browser || "Unknown";
-    return { model, fingerprint: dev.device_fingerprint };
-  };
-
-  // Get IP from promotion tracking via device fingerprint
-  const getUserIp = (userId: string) => {
-    const dev = allDevices.find((d) => d.user_id === userId);
-    if (!dev) return "N/A";
-    const promo = promotionData.find((p) => p.device_fingerprint === dev.device_fingerprint);
+  // Get IP address: first try from activity log metadata, then fallback to promotion_usage_tracking
+  const getLogIp = (log: typeof activityLogs[0]) => {
+    const meta = log.metadata as Record<string, any> | null;
+    if (meta?.ip_address && meta.ip_address !== 'unknown') return meta.ip_address;
+    // Fallback: find any promotion record for same tool around same date
+    const logDate = log.created_at.split('T')[0];
+    const promo = promotionData.find(
+      (p) => p.tool_id === log.tool_name && p.usage_date === logDate && p.ip_address
+    );
     return promo?.ip_address || "N/A";
   };
 
-  // Get phone model from promotion tracking (more accurate) or device_info
-  const getUserPhoneModel = (userId: string) => {
-    const dev = allDevices.find((d) => d.user_id === userId);
-    if (!dev) return "Unknown";
-    // Try promotion_usage_tracking first (has parsed device_model)
-    const promo = promotionData.find((p) => p.device_fingerprint === dev.device_fingerprint);
-    if (promo?.device_model) return promo.device_model;
-    // Fallback to device_info
-    const info = dev.device_info as Record<string, any> | null;
-    if (!info) return "Unknown";
-    return info.model || info.device_model || info.browser || "Unknown";
+  // Get device model: first try from activity log metadata, then fallback
+  const getLogDevice = (log: typeof activityLogs[0]) => {
+    const meta = log.metadata as Record<string, any> | null;
+    if (meta?.device_model && meta.device_model !== 'Unknown Device') return meta.device_model;
+    const logDate = log.created_at.split('T')[0];
+    const promo = promotionData.find(
+      (p) => p.tool_id === log.tool_name && p.usage_date === logDate && p.device_model
+    );
+    return promo?.device_model || "Unknown";
   };
 
   const filteredLogs = activityLogs.filter(
@@ -157,7 +140,7 @@ const AdminActivityTab: React.FC = () => {
             <Activity className="w-5 h-5" />
             User Activity Logs
           </CardTitle>
-          <CardDescription>Track all user activity with ID, IP, Device & Start Date</CardDescription>
+          <CardDescription>Real IP, Device & Account tracking for all users</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-4 mb-4">
@@ -189,10 +172,10 @@ const AdminActivityTab: React.FC = () => {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/30">
-                  <TableHead className="whitespace-nowrap">ID No</TableHead>
+                  <TableHead className="whitespace-nowrap">Acc ID</TableHead>
                   <TableHead>User</TableHead>
                   <TableHead className="whitespace-nowrap">IP Address</TableHead>
-                  <TableHead className="whitespace-nowrap">Phone Model</TableHead>
+                  <TableHead className="whitespace-nowrap">Device</TableHead>
                   <TableHead>Tool</TableHead>
                   <TableHead>Action</TableHead>
                   <TableHead className="whitespace-nowrap">Start Date</TableHead>
@@ -209,52 +192,44 @@ const AdminActivityTab: React.FC = () => {
                 ) : (
                   filteredLogs.map((log) => (
                     <TableRow key={log.id}>
-                      {/* ID No */}
                       <TableCell>
                         <div className="flex items-center gap-1.5">
                           <Hash className="w-3.5 h-3.5 text-primary/70" />
                           <span className="text-xs font-mono font-bold text-primary">{getShortId(log.user_id)}</span>
                         </div>
                       </TableCell>
-                      {/* Email */}
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <User className="w-4 h-4 text-muted-foreground" />
                           <span className="text-sm truncate max-w-[140px]">{getProfileEmail(log.user_id)}</span>
                         </div>
                       </TableCell>
-                      {/* IP Address */}
                       <TableCell>
                         <div className="flex items-center gap-1.5">
                           <Globe className="w-3.5 h-3.5 text-blue-400" />
-                          <span className="text-xs font-mono">{getUserIp(log.user_id)}</span>
+                          <span className="text-xs font-mono">{getLogIp(log)}</span>
                         </div>
                       </TableCell>
-                      {/* Phone Model */}
                       <TableCell>
                         <div className="flex items-center gap-1.5">
                           <Smartphone className="w-3.5 h-3.5 text-green-400" />
-                          <span className="text-xs truncate max-w-[120px]">{getUserPhoneModel(log.user_id)}</span>
+                          <span className="text-xs truncate max-w-[120px]">{getLogDevice(log)}</span>
                         </div>
                       </TableCell>
-                      {/* Tool */}
                       <TableCell>
                         <Badge className={getToolBadgeClass(log.tool_name)}>
                           {log.tool_name}
                         </Badge>
                       </TableCell>
-                      {/* Action */}
                       <TableCell className="text-muted-foreground text-xs">
                         {log.action || "—"}
                       </TableCell>
-                      {/* Start Date */}
                       <TableCell>
                         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                           <CreditCard className="w-3.5 h-3.5 text-amber-400" />
                           {getStartDate(log.user_id)}
                         </div>
                       </TableCell>
-                      {/* Activity Date */}
                       <TableCell>
                         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                           <Calendar className="w-3.5 h-3.5" />
