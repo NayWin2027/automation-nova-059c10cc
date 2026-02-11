@@ -22,9 +22,9 @@ export function GatewayBanner() {
         <AppLogo size={72} />
       </div>
 
-      <h2 className="relative text-center text-4xl font-black tracking-[0.12em]">
+      <h2 className="relative text-center text-4xl font-black tracking-[0.12em] bg-primary-foreground">
         <span
-          className="bg-clip-text font-sans text-6xl text-card-foreground"
+          className="bg-clip-text text-6xl bg-neon-rose text-platinum font-mono"
           style={{
             fontFamily: "'Caveat', cursive",
             backgroundImage:
