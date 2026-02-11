@@ -1,3 +1,5 @@
+import { AppLogo } from "./AppLogo";
+
 export function GatewayBanner() {
   return (
     <div className="premium-banner mb-6 animate-fade-in py-5 relative">
@@ -14,6 +16,12 @@ export function GatewayBanner() {
           }}
         />
       </div>
+
+      {/* Animated 3D Logo */}
+      <div className="flex justify-center mb-2 relative z-10">
+        <AppLogo size={72} />
+      </div>
+
       <h2 className="relative text-center text-4xl font-black tracking-[0.12em]">
         <span
           className="bg-clip-text text-transparent"
