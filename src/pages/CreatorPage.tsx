@@ -171,7 +171,7 @@ const CreatorPage: React.FC = () => {
         >
           <ArrowLeft className="w-4 h-4 text-foreground" />
         </button>
-        <h1 className="text-sm font-bold tracking-wider text-foreground">CREATOR</h1>
+        <h1 className="text-base font-bold tracking-wider text-foreground">CREATOR</h1>
       </header>
 
       <main className="px-4 space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-700">
@@ -180,7 +180,7 @@ const CreatorPage: React.FC = () => {
           <button 
             onClick={() => appApiAllowed && setApiType('app')} 
             disabled={!appApiAllowed}
-            className={`flex-1 py-2 rounded-lg font-black text-[8px] uppercase tracking-widest transition-all flex items-center justify-center gap-1 ${!appApiAllowed ? 'opacity-40 cursor-not-allowed' : ''} ${apiType === 'app' && appApiAllowed ? 'jewel-sapphire text-white shadow-lg' : 'text-muted-foreground'}`}
+            className={`flex-1 py-2 rounded-lg font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-1 ${!appApiAllowed ? 'opacity-40 cursor-not-allowed' : ''} ${apiType === 'app' && appApiAllowed ? 'jewel-sapphire text-white shadow-lg' : 'text-slate-400'}`}
           >
             {!appApiAllowed && <Lock className="w-3 h-3" />}
             APP API 🔒
@@ -188,7 +188,7 @@ const CreatorPage: React.FC = () => {
           <button 
             onClick={() => ownApiAllowed && setApiType('own')} 
             disabled={!ownApiAllowed}
-            className={`flex-1 py-2 rounded-lg font-black text-[8px] uppercase tracking-widest transition-all flex items-center justify-center gap-1 ${!ownApiAllowed ? 'opacity-40 cursor-not-allowed' : ''} ${apiType === 'own' && ownApiAllowed ? 'jewel-diamond text-blue-950' : 'text-muted-foreground'}`}
+            className={`flex-1 py-2 rounded-lg font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-1 ${!ownApiAllowed ? 'opacity-40 cursor-not-allowed' : ''} ${apiType === 'own' && ownApiAllowed ? 'jewel-diamond text-blue-950' : 'text-slate-400'}`}
           >
             {!ownApiAllowed && <Lock className="w-3 h-3" />}
             OWN API
@@ -197,15 +197,15 @@ const CreatorPage: React.FC = () => {
 
         {apiType === 'own' && (
           <div className="bg-secondary/40 rounded-xl p-2 border border-border/50 space-y-1 max-w-sm mx-auto animate-in zoom-in-95 duration-300">
-            <h4 className="text-[6px] font-black text-muted-foreground uppercase tracking-widest ml-1">GEMINI API KEY</h4>
+            <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">GEMINI API KEY</h4>
             <input 
               type="password" 
               value={apiKey} 
               onChange={(e) => setApiKey(e.target.value)} 
               placeholder="Paste Private Key..." 
-              className="w-full bg-background/60 border border-border/50 rounded-lg p-2 text-[10px] font-bold text-foreground outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/50" 
+              className="w-full bg-background/60 border border-border/50 rounded-lg p-2 text-xs font-bold text-foreground outline-none focus:ring-1 focus:ring-primary placeholder:text-slate-500" 
             />
-            <p className="text-[7px] text-muted-foreground/70 ml-1">Tab ပိတ်လိုက်ရင် Key ပျောက်သွားပါမယ်</p>
+            <p className="text-[9px] text-slate-400 ml-1">Tab ပိတ်လိုက်ရင် Key ပျောက်သွားပါမယ်</p>
           </div>
         )}
 
@@ -214,7 +214,7 @@ const CreatorPage: React.FC = () => {
           <div className="flex justify-between items-center px-1">
             <div className="space-y-0.5">
               <h2 className="text-xl font-black tracking-tighter text-foreground">CREATOR <span className="text-primary">MASTER</span></h2>
-              <p className="text-[8px] font-black text-muted-foreground uppercase tracking-[0.3em]">AI CONTENT FACTORY</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">AI CONTENT FACTORY</p>
             </div>
             <div className="w-10 h-10 rounded-xl jewel-gold flex items-center justify-center shadow-xl shadow-amber-900/40">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -224,21 +224,21 @@ const CreatorPage: React.FC = () => {
           {/* Basic Config */}
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
-              <label className="text-[7px] font-black text-muted-foreground uppercase tracking-widest ml-1">LANGUAGE</label>
+              <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest ml-1">LANGUAGE</label>
               <select 
                 value={language} 
                 onChange={e => setLanguage(e.target.value)} 
-                className="w-full bg-secondary/60 border border-border/50 rounded-xl p-3 text-[10px] font-black text-foreground outline-none focus:ring-1 focus:ring-primary uppercase cursor-pointer"
+                 className="w-full bg-secondary/60 border border-border/50 rounded-xl p-3 text-xs font-black text-foreground outline-none focus:ring-1 focus:ring-primary uppercase cursor-pointer"
               >
                 {LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-[7px] font-black text-muted-foreground uppercase tracking-widest ml-1">CATEGORY</label>
+              <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest ml-1">CATEGORY</label>
               <select 
                 value={category} 
                 onChange={e => setCategory(e.target.value)} 
-                className="w-full bg-secondary/60 border border-border/50 rounded-xl p-3 text-[10px] font-black text-foreground outline-none focus:ring-1 focus:ring-primary uppercase cursor-pointer"
+                className="w-full bg-secondary/60 border border-border/50 rounded-xl p-3 text-xs font-black text-foreground outline-none focus:ring-1 focus:ring-primary uppercase cursor-pointer"
               >
                 {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -248,21 +248,21 @@ const CreatorPage: React.FC = () => {
           {/* Topic Input */}
           <div className="space-y-1.5">
             <div className="flex justify-between items-center px-1">
-              <label className="text-[7px] font-black text-muted-foreground uppercase tracking-widest">TOPIC DESCRIPTION</label>
-              <span className="text-[7px] font-black text-primary/50">{topic.length}/2500</span>
+              <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest">TOPIC DESCRIPTION</label>
+              <span className="text-[10px] font-black text-primary/70">{topic.length}/2500</span>
             </div>
             <textarea 
               value={topic}
               onChange={e => setTopic(e.target.value)}
               placeholder="Ex: Why reading books daily is important for your future success..."
-              className="w-full h-28 bg-secondary/40 border border-border/50 rounded-[24px] p-4 text-[12px] font-medium text-foreground outline-none focus:ring-1 focus:ring-primary transition-all placeholder:text-muted-foreground/50 resize-none shadow-inner"
+              className="w-full h-28 bg-secondary/40 border border-border/50 rounded-[24px] p-4 text-sm font-medium text-foreground outline-none focus:ring-1 focus:ring-primary transition-all placeholder:text-slate-500 resize-none shadow-inner"
             />
           </div>
 
           {/* Fine-Tune Section */}
           <div className="space-y-4 bg-muted/30 p-4 rounded-[24px] border border-border/50 shadow-inner">
             <div className="space-y-0.5">
-              <h3 className="text-[9px] font-black text-primary uppercase tracking-[0.2em] flex items-center gap-2">
+              <h3 className="text-[11px] font-black text-primary uppercase tracking-[0.2em] flex items-center gap-2">
                 <div className="w-1.5 h-3 bg-primary rounded-full"></div> FINE-TUNE
               </h3>
             </div>
@@ -272,14 +272,14 @@ const CreatorPage: React.FC = () => {
                 <div key={group} className="space-y-1.5">
                   <div className="flex items-center gap-1.5 mb-0.5">
                     <div className="w-1.5 h-[1px] bg-border"></div>
-                    <p className="text-[6px] font-black text-muted-foreground uppercase tracking-widest">{group}</p>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{group}</p>
                   </div>
                   <div className="flex flex-wrap gap-1">
                     {chips.map(chip => (
                       <button
                         key={chip.value}
                         onClick={() => toggleChip(chip.value)}
-                        className={`px-2.5 py-1.5 rounded-lg text-[6px] font-black uppercase tracking-tighter transition-all border shrink-0 ${selectedChips.includes(chip.value) ? 'jewel-sapphire text-white border-transparent shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'bg-secondary/40 border-border/50 text-muted-foreground hover:text-foreground'}`}
+                        className={`px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-tighter transition-all border shrink-0 ${selectedChips.includes(chip.value) ? 'jewel-sapphire text-white border-transparent shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'bg-secondary/40 border-border/50 text-slate-400 hover:text-foreground'}`}
                       >
                         {chip.label}
                       </button>
@@ -292,17 +292,17 @@ const CreatorPage: React.FC = () => {
 
           {/* Narrative Flow Control */}
           <div className="space-y-1.5">
-            <label className="text-[7px] font-black text-muted-foreground uppercase tracking-widest ml-1">AI NARRATIVE FLOW</label>
+            <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest ml-1">AI NARRATIVE FLOW</label>
             <div className="grid grid-cols-2 gap-2 p-1 bg-muted/30 rounded-xl border border-border/50">
               <button 
                 onClick={() => setFlowControl('Punchy')} 
-                className={`py-2 rounded-lg text-[8px] font-black uppercase transition-all flex flex-col items-center gap-0.5 ${flowControl === 'Punchy' ? 'jewel-ruby text-white shadow-lg' : 'text-muted-foreground'}`}
+                className={`py-2 rounded-lg text-[10px] font-black uppercase transition-all flex flex-col items-center gap-0.5 ${flowControl === 'Punchy' ? 'jewel-ruby text-white shadow-lg' : 'text-slate-400'}`}
               >
                 <span>PUNCHY & VIRAL</span>
               </button>
               <button 
                 onClick={() => setFlowControl('Detailed')} 
-                className={`py-2 rounded-lg text-[8px] font-black uppercase transition-all flex flex-col items-center gap-0.5 ${flowControl === 'Detailed' ? 'jewel-sapphire text-white shadow-lg' : 'text-muted-foreground'}`}
+                className={`py-2 rounded-lg text-[10px] font-black uppercase transition-all flex flex-col items-center gap-0.5 ${flowControl === 'Detailed' ? 'jewel-sapphire text-white shadow-lg' : 'text-slate-400'}`}
               >
                 <span>DEEP & DETAILED</span>
               </button>
@@ -312,34 +312,34 @@ const CreatorPage: React.FC = () => {
           {/* Options Grid */}
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
-              <label className="text-[7px] font-black text-muted-foreground uppercase tracking-widest ml-1">VOICE TONE</label>
+              <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest ml-1">VOICE TONE</label>
               <div className="flex p-1 bg-muted/20 rounded-lg border border-border/50">
                 <button 
                   onClick={() => setVoice('MALE')} 
-                  className={`flex-1 py-1.5 rounded-md text-[8px] font-black uppercase transition-all ${voice === 'MALE' ? 'jewel-sapphire text-white shadow-md' : 'text-muted-foreground'}`}
+                  className={`flex-1 py-1.5 rounded-md text-[10px] font-black uppercase transition-all ${voice === 'MALE' ? 'jewel-sapphire text-white shadow-md' : 'text-slate-400'}`}
                 >
                   MALE
                 </button>
                 <button 
                   onClick={() => setVoice('FEMALE')} 
-                  className={`flex-1 py-1.5 rounded-md text-[8px] font-black uppercase transition-all ${voice === 'FEMALE' ? 'jewel-sapphire text-white shadow-md' : 'text-muted-foreground'}`}
+                  className={`flex-1 py-1.5 rounded-md text-[10px] font-black uppercase transition-all ${voice === 'FEMALE' ? 'jewel-sapphire text-white shadow-md' : 'text-slate-400'}`}
                 >
                   FEMALE
                 </button>
               </div>
             </div>
             <div className="space-y-1">
-              <label className="text-[7px] font-black text-muted-foreground uppercase tracking-widest ml-1">CONTENT TYPE</label>
+              <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest ml-1">CONTENT TYPE</label>
               <div className="flex p-1 bg-muted/20 rounded-lg border border-border/50">
                 <button 
                   onClick={() => setContentType('TEXT')} 
-                  className={`flex-1 py-1.5 rounded-md text-[8px] font-black uppercase transition-all ${contentType === 'TEXT' ? 'bg-muted text-foreground shadow-md border border-border' : 'text-muted-foreground'}`}
+                  className={`flex-1 py-1.5 rounded-md text-[10px] font-black uppercase transition-all ${contentType === 'TEXT' ? 'bg-muted text-foreground shadow-md border border-border' : 'text-slate-400'}`}
                 >
                   TEXT
                 </button>
                 <button 
                   onClick={() => setContentType('VIDEO SCRIPT')} 
-                  className={`flex-1 py-1.5 rounded-md text-[8px] font-black uppercase transition-all ${contentType === 'VIDEO SCRIPT' ? 'jewel-ruby text-white shadow-md' : 'text-muted-foreground'}`}
+                  className={`flex-1 py-1.5 rounded-md text-[10px] font-black uppercase transition-all ${contentType === 'VIDEO SCRIPT' ? 'jewel-ruby text-white shadow-md' : 'text-slate-400'}`}
                 >
                   SCRIPT
                 </button>
@@ -352,15 +352,15 @@ const CreatorPage: React.FC = () => {
               onClick={() => setSeoViral(!seoViral)} 
               className={`p-3 rounded-2xl border transition-all flex flex-col items-center justify-center gap-1 ${seoViral ? 'bg-amber-400/10 border-amber-400/30 shadow-[inset_0_0_15px_rgba(251,191,36,0.1)]' : 'bg-muted/20 border-border/50'}`}
             >
-              <p className="text-[7px] font-black text-muted-foreground uppercase tracking-widest">VIRAL SEO</p>
-              <p className={`text-[9px] font-black uppercase tracking-tight ${seoViral ? 'text-amber-400' : 'text-muted-foreground/50'}`}>{seoViral ? 'ON' : 'OFF'}</p>
+               <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">VIRAL SEO</p>
+              <p className={`text-[11px] font-black uppercase tracking-tight ${seoViral ? 'text-amber-400' : 'text-slate-500'}`}>{seoViral ? 'ON' : 'OFF'}</p>
             </button>
             <button 
               onClick={() => setWithImage(!withImage)} 
               className={`p-3 rounded-2xl border transition-all flex flex-col items-center justify-center gap-1 ${withImage ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-muted/20 border-border/50'}`}
             >
-              <p className="text-[7px] font-black text-muted-foreground uppercase tracking-widest">IMAGE AI</p>
-              <p className={`text-[9px] font-black uppercase tracking-tight ${withImage ? 'text-emerald-400' : 'text-muted-foreground/50'}`}>{withImage ? 'WITH IMG' : 'TEXT ONLY'}</p>
+               <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">IMAGE AI</p>
+              <p className={`text-[11px] font-black uppercase tracking-tight ${withImage ? 'text-emerald-400' : 'text-slate-500'}`}>{withImage ? 'WITH IMG' : 'TEXT ONLY'}</p>
             </button>
           </div>
 
@@ -369,7 +369,7 @@ const CreatorPage: React.FC = () => {
             <button
               disabled={loading || !topic}
               onClick={handleGenerate}
-              className="w-full py-4 rounded-[24px] jewel-gold font-black text-[10px] uppercase tracking-[0.3em] shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-20 disabled:grayscale text-amber-950"
+              className="w-full py-4 rounded-[24px] jewel-gold font-black text-xs uppercase tracking-[0.3em] shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-20 disabled:grayscale text-amber-950"
             >
               {loading ? (
                 <><div className="w-3 h-3 border-2 border-amber-950/20 border-t-amber-950 rounded-full animate-spin"></div> PROCESSING...</>
@@ -382,19 +382,19 @@ const CreatorPage: React.FC = () => {
         {(result || generatedImg) && (
           <div className="animate-in fade-in zoom-in-95 duration-500 space-y-4 max-w-2xl mx-auto">
             <div className="flex justify-between items-center px-4">
-              <h3 className="text-[9px] font-black text-primary uppercase tracking-widest flex items-center gap-2">
+              <h3 className="text-[11px] font-black text-primary uppercase tracking-widest flex items-center gap-2">
                 <div className="w-1.5 h-3 bg-primary rounded-full"></div> AI OUTPUT
               </h3>
               <div className="flex gap-2">
                 <button 
                   onClick={() => navigator.clipboard.writeText(result)} 
-                  className="text-[8px] font-black text-muted-foreground hover:text-foreground transition-colors uppercase tracking-widest border border-border/50 px-2 py-1 rounded"
+                  className="text-[10px] font-black text-slate-400 hover:text-foreground transition-colors uppercase tracking-widest border border-border/50 px-2 py-1 rounded"
                 >
                   COPY
                 </button>
                 <button 
                   onClick={() => { setResult(''); setGeneratedImg(null); }} 
-                  className="text-[8px] font-black text-destructive/70 hover:text-destructive transition-colors uppercase tracking-widest border border-destructive/30 px-2 py-1 rounded"
+                  className="text-[10px] font-black text-destructive/80 hover:text-destructive transition-colors uppercase tracking-widest border border-destructive/30 px-2 py-1 rounded"
                 >
                   CLEAR
                 </button>
@@ -408,7 +408,7 @@ const CreatorPage: React.FC = () => {
             )}
             
             <div className="p-6 bg-card rounded-[32px] border border-border/50 shadow-xl">
-              <p className="text-[13px] leading-[2] font-medium text-foreground whitespace-pre-wrap">{result}</p>
+              <p className="text-sm leading-[2] font-medium text-foreground whitespace-pre-wrap">{result}</p>
             </div>
           </div>
         )}
