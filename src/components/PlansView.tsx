@@ -111,7 +111,7 @@ const PlansView: React.FC = () => {
     kpayName: "NAY WIN KYAW",
     waveNumber: "09967793288",
     waveName: "NAY WIN",
-    thaiBankName: "Krungsri Bank)",
+    thaiBankName: "Krungsri Bank (BAY)",
     thaiBankAcc: "6654523725",
     thaiBankHolder: "MR TUN TUN OO",
     messengerLink: "https://m.me/NAYWIN2027",
