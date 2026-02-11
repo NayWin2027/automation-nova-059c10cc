@@ -151,7 +151,6 @@ const Index = () => {
 
     // Admins always have access
     if (isAdmin) {
-      recordToolUsage(tool.id).catch(console.error);
       if (tool.route) {
         navigate(tool.route);
       } else {
@@ -202,10 +201,6 @@ const Index = () => {
       }
     }
 
-    // Record usage in background (for authenticated users)
-    if (isAuthenticated) {
-      recordToolUsage(tool.id).catch(console.error);
-    }
     if (tool.route) {
       navigate(tool.route);
     } else {
