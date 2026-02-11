@@ -118,8 +118,8 @@ const Index = () => {
   const [showContactDialog, setShowContactDialog] = useState(false);
 
   // Merge tool settings with default tools
-  const tools = defaultTools.map(tool => {
-    const setting = toolSettings.find(s => s.tool_id === tool.id);
+  const tools = defaultTools.map((tool) => {
+    const setting = toolSettings.find((s) => s.tool_id === tool.id);
     if (setting) {
       return {
         ...tool,
@@ -128,8 +128,8 @@ const Index = () => {
       };
     }
     return tool;
-  }).filter(tool => {
-    const setting = toolSettings.find(s => s.tool_id === tool.id);
+  }).filter((tool) => {
+    const setting = toolSettings.find((s) => s.tool_id === tool.id);
     return !setting || setting.is_enabled;
   });
   const handleToolClick = (tool: Tool) => {
@@ -169,7 +169,7 @@ const Index = () => {
 
     // PROMOTION MODE: Check IP/device-based promotion limits
     if (accessControl.promotionMode) {
-      const setting = toolSettings.find(s => s.tool_id === tool.id);
+      const setting = toolSettings.find((s) => s.tool_id === tool.id);
       // Skip promotion limit check for premium-only tools (already handled above)
       if (!setting?.is_premium) {
         const promoCheck = checkPromotionAccess(tool.id, accessControl.promotionDailyLimit || 3, accessControl.promotionToolCount || 3);
@@ -224,8 +224,8 @@ const Index = () => {
         </div>
       </div>
       <div className="grid grid-cols-3 gap-1.5 sm:gap-3 md:gap-4 lg:gap-6 max-w-4xl mx-auto">
-        {tools.map(tool => {
-        const setting = toolSettings.find(s => s.tool_id === tool.id);
+        {tools.map((tool) => {
+        const setting = toolSettings.find((s) => s.tool_id === tool.id);
         const isPremiumTool = setting?.is_premium && !accessControl.freeMode;
         return <div key={tool.id} className="relative">
               {/* Admin-only tier limits badge */}
@@ -311,7 +311,7 @@ const Index = () => {
       
       <header className="px-3 py-1 relative z-10" />
 
-      <main className="px-3 relative z-10">
+      <main className="px-3 relative z-10 text-primary-foreground">
         {activeTab === "home" && renderHomeContent()}
         {activeTab === "premium" && renderPremiumContent()}
         {activeTab === "settings" && renderSettingsContent()}
