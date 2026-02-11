@@ -155,134 +155,131 @@
     pointer-events: none;
   }
 
-  /* Keyboard Key - Ultra Luxury 3D Titanium Block */
+  /* Keyboard Key - Ultra Luxury 3D Cuboid Block (Reference Match) */
   .keyboard-key {
-    /* Brushed titanium body with fine grain texture */
+    /* Deep obsidian-black glass body */
     background: 
-      repeating-linear-gradient(
-        90deg,
-        hsl(220 10% 13%) 0px,
-        hsl(220 6% 10%) 1px,
-        hsl(220 12% 15%) 2px
-      ),
       linear-gradient(
-        155deg,
-        hsl(220 15% 18%) 0%,
-        hsl(225 12% 13%) 30%,
-        hsl(220 10% 8%) 100%
+        145deg,
+        hsl(220 20% 12%) 0%,
+        hsl(225 25% 7%) 40%,
+        hsl(230 20% 4%) 100%
       );
-    background-blend-mode: overlay;
-    /* Sharp neon rim - "power-on" glow */
-    border: 1.5px solid hsl(230 80% 60% / 0.4);
-    border-bottom: 28px solid hsl(225 25% 10%);
-    border-right: 6px solid hsl(230 20% 12%);
-    border-left: 2px solid hsl(245 60% 45% / 0.35);
-    border-radius: 0.75rem;
+    /* Thick electric blue neon rim */
+    border: 2px solid hsl(210 100% 55% / 0.6);
+    border-bottom: 30px solid hsl(210 100% 30% / 0.4);
+    border-right: 8px solid hsl(215 80% 25% / 0.5);
+    border-left: 3px solid hsl(220 90% 50% / 0.4);
+    border-radius: 1rem;
     aspect-ratio: 1 / 1;
-    width: 3.2rem;
-    max-width: 3.2rem;
-    padding: 0.5rem;
+    width: 3.6rem;
+    max-width: 3.6rem;
+    padding: 0.65rem;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.2rem;
+    gap: 0.25rem;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow:
-      /* Deep floating shadow - heavy block */
-      0 24px 50px hsl(0 0% 0% / 0.95),
-      0 12px 20px hsl(0 0% 0% / 0.8),
-      /* Sharp neon ambient rim */
-      0 0 8px hsl(235 80% 60% / 0.2),
-      0 0 18px hsl(210 100% 55% / 0.1),
-      0 0 40px hsl(230 70% 50% / 0.06),
-      /* Inner metallic sheen */
-      inset 0 1px 0 hsl(0 0% 100% / 0.08),
-      inset 0 -6px 16px hsl(0 0% 0% / 0.6);
+      /* Heavy floating shadow */
+      0 28px 55px hsl(0 0% 0% / 0.95),
+      0 14px 25px hsl(0 0% 0% / 0.85),
+      /* Electric blue ambient glow */
+      0 0 12px hsl(210 100% 55% / 0.25),
+      0 0 25px hsl(210 100% 50% / 0.12),
+      0 0 50px hsl(215 90% 50% / 0.08),
+      /* Inner depth */
+      inset 0 2px 0 hsl(0 0% 100% / 0.06),
+      inset 0 -8px 20px hsl(0 0% 0% / 0.7);
     cursor: pointer;
     position: relative;
     overflow: hidden;
   }
 
-  /* Top face: ultra-vibrant glossy indigo-to-cyan with sharp specular */
+  /* Top face: glossy black glass with bright specular highlights */
   .keyboard-key::before {
     content: '';
     position: absolute;
-    inset: 2px;
-    bottom: 6px;
+    inset: 3px;
+    bottom: 8px;
     background: 
-      /* Sharp studio-light specular streak */
+      /* Sharp white specular highlight - wet glass look */
       linear-gradient(
-        140deg,
-        hsl(0 0% 100% / 0.25) 0%,
-        hsl(0 0% 100% / 0.08) 15%,
-        transparent 35%
+        130deg,
+        hsl(0 0% 100% / 0.35) 0%,
+        hsl(0 0% 100% / 0.12) 12%,
+        transparent 30%
       ),
-      /* Vibrant indigo-cyan gradient face */
+      /* Subtle concave glass surface */
+      radial-gradient(
+        ellipse at 30% 20%,
+        hsl(220 30% 18% / 0.6) 0%,
+        transparent 60%
+      ),
+      /* Deep black glass */
       linear-gradient(
-        135deg,
-        hsl(245 85% 62%) 0%,
-        hsl(225 80% 55%) 30%,
-        hsl(200 95% 50%) 65%,
-        hsl(185 100% 48%) 100%
+        150deg,
+        hsl(225 30% 10%) 0%,
+        hsl(230 25% 5%) 50%,
+        hsl(220 20% 3%) 100%
       );
-    border-radius: 0.6rem;
+    border-radius: 0.75rem;
     pointer-events: none;
-    opacity: 0.75;
   }
 
-  /* Specular edge highlight - razor-sharp studio light catch */
+  /* Razor-sharp top-edge specular highlight */
   .keyboard-key::after {
     content: '';
     position: absolute;
     top: 0px;
-    left: 4%;
-    right: 4%;
-    height: 2px;
+    left: 6%;
+    right: 6%;
+    height: 2.5px;
     background: linear-gradient(
       90deg, 
       transparent 0%, 
-      hsl(220 100% 92% / 0.7) 20%, 
-      hsl(200 100% 97% / 0.95) 50%, 
-      hsl(245 90% 88% / 0.6) 80%, 
+      hsl(210 100% 80% / 0.5) 15%, 
+      hsl(0 0% 100% / 0.9) 50%, 
+      hsl(210 100% 80% / 0.5) 85%, 
       transparent 100%
     );
     border-radius: 1px;
     pointer-events: none;
-    filter: blur(0.3px);
+    filter: blur(0.2px);
   }
 
-  /* Hover: intense neon rim glow - "power-on" console feel */
+  /* Hover: intense neon blue rim - "power-on" console feel */
   .keyboard-key:hover {
-    transform: translateY(4px);
-    border-bottom-width: 22px;
-    border-color: hsl(210 100% 60% / 0.7);
-    border-bottom-color: hsl(225 25% 10%);
-    border-right-color: hsl(220 90% 55% / 0.5);
-    border-left-color: hsl(245 90% 65% / 0.5);
+    transform: translateY(5px);
+    border-bottom-width: 24px;
+    border-color: hsl(210 100% 60% / 0.85);
+    border-bottom-color: hsl(210 100% 35% / 0.5);
+    border-right-color: hsl(215 100% 55% / 0.7);
+    border-left-color: hsl(220 100% 60% / 0.7);
     box-shadow:
-      0 14px 35px hsl(230 70% 50% / 0.35),
-      /* Razor-sharp neon rim glow */
-      0 0 6px hsl(210 100% 65% / 0.6),
-      0 0 16px hsl(210 100% 60% / 0.4),
-      0 0 35px hsl(210 100% 55% / 0.25),
-      0 0 60px hsl(230 90% 60% / 0.12),
-      inset 0 1px 0 hsl(0 0% 100% / 0.12),
-      inset 0 -3px 8px hsl(0 0% 0% / 0.5);
+      0 16px 40px hsl(210 90% 50% / 0.3),
+      /* Intense neon rim glow */
+      0 0 8px hsl(210 100% 60% / 0.7),
+      0 0 20px hsl(210 100% 55% / 0.5),
+      0 0 45px hsl(210 100% 50% / 0.3),
+      0 0 80px hsl(215 90% 55% / 0.15),
+      inset 0 2px 0 hsl(0 0% 100% / 0.1),
+      inset 0 -4px 10px hsl(0 0% 0% / 0.5);
   }
 
-  /* Active: deep press with intense neon flash */
+  /* Active: deep press with neon flash */
   .keyboard-key:active {
-    transform: translateY(8px);
-    border-bottom-width: 16px;
-    border-color: hsl(210 100% 68% / 0.8);
-    border-bottom-color: hsl(225 25% 10%);
+    transform: translateY(10px);
+    border-bottom-width: 18px;
+    border-color: hsl(210 100% 65% / 0.9);
+    border-bottom-color: hsl(210 100% 35% / 0.5);
     box-shadow:
-      0 4px 12px hsl(0 0% 0% / 0.9),
-      0 0 10px hsl(210 100% 65% / 0.5),
-      0 0 30px hsl(210 100% 60% / 0.3),
-      0 0 50px hsl(230 90% 55% / 0.15),
-      inset 0 3px 8px hsl(0 0% 0% / 0.7);
+      0 6px 15px hsl(0 0% 0% / 0.9),
+      0 0 12px hsl(210 100% 60% / 0.6),
+      0 0 35px hsl(210 100% 55% / 0.35),
+      0 0 60px hsl(215 90% 50% / 0.2),
+      inset 0 4px 10px hsl(0 0% 0% / 0.7);
   }
 
   /* Legacy support - keep old class for compatibility */
