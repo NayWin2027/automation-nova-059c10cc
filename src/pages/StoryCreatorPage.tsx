@@ -575,7 +575,7 @@ const StoryView: React.FC = () => {
         <button
           onClick={() => appApiAllowed && setApiType("app")}
           disabled={!appApiAllowed}
-          className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${!appApiAllowed ? "opacity-40 cursor-not-allowed" : ""} ${apiType === "app" && appApiAllowed ? "jewel-sapphire jewel-surface text-white shadow-lg" : "text-slate-400"}`}
+          className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${!appApiAllowed ? "opacity-40 cursor-not-allowed" : ""} ${apiType === "app" && appApiAllowed ? "jewel-sapphire jewel-surface text-white shadow-lg" : "text-slate-300"}`}
         >
           {!appApiAllowed && <Lock className="w-3 h-3" />}
           APP SHARED API 🔒
@@ -583,7 +583,7 @@ const StoryView: React.FC = () => {
         <button
           onClick={() => ownApiAllowed && setApiType("own")}
           disabled={!ownApiAllowed}
-          className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${!ownApiAllowed ? "opacity-40 cursor-not-allowed" : ""} ${apiType === "own" && ownApiAllowed ? "jewel-sapphire jewel-surface text-white shadow-lg" : "text-slate-400"}`}
+          className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${!ownApiAllowed ? "opacity-40 cursor-not-allowed" : ""} ${apiType === "own" && ownApiAllowed ? "jewel-sapphire jewel-surface text-white shadow-lg" : "text-slate-300"}`}
         >
           {!ownApiAllowed && <Lock className="w-3 h-3" />}
           YOUR OWN API
@@ -621,7 +621,7 @@ const StoryView: React.FC = () => {
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="The Eternal Saga..."
-            className="w-full bg-black/40 border border-white/10 focus:border-purple-500/50 rounded-[20px] p-4 text-sm font-bold text-white outline-none transition-all placeholder:text-slate-600 shadow-inner"
+            className="w-full bg-black/40 border border-white/10 focus:border-purple-500/50 rounded-[20px] p-4 text-sm font-bold text-white outline-none transition-all placeholder:text-slate-500 shadow-inner"
           />
         </div>
 
@@ -642,7 +642,7 @@ const StoryView: React.FC = () => {
                 </option>
               ))}
             </select>
-            <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">▼</div>
+            <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-300">▼</div>
           </div>
         </div>
 
@@ -665,7 +665,7 @@ const StoryView: React.FC = () => {
               <button
                 key={genre}
                 onClick={() => toggleGenre(genre)}
-                className={`px-4 py-2 rounded-xl text-[8px] font-black transition-all border ${selectedGenres.includes(genre) ? "jewel-sapphire border-transparent text-white shadow-lg" : "bg-black/40 border-white/5 text-slate-400 hover:text-slate-200"}`}
+                className={`px-4 py-2 rounded-xl text-[8px] font-black transition-all border ${selectedGenres.includes(genre) ? "jewel-sapphire border-transparent text-white shadow-lg" : "bg-black/40 border-white/5 text-slate-300 hover:text-slate-200"}`}
               >
                 {genre}
               </button>
@@ -681,13 +681,13 @@ const StoryView: React.FC = () => {
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => setAuthorStyle("master")}
-              className={`py-4 rounded-[20px] font-black text-[8px] uppercase border transition-all ${authorStyle === "master" ? "jewel-sapphire text-white border-transparent shadow-lg" : "bg-black/40 text-slate-400 border-white/5"}`}
+              className={`py-4 rounded-[20px] font-black text-[8px] uppercase border transition-all ${authorStyle === "master" ? "jewel-sapphire text-white border-transparent shadow-lg" : "bg-black/40 text-slate-300 border-white/5"}`}
             >
               MASTER STORYTELLER
             </button>
             <button
               onClick={() => setAuthorStyle("modern")}
-              className={`py-4 rounded-[20px] font-black text-[8px] uppercase border transition-all ${authorStyle === "modern" ? "jewel-emerald text-white border-transparent shadow-lg" : "bg-black/40 text-slate-400 border-white/5"}`}
+              className={`py-4 rounded-[20px] font-black text-[8px] uppercase border transition-all ${authorStyle === "modern" ? "jewel-emerald text-white border-transparent shadow-lg" : "bg-black/40 text-slate-300 border-white/5"}`}
             >
               MODERN (စကားပြော)
             </button>
@@ -699,7 +699,7 @@ const StoryView: React.FC = () => {
           <div className="flex justify-between items-center">
             <h4 className="text-[10px] font-black text-blue-300 uppercase tracking-widest">CHARACTER CAST & EXTRAS</h4>
             <div className="flex items-center gap-2">
-              <span className="text-[7px] font-black text-slate-400 uppercase">TOTAL:</span>
+              <span className="text-[7px] font-black text-slate-300 uppercase">TOTAL:</span>
               <input
                 type="number"
                 value={targetCharCount}
@@ -762,11 +762,11 @@ const StoryView: React.FC = () => {
                       setCharacters(characters.map((c) => (c.id === char.id ? { ...c, name: e.target.value } : c)))
                     }
                     placeholder={char.type === "Extra" ? "Group Name..." : "Name..."}
-                    className="flex-1 bg-transparent border-none focus:ring-0 text-[10px] font-bold text-white placeholder:text-slate-600"
+                    className="flex-1 bg-transparent border-none focus:ring-0 text-[10px] font-bold text-white placeholder:text-slate-500"
                   />
                   <button
                     onClick={() => removeCharacter(char.id)}
-                    className="w-6 h-6 rounded-full hover:bg-white/5 flex items-center justify-center text-slate-500 hover:text-rose-500 transition-colors text-sm"
+                    className="w-6 h-6 rounded-full hover:bg-white/5 flex items-center justify-center text-slate-400 hover:text-rose-500 transition-colors text-sm"
                   >
                     ×
                   </button>
@@ -795,7 +795,7 @@ const StoryView: React.FC = () => {
               </div>
             ))}
             {characters.length === 0 && (
-              <p className="text-center text-[8px] text-slate-600 font-bold py-2">
+              <p className="text-center text-[8px] text-slate-400 font-bold py-2">
                 NO CHARACTERS? AI WILL AUTO-CAST PREMIUM CHARACTERS.
               </p>
             )}
@@ -824,7 +824,7 @@ const StoryView: React.FC = () => {
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-[7px] font-black text-slate-400 uppercase tracking-widest ml-1">
+              <label className="text-[7px] font-black text-slate-300 uppercase tracking-widest ml-1">
                 ENDING STYLE
               </label>
               <select
@@ -840,7 +840,7 @@ const StoryView: React.FC = () => {
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-[7px] font-black text-slate-400 uppercase tracking-widest ml-1">
+              <label className="text-[7px] font-black text-slate-300 uppercase tracking-widest ml-1">
                 POV (ရှုထောင့်)
               </label>
               <select

@@ -436,13 +436,13 @@ export default function TranscriptionView() {
       <div className="bg-[#121826]/80 backdrop-blur-2xl p-1.5 rounded-[40px] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex gap-2 max-w-sm mx-auto">
         <button
           onClick={() => setApiType("app")}
-          className={`flex-1 py-4 rounded-[32px] font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${apiType === "app" ? "bg-[#5e5ce6] text-white shadow-lg shadow-indigo-500/40" : "text-slate-500 hover:text-slate-300"}`}
+          className={`flex-1 py-4 rounded-[32px] font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${apiType === "app" ? "bg-[#5e5ce6] text-white shadow-lg shadow-indigo-500/40" : "text-slate-400 hover:text-slate-200"}`}
         >
           APP API <span className="text-xs">🔒</span>
         </button>
         <button
           onClick={() => setApiType("own")}
-          className={`flex-1 py-4 rounded-[32px] font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${apiType === "own" ? "bg-[#5e5ce6] text-white shadow-lg shadow-indigo-500/40" : "text-slate-500 hover:text-slate-300"}`}
+          className={`flex-1 py-4 rounded-[32px] font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${apiType === "own" ? "bg-[#5e5ce6] text-white shadow-lg shadow-indigo-500/40" : "text-slate-400 hover:text-slate-200"}`}
         >
           OWN API <span className="text-xs">🔒</span>
         </button>
@@ -459,9 +459,9 @@ export default function TranscriptionView() {
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
             placeholder="Paste your API key here..."
-            className="w-full bg-black/40 border border-indigo-500/30 rounded-xl p-3 text-xs font-bold text-indigo-100 outline-none focus:ring-1 focus:ring-indigo-500 placeholder:text-slate-600 shadow-inner"
+            className="w-full bg-black/40 border border-indigo-500/30 rounded-xl p-3 text-xs font-bold text-indigo-100 outline-none focus:ring-1 focus:ring-indigo-500 placeholder:text-slate-500 shadow-inner"
           />
-          <p className="text-[8px] text-indigo-300/60 ml-1">Tab ပိတ်လိုက်ရင် Key ပျောက်သွားပါမယ်</p>
+          <p className="text-[8px] text-indigo-300/80 ml-1">Tab ပိတ်လိုက်ရင် Key ပျောက်သွားပါမယ်</p>
         </div>
       )}
 
@@ -472,7 +472,7 @@ export default function TranscriptionView() {
         </h2>
 
         <div className="space-y-2">
-          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+          <label className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">
             <EditableText value={s.languageLabel} onChange={(v) => setEditSettings({ ...editSettings, languageLabel: v })} />
           </label>
           <div className="relative">
@@ -485,7 +485,7 @@ export default function TranscriptionView() {
                 <option key={l} value={l}>{l}</option>
               ))}
             </select>
-            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
           </div>
         </div>
 
@@ -504,7 +504,7 @@ export default function TranscriptionView() {
           <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500 shadow-inner">
             <Download className="w-6 h-6" />
           </div>
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 group-hover:text-blue-400 transition-colors text-center">
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300 group-hover:text-blue-400 transition-colors text-center">
             {selectedFile ? selectedFile.name.toUpperCase() : (
               <EditableText value={s.uploadText} onChange={(v) => setEditSettings({ ...editSettings, uploadText: v })} />
             )}
@@ -514,7 +514,7 @@ export default function TranscriptionView() {
         {/* CREDIT TIERS (ONLY IF FILE SELECTED) */}
         {selectedFile && !result && (
           <div className="space-y-4 animate-in zoom-in-95 duration-300">
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block text-center">
+            <label className="text-[10px] font-bold text-slate-300 uppercase tracking-widest block text-center">
               <EditableText value={s.tierLabel} onChange={(v) => setEditSettings({ ...editSettings, tierLabel: v })} />
             </label>
             <div className="grid grid-cols-2 gap-2">
@@ -523,7 +523,7 @@ export default function TranscriptionView() {
                   key={idx}
                   onClick={() => !isEditing && !tierLocked && setSelectedTier(tier.value)}
                   disabled={tierLocked && selectedTier !== tier.value}
-                  className={`p-4 rounded-xl border transition-all flex flex-col items-center justify-center gap-1 ${selectedTier === tier.value ? "bg-blue-600 border-blue-400 shadow-lg shadow-blue-500/20" : "bg-white/5 border-white/5 text-slate-500 hover:border-white/10"} ${tierLocked && selectedTier !== tier.value ? "opacity-30 cursor-not-allowed" : ""}`}
+                  className={`p-4 rounded-xl border transition-all flex flex-col items-center justify-center gap-1 ${selectedTier === tier.value ? "bg-blue-600 border-blue-400 shadow-lg shadow-blue-500/20" : "bg-white/5 border-white/5 text-slate-300 hover:border-white/10"} ${tierLocked && selectedTier !== tier.value ? "opacity-30 cursor-not-allowed" : ""}`}
                 >
                   {isEditing ? (
                     <>
@@ -560,7 +560,7 @@ export default function TranscriptionView() {
                       <span className={`text-[8px] font-black uppercase ${selectedTier === tier.value ? "text-blue-100" : ""}`}>
                         {tier.label}
                       </span>
-                      <span className={`text-xs font-black ${selectedTier === tier.value ? "text-white" : "text-slate-400"}`}>
+                      <span className={`text-xs font-black ${selectedTier === tier.value ? "text-white" : "text-slate-300"}`}>
                         {tier.credits} CRD
                       </span>
                     </>
@@ -598,7 +598,7 @@ export default function TranscriptionView() {
             <button
               onClick={handleTranscribe}
               disabled={isTranscribing || selectedTier === null}
-              className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl transition-all active:scale-95 ${isTranscribing || selectedTier === null ? "bg-slate-800 text-slate-500" : "bg-blue-600 text-white hover:bg-blue-500"}`}
+              className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl transition-all active:scale-95 ${isTranscribing || selectedTier === null ? "bg-slate-800 text-slate-400" : "bg-blue-600 text-white hover:bg-blue-500"}`}
             >
               {isTranscribing ? (
                 <div className="flex items-center justify-center gap-3">
@@ -635,7 +635,7 @@ export default function TranscriptionView() {
                   setCopied(true);
                   setTimeout(() => setCopied(false), 2000);
                 }}
-                className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-slate-400 transition-colors"
+                className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-slate-300 transition-colors"
               >
                 {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
               </button>
@@ -669,7 +669,7 @@ export default function TranscriptionView() {
 
           <div className="bg-[#0a0f1d] border border-amber-500/20 rounded-2xl p-5 space-y-4">
             <div className="space-y-2">
-              <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
+              <label className="text-[9px] font-black text-slate-300 uppercase tracking-widest">
                 <EditableText value={s.scriptNicheLabel} onChange={(v) => setEditSettings({ ...editSettings, scriptNicheLabel: v })} />
               </label>
               <div className="relative">
@@ -682,7 +682,7 @@ export default function TranscriptionView() {
                     <option key={n} value={n}>{n}</option>
                   ))}
                 </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
               </div>
             </div>
 
@@ -691,7 +691,7 @@ export default function TranscriptionView() {
               disabled={isGeneratingScript}
               className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl transition-all active:scale-95 flex items-center justify-center gap-3 ${
                 isGeneratingScript
-                  ? "bg-slate-800 text-slate-500"
+                  ? "bg-slate-800 text-slate-400"
                   : "bg-gradient-to-r from-amber-600 to-orange-600 text-white hover:from-amber-500 hover:to-orange-500"
               }`}
             >
@@ -723,7 +723,7 @@ export default function TranscriptionView() {
                 <div className="flex gap-2">
                   <button
                     onClick={handleCopyScript}
-                    className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-slate-400 transition-colors"
+                    className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-slate-300 transition-colors"
                   >
                     {scriptCopied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
                   </button>
@@ -753,7 +753,7 @@ export default function TranscriptionView() {
         </div>
         <div className="space-y-3">
           {s.howToUseSteps.map((step, idx) => (
-            <p key={idx} className="text-[11px] font-medium text-slate-400 leading-relaxed">
+            <p key={idx} className="text-[11px] font-medium text-slate-300 leading-relaxed">
               {isEditing ? (
                 <input
                   type="text"

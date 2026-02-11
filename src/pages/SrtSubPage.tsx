@@ -258,13 +258,13 @@ const SrtTranslatorView: React.FC = () => {
 
       <div className="neon-glass rounded-[28px] p-6 flex justify-between items-center border border-white/5 shadow-xl">
         <div className="space-y-1">
-          <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">APP QUOTA (TODAY)</p>
+          <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest">APP QUOTA (TODAY)</p>
           <p className="text-xl font-black text-rose-500 drop-shadow-[0_0_10px_rgba(244,63,94,0.4)] font-mono">
             0 / 0 Used
           </p>
         </div>
         <div className="text-right space-y-1">
-          <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">STATUS CLASS</p>
+          <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest">STATUS CLASS</p>
           <p className="text-[11px] font-black text-blue-300 uppercase tracking-widest glow-text">GUEST MODE</p>
         </div>
       </div>
@@ -279,7 +279,7 @@ const SrtTranslatorView: React.FC = () => {
             placeholder="Paste Private Key..."
             className="w-full bg-black/50 border border-white/5 rounded-xl p-4 text-xs font-bold text-white outline-none focus:ring-1 focus:ring-emerald-500"
           />
-          <p className="text-[8px] text-emerald-300/60 ml-1">Tab ပိတ်လိုက်ရင် Key ပျောက်သွားပါမယ်</p>
+          <p className="text-[8px] text-emerald-300/80 ml-1">Tab ပိတ်လိုက်ရင် Key ပျောက်သွားပါမယ်</p>
         </div>
       )}
 
@@ -339,7 +339,7 @@ const SrtTranslatorView: React.FC = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">
+                <label className="text-[9px] font-black text-slate-300 uppercase tracking-widest ml-1">
                   TARGET LANGUAGE
                 </label>
                 <select
@@ -356,12 +356,12 @@ const SrtTranslatorView: React.FC = () => {
               </div>
 
               <div className="space-y-2">
-                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">
+                <label className="text-[9px] font-black text-slate-300 uppercase tracking-widest ml-1">
                   DUAL SUBTITLE MODE
                 </label>
                 <button
                   onClick={() => setDualMode(!dualMode)}
-                  className={`w-full p-4 rounded-2xl border transition-all flex justify-between items-center ${dualMode ? "bg-emerald-500/10 border-emerald-500/50 text-white" : "bg-white/5 border-white/5 text-slate-500"}`}
+                  className={`w-full p-4 rounded-2xl border transition-all flex justify-between items-center ${dualMode ? "bg-emerald-500/10 border-emerald-500/50 text-white" : "bg-white/5 border-white/5 text-slate-300"}`}
                 >
                   <span className="text-[10px] font-black uppercase">DUAL-SUB</span>
                   <div
@@ -376,7 +376,7 @@ const SrtTranslatorView: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">
+              <label className="text-[9px] font-black text-slate-300 uppercase tracking-widest ml-1">
                 SELECT CREDIT TIER
               </label>
               <div className="grid grid-cols-4 gap-2">
@@ -384,11 +384,11 @@ const SrtTranslatorView: React.FC = () => {
                   <button
                     key={v}
                     onClick={() => setSelectedTier(v)}
-                    className={`py-3 rounded-xl border flex flex-col items-center justify-center transition-all ${selectedTier === v ? "jewel-emerald border-transparent text-white shadow-xl scale-105" : "bg-slate-900/60 border-white/5 text-slate-500"}`}
+                    className={`py-3 rounded-xl border flex flex-col items-center justify-center transition-all ${selectedTier === v ? "jewel-emerald border-transparent text-white shadow-xl scale-105" : "bg-slate-900/60 border-white/5 text-slate-300"}`}
                   >
                     <span className="text-[9px] font-black uppercase tracking-tight">{v} LINES</span>
                     <span
-                      className={`text-[8px] font-black mt-0.5 ${selectedTier === v ? "text-white" : "text-slate-600"}`}
+                      className={`text-[8px] font-black mt-0.5 ${selectedTier === v ? "text-white" : "text-slate-400"}`}
                     >
                       {Math.round(v / 150)} CRD
                     </span>
@@ -427,7 +427,7 @@ const SrtTranslatorView: React.FC = () => {
               "၄။ ထုတ်ချင်တဲ့ Target Language ဘာသာစကားကိုရွေးပါ။",
               "၅။ စထုတ်နိုင်ပါပြီ။",
             ].map((text, idx) => (
-              <li key={idx} className="text-sm font-medium text-slate-400 flex gap-3 items-start">
+              <li key={idx} className="text-sm font-medium text-slate-300 flex gap-3 items-start">
                 <span className="text-blue-500 font-black shrink-0 mt-0.5">•</span>
                 {text}
               </li>
@@ -465,7 +465,7 @@ const SrtTranslatorView: React.FC = () => {
             <div className="flex gap-3">
               <button
                 onClick={() => navigator.clipboard.writeText(translated)}
-                className="text-[9px] font-black text-slate-400 hover:text-white uppercase"
+                className="text-[9px] font-black text-slate-300 hover:text-white uppercase"
               >
                 COPY
               </button>

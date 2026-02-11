@@ -253,7 +253,7 @@ const TranslateView: React.FC = () => {
           className={`flex-1 py-3.5 rounded-2xl premium-font text-[8px] font-bold transition-all flex items-center justify-center gap-2 ${
             apiType === "app"
               ? "jewel-sapphire jewel-surface text-white shadow-xl scale-105"
-              : "text-slate-500 hover:text-slate-300"
+              : "text-slate-400 hover:text-slate-200"
           }`}
         >
           APP ACCESS <Lock className="w-2.5 h-2.5 text-amber-400" />
@@ -263,7 +263,7 @@ const TranslateView: React.FC = () => {
           className={`flex-1 py-3.5 rounded-2xl premium-font text-[8px] font-bold transition-all ${
             apiType === "own"
               ? "jewel-sapphire jewel-surface text-white shadow-xl scale-105"
-              : "text-slate-500 hover:text-slate-300"
+              : "text-slate-400 hover:text-slate-200"
           }`}
         >
           PRIVATE API
@@ -282,7 +282,7 @@ const TranslateView: React.FC = () => {
             placeholder="PASTE AIza... KEY HERE"
             className="w-full bg-black/50 border border-white/10 rounded-2xl px-6 h-14 text-xs font-black tracking-widest text-white outline-none focus:ring-1 focus:ring-blue-500 shadow-inner"
           />
-          <p className="text-[8px] text-blue-300/60 mt-2 ml-2">Tab ပိတ်လိုက်ရင် Key ပျောက်သွားပါမယ်</p>
+          <p className="text-[8px] text-blue-300/80 mt-2 ml-2">Tab ပိတ်လိုက်ရင် Key ပျောက်သွားပါမယ်</p>
         </div>
       )}
 
@@ -331,7 +331,7 @@ const TranslateView: React.FC = () => {
                 className={`px-5 py-3 rounded-2xl shrink-0 flex items-center gap-2 transition-all border ${
                   selectedEmotion === emo.label
                     ? "jewel-gold text-white shadow-lg scale-105 border-white/20"
-                    : "bg-black/40 border-white/5 text-slate-500 hover:text-slate-300"
+                    : "bg-black/40 border-white/5 text-slate-400 hover:text-slate-200"
                 }`}
               >
                 <span className="text-sm">{emo.icon}</span>
@@ -347,7 +347,7 @@ const TranslateView: React.FC = () => {
             <h4 className="text-[11px] font-black text-white tracking-[0.3em] uppercase premium-font">
               TARGET LANGUAGE
             </h4>
-            <p className="text-[8px] font-bold text-slate-600 tracking-widest uppercase">
+            <p className="text-[8px] font-bold text-slate-400 tracking-widest uppercase">
               ၈၀ ကျော်သော ဘာသာစကားများကို ပံ့ပိုးပေးထားသည်
             </p>
           </div>
@@ -363,7 +363,7 @@ const TranslateView: React.FC = () => {
                 </option>
               ))}
             </select>
-            <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+            <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
           </div>
         </div>
 
@@ -393,7 +393,7 @@ const TranslateView: React.FC = () => {
                   {mode.title}
                 </h5>
                 <p
-                  className={`text-[10px] font-bold leading-relaxed ${selectedMode === mode.id ? "text-white/80" : "text-slate-600"}`}
+                  className={`text-[10px] font-bold leading-relaxed ${selectedMode === mode.id ? "text-white/80" : "text-slate-400"}`}
                 >
                   {mode.desc}
                 </p>
@@ -409,7 +409,7 @@ const TranslateView: React.FC = () => {
             className={`p-5 rounded-[32px] border transition-all flex flex-col items-center justify-center gap-2 shadow-lg ${
               autoFormat
                 ? "bg-emerald-600/20 border-emerald-500 text-emerald-400"
-                : "bg-black/40 border-white/5 text-slate-600"
+                : "bg-black/40 border-white/5 text-slate-400"
             }`}
           >
             <Wand2 className={`w-5 h-5 ${autoFormat ? "animate-bounce" : ""}`} />
@@ -420,7 +420,7 @@ const TranslateView: React.FC = () => {
             className={`p-5 rounded-[32px] border transition-all flex flex-col items-center justify-center gap-2 shadow-lg ${
               paraphraseMode
                 ? "bg-blue-600/20 border-blue-500 text-blue-400"
-                : "bg-black/40 border-white/5 text-slate-600"
+                : "bg-black/40 border-white/5 text-slate-400"
             }`}
           >
             <MessageSquareQuote className={`w-5 h-5 ${paraphraseMode ? "animate-pulse" : ""}`} />
@@ -430,7 +430,7 @@ const TranslateView: React.FC = () => {
 
         {/* Credit Tiers (6 Stage Grid) */}
         <div className="space-y-6 pt-4 border-t border-white/5">
-          <h4 className="text-[10px] font-black text-slate-500 tracking-[0.3em] uppercase ml-2 text-center md:text-left premium-font">
+          <h4 className="text-[10px] font-black text-slate-300 tracking-[0.3em] uppercase ml-2 text-center md:text-left premium-font">
             SELECT CREDIT TIER (CHAR-COUNT)
           </h4>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -445,11 +445,11 @@ const TranslateView: React.FC = () => {
                 }`}
               >
                 <span
-                  className={`text-[8px] font-bold tracking-widest uppercase premium-font ${selectedTier === idx ? "text-indigo-100" : "text-slate-600"}`}
+                  className={`text-[8px] font-bold tracking-widest uppercase premium-font ${selectedTier === idx ? "text-indigo-100" : "text-slate-400"}`}
                 >
                   {tier.label}
                 </span>
-                <span className={`text-[14px] font-black ${selectedTier === idx ? "text-white" : "text-slate-400"}`}>
+                <span className={`text-[14px] font-black ${selectedTier === idx ? "text-white" : "text-slate-300"}`}>
                   {tier.credits} CREDITS
                 </span>
               </button>
@@ -498,7 +498,7 @@ const TranslateView: React.FC = () => {
                 setCopied(true);
                 setTimeout(() => setCopied(false), 2000);
               }}
-              className="text-[9px] font-bold premium-font text-slate-500 hover:text-white transition-all tracking-widest uppercase flex items-center gap-3 bg-white/5 px-6 py-3 rounded-2xl border border-white/5"
+              className="text-[9px] font-bold premium-font text-slate-400 hover:text-white transition-all tracking-widest uppercase flex items-center gap-3 bg-white/5 px-6 py-3 rounded-2xl border border-white/5"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}{" "}
               {copied ? "SYNCED" : "COPY TEXT"}
