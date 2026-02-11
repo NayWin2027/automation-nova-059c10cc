@@ -155,21 +155,24 @@
     pointer-events: none;
   }
 
-  /* Keyboard Key - Ultra Luxury 3D Cuboid Block (Reference Match) */
+  /* Keyboard Key - Ultra Luxury 3D Cuboid Block */
   .keyboard-key {
     /* Deep obsidian-black glass body */
     background: 
       linear-gradient(
         145deg,
-        hsl(220 20% 12%) 0%,
-        hsl(225 25% 7%) 40%,
-        hsl(230 20% 4%) 100%
+        hsl(220 15% 10%) 0%,
+        hsl(225 20% 5%) 50%,
+        hsl(230 18% 3%) 100%
       );
-    /* Thick electric blue neon rim */
-    border: 2px solid hsl(210 100% 55% / 0.6);
-    border-bottom: 30px solid hsl(210 100% 30% / 0.4);
-    border-right: 8px solid hsl(215 80% 25% / 0.5);
-    border-left: 3px solid hsl(220 90% 50% / 0.4);
+    /* Laser-thin intense neon rim */
+    border: 1.5px solid hsl(210 100% 58% / 0.7);
+    /* Real 3D side walls - dark metallic textured extrusion */
+    border-bottom: 28px solid;
+    border-bottom-color: hsl(215 30% 8%);
+    border-right: 7px solid hsl(215 25% 10%);
+    border-left: 2px solid hsl(220 80% 55% / 0.5);
+    border-image: none;
     border-radius: 1rem;
     aspect-ratio: 1 / 1;
     width: 3.6rem;
@@ -182,103 +185,107 @@
     gap: 0.25rem;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow:
-      /* Heavy floating shadow */
-      0 28px 55px hsl(0 0% 0% / 0.95),
-      0 14px 25px hsl(0 0% 0% / 0.85),
-      /* Electric blue ambient glow */
-      0 0 12px hsl(210 100% 55% / 0.25),
-      0 0 25px hsl(210 100% 50% / 0.12),
-      0 0 50px hsl(215 90% 50% / 0.08),
+      /* Heavy floating shadow for 3D depth */
+      0 30px 60px hsl(0 0% 0% / 0.95),
+      0 15px 30px hsl(0 0% 0% / 0.85),
+      /* Side wall metallic gradient illusion */
+      4px 20px 0px -2px hsl(210 40% 12%),
+      6px 22px 0px -3px hsl(215 30% 8%),
+      /* Laser neon ambient glow */
+      0 0 6px hsl(210 100% 58% / 0.35),
+      0 0 15px hsl(210 100% 55% / 0.15),
+      0 0 40px hsl(215 90% 50% / 0.06),
       /* Inner depth */
-      inset 0 2px 0 hsl(0 0% 100% / 0.06),
+      inset 0 1px 0 hsl(0 0% 100% / 0.08),
       inset 0 -8px 20px hsl(0 0% 0% / 0.7);
     cursor: pointer;
     position: relative;
     overflow: hidden;
   }
 
-  /* Top face: glossy black glass with bright specular highlights */
+  /* Top face: glossy black glass with sharp specular */
   .keyboard-key::before {
     content: '';
     position: absolute;
-    inset: 3px;
-    bottom: 8px;
+    inset: 2px;
+    bottom: 6px;
     background: 
-      /* Sharp white specular highlight - wet glass look */
+      /* Sharp pure-white specular highlight - studio light reflection */
       linear-gradient(
-        130deg,
-        hsl(0 0% 100% / 0.35) 0%,
-        hsl(0 0% 100% / 0.12) 12%,
-        transparent 30%
+        125deg,
+        hsl(0 0% 100% / 0.45) 0%,
+        hsl(0 0% 100% / 0.15) 8%,
+        hsl(0 0% 100% / 0.03) 18%,
+        transparent 28%
       ),
-      /* Subtle concave glass surface */
+      /* Subtle concave glass */
       radial-gradient(
-        ellipse at 30% 20%,
-        hsl(220 30% 18% / 0.6) 0%,
-        transparent 60%
+        ellipse at 25% 15%,
+        hsl(220 25% 15% / 0.5) 0%,
+        transparent 55%
       ),
       /* Deep black glass */
       linear-gradient(
         150deg,
-        hsl(225 30% 10%) 0%,
-        hsl(230 25% 5%) 50%,
-        hsl(220 20% 3%) 100%
+        hsl(225 25% 8%) 0%,
+        hsl(230 20% 4%) 50%,
+        hsl(220 15% 2%) 100%
       );
-    border-radius: 0.75rem;
+    border-radius: 0.8rem;
     pointer-events: none;
   }
 
-  /* Razor-sharp top-edge specular highlight */
+  /* Pure white razor-sharp top-edge specular line */
   .keyboard-key::after {
     content: '';
     position: absolute;
     top: 0px;
-    left: 6%;
-    right: 6%;
-    height: 2.5px;
+    left: 8%;
+    right: 8%;
+    height: 1.5px;
     background: linear-gradient(
       90deg, 
       transparent 0%, 
-      hsl(210 100% 80% / 0.5) 15%, 
-      hsl(0 0% 100% / 0.9) 50%, 
-      hsl(210 100% 80% / 0.5) 85%, 
+      hsl(0 0% 100% / 0.6) 20%, 
+      hsl(0 0% 100% / 1) 50%, 
+      hsl(0 0% 100% / 0.6) 80%, 
       transparent 100%
     );
     border-radius: 1px;
     pointer-events: none;
-    filter: blur(0.2px);
   }
 
-  /* Hover: intense neon blue rim - "power-on" console feel */
+  /* Hover: laser-thin intense neon rim */
   .keyboard-key:hover {
     transform: translateY(5px);
-    border-bottom-width: 24px;
-    border-color: hsl(210 100% 60% / 0.85);
-    border-bottom-color: hsl(210 100% 35% / 0.5);
-    border-right-color: hsl(215 100% 55% / 0.7);
-    border-left-color: hsl(220 100% 60% / 0.7);
+    border-bottom-width: 22px;
+    border-color: hsl(210 100% 62% / 0.9);
+    border-bottom-color: hsl(215 30% 10%);
+    border-right-color: hsl(215 60% 35% / 0.8);
+    border-left-color: hsl(220 100% 62% / 0.8);
     box-shadow:
-      0 16px 40px hsl(210 90% 50% / 0.3),
-      /* Intense neon rim glow */
-      0 0 8px hsl(210 100% 60% / 0.7),
-      0 0 20px hsl(210 100% 55% / 0.5),
-      0 0 45px hsl(210 100% 50% / 0.3),
-      0 0 80px hsl(215 90% 55% / 0.15),
-      inset 0 2px 0 hsl(0 0% 100% / 0.1),
-      inset 0 -4px 10px hsl(0 0% 0% / 0.5);
+      0 18px 45px hsl(210 90% 50% / 0.25),
+      4px 14px 0px -2px hsl(210 50% 15%),
+      /* Laser neon glow */
+      0 0 4px hsl(210 100% 62% / 0.9),
+      0 0 12px hsl(210 100% 58% / 0.6),
+      0 0 30px hsl(210 100% 55% / 0.35),
+      0 0 60px hsl(215 90% 55% / 0.12),
+      inset 0 1px 0 hsl(0 0% 100% / 0.12),
+      inset 0 -3px 8px hsl(0 0% 0% / 0.5);
   }
 
-  /* Active: deep press with neon flash */
+  /* Active: deep press with laser flash */
   .keyboard-key:active {
     transform: translateY(10px);
-    border-bottom-width: 18px;
-    border-color: hsl(210 100% 65% / 0.9);
-    border-bottom-color: hsl(210 100% 35% / 0.5);
+    border-bottom-width: 16px;
+    border-color: hsl(210 100% 65% / 0.95);
+    border-bottom-color: hsl(215 30% 10%);
     box-shadow:
       0 6px 15px hsl(0 0% 0% / 0.9),
-      0 0 12px hsl(210 100% 60% / 0.6),
-      0 0 35px hsl(210 100% 55% / 0.35),
-      0 0 60px hsl(215 90% 50% / 0.2),
+      0 0 6px hsl(210 100% 62% / 0.8),
+      0 0 20px hsl(210 100% 58% / 0.4),
+      0 0 45px hsl(215 90% 50% / 0.15),
       inset 0 4px 10px hsl(0 0% 0% / 0.7);
   }
 
