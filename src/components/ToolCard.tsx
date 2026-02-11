@@ -25,7 +25,7 @@ export function ToolCard({
   isPremium,
   onClick
 }: ToolCardProps) {
-  return <button onClick={onClick} className="keyboard-key group relative font-sans py-[50px] px-[50px] pb-[10px] pt-[20px] pl-[60px] pr-[80px]">
+  return <button onClick={onClick} className="keyboard-key group relative font-sans px-[100px] pl-[70px] pt-[50px] pb-[50px] pr-[100px] text-4xl border-black border-double border">
       {/* Gradient fill covering entire key surface */}
       <div className={`absolute inset-0 rounded-[inherit] bg-gradient-to-br ${GRADIENT_MAP[gradient] || GRADIENT_MAP.cyan} z-[2] pointer-events-none mix-blend-screen`} />
 
