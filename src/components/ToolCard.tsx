@@ -23,9 +23,9 @@ export function ToolCard({
           </div>
         </div>}
       
-      <Icon className="w-6 h-6 text-white/90 drop-shadow-[0_0_10px_hsl(260,100%,75%)] mb-1" strokeWidth={1.5} />
+      <Icon className="w-7 h-7 text-white/90 drop-shadow-[0_0_8px_hsl(0,0%,100%,0.3)]" strokeWidth={1.5} />
       
-      <h3 className="text-3xs font-bold text-white/80 text-center leading-tight tracking-wide">
+      <h3 className="text-3xs font-bold text-white/70 text-center leading-tight tracking-wide">
         {title}
       </h3>
     </button>;
