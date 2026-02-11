@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { getPublicIp, getDeviceModel } from '@/utils/deviceInfo';
 
 interface ToolSetting {
   tool_id: string;
@@ -123,7 +124,12 @@ export function useCreditDeduction() {
         return { success: false, error: 'Failed to deduct credits' };
       }
 
-      // Log the usage
+      // Log the usage with real IP and device info
+      const [userIp, userDevice] = await Promise.all([
+        getPublicIp(),
+        Promise.resolve(getDeviceModel()),
+      ]);
+
       await supabase.from('activity_logs').insert({
         user_id: user.id,
         tool_name: toolId,
@@ -131,7 +137,9 @@ export function useCreditDeduction() {
         metadata: { 
           credits_deducted: creditCost,
           new_balance: newBalance,
-          used_app_key: true
+          used_app_key: true,
+          ip_address: userIp,
+          device_model: userDevice,
         }
       });
 
