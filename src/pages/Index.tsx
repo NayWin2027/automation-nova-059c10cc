@@ -32,7 +32,7 @@ const defaultTools = [{
   id: "story",
   icon: FileText,
   title: "Story Creator",
-  description: "ပုံပြင်ဖန်တီး" ရေးသားခြင်း။",
+  description: "ပုံပြင်ဖန်တီး ရေးသားခြင်း။",
   gradient: "violet" as const,
   route: "/story"
 }, {
