@@ -25,7 +25,7 @@ export function ToolCard({
   isPremium,
   onClick
 }: ToolCardProps) {
-  return <button onClick={onClick} className="keyboard-key group relative font-sans px-[100px] pl-[70px] pt-[50px] pb-[50px] pr-[100px] text-4xl border-black border-double border">
+  return <button onClick={onClick} className="keyboard-key group relative font-sans px-[100px] pl-[70px] pt-[50px] pb-[50px] pr-[100px] border-black border-double border text-xs font-thin text-gold-dark">
       {/* Gradient fill covering entire key surface */}
       <div className={`absolute inset-0 rounded-[inherit] bg-gradient-to-br ${GRADIENT_MAP[gradient] || GRADIENT_MAP.cyan} z-[2] pointer-events-none mix-blend-screen`} />
 
@@ -39,7 +39,7 @@ export function ToolCard({
       <Icon className="w-6 h-6 text-white drop-shadow-[0_0_8px_hsl(210,100%,70%,0.3)] relative z-10" strokeWidth={1.5} />
       
       <h3
-      className="text-[11px] font-bold text-white text-center leading-tight relative z-10 mt-0.5"
+      className="text-center leading-tight relative z-10 mt-0.5 text-lg font-extrabold mx-[50px] text-white"
       style={{
         fontFamily: "'Caveat', cursive",
         textShadow: '0 0 8px hsl(200,100%,70%,0.9), 0 0 20px hsl(220,100%,60%,0.5), 0 2px 4px rgba(0,0,0,0.8)',
