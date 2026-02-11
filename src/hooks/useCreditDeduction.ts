@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { getPublicIp, getDeviceModel } from '@/utils/deviceInfo';
+
 
 interface ToolSetting {
   tool_id: string;
@@ -113,65 +113,32 @@ export function useCreditDeduction() {
         };
       }
 
-      // Deduct credits
-      const newBalance = currentCredits - creditCost;
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ credits: newBalance })
-        .eq('user_id', user.id);
-
-      if (updateError) {
-        return { success: false, error: 'Failed to deduct credits' };
-      }
-
-      // Log the usage with real IP and device info
-      const [userIp, userDevice] = await Promise.all([
-        getPublicIp(),
-        Promise.resolve(getDeviceModel()),
-      ]);
-
-      await supabase.from('activity_logs').insert({
-        user_id: user.id,
-        tool_name: toolId,
-        action: 'credit_deduction',
-        metadata: { 
-          credits_deducted: creditCost,
-          new_balance: newBalance,
-          used_app_key: true,
-          ip_address: userIp,
-          device_model: userDevice,
-        }
+      // Use server-side RPC for atomic credit deduction (secure)
+      const { data: rpcResult, error: rpcError } = await supabase.rpc('deduct_user_credits', {
+        _user_id: user.id,
+        _tool_id: toolId,
+        _is_own_api: false,
       });
 
-      // Update daily usage count
-      const today = new Date().toISOString().split('T')[0];
-      const { data: existingUsage } = await supabase
-        .from('user_tool_usage')
-        .select('id, usage_count')
-        .eq('user_id', user.id)
-        .eq('tool_id', toolId)
-        .eq('usage_date', today)
-        .maybeSingle();
-
-      if (existingUsage) {
-        await supabase
-          .from('user_tool_usage')
-          .update({ usage_count: (existingUsage.usage_count || 0) + 1 })
-          .eq('id', existingUsage.id);
-      } else {
-        await supabase
-          .from('user_tool_usage')
-          .insert({
-            user_id: user.id,
-            tool_id: toolId,
-            usage_date: today,
-            usage_count: 1
-          });
+      if (rpcError) {
+        return { success: false, error: rpcError.message };
       }
+
+      const result = rpcResult as any;
+      if (!result?.success) {
+        toast({
+          title: "💳 Credits မလုံလောက်ပါ",
+          description: result?.error || `Credits မလုံလောက်ပါ။`,
+          variant: "destructive",
+        });
+        return { success: false, error: result?.error };
+      }
+
+      const newBalance = result.balance;
 
       toast({
         title: "✅ Credits ဖြတ်ပြီး",
-        description: `${creditCost} credits ဖြတ်ပြီး၊ ကျန် ${newBalance} credits`,
+        description: `${result.deducted || creditCost} credits ဖြတ်ပြီး၊ ကျန် ${newBalance} credits`,
       });
 
       return { success: true, newBalance };
