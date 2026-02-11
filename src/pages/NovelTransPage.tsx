@@ -281,14 +281,7 @@ const NovelTransPage: React.FC = () => {
     setTimeout(() => { isStoppingRef.current = false; }, 200);
   }, []);
 
-  // IMPORTANT: authLoading early return MUST be after ALL hooks
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+  // Auth guard handles redirect; no blocking spinner for instant navigation
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
