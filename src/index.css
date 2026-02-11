@@ -135,9 +135,9 @@
 }
 
 @layer components {
-  /* Premium Background - Blue/Purple Gradient */
+  /* Premium Background - Blue Gradient (matching reference) */
   .premium-background {
-    background: linear-gradient(145deg, hsl(245 60% 12%) 0%, hsl(260 55% 15%) 30%, hsl(220 50% 18%) 60%, hsl(250 45% 10%) 100%);
+    background: linear-gradient(145deg, hsl(215 80% 18%) 0%, hsl(220 85% 25%) 30%, hsl(210 90% 30%) 60%, hsl(220 80% 15%) 100%);
     position: relative;
     overflow: hidden;
   }
@@ -149,82 +149,83 @@
     right: 0;
     bottom: 0;
     background: 
-     radial-gradient(ellipse at 30% 20%, hsl(180 100% 80% / 0.08) 0%, transparent 40%),
-     radial-gradient(ellipse at 70% 30%, hsl(300 100% 80% / 0.06) 0%, transparent 35%),
-     radial-gradient(ellipse at 50% 70%, hsl(45 100% 80% / 0.05) 0%, transparent 45%),
-     radial-gradient(ellipse at 15% 60%, hsl(220 100% 70% / 0.04) 0%, transparent 30%),
-     radial-gradient(ellipse at 85% 75%, hsl(160 100% 70% / 0.03) 0%, transparent 35%);
+     radial-gradient(ellipse at 30% 20%, hsl(210 100% 60% / 0.15) 0%, transparent 40%),
+     radial-gradient(ellipse at 70% 30%, hsl(220 100% 70% / 0.1) 0%, transparent 35%),
+     radial-gradient(ellipse at 50% 70%, hsl(200 100% 60% / 0.08) 0%, transparent 45%);
     pointer-events: none;
   }
 
-  /* Keyboard Key Tool Card - 3D Raised Block */
+  /* Keyboard Key Tool Card - 3D Glossy Black Cube with Blue Metallic Edges */
   .keyboard-key {
     background: linear-gradient(
       145deg,
-      hsl(260 50% 28%) 0%,
-      hsl(240 55% 22%) 40%,
-      hsl(220 60% 25%) 100%
+      hsl(0 0% 12%) 0%,
+      hsl(0 0% 8%) 50%,
+      hsl(0 0% 5%) 100%
     );
-    border: 1px solid hsl(260 60% 50% / 0.35);
-    border-bottom: 4px solid hsl(240 40% 12%);
-    border-right: 2px solid hsl(240 35% 14%);
-    border-radius: 0.75rem;
-    padding: 0.875rem 0.5rem 0.625rem;
+    border: 2px solid hsl(210 100% 50% / 0.6);
+    border-bottom: 6px solid hsl(215 90% 35%);
+    border-right: 3px solid hsl(210 85% 40%);
+    border-radius: 1rem;
+    aspect-ratio: 1 / 1;
+    padding: 0.75rem;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: 0.375rem;
     transition: all 0.15s ease;
     box-shadow:
-      0 6px 16px hsl(0 0% 0% / 0.6),
-      0 2px 4px hsl(0 0% 0% / 0.4),
-      inset 0 1px 1px hsl(270 80% 70% / 0.25),
-      inset 0 -2px 4px hsl(240 50% 10% / 0.5),
-      0 0 20px hsl(260 80% 55% / 0.15);
+      0 8px 20px hsl(0 0% 0% / 0.7),
+      0 3px 6px hsl(0 0% 0% / 0.5),
+      inset 0 1px 1px hsl(0 0% 100% / 0.08),
+      inset 0 -2px 6px hsl(0 0% 0% / 0.6),
+      0 0 15px hsl(210 100% 50% / 0.15),
+      0 0 30px hsl(210 100% 50% / 0.08);
     cursor: pointer;
     position: relative;
     overflow: hidden;
   }
 
-  /* Surface shine effect */
+  /* Glossy glass reflection on top */
   .keyboard-key::before {
     content: '';
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
-    height: 45%;
+    height: 50%;
     background: linear-gradient(
       180deg,
-      hsl(270 60% 70% / 0.12) 0%,
+      hsl(0 0% 100% / 0.07) 0%,
       transparent 100%
     );
-    border-radius: 0.75rem 0.75rem 0 0;
+    border-radius: 1rem 1rem 0 0;
     pointer-events: none;
   }
 
   .keyboard-key:hover {
-    transform: translateY(1px);
-    border-bottom-width: 3px;
+    transform: translateY(2px);
+    border-bottom-width: 4px;
     background: linear-gradient(
       145deg,
-      hsl(260 55% 32%) 0%,
-      hsl(240 60% 26%) 40%,
-      hsl(220 65% 30%) 100%
+      hsl(0 0% 15%) 0%,
+      hsl(0 0% 10%) 50%,
+      hsl(0 0% 7%) 100%
     );
     box-shadow:
-      0 4px 12px hsl(260 80% 55% / 0.4),
-      0 0 24px hsl(240 80% 60% / 0.2),
-      inset 0 1px 1px hsl(270 80% 75% / 0.3),
-      inset 0 -2px 4px hsl(240 50% 10% / 0.4);
+      0 5px 15px hsl(210 100% 50% / 0.3),
+      0 0 25px hsl(210 100% 55% / 0.2),
+      inset 0 1px 1px hsl(0 0% 100% / 0.1),
+      inset 0 -2px 6px hsl(0 0% 0% / 0.5);
   }
 
   .keyboard-key:active {
-    transform: translateY(3px);
-    border-bottom-width: 1px;
+    transform: translateY(4px);
+    border-bottom-width: 2px;
     box-shadow:
-      0 1px 4px hsl(0 0% 0% / 0.6),
-      inset 0 2px 4px hsl(240 50% 10% / 0.6);
+      0 1px 4px hsl(0 0% 0% / 0.7),
+      inset 0 2px 4px hsl(0 0% 0% / 0.7);
   }
 
   /* Legacy support - keep old class for compatibility */
