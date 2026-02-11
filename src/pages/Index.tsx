@@ -111,7 +111,7 @@ const Index = () => {
   } = useAdmin();
   const {
     checkPromotionAccess,
-    recordPromotionUsage,
+    recordPromotionUsage
   } = usePromotionTracking();
   const [activeTab, setActiveTab] = useState<"home" | "premium" | "settings">("home");
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
@@ -172,11 +172,7 @@ const Index = () => {
       const setting = toolSettings.find(s => s.tool_id === tool.id);
       // Skip promotion limit check for premium-only tools (already handled above)
       if (!setting?.is_premium) {
-        const promoCheck = checkPromotionAccess(
-          tool.id,
-          accessControl.promotionDailyLimit || 3,
-          accessControl.promotionToolCount || 3,
-        );
+        const promoCheck = checkPromotionAccess(tool.id, accessControl.promotionDailyLimit || 3, accessControl.promotionToolCount || 3);
         if (!promoCheck.allowed) {
           toast({
             title: "⚠️ Promotion Limit",
@@ -231,7 +227,7 @@ const Index = () => {
         {tools.map(tool => {
         const setting = toolSettings.find(s => s.tool_id === tool.id);
         const isPremiumTool = setting?.is_premium && !accessControl.freeMode;
-        return <div key={tool.id} className="relative">
+        return <div key={tool.id} className="relative mx-0">
               {/* Admin-only tier limits badge */}
               {isAdmin && setting?.tier_limits && <ToolLimitsBadge tierLimits={setting.tier_limits} toolTitle={tool.title} />}
               <ToolCard icon={tool.icon} title={tool.title} description={tool.description} gradient={tool.gradient} isPremium={isPremiumTool} onClick={() => handleToolClick(tool)} />
@@ -288,12 +284,10 @@ const Index = () => {
         </button>
 
         {/* Admin Panel - only visible to admins */}
-        {isAdmin && (
-          <button onClick={() => navigate("/admin/login")} className="w-full p-2.5 rounded-lg border border-gold/20 bg-card/50 text-left hover:bg-card transition-colors">
+        {isAdmin && <button onClick={() => navigate("/admin/login")} className="w-full p-2.5 rounded-lg border border-gold/20 bg-card/50 text-left hover:bg-card transition-colors">
             <h3 className="text-2xs font-semibold text-gold">Admin Panel</h3>
             <p className="text-3xs text-muted-foreground">Access admin dashboard</p>
-          </button>
-        )}
+          </button>}
 
         {isAuthenticated && <>
             <AccountInfoCard />
@@ -311,7 +305,7 @@ const Index = () => {
         </div>
       </div>
     </div>;
-  return <div className="min-h-screen premium-background pb-20">
+  return <div className="min-h-screen premium-background pb-20 border-2 border-neon-rose bg-gold text-white border-dotted opacity-100 shadow-xl px-0">
       {/* Light rays overlay */}
       <div className="premium-rays" />
       
