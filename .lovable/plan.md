@@ -1,69 +1,67 @@
 
 
-## Novel Translator - Character-Count Based Credit Deduction
+# Dark Mode Text Visibility Fix + Desktop Layout Improvement
 
-### Problem
-Currently the `novel-translate` edge function deducts a flat credit cost **before** translation happens. The user wants accurate, output-character-based pricing using this formula:
+## Problem Analysis
 
-- Every 2,000 characters of translated output = 2 credits
-- Formula: `Math.ceil(charCount / 2000) * 2`
-- Example: 300,000 chars output = 300,000 / 2000 = 150 x 2 = 300 credits
+After inspecting the app on desktop (1920x1080) and reviewing all tool pages, here are the two confirmed issues:
 
-### Approach: Post-Translation Deduction
+### Issue 1: Text Visibility in Tool Pages
+The tool pages (Transcribe, Translate, SRT, Novel, Voice, Video Recap, etc.) use hardcoded dark backgrounds like `bg-[#020617]` with various text colors like `text-slate-200`, `text-slate-500`, `text-slate-400`, etc. Some labels use very low-contrast colors (e.g., `text-slate-500` on near-black backgrounds), making them hard to read.
 
-Since we need to know the output length, credits must be deducted **after** the Gemini API returns a successful result. The edge function will be restructured to:
+**Fix approach:** Brighten the low-contrast text colors across all tool pages. Specifically:
+- `text-slate-500` labels --> `text-slate-300` (brighter)
+- `text-slate-400` descriptions --> `text-slate-300`
+- `text-slate-600` placeholders --> `text-slate-500`
+- `text-indigo-300/60` hints --> `text-indigo-300/80`
+- Any `text-white/5`, `border-white/5` elements --> slightly brighter variants
 
-1. **Pre-check**: Verify user has at least 2 credits (minimum possible cost) before calling the API
-2. **Translate**: Call Gemini API
-3. **Count**: Measure exact `translatedText.length`
-4. **Calculate**: `Math.ceil(charCount / 2000) * 2`
-5. **Deduct**: Call `deduct_user_credits` RPC with `_custom_cost` set to the calculated amount
-6. **Return**: Include `creditsDeducted` and `charCount` in the response so the frontend can display it
+Pages to update:
+- `TranscribePage.tsx` -- labels, tier text, help text
+- `TranslatePage2.tsx` -- labels, descriptions
+- `SrtSubPage.tsx` -- labels, descriptions
+- `NovelTransPage.tsx` -- labels, descriptions
+- `VoicePage.tsx` -- labels, descriptions
+- `VideoRecapPage.tsx` -- labels, descriptions
+- `StoryCreatorPage.tsx` -- if similar patterns exist
+- `ThumbnailPage.tsx` -- if similar patterns exist
+- `CreatorPage.tsx` -- if similar patterns exist
+
+### Issue 2: Desktop Home Page Layout
+The home page uses a fixed `grid-cols-3` with `keyboard-key` cards that are only `3.6rem` (57.6px) wide. On desktop, 9 tiny tool cards cluster together in the center, looking cramped and unprofessional.
+
+**Fix approach:** Make the home page grid responsive:
+- Mobile (default): `grid-cols-3` with current small card sizes (unchanged)
+- Tablet (md:): `grid-cols-3` with larger cards
+- Desktop (lg:): `grid-cols-3` or `grid-cols-4/5` with larger cards, centered in a max-width container
+
+Specific changes:
+- `Index.tsx`: Change `grid grid-cols-3 gap-1.5` to `grid grid-cols-3 gap-1.5 sm:gap-3 md:gap-4 lg:gap-6 max-w-4xl mx-auto`
+- `ToolCard.tsx` / `index.css` (.keyboard-key): Add responsive sizing so cards scale up on larger screens (e.g., `sm:w-24 md:w-28 lg:w-32`)
+
+---
+
+## Technical Details
 
 ### Files to Modify
 
-**1. `supabase/functions/novel-translate/index.ts`**
-- Move the `deduct_user_credits` RPC call from before translation to after
-- Add a lightweight pre-check (read user credits, ensure >= 2)
-- After successful translation, count `translatedText.length`, calculate cost, then deduct
-- Return `creditsDeducted` and `outputCharCount` in the JSON response
-- Own API mode remains completely unchanged (no credits involved)
+**Text visibility fixes (strictly text color changes only -- NO logic changes):**
+1. `src/pages/TranscribePage.tsx` -- `text-slate-500` --> `text-slate-300`, `text-slate-400` --> `text-slate-300`
+2. `src/pages/TranslatePage2.tsx` -- same pattern
+3. `src/pages/SrtSubPage.tsx` -- same pattern
+4. `src/pages/NovelTransPage.tsx` -- same pattern
+5. `src/pages/VoicePage.tsx` -- same pattern
+6. `src/pages/VideoRecapPage.tsx` -- same pattern
+7. `src/pages/StoryCreatorPage.tsx` -- same pattern (if applicable)
+8. `src/pages/ThumbnailPage.tsx` -- same pattern (if applicable)
+9. `src/pages/CreatorPage.tsx` -- same pattern (if applicable)
+10. `src/pages/RecapVideoPage.tsx` -- same pattern (if applicable)
 
-**2. `src/pages/NovelTransPage.tsx`**
-- Update the `preCheckCredits` call to pass minimum cost of 2 (since actual cost depends on output)
-- After successful translation, show a toast with the exact char count and credits deducted from the response
-- No other logic changes -- chunk navigation, auto-drive, history, stop button, etc. remain untouched
+**Desktop layout fix:**
+11. `src/pages/Index.tsx` -- responsive grid classes + max-width container
+12. `src/index.css` -- responsive sizing for `.keyboard-key` at `sm:`, `md:`, `lg:` breakpoints
+13. `src/components/ToolCard.tsx` -- if sizing adjustments needed at component level
 
-### Technical Details
-
-```text
-Edge Function Flow (App API mode):
-                                     
-  Request In                         
-      |                              
-  Auth Check                         
-      |                              
-  Pre-Check: credits >= 2?           
-      |  No --> Return error         
-      |  Yes                         
-      v                              
-  Call Gemini API                    
-      |                              
-  Count output chars                 
-      |                              
-  cost = ceil(chars/2000) * 2        
-      |                              
-  deduct_user_credits(_custom_cost)  
-      |  Fail --> Return error       
-      |  Success                     
-      v                              
-  Return { text, creditsDeducted,    
-           outputCharCount }         
-```
-
-### What Will NOT Be Touched
-- All other tool pages, edge functions, and services
-- Auto-drive logic, chunk navigation, history system
-- Own API mode flow
-- Video logic, voice logic, any other tools
-- Database schema (no migration needed)
+### What will NOT be touched
+- No video logic, script logic, any tools backend code, any edge functions, any API services, any auth logic, any credit logic, any admin logic will be modified
+- Only CSS classes for text colors and layout responsiveness will be changed
