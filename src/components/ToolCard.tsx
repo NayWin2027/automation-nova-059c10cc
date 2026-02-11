@@ -38,7 +38,14 @@ export function ToolCard({
       
       <Icon className="w-6 h-6 text-white drop-shadow-[0_0_8px_hsl(210,100%,70%,0.3)] relative z-10" strokeWidth={1.5} />
       
-      <h3 className="text-3xs font-semibold text-white text-center leading-tight tracking-[0.15em] uppercase relative z-10 mt-0.5">
+      <h3 
+        className="text-[11px] font-bold text-white text-center leading-tight relative z-10 mt-0.5"
+        style={{
+          fontFamily: "'Caveat', cursive",
+          textShadow: '0 0 8px hsl(200,100%,70%,0.8), 0 0 20px hsl(220,100%,60%,0.5), 0 2px 4px rgba(0,0,0,0.6)',
+          letterSpacing: '0.05em',
+        }}
+      >
         {title}
       </h3>
     </button>;
