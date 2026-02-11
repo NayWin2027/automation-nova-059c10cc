@@ -1,12 +1,12 @@
 import { LucideIcon, Crown } from "lucide-react";
 
 const GRADIENT_MAP: Record<string, string> = {
-  cyan: "from-cyan-500/25 via-blue-600/20 to-teal-500/15",
-  rose: "from-rose-500/25 via-pink-600/20 to-red-500/15",
-  amber: "from-amber-500/25 via-orange-600/20 to-yellow-500/15",
-  violet: "from-violet-500/25 via-purple-600/20 to-indigo-500/15",
-  emerald: "from-emerald-500/25 via-green-600/20 to-teal-500/15",
-  blue: "from-blue-500/25 via-indigo-600/20 to-sky-500/15",
+  cyan: "from-cyan-500/60 via-blue-600/50 to-teal-500/40",
+  rose: "from-rose-500/60 via-pink-600/50 to-red-500/40",
+  amber: "from-amber-500/60 via-orange-600/50 to-yellow-500/40",
+  violet: "from-violet-500/60 via-purple-600/50 to-indigo-500/40",
+  emerald: "from-emerald-500/60 via-green-600/50 to-teal-500/40",
+  blue: "from-blue-500/60 via-indigo-600/50 to-sky-500/40",
 };
 
 interface ToolCardProps {
