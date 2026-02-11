@@ -26,7 +26,7 @@ const defaultTools = [{
   icon: Mic,
   title: "Transcribe",
   description: "အသံဖိုင်မှ စာသားပြောင်းလဲခြင်း။",
-  gradient: "cyan" as const,
+  gradient: "blue" as const,
   route: "/transcribe"
 }, {
   id: "story",
@@ -40,14 +40,14 @@ const defaultTools = [{
   icon: Image,
   title: "Thumbnail",
   description: "AI Thumbnail ပုံရိုက်ခြင်း။",
-  gradient: "violet" as const,
+  gradient: "amber" as const,
   route: "/thumbnail"
 }, {
   id: "translate",
   icon: Languages,
   title: "Translate",
   description: "ဘာသာစကားများ ပြောင်းလဲခြင်း။",
-  gradient: "cyan" as const,
+  gradient: "emerald" as const,
   route: "/translate"
 }, {
   id: "srt",
@@ -61,21 +61,21 @@ const defaultTools = [{
   icon: BookOpen,
   title: "Novel Trans",
   description: "ဝတ္ထုများ ဘာသာပြန်ခြင်း။",
-  gradient: "cyan" as const,
+  gradient: "blue" as const,
   route: "/novel"
 }, {
   id: "voice",
   icon: Volume2,
   title: "AI Voice",
   description: "စာသားမှ အသံထုတ်ခြင်း။",
-  gradient: "rose" as const,
+  gradient: "amber" as const,
   route: "/voice"
 }, {
   id: "creator",
   icon: PenTool,
   title: "Creator",
   description: "မီဒီယာစီမံမှု ဖန်တီးခြင်း။",
-  gradient: "amber" as const,
+  gradient: "cyan" as const,
   route: "/creator"
 }];
 type Tool = (typeof defaultTools)[number];
