@@ -223,7 +223,7 @@ const Index = () => {
             </button>}
         </div>
       </div>
-      <div className="grid grid-cols-3 gap-1.5">
+      <div className="grid grid-cols-3 gap-1.5 sm:gap-3 md:gap-4 lg:gap-6 max-w-4xl mx-auto">
         {tools.map(tool => {
         const setting = toolSettings.find(s => s.tool_id === tool.id);
         const isPremiumTool = setting?.is_premium && !accessControl.freeMode;

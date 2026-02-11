@@ -249,7 +249,7 @@ const LayerControl: React.FC<any> = ({
       <div className="flex justify-between items-center px-1">
         <label className={`text-[10px] font-black uppercase tracking-[0.2em] text-${colorTheme}-400`}>{label}</label>
         <div className="flex items-center gap-2">
-          <span className="text-[8px] font-black text-slate-500 uppercase">Scale</span>
+          <span className="text-[8px] font-black text-slate-400 uppercase">Scale</span>
           <input
             type="range"
             min="20"
@@ -271,7 +271,7 @@ const LayerControl: React.FC<any> = ({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {/* Style Dropdown */}
         <div className="space-y-1">
-          <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest ml-1">Color Style</p>
+          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest ml-1">Color Style</p>
           <select
             value={style}
             onChange={(e) => setStyle(e.target.value)}
@@ -287,7 +287,7 @@ const LayerControl: React.FC<any> = ({
 
         {/* Effect Dropdown */}
         <div className="space-y-1">
-          <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest ml-1">Text Effect</p>
+          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest ml-1">Text Effect</p>
           <select
             value={effect}
             onChange={(e) => setEffect(e.target.value as FontEffect)}
@@ -303,7 +303,7 @@ const LayerControl: React.FC<any> = ({
 
         {/* Font Dropdown */}
         <div className="space-y-1">
-          <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest ml-1">Elite Font</p>
+          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest ml-1">Elite Font</p>
           <select
             value={font}
             onChange={(e) => setFont(e.target.value)}
@@ -320,13 +320,13 @@ const LayerControl: React.FC<any> = ({
 
       <div className="grid grid-cols-2 gap-4 items-center border-t border-white/5 pt-3">
         <div className="space-y-1">
-          <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest ml-1">Alignment</p>
+          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest ml-1">Alignment</p>
           <div className="grid grid-cols-5 gap-1">
             {(["UPON LEFT", "UPON RIGHT", "CENTER", "BUTTON LEFT", "BUTTON RIGHT"] as Position[]).map((p) => (
               <button
                 key={p}
                 onClick={() => setPos(p)}
-                className={`w-full py-2 rounded-lg text-[6px] font-black uppercase transition-all ${pos === p ? "bg-white text-black" : "bg-slate-800 text-slate-500"}`}
+                className={`w-full py-2 rounded-lg text-[6px] font-black uppercase transition-all ${pos === p ? "bg-white text-black" : "bg-slate-800 text-slate-300"}`}
                 title={p}
               >
                 {p
@@ -338,7 +338,7 @@ const LayerControl: React.FC<any> = ({
           </div>
         </div>
         <div className="space-y-1">
-          <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest text-center">Precise Position</p>
+          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest text-center">Precise Position</p>
           <div className="flex items-center justify-center gap-2">
             <button
               onClick={() => setOffset((o: any) => ({ ...o, x: o.x - 5 }))}
@@ -743,7 +743,7 @@ const ThumbnailView: React.FC = () => {
       <div className="sticky top-20 z-[100] pb-2">
         <div className="neon-glass rounded-[56px] p-6 space-y-5 border border-white/15 shadow-[0_0_100px_rgba(0,0,0,0.9)] overflow-hidden bg-black/80 backdrop-blur-3xl">
           <div className="flex justify-between items-center px-4">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.5em]">LIVE HD MONITOR</span>
+            <span className="text-[10px] font-black text-slate-300 uppercase tracking-[0.5em]">LIVE HD MONITOR</span>
             {bgImage && (
               <button
                 onClick={() => {
@@ -828,7 +828,7 @@ const ThumbnailView: React.FC = () => {
               <h2 className="text-3xl font-black text-white tracking-tighter uppercase drop-shadow-2xl">
                 DESIGN <span className="text-blue-500">MASTER</span> HUB
               </h2>
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.5em] opacity-70">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.5em] opacity-70">
                 PROFESSIONAL WORKFLOW ENGINE V9
               </p>
             </div>
