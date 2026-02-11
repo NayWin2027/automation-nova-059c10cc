@@ -3,9 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { 
-  User, Lock, ArrowRight, Sparkles, Eye, EyeOff, 
+  User, Lock, ArrowRight, Eye, EyeOff, 
   LogIn, Home
 } from "lucide-react";
+import { AppLogo } from "@/components/AppLogo";
 
 const ADMIN_GATE_CODE = "k$@w$@n008060964999777999";
 
@@ -116,11 +117,23 @@ const UserLoginPage: React.FC = () => {
         
         <div className="relative premium-tool-card rounded-2xl p-6 border border-white/10">
           {/* Header */}
-          <div className="text-center mb-6">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-blue-600 mb-3 shadow-lg shadow-violet-500/30">
-              <Sparkles className="w-6 h-6 text-white" />
+           <div className="text-center mb-6">
+            <div className="flex justify-center mb-3">
+              <AppLogo size={56} />
             </div>
-            <h1 className="text-lg font-bold text-white mb-1">MediaMaster</h1>
+            <h1
+              className="text-2xl font-black text-white mb-1"
+              style={{
+                fontFamily: "'Caveat', cursive",
+                backgroundImage: "linear-gradient(135deg, hsl(0 0% 92%), hsl(220 30% 80%), hsl(245 80% 72%), hsl(200 100% 70%))",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                filter: "drop-shadow(0 0 18px hsl(200 100% 65% / 0.6))",
+                textShadow: "0 0 24px hsl(200,100%,70%,0.4)",
+              }}
+            >
+              Automation Nova AI
+            </h1>
             <p className="text-2xs text-white/50 uppercase tracking-widest">
               User Login
             </p>
