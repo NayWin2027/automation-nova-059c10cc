@@ -284,7 +284,9 @@ export type Database = {
       user_tool_usage: {
         Row: {
           created_at: string | null
+          error_count: number
           id: string
+          success_count: number
           tool_id: string
           usage_count: number | null
           usage_date: string
@@ -292,7 +294,9 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          error_count?: number
           id?: string
+          success_count?: number
           tool_id: string
           usage_count?: number | null
           usage_date?: string
@@ -300,7 +304,9 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          error_count?: number
           id?: string
+          success_count?: number
           tool_id?: string
           usage_count?: number | null
           usage_date?: string
@@ -380,6 +386,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      record_tool_outcome: {
+        Args: { _outcome: string; _tool_id: string; _user_id: string }
+        Returns: Json
       }
       verify_admin_secret: { Args: { secret_input: string }; Returns: boolean }
     }
