@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useAdmin } from "@/hooks/useAdmin";
-import { Calendar, User, BarChart3, Search, TrendingUp, Zap, Smartphone, Monitor, CheckCircle2, XCircle } from "lucide-react";
+import { Calendar, User, BarChart3, Search, TrendingUp, Zap, Smartphone, Monitor, CheckCircle2, XCircle, CreditCard } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -29,6 +29,7 @@ interface DailyUsage {
   usage_count: number;
   success_count: number;
   error_count: number;
+  deduct_count: number;
 }
 
 interface Profile {
@@ -265,6 +266,7 @@ const AdminDailyUsageTab: React.FC = () => {
   const totalUsesToday = usageData.reduce((sum, u) => sum + u.usage_count, 0);
   const totalSuccess = usageData.reduce((sum, u) => sum + (u.success_count || 0), 0);
   const totalErrors = usageData.reduce((sum, u) => sum + (u.error_count || 0), 0);
+  const totalDeducts = usageData.reduce((sum, u) => sum + (u.deduct_count || 0), 0);
   const uniqueUsers = new Set(usageData.map(u => u.user_id)).size;
   const topTool = usageData.length > 0 
     ? usageData.reduce((prev, curr) => prev.usage_count > curr.usage_count ? prev : curr).tool_id
@@ -283,7 +285,7 @@ const AdminDailyUsageTab: React.FC = () => {
   return (
     <div className="space-y-4">
       {/* Daily Stats Summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
         <Card className="border-border/50 bg-card/50">
           <CardContent className="pt-4 pb-3">
             <div className="flex items-center gap-2 mb-1">
@@ -309,6 +311,15 @@ const AdminDailyUsageTab: React.FC = () => {
               <span className="text-2xs text-muted-foreground">Errors</span>
             </div>
             <p className="text-xl font-bold text-red-500">{totalErrors}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/50 bg-card/50">
+          <CardContent className="pt-4 pb-3">
+            <div className="flex items-center gap-2 mb-1">
+              <CreditCard className="w-4 h-4 text-orange-500" />
+              <span className="text-2xs text-muted-foreground">Credit Deduct</span>
+            </div>
+            <p className="text-xl font-bold text-orange-500">{totalDeducts}</p>
           </CardContent>
         </Card>
         <Card className="border-border/50 bg-card/50">
@@ -402,19 +413,20 @@ const AdminDailyUsageTab: React.FC = () => {
                   <TableHead className="text-2xs text-center">Process</TableHead>
                   <TableHead className="text-2xs text-center">✅</TableHead>
                   <TableHead className="text-2xs text-center">❌</TableHead>
+                  <TableHead className="text-2xs text-center">💳</TableHead>
                   <TableHead className="text-2xs">Date</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
+                    <TableCell colSpan={8} className="text-center py-8">
                       <div className="animate-pulse text-muted-foreground text-xs">Loading...</div>
                     </TableCell>
                   </TableRow>
                 ) : filteredData.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground text-xs">
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground text-xs">
                       ဒီနေ့အတွက် အသုံးပြုမှု မရှိသေးပါ
                     </TableCell>
                   </TableRow>
@@ -482,6 +494,9 @@ const AdminDailyUsageTab: React.FC = () => {
                         </TableCell>
                         <TableCell className="text-center">
                           <span className="text-sm font-bold text-red-500">{usage.error_count || 0}</span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span className="text-sm font-bold text-orange-500">{usage.deduct_count || 0}</span>
                         </TableCell>
                         <TableCell>
                           <span className="text-2xs text-muted-foreground">

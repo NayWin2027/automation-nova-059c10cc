@@ -284,6 +284,7 @@ export type Database = {
       user_tool_usage: {
         Row: {
           created_at: string | null
+          deduct_count: number
           error_count: number
           id: string
           success_count: number
@@ -294,6 +295,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          deduct_count?: number
           error_count?: number
           id?: string
           success_count?: number
@@ -304,6 +306,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          deduct_count?: number
           error_count?: number
           id?: string
           success_count?: number
