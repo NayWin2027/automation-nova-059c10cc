@@ -1,13 +1,13 @@
 export function GatewayBanner() {
   return (
     <div className="premium-banner mb-6 animate-fade-in py-5 relative">
-      {/* Glow aura behind text */}
+      {/* Premium glow aura behind text */}
       <div
         className="absolute inset-0 flex items-center justify-center pointer-events-none"
         aria-hidden="true"
       >
         <div
-          className="w-64 h-16 rounded-full blur-3xl opacity-40"
+          className="w-72 h-20 rounded-full blur-3xl opacity-40"
           style={{
             background:
               "radial-gradient(ellipse, hsl(230 80% 60% / 0.6) 0%, hsl(245 70% 50% / 0.3) 50%, transparent 80%)",

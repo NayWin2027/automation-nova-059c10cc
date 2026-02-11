@@ -16,16 +16,16 @@ export function ToolCard({
   onClick
 }: ToolCardProps) {
   return <button onClick={onClick} className="keyboard-key group relative font-sans">
-      {isPremium && <div className="absolute -top-1.5 -right-1.5 z-10">
-          <div className="flex items-center gap-0.5 px-1 py-0.5 rounded-full bg-gradient-to-r from-amber-500/40 to-yellow-400/30 border border-amber-400/50 backdrop-blur-sm">
-            <Crown className="w-2 h-2 text-amber-300 drop-shadow-[0_0_4px_hsl(45,100%,60%,0.6)]" />
-            <span className="text-4xs text-amber-300 font-bold">PRO</span>
+      {isPremium && <div className="absolute -top-2 -right-2 z-10">
+          <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500/40 to-yellow-400/30 border border-amber-400/50 backdrop-blur-sm">
+            <Crown className="w-2.5 h-2.5 text-amber-300 drop-shadow-[0_0_4px_hsl(45,100%,60%,0.6)]" />
+            <span className="text-3xs text-amber-300 font-bold">PRO</span>
           </div>
         </div>}
       
-      <Icon className="w-5 h-5 text-white/95 drop-shadow-[0_0_8px_hsl(230,80%,70%,0.5)] relative z-10" strokeWidth={1.5} />
+      <Icon className="w-6 h-6 text-white/95 drop-shadow-[0_0_10px_hsl(210,100%,70%,0.4)] relative z-10" strokeWidth={1.5} />
       
-      <h3 className="text-4xs font-bold text-white/70 text-center leading-tight tracking-wider uppercase relative z-10 drop-shadow-[0_0_4px_hsl(200,90%,60%,0.3)]">
+      <h3 className="text-3xs font-bold text-white/60 text-center leading-tight tracking-widest uppercase relative z-10 mt-0.5">
         {title}
       </h3>
     </button>;
