@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useAdmin } from "@/hooks/useAdmin";
-import { Calendar, User, BarChart3, Search, TrendingUp, Zap, Smartphone, Monitor } from "lucide-react";
+import { Calendar, User, BarChart3, Search, TrendingUp, Zap, Smartphone, Monitor, CheckCircle2, XCircle } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -27,6 +27,8 @@ interface DailyUsage {
   tool_id: string;
   usage_date: string;
   usage_count: number;
+  success_count: number;
+  error_count: number;
 }
 
 interface Profile {
@@ -261,6 +263,8 @@ const AdminDailyUsageTab: React.FC = () => {
 
   // Calculate daily stats
   const totalUsesToday = usageData.reduce((sum, u) => sum + u.usage_count, 0);
+  const totalSuccess = usageData.reduce((sum, u) => sum + (u.success_count || 0), 0);
+  const totalErrors = usageData.reduce((sum, u) => sum + (u.error_count || 0), 0);
   const uniqueUsers = new Set(usageData.map(u => u.user_id)).size;
   const topTool = usageData.length > 0 
     ? usageData.reduce((prev, curr) => prev.usage_count > curr.usage_count ? prev : curr).tool_id
@@ -279,14 +283,32 @@ const AdminDailyUsageTab: React.FC = () => {
   return (
     <div className="space-y-4">
       {/* Daily Stats Summary */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <Card className="border-border/50 bg-card/50">
           <CardContent className="pt-4 pb-3">
             <div className="flex items-center gap-2 mb-1">
               <BarChart3 className="w-4 h-4 text-cyan-500" />
-              <span className="text-2xs text-muted-foreground">Total Uses</span>
+              <span className="text-2xs text-muted-foreground">Process</span>
             </div>
             <p className="text-xl font-bold">{totalUsesToday}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/50 bg-card/50">
+          <CardContent className="pt-4 pb-3">
+            <div className="flex items-center gap-2 mb-1">
+              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              <span className="text-2xs text-muted-foreground">Success</span>
+            </div>
+            <p className="text-xl font-bold text-emerald-500">{totalSuccess}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/50 bg-card/50">
+          <CardContent className="pt-4 pb-3">
+            <div className="flex items-center gap-2 mb-1">
+              <XCircle className="w-4 h-4 text-red-500" />
+              <span className="text-2xs text-muted-foreground">Errors</span>
+            </div>
+            <p className="text-xl font-bold text-red-500">{totalErrors}</p>
           </CardContent>
         </Card>
         <Card className="border-border/50 bg-card/50">
@@ -377,20 +399,22 @@ const AdminDailyUsageTab: React.FC = () => {
                   <TableHead className="text-2xs">User</TableHead>
                   <TableHead className="text-2xs">Devices</TableHead>
                   <TableHead className="text-2xs">Tool</TableHead>
-                  <TableHead className="text-2xs text-center">Uses</TableHead>
+                  <TableHead className="text-2xs text-center">Process</TableHead>
+                  <TableHead className="text-2xs text-center">✅</TableHead>
+                  <TableHead className="text-2xs text-center">❌</TableHead>
                   <TableHead className="text-2xs">Date</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8">
+                    <TableCell colSpan={7} className="text-center py-8">
                       <div className="animate-pulse text-muted-foreground text-xs">Loading...</div>
                     </TableCell>
                   </TableRow>
                 ) : filteredData.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground text-xs">
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground text-xs">
                       ဒီနေ့အတွက် အသုံးပြုမှု မရှိသေးပါ
                     </TableCell>
                   </TableRow>
@@ -452,7 +476,12 @@ const AdminDailyUsageTab: React.FC = () => {
                         </TableCell>
                         <TableCell className="text-center">
                           <span className="text-sm font-bold text-primary">{usage.usage_count}</span>
-                          <span className="text-3xs text-muted-foreground ml-1">times</span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span className="text-sm font-bold text-emerald-500">{usage.success_count || 0}</span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span className="text-sm font-bold text-red-500">{usage.error_count || 0}</span>
                         </TableCell>
                         <TableCell>
                           <span className="text-2xs text-muted-foreground">
