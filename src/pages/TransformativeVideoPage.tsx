@@ -448,14 +448,7 @@ export default function TransformativeVideoPage() {
     sessionStorage.setItem("transformative_api_mode", apiMode);
   }, [apiMode]);
 
-  // Show loading while checking auth
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+  // Auth guard handles redirect; no blocking spinner for instant navigation
 
   // URL & Upload State
   const [videoUrl, setVideoUrl] = useState("");
