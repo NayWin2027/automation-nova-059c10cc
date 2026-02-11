@@ -1,36 +1,29 @@
 export function GatewayBanner() {
   return (
-    <div className="premium-banner mb-6 animate-fade-in py-5">
-      <h2 className="text-center text-3xl font-black tracking-[0.25em] uppercase">
+    <div className="premium-banner mb-6 animate-fade-in py-5 relative">
+      {/* Glow aura behind text */}
+      <div
+        className="absolute inset-0 flex items-center justify-center pointer-events-none"
+        aria-hidden="true"
+      >
+        <div
+          className="w-64 h-16 rounded-full blur-3xl opacity-40"
+          style={{
+            background:
+              "radial-gradient(ellipse, hsl(230 80% 60% / 0.6) 0%, hsl(245 70% 50% / 0.3) 50%, transparent 80%)",
+          }}
+        />
+      </div>
+      <h2 className="relative text-center text-4xl font-black tracking-[0.2em] uppercase">
         <span
           className="bg-clip-text text-transparent"
           style={{
             backgroundImage:
-              "linear-gradient(135deg, hsl(45 90% 60%), hsl(38 100% 50%), hsl(30 90% 45%))",
-            filter: "drop-shadow(0 0 18px hsl(45 100% 60% / 0.5))",
+              "linear-gradient(135deg, hsl(0 0% 85%), hsl(220 20% 75%), hsl(245 60% 65%), hsl(230 70% 58%))",
+            filter: "drop-shadow(0 0 20px hsl(235 80% 65% / 0.4))",
           }}
         >
-          Automation
-        </span>{" "}
-        <span
-          className="bg-clip-text text-transparent"
-          style={{
-            backgroundImage:
-              "linear-gradient(135deg, hsl(245 72% 58%), hsl(220 80% 55%), hsl(190 90% 50%))",
-            filter: "drop-shadow(0 0 22px hsl(230 90% 65% / 0.6))",
-          }}
-        >
-          Nova
-        </span>{" "}
-        <span
-          className="bg-clip-text text-transparent"
-          style={{
-            backgroundImage:
-              "linear-gradient(135deg, hsl(190 90% 50%), hsl(200 95% 55%), hsl(245 72% 58%))",
-            filter: "drop-shadow(0 0 22px hsl(200 95% 60% / 0.5))",
-          }}
-        >
-          AI
+          Automation Nova AI
         </span>
       </h2>
     </div>
