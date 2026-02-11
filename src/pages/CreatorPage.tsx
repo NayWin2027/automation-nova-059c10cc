@@ -262,8 +262,8 @@ const CreatorPage: React.FC = () => {
           {/* Fine-Tune Section */}
           <div className="space-y-4 bg-muted/30 p-4 rounded-[24px] border border-border/50 shadow-inner">
             <div className="space-y-0.5">
-              <h3 className="text-[11px] font-black text-primary uppercase tracking-[0.2em] flex items-center gap-2">
-                <div className="w-1.5 h-3 bg-primary rounded-full"></div> FINE-TUNE
+              <h3 className="text-base font-black text-primary uppercase tracking-[0.2em] flex items-center gap-2">
+                <div className="w-2 h-4 bg-primary rounded-full"></div> FINE-TUNE
               </h3>
             </div>
             
@@ -272,14 +272,14 @@ const CreatorPage: React.FC = () => {
                 <div key={group} className="space-y-1.5">
                   <div className="flex items-center gap-1.5 mb-0.5">
                     <div className="w-1.5 h-[1px] bg-border"></div>
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{group}</p>
+                    <p className="text-xs font-black text-amber-400 uppercase tracking-widest">{group}</p>
                   </div>
                   <div className="flex flex-wrap gap-1">
                     {chips.map(chip => (
                       <button
                         key={chip.value}
                         onClick={() => toggleChip(chip.value)}
-                        className={`px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-tighter transition-all border shrink-0 ${selectedChips.includes(chip.value) ? 'jewel-sapphire text-white border-transparent shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'bg-secondary/40 border-border/50 text-slate-400 hover:text-foreground'}`}
+                        className={`px-3 py-2 rounded-lg text-xs font-black uppercase tracking-tighter transition-all border shrink-0 ${selectedChips.includes(chip.value) ? 'jewel-sapphire text-white border-transparent shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'bg-secondary/40 border-border/50 text-slate-300 hover:text-foreground'}`}
                       >
                         {chip.label}
                       </button>
