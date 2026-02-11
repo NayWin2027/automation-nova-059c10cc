@@ -1,12 +1,12 @@
 import { LucideIcon, Crown } from "lucide-react";
 
 const GRADIENT_MAP: Record<string, string> = {
-  cyan: "from-cyan-500/60 via-blue-600/50 to-teal-500/40",
-  rose: "from-rose-500/60 via-pink-600/50 to-red-500/40",
-  amber: "from-amber-500/60 via-orange-600/50 to-yellow-500/40",
-  violet: "from-violet-500/60 via-purple-600/50 to-indigo-500/40",
-  emerald: "from-emerald-500/60 via-green-600/50 to-teal-500/40",
-  blue: "from-blue-500/60 via-indigo-600/50 to-sky-500/40"
+  cyan: "from-teal-400 via-cyan-500 to-teal-600",
+  rose: "from-pink-400 via-rose-500 to-pink-600",
+  amber: "from-amber-400 via-orange-500 to-yellow-600",
+  violet: "from-purple-400 via-violet-500 to-purple-600",
+  emerald: "from-emerald-400 via-green-500 to-teal-600",
+  blue: "from-blue-400 via-indigo-500 to-blue-600"
 };
 
 interface ToolCardProps {
@@ -17,6 +17,7 @@ interface ToolCardProps {
   isPremium?: boolean;
   onClick?: () => void;
 }
+
 export function ToolCard({
   icon: Icon,
   title,
@@ -25,28 +26,40 @@ export function ToolCard({
   isPremium,
   onClick
 }: ToolCardProps) {
-  return <button onClick={onClick} className="keyboard-key group relative font-sans px-[100px] border-black border-double border text-xs font-thin text-gold-dark pt-[20px] pb-[20px] pl-[20px] pr-[10px]">
-      {/* Gradient fill covering entire key surface */}
-      <div className={`absolute inset-0 rounded-[inherit] bg-gradient-to-br ${GRADIENT_MAP[gradient] || GRADIENT_MAP.cyan} z-[2] pointer-events-none mix-blend-screen`} />
+  return (
+    <button
+      onClick={onClick}
+      className={`tool-glossy-card group relative w-full bg-gradient-to-br ${GRADIENT_MAP[gradient] || GRADIENT_MAP.cyan}`}
+    >
+      {/* Glossy top highlight */}
+      <div className="absolute inset-x-0 top-0 h-[45%] rounded-t-[inherit] bg-gradient-to-b from-white/30 via-white/10 to-transparent pointer-events-none z-[2]" />
 
-      {isPremium && <div className="absolute -top-2 -right-2 z-10">
-          <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500/40 to-yellow-400/30 border border-amber-400/50 backdrop-blur-sm">
-            <Crown className="w-2.5 h-2.5 text-amber-300 drop-shadow-[0_0_4px_hsl(45,100%,60%,0.6)]" />
+      {/* Subtle inner shadow for depth */}
+      <div className="absolute inset-0 rounded-[inherit] shadow-[inset_0_-8px_20px_rgba(0,0,0,0.25)] pointer-events-none z-[2]" />
+
+      {isPremium && (
+        <div className="absolute top-1.5 right-1.5 z-10">
+          <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-black/30 border border-white/20 backdrop-blur-sm">
+            <Crown className="w-2.5 h-2.5 text-amber-300" />
             <span className="text-3xs text-amber-300 font-bold">Premium</span>
           </div>
-        </div>}
-      
-      <Icon className="w-6 h-6 text-white drop-shadow-[0_0_8px_hsl(210,100%,70%,0.3)] relative z-10" strokeWidth={1.5} />
-      
-      <h3
-      className="text-center leading-tight relative z-10 mt-0.5 text-lg font-extrabold mx-[50px] text-white"
-      style={{
-        fontFamily: "'Caveat', cursive",
-        textShadow: '0 0 8px hsl(200,100%,70%,0.9), 0 0 20px hsl(220,100%,60%,0.5), 0 2px 4px rgba(0,0,0,0.8)',
-        letterSpacing: '0.04em'
-      }}>
+        </div>
+      )}
 
-        {title}
-      </h3>
-    </button>;
+      {/* Content */}
+      <div className="relative z-[3] flex flex-col items-center justify-center gap-1 py-4 px-3 sm:py-5 sm:px-4">
+        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center border border-white/20">
+          <Icon className="w-5 h-5 sm:w-6 sm:h-6 text-white" strokeWidth={1.8} />
+        </div>
+
+        <h3 className="text-xs sm:text-sm font-extrabold text-white uppercase tracking-wider mt-1">
+          {title}
+        </h3>
+
+        <p className="text-[9px] sm:text-[10px] text-white/80 leading-tight text-center line-clamp-2">
+          {description}
+        </p>
+      </div>
+    </button>
+  );
 }
