@@ -1,14 +1,4 @@
 import { LucideIcon, Crown } from "lucide-react";
-
-const GRADIENT_MAP: Record<string, string> = {
-  cyan: "from-cyan-500/60 via-blue-600/50 to-teal-500/40",
-  rose: "from-rose-500/60 via-pink-600/50 to-red-500/40",
-  amber: "from-amber-500/60 via-orange-600/50 to-yellow-500/40",
-  violet: "from-violet-500/60 via-purple-600/50 to-indigo-500/40",
-  emerald: "from-emerald-500/60 via-green-600/50 to-teal-500/40",
-  blue: "from-blue-500/60 via-indigo-600/50 to-sky-500/40",
-};
-
 interface ToolCardProps {
   icon: LucideIcon;
   title: string;
@@ -26,9 +16,6 @@ export function ToolCard({
   onClick
 }: ToolCardProps) {
   return <button onClick={onClick} className="keyboard-key group relative font-sans">
-      {/* Gradient fill covering entire key surface */}
-      <div className={`absolute inset-0 rounded-[inherit] bg-gradient-to-br ${GRADIENT_MAP[gradient] || GRADIENT_MAP.cyan} z-[2] pointer-events-none mix-blend-screen`} />
-
       {isPremium && <div className="absolute -top-2 -right-2 z-10">
           <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500/40 to-yellow-400/30 border border-amber-400/50 backdrop-blur-sm">
             <Crown className="w-2.5 h-2.5 text-amber-300 drop-shadow-[0_0_4px_hsl(45,100%,60%,0.6)]" />
@@ -38,7 +25,7 @@ export function ToolCard({
       
       <Icon className="w-6 h-6 text-white drop-shadow-[0_0_8px_hsl(210,100%,70%,0.3)] relative z-10" strokeWidth={1.5} />
       
-      <h3 className="text-3xs font-semibold text-white text-center leading-tight tracking-[0.15em] uppercase relative z-10 mt-0.5">
+      <h3 className="text-3xs font-semibold text-white text-center leading-tight tracking-[0.15em] uppercase relative z-10 mt-0.5 px-[45px]">
         {title}
       </h3>
     </button>;
