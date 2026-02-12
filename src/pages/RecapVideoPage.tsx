@@ -2098,8 +2098,8 @@ export default function VideoRecapView() {
           <Home className="w-4 h-4" />
           <span className="text-[9px] font-black uppercase tracking-widest">Home</span>
         </button>
-        <h1 className="font-black text-white uppercase tracking-widest text-2xl">
-          VIDEO <span className="text-blue-500">RECAP</span>
+        <h1 className="font-black text-white uppercase tracking-widest text-2xl">NOVA VIDEO RECAP
+          <span className="text-neon-rose">RECAP</span>
         </h1>
         <div className="w-16" /> {/* Spacer for centering */}
       </div>
