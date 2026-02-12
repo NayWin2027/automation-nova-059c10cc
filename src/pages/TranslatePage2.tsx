@@ -563,7 +563,7 @@ const TranslateView: React.FC = () => {
       {/* Branding Footer */}
       <div className="max-w-md mx-auto mt-20 flex items-start gap-6 p-8 bg-indigo-500/5 rounded-[40px] border border-indigo-500/10 backdrop-blur-md">
         <Info className="w-6 h-6 text-indigo-400 shrink-0 mt-0.5" />
-        <p className="font-bold text-indigo-200/40 leading-relaxed uppercase tracking-wider text-lg">
+        <p className="font-bold leading-relaxed uppercase tracking-wider text-lg text-neon-rose">
           ကျွန်ုပ်တို့၏ AI Engine သည် လူသားစကားပြောပုံစံကို အထူးပြုပါသည်။ ရွေးချယ်ထားသော Credit Tier အလိုက် စာလုံးရေကို
           ကန့်သတ်တွက်ချက်မည်ဖြစ်ပါသည်။ စာလုံးရေပိုများပါက ပိုမိုမြင့်မားသော Tier ကို ရွေးချယ်အသုံးပြုပေးပါ။ (နော်) ဟူသော
           စကားလုံးအား အသုံးမပြုရန် စနစ်တွင် ကန့်သတ်ထားပါသည်။
