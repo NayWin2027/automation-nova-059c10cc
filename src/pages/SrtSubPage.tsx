@@ -284,7 +284,7 @@ const SrtTranslatorView: React.FC = () => {
           placeholder="Paste Private Key..."
           className="w-full bg-black/50 border border-white/5 rounded-xl p-4 text-xs font-bold text-white outline-none focus:ring-1 focus:ring-emerald-500" />
 
-          <p className="ml-1 text-lg text-destructive-foreground">Tab ပိတ်လိုက်ရင် Key ပျောက်သွားပါမယ်</p>
+          <p className="ml-1 text-lg text-neon-rose">Tab ပိတ်လိုက်ရင် Key ပျောက်သွားပါမယ်</p>
         </div>
       }
 
