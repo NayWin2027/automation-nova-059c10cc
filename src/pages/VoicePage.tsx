@@ -620,7 +620,7 @@ const VoicePage: React.FC = () => {
       }
 
       {/* Header */}
-      <header className="p-4 flex items-center gap-3 bg-card">
+      <header className="p-4 flex items-center gap-3 bg-card border-secondary-foreground">
         <button
           onClick={() => navigate('/')}
           className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center">
@@ -631,7 +631,7 @@ const VoicePage: React.FC = () => {
         <EditableField fieldKey="pageTitle" colorKey="pageTitleColor" sizeKey="pageTitleSize" label="Page Title" /> :
 
         <h1
-          className="font-bold tracking-wider text-secondary-foreground text-lg"
+          className="font-bold tracking-wider text-destructive-foreground text-xl"
           style={{
             color: vs?.pageTitleColor || defaultVoiceSettings.pageTitleColor,
             fontSize: (vs?.pageTitleSize || defaultVoiceSettings.pageTitleSize) + 'px'
