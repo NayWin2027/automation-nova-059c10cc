@@ -383,6 +383,8 @@ export default function VideoRecapView() {
   const tickerVelYRef = useRef(1);
   const charImgRef = useRef<HTMLImageElement | null>(null);
   const freezeCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const cachedLogoImgRef = useRef<HTMLImageElement | null>(null);
+  const cachedLogoSrcRef = useRef<string | null>(null);
   const wasFreezeModeRef = useRef(false);
   const freezeCapturedCycleRef = useRef<number>(-1); // ensures photo phase stays stable for the full 3s
   const didConfirmSuccessRef = useRef(false);
@@ -1620,8 +1622,9 @@ export default function VideoRecapView() {
           const desiredFreezeTime = clampTime(sceneStart + Math.min(freezeElapsed, Math.max(0, sceneDuration - 0.1)));
 
           // SMOOTH video control: minimize play/pause toggling
-          // Only act on PHASE TRANSITIONS — never call play/pause every frame
-          if (motionZoom && isPlaying) {
+          // CRITICAL: During EXPORT, NEVER pause/play the video — it causes buffering hangs.
+          // Instead, keep video playing and rely on freeze canvas for photo phase visuals.
+          if (motionZoom && isPlaying && !isExporting) {
             if (inPhotoPhase && !lastPhaseWasPhotoRef.current) {
               // Entering photo phase — pause video once and set freeze frame position
               video.pause();
@@ -1633,11 +1636,14 @@ export default function VideoRecapView() {
               video.play().catch(() => {});
               lastPhaseWasPhotoRef.current = false;
             }
+          } else if (motionZoom && isExporting) {
+            // During export: track phase state but don't touch video playback
+            lastPhaseWasPhotoRef.current = inPhotoPhase;
           }
 
           // SEGMENT-LEVEL SEEKING: only seek when segment actually changes
           // This is the key to smoothness — don't seek within the same segment during motion
-          if (isPlaying && activeSegment && video.duration > 0) {
+          if (isPlaying && !isExporting && activeSegment && video.duration > 0) {
             const segIdx = scriptSegments.indexOf(activeSegment);
             if (segIdx !== lastSeekedSegmentRef.current) {
               // New segment — seek to its scene start
@@ -1770,8 +1776,9 @@ export default function VideoRecapView() {
           }
 
           if (filmGrain) {
-            const noiseCount = targetW * targetH * 0.005;
-            ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
+            // Reduced grain density for smoother performance (especially during export)
+            const noiseCount = isExporting ? targetW * targetH * 0.001 : targetW * targetH * 0.003;
+            ctx.fillStyle = "rgba(255, 255, 255, 0.10)";
             for (let i = 0; i < noiseCount; i++) ctx.fillRect(Math.random() * targetW, Math.random() * targetH, 1, 1);
           }
           ctx.restore();
@@ -1811,9 +1818,15 @@ export default function VideoRecapView() {
           }
 
           if (logoSrc) {
-            const logoImg = new Image();
-            logoImg.src = logoSrc;
-            if (logoImg.complete && logoImg.width > 0) {
+            // Cache logo image to avoid creating new Image() every frame
+            if (cachedLogoSrcRef.current !== logoSrc) {
+              const img = new Image();
+              img.src = logoSrc;
+              cachedLogoImgRef.current = img;
+              cachedLogoSrcRef.current = logoSrc;
+            }
+            const logoImg = cachedLogoImgRef.current;
+            if (logoImg && logoImg.complete && logoImg.width > 0) {
               const size = targetH * (logoSize / 100);
               const margin = 20;
               const lx = targetW - size - margin;
