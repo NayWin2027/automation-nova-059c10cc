@@ -171,7 +171,7 @@ const CreatorPage: React.FC = () => {
 
           <ArrowLeft className="w-4 h-4 text-foreground" />
         </button>
-        <h1 className="text-base font-bold tracking-wider text-foreground">CREATOR</h1>
+        <h1 className="font-bold tracking-wider text-foreground text-4xl">CONTENT CREATOR NOVA</h1>
       </header>
 
       <main className="px-4 space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-700">
@@ -213,8 +213,8 @@ const CreatorPage: React.FC = () => {
           {/* Header Section */}
           <div className="flex justify-between items-center px-1">
             <div className="space-y-0.5">
-              <h2 className="text-xl font-black tracking-tighter text-foreground">CREATOR <span className="text-primary">MASTER</span></h2>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">AI CONTENT FACTORY</p>
+              <h2 className="font-black tracking-tighter text-foreground text-3xl">CONTENT CREATOR  NOVA<span className="text-primary">MASTER</span></h2>
+              <p className="font-black uppercase tracking-[0.3em] text-neon-rose text-xl">AI CONTENT FACTORY</p>
             </div>
             <div className="w-10 h-10 rounded-xl jewel-gold flex items-center justify-center shadow-xl shadow-amber-900/40">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
@@ -224,7 +224,7 @@ const CreatorPage: React.FC = () => {
           {/* Basic Config */}
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest ml-1">LANGUAGE</label>
+              <label className="font-black text-slate-300 uppercase tracking-widest ml-1 text-base">LANGUAGE</label>
               <select
                 value={language}
                 onChange={(e) => setLanguage(e.target.value)}
@@ -234,7 +234,7 @@ const CreatorPage: React.FC = () => {
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest ml-1">CATEGORY</label>
+              <label className="font-black text-slate-300 uppercase tracking-widest ml-1 text-base">CATEGORY</label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
