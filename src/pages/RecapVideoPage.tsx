@@ -2093,7 +2093,7 @@ export default function VideoRecapView() {
       <div className="flex items-center justify-between py-2">
         <button
           onClick={() => navigate("/")}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-all">
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-all text-base">
 
           <Home className="w-4 h-4" />
           <span className="text-[9px] font-black uppercase tracking-widest">Home</span>
