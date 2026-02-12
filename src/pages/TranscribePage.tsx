@@ -788,7 +788,7 @@ export default function TranscriptionView() {
 
       {/* PRO TIPS SECTION */}
       <div className="bg-[#0a0f1d] border border-white/5 rounded-2xl p-6 space-y-4">
-        <div className="flex items-center gap-3 text-neon-rose">
+        <div className="flex items-center gap-3 text-gold-light">
           <div className="w-1 h-4 bg-blue-500 rounded-full"></div>
           <h3 className="text-[10px] font-black text-white uppercase tracking-widest">
             <EditableText value={s.proTipsTitle} onChange={(v) => setEditSettings({ ...editSettings, proTipsTitle: v })} />
