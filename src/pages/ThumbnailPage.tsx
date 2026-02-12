@@ -322,7 +322,7 @@ const LayerControl: React.FC<any> = ({
       <div className="grid grid-cols-2 gap-4 items-center border-t border-white/5 pt-3">
         <div className="space-y-1">
           <p className="font-black text-slate-400 uppercase tracking-widest ml-1 text-sm">Alignment</p>
-          <div className="grid grid-cols-5 gap-1">
+          <div className="grid grid-cols-5 gap-1 bg-neon-rose">
             {(["UPON LEFT", "UPON RIGHT", "CENTER", "BUTTON LEFT", "BUTTON RIGHT"] as Position[]).map((p) =>
             <button
               key={p}
@@ -340,7 +340,7 @@ const LayerControl: React.FC<any> = ({
         </div>
         <div className="space-y-1">
           <p className="font-black text-slate-400 uppercase tracking-widest text-center text-sm">Precise Position</p>
-          <div className="flex items-center justify-center gap-2">
+          <div className="flex items-center justify-center gap-2 bg-neon-rose">
             <button
               onClick={() => setOffset((o: any) => ({ ...o, x: o.x - 5 }))}
               className="w-6 h-6 bg-white/5 rounded text-[10px]">
