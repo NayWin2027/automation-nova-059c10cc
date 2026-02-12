@@ -209,7 +209,7 @@ const SrtTranslatorView: React.FC = () => {
 
           <ArrowLeft className="w-4 h-4 text-white" />
         </button>
-        <h1 className="text-sm font-black text-white uppercase tracking-widest">SRT Translator</h1>
+        <h1 className="font-black text-white uppercase tracking-widest text-4xl">SRT Translator</h1>
       </div>
 
       {/* 1. API TYPE TABS (Premium Styling) */}
