@@ -699,7 +699,7 @@ const StoryView: React.FC = () => {
           <div className="flex justify-between items-center">
             <h4 className="font-black text-blue-300 uppercase tracking-widest text-sm">CHARACTER CAST & EXTRAS</h4>
             <div className="flex items-center gap-2">
-              <span className="text-[7px] font-black text-slate-300 uppercase">TOTAL:</span>
+              <span className="font-black uppercase text-base text-neon-rose">TOTAL:</span>
               <input
                 type="number"
                 value={targetCharCount}
