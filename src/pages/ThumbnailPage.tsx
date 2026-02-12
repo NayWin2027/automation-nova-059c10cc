@@ -250,7 +250,7 @@ const LayerControl: React.FC<any> = ({
       <div className="flex justify-between items-center px-1">
         <label className={`text-[10px] font-black uppercase tracking-[0.2em] text-${colorTheme}-400`}>{label}</label>
         <div className="flex items-center gap-2">
-          <span className="font-black text-slate-400 uppercase text-sm">Scale</span>
+          <span className="font-black uppercase text-sm text-neon-cyan">Scale</span>
           <input
             type="range"
             min="20"
@@ -272,7 +272,7 @@ const LayerControl: React.FC<any> = ({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {/* Style Dropdown */}
         <div className="space-y-1">
-          <p className="font-black text-slate-400 uppercase tracking-widest ml-1 text-xs">Color Style</p>
+          <p className="font-black uppercase tracking-widest ml-1 text-xs text-gold">Color Style</p>
           <select
             value={style}
             onChange={(e) => setStyle(e.target.value)}
@@ -288,7 +288,7 @@ const LayerControl: React.FC<any> = ({
 
         {/* Effect Dropdown */}
         <div className="space-y-1">
-          <p className="font-black text-slate-400 uppercase tracking-widest ml-1 text-xs">Text Effect</p>
+          <p className="font-black uppercase tracking-widest ml-1 text-xs text-gold">Text Effect</p>
           <select
             value={effect}
             onChange={(e) => setEffect(e.target.value as FontEffect)}
@@ -304,7 +304,7 @@ const LayerControl: React.FC<any> = ({
 
         {/* Font Dropdown */}
         <div className="space-y-1">
-          <p className="font-black text-slate-400 uppercase tracking-widest ml-1 text-xs">Elite Font</p>
+          <p className="font-black uppercase tracking-widest ml-1 text-xs text-gold">Elite Font</p>
           <select
             value={font}
             onChange={(e) => setFont(e.target.value)}
@@ -321,8 +321,8 @@ const LayerControl: React.FC<any> = ({
 
       <div className="grid grid-cols-2 gap-4 items-center border-t border-white/5 pt-3">
         <div className="space-y-1">
-          <p className="font-black text-slate-400 uppercase tracking-widest ml-1 text-sm">Alignment</p>
-          <div className="grid grid-cols-5 gap-1 bg-neon-rose">
+          <p className="font-black uppercase tracking-widest ml-1 text-sm text-neon-rose">Alignment</p>
+          <div className="grid grid-cols-5 gap-1 bg-primary-foreground">
             {(["UPON LEFT", "UPON RIGHT", "CENTER", "BUTTON LEFT", "BUTTON RIGHT"] as Position[]).map((p) =>
             <button
               key={p}
@@ -339,8 +339,8 @@ const LayerControl: React.FC<any> = ({
           </div>
         </div>
         <div className="space-y-1">
-          <p className="font-black text-slate-400 uppercase tracking-widest text-center text-sm">Precise Position</p>
-          <div className="flex items-center justify-center gap-2 bg-neon-rose">
+          <p className="font-black uppercase tracking-widest text-center text-sm text-neon-rose">Precise Position</p>
+          <div className="flex items-center justify-center gap-2 bg-popover">
             <button
               onClick={() => setOffset((o: any) => ({ ...o, x: o.x - 5 }))}
               className="w-6 h-6 bg-white/5 rounded text-[10px]">
@@ -743,7 +743,7 @@ const ThumbnailView: React.FC = () => {
   if (!isAllowed) return null;
 
   return (
-    <div className="space-y-6 pb-40 animate-in fade-in duration-500 max-w-5xl mx-auto px-2 text-white">
+    <div className="space-y-6 pb-40 animate-in fade-in duration-500 max-w-5xl mx-auto px-2 text-white bg-blue-700">
       {/* 1. MONITOR PREVIEW (Sticky Top - Compact) */}
       <div className="sticky top-16 z-[100] pb-1">
         <div className="neon-glass rounded-2xl sm:rounded-3xl p-3 sm:p-4 space-y-2 border border-white/15 shadow-[0_0_60px_rgba(0,0,0,0.7)] overflow-hidden bg-black/80 backdrop-blur-3xl">
