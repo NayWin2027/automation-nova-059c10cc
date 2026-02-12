@@ -276,7 +276,7 @@ const SrtTranslatorView: React.FC = () => {
 
       {apiType === "own" &&
       <div className="neon-glass rounded-2xl p-4 border border-emerald-500/20 space-y-2 animate-in zoom-in-95">
-          <h4 className="font-black text-emerald-400 uppercase tracking-widest ml-1 text-sm">GEMINI PRIVATE KEY</h4>
+          <h4 className="font-black uppercase tracking-widest ml-1 text-sm text-white">GEMINI PRIVATE KEY</h4>
           <input
           type="password"
           value={apiKey}
@@ -284,14 +284,14 @@ const SrtTranslatorView: React.FC = () => {
           placeholder="Paste Private Key..."
           className="w-full bg-black/50 border border-white/5 rounded-xl p-4 text-xs font-bold text-white outline-none focus:ring-1 focus:ring-emerald-500" />
 
-          <p className="text-emerald-300/80 ml-1 text-lg">Tab ပိတ်လိုက်ရင် Key ပျောက်သွားပါမယ်</p>
+          <p className="ml-1 text-lg text-destructive-foreground">Tab ပိတ်လိုက်ရင် Key ပျောက်သွားပါမယ်</p>
         </div>
       }
 
       {/* 3. MAIN TRANSLATOR INTERFACE */}
       <div className="neon-glass rounded-[48px] p-8 space-y-8 border border-white/10 shadow-3xl relative overflow-hidden">
-        <h2 className="text-xl font-black uppercase tracking-[0.4em] text-emerald-400 text-center">
-          SRT <span className="text-white">TRANSLATOR</span>
+        <h2 className="font-black uppercase tracking-[0.4em] text-center text-2xl text-neon-amber">SRT TRANSLATOR
+          <span className="text-white text-2xl">TRANSLATOR</span>
         </h2>
 
         {!fileContent ?
