@@ -238,7 +238,7 @@ const Index = () => {
         className="w-7 h-7 rounded-lg bg-card/60 border border-gold/20 flex items-center justify-center hover:bg-card transition-colors"
         title={isLightMode ? 'Switch to Dark Mode' : 'Switch to Light Mode'}>
 
-          {isLightMode ? <Moon className="text-foreground w-[25px] h-[20px]" /> : <Sun className="w-3.5 h-3.5 text-amber-400" />}
+          {isLightMode ? <Moon className="w-3.5 h-3.5 text-foreground" /> : <Sun className="w-3.5 h-3.5 text-amber-400" />}
         </button>
         <div className="flex items-center gap-1.5">
           {isAuthenticated ?
@@ -401,7 +401,7 @@ const Index = () => {
 
       <header className="px-3 py-1 relative z-10" />
 
-      <main className="px-3 relative z-10 text-primary-foreground rounded-none border-none border-0">
+      <main className="px-3 relative z-10 text-primary-foreground rounded-none border-none border-0 bg-sidebar">
         {activeTab === "home" && renderHomeContent()}
         {activeTab === "premium" && renderPremiumContent()}
         {activeTab === "settings" && renderSettingsContent()}
