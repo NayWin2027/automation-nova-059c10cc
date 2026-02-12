@@ -250,7 +250,7 @@ const LayerControl: React.FC<any> = ({
       <div className="flex justify-between items-center px-1">
         <label className={`text-[10px] font-black uppercase tracking-[0.2em] text-${colorTheme}-400`}>{label}</label>
         <div className="flex items-center gap-2">
-          <span className="font-black text-slate-400 uppercase text-sm">Scale</span>
+          <span className="font-black uppercase text-sm text-neon-rose">Scale</span>
           <input
             type="range"
             min="20"
