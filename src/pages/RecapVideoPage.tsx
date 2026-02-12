@@ -11,146 +11,146 @@ import { preCheckCredits } from "@/utils/creditPreCheck";
 
 // --- DATA SETS ---
 const VOICES = [
-  { id: "v1", name: "Kyaw Swar (Deep Narration)", gender: "MALE", apiVoice: "Charon", avatar: "👨‍💼" },
-  { id: "v2", name: "May Thet (Soft Story)", gender: "FEMALE", apiVoice: "Kore", avatar: "👩‍💼" },
-  { id: "v3", name: "Thura (News Reader)", gender: "MALE", apiVoice: "Fenrir", avatar: "🤵" },
-  { id: "v4", name: "Hnin Wutyi (Emotional)", gender: "FEMALE", apiVoice: "Zephyr", avatar: "💃" },
-  { id: "v5", name: "Zayar (Documentary)", gender: "MALE", apiVoice: "Puck", avatar: "🧔" },
-  { id: "v6", name: "Ko Aung (Casual - M)", gender: "MALE", apiVoice: "Fenrir", avatar: "👮" },
-  { id: "v7", name: "Ma Su (Sweet - F)", gender: "FEMALE", apiVoice: "Kore", avatar: "👩‍⚕️" },
-  { id: "v8", name: "U Win (Authoritative - M)", gender: "MALE", apiVoice: "Charon", avatar: "👷" },
-  { id: "v9", name: "Daw Moe (Calm - F)", gender: "FEMALE", apiVoice: "Zephyr", avatar: "🧕" },
-  { id: "v10", name: "Ko Tun (Fast Paced - M)", gender: "MALE", apiVoice: "Puck", avatar: "⛹️" },
-  { id: "v11", name: "Ma Nway (Teacher Tone - F)", gender: "FEMALE", apiVoice: "Kore", avatar: "👩‍🏫" },
-  { id: "v12", name: "Ko Min (Heroic - M)", gender: "MALE", apiVoice: "Fenrir", avatar: "🦸‍♂️" },
-  { id: "v13", name: "Ma Yin (Whisper - F)", gender: "FEMALE", apiVoice: "Zephyr", avatar: "🧚‍♀️" },
-  { id: "v14", name: "Ko Kaung (Friendly - M)", gender: "MALE", apiVoice: "Puck", avatar: "🙋‍♂️" },
-  { id: "v15", name: "Daw Myat (Professional - F)", gender: "FEMALE", apiVoice: "Kore", avatar: "👩‍⚖️" },
-  { id: "v16", name: "U Naing (Serious - M)", gender: "MALE", apiVoice: "Charon", avatar: "👮‍♂️" },
-  { id: "v17", name: "Ma Phyu (Bright - F)", gender: "FEMALE", apiVoice: "Zephyr", avatar: "💁‍♀️" },
-  { id: "v18", name: "Ko Kyaw (Youthful - M)", gender: "MALE", apiVoice: "Puck", avatar: "🙍‍♂️" },
-  { id: "v19", name: "Daw Thida (Warm - F)", gender: "FEMALE", apiVoice: "Kore", avatar: "🤱" },
-  { id: "v20", name: "U Soe (Classic - M)", gender: "MALE", apiVoice: "Fenrir", avatar: "🕴️" },
-];
+{ id: "v1", name: "Kyaw Swar (Deep Narration)", gender: "MALE", apiVoice: "Charon", avatar: "👨‍💼" },
+{ id: "v2", name: "May Thet (Soft Story)", gender: "FEMALE", apiVoice: "Kore", avatar: "👩‍💼" },
+{ id: "v3", name: "Thura (News Reader)", gender: "MALE", apiVoice: "Fenrir", avatar: "🤵" },
+{ id: "v4", name: "Hnin Wutyi (Emotional)", gender: "FEMALE", apiVoice: "Zephyr", avatar: "💃" },
+{ id: "v5", name: "Zayar (Documentary)", gender: "MALE", apiVoice: "Puck", avatar: "🧔" },
+{ id: "v6", name: "Ko Aung (Casual - M)", gender: "MALE", apiVoice: "Fenrir", avatar: "👮" },
+{ id: "v7", name: "Ma Su (Sweet - F)", gender: "FEMALE", apiVoice: "Kore", avatar: "👩‍⚕️" },
+{ id: "v8", name: "U Win (Authoritative - M)", gender: "MALE", apiVoice: "Charon", avatar: "👷" },
+{ id: "v9", name: "Daw Moe (Calm - F)", gender: "FEMALE", apiVoice: "Zephyr", avatar: "🧕" },
+{ id: "v10", name: "Ko Tun (Fast Paced - M)", gender: "MALE", apiVoice: "Puck", avatar: "⛹️" },
+{ id: "v11", name: "Ma Nway (Teacher Tone - F)", gender: "FEMALE", apiVoice: "Kore", avatar: "👩‍🏫" },
+{ id: "v12", name: "Ko Min (Heroic - M)", gender: "MALE", apiVoice: "Fenrir", avatar: "🦸‍♂️" },
+{ id: "v13", name: "Ma Yin (Whisper - F)", gender: "FEMALE", apiVoice: "Zephyr", avatar: "🧚‍♀️" },
+{ id: "v14", name: "Ko Kaung (Friendly - M)", gender: "MALE", apiVoice: "Puck", avatar: "🙋‍♂️" },
+{ id: "v15", name: "Daw Myat (Professional - F)", gender: "FEMALE", apiVoice: "Kore", avatar: "👩‍⚖️" },
+{ id: "v16", name: "U Naing (Serious - M)", gender: "MALE", apiVoice: "Charon", avatar: "👮‍♂️" },
+{ id: "v17", name: "Ma Phyu (Bright - F)", gender: "FEMALE", apiVoice: "Zephyr", avatar: "💁‍♀️" },
+{ id: "v18", name: "Ko Kyaw (Youthful - M)", gender: "MALE", apiVoice: "Puck", avatar: "🙍‍♂️" },
+{ id: "v19", name: "Daw Thida (Warm - F)", gender: "FEMALE", apiVoice: "Kore", avatar: "🤱" },
+{ id: "v20", name: "U Soe (Classic - M)", gender: "MALE", apiVoice: "Fenrir", avatar: "🕴️" }];
+
 
 const CHARACTERS = [
-  { id: "none", label: "မပြပါ (None)", src: "" },
-  { id: "c1", label: "ယောကျ်ား ၁ (Male 1)", src: "/images/char-male1.png" },
-  { id: "c2", label: "မိန်းမ ၁ (Female 1)", src: "/images/char-female1.png" },
-  { id: "c3", label: "ယောကျ်ား ၂ (Male 2)", src: "/images/char-male2.png" },
-  { id: "c4", label: "မိန်းမ ၂ (Female 2)", src: "/images/char-female2.png" },
-  { id: "c5", label: "ယောကျ်ား ၃ (Male 3)", src: "/images/char-male3.png" },
-];
+{ id: "none", label: "မပြပါ (None)", src: "" },
+{ id: "c1", label: "ယောကျ်ား ၁ (Male 1)", src: "/images/char-male1.png" },
+{ id: "c2", label: "မိန်းမ ၁ (Female 1)", src: "/images/char-female1.png" },
+{ id: "c3", label: "ယောကျ်ား ၂ (Male 2)", src: "/images/char-male2.png" },
+{ id: "c4", label: "မိန်းမ ၂ (Female 2)", src: "/images/char-female2.png" },
+{ id: "c5", label: "ယောကျ်ား ၃ (Male 3)", src: "/images/char-male3.png" }];
+
 
 const LANGUAGES = [
-  "BURMESE (MYANMAR)",
-  "ENGLISH",
-  "JAPANESE",
-  "KOREAN",
-  "CHINESE (SIMPLIFIED)",
-  "CHINESE (TRADITIONAL)",
-  "THAI",
-  "VIETNAMESE",
-  "HINDI",
-  "INDONESIAN",
-  "MALAY",
-  "FRENCH",
-  "GERMAN",
-  "SPANISH",
-  "ITALIAN",
-  "RUSSIAN",
-  "PORTUGUESE",
-  "ARABIC",
-  "TURKISH",
-  "BENGALI",
-  "PUNJABI",
-  "TELUGU",
-  "MARATHI",
-  "TAMIL",
-  "URDU",
-  "GUJARATI",
-  "KANNADA",
-  "MALAYALAM",
-  "FILIPINO",
-  "KHMER",
-  "LAO",
-  "AFRIKAANS",
-  "ALBANIAN",
-  "AMHARIC",
-  "ARMENIAN",
-  "AZERBAIJANI",
-  "BASQUE",
-  "BELARUSIAN",
-  "BOSNIAN",
-  "BULGARIAN",
-  "CATALAN",
-  "CROATIAN",
-  "CZECH",
-  "DANISH",
-  "DUTCH",
-  "ESTONIAN",
-  "FINNISH",
-  "GALICIAN",
-  "GEORGIAN",
-  "GREEK",
-  "HEBREW",
-  "HUNGARIAN",
-  "ICELANDIC",
-  "IRISH",
-  "KAZAKH",
-  "KYRGYZ",
-  "LATVIAN",
-  "LITHUANIAN",
-  "MACEDONIAN",
-  "MALAGASY",
-  "MALTESE",
-  "MONGOLIAN",
-  "NEPALI",
-  "NORWEGIAN",
-  "PERSIAN",
-  "POLISH",
-  "ROMANIAN",
-  "SERBIAN",
-  "SINHALA",
-  "SLOVAK",
-  "SLOVENIAN",
-  "SOMALI",
-  "SWAHILI",
-  "SWEDISH",
-  "TAJIK",
-  "UKRAINIAN",
-  "UZBEK",
-  "ZULU",
-  "XHOSA",
-  "YORUBA",
-  "IGBO",
-];
+"BURMESE (MYANMAR)",
+"ENGLISH",
+"JAPANESE",
+"KOREAN",
+"CHINESE (SIMPLIFIED)",
+"CHINESE (TRADITIONAL)",
+"THAI",
+"VIETNAMESE",
+"HINDI",
+"INDONESIAN",
+"MALAY",
+"FRENCH",
+"GERMAN",
+"SPANISH",
+"ITALIAN",
+"RUSSIAN",
+"PORTUGUESE",
+"ARABIC",
+"TURKISH",
+"BENGALI",
+"PUNJABI",
+"TELUGU",
+"MARATHI",
+"TAMIL",
+"URDU",
+"GUJARATI",
+"KANNADA",
+"MALAYALAM",
+"FILIPINO",
+"KHMER",
+"LAO",
+"AFRIKAANS",
+"ALBANIAN",
+"AMHARIC",
+"ARMENIAN",
+"AZERBAIJANI",
+"BASQUE",
+"BELARUSIAN",
+"BOSNIAN",
+"BULGARIAN",
+"CATALAN",
+"CROATIAN",
+"CZECH",
+"DANISH",
+"DUTCH",
+"ESTONIAN",
+"FINNISH",
+"GALICIAN",
+"GEORGIAN",
+"GREEK",
+"HEBREW",
+"HUNGARIAN",
+"ICELANDIC",
+"IRISH",
+"KAZAKH",
+"KYRGYZ",
+"LATVIAN",
+"LITHUANIAN",
+"MACEDONIAN",
+"MALAGASY",
+"MALTESE",
+"MONGOLIAN",
+"NEPALI",
+"NORWEGIAN",
+"PERSIAN",
+"POLISH",
+"ROMANIAN",
+"SERBIAN",
+"SINHALA",
+"SLOVAK",
+"SLOVENIAN",
+"SOMALI",
+"SWAHILI",
+"SWEDISH",
+"TAJIK",
+"UKRAINIAN",
+"UZBEK",
+"ZULU",
+"XHOSA",
+"YORUBA",
+"IGBO"];
+
 
 const ASPECT_RATIOS = [
-  { label: "ORIGINAL", w: 0, h: 0 },
-  { label: "16:9 (YouTube)", w: 16, h: 9 },
-  { label: "9:16 (TikTok)", w: 9, h: 16 },
-  { label: "1:1 (Square)", w: 1, h: 1 },
-  { label: "4:3 (Classic)", w: 4, h: 3 },
-];
+{ label: "ORIGINAL", w: 0, h: 0 },
+{ label: "16:9 (YouTube)", w: 16, h: 9 },
+{ label: "9:16 (TikTok)", w: 9, h: 16 },
+{ label: "1:1 (Square)", w: 1, h: 1 },
+{ label: "4:3 (Classic)", w: 4, h: 3 }];
+
 
 const COLORS = [
-  { id: "cyan", name: "CYAN", hex: "#00FFFF" },
-  { id: "red", name: "RED", hex: "#ef4444" },
-  { id: "gold", name: "GOLD", hex: "#fbbf24" },
-  { id: "green", name: "GREEN", hex: "#22c55e" },
-  { id: "purple", name: "PURP", hex: "#c084fc" },
-  { id: "blue", name: "BLUE", hex: "#3b82f6" },
-  { id: "white", name: "WHITE", hex: "#ffffff" },
-];
+{ id: "cyan", name: "CYAN", hex: "#00FFFF" },
+{ id: "red", name: "RED", hex: "#ef4444" },
+{ id: "gold", name: "GOLD", hex: "#fbbf24" },
+{ id: "green", name: "GREEN", hex: "#22c55e" },
+{ id: "purple", name: "PURP", hex: "#c084fc" },
+{ id: "blue", name: "BLUE", hex: "#3b82f6" },
+{ id: "white", name: "WHITE", hex: "#ffffff" }];
+
 
 const SUB_COLORS = [
-  { id: "GOLD", label: "GOLD GRADIENT", hex: "#FFD700" },
-  { id: "WHITE", label: "PURE WHITE", hex: "#FFFFFF" },
-  { id: "NEON", label: "NEON CYAN", hex: "#00FFFF" },
-  { id: "ROSE", label: "ROSE PINK", hex: "#FB7185" },
-  { id: "LIME", label: "LIME GREEN", hex: "#A3E635" },
-];
+{ id: "GOLD", label: "GOLD GRADIENT", hex: "#FFD700" },
+{ id: "WHITE", label: "PURE WHITE", hex: "#FFFFFF" },
+{ id: "NEON", label: "NEON CYAN", hex: "#00FFFF" },
+{ id: "ROSE", label: "ROSE PINK", hex: "#FB7185" },
+{ id: "LIME", label: "LIME GREEN", hex: "#A3E635" }];
+
 
 interface VideoScene {
   start: number;
@@ -189,28 +189,28 @@ interface AccordionItemProps {
 
 // Fix: silence "Function components cannot be given refs" warnings by forwarding any ref.
 const AccordionItem = React.forwardRef<HTMLDivElement, AccordionItemProps>(function AccordionItem(
-  { title, isOpen, onClick, children },
-  ref
-) {
+{ title, isOpen, onClick, children },
+ref)
+{
   return (
     <div
       ref={ref}
-      className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0a0a] transition-all duration-300"
-    >
+      className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0a0a] transition-all duration-300">
+
       <button
         onClick={onClick}
-        className="w-full p-4 flex justify-between items-center bg-white/5 hover:bg-white/10 active:bg-white/20 transition-colors"
-      >
-        <span className="text-[9px] font-black text-white uppercase tracking-widest">{title}</span>
+        className="w-full p-4 flex justify-between items-center bg-white/5 hover:bg-white/10 active:bg-white/20 transition-colors">
+
+        <span className="font-black uppercase tracking-widest text-sm text-neon-rose">{title}</span>
         <span className={`text-white transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`}>▼</span>
       </button>
       <div
-        className={`transition-[max-height] duration-500 ease-in-out overflow-hidden ${isOpen ? "max-h-[800px]" : "max-h-0"}`}
-      >
+        className={`transition-[max-height] duration-500 ease-in-out overflow-hidden ${isOpen ? "max-h-[800px]" : "max-h-0"}`}>
+
         <div className="p-4 space-y-4 border-t border-white/5">{children}</div>
       </div>
-    </div>
-  );
+    </div>);
+
 });
 
 const createWavBlob = (base64Audio: string) => {
@@ -224,7 +224,7 @@ const createWavBlob = (base64Audio: string) => {
   const sampleRate = 24000;
   const numChannels = 1;
   const bitsPerSample = 16;
-  const blockAlign = (numChannels * bitsPerSample) / 8;
+  const blockAlign = numChannels * bitsPerSample / 8;
   const byteRate = sampleRate * blockAlign;
   const dataSize = len;
   const buffer = new ArrayBuffer(44 + dataSize);
@@ -302,7 +302,7 @@ export default function VideoRecapView() {
   const [logoNeon, setLogoNeon] = useState(false);
   const [channelName, setChannelName] = useState("");
   const [tickerMode, setTickerMode] = useState<"OFF" | "SCROLL" | "BOUNCE">("OFF");
-  
+
   // History state
   const [history, setHistory] = useState<HistoryItem[]>(() => {
     try {
@@ -332,9 +332,9 @@ export default function VideoRecapView() {
           await supabase.auth.refreshSession();
         }
       } catch {
+
         // ignore; auth guard will handle if the user truly loses session
-      }
-    };
+      }};
 
     const onVisible = () => {
       if (disposed) return;
@@ -406,7 +406,7 @@ export default function VideoRecapView() {
       const f = e.target.files[0];
       setFile(f);
       setCurrentFileName(f.name);
-      
+
       // Convert to Base64 Data URL for persistence (survives browser tab switches)
       const reader = new FileReader();
       reader.onload = () => {
@@ -419,7 +419,7 @@ export default function VideoRecapView() {
         setVideoSrc(URL.createObjectURL(f));
       };
       reader.readAsDataURL(f);
-      
+
       setFullScriptText("");
       setScriptSegments([]);
       setAudioBlobUrl(null);
@@ -432,22 +432,22 @@ export default function VideoRecapView() {
   // Save to history
   const saveToHistory = useCallback((script: string, audioUrl: string | null, segments: ScriptSegment[]) => {
     if (!currentFileName || !script) return;
-    
+
     const newItem: HistoryItem = {
       id: Date.now().toString(),
       timestamp: Date.now(),
       fileName: currentFileName,
       script,
       audioBlobUrl: audioUrl,
-      segments,
+      segments
     };
-    
-    setHistory(prev => {
+
+    setHistory((prev) => {
       const updated = [newItem, ...prev.slice(0, 19)]; // Keep last 20
       localStorage.setItem("video_recap_history", JSON.stringify(updated));
       return updated;
     });
-    
+
     toast.success("History ထဲမှာ သိမ်းပြီးပါပြီ!");
   }, [currentFileName]);
 
@@ -462,8 +462,8 @@ export default function VideoRecapView() {
 
   // Delete from history
   const deleteFromHistory = (id: string) => {
-    setHistory(prev => {
-      const updated = prev.filter(h => h.id !== id);
+    setHistory((prev) => {
+      const updated = prev.filter((h) => h.id !== id);
       localStorage.setItem("video_recap_history", JSON.stringify(updated));
       return updated;
     });
@@ -504,16 +504,16 @@ export default function VideoRecapView() {
   // Priority: 1) Exact timestamp match, 2) Nearest scene by time, 3) Sequential fallback
   const matchSegmentsToScenes = (segments: ScriptSegment[], scenes: VideoScene[]): ScriptSegment[] => {
     if (!scenes || scenes.length === 0) return segments;
-    
+
     // Sort scenes by start time for reliable nearest-match
     const sortedScenes = [...scenes].sort((a, b) => a.start - b.start);
-    
+
     return segments.map((seg, idx) => {
       // 1. Exact timestamp match: seg.time falls within a scene's range
-      let matchedScene = sortedScenes.find(sc => 
-        seg.time >= sc.start && seg.time < sc.end
+      let matchedScene = sortedScenes.find((sc) =>
+      seg.time >= sc.start && seg.time < sc.end
       );
-      
+
       if (!matchedScene) {
         // 2. Nearest scene by timestamp: find the scene whose start is closest to seg.time
         let minDist = Infinity;
@@ -525,19 +525,19 @@ export default function VideoRecapView() {
           }
         }
       }
-      
+
       if (!matchedScene) {
         // 3. Final fallback: sequential assignment
         matchedScene = sortedScenes[Math.min(idx, sortedScenes.length - 1)];
       }
-      
+
       // Use exact scene start (no arbitrary offset) for precise matching
       return {
         ...seg,
         videoTime: matchedScene.start,
         sceneStart: matchedScene.start,
         sceneEnd: matchedScene.end,
-        sceneTopic: matchedScene.topic,
+        sceneTopic: matchedScene.topic
       };
     });
   };
@@ -587,10 +587,10 @@ export default function VideoRecapView() {
       const reliableFile = await getReliableFile();
       const customKey = apiType === "own" ? apiKey : undefined;
       const result = await analyzeVideo(reliableFile, reliableFile.type || "video/mp4", targetLang, customKey);
-      
+
       // Extract recap string and scenes
       const { recap: rawRecap, scenes: detectedScenes } = result;
-      
+
       let segments: ScriptSegment[] = [];
       try {
         segments = JSON.parse(rawRecap);
@@ -598,12 +598,12 @@ export default function VideoRecapView() {
       } catch {
         segments = [{ time: 0, text: rawRecap }];
       }
-      segments = segments
-        .map((s) => ({
-          time: typeof s.time === "number" ? s.time : 0,
-          text: s.text || "",
-        }))
-        .sort((a, b) => a.time - b.time);
+      segments = segments.
+      map((s) => ({
+        time: typeof s.time === "number" ? s.time : 0,
+        text: s.text || ""
+      })).
+      sort((a, b) => a.time - b.time);
 
       // Match segments to detected scenes for semantic video seeking
       if (detectedScenes && detectedScenes.length > 0) {
@@ -611,11 +611,11 @@ export default function VideoRecapView() {
         segments = matchSegmentsToScenes(segments, detectedScenes);
       }
 
-      const completeText = segments
-        .map((s) => s.text)
-        .join(" ")
-        .replace(/(\d+),(?=\d{3})/g, "$1")
-        .replace(/(\d)\s?,\s?(\d)/g, "$1$2");
+      const completeText = segments.
+      map((s) => s.text).
+      join(" ").
+      replace(/(\d+),(?=\d{3})/g, "$1").
+      replace(/(\d)\s?,\s?(\d)/g, "$1$2");
       setFullScriptText(completeText);
       setScriptSegments(segments);
       setAnalyzing(false);
@@ -671,16 +671,16 @@ export default function VideoRecapView() {
         // Use refs to avoid stale closure issues with fullScriptText/scriptSegments
         const currentScript = fullScriptTextRef.current;
         const currentSegments = scriptSegmentsRef.current;
-        console.log("[CUSTOM-AUDIO] fullScriptText length:", currentScript.length, "scriptSegments:", currentSegments.length, "validSegments:", currentSegments.filter(s => s.text && s.text.trim() !== "").length);
+        console.log("[CUSTOM-AUDIO] fullScriptText length:", currentScript.length, "scriptSegments:", currentSegments.length, "validSegments:", currentSegments.filter((s) => s.text && s.text.trim() !== "").length);
         // Filter to only segments with actual text content (avoid stale empty segments)
-        const validSegments = currentSegments.filter(s => s.text && s.text.trim() !== "");
-        let segments: { time: number; text: string; videoTime?: number; sceneStart?: number; sceneEnd?: number }[];
+        const validSegments = currentSegments.filter((s) => s.text && s.text.trim() !== "");
+        let segments: {time: number;text: string;videoTime?: number;sceneStart?: number;sceneEnd?: number;}[];
 
         if (validSegments.length > 0) {
           segments = validSegments;
         } else {
           // No valid segments: split fullScriptText into ~6s segments
-          const sentences = currentScript.split(/(?<=[။\.\!\?])\s*/g).filter(s => s.trim());
+          const sentences = currentScript.split(/(?<=[။\.\!\?])\s*/g).filter((s) => s.trim());
           const partCount = Math.max(1, Math.ceil(totalDuration / 6));
           if (sentences.length >= partCount) {
             // Distribute sentences evenly across parts
@@ -692,7 +692,7 @@ export default function VideoRecapView() {
             }
           } else {
             // Fewer sentences than parts: one segment per sentence
-            segments = sentences.map(s => ({ time: 0, text: s.trim() }));
+            segments = sentences.map((s) => ({ time: 0, text: s.trim() }));
           }
           if (segments.length === 0) {
             segments = [{ time: 0, text: currentScript.trim() }];
@@ -706,9 +706,9 @@ export default function VideoRecapView() {
           audioStart: idx * segDur,
           audioEnd: (idx + 1) * segDur,
           // CRITICAL: Add scene matching data so renderer syncs video to correct scene
-          videoTime: seg.videoTime ?? (idx / segments.length) * videoDur,
-          sceneStart: seg.sceneStart ?? (idx / segments.length) * videoDur,
-          sceneEnd: seg.sceneEnd ?? ((idx + 1) / segments.length) * videoDur,
+          videoTime: seg.videoTime ?? idx / segments.length * videoDur,
+          sceneStart: seg.sceneStart ?? idx / segments.length * videoDur,
+          sceneEnd: seg.sceneEnd ?? (idx + 1) / segments.length * videoDur
         }));
       } else {
         // No script: create empty segments (no subtitles) distributed evenly across video
@@ -717,13 +717,13 @@ export default function VideoRecapView() {
         const numSegments = Math.max(1, Math.ceil(totalDuration / 6)); // ~6s per segment to match 3s+3s cycle
         const segDur = totalDuration / numSegments;
         mappedSegments = Array.from({ length: numSegments }, (_, idx) => ({
-          time: (idx / numSegments) * videoDur,
+          time: idx / numSegments * videoDur,
           text: "", // No subtitle text
           audioStart: idx * segDur,
           audioEnd: (idx + 1) * segDur,
-          videoTime: (idx / numSegments) * videoDur,
-          sceneStart: (idx / numSegments) * videoDur,
-          sceneEnd: ((idx + 1) / numSegments) * videoDur,
+          videoTime: idx / numSegments * videoDur,
+          sceneStart: idx / numSegments * videoDur,
+          sceneEnd: (idx + 1) / numSegments * videoDur
         }));
       }
 
@@ -862,7 +862,7 @@ export default function VideoRecapView() {
           // Rate-limited or fallback — silent retry with 3s wait
           if (attempt < MAX_RETRIES) {
             setStatusText(`⏳ Retry ${attempt + 1}/${MAX_RETRIES}... (${i + 1}/${segments.length})`);
-            await new Promise(r => setTimeout(r, 3000));
+            await new Promise((r) => setTimeout(r, 3000));
           }
         }
 
@@ -878,7 +878,7 @@ export default function VideoRecapView() {
 
         // Throttle: 3s delay between TTS calls to prevent 429 rate limiting
         if (i < segments.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 3000));
+          await new Promise((resolve) => setTimeout(resolve, 3000));
         }
       }
 
@@ -898,7 +898,7 @@ export default function VideoRecapView() {
         const mapped = {
           ...seg,
           audioStart: currentTimePointer,
-          audioEnd: currentTimePointer + segDur,
+          audioEnd: currentTimePointer + segDur
         };
         currentTimePointer += segDur;
         return mapped;
@@ -983,7 +983,7 @@ export default function VideoRecapView() {
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseFloat(e.target.value);
     const totalDur = audioDuration || videoRef.current?.duration || 1;
-    const newTime = (val / 100) * totalDur;
+    const newTime = val / 100 * totalDur;
     if (videoRef.current) videoRef.current.currentTime = newTime;
     if (audioRef.current) audioRef.current.currentTime = newTime;
     setProgress(val);
@@ -994,12 +994,12 @@ export default function VideoRecapView() {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const audio = audioRef.current;
-    
+
     if (!video || !canvas || !audio || !audioBlobUrl) {
       toast.error("Video/Audio မ ready ဖြစ်သေးပါ");
       return;
     }
-    
+
     // Basic capability checks (avoid hard crashes on mobile browsers)
     if (typeof MediaRecorder === "undefined") {
       toast.error("ဒီ browser မှာ Auto Save မထောက်ပံ့ပါ (MediaRecorder မရှိပါ)။ Chrome (Android/Desktop) နဲ့ စမ်းပါ");
@@ -1012,57 +1012,57 @@ export default function VideoRecapView() {
         mediaRecorderRef.current.stop();
       }
     } catch {
+
       // ignore
     }
-
     const waitForPlayable = (el: HTMLMediaElement, label: string) =>
-      new Promise<void>((resolve, reject) => {
-        // HAVE_CURRENT_DATA = 2
-        if (el.readyState >= 2 && Number.isFinite(el.duration) && el.duration > 0) return resolve();
+    new Promise<void>((resolve, reject) => {
+      // HAVE_CURRENT_DATA = 2
+      if (el.readyState >= 2 && Number.isFinite(el.duration) && el.duration > 0) return resolve();
 
-        let done = false;
-        const cleanup = () => {
-          if (done) return;
-          done = true;
-          el.removeEventListener("loadedmetadata", onReady);
-          el.removeEventListener("canplay", onReady);
-          el.removeEventListener("canplaythrough", onReady);
-          el.removeEventListener("error", onErr);
-          window.clearTimeout(t);
-        };
-        const onReady = () => {
-          if (el.readyState >= 2 && Number.isFinite(el.duration) && el.duration > 0) {
-            cleanup();
-            resolve();
-          }
-        };
-        const onErr = () => {
+      let done = false;
+      const cleanup = () => {
+        if (done) return;
+        done = true;
+        el.removeEventListener("loadedmetadata", onReady);
+        el.removeEventListener("canplay", onReady);
+        el.removeEventListener("canplaythrough", onReady);
+        el.removeEventListener("error", onErr);
+        window.clearTimeout(t);
+      };
+      const onReady = () => {
+        if (el.readyState >= 2 && Number.isFinite(el.duration) && el.duration > 0) {
           cleanup();
-          reject(new Error(`${label} load error`));
-        };
-        const t = window.setTimeout(() => {
-          cleanup();
-          reject(new Error(`${label} timed out`));
-        }, 12000);
+          resolve();
+        }
+      };
+      const onErr = () => {
+        cleanup();
+        reject(new Error(`${label} load error`));
+      };
+      const t = window.setTimeout(() => {
+        cleanup();
+        reject(new Error(`${label} timed out`));
+      }, 12000);
 
-        el.addEventListener("loadedmetadata", onReady);
-        el.addEventListener("canplay", onReady);
-        el.addEventListener("canplaythrough", onReady);
-        el.addEventListener("error", onErr);
-      });
+      el.addEventListener("loadedmetadata", onReady);
+      el.addEventListener("canplay", onReady);
+      el.addEventListener("canplaythrough", onReady);
+      el.addEventListener("error", onErr);
+    });
 
     const pickMimeType = () => {
       // Prefer MP4 when supported (plays in more phone galleries), otherwise VP8 WebM.
       const candidates = [
-        // Some Android devices support MP4/H264 recording via MediaRecorder
-        "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
-        "video/mp4",
-        "video/webm;codecs=vp8,opus",
-        "video/webm;codecs=vp9,opus",
-        "video/webm;codecs=vp8",
-        "video/webm;codecs=vp9",
-        "video/webm",
-      ];
+      // Some Android devices support MP4/H264 recording via MediaRecorder
+      "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+      "video/mp4",
+      "video/webm;codecs=vp8,opus",
+      "video/webm;codecs=vp9,opus",
+      "video/webm;codecs=vp8",
+      "video/webm;codecs=vp9",
+      "video/webm"];
+
       for (const t of candidates) {
         if ((MediaRecorder as any).isTypeSupported?.(t)) return t;
       }
@@ -1116,9 +1116,9 @@ export default function VideoRecapView() {
     try {
       recorder = new MediaRecorder(
         stream,
-        mimeType
-          ? { mimeType, videoBitsPerSecond: 8000000 }
-          : { videoBitsPerSecond: 8000000 }
+        mimeType ?
+        { mimeType, videoBitsPerSecond: 8000000 } :
+        { videoBitsPerSecond: 8000000 }
       );
     } catch {
       toast.error("ဒီ browser မှာ recording format မထောက်ပံ့ပါ—Chrome နဲ့ စမ်းပါ");
@@ -1193,16 +1193,16 @@ export default function VideoRecapView() {
       console.error("[RecapExport] Audio play failed:", audioPlayErr);
       toast.error("Audio play မရပါ—ပြန်စမ်းပါ");
       setIsExporting(false);
-      try { recorder.stop(); } catch {}
+      try {recorder.stop();} catch {}
       return;
     }
     video.play().catch(() => {});
 
     // Used for progress + safety timeout
     const totalDur =
-      (Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : audioDuration) ||
-      video.duration ||
-      10;
+    (Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : audioDuration) ||
+    video.duration ||
+    10;
 
     // Stop when audio ends OR reaches end (some browsers don't fire ended reliably)
     const stopRecording = () => {
@@ -1210,17 +1210,17 @@ export default function VideoRecapView() {
         video.pause();
         audio.pause();
       } catch {
+
         // ignore
-      }
-      try {
+      }try {
         if (recorder.state === "recording") {
           // Helps some browsers finalize a playable file (duration/headers).
           try {
             recorder.requestData();
           } catch {
+
             // ignore
-          }
-          window.setTimeout(() => {
+          }window.setTimeout(() => {
             try {
               if (recorder.state === "recording") recorder.stop();
             } catch {
@@ -1243,33 +1243,33 @@ export default function VideoRecapView() {
         stopRecording();
       }
     }, safetyMs);
-    
+
   }, [audioBlobUrl, audioDuration, apiType, apiKey, setupAudioAnalyzer]);
 
   // Legacy download handler (unused but kept for reference)
   const handleDownload = handleAutoSaveRecord;
-  
+
   // Unified frame render function (same logic for preview and export)
   const renderFrameToCanvas = (
-    ctx: CanvasRenderingContext2D,
-    freezeCtx: CanvasRenderingContext2D,
-    freezeCanvas: HTMLCanvasElement,
-    video: HTMLVideoElement,
-    effectiveTime: number,
-    wasFreezePrev: boolean,
-    setWasFreeze: (val: boolean) => void
-  ) => {
+  ctx: CanvasRenderingContext2D,
+  freezeCtx: CanvasRenderingContext2D,
+  freezeCanvas: HTMLCanvasElement,
+  video: HTMLVideoElement,
+  effectiveTime: number,
+  wasFreezePrev: boolean,
+  setWasFreeze: (val: boolean) => void) =>
+  {
     const targetW = ctx.canvas.width;
     const targetH = ctx.canvas.height;
-    
+
     // Find active segment
     let activeSegment = scriptSegments.find(
-      (s) => effectiveTime >= (s.audioStart || 0) && effectiveTime < (s.audioEnd || Infinity),
+      (s) => effectiveTime >= (s.audioStart || 0) && effectiveTime < (s.audioEnd || Infinity)
     );
     if (!activeSegment && scriptSegments.length > 0 && effectiveTime >= (scriptSegments[scriptSegments.length - 1].audioEnd || 0)) {
       activeSegment = scriptSegments[scriptSegments.length - 1];
     }
-    
+
     // Phase calculation — matching main renderer exactly
     let inPhotoPhase = false;
     let phase = 0;
@@ -1277,13 +1277,13 @@ export default function VideoRecapView() {
     const CYCLE_DUR = 6.0;
     const MOTION_DUR = 3.0;
     const FADE_DUR = 0.4;
-    
+
     if (activeSegment) {
       segLocalTime = effectiveTime - (activeSegment.audioStart || 0);
       phase = segLocalTime % CYCLE_DUR;
       inPhotoPhase = phase >= MOTION_DUR && motionZoom;
     }
-    
+
     // Calculate video dimensions
     const vw = video.videoWidth || 1280;
     const vh = video.videoHeight || 720;
@@ -1292,21 +1292,21 @@ export default function VideoRecapView() {
     const dh = vh * scale;
     const dx = (targetW - dw) / 2;
     const dy = (targetH - dh) / 2;
-    
+
     // Clear and fill black
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, targetW, targetH);
-    
+
     ctx.save();
     if (flipVideo) {
       ctx.translate(targetW, 0);
       ctx.scale(-1, 1);
     }
-    
+
     // Capture freeze frame at transition point
-    const needsCapture = (inPhotoPhase && !wasFreezePrev) || 
-      (freezeCanvas.width !== targetW || freezeCanvas.height !== targetH);
-    
+    const needsCapture = inPhotoPhase && !wasFreezePrev ||
+    freezeCanvas.width !== targetW || freezeCanvas.height !== targetH;
+
     if (needsCapture && freezeCtx) {
       freezeCanvas.width = targetW;
       freezeCanvas.height = targetH;
@@ -1320,7 +1320,7 @@ export default function VideoRecapView() {
       freezeCtx.drawImage(video, dx, dy, dw, dh);
       if (flipVideo) freezeCtx.restore();
     }
-    
+
     // ===== RENDER BASED ON PHASE — identical to main renderer =====
     if (motionZoom && activeSegment) {
       if (inPhotoPhase) {
@@ -1354,10 +1354,10 @@ export default function VideoRecapView() {
       ctx.globalAlpha = 1.0;
       ctx.drawImage(video, dx, dy, dw, dh);
     }
-    
+
     ctx.globalAlpha = 1.0;
     ctx.restore();
-    
+
     // Apply color grading
     if (autoColor) {
       ctx.fillStyle = "rgba(255, 160, 0, 0.08)";
@@ -1365,7 +1365,7 @@ export default function VideoRecapView() {
       ctx.fillRect(0, 0, targetW, targetH);
       ctx.globalCompositeOperation = "source-over";
     }
-    
+
     // Film grain
     if (filmGrain) {
       const noiseCount = targetW * targetH * 0.003;
@@ -1374,7 +1374,7 @@ export default function VideoRecapView() {
         ctx.fillRect(Math.random() * targetW, Math.random() * targetH, 1, 1);
       }
     }
-    
+
     // Blur band
     if (blurEnabled) {
       const by = targetH * (blurY / 100);
@@ -1382,21 +1382,21 @@ export default function VideoRecapView() {
       ctx.fillStyle = `rgba(0,0,0,${blurOpacity})`;
       ctx.fillRect(0, by, targetW, bh);
     }
-    
+
     // Subtitle rendering
     ctx.globalAlpha = 1.0;
     ctx.globalCompositeOperation = "source-over";
     ctx.shadowBlur = 0;
     ctx.shadowColor = "transparent";
     if (activeSegment) {
-      const chunk = String(activeSegment.text || "")
-        .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, "")
-        .replace(/\[[^\]]*\d[^\]]*\]/g, "")
-        .replace(/```[\s\S]*?```/g, "")
-        .replace(/[•●◆▶️➡️]+/g, " ")
-        .replace(/\s{2,}/g, " ")
-        .trim();
-      
+      const chunk = String(activeSegment.text || "").
+      replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, "").
+      replace(/\[[^\]]*\d[^\]]*\]/g, "").
+      replace(/```[\s\S]*?```/g, "").
+      replace(/[•●◆▶️➡️]+/g, " ").
+      replace(/\s{2,}/g, " ").
+      trim();
+
       if (chunk) {
         const by = targetH * (blurY / 100);
         const bh = targetH * (blurH / 100);
@@ -1407,10 +1407,10 @@ export default function VideoRecapView() {
         const maxWidth = targetW * 0.92;
         const maxLines = 2;
         const lineSpacing = 1.15;
-        
+
         // FIXED font size — consistent across all segments
         const fs = targetH * 0.036 * subScale;
-        
+
         const wrapText = (text: string, fontSize: number): string[] => {
           ctx.font = `900 ${fontSize}px 'Padauk', sans-serif`;
           const words = text.split(/\s+/).filter(Boolean);
@@ -1428,16 +1428,16 @@ export default function VideoRecapView() {
           if (currentLine) lines.push(currentLine);
           return lines;
         };
-        
+
         const wrappedLines = wrapText(chunk, fs);
         const finalLines = wrappedLines.slice(0, maxLines);
-        
+
         ctx.font = `900 ${fs}px 'Padauk', sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.shadowColor = "rgba(0,0,0,0.85)";
         ctx.shadowBlur = 5;
-        
+
         if (subColor === "GOLD") {
           const g = ctx.createLinearGradient(0, ty - fs, 0, ty + fs);
           g.addColorStop(0, "#FFD700");
@@ -1450,14 +1450,14 @@ export default function VideoRecapView() {
         } else {
           ctx.fillStyle = SUB_COLORS.find((c) => c.id === subColor)?.hex || "white";
         }
-        
+
         ctx.save();
         ctx.beginPath();
         ctx.rect(0, clipY, targetW, clipH);
         ctx.clip();
-        
+
         const totalTextHeight = finalLines.length * fs * lineSpacing;
-        const startY = ty - (totalTextHeight / 2) + (fs * lineSpacing / 2);
+        const startY = ty - totalTextHeight / 2 + fs * lineSpacing / 2;
         finalLines.forEach((l, i) => {
           ctx.fillText(l, targetW / 2, startY + i * fs * lineSpacing);
         });
@@ -1470,11 +1470,11 @@ export default function VideoRecapView() {
       const charImg = charImgRef.current;
       const charSize = targetH * 0.22;
       const margin = targetH * 0.04;
-      let cx = 0, cy = 0;
-      if (charPos === "TL") { cx = margin; cy = margin; }
-      else if (charPos === "TR") { cx = targetW - charSize - margin; cy = margin; }
-      else if (charPos === "BL") { cx = margin; cy = targetH - charSize - margin; }
-      else { cx = targetW - charSize - margin; cy = targetH - charSize - margin; }
+      let cx = 0,cy = 0;
+      if (charPos === "TL") {cx = margin;cy = margin;} else
+      if (charPos === "TR") {cx = targetW - charSize - margin;cy = margin;} else
+      if (charPos === "BL") {cx = margin;cy = targetH - charSize - margin;} else
+      {cx = targetW - charSize - margin;cy = targetH - charSize - margin;}
 
       let audioLevel = 0;
       if (analyserRef.current && dataArrayRef.current) {
@@ -1490,7 +1490,7 @@ export default function VideoRecapView() {
 
       ctx.save();
       const glowIntensity = 8 + audioLevel * 25;
-      const hue = (Date.now() / 30) % 360;
+      const hue = Date.now() / 30 % 360;
       ctx.shadowColor = `hsla(${hue}, 90%, 60%, ${0.4 + audioLevel * 0.5})`;
       ctx.shadowBlur = glowIntensity;
       ctx.beginPath();
@@ -1511,7 +1511,7 @@ export default function VideoRecapView() {
       ctx.shadowBlur = 0;
       ctx.shadowColor = "transparent";
     }
-    
+
     setWasFreeze(inPhotoPhase);
   };
 
@@ -1553,34 +1553,34 @@ export default function VideoRecapView() {
           // Segments are timed to audio timeline; falling back to video.currentTime misaligns subtitles.
           const effectiveTime = audioBlobUrl ? audio.currentTime : video.currentTime;
 
-           // Avoid updating React state every frame (causes stutter). Throttle to ~10fps.
-           if (isPlaying) {
-             const now = performance.now();
-             if (now - lastProgressUpdateRef.current > 100) {
-               lastProgressUpdateRef.current = now;
-               const totalDur = audioDuration || video.duration || 1;
-               setProgress((effectiveTime / totalDur) * 100);
-             }
-           }
+          // Avoid updating React state every frame (causes stutter). Throttle to ~10fps.
+          if (isPlaying) {
+            const now = performance.now();
+            if (now - lastProgressUpdateRef.current > 100) {
+              lastProgressUpdateRef.current = now;
+              const totalDur = audioDuration || video.duration || 1;
+              setProgress(effectiveTime / totalDur * 100);
+            }
+          }
 
           let activeSegment = scriptSegments.find(
-            (s) => effectiveTime >= (s.audioStart || 0) && effectiveTime < (s.audioEnd || Infinity),
+            (s) => effectiveTime >= (s.audioStart || 0) && effectiveTime < (s.audioEnd || Infinity)
           );
           if (
-            !activeSegment &&
-            scriptSegments.length > 0 &&
-            effectiveTime >= (scriptSegments[scriptSegments.length - 1].audioEnd || 0)
-          ) {
+          !activeSegment &&
+          scriptSegments.length > 0 &&
+          effectiveTime >= (scriptSegments[scriptSegments.length - 1].audioEnd || 0))
+          {
             activeSegment = scriptSegments[scriptSegments.length - 1];
           }
 
           // DEBUG: Log subtitle state every 2 seconds to diagnose missing subtitles
           if (isPlaying && Math.floor(effectiveTime * 10) % 20 === 0) {
             console.log("[SUBTITLE-DEBUG] effectiveTime:", effectiveTime.toFixed(2),
-              "segments:", scriptSegments.length,
-              "activeText:", activeSegment?.text?.substring(0, 30) || "NONE",
-              "audioStart:", activeSegment?.audioStart, "audioEnd:", activeSegment?.audioEnd,
-              "audioBlobUrl:", !!audioBlobUrl, "audio.ct:", audio.currentTime.toFixed(2));
+            "segments:", scriptSegments.length,
+            "activeText:", activeSegment?.text?.substring(0, 30) || "NONE",
+            "audioStart:", activeSegment?.audioStart, "audioEnd:", activeSegment?.audioEnd,
+            "audioBlobUrl:", !!audioBlobUrl, "audio.ct:", audio.currentTime.toFixed(2));
           }
 
           // ============ 3S VIDEO / 3S PHOTO LOOP (SEGMENT-ANCHORED + SEMANTIC) ============
@@ -1595,11 +1595,11 @@ export default function VideoRecapView() {
           const cycleIndex = Math.floor(segLocalTime / CYCLE_DUR);
 
           const sceneStart =
-            activeSegment?.sceneStart ?? activeSegment?.videoTime ?? activeSegment?.time ?? 0;
+          activeSegment?.sceneStart ?? activeSegment?.videoTime ?? activeSegment?.time ?? 0;
           const sceneEnd = activeSegment?.sceneEnd;
 
           // Scene duration — used to CLAMP motion within scene bounds (prevents seeking to unrelated scenes)
-          const sceneDuration = (sceneEnd && sceneEnd > sceneStart) ? (sceneEnd - sceneStart) : 6.0;
+          const sceneDuration = sceneEnd && sceneEnd > sceneStart ? sceneEnd - sceneStart : 6.0;
 
           const clampTime = (t: number) => {
             if (!Number.isFinite(t)) return 0;
@@ -1610,11 +1610,11 @@ export default function VideoRecapView() {
           // CRITICAL FIX: Clamp motion within scene bounds using modulo wrap
           // This prevents video from seeking past scene end into unrelated scenes
           const rawMotionElapsed = cycleIndex * MOTION_DUR + Math.min(phase, MOTION_DUR);
-          const motionElapsed = sceneDuration > 0 ? (rawMotionElapsed % sceneDuration) : 0;
+          const motionElapsed = sceneDuration > 0 ? rawMotionElapsed % sceneDuration : 0;
 
           // Freeze frame: capture at end of current motion period within scene bounds
           const rawFreezeElapsed = (cycleIndex + 1) * MOTION_DUR;
-          const freezeElapsed = sceneDuration > 0 ? (rawFreezeElapsed % sceneDuration) : 0;
+          const freezeElapsed = sceneDuration > 0 ? rawFreezeElapsed % sceneDuration : 0;
 
           const desiredMotionTime = clampTime(sceneStart + motionElapsed);
           const desiredFreezeTime = clampTime(sceneStart + Math.min(freezeElapsed, Math.max(0, sceneDuration - 0.1)));
@@ -1654,9 +1654,9 @@ export default function VideoRecapView() {
             } else if (!inPhotoPhase) {
               // Drift correction: only correct if video is OUTSIDE the scene bounds entirely
               // Wider tolerance (1s) to prevent micro-seeks that cause stutter
-              const isOutsideScene = sceneEnd
-                ? (video.currentTime < sceneStart - 1.0 || video.currentTime > sceneEnd + 1.0)
-                : Math.abs(video.currentTime - desiredMotionTime) > 5.0;
+              const isOutsideScene = sceneEnd ?
+              video.currentTime < sceneStart - 1.0 || video.currentTime > sceneEnd + 1.0 :
+              Math.abs(video.currentTime - desiredMotionTime) > 5.0;
               if (isOutsideScene) {
                 video.currentTime = desiredMotionTime;
               }
@@ -1697,10 +1697,10 @@ export default function VideoRecapView() {
           const enteringFreezeMode = motionZoom && inPhotoPhase && !wasFreezeModeRef.current;
           const shouldCaptureForCycle = motionZoom && inPhotoPhase && freezeCapturedCycleRef.current !== cycleIndex;
           const needsCapture =
-            sizeChanged ||
-            enteringFreezeMode ||
-            shouldCaptureForCycle ||
-            (motionZoom && (freezeCanvas.width === 0 || freezeCanvas.height === 0));
+          sizeChanged ||
+          enteringFreezeMode ||
+          shouldCaptureForCycle ||
+          motionZoom && (freezeCanvas.width === 0 || freezeCanvas.height === 0);
 
           if (needsCapture && motionZoom) {
             freezeCanvas.width = targetW;
@@ -1825,7 +1825,7 @@ export default function VideoRecapView() {
                 ctx.rotate(logoAngleRef.current);
               }
               if (logoNeon) {
-                ctx.shadowColor = `hsl(${(Date.now() / 10) % 360}, 100%, 50%)`;
+                ctx.shadowColor = `hsl(${Date.now() / 10 % 360}, 100%, 50%)`;
                 ctx.shadowBlur = 30;
               }
               ctx.beginPath();
@@ -1842,7 +1842,7 @@ export default function VideoRecapView() {
             ctx.font = `900 ${tickerFs}px 'Padauk', sans-serif`;
             ctx.shadowColor = "rgba(0,0,0,0.9)";
             ctx.shadowBlur = 6;
-            
+
             // Gradient fill for channel name
             const tickerGrad = ctx.createLinearGradient(0, 0, 0, tickerFs);
             tickerGrad.addColorStop(0, "#FFD700");
@@ -1850,10 +1850,10 @@ export default function VideoRecapView() {
             ctx.fillStyle = tickerGrad;
             ctx.textAlign = "left";
             ctx.textBaseline = "top";
-            
+
             const textWidth = ctx.measureText(channelName).width;
             const padding = 20;
-            
+
             if (tickerMode === "SCROLL") {
               // Horizontal scroll from right to left
               tickerXRef.current -= 2;
@@ -1865,7 +1865,7 @@ export default function VideoRecapView() {
               // Bounce animation (DVD logo style)
               tickerXRef.current += tickerVelXRef.current;
               tickerYRef.current += tickerVelYRef.current;
-              
+
               // Boundary checks
               if (tickerXRef.current <= 0 || tickerXRef.current + textWidth >= targetW) {
                 tickerVelXRef.current *= -1;
@@ -1875,9 +1875,9 @@ export default function VideoRecapView() {
                 tickerVelYRef.current *= -1;
                 tickerYRef.current = Math.max(0, Math.min(tickerYRef.current, targetH - tickerFs));
               }
-              
+
               // Neon glow effect for bounce
-              ctx.shadowColor = `hsl(${(Date.now() / 20) % 360}, 100%, 50%)`;
+              ctx.shadowColor = `hsl(${Date.now() / 20 % 360}, 100%, 50%)`;
               ctx.shadowBlur = 15;
               ctx.fillText(channelName, tickerXRef.current, tickerYRef.current);
             }
@@ -1901,13 +1901,13 @@ export default function VideoRecapView() {
           ctx.shadowColor = "transparent";
           if (activeSegment) {
             const chunk = String(activeSegment.text || "")
-              // Remove junk: timestamps, bracketed timecodes, markdown fences, bullet-ish symbols
-              .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, "")
-              .replace(/\[[^\]]*\d[^\]]*\]/g, "")
-              .replace(/```[\s\S]*?```/g, "")
-              .replace(/[•●◆▶️➡️]+/g, " ")
-              .replace(/\s{2,}/g, " ")
-              .trim();
+            // Remove junk: timestamps, bracketed timecodes, markdown fences, bullet-ish symbols
+            .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, "").
+            replace(/\[[^\]]*\d[^\]]*\]/g, "").
+            replace(/```[\s\S]*?```/g, "").
+            replace(/[•●◆▶️➡️]+/g, " ").
+            replace(/\s{2,}/g, " ").
+            trim();
 
             if (chunk) {
               // Keep subtitles strictly inside the blur band.
@@ -1920,16 +1920,16 @@ export default function VideoRecapView() {
               const maxWidth = targetW * 0.92;
               const maxLines = 2;
               const lineSpacing = 1.15;
-              
+
               // FIXED font size — no auto-shrink to prevent size jumping between segments
               const fs = targetH * 0.036 * subScale;
-              
+
               const wrapText = (text: string, fontSize: number): string[] => {
                 ctx.font = `900 ${fontSize}px 'Padauk', sans-serif`;
                 const words = text.split(/\s+/).filter(Boolean);
                 const lines: string[] = [];
                 let currentLine = "";
-                
+
                 for (const word of words) {
                   const testLine = currentLine ? `${currentLine} ${word}` : word;
                   if (ctx.measureText(testLine).width > maxWidth && currentLine) {
@@ -1942,17 +1942,17 @@ export default function VideoRecapView() {
                 if (currentLine) lines.push(currentLine);
                 return lines;
               };
-              
+
               const wrappedLines = wrapText(chunk, fs);
               // Take first 2 lines only — consistent size, no jumping
               const finalLines = wrappedLines.slice(0, maxLines);
-              
+
               ctx.font = `900 ${fs}px 'Padauk', sans-serif`;
               ctx.textAlign = "center";
               ctx.textBaseline = "middle";
               ctx.shadowColor = "rgba(0,0,0,0.85)";
               ctx.shadowBlur = 5;
-              
+
               if (subColor === "GOLD") {
                 const g = ctx.createLinearGradient(0, ty - fs, 0, ty + fs);
                 g.addColorStop(0, "#FFD700");
@@ -1970,11 +1970,11 @@ export default function VideoRecapView() {
               ctx.beginPath();
               ctx.rect(0, clipY, targetW, clipH);
               ctx.clip();
-              
+
               // Center lines vertically within clip area
               const totalTextHeight = finalLines.length * fs * lineSpacing;
-              const startY = ty - (totalTextHeight / 2) + (fs * lineSpacing / 2);
-              
+              const startY = ty - totalTextHeight / 2 + fs * lineSpacing / 2;
+
               finalLines.forEach((l, i) => {
                 const yOff = startY + i * fs * lineSpacing;
                 ctx.fillText(l, targetW / 2, yOff);
@@ -1988,11 +1988,11 @@ export default function VideoRecapView() {
             const charImg = charImgRef.current;
             const charSize = targetH * 0.22;
             const margin = targetH * 0.04;
-            let cx = 0, cy = 0;
-            if (charPos === "TL") { cx = margin; cy = margin; }
-            else if (charPos === "TR") { cx = targetW - charSize - margin; cy = margin; }
-            else if (charPos === "BL") { cx = margin; cy = targetH - charSize - margin - (timelineHeight * 2); }
-            else { cx = targetW - charSize - margin; cy = targetH - charSize - margin - (timelineHeight * 2); }
+            let cx = 0,cy = 0;
+            if (charPos === "TL") {cx = margin;cy = margin;} else
+            if (charPos === "TR") {cx = targetW - charSize - margin;cy = margin;} else
+            if (charPos === "BL") {cx = margin;cy = targetH - charSize - margin - timelineHeight * 2;} else
+            {cx = targetW - charSize - margin;cy = targetH - charSize - margin - timelineHeight * 2;}
 
             // Audio level for lip-sync
             let audioLevel = 0;
@@ -2012,7 +2012,7 @@ export default function VideoRecapView() {
 
             // Glow ring effect
             const glowIntensity = 8 + audioLevel * 25;
-            const hue = (Date.now() / 30) % 360;
+            const hue = Date.now() / 30 % 360;
             ctx.shadowColor = `hsla(${hue}, 90%, 60%, ${0.4 + audioLevel * 0.5})`;
             ctx.shadowBlur = glowIntensity;
             ctx.beginPath();
@@ -2050,40 +2050,40 @@ export default function VideoRecapView() {
     reqRef.current = requestAnimationFrame(render);
     return () => cancelAnimationFrame(reqRef.current!);
   }, [
-    isPlaying,
-    isExporting,
-    audioDuration,
-    aspectRatio,
-    smartZoom,
-    motionZoom,
-    borderEnabled,
-    timelineColor,
-    borderColor,
-    logoSrc,
-    logoSpin,
-    logoNeon,
-    logoSize,
-    tickerMode,
-    channelName,
-    charId,
-    charPos,
-    scriptSegments,
-    audioSpeed,
-    videoSpeed,
-    filmGrain,
-    autoColor,
-    subScale,
-    subColor,
-    blurEnabled,
-    blurY,
-    blurH,
-    blurOpacity,
-    borderWidth,
-    timelineHeight,
-    flipVideo,
-    isVideoReady,
-    audioBlobUrl,
-  ]);
+  isPlaying,
+  isExporting,
+  audioDuration,
+  aspectRatio,
+  smartZoom,
+  motionZoom,
+  borderEnabled,
+  timelineColor,
+  borderColor,
+  logoSrc,
+  logoSpin,
+  logoNeon,
+  logoSize,
+  tickerMode,
+  channelName,
+  charId,
+  charPos,
+  scriptSegments,
+  audioSpeed,
+  videoSpeed,
+  filmGrain,
+  autoColor,
+  subScale,
+  subColor,
+  blurEnabled,
+  blurY,
+  blurH,
+  blurOpacity,
+  borderWidth,
+  timelineHeight,
+  flipVideo,
+  isVideoReady,
+  audioBlobUrl]
+  );
 
   // NOTE: no authLoading gate here; avoids UI "blink" and state reset.
 
@@ -2093,8 +2093,8 @@ export default function VideoRecapView() {
       <div className="flex items-center justify-between py-2">
         <button
           onClick={() => navigate("/")}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-all"
-        >
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-all">
+
           <Home className="w-4 h-4" />
           <span className="text-[9px] font-black uppercase tracking-widest">Home</span>
         </button>
@@ -2109,48 +2109,48 @@ export default function VideoRecapView() {
         <button
           onClick={() => setShowHistory(!showHistory)}
           className={`flex-1 py-3 rounded-2xl font-black text-[9px] uppercase tracking-widest transition-all border ${
-            showHistory 
-              ? "bg-amber-500/20 border-amber-500/50 text-amber-300" 
-              : "bg-white/5 border-white/10 text-slate-400 hover:text-white"
-          }`}
-        >
+          showHistory ?
+          "bg-amber-500/20 border-amber-500/50 text-amber-300" :
+          "bg-white/5 border-white/10 text-slate-400 hover:text-white"}`
+          }>
+
           📚 HISTORY ({history.length})
         </button>
-        {history.length > 0 && (
-          <button
-            onClick={() => {
-              if (confirm("History အကုန်ဖျက်မှာလား?")) {
-                setHistory([]);
-                localStorage.removeItem("video_recap_history");
-                toast.success("History အကုန်ဖျက်ပြီးပါပြီ");
-              }
-            }}
-            className="px-4 py-3 rounded-2xl bg-red-500/20 border border-red-500/30 text-red-400 font-black text-[9px] uppercase tracking-widest"
-          >
+        {history.length > 0 &&
+        <button
+          onClick={() => {
+            if (confirm("History အကုန်ဖျက်မှာလား?")) {
+              setHistory([]);
+              localStorage.removeItem("video_recap_history");
+              toast.success("History အကုန်ဖျက်ပြီးပါပြီ");
+            }
+          }}
+          className="px-4 py-3 rounded-2xl bg-red-500/20 border border-red-500/30 text-red-400 font-black text-[9px] uppercase tracking-widest">
+
             🗑️
           </button>
-        )}
+        }
       </div>
 
       {/* History Panel */}
-      {showHistory && (
-        <div className="bg-[#0a0a0a] rounded-2xl border border-white/10 overflow-hidden animate-in slide-in-from-top duration-300">
+      {showHistory &&
+      <div className="bg-[#0a0a0a] rounded-2xl border border-white/10 overflow-hidden animate-in slide-in-from-top duration-300">
           <div className="p-3 bg-white/5 border-b border-white/10">
             <h3 className="text-[10px] font-black text-white uppercase tracking-widest">
               📼 RECENT RECAPS
             </h3>
           </div>
           <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
-            {history.length === 0 ? (
-              <div className="p-6 text-center text-slate-500 text-xs">
+            {history.length === 0 ?
+          <div className="p-6 text-center text-slate-500 text-xs">
                 History မရှိသေးပါ
-              </div>
-            ) : (
-              history.map((item) => (
-                <div
-                  key={item.id}
-                  className="p-3 border-b border-white/5 hover:bg-white/5 transition-colors"
-                >
+              </div> :
+
+          history.map((item) =>
+          <div
+            key={item.id}
+            className="p-3 border-b border-white/5 hover:bg-white/5 transition-colors">
+
                   <div className="flex justify-between items-start gap-2">
                     <div className="flex-1 min-w-0">
                       <p className="text-[10px] font-bold text-white truncate">
@@ -2165,25 +2165,25 @@ export default function VideoRecapView() {
                     </div>
                     <div className="flex gap-1 shrink-0">
                       <button
-                        onClick={() => loadFromHistory(item)}
-                        className="px-2 py-1 rounded bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[7px] font-bold"
-                      >
+                  onClick={() => loadFromHistory(item)}
+                  className="px-2 py-1 rounded bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[7px] font-bold">
+
                         LOAD
                       </button>
                       <button
-                        onClick={() => deleteFromHistory(item.id)}
-                        className="px-2 py-1 rounded bg-red-500/20 border border-red-500/30 text-red-400 text-[7px] font-bold"
-                      >
+                  onClick={() => deleteFromHistory(item.id)}
+                  className="px-2 py-1 rounded bg-red-500/20 border border-red-500/30 text-red-400 text-[7px] font-bold">
+
                         ✕
                       </button>
                     </div>
                   </div>
                 </div>
-              ))
-            )}
+          )
+          }
           </div>
         </div>
-      )}
+      }
 
       {/* API Switcher Section */}
       <div className="flex bg-slate-900/60 backdrop-blur-xl p-1 rounded-2xl border border-white/10 shadow-lg">
@@ -2191,13 +2191,13 @@ export default function VideoRecapView() {
           onClick={() => appApiAllowed && setApiType("app")}
           disabled={!appApiAllowed}
           className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${
-            !appApiAllowed 
-              ? "opacity-40 cursor-not-allowed text-slate-500" 
-              : apiType === "app" 
-                ? "jewel-sapphire shadow-[0_0_15px_rgba(37,99,235,0.4)] text-white" 
-                : "text-slate-400 hover:text-white"
-          }`}
-        >
+          !appApiAllowed ?
+          "opacity-40 cursor-not-allowed text-slate-500" :
+          apiType === "app" ?
+          "jewel-sapphire shadow-[0_0_15px_rgba(37,99,235,0.4)] text-white" :
+          "text-slate-400 hover:text-white"}`
+          }>
+
           {!appApiAllowed && <Lock className="w-3 h-3" />}
           APP API
         </button>
@@ -2205,31 +2205,31 @@ export default function VideoRecapView() {
           onClick={() => ownApiAllowed && setApiType("own")}
           disabled={!ownApiAllowed}
           className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${
-            !ownApiAllowed 
-              ? "opacity-40 cursor-not-allowed text-slate-500" 
-              : apiType === "own" 
-                ? "jewel-sapphire shadow-[0_0_15px_rgba(37,99,235,0.4)] text-white" 
-                : "text-slate-400 hover:text-white"
-          }`}
-        >
+          !ownApiAllowed ?
+          "opacity-40 cursor-not-allowed text-slate-500" :
+          apiType === "own" ?
+          "jewel-sapphire shadow-[0_0_15px_rgba(37,99,235,0.4)] text-white" :
+          "text-slate-400 hover:text-white"}`
+          }>
+
           {!ownApiAllowed && <Lock className="w-3 h-3" />}
           OWN API
         </button>
       </div>
 
       {/* Custom API Input Box */}
-      {apiType === "own" && (
-        <div className="neon-glass rounded-2xl p-4 border border-amber-500/20 space-y-2 shadow-inner animate-in zoom-in-95 duration-300">
+      {apiType === "own" &&
+      <div className="neon-glass rounded-2xl p-4 border border-amber-500/20 space-y-2 shadow-inner animate-in zoom-in-95 duration-300">
           <h4 className="text-[9px] font-black text-amber-200 uppercase tracking-widest ml-1">GEMINI API KEY</h4>
           <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="Paste your Gemini API Key here..."
-            className="w-full bg-black/40 border border-amber-500/30 rounded-xl p-3 text-xs font-bold text-white focus:ring-1 focus:ring-amber-500 outline-none transition-all placeholder:text-slate-600 shadow-inner"
-          />
+          type="password"
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          placeholder="Paste your Gemini API Key here..."
+          className="w-full bg-black/40 border border-amber-500/30 rounded-xl p-3 text-xs font-bold text-white focus:ring-1 focus:ring-amber-500 outline-none transition-all placeholder:text-slate-600 shadow-inner" />
+
         </div>
-      )}
+      }
 
       <div className="flex items-center gap-3 bg-[#050505] p-2 rounded-2xl border border-white/10">
         <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white">
@@ -2245,28 +2245,28 @@ export default function VideoRecapView() {
             type="text"
             placeholder="1GB Video Max..."
             disabled
-            className="w-full bg-transparent text-[9px] text-slate-500 outline-none border-none p-0 h-auto font-bold"
-          />
+            className="w-full bg-transparent text-[9px] text-slate-500 outline-none border-none p-0 h-auto font-bold" />
+
         </div>
       </div>
 
       <div className="bg-black rounded-[32px] overflow-hidden border border-white/10 shadow-2xl relative group">
         <div className="relative w-full aspect-square bg-black flex items-center justify-center">
-          {!videoSrc ? (
-            <div
-              onClick={() => document.getElementById("vid")?.click()}
-              className="flex flex-col items-center justify-center cursor-pointer gap-2 opacity-50 hover:opacity-100 transition-opacity"
-            >
+          {!videoSrc ?
+          <div
+            onClick={() => document.getElementById("vid")?.click()}
+            className="flex flex-col items-center justify-center cursor-pointer gap-2 opacity-50 hover:opacity-100 transition-opacity">
+
               <div className="w-16 h-16 rounded-full border-2 border-dashed border-slate-600 flex items-center justify-center">
                 <svg
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  className="text-slate-400"
-                >
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="text-slate-400">
+
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                   <polyline points="7 10 12 15 17 10" />
                   <line x1="12" x2="12" y1="15" y2="3" />
@@ -2276,50 +2276,50 @@ export default function VideoRecapView() {
                 TAP TO UPLOAD (1GB MAX)
               </span>
               <input id="vid" type="file" accept="video/*" onChange={handleFileChange} className="hidden" />
-            </div>
-          ) : (
-            <>
+            </div> :
+
+          <>
               <video
-                ref={videoRef}
-                src={videoSrc}
-                className="hidden"
-                muted
-                playsInline
-                crossOrigin="anonymous"
-                onLoadedData={handleVideoLoaded}
-              />
+              ref={videoRef}
+              src={videoSrc}
+              className="hidden"
+              muted
+              playsInline
+              crossOrigin="anonymous"
+              onLoadedData={handleVideoLoaded} />
+
               <audio
-                ref={audioRef}
-                src={audioBlobUrl || undefined}
-                onEnded={() => {
-                  setIsPlaying(false);
-                  setProgress(100);
-                }}
-                className="hidden"
-                crossOrigin="anonymous"
-              />
+              ref={audioRef}
+              src={audioBlobUrl || undefined}
+              onEnded={() => {
+                setIsPlaying(false);
+                setProgress(100);
+              }}
+              className="hidden"
+              crossOrigin="anonymous" />
+
               <canvas ref={canvasRef} className="w-full h-full object-contain" />
               <div
-                className="absolute bottom-0 left-0 right-0 z-30 group-hover:opacity-100 transition-all cursor-pointer"
-                style={{ height: `${timelineHeight * 3}px`, background: "rgba(255,255,255,0.1)" }}
-              >
+              className="absolute bottom-0 left-0 right-0 z-30 group-hover:opacity-100 transition-all cursor-pointer"
+              style={{ height: `${timelineHeight * 3}px`, background: "rgba(255,255,255,0.1)" }}>
+
                 <div
-                  className="h-full transition-all duration-100 ease-linear shadow-[0_0_10px_rgba(0,0,0,0.5)]"
-                  style={{ width: `${progress}%`, backgroundColor: timelineColor }}
-                />
+                className="h-full transition-all duration-100 ease-linear shadow-[0_0_10px_rgba(0,0,0,0.5)]"
+                style={{ width: `${progress}%`, backgroundColor: timelineColor }} />
+
                 <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={progress}
-                  onChange={handleSeek}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                />
+                type="range"
+                min="0"
+                max="100"
+                value={progress}
+                onChange={handleSeek}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+
               </div>
             </>
-          )}
-          {analyzing && (
-            <div className="absolute inset-0 bg-black/95 z-[100] flex flex-col items-center justify-center text-white gap-4 animate-in fade-in duration-300 pointer-events-none">
+          }
+          {analyzing &&
+          <div className="absolute inset-0 bg-black/95 z-[100] flex flex-col items-center justify-center text-white gap-4 animate-in fade-in duration-300 pointer-events-none">
               <div className="relative">
                 <div className="w-20 h-20 border-4 border-blue-500/30 rounded-full animate-spin"></div>
                 <div className="w-20 h-20 border-4 border-t-blue-500 rounded-full animate-spin absolute top-0 left-0"></div>
@@ -2328,15 +2328,15 @@ export default function VideoRecapView() {
                 {statusText}
               </p>
             </div>
-          )}
-          {isExporting && (
-            <div className="absolute inset-0 bg-black/95 z-[100] flex flex-col items-center justify-center text-white gap-3">
+          }
+          {isExporting &&
+          <div className="absolute inset-0 bg-black/95 z-[100] flex flex-col items-center justify-center text-white gap-3">
               <div className="w-12 h-12 border-4 border-rose-500 border-t-transparent rounded-full animate-spin"></div>
               <span className="text-[10px] font-black tracking-widest text-rose-500">
                 EXPORTING... {Math.round(progress)}%
               </span>
             </div>
-          )}
+          }
         </div>
       </div>
 
@@ -2344,8 +2344,8 @@ export default function VideoRecapView() {
         <AccordionItem
           title="1. SETTINGS & FORMAT"
           isOpen={openSection === "script"}
-          onClick={() => setOpenSection(openSection === "script" ? null : "script")}
-        >
+          onClick={() => setOpenSection(openSection === "script" ? null : "script")}>
+
           <div className="space-y-3">
             <div className="space-y-1">
               <label className="text-[7px] font-black text-slate-500 uppercase tracking-widest">
@@ -2354,20 +2354,20 @@ export default function VideoRecapView() {
               <select
                 value={aspectRatio.label}
                 onChange={(e) =>
-                  setAspectRatio(ASPECT_RATIOS.find((r) => r.label === e.target.value) || ASPECT_RATIOS[0])
+                setAspectRatio(ASPECT_RATIOS.find((r) => r.label === e.target.value) || ASPECT_RATIOS[0])
                 }
-                className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl p-3 text-[9px] font-black text-white outline-none"
-              >
-                {ASPECT_RATIOS.map((r) => (
-                  <option key={r.label} value={r.label}>
+                className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl p-3 text-[9px] font-black text-white outline-none">
+
+                {ASPECT_RATIOS.map((r) =>
+                <option key={r.label} value={r.label}>
                     {r.label}
                   </option>
-                ))}
+                )}
               </select>
             </div>
             <div className="flex gap-4 pt-2">
               <div className="flex-1 space-y-1">
-                <label className="text-[7px] font-black text-slate-500 uppercase tracking-widest">
+                <label className="font-black uppercase tracking-widest text-xs text-popover-foreground">
                   VIDEO PLAYBACK SPEED ({videoSpeed}x)
                 </label>
                 <input
@@ -2377,11 +2377,11 @@ export default function VideoRecapView() {
                   step="0.1"
                   value={videoSpeed}
                   onChange={(e) => setVideoSpeed(parseFloat(e.target.value))}
-                  className="w-full h-1.5 bg-white/10 rounded-full appearance-none accent-blue-500"
-                />
+                  className="w-full h-1.5 bg-white/10 rounded-full appearance-none accent-blue-500" />
+
               </div>
               <div className="flex-1 space-y-1">
-                <label className="text-[7px] font-black text-slate-500 uppercase tracking-widest">
+                <label className="font-black uppercase tracking-widest text-xs text-destructive-foreground">
                   AUDIO DURATION / SPEED ({audioSpeed}x)
                 </label>
                 <input
@@ -2391,8 +2391,8 @@ export default function VideoRecapView() {
                   step="0.1"
                   value={audioSpeed}
                   onChange={(e) => setAudioSpeed(parseFloat(e.target.value))}
-                  className="w-full h-1.5 bg-white/10 rounded-full appearance-none accent-amber-500"
-                />
+                  className="w-full h-1.5 bg-white/10 rounded-full appearance-none accent-amber-500" />
+
               </div>
             </div>
             <div className="space-y-2 pt-2">
@@ -2403,79 +2403,79 @@ export default function VideoRecapView() {
                 value={fullScriptText}
                 onChange={(e) => setFullScriptText(e.target.value)}
                 placeholder="Script will appear here after analysis... (or paste your own script)"
-                className="w-full h-32 bg-[#1a1a1a] border border-white/10 rounded-xl p-3 text-[9px] font-medium text-white outline-none focus:border-blue-500/50 resize-none opacity-90 custom-scrollbar"
-              />
+                className="w-full h-32 bg-[#1a1a1a] border border-white/10 rounded-xl p-3 text-[9px] font-medium text-white outline-none focus:border-blue-500/50 resize-none opacity-90 custom-scrollbar" />
+
             </div>
 
             {/* Audio Source Toggle */}
             <div className="space-y-2 pt-2">
-              <label className="text-[7px] font-black text-slate-500 uppercase tracking-widest">
+              <label className="font-black uppercase tracking-widest text-white text-xs">
                 AUDIO SOURCE
               </label>
               <div className="flex bg-black/40 p-1 rounded-xl border border-white/10">
                 <button
                   onClick={() => setAudioMode("ai")}
                   className={`flex-1 py-2 rounded-lg font-black text-[8px] uppercase tracking-widest transition-all ${
-                    audioMode === "ai"
-                      ? "bg-blue-600 text-white shadow-lg"
-                      : "text-slate-500 hover:text-white"
-                  }`}
-                >
+                  audioMode === "ai" ?
+                  "bg-blue-600 text-white shadow-lg" :
+                  "text-slate-500 hover:text-white"}`
+                  }>
+
                   🤖 AI VOICE
                 </button>
                 <button
                   onClick={() => setAudioMode("custom")}
                   className={`flex-1 py-2 rounded-lg font-black text-[8px] uppercase tracking-widest transition-all ${
-                    audioMode === "custom"
-                      ? "bg-purple-600 text-white shadow-lg"
-                      : "text-slate-500 hover:text-white"
-                  }`}
-                >
+                  audioMode === "custom" ?
+                  "bg-purple-600 text-white shadow-lg" :
+                  "text-slate-500 hover:text-white"}`
+                  }>
+
                   🎵 CUSTOM AUDIO
                 </button>
               </div>
 
               {/* Custom Audio Upload */}
-              {audioMode === "custom" && (
-                <div className="space-y-2 mt-2 p-3 rounded-xl bg-purple-500/5 border border-purple-500/20">
-                  {!customAudioFile ? (
-                    <label className="flex items-center justify-center gap-2 py-4 rounded-xl border border-dashed border-purple-500/30 bg-black/20 cursor-pointer hover:border-purple-500/60 transition-all">
+              {audioMode === "custom" &&
+              <div className="space-y-2 mt-2 p-3 rounded-xl bg-purple-500/5 border border-purple-500/20">
+                  {!customAudioFile ?
+                <label className="flex items-center justify-center gap-2 py-4 rounded-xl border border-dashed border-purple-500/30 bg-black/20 cursor-pointer hover:border-purple-500/60 transition-all">
                       <input
-                        type="file"
-                        accept=".mp3,.wav,.m4a,audio/*"
-                        onChange={handleCustomAudioUpload}
-                        className="hidden"
-                      />
+                    type="file"
+                    accept=".mp3,.wav,.m4a,audio/*"
+                    onChange={handleCustomAudioUpload}
+                    className="hidden" />
+
                       <span className="text-[8px] text-purple-300 font-bold">📂 UPLOAD AUDIO (.mp3, .wav, .m4a)</span>
-                    </label>
-                  ) : (
-                    <div className="flex items-center justify-between gap-2">
+                    </label> :
+
+                <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="text-[8px] text-purple-300">🎵</span>
                         <span className="text-[8px] text-white font-bold truncate">{customAudioFile.name}</span>
                       </div>
                       <button
-                        onClick={() => {
-                          setCustomAudioFile(null);
-                          if (customAudioUrl) URL.revokeObjectURL(customAudioUrl);
-                          setCustomAudioUrl(null);
-                        }}
-                        className="px-2 py-1 rounded bg-red-500/20 border border-red-500/30 text-red-400 text-[7px] font-black shrink-0"
-                      >
+                    onClick={() => {
+                      setCustomAudioFile(null);
+                      if (customAudioUrl) URL.revokeObjectURL(customAudioUrl);
+                      setCustomAudioUrl(null);
+                    }}
+                    className="px-2 py-1 rounded bg-red-500/20 border border-red-500/30 text-red-400 text-[7px] font-black shrink-0">
+
                         ✕ REMOVE
                       </button>
                     </div>
-                  )}
+                }
                 </div>
-              )}
+              }
             </div>
           </div>
         </AccordionItem>
         <AccordionItem
           title="2. LANGUAGE & VOICE (20 PROFILES)"
           isOpen={openSection === "voice"}
-          onClick={() => setOpenSection(openSection === "voice" ? null : "voice")}
-        >
+          onClick={() => setOpenSection(openSection === "voice" ? null : "voice")}>
+
           <div className="space-y-3">
             <div className="space-y-1">
               <label className="text-[7px] font-black text-slate-500 uppercase tracking-widest">
@@ -2484,13 +2484,13 @@ export default function VideoRecapView() {
               <select
                 value={targetLang}
                 onChange={(e) => setTargetLang(e.target.value)}
-                className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl p-3 text-[9px] font-black text-white outline-none"
-              >
-                {LANGUAGES.map((l) => (
-                  <option key={l} value={l}>
+                className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl p-3 text-[9px] font-black text-white outline-none">
+
+                {LANGUAGES.map((l) =>
+                <option key={l} value={l}>
                     {l}
                   </option>
-                ))}
+                )}
               </select>
             </div>
             <div className="space-y-1">
@@ -2498,13 +2498,13 @@ export default function VideoRecapView() {
               <select
                 value={selectedVoice}
                 onChange={(e) => setSelectedVoice(e.target.value)}
-                className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl p-3 text-[9px] font-black text-white outline-none"
-              >
-                {VOICES.map((v) => (
-                  <option key={v.id} value={v.id}>
+                className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl p-3 text-[9px] font-black text-white outline-none">
+
+                {VOICES.map((v) =>
+                <option key={v.id} value={v.id}>
                     {v.name}
                   </option>
-                ))}
+                )}
               </select>
             </div>
           </div>
@@ -2512,68 +2512,68 @@ export default function VideoRecapView() {
         <AccordionItem
           title="3. CHARACTER OVERLAY"
           isOpen={openSection === "char"}
-          onClick={() => setOpenSection(openSection === "char" ? null : "char")}
-        >
+          onClick={() => setOpenSection(openSection === "char" ? null : "char")}>
+
           <div className="space-y-3">
             <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-              {CHARACTERS.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => setCharId(c.id)}
-                  className={`w-12 h-12 rounded-full border-2 shrink-0 overflow-hidden transition-all ${charId === c.id ? "border-blue-500 scale-110" : "border-white/10 opacity-50"}`}
-                >
-                  {c.id === "none" ? (
-                    <span className="text-[5px] text-white font-bold flex items-center justify-center h-full">
+              {CHARACTERS.map((c) =>
+              <button
+                key={c.id}
+                onClick={() => setCharId(c.id)}
+                className={`w-12 h-12 rounded-full border-2 shrink-0 overflow-hidden transition-all ${charId === c.id ? "border-blue-500 scale-110" : "border-white/10 opacity-50"}`}>
+
+                  {c.id === "none" ?
+                <span className="text-[5px] text-white font-bold flex items-center justify-center h-full">
                       NONE
-                    </span>
-                  ) : (
-                    <img src={c.src} className="w-full h-full object-cover" />
-                  )}
+                    </span> :
+
+                <img src={c.src} className="w-full h-full object-cover" />
+                }
                 </button>
-              ))}
+              )}
             </div>
             <div className="grid grid-cols-2 gap-2">
-              {["TL", "TR", "BL", "BR"].map((pos) => (
-                <button
-                  key={pos}
-                  onClick={() => setCharPos(pos as any)}
-                  className={`py-2 rounded-lg text-[7px] font-black border transition-all ${charPos === pos ? "bg-blue-500 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-500"}`}
-                >
+              {["TL", "TR", "BL", "BR"].map((pos) =>
+              <button
+                key={pos}
+                onClick={() => setCharPos(pos as any)}
+                className={`py-2 rounded-lg text-[7px] font-black border transition-all ${charPos === pos ? "bg-blue-500 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-500"}`}>
+
                   {pos}
                 </button>
-              ))}
+              )}
             </div>
           </div>
         </AccordionItem>
         <AccordionItem
           title="4. VISUAL EFFECTS & BLUR"
           isOpen={openSection === "visual"}
-          onClick={() => setOpenSection(openSection === "visual" ? null : "visual")}
-        >
+          onClick={() => setOpenSection(openSection === "visual" ? null : "visual")}>
+
           <div className="space-y-4">
             <button
               onClick={activateCopyrightSafeMode}
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 text-white font-black text-[9px] uppercase tracking-widest shadow-lg active:scale-95 transition-all border border-emerald-400/30"
-            >
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 text-white font-black text-[9px] uppercase tracking-widest shadow-lg active:scale-95 transition-all border border-emerald-400/30">
+
               🛡️ ACTIVATE COPYRIGHT SAFE MODE (AUTO)
             </button>
             <div className="flex gap-2">
               <button
                 onClick={() => setFlipVideo(!flipVideo)}
-                className={`flex-1 py-2 rounded-xl border text-[7px] font-black ${flipVideo ? "border-emerald-500 text-emerald-400 bg-emerald-500/10" : "border-white/10 text-slate-500"}`}
-              >
+                className={`flex-1 py-2 rounded-xl border text-[7px] font-black ${flipVideo ? "border-emerald-500 text-emerald-400 bg-emerald-500/10" : "border-white/10 text-slate-500"}`}>
+
                 FLIP VIDEO
               </button>
               <button
                 onClick={() => setMotionZoom(!motionZoom)}
-                className={`flex-1 py-2 rounded-xl border text-[7px] font-black ${motionZoom ? "border-amber-500 text-amber-400 bg-amber-500/10" : "border-white/10 text-slate-500"}`}
-              >
+                className={`flex-1 py-2 rounded-xl border text-[7px] font-black ${motionZoom ? "border-amber-500 text-amber-400 bg-amber-500/10" : "border-white/10 text-slate-500"}`}>
+
                 {motionZoom ? "3S FREEZE ON" : "FREEZE OFF"}
               </button>
               <button
                 onClick={() => setFilmGrain(!filmGrain)}
-                className={`flex-1 py-2 rounded-xl border text-[7px] font-black ${filmGrain ? "border-purple-500 text-purple-400 bg-purple-500/10" : "border-white/10 text-slate-500"}`}
-              >
+                className={`flex-1 py-2 rounded-xl border text-[7px] font-black ${filmGrain ? "border-purple-500 text-purple-400 bg-purple-500/10" : "border-white/10 text-slate-500"}`}>
+
                 FILM GRAIN
               </button>
             </div>
@@ -2582,8 +2582,8 @@ export default function VideoRecapView() {
                 <span className="text-[7px] font-black text-slate-400 uppercase">SUBTITLE BLUR BOX</span>
                 <button
                   onClick={() => setBlurEnabled(!blurEnabled)}
-                  className={`text-[7px] font-black px-2 rounded ${blurEnabled ? "bg-blue-500 text-white" : "bg-slate-700 text-slate-400"}`}
-                >
+                  className={`text-[7px] font-black px-2 rounded ${blurEnabled ? "bg-blue-500 text-white" : "bg-slate-700 text-slate-400"}`}>
+
                   {blurEnabled ? "ON" : "OFF"}
                 </button>
               </div>
@@ -2595,8 +2595,8 @@ export default function VideoRecapView() {
                   max="100"
                   value={blurY}
                   onChange={(e) => setBlurY(parseInt(e.target.value))}
-                  className="flex-1 h-1.5 bg-black rounded-full appearance-none accent-blue-500"
-                />
+                  className="flex-1 h-1.5 bg-black rounded-full appearance-none accent-blue-500" />
+
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-[7px] text-slate-500 w-8">HEIGHT</span>
@@ -2606,8 +2606,8 @@ export default function VideoRecapView() {
                   max="50"
                   value={blurH}
                   onChange={(e) => setBlurH(parseInt(e.target.value))}
-                  className="flex-1 h-1.5 bg-black rounded-full appearance-none accent-blue-500"
-                />
+                  className="flex-1 h-1.5 bg-black rounded-full appearance-none accent-blue-500" />
+
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-[7px] text-slate-500 w-8">OPACITY</span>
@@ -2618,8 +2618,8 @@ export default function VideoRecapView() {
                   step="0.1"
                   value={blurOpacity}
                   onChange={(e) => setBlurOpacity(parseFloat(e.target.value))}
-                  className="flex-1 h-1.5 bg-black rounded-full appearance-none accent-blue-500"
-                />
+                  className="flex-1 h-1.5 bg-black rounded-full appearance-none accent-blue-500" />
+
               </div>
             </div>
           </div>
@@ -2627,8 +2627,8 @@ export default function VideoRecapView() {
         <AccordionItem
           title="5. COLORS & BRANDING"
           isOpen={openSection === "color"}
-          onClick={() => setOpenSection(openSection === "color" ? null : "color")}
-        >
+          onClick={() => setOpenSection(openSection === "color" ? null : "color")}>
+
           <div className="space-y-4">
             <div className="space-y-2 bg-white/5 p-3 rounded-xl border border-white/5">
               <div className="flex justify-between items-center">
@@ -2637,8 +2637,8 @@ export default function VideoRecapView() {
                   type="color"
                   value={timelineColor}
                   onChange={(e) => setTimelineColor(e.target.value)}
-                  className="w-6 h-6 rounded bg-transparent border-none cursor-pointer"
-                />
+                  className="w-6 h-6 rounded bg-transparent border-none cursor-pointer" />
+
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-[7px] text-slate-500 w-12">THICKNESS</span>
@@ -2648,70 +2648,70 @@ export default function VideoRecapView() {
                   max="15"
                   value={timelineHeight}
                   onChange={(e) => setTimelineHeight(parseInt(e.target.value))}
-                  className="flex-1 h-1.5 bg-black rounded-full appearance-none accent-white"
-                />
+                  className="flex-1 h-1.5 bg-black rounded-full appearance-none accent-white" />
+
               </div>
               <div className="flex gap-2 pt-1">
-                {COLORS.map((c) => (
-                  <button
-                    key={c.id}
-                    onClick={() => setTimelineColor(c.hex)}
-                    className={`w-4 h-4 rounded-full border ${timelineColor === c.hex ? "border-white scale-125" : "border-transparent opacity-40"}`}
-                    style={{ backgroundColor: c.hex }}
-                  />
-                ))}
+                {COLORS.map((c) =>
+                <button
+                  key={c.id}
+                  onClick={() => setTimelineColor(c.hex)}
+                  className={`w-4 h-4 rounded-full border ${timelineColor === c.hex ? "border-white scale-125" : "border-transparent opacity-40"}`}
+                  style={{ backgroundColor: c.hex }} />
+
+                )}
               </div>
             </div>
             <div className="space-y-2 bg-white/5 p-3 rounded-xl border border-white/5">
               <div className="flex justify-between items-center">
                 <button
                   onClick={() => setBorderEnabled(!borderEnabled)}
-                  className={`px-2 py-1 rounded text-[6px] font-black uppercase ${borderEnabled ? "bg-blue-500 text-white" : "bg-slate-800 text-slate-500"}`}
-                >
+                  className={`px-2 py-1 rounded text-[6px] font-black uppercase ${borderEnabled ? "bg-blue-500 text-white" : "bg-slate-800 text-slate-500"}`}>
+
                   VIDEO BORDER: {borderEnabled ? "ON" : "OFF"}
                 </button>
-                {borderEnabled && (
-                  <input
-                    type="color"
-                    value={borderColor}
-                    onChange={(e) => setBorderColor(e.target.value)}
-                    className="w-6 h-6 rounded bg-transparent border-none cursor-pointer"
-                  />
-                )}
+                {borderEnabled &&
+                <input
+                  type="color"
+                  value={borderColor}
+                  onChange={(e) => setBorderColor(e.target.value)}
+                  className="w-6 h-6 rounded bg-transparent border-none cursor-pointer" />
+
+                }
               </div>
-              {borderEnabled && (
-                <div className="flex items-center gap-2">
+              {borderEnabled &&
+              <div className="flex items-center gap-2">
                   <span className="text-[7px] text-slate-500 w-12">WIDTH</span>
                   <input
-                    type="range"
-                    min="1"
-                    max="50"
-                    value={borderWidth}
-                    onChange={(e) => setBorderWidth(parseInt(e.target.value))}
-                    className="flex-1 h-1.5 bg-black rounded-full appearance-none accent-white"
-                  />
+                  type="range"
+                  min="1"
+                  max="50"
+                  value={borderWidth}
+                  onChange={(e) => setBorderWidth(parseInt(e.target.value))}
+                  className="flex-1 h-1.5 bg-black rounded-full appearance-none accent-white" />
+
                 </div>
-              )}
-              {borderEnabled && (
-                <div className="flex gap-2 pt-1">
-                  {COLORS.map((c) => (
-                    <button
-                      key={c.id}
-                      onClick={() => setBorderColor(c.hex)}
-                      className={`w-4 h-4 rounded-full border ${borderColor === c.hex ? "border-white scale-125" : "border-transparent opacity-40"}`}
-                      style={{ backgroundColor: c.hex }}
-                    />
-                  ))}
+              }
+              {borderEnabled &&
+              <div className="flex gap-2 pt-1">
+                  {COLORS.map((c) =>
+                <button
+                  key={c.id}
+                  onClick={() => setBorderColor(c.hex)}
+                  className={`w-4 h-4 rounded-full border ${borderColor === c.hex ? "border-white scale-125" : "border-transparent opacity-40"}`}
+                  style={{ backgroundColor: c.hex }} />
+
+                )}
                 </div>
-              )}
+              }
             </div>
           </div>
         </AccordionItem>
         <AccordionItem
           title="7. LOGO & BRANDING"
           isOpen={openSection === "logo"}
-          onClick={() => setOpenSection(openSection === "logo" ? null : "logo")}
-        >
+          onClick={() => setOpenSection(openSection === "logo" ? null : "logo")}>
+
           <div className="space-y-4">
             {/* Logo Upload */}
             <div className="space-y-2 bg-white/5 p-3 rounded-xl border border-white/5">
@@ -2721,61 +2721,61 @@ export default function VideoRecapView() {
                   type="file"
                   accept="image/*"
                   onChange={handleLogoUpload}
-                  className="hidden"
-                />
-                {logoSrc ? (
-                  <div className="flex items-center gap-2">
+                  className="hidden" />
+
+                {logoSrc ?
+                <div className="flex items-center gap-2">
                     <img src={logoSrc} alt="Logo" className="w-8 h-8 object-contain rounded" />
                     <span className="text-[8px] text-green-400 font-bold">LOGO LOADED ✓</span>
-                  </div>
-                ) : (
-                  <span className="text-[8px] text-slate-500 font-bold">TAP TO UPLOAD LOGO</span>
-                )}
+                  </div> :
+
+                <span className="text-[8px] text-slate-500 font-bold">TAP TO UPLOAD LOGO</span>
+                }
               </label>
-              {logoSrc && (
-                <button
-                  onClick={() => setLogoSrc(null)}
-                  className="w-full py-2 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 text-[7px] font-black"
-                >
+              {logoSrc &&
+              <button
+                onClick={() => setLogoSrc(null)}
+                className="w-full py-2 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 text-[7px] font-black">
+
                   REMOVE LOGO
                 </button>
-              )}
+              }
             </div>
             
             {/* Logo Size */}
-            {logoSrc && (
-              <div className="space-y-2 bg-white/5 p-3 rounded-xl border border-white/5">
+            {logoSrc &&
+            <div className="space-y-2 bg-white/5 p-3 rounded-xl border border-white/5">
                 <div className="flex justify-between items-center">
                   <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">LOGO SIZE ({logoSize}%)</span>
                 </div>
                 <input
-                  type="range"
-                  min="5"
-                  max="40"
-                  value={logoSize}
-                  onChange={(e) => setLogoSize(parseInt(e.target.value))}
-                  className="w-full h-1.5 bg-black rounded-full appearance-none accent-blue-500"
-                />
+                type="range"
+                min="5"
+                max="40"
+                value={logoSize}
+                onChange={(e) => setLogoSize(parseInt(e.target.value))}
+                className="w-full h-1.5 bg-black rounded-full appearance-none accent-blue-500" />
+
               </div>
-            )}
+            }
 
             {/* Logo Effects */}
-            {logoSrc && (
-              <div className="flex gap-2">
+            {logoSrc &&
+            <div className="flex gap-2">
                 <button
-                  onClick={() => setLogoSpin(!logoSpin)}
-                  className={`flex-1 py-2 rounded-xl border text-[7px] font-black ${logoSpin ? "border-cyan-500 text-cyan-400 bg-cyan-500/10" : "border-white/10 text-slate-500"}`}
-                >
+                onClick={() => setLogoSpin(!logoSpin)}
+                className={`flex-1 py-2 rounded-xl border text-[7px] font-black ${logoSpin ? "border-cyan-500 text-cyan-400 bg-cyan-500/10" : "border-white/10 text-slate-500"}`}>
+
                   🔄 LOGO SPIN
                 </button>
                 <button
-                  onClick={() => setLogoNeon(!logoNeon)}
-                  className={`flex-1 py-2 rounded-xl border text-[7px] font-black ${logoNeon ? "border-purple-500 text-purple-400 bg-purple-500/10" : "border-white/10 text-slate-500"}`}
-                >
+                onClick={() => setLogoNeon(!logoNeon)}
+                className={`flex-1 py-2 rounded-xl border text-[7px] font-black ${logoNeon ? "border-purple-500 text-purple-400 bg-purple-500/10" : "border-white/10 text-slate-500"}`}>
+
                   💎 NEON RING
                 </button>
               </div>
-            )}
+            }
 
             {/* Channel Name */}
             <div className="space-y-2 bg-white/5 p-3 rounded-xl border border-white/5">
@@ -2785,47 +2785,47 @@ export default function VideoRecapView() {
                 value={channelName}
                 onChange={(e) => setChannelName(e.target.value)}
                 placeholder="Enter your channel name..."
-                className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-xs font-bold text-white focus:ring-1 focus:ring-blue-500 outline-none transition-all placeholder:text-slate-600"
-              />
+                className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-xs font-bold text-white focus:ring-1 focus:ring-blue-500 outline-none transition-all placeholder:text-slate-600" />
+
             </div>
 
             {/* Ticker Mode (Bounce) */}
-            {channelName && (
-              <div className="space-y-2 bg-white/5 p-3 rounded-xl border border-white/5">
+            {channelName &&
+            <div className="space-y-2 bg-white/5 p-3 rounded-xl border border-white/5">
                 <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">CHANNEL NAME ANIMATION</span>
                 <div className="grid grid-cols-3 gap-2">
-                  {(["OFF", "SCROLL", "BOUNCE"] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      onClick={() => setTickerMode(mode)}
-                      className={`py-2 rounded-lg text-[7px] font-black border transition-all ${tickerMode === mode ? "bg-blue-500 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-500"}`}
-                    >
+                  {(["OFF", "SCROLL", "BOUNCE"] as const).map((mode) =>
+                <button
+                  key={mode}
+                  onClick={() => setTickerMode(mode)}
+                  className={`py-2 rounded-lg text-[7px] font-black border transition-all ${tickerMode === mode ? "bg-blue-500 border-blue-400 text-white" : "bg-white/5 border-white/5 text-slate-500"}`}>
+
                       {mode === "OFF" ? "STATIC" : mode}
                     </button>
-                  ))}
+                )}
                 </div>
               </div>
-            )}
+            }
           </div>
         </AccordionItem>
         <AccordionItem
           title="8. SUBTITLE STYLING"
           isOpen={openSection === "sub"}
-          onClick={() => setOpenSection(openSection === "sub" ? null : "sub")}
-        >
+          onClick={() => setOpenSection(openSection === "sub" ? null : "sub")}>
+
           <div className="space-y-3">
             <div className="space-y-1">
               <label className="text-[7px] font-black text-slate-500 uppercase tracking-widest">TEXT COLOR</label>
               <select
                 value={subColor}
                 onChange={(e) => setSubColor(e.target.value)}
-                className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl p-3 text-[9px] font-black text-white outline-none"
-              >
-                {SUB_COLORS.map((c) => (
-                  <option key={c.id} value={c.id}>
+                className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl p-3 text-[9px] font-black text-white outline-none">
+
+                {SUB_COLORS.map((c) =>
+                <option key={c.id} value={c.id}>
                     {c.label}
                   </option>
-                ))}
+                )}
               </select>
             </div>
             <div className="space-y-1">
@@ -2835,8 +2835,8 @@ export default function VideoRecapView() {
               <select
                 value={subScale}
                 onChange={(e) => setSubScale(parseFloat(e.target.value))}
-                className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl p-3 text-[9px] font-black text-white outline-none"
-              >
+                className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl p-3 text-[9px] font-black text-white outline-none">
+
                 <option value="0.5">XS - Tiny</option>
                 <option value="0.8">S - Small</option>
                 <option value="1.0">M - Normal</option>
@@ -2851,109 +2851,109 @@ export default function VideoRecapView() {
 
       <div className="flex flex-col gap-2 pt-4 sticky bottom-4 z-50">
         {/* Phase 1: Generate Script (skip if custom audio mode with file uploaded) */}
-        {!audioBlobUrl && !fullScriptText && !(audioMode === "custom" && customAudioFile) && (
-          <button
-            onClick={handleProcess}
-            disabled={!videoSrc || analyzing}
-            className={`w-full py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all ${
-              analyzing ? "bg-blue-600/80 text-white animate-pulse" : "bg-blue-600 text-white"
-            }`}
-          >
+        {!audioBlobUrl && !fullScriptText && !(audioMode === "custom" && customAudioFile) &&
+        <button
+          onClick={handleProcess}
+          disabled={!videoSrc || analyzing}
+          className={`w-full py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all ${
+          analyzing ? "bg-blue-600/80 text-white animate-pulse" : "bg-blue-600 text-white"}`
+          }>
+
             {analyzing ? statusText || "ANALYZING..." : "📝 GENERATE SCRIPT"}
           </button>
-        )}
+        }
 
         {/* Custom Audio Direct Create (skip script step entirely) */}
-        {!audioBlobUrl && !fullScriptText && audioMode === "custom" && customAudioFile && !analyzing && (
-          <div className="flex gap-2">
+        {!audioBlobUrl && !fullScriptText && audioMode === "custom" && customAudioFile && !analyzing &&
+        <div className="flex gap-2">
             <button
-              onClick={handleCreateRecapCustom}
-              disabled={!videoSrc}
-              className="flex-1 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white active:scale-[0.98] transition-all"
-            >
+            onClick={handleCreateRecapCustom}
+            disabled={!videoSrc}
+            className="flex-1 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white active:scale-[0.98] transition-all">
+
               🎵 CREATE RECAP (DIRECT AUDIO)
             </button>
             <button
-              onClick={() => {
-                setCustomAudioFile(null);
-                if (customAudioUrl) URL.revokeObjectURL(customAudioUrl);
-                setCustomAudioUrl(null);
-              }}
-              className="px-4 py-3 rounded-2xl bg-white/5 border border-white/10 text-slate-400 font-black text-[9px] uppercase"
-            >
+            onClick={() => {
+              setCustomAudioFile(null);
+              if (customAudioUrl) URL.revokeObjectURL(customAudioUrl);
+              setCustomAudioUrl(null);
+            }}
+            className="px-4 py-3 rounded-2xl bg-white/5 border border-white/10 text-slate-400 font-black text-[9px] uppercase">
+
               ✕
             </button>
           </div>
-        )}
+        }
 
         {/* Phase 2: Create Recap (after script exists, before audio) */}
-        {!audioBlobUrl && fullScriptText && !analyzing && (
-          <div className="flex gap-2">
-            {audioMode === "ai" ? (
-              <button
-                onClick={handleCreateRecapAI}
-                className="flex-1 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white active:scale-[0.98] transition-all"
-              >
+        {!audioBlobUrl && fullScriptText && !analyzing &&
+        <div className="flex gap-2">
+            {audioMode === "ai" ?
+          <button
+            onClick={handleCreateRecapAI}
+            className="flex-1 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white active:scale-[0.98] transition-all">
+
                 🤖 CREATE RECAP (AI VOICE)
-              </button>
-            ) : (
-              <button
-                onClick={handleCreateRecapCustom}
-                disabled={!customAudioFile}
-                className={`flex-1 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all ${
-                  customAudioFile
-                    ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white active:scale-[0.98]"
-                    : "bg-white/5 text-slate-500 cursor-not-allowed"
-                }`}
-              >
+              </button> :
+
+          <button
+            onClick={handleCreateRecapCustom}
+            disabled={!customAudioFile}
+            className={`flex-1 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all ${
+            customAudioFile ?
+            "bg-gradient-to-r from-purple-600 to-pink-600 text-white active:scale-[0.98]" :
+            "bg-white/5 text-slate-500 cursor-not-allowed"}`
+            }>
+
                 🎵 CREATE RECAP (CUSTOM AUDIO)
               </button>
-            )}
+          }
             <button
-              onClick={() => {
-                setFullScriptText("");
-                setScriptSegments([]);
-              }}
-              className="px-4 py-3 rounded-2xl bg-white/5 border border-white/10 text-slate-400 font-black text-[9px] uppercase"
-            >
+            onClick={() => {
+              setFullScriptText("");
+              setScriptSegments([]);
+            }}
+            className="px-4 py-3 rounded-2xl bg-white/5 border border-white/10 text-slate-400 font-black text-[9px] uppercase">
+
               ✕
             </button>
           </div>
-        )}
+        }
 
         {/* Processing state */}
-        {analyzing && fullScriptText && (
-          <button disabled className="w-full py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl bg-blue-600/80 text-white animate-pulse">
+        {analyzing && fullScriptText &&
+        <button disabled className="w-full py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl bg-blue-600/80 text-white animate-pulse">
             {statusText || "PROCESSING..."}
           </button>
-        )}
+        }
 
         {/* Phase 3: Preview & Download (after audio ready) */}
-        {audioBlobUrl && (
-          <div className="flex gap-3">
+        {audioBlobUrl &&
+        <div className="flex gap-3">
             <button
-              onClick={togglePlay}
-              disabled={analyzing || isExporting}
-              className={`flex-1 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all ${
-                isPlaying ? "bg-rose-600 text-white" : "bg-gradient-to-r from-emerald-600 to-teal-600 text-white"
-              }`}
-            >
+            onClick={togglePlay}
+            disabled={analyzing || isExporting}
+            className={`flex-1 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all ${
+            isPlaying ? "bg-rose-600 text-white" : "bg-gradient-to-r from-emerald-600 to-teal-600 text-white"}`
+            }>
+
               {isPlaying ? "⏸ PAUSE" : "▶ PREVIEW"}
             </button>
             <button
-              onClick={handleDownload}
-              disabled={analyzing || isExporting}
-              className={`w-[44%] py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all border ${
-                analyzing || isExporting
-                  ? "bg-white/5 border-white/10 text-slate-500"
-                  : "bg-white/10 border-white/20 text-white hover:bg-white/15 active:scale-[0.99]"
-              }`}
-            >
+            onClick={handleDownload}
+            disabled={analyzing || isExporting}
+            className={`w-[44%] py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all border ${
+            analyzing || isExporting ?
+            "bg-white/5 border-white/10 text-slate-500" :
+            "bg-white/10 border-white/20 text-white hover:bg-white/15 active:scale-[0.99]"}`
+            }>
+
               {isExporting ? `⬇ EXPORTING... ${Math.round(progress)}%` : "⬇ DOWNLOAD"}
             </button>
           </div>
-        )}
+        }
       </div>
-    </div>
-  );
+    </div>);
+
 }
