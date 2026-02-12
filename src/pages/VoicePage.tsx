@@ -219,12 +219,12 @@ const VoicePage: React.FC = () => {
     howToUseTitleColor: "#ffffff",
     howToUseText: "၁။ Ai အသံထုတ်မည့် စာသားကိုထည့်ပါ။\n၂။ Ai Character ရွေးပါ။ (ကျား/မ ၂၀ ဦးအထိ ရွေးချယ်နိုင်သည်)\n၃။ Ai Character ရဲ့ အသံ Tone ကိုရွေးပါ။\n၄။ စာသားအရေအတွက်စစ်ပါ။\n၅။ ပါဝင်တဲ့စာသားအရေအတွက်နဲ့ကိုက်ညီတဲ့ Credit ကိုရွေးပါ။\n၆။ စာတန်းထိုးဖိုင်ပါ ပူးတွဲလိုချင်ပါက ဖွင့်ပါ။ (+2 credits ပေးရပါမည်)\n၇။ စတင်ထုတ်နိုင်ပါပြီ။",
     howToUseTextColor: "#9ca3af",
-    howToUseTextSize: 11,
+    howToUseTextSize: 30,
     proTipsTitle: "PRO TIPS & WARNINGS",
     proTipsTitleColor: "#fcd34d",
     proTipsText: "! စာသားအရေအတွက် ၄၅၀၀ ထက်ပိုမရပါ။\n! App API မှာ အသံထုတ်တဲ့အကြိမ်ရေ အကန့်အသတ်ရှိတာကြောင့် ထုတ်မရခဲ့ရင် Own API ဘက်ကို ပြောင်းသုံးပေးပါ။\n! History တွေအရမ်းများလာရင် ဖျက်ပေးဖို့ မမေ့ပါနဲ့။ (မှတ်တမ်း ၂၀ အထိသာ သိမ်းဆည်းပေးမည်)",
     proTipsTextColor: "#fbbf2480",
-    proTipsTextSize: 11,
+    proTipsTextSize: 30,
     footerText: "© 2026 TRANSCRIPT MASTER AI",
     footerTextColor: "#ffffff33",
     blockedNoticeText: "API နှစ်မျိုးလုံး ပိတ်ထားပါသည်။ Admin ကို ဆက်သွယ်ပါ။",
@@ -695,7 +695,7 @@ const VoicePage: React.FC = () => {
             {isEditing ? (
               <EditableField fieldKey="blockedNoticeText" label="Blocked Notice" />
             ) : (
-              <p className="text-[10px] font-bold text-destructive">
+              <p className="text-lg font-extrabold text-destructive">
                 {vs?.blockedNoticeText || defaultVoiceSettings.blockedNoticeText}
               </p>
             )}
@@ -788,8 +788,8 @@ const VoicePage: React.FC = () => {
           <textarea
             value={text}
             onChange={(e) => { setText(e.target.value); setShowOptions(false); setResultAudio(null); setTierLocked(false); setSelectedTier(null); }}
-            placeholder="Enter script content here..."
-            className="w-full h-32 bg-transparent border-none focus:ring-0 text-sm font-bold leading-relaxed text-foreground placeholder:text-muted-foreground/30 resize-none"
+            placeholder="အသံထုတ်ဖို့ စာသားကို ဒီမှာ ရိုက်ထည့်ပါ..."
+            className="w-full h-32 bg-transparent border-none focus:ring-0 text-lg font-extrabold leading-relaxed text-foreground placeholder:text-muted-foreground/30 resize-none"
           />
         </div>
 
@@ -1050,7 +1050,7 @@ const VoicePage: React.FC = () => {
           )}
           
           {history.length === 0 ? (
-            <div className="bg-white/5 border border-white/5 rounded-2xl p-6 text-center italic text-muted-foreground text-[10px]">
+            <div className="bg-white/5 border border-white/5 rounded-2xl p-6 text-center italic text-muted-foreground text-lg font-bold">
               {vs?.noHistoryText || defaultVoiceSettings.noHistoryText}
             </div>
           ) : (
@@ -1058,7 +1058,7 @@ const VoicePage: React.FC = () => {
               {history.map(item => (
                 <div key={item.id} className="bg-white/5 border border-white/5 p-4 rounded-2xl flex items-center justify-between group animate-in slide-in-from-right-2 duration-300">
                   <div className="flex-1 min-w-0 pr-4 cursor-pointer" onClick={() => item.audio ? playHistoryItem(item.audio, item.text) : alert('ဤမှတ်တမ်းတွင် အသံဖိုင်မရှိတော့ပါ။ (Session ပြီးဆုံးပြီ)')}>
-                    <p className="text-[10px] font-bold text-foreground/80 truncate">{item.text}</p>
+                    <p className="text-sm font-extrabold text-foreground/80 truncate">{item.text}</p>
                     <div className="flex gap-2 mt-1">
                       <span className="text-[7px] font-black text-primary uppercase tracking-widest">{item.voice}</span>
                       <span className="text-[7px] font-black text-muted-foreground">{new Date(item.timestamp).toLocaleTimeString()}</span>
@@ -1094,7 +1094,7 @@ const VoicePage: React.FC = () => {
             {isEditing ? (
               <EditableTextarea fieldKey="howToUseText" colorKey="howToUseTextColor" sizeKey="howToUseTextSize" label="How To Use Content (\\n = new line)" />
             ) : (
-              <div className="space-y-2 font-bold leading-relaxed" style={{ color: vs?.howToUseTextColor || defaultVoiceSettings.howToUseTextColor, fontSize: (vs?.howToUseTextSize || defaultVoiceSettings.howToUseTextSize) + 'px' }}>
+              <div className="space-y-2 font-extrabold leading-relaxed" style={{ color: vs?.howToUseTextColor || defaultVoiceSettings.howToUseTextColor, fontSize: (vs?.howToUseTextSize || defaultVoiceSettings.howToUseTextSize) + 'px' }}>
                 {(vs?.howToUseText || defaultVoiceSettings.howToUseText).split('\n').map((line: string, i: number) => (
                   <p key={i}>{line}</p>
                 ))}
@@ -1116,7 +1116,7 @@ const VoicePage: React.FC = () => {
             {isEditing ? (
               <EditableTextarea fieldKey="proTipsText" colorKey="proTipsTextColor" sizeKey="proTipsTextSize" label="Pro Tips Content (\\n = new line)" />
             ) : (
-              <div className="space-y-2 font-bold leading-relaxed" style={{ color: vs?.proTipsTextColor || defaultVoiceSettings.proTipsTextColor, fontSize: (vs?.proTipsTextSize || defaultVoiceSettings.proTipsTextSize) + 'px' }}>
+              <div className="space-y-2 font-extrabold leading-relaxed" style={{ color: vs?.proTipsTextColor || defaultVoiceSettings.proTipsTextColor, fontSize: (vs?.proTipsTextSize || defaultVoiceSettings.proTipsTextSize) + 'px' }}>
                 {(vs?.proTipsText || defaultVoiceSettings.proTipsText).split('\n').map((line: string, i: number) => (
                   <p key={i}>{line}</p>
                 ))}
