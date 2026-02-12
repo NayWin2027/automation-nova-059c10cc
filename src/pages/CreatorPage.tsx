@@ -292,7 +292,7 @@ const CreatorPage: React.FC = () => {
 
           {/* Narrative Flow Control */}
           <div className="space-y-1.5">
-            <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest ml-1">AI NARRATIVE FLOW</label>
+            <label className="font-black text-slate-300 uppercase tracking-widest ml-1 text-base">AI NARRATIVE FLOW</label>
             <div className="grid grid-cols-2 gap-2 p-1 bg-muted/30 rounded-xl border border-border/50">
               <button
                 onClick={() => setFlowControl('Punchy')}
@@ -312,7 +312,7 @@ const CreatorPage: React.FC = () => {
           {/* Options Grid */}
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest ml-1">VOICE TONE</label>
+              <label className="font-black text-slate-300 uppercase tracking-widest ml-1 text-base">VOICE TONE</label>
               <div className="flex p-1 bg-muted/20 rounded-lg border border-border/50">
                 <button
                   onClick={() => setVoice('MALE')}
@@ -329,7 +329,7 @@ const CreatorPage: React.FC = () => {
               </div>
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest ml-1">CONTENT TYPE</label>
+              <label className="font-black text-slate-300 uppercase tracking-widest ml-1 text-base">CONTENT TYPE</label>
               <div className="flex p-1 bg-muted/20 rounded-lg border border-border/50">
                 <button
                   onClick={() => setContentType('TEXT')}
