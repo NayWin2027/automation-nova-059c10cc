@@ -1622,28 +1622,24 @@ export default function VideoRecapView() {
           const desiredFreezeTime = clampTime(sceneStart + Math.min(freezeElapsed, Math.max(0, sceneDuration - 0.1)));
 
           // SMOOTH video control: minimize play/pause toggling
-          // CRITICAL: During EXPORT, NEVER pause/play the video — it causes buffering hangs.
-          // Instead, keep video playing and rely on freeze canvas for photo phase visuals.
-          if (motionZoom && isPlaying && !isExporting) {
+          // Only act on PHASE TRANSITIONS — never call play/pause every frame
+          if (motionZoom && isPlaying) {
             if (inPhotoPhase && !lastPhaseWasPhotoRef.current) {
               // Entering photo phase — pause video once and set freeze frame position
-              video.pause();
+              if (!isExporting) video.pause();
               video.currentTime = desiredFreezeTime;
               lastPhaseWasPhotoRef.current = true;
             } else if (!inPhotoPhase && lastPhaseWasPhotoRef.current) {
               // Entering motion phase — resume video playback once
               video.currentTime = desiredMotionTime;
-              video.play().catch(() => {});
+              if (!isExporting) video.play().catch(() => {});
               lastPhaseWasPhotoRef.current = false;
             }
-          } else if (motionZoom && isExporting) {
-            // During export: track phase state but don't touch video playback
-            lastPhaseWasPhotoRef.current = inPhotoPhase;
           }
 
           // SEGMENT-LEVEL SEEKING: only seek when segment actually changes
           // This is the key to smoothness — don't seek within the same segment during motion
-          if (isPlaying && !isExporting && activeSegment && video.duration > 0) {
+          if (isPlaying && activeSegment && video.duration > 0) {
             const segIdx = scriptSegments.indexOf(activeSegment);
             if (segIdx !== lastSeekedSegmentRef.current) {
               // New segment — seek to its scene start
