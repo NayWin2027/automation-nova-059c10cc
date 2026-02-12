@@ -764,8 +764,8 @@ const ThumbnailView: React.FC = () => {
           </div>
 
           <div
-            className="bg-[#020617] rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl relative border border-white/5 flex items-center justify-center max-h-[280px] sm:max-h-[320px] group w-full"
-            style={{ aspectRatio: RATIO_MAP[selectedRatio] }}>
+            className="bg-[#020617] rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl relative border border-white/5 flex items-center justify-center group w-full"
+            style={{ aspectRatio: '1 / 1', maxWidth: '400px', margin: '0 auto' }}>
 
             <canvas
               ref={canvasRef}
