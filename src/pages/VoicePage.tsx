@@ -1086,7 +1086,7 @@ const VoicePage: React.FC = () => {
               {isEditing ?
               <EditableField fieldKey="howToUseTitle" colorKey="howToUseTitleColor" label="How To Use Title" /> :
 
-              <h4 className="font-black uppercase tracking-[0.2em] text-neon-rose text-base" style={{ color: vs?.howToUseTitleColor || defaultVoiceSettings.howToUseTitleColor }}>
+              <h4 className="font-black uppercase tracking-[0.2em] text-base text-neon-amber" style={{ color: vs?.howToUseTitleColor || defaultVoiceSettings.howToUseTitleColor }}>
                   {vs?.howToUseTitle || defaultVoiceSettings.howToUseTitle}
                 </h4>
               }
@@ -1094,7 +1094,7 @@ const VoicePage: React.FC = () => {
             {isEditing ?
             <EditableTextarea fieldKey="howToUseText" colorKey="howToUseTextColor" sizeKey="howToUseTextSize" label="How To Use Content (\\n = new line)" /> :
 
-            <div className="space-y-2 font-bold leading-relaxed rounded-lg shadow-lg text-white px-0 pb-0 pr-0" style={{ color: vs?.howToUseTextColor || defaultVoiceSettings.howToUseTextColor, fontSize: (vs?.howToUseTextSize || defaultVoiceSettings.howToUseTextSize) + 'px' }}>
+            <div className="space-y-2 font-bold leading-relaxed rounded-lg shadow-lg px-0 pb-0 pr-0 text-destructive-foreground" style={{ color: vs?.howToUseTextColor || defaultVoiceSettings.howToUseTextColor, fontSize: (vs?.howToUseTextSize || defaultVoiceSettings.howToUseTextSize) + 'px' }}>
                 {(vs?.howToUseText || defaultVoiceSettings.howToUseText).split('\n').map((line: string, i: number) =>
               <p key={i}>{line}</p>
               )}
@@ -1116,7 +1116,7 @@ const VoicePage: React.FC = () => {
             {isEditing ?
             <EditableTextarea fieldKey="proTipsText" colorKey="proTipsTextColor" sizeKey="proTipsTextSize" label="Pro Tips Content (\\n = new line)" /> :
 
-            <div className="space-y-2 font-bold leading-relaxed text-amber-100" style={{ color: vs?.proTipsTextColor || defaultVoiceSettings.proTipsTextColor, fontSize: (vs?.proTipsTextSize || defaultVoiceSettings.proTipsTextSize) + 'px' }}>
+            <div className="space-y-2 font-bold leading-relaxed text-secondary-foreground" style={{ color: vs?.proTipsTextColor || defaultVoiceSettings.proTipsTextColor, fontSize: (vs?.proTipsTextSize || defaultVoiceSettings.proTipsTextSize) + 'px' }}>
                 {(vs?.proTipsText || defaultVoiceSettings.proTipsText).split('\n').map((line: string, i: number) =>
               <p key={i}>{line}</p>
               )}
