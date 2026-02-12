@@ -199,9 +199,9 @@ ref)
 
       <button
         onClick={onClick}
-        className="w-full p-4 flex justify-between items-center transition-colors bg-[sidebar-primary-foreground] bg-amber-950 hover:bg-amber-800">
+        className="w-full p-4 flex justify-between items-center bg-white/5 hover:bg-white/10 active:bg-white/20 transition-colors">
 
-        <span className="font-black uppercase tracking-widest text-sm text-white">{title}</span>
+        <span className="font-black uppercase tracking-widest text-sm text-neon-rose">{title}</span>
         <span className={`text-white transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`}>▼</span>
       </button>
       <div
@@ -2088,18 +2088,18 @@ export default function VideoRecapView() {
   // NOTE: no authLoading gate here; avoids UI "blink" and state reset.
 
   return (
-    <div className="flex flex-col gap-5 pb-32 max-w-lg mx-auto px-2 animate-in fade-in duration-500 bg-blue-900">
+    <div className="flex flex-col gap-5 pb-32 max-w-lg mx-auto px-2 animate-in fade-in duration-500">
       {/* Header with Home Button */}
       <div className="flex items-center justify-between py-2">
         <button
           onClick={() => navigate("/")}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-all text-base">
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-all">
 
           <Home className="w-4 h-4" />
           <span className="text-[9px] font-black uppercase tracking-widest">Home</span>
         </button>
-        <h1 className="font-black text-white uppercase tracking-widest text-2xl">NOVA VIDEO RECAP
-          <span className="text-neon-rose">RECAP</span>
+        <h1 className="text-[11px] font-black text-white uppercase tracking-widest">NOVA VIDEO RECAP
+          <span className="text-blue-500">RECAP</span>
         </h1>
         <div className="w-16" /> {/* Spacer for centering */}
       </div>
@@ -2231,15 +2231,15 @@ export default function VideoRecapView() {
         </div>
       }
 
-      <div className="flex items-center gap-3 p-2 rounded-2xl border border-white/10 bg-blue-900">
+      <div className="flex items-center gap-3 bg-[#050505] p-2 rounded-2xl border border-white/10">
         <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
             <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
           </svg>
         </div>
         <div className="flex-1">
-          <h2 className="text-sm font-black text-white uppercase tracking-tighter">NOVA AI
-            <span className="text-blue-500">AI</span>
+          <h2 className="text-sm font-black text-white uppercase tracking-tighter">
+            MASTER <span className="text-blue-500">AI</span>
           </h2>
           <input
             type="text"
@@ -2251,7 +2251,7 @@ export default function VideoRecapView() {
       </div>
 
       <div className="bg-black rounded-[32px] overflow-hidden border border-white/10 shadow-2xl relative group">
-        <div className="relative w-full aspect-square flex items-center justify-center bg-blue-900">
+        <div className="relative w-full aspect-square bg-black flex items-center justify-center">
           {!videoSrc ?
           <div
             onClick={() => document.getElementById("vid")?.click()}
@@ -2347,8 +2347,8 @@ export default function VideoRecapView() {
           onClick={() => setOpenSection(openSection === "script" ? null : "script")}>
 
           <div className="space-y-3">
-            <div className="space-y-1 bg-gold-dark">
-              <label className="font-black uppercase tracking-widest text-xs text-current">
+            <div className="space-y-1">
+              <label className="font-black uppercase tracking-widest text-xs text-neon-rose">
                 VIDEO SIZE / ASPECT RATIO
               </label>
               <select
@@ -2356,7 +2356,7 @@ export default function VideoRecapView() {
                 onChange={(e) =>
                 setAspectRatio(ASPECT_RATIOS.find((r) => r.label === e.target.value) || ASPECT_RATIOS[0])
                 }
-                className="w-full border border-white/10 rounded-xl p-3 text-[9px] font-black text-white outline-none bg-red-950">
+                className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl p-3 text-[9px] font-black text-white outline-none">
 
                 {ASPECT_RATIOS.map((r) =>
                 <option key={r.label} value={r.label}>
@@ -2366,8 +2366,8 @@ export default function VideoRecapView() {
               </select>
             </div>
             <div className="flex gap-4 pt-2">
-              <div className="flex-1 space-y-1 bg-red-950">
-                <label className="font-black uppercase tracking-widest text-xs text-current">
+              <div className="flex-1 space-y-1">
+                <label className="font-black uppercase tracking-widest text-xs text-neon-rose">
                   VIDEO PLAYBACK SPEED ({videoSpeed}x)
                 </label>
                 <input
@@ -2380,7 +2380,7 @@ export default function VideoRecapView() {
                   className="w-full h-1.5 bg-white/10 rounded-full appearance-none accent-blue-500" />
 
               </div>
-              <div className="flex-1 space-y-1 bg-red-950">
+              <div className="flex-1 space-y-1">
                 <label className="font-black uppercase tracking-widest text-xs text-destructive-foreground">
                   AUDIO DURATION / SPEED ({audioSpeed}x)
                 </label>
@@ -2395,8 +2395,8 @@ export default function VideoRecapView() {
 
               </div>
             </div>
-            <div className="space-y-2 pt-2 bg-red-950">
-              <label className="font-black uppercase tracking-widest text-xs text-white">
+            <div className="space-y-2 pt-2">
+              <label className="font-black uppercase tracking-widest text-xs text-neon-rose">
                 AI GENERATED SCRIPT (EDITABLE)
               </label>
               <textarea
@@ -2408,7 +2408,7 @@ export default function VideoRecapView() {
             </div>
 
             {/* Audio Source Toggle */}
-            <div className="space-y-2 pt-2 bg-orange-950">
+            <div className="space-y-2 pt-2">
               <label className="font-black uppercase tracking-widest text-white text-xs">
                 AUDIO SOURCE
               </label>
