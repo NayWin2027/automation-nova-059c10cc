@@ -291,7 +291,7 @@ export default function VideoRecapView() {
   const [flipVideo, setFlipVideo] = useState(false);
   const [audioSpeed, setAudioSpeed] = useState(1.0);
   const [smartZoom, setSmartZoom] = useState(true);
-  const [autoColor, setAutoColor] = useState(false);
+  const [autoColor, setAutoColor] = useState<string>("OFF");
   // Custom Audio Upload states
   const [audioMode, setAudioMode] = useState<"ai" | "custom">("ai");
   const [customAudioFile, setCustomAudioFile] = useState<File | null>(null);
@@ -945,7 +945,7 @@ export default function VideoRecapView() {
     setFlipVideo(true);
     setFilmGrain(true);
     setMotionZoom(true);
-    setAutoColor(true);
+    setAutoColor("WARM");
     alert("Safe Mode Enabled: Video Flip, Grain, Zoom, and Auto-Color activated.");
   };
 
@@ -1361,8 +1361,16 @@ export default function VideoRecapView() {
     ctx.restore();
 
     // Apply color grading
-    if (autoColor) {
-      ctx.fillStyle = "rgba(255, 160, 0, 0.08)";
+    if (autoColor && autoColor !== "OFF") {
+      const colorMap: Record<string, string> = {
+        WARM: "rgba(255, 160, 0, 0.10)",
+        COOL: "rgba(0, 100, 255, 0.10)",
+        TEAL: "rgba(0, 200, 180, 0.08)",
+        PINK: "rgba(255, 80, 150, 0.08)",
+        SEPIA: "rgba(180, 120, 60, 0.12)",
+        VINTAGE: "rgba(120, 80, 200, 0.08)",
+      };
+      ctx.fillStyle = colorMap[autoColor] || "rgba(255, 160, 0, 0.08)";
       ctx.globalCompositeOperation = "overlay";
       ctx.fillRect(0, 0, targetW, targetH);
       ctx.globalCompositeOperation = "source-over";
@@ -1625,14 +1633,15 @@ export default function VideoRecapView() {
           // Only act on PHASE TRANSITIONS — never call play/pause every frame
           if (motionZoom && isPlaying) {
             if (inPhotoPhase && !lastPhaseWasPhotoRef.current) {
-              // Entering photo phase — pause video once and set freeze frame position
-              video.pause();
+              // Entering photo phase — set freeze frame position
+              // CRITICAL: During export, do NOT call video.pause() as it stalls MediaRecorder
+              if (!isExporting) video.pause();
               video.currentTime = desiredFreezeTime;
               lastPhaseWasPhotoRef.current = true;
             } else if (!inPhotoPhase && lastPhaseWasPhotoRef.current) {
-              // Entering motion phase — resume video playback once
+              // Entering motion phase — resume video playback
               video.currentTime = desiredMotionTime;
-              video.play().catch(() => {});
+              if (!isExporting) video.play().catch(() => {});
               lastPhaseWasPhotoRef.current = false;
             }
           }
@@ -1764,8 +1773,16 @@ export default function VideoRecapView() {
 
           ctx.globalAlpha = 1.0;
 
-          if (autoColor) {
-            ctx.fillStyle = "rgba(255, 160, 0, 0.08)";
+          if (autoColor && autoColor !== "OFF") {
+            const colorMap: Record<string, string> = {
+              WARM: "rgba(255, 160, 0, 0.10)",
+              COOL: "rgba(0, 100, 255, 0.10)",
+              TEAL: "rgba(0, 200, 180, 0.08)",
+              PINK: "rgba(255, 80, 150, 0.08)",
+              SEPIA: "rgba(180, 120, 60, 0.12)",
+              VINTAGE: "rgba(120, 80, 200, 0.08)",
+            };
+            ctx.fillStyle = colorMap[autoColor] || "rgba(255, 160, 0, 0.08)";
             ctx.globalCompositeOperation = "overlay";
             ctx.fillRect(0, 0, targetW, targetH);
             ctx.globalCompositeOperation = "source-over";
@@ -2585,6 +2602,32 @@ export default function VideoRecapView() {
 
                 FILM GRAIN
               </button>
+            </div>
+            {/* Auto Color Grading Selector */}
+            <div className="bg-white/5 p-3 rounded-xl border border-white/5 space-y-2">
+              <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">🎨 AUTO COLOR GRADE</span>
+              <div className="grid grid-cols-4 gap-1.5">
+                {[
+                  { id: "OFF", label: "OFF", color: "bg-slate-700" },
+                  { id: "WARM", label: "WARM", color: "bg-orange-500" },
+                  { id: "COOL", label: "COOL", color: "bg-blue-500" },
+                  { id: "TEAL", label: "TEAL", color: "bg-teal-500" },
+                  { id: "PINK", label: "PINK", color: "bg-pink-500" },
+                  { id: "SEPIA", label: "SEPIA", color: "bg-amber-700" },
+                  { id: "VINTAGE", label: "VINTAGE", color: "bg-purple-500" },
+                ].map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => setAutoColor(c.id)}
+                    className={`py-1.5 rounded-lg border text-[6px] font-black uppercase transition-all ${
+                      autoColor === c.id
+                        ? `${c.color} border-white text-white shadow-lg scale-105`
+                        : "border-white/10 text-slate-500 hover:text-white"
+                    }`}>
+                    {c.label}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="bg-white/5 p-3 rounded-xl border border-white/5 space-y-3">
               <div className="flex justify-between">
