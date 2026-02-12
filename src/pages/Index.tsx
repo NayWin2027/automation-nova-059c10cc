@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import PlansView from "@/components/PlansView";
 import { useNavigate } from "react-router-dom";
 import {
@@ -20,7 +20,10 @@ import {
   FileCheck,
   Shield,
   Info,
+  Sun,
+  Moon,
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { ToolCard } from "@/components/ToolCard";
 import { BottomNav } from "@/components/BottomNav";
 import { GatewayBanner } from "@/components/GatewayBanner";
@@ -126,6 +129,18 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState<"home" | "premium" | "settings">("home");
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
   const [showContactDialog, setShowContactDialog] = useState(false);
+  const [isLightMode, setIsLightMode] = useState(() => {
+    return localStorage.getItem('theme-mode') === 'light';
+  });
+
+  useEffect(() => {
+    if (isLightMode) {
+      document.documentElement.classList.add('light-mode');
+    } else {
+      document.documentElement.classList.remove('light-mode');
+    }
+    localStorage.setItem('theme-mode', isLightMode ? 'light' : 'dark');
+  }, [isLightMode]);
 
   // Merge tool settings with default tools
   const tools = defaultTools
@@ -273,6 +288,20 @@ const Index = () => {
     <div className="space-y-2">
       <h2 className="text-sm font-bold text-foreground mb-2">Settings</h2>
       <div className="space-y-1.5">
+        {/* Theme Toggle */}
+        <div className="w-full p-2.5 rounded-lg border border-gold/20 bg-card/50">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {isLightMode ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-primary" />}
+              <div>
+                <h3 className="text-2xs font-semibold text-foreground">Appearance</h3>
+                <p className="text-3xs text-muted-foreground">{isLightMode ? 'Light Mode' : 'Dark Mode'}</p>
+              </div>
+            </div>
+            <Switch checked={isLightMode} onCheckedChange={setIsLightMode} />
+          </div>
+        </div>
+
         {/* Contact */}
         <button
           onClick={() => setShowContactDialog(true)}

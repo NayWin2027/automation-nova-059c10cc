@@ -121,6 +121,53 @@
     --sidebar-border: 220 20% 18%;
     --sidebar-ring: 199 89% 48%;
   }
+
+  /* Premium Light Mode */
+  .light-mode {
+    --background: 40 30% 96%;
+    --foreground: 220 30% 15%;
+
+    --card: 40 20% 98%;
+    --card-foreground: 220 30% 15%;
+
+    --popover: 40 20% 98%;
+    --popover-foreground: 220 30% 15%;
+
+    --primary: 210 70% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 35 15% 90%;
+    --secondary-foreground: 220 25% 20%;
+
+    --muted: 35 10% 92%;
+    --muted-foreground: 220 15% 45%;
+
+    --accent: 45 80% 50%;
+    --accent-foreground: 220 30% 12%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 35 15% 85%;
+    --input: 35 15% 85%;
+    --ring: 45 80% 50%;
+
+    --gold: 45 90% 45%;
+    --gold-light: 48 100% 60%;
+    --gold-dark: 40 80% 35%;
+
+    --shadow-glow: 0 4px 20px hsl(45 60% 50% / 0.1);
+    --shadow-card: 0 2px 12px hsl(220 20% 50% / 0.08);
+
+    --sidebar-background: 40 20% 95%;
+    --sidebar-foreground: 220 30% 15%;
+    --sidebar-primary: 210 70% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 35 15% 88%;
+    --sidebar-accent-foreground: 220 25% 20%;
+    --sidebar-border: 35 15% 85%;
+    --sidebar-ring: 45 80% 50%;
+  }
 }
 
 @layer base {
@@ -464,5 +511,69 @@
   .badge-free {
     background: hsl(220 20% 18%);
     border: 1px solid hsl(220 15% 25%);
+  }
+
+  /* Light mode overrides for premium components */
+  .light-mode .premium-background {
+    background: linear-gradient(160deg, hsl(40 25% 95%) 0%, hsl(38 30% 93%) 40%, hsl(42 20% 96%) 70%, hsl(35 25% 94%) 100%);
+  }
+
+  .light-mode .premium-rays {
+    background:
+      radial-gradient(ellipse at 25% 15%, hsl(45 80% 70% / 0.08) 0%, transparent 50%),
+      radial-gradient(ellipse at 75% 25%, hsl(210 60% 70% / 0.06) 0%, transparent 45%),
+      radial-gradient(ellipse at 50% 80%, hsl(45 70% 60% / 0.05) 0%, transparent 50%);
+  }
+
+  .light-mode .premium-nav-glass {
+    background: linear-gradient(180deg, hsl(0 0% 100% / 0.9) 0%, hsl(40 15% 97% / 0.95) 50%, hsl(35 20% 95% / 0.98) 100%);
+    border: 1px solid hsl(45 40% 75% / 0.4);
+    box-shadow:
+      0 4px 20px hsl(220 20% 50% / 0.08),
+      0 0 10px hsl(45 60% 60% / 0.06),
+      inset 0 1px 0 hsl(0 0% 100% / 0.8);
+  }
+
+  .light-mode .premium-nav-glass::before {
+    background: linear-gradient(90deg, hsl(45 80% 60% / 0.3) 0%, hsl(210 60% 60% / 0.15) 50%, hsl(45 80% 60% / 0.3) 100%);
+  }
+
+  .light-mode .tool-glossy-card {
+    border: 1px solid hsl(45 40% 75% / 0.3);
+    box-shadow:
+      0 2px 10px hsl(220 20% 50% / 0.06),
+      0 1px 3px hsl(220 20% 50% / 0.04),
+      inset 0 1px 0 hsl(0 0% 100% / 0.6);
+  }
+
+  .light-mode .tool-glossy-card:hover {
+    box-shadow:
+      0 6px 20px hsl(220 20% 50% / 0.1),
+      0 2px 6px hsl(45 60% 50% / 0.08),
+      inset 0 1px 0 hsl(0 0% 100% / 0.7);
+    border-color: hsl(45 50% 65% / 0.5);
+  }
+
+  .light-mode .nav-glass {
+    background: hsl(40 15% 95% / 0.9);
+    border: 1px solid hsl(35 15% 85% / 0.5);
+    box-shadow: 0 2px 15px hsl(220 20% 50% / 0.06);
+  }
+
+  .light-mode .glass-card {
+    background: hsl(0 0% 100% / 0.8);
+    border: 1px solid hsl(35 15% 85% / 0.5);
+    box-shadow: 0 2px 12px hsl(220 20% 50% / 0.06);
+  }
+
+  .light-mode .upload-zone {
+    background: linear-gradient(135deg, hsl(40 20% 97%) 0%, hsl(38 15% 95%) 100%);
+    border-color: hsl(35 15% 82%);
+  }
+
+  .light-mode .gold-glass {
+    background: linear-gradient(135deg, hsl(40 30% 95% / 0.9) 0%, hsl(38 25% 92% / 0.95) 100%);
+    border: 1px solid hsl(45 60% 65% / 0.3);
+    box-shadow: 0 2px 15px hsl(45 50% 50% / 0.08);
   }
 }
