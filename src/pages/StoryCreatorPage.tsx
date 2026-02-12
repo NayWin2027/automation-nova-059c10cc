@@ -559,7 +559,7 @@ const StoryView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-5 pb-32 animate-in fade-in duration-500 max-w-2xl mx-auto px-1 border-blue-500 bg-blue-700">
+    <div className="space-y-5 pb-32 animate-in fade-in duration-500 max-w-2xl mx-auto px-1">
       {/* HOME BUTTON */}
       <div className="flex justify-start p-2">
         <button
@@ -605,8 +605,8 @@ const StoryView: React.FC = () => {
       {/* 3. Main Master Novelist Card */}
       <div className="neon-glass rounded-[36px] p-6 md:p-8 space-y-8 border border-white/10 shadow-[0_0_80px_rgba(0,0,0,0.8)] relative overflow-hidden">
         <div className="text-center space-y-1 relative z-10">
-          <h2 className="text-2xl font-black uppercase tracking-tighter text-white drop-shadow-lg">STORY CREATION</h2>
-          <p className="font-black uppercase tracking-[0.4em] opacity-80 text-popover-foreground text-lg">
+          <h2 className="text-2xl font-black uppercase tracking-tighter text-white drop-shadow-lg">MASTER NOVELIST</h2>
+          <p className="font-black text-purple-300 uppercase tracking-[0.4em] opacity-80 text-sm">
             PREMIUM STORY ENGINE
           </p>
         </div>
@@ -654,7 +654,7 @@ const StoryView: React.FC = () => {
             </label>
             <button
               onClick={handleRandomize}
-              className="text-[12px] hover:scale-110 transition-transform text-purple-400"
+              className="hover:scale-110 transition-transform text-purple-400 text-xl"
               title="Random Inspiration Dice">
 
               🎲
