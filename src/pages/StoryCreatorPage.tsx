@@ -613,7 +613,7 @@ const StoryView: React.FC = () => {
 
         {/* Novel Title */}
         <div className="space-y-2">
-          <label className="font-black uppercase tracking-widest ml-1 drop-shadow-sm text-neon-rose text-sm">
+          <label className="font-black uppercase tracking-widest ml-1 drop-shadow-sm text-neon-rose text-base">
             NOVEL TITLE
           </label>
           <input
@@ -627,7 +627,7 @@ const StoryView: React.FC = () => {
 
         {/* Language */}
         <div className="space-y-2">
-          <label className="font-black uppercase tracking-widest ml-1 drop-shadow-sm text-neon-rose text-sm">
+          <label className="font-black uppercase tracking-widest ml-1 drop-shadow-sm text-neon-rose text-base">
             WRITING LANGUAGE
           </label>
           <div className="relative">
