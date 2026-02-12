@@ -559,7 +559,7 @@ const StoryView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-5 pb-32 animate-in fade-in duration-500 max-w-2xl mx-auto px-1">
+    <div className="space-y-5 pb-32 animate-in fade-in duration-500 max-w-2xl mx-auto px-1 border-blue-500 bg-blue-700">
       {/* HOME BUTTON */}
       <div className="flex justify-start p-2">
         <button
