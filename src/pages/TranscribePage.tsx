@@ -796,7 +796,7 @@ export default function TranscriptionView() {
         </div>
         <div className="space-y-3">
           {s.proTips.map((tip, idx) =>
-          <p key={idx} className="font-medium text-amber-500/80 leading-relaxed text-base">
+          <p key={idx} className="font-medium leading-relaxed text-base text-white">
               {isEditing ?
             <input
               type="text"
