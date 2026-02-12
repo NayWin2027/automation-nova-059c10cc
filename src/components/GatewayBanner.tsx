@@ -22,7 +22,7 @@ export function GatewayBanner() {
         <AppLogo size={72} />
       </div>
 
-      <h2 className="relative text-center text-4xl font-black tracking-[0.12em]">
+      <h2 className="relative text-center font-black tracking-[0.12em] text-7xl">
         <span
           className="bg-clip-text text-transparent text-4xl"
           style={{
