@@ -1050,7 +1050,7 @@ const VoicePage: React.FC = () => {
           }
           
           {history.length === 0 ?
-          <div className="bg-white/5 border border-white/5 rounded-2xl p-6 text-center italic text-muted-foreground text-[10px]">
+          <div className="border border-white/5 rounded-2xl p-6 text-center italic text-[10px] bg-accent-foreground text-amber-100">
               {vs?.noHistoryText || defaultVoiceSettings.noHistoryText}
             </div> :
 
