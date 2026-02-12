@@ -746,7 +746,7 @@ const StoryView: React.FC = () => {
             {characters.map((char) =>
             <div
               key={char.id}
-              className="flex flex-col gap-2 bg-black/40 p-3 rounded-xl border border-white/5 animate-in slide-in-from-left-2">
+              className="flex flex-col gap-2 p-3 rounded-xl border border-white/5 animate-in slide-in-from-left-2 bg-gray-300">
 
                 {/* Top Row: Type | Name | Delete */}
                 <div className="flex items-center gap-2">
@@ -777,7 +777,7 @@ const StoryView: React.FC = () => {
                   <select
                   value={char.archetype}
                   onChange={(e) => changeArchetype(char.id, e.target.value as Archetype)}
-                  className="flex-1 bg-slate-900/50 border border-white/10 rounded-lg py-1 px-2 text-[8px] font-black text-slate-300 outline-none focus:border-blue-500/50">
+                  className="flex-1 bg-slate-900/50 border border-white/10 rounded-lg py-1 px-2 text-[8px] font-black outline-none focus:border-blue-500/50 text-neon-rose">
 
                     <option value="CLASSIC">Classic Hero (Romantic/Good)</option>
                     <option value="ROUGH">Rough/Wild (Hard but Not Evil)</option>
