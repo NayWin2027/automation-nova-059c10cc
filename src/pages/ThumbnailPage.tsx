@@ -833,7 +833,7 @@ const ThumbnailView: React.FC = () => {
               <h2 className="text-3xl font-black tracking-tighter uppercase drop-shadow-2xl text-gold">THUMBNAIL  MAKER ​
                 <span className="text-blue-500">​</span> HUB
               </h2>
-              <p className="font-black uppercase tracking-[0.5em] opacity-70 text-gold text-sm">PROFESSIONAL WORKFLOW ENGINE
+              <p className="font-black uppercase tracking-[0.5em] opacity-70 text-sm text-white">PROFESSIONAL WORKFLOW ENGINE
 
               </p>
             </div>
@@ -966,7 +966,7 @@ const ThumbnailView: React.FC = () => {
               }
 
               <div className="space-y-3 px-4">
-                <label className="font-black text-slate-500 uppercase tracking-widest ml-2 text-base">
+                <label className="font-black uppercase tracking-widest ml-2 text-base text-secondary-foreground">
                   AI SCENE VISION (DESCRIBE NICHE & ATMOSPHERE)
                 </label>
                 <textarea
