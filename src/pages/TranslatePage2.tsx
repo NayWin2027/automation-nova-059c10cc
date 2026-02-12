@@ -313,13 +313,13 @@ const TranslateView: React.FC = () => {
       }
 
       {/* Main Interface */}
-      <div className="neon-glass rounded-[48px] p-8 md:p-12 space-y-12 border border-white/10 shadow-[0_0_100px_rgba(0,0,0,0.9)] relative overflow-hidden">
+      <div className="neon-glass rounded-[48px] p-8 md:p-12 space-y-12 border border-white/10 shadow-[0_0_100px_rgba(0,0,0,0.9)] relative overflow-hidden bg-blue-800">
         <div className="absolute -top-40 -left-40 w-80 h-80 bg-indigo-600/10 blur-[120px] rounded-full"></div>
 
         {/* Source Text Input */}
         <div className="space-y-4">
           <div className="flex justify-between items-center px-2">
-            <label className="font-black text-indigo-400 tracking-[0.3em] uppercase flex items-center gap-2 premium-font text-lg">
+            <label className="font-black tracking-[0.3em] uppercase flex items-center gap-2 premium-font text-lg text-neon-rose">
               <div className="w-1.5 h-3 bg-indigo-500 rounded-full animate-pulse"></div> CONTENT INPUT
             </label>
             <button
@@ -561,7 +561,7 @@ const TranslateView: React.FC = () => {
       }
 
       {/* Branding Footer */}
-      <div className="max-w-md mx-auto mt-20 flex items-start gap-6 p-8 bg-indigo-500/5 rounded-[40px] border border-indigo-500/10 backdrop-blur-md">
+      <div className="max-w-md mx-auto mt-20 flex items-start gap-6 p-8 rounded-[40px] border border-indigo-500/10 backdrop-blur-md bg-blue-800">
         <Info className="w-6 h-6 text-indigo-400 shrink-0 mt-0.5" />
         <p className="font-bold leading-relaxed uppercase tracking-wider text-lg text-neon-rose">
           ကျွန်ုပ်တို့၏ AI Engine သည် လူသားစကားပြောပုံစံကို အထူးပြုပါသည်။ ရွေးချယ်ထားသော Credit Tier အလိုက် စာလုံးရေကို
