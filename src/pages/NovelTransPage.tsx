@@ -809,7 +809,7 @@ TRANSLATION QUALITY (CRITICAL):
         }
 
       {/* Main Container */}
-      <div className="gold-glass rounded-[40px] p-6 md:p-8 space-y-6 relative overflow-hidden transition-all duration-500 bg-slate-950">
+      <div className="gold-glass rounded-[40px] p-6 md:p-8 space-y-6 relative overflow-hidden transition-all duration-500 bg-neon-amber">
         
         {/* Header */}
         <div className="text-center space-y-1">
@@ -825,8 +825,8 @@ TRANSLATION QUALITY (CRITICAL):
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><path d="M12 17h.01" /></svg>
                      </div>
                      <div className="text-left">
-                        <p className="font-black text-white uppercase tracking-widest text-sm">လမ်းညွှန် (HOW TO USE)</p>
-                        <p className="font-bold text-amber-100 uppercase text-sm">အသုံးပြုနည်း အဆင့်ဆင့်</p>
+                        <p className="font-black uppercase tracking-widest text-base text-popover">လမ်းညွှန် (HOW TO USE)</p>
+                        <p className="font-bold uppercase text-zinc-950 text-lg">အသုံးပြုနည်း အဆင့်ဆင့်</p>
                      </div>
                 </div>
                 <span className={`text-amber-200 transition-transform duration-300 ${showGuide ? 'rotate-180' : ''}`}>▼</span>
