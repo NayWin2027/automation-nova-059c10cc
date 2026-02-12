@@ -631,7 +631,7 @@ const VoicePage: React.FC = () => {
         <EditableField fieldKey="pageTitle" colorKey="pageTitleColor" sizeKey="pageTitleSize" label="Page Title" /> :
 
         <h1
-          className="font-bold tracking-wider text-white text-4xl"
+          className="font-bold tracking-wider text-4xl text-white"
           style={{
             color: vs?.pageTitleColor || defaultVoiceSettings.pageTitleColor,
             fontSize: (vs?.pageTitleSize || defaultVoiceSettings.pageTitleSize) + 'px'
@@ -799,7 +799,7 @@ const VoicePage: React.FC = () => {
             {isEditing ?
             <EditableField fieldKey="performanceLabel" colorKey="performanceLabelColor" label="Performance Label" /> :
 
-            <h4 className="font-black uppercase tracking-widest ml-1 text-base text-white" style={{ color: vs?.performanceLabelColor || defaultVoiceSettings.performanceLabelColor }}>
+            <h4 className="font-black uppercase tracking-widest ml-1 text-base text-neon-rose" style={{ color: vs?.performanceLabelColor || defaultVoiceSettings.performanceLabelColor }}>
                 {vs?.performanceLabel || defaultVoiceSettings.performanceLabel}
               </h4>
             }
