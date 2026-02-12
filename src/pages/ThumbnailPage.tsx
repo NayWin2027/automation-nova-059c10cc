@@ -272,7 +272,7 @@ const LayerControl: React.FC<any> = ({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {/* Style Dropdown */}
         <div className="space-y-1">
-          <p className="font-black text-slate-400 uppercase tracking-widest ml-1 text-xs">Color Style</p>
+          <p className="font-black uppercase tracking-widest ml-1 text-xs text-white">Color Style</p>
           <select
             value={style}
             onChange={(e) => setStyle(e.target.value)}
@@ -288,7 +288,7 @@ const LayerControl: React.FC<any> = ({
 
         {/* Effect Dropdown */}
         <div className="space-y-1">
-          <p className="font-black text-slate-400 uppercase tracking-widest ml-1 text-xs">Text Effect</p>
+          <p className="font-black uppercase tracking-widest ml-1 text-xs text-white">Text Effect</p>
           <select
             value={effect}
             onChange={(e) => setEffect(e.target.value as FontEffect)}
@@ -304,7 +304,7 @@ const LayerControl: React.FC<any> = ({
 
         {/* Font Dropdown */}
         <div className="space-y-1">
-          <p className="font-black text-slate-400 uppercase tracking-widest ml-1 text-xs">Elite Font</p>
+          <p className="font-black uppercase tracking-widest ml-1 text-xs text-white">Elite Font</p>
           <select
             value={font}
             onChange={(e) => setFont(e.target.value)}
@@ -321,8 +321,8 @@ const LayerControl: React.FC<any> = ({
 
       <div className="grid grid-cols-2 gap-4 items-center border-t border-white/5 pt-3">
         <div className="space-y-1">
-          <p className="font-black text-slate-400 uppercase tracking-widest ml-1 text-sm">Alignment</p>
-          <div className="grid grid-cols-5 gap-1 bg-neon-rose">
+          <p className="font-black uppercase tracking-widest ml-1 text-sm text-white">Alignment</p>
+          <div className="grid grid-cols-5 gap-1 bg-indigo-600">
             {(["UPON LEFT", "UPON RIGHT", "CENTER", "BUTTON LEFT", "BUTTON RIGHT"] as Position[]).map((p) =>
             <button
               key={p}
@@ -339,8 +339,8 @@ const LayerControl: React.FC<any> = ({
           </div>
         </div>
         <div className="space-y-1">
-          <p className="font-black text-slate-400 uppercase tracking-widest text-center text-sm">Precise Position</p>
-          <div className="flex items-center justify-center gap-2 bg-neon-rose">
+          <p className="font-black uppercase tracking-widest text-center text-sm text-white">Precise Position</p>
+          <div className="flex items-center justify-center gap-2 bg-indigo-800">
             <button
               onClick={() => setOffset((o: any) => ({ ...o, x: o.x - 5 }))}
               className="w-6 h-6 bg-white/5 rounded text-[10px]">
@@ -355,7 +355,7 @@ const LayerControl: React.FC<any> = ({
             </button>
             <button
               onClick={() => setOffset({ x: 0, y: 0 })}
-              className="px-2 py-1 bg-rose-500/10 rounded text-[6px] font-black text-destructive-foreground">
+              className="px-2 py-1 rounded text-[6px] font-black text-destructive-foreground bg-indigo-700 hover:bg-indigo-600">
 
               RST
             </button>
