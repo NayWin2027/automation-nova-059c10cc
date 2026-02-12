@@ -164,6 +164,27 @@ const TranslateView: React.FC = () => {
   const [targetLang, setTargetLang] = useState("BURMESE (SPOKEN)");
   const [selectedMode, setSelectedMode] = useState(1);
   const [selectedTier, setSelectedTier] = useState<number | null>(null);
+  const [tierLocked, setTierLocked] = useState(false);
+
+  // Auto-select tier based on real character count
+  const charCount = text.length;
+  React.useEffect(() => {
+    if (apiType !== "app" || charCount === 0) {
+      setSelectedTier(null);
+      setTierLocked(false);
+      return;
+    }
+    // Thresholds: 5000, 10000, 15000, 20000, 25000, 30000
+    let tierIndex: number;
+    if (charCount <= 5000) tierIndex = 0;
+    else if (charCount <= 10000) tierIndex = 1;
+    else if (charCount <= 15000) tierIndex = 2;
+    else if (charCount <= 20000) tierIndex = 3;
+    else if (charCount <= 25000) tierIndex = 4;
+    else tierIndex = 5;
+    setSelectedTier(tierIndex);
+    setTierLocked(true);
+  }, [charCount, apiType]);
 
   // Gift Features
   const [selectedEmotion, setSelectedEmotion] = useState("PROFESSIONAL");
@@ -437,18 +458,33 @@ const TranslateView: React.FC = () => {
         <div className="space-y-6 pt-4 border-t border-white/5">
           <h4 className="text-[10px] font-black text-slate-300 tracking-[0.3em] uppercase ml-2 text-center md:text-left premium-font">
             SELECT CREDIT TIER (CHAR-COUNT)
+            {charCount > 0 && (
+              <span className="ml-2 text-amber-400 normal-case tracking-normal">
+                — စာလုံးရေ: {charCount.toLocaleString()}
+              </span>
+            )}
           </h4>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {CREDIT_TIERS.map((tier, idx) => (
-              <button
-                key={idx}
-                onClick={() => setSelectedTier(idx)}
-                className={`p-6 rounded-[32px] flex flex-col items-center justify-center gap-1.5 transition-all border shadow-xl ${
-                  selectedTier === idx
-                    ? "bg-indigo-600 border-white/40 scale-[1.08] ring-4 ring-indigo-500/20"
-                    : "bg-black/50 border-white/5 hover:bg-slate-900"
-                }`}
-              >
+            {CREDIT_TIERS.map((tier, idx) => {
+              const isAutoSelected = tierLocked && selectedTier === idx;
+              const isLocked = tierLocked && selectedTier !== idx;
+              return (
+                <button
+                  key={idx}
+                  onClick={() => {
+                    if (!tierLocked) setSelectedTier(idx);
+                  }}
+                  disabled={isLocked}
+                  className={`p-6 rounded-[32px] flex flex-col items-center justify-center gap-1.5 transition-all border shadow-xl ${
+                    isAutoSelected
+                      ? "bg-indigo-600 border-white/40 scale-[1.08] ring-4 ring-indigo-500/20"
+                      : isLocked
+                        ? "bg-black/30 border-white/5 opacity-40 cursor-not-allowed"
+                        : selectedTier === idx
+                          ? "bg-indigo-600 border-white/40 scale-[1.08] ring-4 ring-indigo-500/20"
+                          : "bg-black/50 border-white/5 hover:bg-slate-900"
+                  }`}
+                >
                 <span
                   className={`text-[8px] font-bold tracking-widest uppercase premium-font ${selectedTier === idx ? "text-indigo-100" : "text-slate-400"}`}
                 >
@@ -457,8 +493,14 @@ const TranslateView: React.FC = () => {
                 <span className={`text-[14px] font-black ${selectedTier === idx ? "text-white" : "text-slate-300"}`}>
                   {tier.credits} CREDITS
                 </span>
+                {isAutoSelected && (
+                  <span className="text-[7px] font-black text-emerald-300 tracking-widest uppercase mt-1 flex items-center gap-1">
+                    <Check className="w-2.5 h-2.5" /> AUTO SELECTED
+                  </span>
+                )}
               </button>
-            ))}
+              );
+            })}
           </div>
         </div>
 
