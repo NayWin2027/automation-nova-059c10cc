@@ -1626,13 +1626,13 @@ export default function VideoRecapView() {
           if (motionZoom && isPlaying) {
             if (inPhotoPhase && !lastPhaseWasPhotoRef.current) {
               // Entering photo phase — pause video once and set freeze frame position
-              if (!isExporting) video.pause();
+              video.pause();
               video.currentTime = desiredFreezeTime;
               lastPhaseWasPhotoRef.current = true;
             } else if (!inPhotoPhase && lastPhaseWasPhotoRef.current) {
               // Entering motion phase — resume video playback once
               video.currentTime = desiredMotionTime;
-              if (!isExporting) video.play().catch(() => {});
+              video.play().catch(() => {});
               lastPhaseWasPhotoRef.current = false;
             }
           }
