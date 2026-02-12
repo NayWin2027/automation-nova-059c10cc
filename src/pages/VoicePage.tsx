@@ -620,7 +620,7 @@ const VoicePage: React.FC = () => {
       }
 
       {/* Header */}
-      <header className="p-4 flex items-center gap-3">
+      <header className="p-4 flex items-center gap-3 bg-card">
         <button
           onClick={() => navigate('/')}
           className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center">
@@ -631,7 +631,7 @@ const VoicePage: React.FC = () => {
         <EditableField fieldKey="pageTitle" colorKey="pageTitleColor" sizeKey="pageTitleSize" label="Page Title" /> :
 
         <h1
-          className="font-bold tracking-wider text-foreground"
+          className="font-bold tracking-wider text-secondary-foreground text-lg"
           style={{
             color: vs?.pageTitleColor || defaultVoiceSettings.pageTitleColor,
             fontSize: (vs?.pageTitleSize || defaultVoiceSettings.pageTitleSize) + 'px'
@@ -642,7 +642,7 @@ const VoicePage: React.FC = () => {
         }
       </header>
 
-      <main className="px-4 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <main className="px-4 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700 border-gold bg-blue-950">
         
         {/* 1. API Switcher */}
         <div className="flex bg-white/5 backdrop-blur-xl p-1 rounded-[18px] border border-white/10 shadow-lg">
@@ -1125,11 +1125,11 @@ const VoicePage: React.FC = () => {
           </div>
         </div>
 
-        <div className="text-center pt-6 opacity-20">
+        <div className="text-center pt-6 opacity-20 text-gold">
           {isEditing ?
           <EditableField fieldKey="footerText" colorKey="footerTextColor" label="Footer Text" /> :
 
-          <p className="text-[7px] font-black tracking-[0.4em] uppercase" style={{ color: vs?.footerTextColor || defaultVoiceSettings.footerTextColor }}>
+          <p className="font-black tracking-[0.4em] uppercase text-sm text-slate-50 bg-indigo-950" style={{ color: vs?.footerTextColor || defaultVoiceSettings.footerTextColor }}>
               {vs?.footerText || defaultVoiceSettings.footerText}
             </p>
           }
