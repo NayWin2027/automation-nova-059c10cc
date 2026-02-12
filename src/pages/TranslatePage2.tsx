@@ -439,7 +439,7 @@ const TranslateView: React.FC = () => {
             }>
 
             <Wand2 className={`w-5 h-5 ${autoFormat ? "animate-bounce" : ""}`} />
-            <span className="font-bold tracking-widest uppercase premium-font text-base">AUTO SCRIPT FIX</span>
+            <span className="font-bold tracking-widest uppercase premium-font text-base text-neon-cyan">AUTO SCRIPT FIX</span>
           </button>
           <button
             onClick={() => setParaphraseMode(!paraphraseMode)}
@@ -450,7 +450,7 @@ const TranslateView: React.FC = () => {
             }>
 
             <MessageSquareQuote className={`w-5 h-5 ${paraphraseMode ? "animate-pulse" : ""}`} />
-            <span className="font-bold tracking-widest uppercase premium-font text-base">ELITE PHRASE</span>
+            <span className="font-bold tracking-widest uppercase premium-font text-base text-neon-cyan">ELITE PHRASE</span>
           </button>
         </div>
 
