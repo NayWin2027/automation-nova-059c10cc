@@ -355,7 +355,7 @@ const LayerControl: React.FC<any> = ({
             </button>
             <button
               onClick={() => setOffset({ x: 0, y: 0 })}
-              className="px-2 py-1 bg-rose-500/10 text-rose-400 rounded text-[6px] font-black">
+              className="px-2 py-1 bg-rose-500/10 rounded text-[6px] font-black text-destructive-foreground">
 
               RST
             </button>
