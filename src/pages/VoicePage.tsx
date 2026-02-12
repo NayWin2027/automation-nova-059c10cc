@@ -814,7 +814,7 @@ const VoicePage: React.FC = () => {
             {isEditing ?
             <EditableField fieldKey="characterLabel" colorKey="characterLabelColor" label="Character Label" /> :
 
-            <h4 className="font-black uppercase tracking-widest ml-1 text-base text-white" style={{ color: vs?.characterLabelColor || defaultVoiceSettings.characterLabelColor }}>
+            <h4 className="font-black uppercase tracking-widest ml-1 text-base text-neon-rose" style={{ color: vs?.characterLabelColor || defaultVoiceSettings.characterLabelColor }}>
                 {vs?.characterLabel || defaultVoiceSettings.characterLabel}
               </h4>
             }
@@ -1032,7 +1032,7 @@ const VoicePage: React.FC = () => {
             {isEditing ?
             <EditableField fieldKey="historyTitle" colorKey="historyTitleColor" label="History Title" /> :
 
-            <h4 className="font-black uppercase tracking-widest text-base text-white" style={{ color: vs?.historyTitleColor || defaultVoiceSettings.historyTitleColor }}>
+            <h4 className="font-black uppercase tracking-widest text-base text-neon-rose" style={{ color: vs?.historyTitleColor || defaultVoiceSettings.historyTitleColor }}>
                 {vs?.historyTitle || defaultVoiceSettings.historyTitle}
               </h4>
             }
