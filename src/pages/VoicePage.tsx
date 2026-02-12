@@ -1080,7 +1080,7 @@ const VoicePage: React.FC = () => {
 
         {/* 8. Help Info */}
         <div className="space-y-3 pt-2">
-          <div className="bg-white/5 border border-white/10 rounded-[28px] p-6 space-y-3 shadow-inner text-gold">
+          <div className="border border-white/10 rounded-[28px] p-6 space-y-3 shadow-inner text-gold bg-gold">
             <div className="flex items-center gap-2">
               <div className="w-1 h-4 bg-primary rounded-full"></div>
               {isEditing ?
@@ -1094,7 +1094,7 @@ const VoicePage: React.FC = () => {
             {isEditing ?
             <EditableTextarea fieldKey="howToUseText" colorKey="howToUseTextColor" sizeKey="howToUseTextSize" label="How To Use Content (\\n = new line)" /> :
 
-            <div className="space-y-2 font-bold leading-relaxed rounded-lg shadow-lg px-0 pb-0 pr-0 text-white" style={{ color: vs?.howToUseTextColor || defaultVoiceSettings.howToUseTextColor, fontSize: (vs?.howToUseTextSize || defaultVoiceSettings.howToUseTextSize) + 'px' }}>
+            <div className="space-y-2 font-bold leading-relaxed rounded-lg shadow-lg px-0 pb-0 pr-0 text-white bg-white" style={{ color: vs?.howToUseTextColor || defaultVoiceSettings.howToUseTextColor, fontSize: (vs?.howToUseTextSize || defaultVoiceSettings.howToUseTextSize) + 'px' }}>
                 {(vs?.howToUseText || defaultVoiceSettings.howToUseText).split('\n').map((line: string, i: number) =>
               <p key={i}>{line}</p>
               )}
@@ -1116,7 +1116,7 @@ const VoicePage: React.FC = () => {
             {isEditing ?
             <EditableTextarea fieldKey="proTipsText" colorKey="proTipsTextColor" sizeKey="proTipsTextSize" label="Pro Tips Content (\\n = new line)" /> :
 
-            <div className="space-y-2 font-bold leading-relaxed text-white" style={{ color: vs?.proTipsTextColor || defaultVoiceSettings.proTipsTextColor, fontSize: (vs?.proTipsTextSize || defaultVoiceSettings.proTipsTextSize) + 'px' }}>
+            <div className="space-y-2 font-bold leading-relaxed text-white bg-slate-100" style={{ color: vs?.proTipsTextColor || defaultVoiceSettings.proTipsTextColor, fontSize: (vs?.proTipsTextSize || defaultVoiceSettings.proTipsTextSize) + 'px' }}>
                 {(vs?.proTipsText || defaultVoiceSettings.proTipsText).split('\n').map((line: string, i: number) =>
               <p key={i}>{line}</p>
               )}
