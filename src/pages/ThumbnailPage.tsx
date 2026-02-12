@@ -745,8 +745,8 @@ const ThumbnailView: React.FC = () => {
   return (
     <div className="space-y-6 pb-40 animate-in fade-in duration-500 max-w-5xl mx-auto px-2 text-white bg-blue-700">
       {/* 1. MONITOR PREVIEW (Sticky Top - Compact) */}
-      <div className="sticky top-16 z-[100] pb-1">
-        <div className="neon-glass rounded-2xl sm:rounded-3xl p-3 sm:p-4 space-y-2 border border-white/15 shadow-[0_0_60px_rgba(0,0,0,0.7)] overflow-hidden bg-black/80 backdrop-blur-3xl">
+      <div className="sticky top-16 z-[100] mx-0 px-0 py-0 pr-0 pb-0">
+        <div className="neon-glass rounded-2xl sm:rounded-3xl p-3 sm:p-4 space-y-2 border border-white/15 shadow-[0_0_60px_rgba(0,0,0,0.7)] overflow-hidden bg-black/80 backdrop-blur-3xl my-0 py-0 px-0 mx-[300px]">
           <div className="flex justify-between items-center px-2">
             <span className="font-black uppercase tracking-[0.3em] text-secondary-foreground text-xl">LIVE HD MONITOR</span>
             {bgImage &&
