@@ -373,7 +373,7 @@ const TranslateView: React.FC = () => {
             <h4 className="font-black text-white tracking-[0.3em] uppercase premium-font text-base">
               TARGET LANGUAGE
             </h4>
-            <p className="text-base font-bold text-slate-400 tracking-widest uppercase">
+            <p className="text-base font-bold tracking-widest uppercase text-neon-rose">
               ၈၀ ကျော်သော ဘာသာစကားများကို ပံ့ပိုးပေးထားသည်
             </p>
           </div>
@@ -456,7 +456,7 @@ const TranslateView: React.FC = () => {
 
         {/* Credit Tiers (6 Stage Grid) */}
         <div className="space-y-6 pt-4 border-t border-white/5">
-          <h4 className="font-black text-slate-300 tracking-[0.3em] uppercase ml-2 text-center md:text-left premium-font text-base">
+          <h4 className="font-black tracking-[0.3em] uppercase ml-2 text-center md:text-left premium-font text-base text-neon-rose">
             SELECT CREDIT TIER (CHAR-COUNT)
             {charCount > 0 &&
             <span className="ml-2 text-base text-amber-400 normal-case tracking-normal">
