@@ -219,13 +219,13 @@ const VoicePage: React.FC = () => {
     howToUseTitleColor: "#ffffff",
     howToUseText: "၁။ Ai အသံထုတ်မည့် စာသားကိုထည့်ပါ။\n၂။ Ai Character ရွေးပါ။ (ကျား/မ ၂၀ ဦးအထိ ရွေးချယ်နိုင်သည်)\n၃။ Ai Character ရဲ့ အသံ Tone ကိုရွေးပါ။\n၄။ စာသားအရေအတွက်စစ်ပါ။\n၅။ ပါဝင်တဲ့စာသားအရေအတွက်နဲ့ကိုက်ညီတဲ့ Credit ကိုရွေးပါ။\n၆။ စာတန်းထိုးဖိုင်ပါ ပူးတွဲလိုချင်ပါက ဖွင့်ပါ။ (+2 credits ပေးရပါမည်)\n၇။ စတင်ထုတ်နိုင်ပါပြီ။",
     howToUseTextColor: "#9ca3af",
-    howToUseTextSize: 33,
+    howToUseTextSize: 11,
     proTipsTitle: "PRO TIPS & WARNINGS",
     proTipsTitleColor: "#fcd34d",
     proTipsText: "! စာသားအရေအတွက် ၄၅၀၀ ထက်ပိုမရပါ။\n! App API မှာ အသံထုတ်တဲ့အကြိမ်ရေ အကန့်အသတ်ရှိတာကြောင့် ထုတ်မရခဲ့ရင် Own API ဘက်ကို ပြောင်းသုံးပေးပါ။\n! History တွေအရမ်းများလာရင် ဖျက်ပေးဖို့ မမေ့ပါနဲ့။ (မှတ်တမ်း ၂၀ အထိသာ သိမ်းဆည်းပေးမည်)",
     proTipsTextColor: "#fbbf2480",
-    proTipsTextSize: 33,
-    footerText: "© 2026 AUTOMATION NOVA AI",
+    proTipsTextSize: 11,
+    footerText: "© 2026 TRANSCRIPT MASTER AI",
     footerTextColor: "#ffffff33",
     blockedNoticeText: "API နှစ်မျိုးလုံး ပိတ်ထားပါသည်။ Admin ကို ဆက်သွယ်ပါ။",
     tier1Label: "UNDER 1,500 CHARS",
@@ -1050,7 +1050,7 @@ const VoicePage: React.FC = () => {
           }
           
           {history.length === 0 ?
-          <div className="bg-white/5 dark:bg-white/5 bg-slate-100 border border-white/5 dark:border-white/5 border-slate-200 rounded-2xl p-6 text-center italic text-slate-700 dark:text-muted-foreground text-lg font-extrabold">
+          <div className="bg-white/5 border border-white/5 rounded-2xl p-6 text-center italic text-muted-foreground text-[10px]">
               {vs?.noHistoryText || defaultVoiceSettings.noHistoryText}
             </div> :
 
@@ -1094,7 +1094,7 @@ const VoicePage: React.FC = () => {
             {isEditing ?
             <EditableTextarea fieldKey="howToUseText" colorKey="howToUseTextColor" sizeKey="howToUseTextSize" label="How To Use Content (\\n = new line)" /> :
 
-            <div className="space-y-2 font-extrabold leading-relaxed rounded-lg shadow-lg px-0 pb-0 pr-0 text-slate-800 dark:text-slate-300" style={{ fontSize: (vs?.howToUseTextSize || defaultVoiceSettings.howToUseTextSize) + 'px' }}>
+            <div className="space-y-2 font-bold leading-relaxed rounded-lg shadow-lg px-0 pb-0 pr-0 text-white" style={{ color: vs?.howToUseTextColor || defaultVoiceSettings.howToUseTextColor, fontSize: (vs?.howToUseTextSize || defaultVoiceSettings.howToUseTextSize) + 'px' }}>
                 {(vs?.howToUseText || defaultVoiceSettings.howToUseText).split('\n').map((line: string, i: number) =>
               <p key={i}>{line}</p>
               )}
@@ -1116,7 +1116,7 @@ const VoicePage: React.FC = () => {
             {isEditing ?
             <EditableTextarea fieldKey="proTipsText" colorKey="proTipsTextColor" sizeKey="proTipsTextSize" label="Pro Tips Content (\\n = new line)" /> :
 
-            <div className="space-y-2 font-extrabold leading-relaxed text-amber-700 dark:text-amber-300/60" style={{ fontSize: (vs?.proTipsTextSize || defaultVoiceSettings.proTipsTextSize) + 'px' }}>
+            <div className="space-y-2 font-bold leading-relaxed text-white" style={{ color: vs?.proTipsTextColor || defaultVoiceSettings.proTipsTextColor, fontSize: (vs?.proTipsTextSize || defaultVoiceSettings.proTipsTextSize) + 'px' }}>
                 {(vs?.proTipsText || defaultVoiceSettings.proTipsText).split('\n').map((line: string, i: number) =>
               <p key={i}>{line}</p>
               )}
@@ -1129,7 +1129,7 @@ const VoicePage: React.FC = () => {
           {isEditing ?
           <EditableField fieldKey="footerText" colorKey="footerTextColor" label="Footer Text" /> :
 
-          <p className="font-black tracking-[0.4em] uppercase text-sm text-slate-600 dark:text-slate-400">
+          <p className="font-black tracking-[0.4em] uppercase text-sm text-slate-50 bg-indigo-950" style={{ color: vs?.footerTextColor || defaultVoiceSettings.footerTextColor }}>
               {vs?.footerText || defaultVoiceSettings.footerText}
             </p>
           }
