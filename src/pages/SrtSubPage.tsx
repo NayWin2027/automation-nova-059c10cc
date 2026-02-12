@@ -421,7 +421,7 @@ const SrtTranslatorView: React.FC = () => {
           <div className="w-1.5 h-6 bg-blue-500 rounded-full"></div> HOW TO USE
         </h3>
         <div className="space-y-4">
-          <p className="font-bold text-blue-200 bg-blue-500/5 p-3 rounded-xl border border-blue-500/10 text-lg">
+          <p className="font-bold bg-blue-500/5 p-3 rounded-xl border border-blue-500/10 text-neon-amber text-2xl">
             "စာတန်းထိုး SRT File တွေကို ဘာသာပြန်ပေးတဲ့ Tool"
           </p>
           <ul className="space-y-3 pl-2">
