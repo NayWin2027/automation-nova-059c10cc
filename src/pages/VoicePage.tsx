@@ -725,7 +725,7 @@ const VoicePage: React.FC = () => {
         }
 
         {/* Language Selector */}
-        <div className="bg-white/5 backdrop-blur-2xl rounded-[28px] p-5 border border-white/10 space-y-3 shadow-xl">
+        <div className="bg-white/5 backdrop-blur-2xl rounded-[28px] p-5 border border-white/10 space-y-3 shadow-xl text-destructive-foreground">
           <div className="flex items-center gap-2 px-1 text-platinum bg-card">
             <Globe className="w-4 h-4 text-primary" />
             {isEditing ?
@@ -1058,9 +1058,9 @@ const VoicePage: React.FC = () => {
               {history.map((item) =>
             <div key={item.id} className="bg-white/5 border border-white/5 p-4 rounded-2xl flex items-center justify-between group animate-in slide-in-from-right-2 duration-300">
                   <div className="flex-1 min-w-0 pr-4 cursor-pointer" onClick={() => item.audio ? playHistoryItem(item.audio, item.text) : alert('ဤမှတ်တမ်းတွင် အသံဖိုင်မရှိတော့ပါ။ (Session ပြီးဆုံးပြီ)')}>
-                    <p className="text-[10px] font-bold text-foreground/80 truncate">{item.text}</p>
+                    <p className="font-bold text-foreground/80 truncate text-sm">{item.text}</p>
                     <div className="flex gap-2 mt-1">
-                      <span className="text-[7px] font-black text-primary uppercase tracking-widest">{item.voice}</span>
+                      <span className="font-black text-primary uppercase tracking-widest text-sm">{item.voice}</span>
                       <span className="text-[7px] font-black text-muted-foreground">{new Date(item.timestamp).toLocaleTimeString()}</span>
                     </div>
                   </div>
