@@ -631,7 +631,7 @@ const VoicePage: React.FC = () => {
         <EditableField fieldKey="pageTitle" colorKey="pageTitleColor" sizeKey="pageTitleSize" label="Page Title" /> :
 
         <h1
-          className="font-bold tracking-wider text-destructive-foreground text-xl"
+          className="font-bold tracking-wider text-white text-3xl"
           style={{
             color: vs?.pageTitleColor || defaultVoiceSettings.pageTitleColor,
             fontSize: (vs?.pageTitleSize || defaultVoiceSettings.pageTitleSize) + 'px'
