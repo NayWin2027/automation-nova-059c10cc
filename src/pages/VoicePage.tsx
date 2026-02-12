@@ -731,7 +731,7 @@ const VoicePage: React.FC = () => {
             {isEditing ?
             <EditableField fieldKey="languageLabel" colorKey="languageLabelColor" label="Language Label" /> :
 
-            <h4 className="text-[10px] font-black uppercase tracking-widest" style={{ color: vs?.languageLabelColor || defaultVoiceSettings.languageLabelColor }}>
+            <h4 className="font-black uppercase tracking-widest text-base" style={{ color: vs?.languageLabelColor || defaultVoiceSettings.languageLabelColor }}>
                 {vs?.languageLabel || defaultVoiceSettings.languageLabel}
               </h4>
             }
@@ -766,11 +766,11 @@ const VoicePage: React.FC = () => {
               {isEditing ?
               <EditableField fieldKey="scriptLabel" colorKey="scriptLabelColor" label="Script Label" /> :
 
-              <label className="font-black uppercase tracking-widest text-sm" style={{ color: vs?.scriptLabelColor || defaultVoiceSettings.scriptLabelColor }}>
+              <label className="font-black uppercase tracking-widest text-base" style={{ color: vs?.scriptLabelColor || defaultVoiceSettings.scriptLabelColor }}>
                   {vs?.scriptLabel || defaultVoiceSettings.scriptLabel}
                 </label>
               }
-              <span className="bg-background/50 px-2 py-0.5 rounded-lg font-black text-sm text-neon-rose">{text.length}/4500</span>
+              <span className="bg-background/50 px-2 py-0.5 rounded-lg font-black text-neon-rose text-base">{text.length}/4500</span>
             </div>
             {!isEditing &&
             <div className="flex gap-4">
@@ -799,7 +799,7 @@ const VoicePage: React.FC = () => {
             {isEditing ?
             <EditableField fieldKey="performanceLabel" colorKey="performanceLabelColor" label="Performance Label" /> :
 
-            <h4 className="font-black uppercase tracking-widest ml-1 text-xs text-neon-rose" style={{ color: vs?.performanceLabelColor || defaultVoiceSettings.performanceLabelColor }}>
+            <h4 className="font-black uppercase tracking-widest ml-1 text-neon-rose text-base" style={{ color: vs?.performanceLabelColor || defaultVoiceSettings.performanceLabelColor }}>
                 {vs?.performanceLabel || defaultVoiceSettings.performanceLabel}
               </h4>
             }
@@ -814,7 +814,7 @@ const VoicePage: React.FC = () => {
             {isEditing ?
             <EditableField fieldKey="characterLabel" colorKey="characterLabelColor" label="Character Label" /> :
 
-            <h4 className="font-black uppercase tracking-widest ml-1 text-sm" style={{ color: vs?.characterLabelColor || defaultVoiceSettings.characterLabelColor }}>
+            <h4 className="font-black uppercase tracking-widest ml-1 text-base text-white" style={{ color: vs?.characterLabelColor || defaultVoiceSettings.characterLabelColor }}>
                 {vs?.characterLabel || defaultVoiceSettings.characterLabel}
               </h4>
             }
@@ -1032,7 +1032,7 @@ const VoicePage: React.FC = () => {
             {isEditing ?
             <EditableField fieldKey="historyTitle" colorKey="historyTitleColor" label="History Title" /> :
 
-            <h4 className="text-[10px] font-black uppercase tracking-widest" style={{ color: vs?.historyTitleColor || defaultVoiceSettings.historyTitleColor }}>
+            <h4 className="font-black uppercase tracking-widest text-base text-white" style={{ color: vs?.historyTitleColor || defaultVoiceSettings.historyTitleColor }}>
                 {vs?.historyTitle || defaultVoiceSettings.historyTitle}
               </h4>
             }
