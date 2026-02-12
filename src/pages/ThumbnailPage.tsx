@@ -321,7 +321,7 @@ const LayerControl: React.FC<any> = ({
 
       <div className="grid grid-cols-2 gap-4 items-center border-t border-white/5 pt-3">
         <div className="space-y-1">
-          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest ml-1">Alignment</p>
+          <p className="font-black text-slate-400 uppercase tracking-widest ml-1 text-sm">Alignment</p>
           <div className="grid grid-cols-5 gap-1">
             {(["UPON LEFT", "UPON RIGHT", "CENTER", "BUTTON LEFT", "BUTTON RIGHT"] as Position[]).map((p) =>
             <button
@@ -746,7 +746,7 @@ const ThumbnailView: React.FC = () => {
     <div className="space-y-6 pb-40 animate-in fade-in duration-500 max-w-5xl mx-auto px-2 text-white">
       {/* 1. MONITOR PREVIEW (Sticky Top - Compact) */}
       <div className="sticky top-16 z-[100] pb-1">
-        <div className="rounded-2xl sm:rounded-3xl p-2 sm:p-3 space-y-2 overflow-hidden bg-black/60 backdrop-blur-xl">
+        <div className="neon-glass rounded-2xl sm:rounded-3xl p-3 sm:p-4 space-y-2 border border-white/15 shadow-[0_0_60px_rgba(0,0,0,0.7)] overflow-hidden bg-black/80 backdrop-blur-3xl">
           <div className="flex justify-between items-center px-2">
             <span className="text-[9px] font-black text-slate-300 uppercase tracking-[0.3em]">LIVE HD MONITOR</span>
             {bgImage &&
@@ -764,8 +764,8 @@ const ThumbnailView: React.FC = () => {
           </div>
 
           <div
-            className="bg-[#020617] rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl relative border border-white/5 flex items-center justify-center group w-full"
-            style={{ aspectRatio: '1 / 1', maxWidth: '400px', margin: '0 auto' }}>
+            className="bg-[#020617] rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl relative border border-white/5 flex items-center justify-center max-h-[280px] sm:max-h-[320px] group w-full"
+            style={{ aspectRatio: RATIO_MAP[selectedRatio] }}>
 
             <canvas
               ref={canvasRef}
