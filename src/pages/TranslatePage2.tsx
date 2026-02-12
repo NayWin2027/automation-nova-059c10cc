@@ -308,7 +308,7 @@ const TranslateView: React.FC = () => {
             placeholder="PASTE AIza... KEY HERE"
             className="w-full bg-black/50 border border-white/10 rounded-2xl px-6 h-14 text-xs font-black tracking-widest text-white outline-none focus:ring-1 focus:ring-blue-500 shadow-inner"
           />
-          <p className="text-[10px] text-blue-300/80 mt-2 ml-2">Tab ပိတ်လိုက်ရင် Key ပျောက်သွားပါမယ်</p>
+          <p className="text-base text-blue-300/80 mt-2 ml-2">Tab ပိတ်လိုက်ရင် Key ပျောက်သွားပါမယ်</p>
         </div>
       )}
 
@@ -333,7 +333,7 @@ const TranslateView: React.FC = () => {
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="ဘာသာပြန်ဆိုလိုသော စာသားများကို ဒီနေရာတွင် ထည့်သွင်းပါ..."
-            className="w-full h-44 bg-black/40 border border-white/5 rounded-[32px] p-8 text-sm font-medium leading-relaxed text-slate-200 focus:border-indigo-500/50 outline-none resize-none custom-scrollbar shadow-inner"
+            className="w-full h-44 bg-black/40 border border-white/5 rounded-[32px] p-8 text-lg font-medium leading-relaxed text-slate-200 focus:border-indigo-500/50 outline-none resize-none custom-scrollbar shadow-inner"
           />
         </div>
 
@@ -373,7 +373,7 @@ const TranslateView: React.FC = () => {
             <h4 className="text-[11px] font-black text-white tracking-[0.3em] uppercase premium-font">
               TARGET LANGUAGE
             </h4>
-            <p className="text-[10px] font-bold text-slate-400 tracking-widest uppercase">
+            <p className="text-base font-bold text-slate-400 tracking-widest uppercase">
               ၈၀ ကျော်သော ဘာသာစကားများကို ပံ့ပိုးပေးထားသည်
             </p>
           </div>
@@ -419,7 +419,7 @@ const TranslateView: React.FC = () => {
                   {mode.title}
                 </h5>
                 <p
-                  className={`text-[11px] font-bold leading-relaxed ${selectedMode === mode.id ? "text-white/80" : "text-slate-400"}`}
+                  className={`text-base font-bold leading-relaxed ${selectedMode === mode.id ? "text-white/80" : "text-slate-400"}`}
                 >
                   {mode.desc}
                 </p>
@@ -459,7 +459,7 @@ const TranslateView: React.FC = () => {
           <h4 className="text-[10px] font-black text-slate-300 tracking-[0.3em] uppercase ml-2 text-center md:text-left premium-font">
             SELECT CREDIT TIER (CHAR-COUNT)
             {charCount > 0 && (
-              <span className="ml-2 text-amber-400 normal-case tracking-normal">
+              <span className="ml-2 text-base text-amber-400 normal-case tracking-normal">
                 — စာလုံးရေ: {charCount.toLocaleString()}
               </span>
             )}
@@ -486,7 +486,7 @@ const TranslateView: React.FC = () => {
                   }`}
                 >
                 <span
-                  className={`text-[8px] font-bold tracking-widest uppercase premium-font ${selectedTier === idx ? "text-indigo-100" : "text-slate-400"}`}
+                  className={`text-sm font-bold tracking-widest uppercase premium-font ${selectedTier === idx ? "text-indigo-100" : "text-slate-400"}`}
                 >
                   {tier.label}
                 </span>
@@ -563,7 +563,7 @@ const TranslateView: React.FC = () => {
       {/* Branding Footer */}
       <div className="max-w-md mx-auto mt-20 flex items-start gap-6 p-8 bg-indigo-500/5 rounded-[40px] border border-indigo-500/10 backdrop-blur-md">
         <Info className="w-6 h-6 text-indigo-400 shrink-0 mt-0.5" />
-        <p className="text-[10px] font-bold text-indigo-200/40 leading-relaxed uppercase tracking-wider">
+        <p className="text-base font-bold text-indigo-200/40 leading-relaxed uppercase tracking-wider">
           ကျွန်ုပ်တို့၏ AI Engine သည် လူသားစကားပြောပုံစံကို အထူးပြုပါသည်။ ရွေးချယ်ထားသော Credit Tier အလိုက် စာလုံးရေကို
           ကန့်သတ်တွက်ချက်မည်ဖြစ်ပါသည်။ စာလုံးရေပိုများပါက ပိုမိုမြင့်မားသော Tier ကို ရွေးချယ်အသုံးပြုပေးပါ။ (နော်) ဟူသော
           စကားလုံးအား အသုံးမပြုရန် စနစ်တွင် ကန့်သတ်ထားပါသည်။
