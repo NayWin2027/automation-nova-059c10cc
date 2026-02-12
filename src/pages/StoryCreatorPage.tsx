@@ -24,158 +24,158 @@ interface Character {
 }
 
 const LANGUAGES = [
-  "BURMESE",
-  "ENGLISH",
-  "JAPANESE",
-  "KOREAN",
-  "CHINESE (SIMPLIFIED)",
-  "CHINESE (TRADITIONAL)",
-  "THAI",
-  "VIETNAMESE",
-  "HINDI",
-  "INDONESIAN",
-  "MALAY",
-  "FRENCH",
-  "GERMAN",
-  "SPANISH",
-  "ITALIAN",
-  "RUSSIAN",
-  "PORTUGUESE",
-  "ARABIC",
-  "TURKISH",
-  "BENGALI",
-  "PUNJABI",
-  "TELUGU",
-  "MARATHI",
-  "TAMIL",
-  "URDU",
-  "GUJARATI",
-  "KANNADA",
-  "MALAYALAM",
-  "FILIPINO",
-  "KHMER",
-  "LAO",
-  "AFRIKAANS",
-  "ALBANIAN",
-  "AMHARIC",
-  "ARMENIAN",
-  "AZERBAIJANI",
-  "BASQUE",
-  "BELARUSIAN",
-  "BOSNIAN",
-  "BULGARIAN",
-  "CATALAN",
-  "CROATIAN",
-  "CZECH",
-  "DANISH",
-  "DUTCH",
-  "ESTONIAN",
-  "FINNISH",
-  "GALICIAN",
-  "GEORGIAN",
-  "GREEK",
-  "HEBREW",
-  "HUNGARIAN",
-  "ICELANDIC",
-  "IRISH",
-  "KAZAKH",
-  "KYRGYZ",
-  "LATVIAN",
-  "LITHUANIAN",
-  "MACEDONIAN",
-  "MALAGASY",
-  "MALTESE",
-  "MONGOLIAN",
-  "NEPALI",
-  "NORWEGIAN",
-  "PERSIAN",
-  "POLISH",
-  "ROMANIAN",
-  "SERBIAN",
-  "SINHALA",
-  "SLOVAK",
-  "SLOVENIAN",
-  "SOMALI",
-  "SWAHILI",
-  "SWEDISH",
-  "TAJIK",
-  "UKRAINIAN",
-  "UZBEK",
-  "ZULU",
-  "XHOSA",
-  "YORUBA",
-  "IGBO",
-];
+"BURMESE",
+"ENGLISH",
+"JAPANESE",
+"KOREAN",
+"CHINESE (SIMPLIFIED)",
+"CHINESE (TRADITIONAL)",
+"THAI",
+"VIETNAMESE",
+"HINDI",
+"INDONESIAN",
+"MALAY",
+"FRENCH",
+"GERMAN",
+"SPANISH",
+"ITALIAN",
+"RUSSIAN",
+"PORTUGUESE",
+"ARABIC",
+"TURKISH",
+"BENGALI",
+"PUNJABI",
+"TELUGU",
+"MARATHI",
+"TAMIL",
+"URDU",
+"GUJARATI",
+"KANNADA",
+"MALAYALAM",
+"FILIPINO",
+"KHMER",
+"LAO",
+"AFRIKAANS",
+"ALBANIAN",
+"AMHARIC",
+"ARMENIAN",
+"AZERBAIJANI",
+"BASQUE",
+"BELARUSIAN",
+"BOSNIAN",
+"BULGARIAN",
+"CATALAN",
+"CROATIAN",
+"CZECH",
+"DANISH",
+"DUTCH",
+"ESTONIAN",
+"FINNISH",
+"GALICIAN",
+"GEORGIAN",
+"GREEK",
+"HEBREW",
+"HUNGARIAN",
+"ICELANDIC",
+"IRISH",
+"KAZAKH",
+"KYRGYZ",
+"LATVIAN",
+"LITHUANIAN",
+"MACEDONIAN",
+"MALAGASY",
+"MALTESE",
+"MONGOLIAN",
+"NEPALI",
+"NORWEGIAN",
+"PERSIAN",
+"POLISH",
+"ROMANIAN",
+"SERBIAN",
+"SINHALA",
+"SLOVAK",
+"SLOVENIAN",
+"SOMALI",
+"SWAHILI",
+"SWEDISH",
+"TAJIK",
+"UKRAINIAN",
+"UZBEK",
+"ZULU",
+"XHOSA",
+"YORUBA",
+"IGBO"];
+
 
 const GENRES = [
-  "HORROR",
-  "LOVE",
-  "MORAL STORY",
-  "DETECTIVE (CRIME)",
-  "MYSTERY",
-  "FANTASY",
-  "SCI-FI",
-  "DRAMA",
-  "COMEDY",
-  "SATIRE",
-  "ADVENTURE",
-  "ACTION",
-  "HISTORICAL FICTION",
-  "PSYCHOLOGICAL THRILLER",
-  "MYTHOLOGY",
-  "FOLKLORE",
-  "SLICE OF LIFE",
-  "DYSTOPIAN",
-  "EROTIC ROMANCE",
-];
+"HORROR",
+"LOVE",
+"MORAL STORY",
+"DETECTIVE (CRIME)",
+"MYSTERY",
+"FANTASY",
+"SCI-FI",
+"DRAMA",
+"COMEDY",
+"SATIRE",
+"ADVENTURE",
+"ACTION",
+"HISTORICAL FICTION",
+"PSYCHOLOGICAL THRILLER",
+"MYTHOLOGY",
+"FOLKLORE",
+"SLICE OF LIFE",
+"DYSTOPIAN",
+"EROTIC ROMANCE"];
+
 
 const ENDING_STYLES = [
-  "HAPPY ENDING",
-  "SAD ENDING",
-  "CLIFFHANGER",
-  "PLOT TWIST",
-  "MORAL LESSON",
-  "AMBIGUOUS",
-  "TRAGIC",
-];
+"HAPPY ENDING",
+"SAD ENDING",
+"CLIFFHANGER",
+"PLOT TWIST",
+"MORAL LESSON",
+"AMBIGUOUS",
+"TRAGIC"];
+
 
 const POVS = [
-  "First Person (I - ကိုယ်တိုင်ပြော)",
-  "Third Person Limited (ဇာတ်လိုက်စိတ်ကိုပဲသိသူ)",
-  "Third Person Omniscient (ဘုရားအမြင်/အကုန်သိ)",
-];
+"First Person (I - ကိုယ်တိုင်ပြော)",
+"Third Person Limited (ဇာတ်လိုက်စိတ်ကိုပဲသိသူ)",
+"Third Person Omniscient (ဘုရားအမြင်/အကုန်သိ)"];
+
 
 const ATMOSPHERES = [
-  "Dark (21+ Explicit)",
-  "Suspenseful",
-  "Cheerful",
-  "Romantic",
-  "Mysterious",
-  "Tense",
-  "Whimsical",
-  "Melancholic",
-  "Erotic/Sensual",
-];
+"Dark (21+ Explicit)",
+"Suspenseful",
+"Cheerful",
+"Romantic",
+"Mysterious",
+"Tense",
+"Whimsical",
+"Melancholic",
+"Erotic/Sensual"];
+
 
 const PACING = ["Slow (ဇာတ်အေး/အဖွဲ့များ)", "Balanced (ပုံမှန်)", "Fast (ဇာတ်မြန်)", "Rapid (အလွန်မြန်/Action)"];
 
 const STORY_PHASES = [
-  { id: "INTRO", label: "INTRO / PROLOGUE (နောက်ခံ/နိဒါန်း)" },
-  { id: "RISING", label: "NORMAL CHAPTER (ဇာတ်လမ်းဆင်)" },
-  { id: "CLIMAX", label: "CLIMAX (ဇာတ်ရှိန်အမြင့်ဆုံး)" },
-  { id: "FALLING", label: "FALLING ACTION (ဖြေရှင်းခန်း)" },
-  { id: "ENDING", label: "ENDING (နိဂုံး)" },
-];
+{ id: "INTRO", label: "INTRO / PROLOGUE (နောက်ခံ/နိဒါန်း)" },
+{ id: "RISING", label: "NORMAL CHAPTER (ဇာတ်လမ်းဆင်)" },
+{ id: "CLIMAX", label: "CLIMAX (ဇာတ်ရှိန်အမြင့်ဆုံး)" },
+{ id: "FALLING", label: "FALLING ACTION (ဖြေရှင်းခန်း)" },
+{ id: "ENDING", label: "ENDING (နိဂုံး)" }];
+
 
 const PLOT_FOCUS = [
-  { id: "ATMOSPHERE", label: "ATMOSPHERE" },
-  { id: "ACTION", label: "ACTION" },
-  { id: "TWIST", label: "PLOT TWIST" },
-  { id: "MYSTERY", label: "MYSTERY" },
-  { id: "EMOTIONAL", label: "EMOTIONAL" },
-  { id: "DIALOGUE", label: "DIALOGUE" },
-  { id: "PASSION", label: "PASSION/ROMANCE" },
-];
+{ id: "ATMOSPHERE", label: "ATMOSPHERE" },
+{ id: "ACTION", label: "ACTION" },
+{ id: "TWIST", label: "PLOT TWIST" },
+{ id: "MYSTERY", label: "MYSTERY" },
+{ id: "EMOTIONAL", label: "EMOTIONAL" },
+{ id: "DIALOGUE", label: "DIALOGUE" },
+{ id: "PASSION", label: "PASSION/ROMANCE" }];
+
 
 const StoryView: React.FC = () => {
   const navigate = useNavigate();
@@ -250,7 +250,7 @@ const StoryView: React.FC = () => {
       name: "",
       gender: "Male",
       type,
-      archetype: defaultArchetype,
+      archetype: defaultArchetype
     };
     setCharacters([...characters, newChar]);
   };
@@ -260,11 +260,11 @@ const StoryView: React.FC = () => {
   };
 
   const toggleGender = (id: string) => {
-    setCharacters(characters.map((c) => (c.id === id ? { ...c, gender: c.gender === "Male" ? "Female" : "Male" } : c)));
+    setCharacters(characters.map((c) => c.id === id ? { ...c, gender: c.gender === "Male" ? "Female" : "Male" } : c));
   };
 
   const changeArchetype = (id: string, arch: Archetype) => {
-    setCharacters(characters.map((c) => (c.id === id ? { ...c, archetype: arch } : c)));
+    setCharacters(characters.map((c) => c.id === id ? { ...c, archetype: arch } : c));
   };
 
   const handleRandomize = () => {
@@ -289,8 +289,8 @@ const StoryView: React.FC = () => {
         msg.includes("quota") ||
         msg.includes("rate") ||
         msg.includes("limit") ||
-        msg.includes("resource_exhausted")
-      );
+        msg.includes("resource_exhausted"));
+
     }
     return false;
   };
@@ -312,8 +312,8 @@ const StoryView: React.FC = () => {
           contents: prompt,
           config: {
             temperature: 0.9,
-            maxOutputTokens: 8192,
-          },
+            maxOutputTokens: 8192
+          }
         });
 
         return result.text || "";
@@ -329,11 +329,11 @@ const StoryView: React.FC = () => {
 
         // If model not available for this key, try next model
         const isModelAccessIssue =
-          msg.includes("not found") ||
-          msg.includes("404") ||
-          msg.includes("model") && msg.includes("not") && msg.includes("available") ||
-          msg.includes("permission") ||
-          msg.includes("not supported");
+        msg.includes("not found") ||
+        msg.includes("404") ||
+        msg.includes("model") && msg.includes("not") && msg.includes("available") ||
+        msg.includes("permission") ||
+        msg.includes("not supported");
 
         if (isModelAccessIssue) continue;
 
@@ -349,9 +349,9 @@ const StoryView: React.FC = () => {
   const executeGeneration = async (prompt: string, retryCount: number = 0): Promise<string | null> => {
     try {
       const result =
-        apiType === "own"
-          ? await generateStoryOwnApiDirect(prompt, apiKey)
-          : await generateStory(prompt, undefined);
+      apiType === "own" ?
+      await generateStoryOwnApiDirect(prompt, apiKey) :
+      await generateStory(prompt, undefined);
 
       // Success - reset retry counter
       silentRetryCountRef.current = 0;
@@ -364,7 +364,7 @@ const StoryView: React.FC = () => {
       if (apiType === "own" && isQuotaError(e)) {
         if (retryCount < MAX_SILENT_RETRIES) {
           console.log(
-            `[StoryCreator] Own API quota hit, silent retry ${retryCount + 1}/${MAX_SILENT_RETRIES} in ${SILENT_RETRY_DELAY_MS / 1000}s`,
+            `[StoryCreator] Own API quota hit, silent retry ${retryCount + 1}/${MAX_SILENT_RETRIES} in ${SILENT_RETRY_DELAY_MS / 1000}s`
           );
           isSilentRetryingRef.current = true;
 
@@ -379,7 +379,7 @@ const StoryView: React.FC = () => {
         toast({
           title: "⏸️ API Limit Reached",
           description: "တစ်ချိန်ကြာပြီး ပြန်စပါ",
-          variant: "default",
+          variant: "default"
         });
         return null;
       }
@@ -402,55 +402,55 @@ const StoryView: React.FC = () => {
     setLoading(true);
 
     const previousContext =
-      storySegments.length > 0
-        ? storySegments[storySegments.length - 1].slice(-3500)
-        : "Start of the story. No events yet.";
+    storySegments.length > 0 ?
+    storySegments[storySegments.length - 1].slice(-3500) :
+    "Start of the story. No events yet.";
 
     // Logic for Modern Burmese
     const styleInstruction =
-      authorStyle === "modern"
-        ? "STRICT RULE: Write in MODERN SPOKEN BURMESE (စကားပြောဟန်). Do NOT use literary particles like 'သည်', '၏', '၍'. Use natural conversation markers. Tone should be realistic, like a Netflix series script."
-        : `Write in the style of ${authorStyle === "custom" ? customAuthor : "a World-Class Literary Master"}. Use rich metaphors and poetic descriptions.`;
+    authorStyle === "modern" ?
+    "STRICT RULE: Write in MODERN SPOKEN BURMESE (စကားပြောဟန်). Do NOT use literary particles like 'သည်', '၏', '၍'. Use natural conversation markers. Tone should be realistic, like a Netflix series script." :
+    `Write in the style of ${authorStyle === "custom" ? customAuthor : "a World-Class Literary Master"}. Use rich metaphors and poetic descriptions.`;
 
     // Logic for Dark/Mature
     const isMature =
-      atmosphere.includes("Dark") || atmosphere.includes("Erotic") || selectedGenres.includes("EROTIC ROMANCE");
+    atmosphere.includes("Dark") || atmosphere.includes("Erotic") || selectedGenres.includes("EROTIC ROMANCE");
 
-    const atmosphereInstruction = isMature
-      ? `Atmosphere: ${atmosphere}. 
+    const atmosphereInstruction = isMature ?
+    `Atmosphere: ${atmosphere}. 
            MODE: 21+ ADULT PREMIUM NOVEL.
            STRICT INSTRUCTIONS:
            1. Write with UNFILTERED, VIVID detail (ကွင်းကွင်းကွက်ကွက်).
            2. Focus on physical sensations, anatomy, and interactions.
            3. Follow CHARACTER ARCHETYPES strictly for behavior during these scenes.
-           4. MAKE IT FEELS EXPENSIVE AND PREMIUM.`
-      : `Atmosphere: ${atmosphere}.`;
+           4. MAKE IT FEELS EXPENSIVE AND PREMIUM.` :
+    `Atmosphere: ${atmosphere}.`;
 
     // Handle Character Roster or Auto-Gen
     let castSection = "";
     if (characters.length > 0) {
-      const descriptions = characters
-        .map((c) => {
-          let behavior = "";
-          switch (c.archetype) {
-            case "CLASSIC":
-              behavior = "Classic Hero: Even in 21+ scenes, acts with PASSION, ROMANCE, and CONSENT. Not abusive.";
-              break;
-            case "ROUGH":
-              behavior = "Rough/Wild: Aggressive, dominant, rough, maybe wild, BUT NOT EVIL. Consensual but hard.";
-              break;
-            case "VILLAIN":
-              behavior =
-                "Villainous: Cruel, selfish, potentially non-consensual or manipulative. True villain behavior.";
-              break;
-            case "AI_AUTO":
-              behavior =
-                "PREMIUM AI AUTO MODE: You (the AI) MUST assign a HIGH-END, COMPLEX personality to this character. They could be Humorous, Stoic, Brave, Lazy, Noble, Chaotic, or Meticulous. Make them feel EXPENSIVE, DEEP, and REALISTIC like a World-Class Novel character.";
-              break;
-          }
-          return `- ${c.name} (${c.gender}) [Role: ${c.type}] -> BEHAVIOR: ${behavior}`;
-        })
-        .join("\n");
+      const descriptions = characters.
+      map((c) => {
+        let behavior = "";
+        switch (c.archetype) {
+          case "CLASSIC":
+            behavior = "Classic Hero: Even in 21+ scenes, acts with PASSION, ROMANCE, and CONSENT. Not abusive.";
+            break;
+          case "ROUGH":
+            behavior = "Rough/Wild: Aggressive, dominant, rough, maybe wild, BUT NOT EVIL. Consensual but hard.";
+            break;
+          case "VILLAIN":
+            behavior =
+            "Villainous: Cruel, selfish, potentially non-consensual or manipulative. True villain behavior.";
+            break;
+          case "AI_AUTO":
+            behavior =
+            "PREMIUM AI AUTO MODE: You (the AI) MUST assign a HIGH-END, COMPLEX personality to this character. They could be Humorous, Stoic, Brave, Lazy, Noble, Chaotic, or Meticulous. Make them feel EXPENSIVE, DEEP, and REALISTIC like a World-Class Novel character.";
+            break;
+        }
+        return `- ${c.name} (${c.gender}) [Role: ${c.type}] -> BEHAVIOR: ${behavior}`;
+      }).
+      join("\n");
       castSection = `CAST & PERSONALITIES (STRICTLY FOLLOW THIS):
         ${descriptions}`;
     } else {
@@ -521,7 +521,7 @@ const StoryView: React.FC = () => {
         toast({
           title: "Generation Failed",
           description: "API Key စစ်ပြီး ပြန်စပါ",
-          variant: "destructive",
+          variant: "destructive"
         });
       }
     } finally {
@@ -541,7 +541,7 @@ const StoryView: React.FC = () => {
   };
 
   const currentText =
-    currentSegmentIndex >= 0 && storySegments[currentSegmentIndex] ? storySegments[currentSegmentIndex] : "";
+  currentSegmentIndex >= 0 && storySegments[currentSegmentIndex] ? storySegments[currentSegmentIndex] : "";
 
   const getCharColor = (type: string) => {
     switch (type) {
@@ -564,8 +564,8 @@ const StoryView: React.FC = () => {
       <div className="flex justify-start p-2">
         <button
           onClick={() => navigate("/")}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800/80 border border-white/10 text-white text-xs font-bold hover:bg-slate-700 transition-all"
-        >
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800/80 border border-white/10 text-white text-xs font-bold hover:bg-slate-700 transition-all">
+
           <Home className="w-4 h-4" />
           Home
         </button>
@@ -575,32 +575,32 @@ const StoryView: React.FC = () => {
         <button
           onClick={() => appApiAllowed && setApiType("app")}
           disabled={!appApiAllowed}
-          className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${!appApiAllowed ? "opacity-40 cursor-not-allowed" : ""} ${apiType === "app" && appApiAllowed ? "jewel-sapphire jewel-surface text-white shadow-lg" : "text-slate-300"}`}
-        >
+          className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${!appApiAllowed ? "opacity-40 cursor-not-allowed" : ""} ${apiType === "app" && appApiAllowed ? "jewel-sapphire jewel-surface text-white shadow-lg" : "text-slate-300"}`}>
+
           {!appApiAllowed && <Lock className="w-3 h-3" />}
           APP SHARED API 🔒
         </button>
         <button
           onClick={() => ownApiAllowed && setApiType("own")}
           disabled={!ownApiAllowed}
-          className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${!ownApiAllowed ? "opacity-40 cursor-not-allowed" : ""} ${apiType === "own" && ownApiAllowed ? "jewel-sapphire jewel-surface text-white shadow-lg" : "text-slate-300"}`}
-        >
+          className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${!ownApiAllowed ? "opacity-40 cursor-not-allowed" : ""} ${apiType === "own" && ownApiAllowed ? "jewel-sapphire jewel-surface text-white shadow-lg" : "text-slate-300"}`}>
+
           {!ownApiAllowed && <Lock className="w-3 h-3" />}
           YOUR OWN API
         </button>
       </div>
 
-      {apiType === "own" && (
-        <div className="neon-glass rounded-[24px] p-4 border border-blue-500/20 space-y-2 shadow-inner">
+      {apiType === "own" &&
+      <div className="neon-glass rounded-[24px] p-4 border border-blue-500/20 space-y-2 shadow-inner">
           <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="Paste your private key here..."
-            className="w-full bg-black/40 border border-blue-500/20 rounded-xl p-3 text-xs font-bold text-white outline-none focus:ring-1 focus:ring-blue-500"
-          />
+          type="password"
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          placeholder="Paste your private key here..."
+          className="w-full bg-black/40 border border-blue-500/20 rounded-xl p-3 text-xs font-bold text-white outline-none focus:ring-1 focus:ring-blue-500" />
+
         </div>
-      )}
+      }
 
       {/* 3. Main Master Novelist Card */}
       <div className="neon-glass rounded-[36px] p-6 md:p-8 space-y-8 border border-white/10 shadow-[0_0_80px_rgba(0,0,0,0.8)] relative overflow-hidden">
@@ -613,7 +613,7 @@ const StoryView: React.FC = () => {
 
         {/* Novel Title */}
         <div className="space-y-2">
-          <label className="text-[9px] font-black text-purple-200 uppercase tracking-widest ml-1 drop-shadow-sm">
+          <label className="font-black uppercase tracking-widest ml-1 drop-shadow-sm text-neon-rose text-sm">
             NOVEL TITLE
           </label>
           <input
@@ -621,26 +621,26 @@ const StoryView: React.FC = () => {
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="The Eternal Saga..."
-            className="w-full bg-black/40 border border-white/10 focus:border-purple-500/50 rounded-[20px] p-4 text-sm font-bold text-white outline-none transition-all placeholder:text-slate-500 shadow-inner"
-          />
+            className="w-full bg-black/40 border border-white/10 focus:border-purple-500/50 rounded-[20px] p-4 text-sm font-bold text-white outline-none transition-all placeholder:text-slate-500 shadow-inner" />
+
         </div>
 
         {/* Language */}
         <div className="space-y-2">
-          <label className="text-[9px] font-black text-purple-200 uppercase tracking-widest ml-1 drop-shadow-sm">
+          <label className="font-black uppercase tracking-widest ml-1 drop-shadow-sm text-neon-rose text-sm">
             WRITING LANGUAGE
           </label>
           <div className="relative">
             <select
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
-              className="w-full bg-black/40 border border-white/10 rounded-[20px] p-4 text-[10px] font-black text-white uppercase outline-none focus:ring-1 focus:ring-blue-500 appearance-none cursor-pointer custom-scrollbar shadow-inner"
-            >
-              {LANGUAGES.map((l) => (
-                <option key={l} value={l} className="bg-[#0d1117]">
+              className="w-full bg-black/40 border border-white/10 rounded-[20px] p-4 text-[10px] font-black text-white uppercase outline-none focus:ring-1 focus:ring-blue-500 appearance-none cursor-pointer custom-scrollbar shadow-inner">
+
+              {LANGUAGES.map((l) =>
+              <option key={l} value={l} className="bg-[#0d1117]">
                   {l}
                 </option>
-              ))}
+              )}
             </select>
             <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-300">▼</div>
           </div>
@@ -649,46 +649,46 @@ const StoryView: React.FC = () => {
         {/* Genres */}
         <div className="space-y-3">
           <div className="flex justify-between items-center px-1">
-            <label className="text-[9px] font-black text-purple-200 uppercase tracking-widest drop-shadow-sm">
+            <label className="text-[9px] font-black uppercase tracking-widest drop-shadow-sm text-neon-rose">
               STORY GENRES
             </label>
             <button
               onClick={handleRandomize}
               className="text-[12px] hover:scale-110 transition-transform text-purple-400"
-              title="Random Inspiration Dice"
-            >
+              title="Random Inspiration Dice">
+
               🎲
             </button>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {GENRES.map((genre) => (
-              <button
-                key={genre}
-                onClick={() => toggleGenre(genre)}
-                className={`px-4 py-2 rounded-xl text-[8px] font-black transition-all border ${selectedGenres.includes(genre) ? "jewel-sapphire border-transparent text-white shadow-lg" : "bg-black/40 border-white/5 text-slate-300 hover:text-slate-200"}`}
-              >
+          <div className="flex flex-wrap gap-2 text-destructive">
+            {GENRES.map((genre) =>
+            <button
+              key={genre}
+              onClick={() => toggleGenre(genre)}
+              className={`px-4 py-2 rounded-xl text-[8px] font-black transition-all border ${selectedGenres.includes(genre) ? "jewel-sapphire border-transparent text-white shadow-lg" : "bg-black/40 border-white/5 text-slate-300 hover:text-slate-200"}`}>
+
                 {genre}
               </button>
-            ))}
+            )}
           </div>
         </div>
 
         {/* Author Style */}
         <div className="space-y-3">
-          <label className="text-[9px] font-black text-purple-200 uppercase tracking-widest ml-1 drop-shadow-sm">
+          <label className="text-[9px] font-black uppercase tracking-widest ml-1 drop-shadow-sm text-neon-rose">
             WRITING STYLE
           </label>
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => setAuthorStyle("master")}
-              className={`py-4 rounded-[20px] font-black text-[8px] uppercase border transition-all ${authorStyle === "master" ? "jewel-sapphire text-white border-transparent shadow-lg" : "bg-black/40 text-slate-300 border-white/5"}`}
-            >
+              className={`py-4 rounded-[20px] font-black text-[8px] uppercase border transition-all ${authorStyle === "master" ? "jewel-sapphire text-white border-transparent shadow-lg" : "bg-black/40 text-slate-300 border-white/5"}`}>
+
               MASTER STORYTELLER
             </button>
             <button
               onClick={() => setAuthorStyle("modern")}
-              className={`py-4 rounded-[20px] font-black text-[8px] uppercase border transition-all ${authorStyle === "modern" ? "jewel-emerald text-white border-transparent shadow-lg" : "bg-black/40 text-slate-300 border-white/5"}`}
-            >
+              className={`py-4 rounded-[20px] font-black text-[8px] uppercase border transition-all ${authorStyle === "modern" ? "jewel-emerald text-white border-transparent shadow-lg" : "bg-black/40 text-slate-300 border-white/5"}`}>
+
               MODERN (စကားပြော)
             </button>
           </div>
@@ -697,77 +697,77 @@ const StoryView: React.FC = () => {
         {/* Character Cast */}
         <div className="bg-[#05070a]/50 rounded-[32px] p-6 space-y-4 border border-white/5 shadow-inner">
           <div className="flex justify-between items-center">
-            <h4 className="text-[10px] font-black text-blue-300 uppercase tracking-widest">CHARACTER CAST & EXTRAS</h4>
+            <h4 className="font-black text-blue-300 uppercase tracking-widest text-sm">CHARACTER CAST & EXTRAS</h4>
             <div className="flex items-center gap-2">
               <span className="text-[7px] font-black text-slate-300 uppercase">TOTAL:</span>
               <input
                 type="number"
                 value={targetCharCount}
                 onChange={(e) => setTargetCharCount(parseInt(e.target.value) || 0)}
-                className="w-10 h-8 bg-black/60 border border-white/10 rounded-lg text-center text-[10px] font-black text-blue-400 outline-none"
-              />
+                className="w-10 h-8 bg-black/60 border border-white/10 rounded-lg text-center text-[10px] font-black text-blue-400 outline-none" />
+
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => addCharacter("Protagonist")}
-              className="py-2.5 rounded-xl bg-blue-600/10 border border-blue-500/20 text-[8px] font-black text-blue-300 uppercase hover:bg-blue-600/20 transition-all"
-            >
+              className="py-2.5 rounded-xl bg-blue-600/10 border border-blue-500/20 font-black text-blue-300 uppercase hover:bg-blue-600/20 transition-all text-xs">
+
               + PROTAGONIST (ဇာတ်လိုက်)
             </button>
             <button
               onClick={() => addCharacter("Antagonist")}
-              className="py-2.5 rounded-xl bg-rose-600/10 border border-rose-500/20 text-[8px] font-black text-rose-300 uppercase hover:bg-rose-600/20 transition-all"
-            >
+              className="py-2.5 rounded-xl bg-rose-600/10 border border-rose-500/20 font-black text-rose-300 uppercase hover:bg-rose-600/20 transition-all text-sm">
+
               + ANTAGONIST (ဗီလိန်)
             </button>
             <button
               onClick={() => addCharacter("Supporting")}
-              className="py-2.5 rounded-xl bg-amber-600/10 border border-amber-500/20 text-[8px] font-black text-amber-300 uppercase hover:bg-amber-600/20 transition-all"
-            >
+              className="py-2.5 rounded-xl bg-amber-600/10 border border-amber-500/20 font-black text-amber-300 uppercase hover:bg-amber-600/20 transition-all text-sm">
+
               + SUPPORTING (ဇာတ်ပို့)
             </button>
             <button
               onClick={() => addCharacter("Extra")}
-              className="py-2.5 rounded-xl bg-slate-600/10 border border-slate-500/20 text-[8px] font-black text-slate-300 uppercase hover:bg-slate-600/20 transition-all"
-            >
+              className="py-2.5 rounded-xl bg-slate-600/10 border border-slate-500/20 font-black text-slate-300 uppercase hover:bg-slate-600/20 transition-all text-sm">
+
               + EXTRA (ဖြတ်လျှောက်)
             </button>
             <button
               onClick={() => setCharacters([])}
-              className="col-span-2 py-3 rounded-xl bg-gradient-to-r from-purple-900/40 to-purple-600/20 border border-purple-500/30 text-[9px] font-black text-purple-200 uppercase tracking-widest hover:bg-purple-600/30 transition-all shadow-lg flex items-center justify-center gap-2"
-            >
+              className="col-span-2 py-3 rounded-xl bg-gradient-to-r from-purple-900/40 to-purple-600/20 border border-purple-500/30 font-black text-purple-200 uppercase tracking-widest hover:bg-purple-600/30 transition-all shadow-lg flex items-center justify-center gap-2 text-sm">
+
               <span>✨</span> AI AUTO CAST (အလိုအလျောက် ဇာတ်ကောင်ရွေးမည်)
             </button>
           </div>
 
           <div className="space-y-2 max-h-80 overflow-y-auto custom-scrollbar pr-1">
-            {characters.map((char) => (
-              <div
-                key={char.id}
-                className="flex flex-col gap-2 bg-black/40 p-3 rounded-xl border border-white/5 animate-in slide-in-from-left-2"
-              >
+            {characters.map((char) =>
+            <div
+              key={char.id}
+              className="flex flex-col gap-2 bg-black/40 p-3 rounded-xl border border-white/5 animate-in slide-in-from-left-2">
+
                 {/* Top Row: Type | Name | Delete */}
                 <div className="flex items-center gap-2">
                   <span
-                    className={`px-2 py-1 rounded-lg text-[6px] font-black uppercase shadow-md tracking-wider w-16 text-center shrink-0 ${getCharColor(char.type)}`}
-                  >
+                  className={`px-2 py-1 rounded-lg text-[6px] font-black uppercase shadow-md tracking-wider w-16 text-center shrink-0 ${getCharColor(char.type)}`}>
+
                     {char.type}
                   </span>
                   <input
-                    type="text"
-                    value={char.name}
-                    onChange={(e) =>
-                      setCharacters(characters.map((c) => (c.id === char.id ? { ...c, name: e.target.value } : c)))
-                    }
-                    placeholder={char.type === "Extra" ? "Group Name..." : "Name..."}
-                    className="flex-1 bg-transparent border-none focus:ring-0 text-[10px] font-bold text-white placeholder:text-slate-500"
-                  />
+                  type="text"
+                  value={char.name}
+                  onChange={(e) =>
+                  setCharacters(characters.map((c) => c.id === char.id ? { ...c, name: e.target.value } : c))
+                  }
+                  placeholder={char.type === "Extra" ? "Group Name..." : "Name..."}
+                  className="flex-1 bg-transparent border-none focus:ring-0 text-[10px] font-bold text-white placeholder:text-slate-500" />
+
                   <button
-                    onClick={() => removeCharacter(char.id)}
-                    className="w-6 h-6 rounded-full hover:bg-white/5 flex items-center justify-center text-slate-400 hover:text-rose-500 transition-colors text-sm"
-                  >
+                  onClick={() => removeCharacter(char.id)}
+                  className="w-6 h-6 rounded-full hover:bg-white/5 flex items-center justify-center text-slate-400 hover:text-rose-500 transition-colors text-sm">
+
                     ×
                   </button>
                 </div>
@@ -775,10 +775,10 @@ const StoryView: React.FC = () => {
                 {/* Bottom Row: Archetype Select | Gender Toggle */}
                 <div className="flex items-center gap-2 pl-18">
                   <select
-                    value={char.archetype}
-                    onChange={(e) => changeArchetype(char.id, e.target.value as Archetype)}
-                    className="flex-1 bg-slate-900/50 border border-white/10 rounded-lg py-1 px-2 text-[8px] font-black text-slate-300 outline-none focus:border-blue-500/50"
-                  >
+                  value={char.archetype}
+                  onChange={(e) => changeArchetype(char.id, e.target.value as Archetype)}
+                  className="flex-1 bg-slate-900/50 border border-white/10 rounded-lg py-1 px-2 text-[8px] font-black text-slate-300 outline-none focus:border-blue-500/50">
+
                     <option value="CLASSIC">Classic Hero (Romantic/Good)</option>
                     <option value="ROUGH">Rough/Wild (Hard but Not Evil)</option>
                     <option value="VILLAIN">Villainous (Evil/Cruel)</option>
@@ -786,30 +786,30 @@ const StoryView: React.FC = () => {
                   </select>
 
                   <button
-                    onClick={() => toggleGender(char.id)}
-                    className={`w-8 h-6 rounded-lg text-[7px] font-black flex items-center justify-center transition-colors uppercase shrink-0 ${char.gender === "Male" ? "bg-blue-500/20 text-blue-400" : "bg-pink-500/20 text-pink-400"}`}
-                  >
+                  onClick={() => toggleGender(char.id)}
+                  className={`w-8 h-6 rounded-lg text-[7px] font-black flex items-center justify-center transition-colors uppercase shrink-0 ${char.gender === "Male" ? "bg-blue-500/20 text-blue-400" : "bg-pink-500/20 text-pink-400"}`}>
+
                     {char.gender === "Male" ? "M" : "F"}
                   </button>
                 </div>
               </div>
-            ))}
-            {characters.length === 0 && (
-              <p className="text-center text-[8px] text-slate-400 font-bold py-2">
+            )}
+            {characters.length === 0 &&
+            <p className="text-center text-[8px] text-slate-400 font-bold py-2">
                 NO CHARACTERS? AI WILL AUTO-CAST PREMIUM CHARACTERS.
               </p>
-            )}
+            }
           </div>
         </div>
 
         {/* RESTORED: Advanced Controls */}
         <div className="space-y-4 pt-2 bg-white/5 p-4 rounded-[24px] border border-white/5">
-          <h3 className="text-[10px] font-black text-amber-300 uppercase tracking-widest text-center border-b border-white/10 pb-2 mb-2">
+          <h3 className="font-black text-amber-300 uppercase tracking-widest text-center border-b border-white/10 pb-2 mb-2 text-base">
             PREMIUM CONTROLS
           </h3>
 
           <div className="space-y-2">
-            <label className="text-[9px] font-black text-purple-200 uppercase tracking-widest ml-1">
+            <label className="font-black uppercase tracking-widest ml-1 text-sm text-neon-rose">
               CREATIVITY ({creativity}%)
             </label>
             <input
@@ -818,71 +818,71 @@ const StoryView: React.FC = () => {
               max="100"
               value={creativity}
               onChange={(e) => setCreativity(parseInt(e.target.value))}
-              className="w-full h-2 bg-black/40 rounded-lg appearance-none cursor-pointer accent-purple-500"
-            />
+              className="w-full h-2 bg-black/40 rounded-lg appearance-none cursor-pointer accent-purple-500" />
+
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-[7px] font-black text-slate-300 uppercase tracking-widest ml-1">
+              <label className="font-black text-slate-300 uppercase tracking-widest ml-1 text-sm">
                 ENDING STYLE
               </label>
               <select
                 value={endingStyle}
                 onChange={(e) => setEndingStyle(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-[9px] font-bold text-white outline-none"
-              >
-                {ENDING_STYLES.map((s) => (
-                  <option key={s} value={s}>
+                className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-[9px] font-bold text-white outline-none">
+
+                {ENDING_STYLES.map((s) =>
+                <option key={s} value={s}>
                     {s}
                   </option>
-                ))}
+                )}
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-[7px] font-black text-slate-300 uppercase tracking-widest ml-1">
+              <label className="font-black uppercase tracking-widest ml-1 text-neon-rose text-sm">
                 POV (ရှုထောင့်)
               </label>
               <select
                 value={pov}
                 onChange={(e) => setPov(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-[9px] font-bold text-white outline-none"
-              >
-                {POVS.map((p) => (
-                  <option key={p} value={p}>
+                className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-[9px] font-bold text-white outline-none">
+
+                {POVS.map((p) =>
+                <option key={p} value={p}>
                     {p}
                   </option>
-                ))}
+                )}
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-[7px] font-black text-slate-400 uppercase tracking-widest ml-1">ATMOSPHERE</label>
+              <label className="font-black text-slate-400 uppercase tracking-widest ml-1 text-sm">ATMOSPHERE</label>
               <select
                 value={atmosphere}
                 onChange={(e) => setAtmosphere(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-[9px] font-bold text-white outline-none"
-              >
-                {ATMOSPHERES.map((a) => (
-                  <option key={a} value={a}>
+                className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-[9px] font-bold text-white outline-none">
+
+                {ATMOSPHERES.map((a) =>
+                <option key={a} value={a}>
                     {a}
                   </option>
-                ))}
+                )}
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-[7px] font-black text-slate-400 uppercase tracking-widest ml-1">
+              <label className="font-black text-slate-400 uppercase tracking-widest ml-1 text-sm">
                 STORY PACE (အသွားအလာ)
               </label>
               <select
                 value={pace}
                 onChange={(e) => setPace(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-[9px] font-bold text-white outline-none"
-              >
-                {PACING.map((p) => (
-                  <option key={p} value={p}>
+                className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-[9px] font-bold text-white outline-none">
+
+                {PACING.map((p) =>
+                <option key={p} value={p}>
                     {p}
                   </option>
-                ))}
+                )}
               </select>
             </div>
           </div>
@@ -896,41 +896,41 @@ const StoryView: React.FC = () => {
 
           {/* Phase Selector */}
           <div className="space-y-2">
-            <label className="text-[7px] font-black text-slate-400 uppercase tracking-widest ml-1">
+            <label className="font-black text-slate-400 uppercase tracking-widest ml-1 text-sm">
               CURRENT STORY PHASE
             </label>
             <div className="grid grid-cols-1 gap-2">
-              {STORY_PHASES.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => setStoryPhase(p.id)}
-                  className={`p-3 rounded-xl text-left border transition-all ${storyPhase === p.id ? "bg-purple-600/20 border-purple-500 shadow-lg" : "bg-black/30 border-white/5 text-slate-500"}`}
-                >
+              {STORY_PHASES.map((p) =>
+              <button
+                key={p.id}
+                onClick={() => setStoryPhase(p.id)}
+                className={`p-3 rounded-xl text-left border transition-all ${storyPhase === p.id ? "bg-purple-600/20 border-purple-500 shadow-lg" : "bg-black/30 border-white/5 text-slate-500"}`}>
+
                   <span
-                    className={`text-[9px] font-black uppercase ${storyPhase === p.id ? "text-white" : "text-slate-400"}`}
-                  >
+                  className={`text-[9px] font-black uppercase ${storyPhase === p.id ? "text-white" : "text-slate-400"}`}>
+
                     {p.label}
                   </span>
                 </button>
-              ))}
+              )}
             </div>
           </div>
 
           {/* Plot Focus / Twist Selector (Multi-Select) */}
           <div className="space-y-2">
-            <label className="text-[7px] font-black text-slate-400 uppercase tracking-widest ml-1">
+            <label className="font-black text-slate-400 uppercase tracking-widest ml-1 text-sm">
               PLOT FOCUS (SELECT MULTIPLE)
             </label>
             <div className="flex flex-wrap gap-2">
-              {PLOT_FOCUS.map((f) => (
-                <button
-                  key={f.id}
-                  onClick={() => toggleFocus(f.id)}
-                  className={`px-3 py-2 rounded-xl text-[8px] font-black uppercase border transition-all ${selectedFocus.includes(f.id) ? "bg-rose-600 text-white border-rose-500 shadow-lg" : "bg-black/30 border-white/5 text-slate-500"}`}
-                >
+              {PLOT_FOCUS.map((f) =>
+              <button
+                key={f.id}
+                onClick={() => toggleFocus(f.id)}
+                className={`px-3 py-2 rounded-xl text-[8px] font-black uppercase border transition-all ${selectedFocus.includes(f.id) ? "bg-rose-600 text-white border-rose-500 shadow-lg" : "bg-black/30 border-white/5 text-slate-500"}`}>
+
                   {f.label}
                 </button>
-              ))}
+              )}
             </div>
           </div>
         </div>
@@ -940,19 +940,19 @@ const StoryView: React.FC = () => {
           <button
             disabled={loading || !title}
             onClick={handleGenerate}
-            className={`w-full py-5 rounded-[28px] font-black text-xs uppercase tracking-[0.2em] shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-20 ${loading ? "bg-slate-800 text-slate-500" : "jewel-sapphire jewel-surface text-white"}`}
-          >
-            {loading
-              ? "WRITING MASTERPIECE..."
-              : storySegments.length > 0
-                ? "GENERATE NEXT PART ▶"
-                : "START NOVEL (INTRO)"}
+            className={`w-full py-5 rounded-[28px] font-black text-xs uppercase tracking-[0.2em] shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-20 ${loading ? "bg-slate-800 text-slate-500" : "jewel-sapphire jewel-surface text-white"}`}>
+
+            {loading ?
+            "WRITING MASTERPIECE..." :
+            storySegments.length > 0 ?
+            "GENERATE NEXT PART ▶" :
+            "START NOVEL (INTRO)"}
           </button>
         </div>
 
         {/* Story Result & Navigation */}
-        {storySegments.length > 0 && (
-          <div id="story-result" className="mt-8 space-y-3 animate-in fade-in zoom-in-95 duration-1000">
+        {storySegments.length > 0 &&
+        <div id="story-result" className="mt-8 space-y-3 animate-in fade-in zoom-in-95 duration-1000">
             <div className="flex justify-between items-center px-4">
               <h3 className="text-[9px] font-black text-blue-300 uppercase tracking-widest flex items-center gap-2">
                 <div className="w-1.5 h-3 bg-blue-500 rounded-full"></div> CHAPTER {currentSegmentIndex + 1} OF{" "}
@@ -960,15 +960,15 @@ const StoryView: React.FC = () => {
               </h3>
               <div className="flex gap-2">
                 <button
-                  onClick={downloadTxt}
-                  className="text-[8px] font-black text-emerald-400 hover:text-emerald-300 transition-colors uppercase tracking-widest border border-emerald-500/30 px-2 py-1 rounded"
-                >
+                onClick={downloadTxt}
+                className="text-[8px] font-black text-emerald-400 hover:text-emerald-300 transition-colors uppercase tracking-widest border border-emerald-500/30 px-2 py-1 rounded">
+
                   SAVE ALL .TXT
                 </button>
                 <button
-                  onClick={() => navigator.clipboard.writeText(currentText)}
-                  className="text-[8px] font-black text-slate-400 hover:text-white transition-colors uppercase tracking-widest border border-white/10 px-2 py-1 rounded"
-                >
+                onClick={() => navigator.clipboard.writeText(currentText)}
+                className="text-[8px] font-black text-slate-400 hover:text-white transition-colors uppercase tracking-widest border border-white/10 px-2 py-1 rounded">
+
                   COPY
                 </button>
               </div>
@@ -982,10 +982,10 @@ const StoryView: React.FC = () => {
             {/* Navigation Controls */}
             <div className="flex justify-between items-center bg-black/40 p-2 rounded-[24px] border border-white/10">
               <button
-                onClick={() => setCurrentSegmentIndex((prev) => Math.max(0, prev - 1))}
-                disabled={currentSegmentIndex <= 0}
-                className="px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed text-[8px] font-black text-white uppercase tracking-widest transition-all"
-              >
+              onClick={() => setCurrentSegmentIndex((prev) => Math.max(0, prev - 1))}
+              disabled={currentSegmentIndex <= 0}
+              className="px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed text-[8px] font-black text-white uppercase tracking-widest transition-all">
+
                 ◀ PREVIOUS
               </button>
 
@@ -994,18 +994,18 @@ const StoryView: React.FC = () => {
               </span>
 
               <button
-                onClick={() => setCurrentSegmentIndex((prev) => Math.min(storySegments.length - 1, prev + 1))}
-                disabled={currentSegmentIndex >= storySegments.length - 1}
-                className="px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed text-[8px] font-black text-white uppercase tracking-widest transition-all"
-              >
+              onClick={() => setCurrentSegmentIndex((prev) => Math.min(storySegments.length - 1, prev + 1))}
+              disabled={currentSegmentIndex >= storySegments.length - 1}
+              className="px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed text-[8px] font-black text-white uppercase tracking-widest transition-all">
+
                 NEXT ▶
               </button>
             </div>
           </div>
-        )}
+        }
       </div>
-    </div>
-  );
+    </div>);
+
 };
 
 export default StoryView;
