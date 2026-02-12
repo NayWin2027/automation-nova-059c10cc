@@ -213,7 +213,7 @@ const CreatorPage: React.FC = () => {
           {/* Header Section */}
           <div className="flex justify-between items-center px-1">
             <div className="space-y-0.5">
-              <h2 className="font-black tracking-tighter text-foreground text-3xl">CONTENT CREATOR  NOVA<span className="text-primary">MASTER</span></h2>
+              <h2 className="font-black tracking-tighter text-foreground text-3xl">CONTENT CREATOR  NOVA<span className="text-primary">MASTER</span></h2>
               <p className="font-black uppercase tracking-[0.3em] text-neon-rose text-xl">AI CONTENT FACTORY</p>
             </div>
             <div className="w-10 h-10 rounded-xl jewel-gold flex items-center justify-center shadow-xl shadow-amber-900/40">
