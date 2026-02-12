@@ -606,7 +606,7 @@ const StoryView: React.FC = () => {
       <div className="neon-glass rounded-[36px] p-6 md:p-8 space-y-8 border border-white/10 shadow-[0_0_80px_rgba(0,0,0,0.8)] relative overflow-hidden">
         <div className="text-center space-y-1 relative z-10">
           <h2 className="text-2xl font-black uppercase tracking-tighter text-white drop-shadow-lg">MASTER NOVELIST</h2>
-          <p className="font-black text-purple-300 uppercase tracking-[0.4em] opacity-80 text-sm">
+          <p className="font-black uppercase tracking-[0.4em] opacity-80 text-sm text-black">
             PREMIUM STORY ENGINE
           </p>
         </div>
