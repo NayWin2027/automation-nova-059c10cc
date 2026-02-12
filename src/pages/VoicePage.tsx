@@ -1094,7 +1094,7 @@ const VoicePage: React.FC = () => {
             {isEditing ?
             <EditableTextarea fieldKey="howToUseText" colorKey="howToUseTextColor" sizeKey="howToUseTextSize" label="How To Use Content (\\n = new line)" /> :
 
-            <div className="space-y-2 font-bold leading-relaxed rounded-lg shadow-lg px-0 pb-0 pr-0 text-white bg-primary-foreground" style={{ color: vs?.howToUseTextColor || defaultVoiceSettings.howToUseTextColor, fontSize: (vs?.howToUseTextSize || defaultVoiceSettings.howToUseTextSize) + 'px' }}>
+            <div className="space-y-2 font-bold leading-relaxed rounded-lg shadow-lg px-0 pb-0 pr-0 text-white bg-blue-800" style={{ color: vs?.howToUseTextColor || defaultVoiceSettings.howToUseTextColor, fontSize: (vs?.howToUseTextSize || defaultVoiceSettings.howToUseTextSize) + 'px' }}>
                 {(vs?.howToUseText || defaultVoiceSettings.howToUseText).split('\n').map((line: string, i: number) =>
               <p key={i}>{line}</p>
               )}
