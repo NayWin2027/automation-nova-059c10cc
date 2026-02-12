@@ -7,22 +7,22 @@ import { toast } from "sonner";
 type Position = "UPON LEFT" | "UPON RIGHT" | "BUTTON LEFT" | "BUTTON RIGHT" | "CENTER";
 type AspectRatio = "1:1" | "16:9" | "9:16" | "4:3" | "3:4";
 type FontEffect =
-  | "CLASSIC"
-  | "STICKER_POP"
-  | "3D_OFFSET"
-  | "CHROME_GLOW"
-  | "NEON_STROKE"
-  | "DARK_PLATE"
-  | "FIRE_GLOW"
-  | "ICY_FROST"
-  | "GOLDEN_METAL"
-  | "VAPORWAVE"
-  | "CHALK_BOARD"
-  | "COMIC_BOOM"
-  | "LUXURY_ENGRAVE"
-  | "GHOST_FADE"
-  | "ROYAL_SILK"
-  | "CYBER_GLITCH";
+"CLASSIC" |
+"STICKER_POP" |
+"3D_OFFSET" |
+"CHROME_GLOW" |
+"NEON_STROKE" |
+"DARK_PLATE" |
+"FIRE_GLOW" |
+"ICY_FROST" |
+"GOLDEN_METAL" |
+"VAPORWAVE" |
+"CHALK_BOARD" |
+"COMIC_BOOM" |
+"LUXURY_ENGRAVE" |
+"GHOST_FADE" |
+"ROYAL_SILK" |
+"CYBER_GLITCH";
 
 interface TextStyle {
   id: string;
@@ -34,179 +34,179 @@ interface TextStyle {
 }
 
 const PREMIUM_COLORS: TextStyle[] = [
-  {
-    id: "GOLD",
-    label: "LUXURY GOLD",
-    fill: "#FFD700",
-    stroke: "#4a3701",
-    glow: "rgba(251, 191, 36, 0.8)",
-    secondary: "#f59e0b",
-  },
-  {
-    id: "CYAN",
-    label: "ELECTRIC CYAN",
-    fill: "#00FFFF",
-    stroke: "#003333",
-    glow: "rgba(0, 255, 255, 0.9)",
-    secondary: "#0891b2",
-  },
-  {
-    id: "RUBY",
-    label: "VIVID RUBY",
-    fill: "#FF003F",
-    stroke: "#33000d",
-    glow: "rgba(255, 0, 63, 0.7)",
-    secondary: "#be123c",
-  },
-  {
-    id: "LIME",
-    label: "TOXIC LIME",
-    fill: "#32CD32",
-    stroke: "#0a290a",
-    glow: "rgba(50, 205, 50, 0.8)",
-    secondary: "#15803d",
-  },
-  {
-    id: "PURPLE",
-    label: "ROYAL PURPLE",
-    fill: "#BF40BF",
-    stroke: "#2e0a2e",
-    glow: "rgba(191, 64, 191, 0.8)",
-    secondary: "#7e22ce",
-  },
-  {
-    id: "PINK",
-    label: "NEON PINK",
-    fill: "#FF1493",
-    stroke: "#33001a",
-    glow: "rgba(255, 20, 147, 1)",
-    secondary: "#db2777",
-  },
-  {
-    id: "EMERALD",
-    label: "DEEP EMERALD",
-    fill: "#50C878",
-    stroke: "#064e3b",
-    glow: "rgba(16, 185, 129, 0.6)",
-    secondary: "#047857",
-  },
-  {
-    id: "ORANGE",
-    label: "PUNCHY ORANGE",
-    fill: "#FF4500",
-    stroke: "#451a03",
-    glow: "rgba(255, 69, 0, 0.7)",
-    secondary: "#ea580c",
-  },
-  {
-    id: "WHITE",
-    label: "CLEAN WHITE",
-    fill: "#FFFFFF",
-    stroke: "#222222",
-    glow: "rgba(255, 255, 255, 0.5)",
-    secondary: "#f8fafc",
-  },
-  {
-    id: "BLACK",
-    label: "VOID BLACK",
-    fill: "#000000",
-    stroke: "#FFFFFF",
-    glow: "rgba(0,0,0,0.5)",
-    secondary: "#1e293b",
-  },
-  {
-    id: "ELECTRIC_PURP",
-    label: "ELECTRIC PURPLE",
-    fill: "#A855F7",
-    stroke: "#3b0764",
-    glow: "rgba(168, 85, 247, 0.9)",
-    secondary: "#d8b4fe",
-  },
-  {
-    id: "BLOOD_MOON",
-    label: "BLOOD MOON",
-    fill: "#7F1D1D",
-    stroke: "#450a0a",
-    glow: "rgba(127, 29, 29, 0.8)",
-    secondary: "#ef4444",
-  },
-  {
-    id: "MINT_MAGIC",
-    label: "MINT MAGIC",
-    fill: "#2DD4BF",
-    stroke: "#134e4a",
-    glow: "rgba(45, 212, 191, 0.8)",
-    secondary: "#99f6e4",
-  },
-  {
-    id: "SUNSET_GLOW",
-    label: "SUNSET GLOW",
-    fill: "#F97316",
-    stroke: "#7c2d12",
-    glow: "rgba(249, 115, 22, 0.8)",
-    secondary: "#fdba74",
-  },
-  {
-    id: "COBALT_STORM",
-    label: "COBALT STORM",
-    fill: "#1D4ED8",
-    stroke: "#172554",
-    glow: "rgba(29, 78, 216, 0.8)",
-    secondary: "#60a5fa",
-  },
-  {
-    id: "ICE_CAVERN",
-    label: "ICE CAVERN",
-    fill: "#0EA5E9",
-    stroke: "#082f49",
-    glow: "rgba(14, 165, 233, 0.7)",
-    secondary: "#7dd3fc",
-  },
-  {
-    id: "VOLCANIC",
-    label: "VOLCANIC RED",
-    fill: "#B91C1C",
-    stroke: "#450a0a",
-    glow: "rgba(185, 28, 28, 0.9)",
-    secondary: "#f87171",
-  },
-  {
-    id: "OBSIDIAN",
-    label: "OBSIDIAN TEAL",
-    fill: "#0D9488",
-    stroke: "#042f2e",
-    glow: "rgba(13, 148, 136, 0.6)",
-    secondary: "#5eead4",
-  },
-  {
-    id: "AMBER_ELITE",
-    label: "AMBER ELITE",
-    fill: "#D97706",
-    stroke: "#451a03",
-    glow: "rgba(217, 119, 6, 0.8)",
-    secondary: "#fbbf24",
-  },
-  {
-    id: "ULTRA_VIOLET",
-    label: "ULTRA VIOLET",
-    fill: "#8B5CF6",
-    stroke: "#2e1065",
-    glow: "rgba(139, 92, 246, 0.9)",
-    secondary: "#c4b5fd",
-  },
-];
+{
+  id: "GOLD",
+  label: "LUXURY GOLD",
+  fill: "#FFD700",
+  stroke: "#4a3701",
+  glow: "rgba(251, 191, 36, 0.8)",
+  secondary: "#f59e0b"
+},
+{
+  id: "CYAN",
+  label: "ELECTRIC CYAN",
+  fill: "#00FFFF",
+  stroke: "#003333",
+  glow: "rgba(0, 255, 255, 0.9)",
+  secondary: "#0891b2"
+},
+{
+  id: "RUBY",
+  label: "VIVID RUBY",
+  fill: "#FF003F",
+  stroke: "#33000d",
+  glow: "rgba(255, 0, 63, 0.7)",
+  secondary: "#be123c"
+},
+{
+  id: "LIME",
+  label: "TOXIC LIME",
+  fill: "#32CD32",
+  stroke: "#0a290a",
+  glow: "rgba(50, 205, 50, 0.8)",
+  secondary: "#15803d"
+},
+{
+  id: "PURPLE",
+  label: "ROYAL PURPLE",
+  fill: "#BF40BF",
+  stroke: "#2e0a2e",
+  glow: "rgba(191, 64, 191, 0.8)",
+  secondary: "#7e22ce"
+},
+{
+  id: "PINK",
+  label: "NEON PINK",
+  fill: "#FF1493",
+  stroke: "#33001a",
+  glow: "rgba(255, 20, 147, 1)",
+  secondary: "#db2777"
+},
+{
+  id: "EMERALD",
+  label: "DEEP EMERALD",
+  fill: "#50C878",
+  stroke: "#064e3b",
+  glow: "rgba(16, 185, 129, 0.6)",
+  secondary: "#047857"
+},
+{
+  id: "ORANGE",
+  label: "PUNCHY ORANGE",
+  fill: "#FF4500",
+  stroke: "#451a03",
+  glow: "rgba(255, 69, 0, 0.7)",
+  secondary: "#ea580c"
+},
+{
+  id: "WHITE",
+  label: "CLEAN WHITE",
+  fill: "#FFFFFF",
+  stroke: "#222222",
+  glow: "rgba(255, 255, 255, 0.5)",
+  secondary: "#f8fafc"
+},
+{
+  id: "BLACK",
+  label: "VOID BLACK",
+  fill: "#000000",
+  stroke: "#FFFFFF",
+  glow: "rgba(0,0,0,0.5)",
+  secondary: "#1e293b"
+},
+{
+  id: "ELECTRIC_PURP",
+  label: "ELECTRIC PURPLE",
+  fill: "#A855F7",
+  stroke: "#3b0764",
+  glow: "rgba(168, 85, 247, 0.9)",
+  secondary: "#d8b4fe"
+},
+{
+  id: "BLOOD_MOON",
+  label: "BLOOD MOON",
+  fill: "#7F1D1D",
+  stroke: "#450a0a",
+  glow: "rgba(127, 29, 29, 0.8)",
+  secondary: "#ef4444"
+},
+{
+  id: "MINT_MAGIC",
+  label: "MINT MAGIC",
+  fill: "#2DD4BF",
+  stroke: "#134e4a",
+  glow: "rgba(45, 212, 191, 0.8)",
+  secondary: "#99f6e4"
+},
+{
+  id: "SUNSET_GLOW",
+  label: "SUNSET GLOW",
+  fill: "#F97316",
+  stroke: "#7c2d12",
+  glow: "rgba(249, 115, 22, 0.8)",
+  secondary: "#fdba74"
+},
+{
+  id: "COBALT_STORM",
+  label: "COBALT STORM",
+  fill: "#1D4ED8",
+  stroke: "#172554",
+  glow: "rgba(29, 78, 216, 0.8)",
+  secondary: "#60a5fa"
+},
+{
+  id: "ICE_CAVERN",
+  label: "ICE CAVERN",
+  fill: "#0EA5E9",
+  stroke: "#082f49",
+  glow: "rgba(14, 165, 233, 0.7)",
+  secondary: "#7dd3fc"
+},
+{
+  id: "VOLCANIC",
+  label: "VOLCANIC RED",
+  fill: "#B91C1C",
+  stroke: "#450a0a",
+  glow: "rgba(185, 28, 28, 0.9)",
+  secondary: "#f87171"
+},
+{
+  id: "OBSIDIAN",
+  label: "OBSIDIAN TEAL",
+  fill: "#0D9488",
+  stroke: "#042f2e",
+  glow: "rgba(13, 148, 136, 0.6)",
+  secondary: "#5eead4"
+},
+{
+  id: "AMBER_ELITE",
+  label: "AMBER ELITE",
+  fill: "#D97706",
+  stroke: "#451a03",
+  glow: "rgba(217, 119, 6, 0.8)",
+  secondary: "#fbbf24"
+},
+{
+  id: "ULTRA_VIOLET",
+  label: "ULTRA VIOLET",
+  fill: "#8B5CF6",
+  stroke: "#2e1065",
+  glow: "rgba(139, 92, 246, 0.9)",
+  secondary: "#c4b5fd"
+}];
+
 
 const ELITE_FONTS = [
-  { id: "Rubik Glitch", label: "GUTCH (GLITCH)" },
-  { id: "Pattaya", label: "HANDWRITTEN (လက်ရေးလှ)" },
-  { id: "Fascinate Inline", label: "ARTISTIC BRUSH (စုတ်တံ)" },
-  { id: "Kanit", label: "KANIT (MODERN)" },
-  { id: "Archivo Black", label: "ARCHIVO (HEAVY)" },
-  { id: "Anton", label: "ANTON (HOLLYWOOD)" },
-  { id: "Bebas Neue", label: "BEBAS (PREMIUM)" },
-  { id: "Padauk", label: "PADAUK (TRADITIONAL)" },
-  { id: "Montserrat", label: "CLEAN PRO" },
-];
+{ id: "Rubik Glitch", label: "GUTCH (GLITCH)" },
+{ id: "Pattaya", label: "HANDWRITTEN (လက်ရေးလှ)" },
+{ id: "Fascinate Inline", label: "ARTISTIC BRUSH (စုတ်တံ)" },
+{ id: "Kanit", label: "KANIT (MODERN)" },
+{ id: "Archivo Black", label: "ARCHIVO (HEAVY)" },
+{ id: "Anton", label: "ANTON (HOLLYWOOD)" },
+{ id: "Bebas Neue", label: "BEBAS (PREMIUM)" },
+{ id: "Padauk", label: "PADAUK (TRADITIONAL)" },
+{ id: "Montserrat", label: "CLEAN PRO" }];
+
 
 const LayerControl: React.FC<any> = ({
   label,
@@ -224,41 +224,41 @@ const LayerControl: React.FC<any> = ({
   setOffset,
   size,
   setSize,
-  colorTheme,
+  colorTheme
 }) => {
   const allEffects: FontEffect[] = [
-    "CLASSIC",
-    "STICKER_POP",
-    "3D_OFFSET",
-    "CHROME_GLOW",
-    "NEON_STROKE",
-    "DARK_PLATE",
-    "FIRE_GLOW",
-    "ICY_FROST",
-    "GOLDEN_METAL",
-    "VAPORWAVE",
-    "CHALK_BOARD",
-    "COMIC_BOOM",
-    "LUXURY_ENGRAVE",
-    "GHOST_FADE",
-    "ROYAL_SILK",
-    "CYBER_GLITCH",
-  ];
+  "CLASSIC",
+  "STICKER_POP",
+  "3D_OFFSET",
+  "CHROME_GLOW",
+  "NEON_STROKE",
+  "DARK_PLATE",
+  "FIRE_GLOW",
+  "ICY_FROST",
+  "GOLDEN_METAL",
+  "VAPORWAVE",
+  "CHALK_BOARD",
+  "COMIC_BOOM",
+  "LUXURY_ENGRAVE",
+  "GHOST_FADE",
+  "ROYAL_SILK",
+  "CYBER_GLITCH"];
+
 
   return (
     <div className="space-y-4 bg-white/5 p-6 rounded-[32px] border border-white/5 shadow-inner backdrop-blur-sm transition-all hover:bg-white/[0.08]">
       <div className="flex justify-between items-center px-1">
         <label className={`text-[10px] font-black uppercase tracking-[0.2em] text-${colorTheme}-400`}>{label}</label>
         <div className="flex items-center gap-2">
-          <span className="text-[8px] font-black text-slate-400 uppercase">Scale</span>
+          <span className="font-black text-slate-400 uppercase text-sm">Scale</span>
           <input
             type="range"
             min="20"
             max="500"
             value={size}
             onChange={(e) => setSize(parseInt(e.target.value))}
-            className={`w-24 h-1 accent-${colorTheme}-500 bg-white/10 rounded-lg appearance-none cursor-pointer`}
-          />
+            className={`w-24 h-1 accent-${colorTheme}-500 bg-white/10 rounded-lg appearance-none cursor-pointer`} />
+
         </div>
       </div>
 
@@ -266,55 +266,55 @@ const LayerControl: React.FC<any> = ({
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder={`စာသားထည့်ပါ (${label})...`}
-        className="w-full h-16 bg-black/50 border border-white/10 rounded-2xl p-4 text-sm font-bold text-white outline-none focus:ring-1 focus:ring-blue-500/50 resize-none shadow-inner"
-      />
+        className="w-full h-16 bg-black/50 border border-white/10 rounded-2xl p-4 text-sm font-bold text-white outline-none focus:ring-1 focus:ring-blue-500/50 resize-none shadow-inner" />
+
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {/* Style Dropdown */}
         <div className="space-y-1">
-          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest ml-1">Color Style</p>
+          <p className="font-black text-slate-400 uppercase tracking-widest ml-1 text-xs">Color Style</p>
           <select
             value={style}
             onChange={(e) => setStyle(e.target.value)}
-            className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-[10px] font-black text-white outline-none"
-          >
-            {PREMIUM_COLORS.map((c) => (
-              <option key={c.id} value={c.id}>
+            className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-[10px] font-black text-white outline-none">
+
+            {PREMIUM_COLORS.map((c) =>
+            <option key={c.id} value={c.id}>
                 {c.label}
               </option>
-            ))}
+            )}
           </select>
         </div>
 
         {/* Effect Dropdown */}
         <div className="space-y-1">
-          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest ml-1">Text Effect</p>
+          <p className="font-black text-slate-400 uppercase tracking-widest ml-1 text-xs">Text Effect</p>
           <select
             value={effect}
             onChange={(e) => setEffect(e.target.value as FontEffect)}
-            className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-[10px] font-black text-white outline-none"
-          >
-            {allEffects.map((f) => (
-              <option key={f} value={f}>
+            className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-[10px] font-black text-white outline-none">
+
+            {allEffects.map((f) =>
+            <option key={f} value={f}>
                 {f.replace("_", " ")}
               </option>
-            ))}
+            )}
           </select>
         </div>
 
         {/* Font Dropdown */}
         <div className="space-y-1">
-          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest ml-1">Elite Font</p>
+          <p className="font-black text-slate-400 uppercase tracking-widest ml-1 text-xs">Elite Font</p>
           <select
             value={font}
             onChange={(e) => setFont(e.target.value)}
-            className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-[10px] font-black text-white outline-none"
-          >
-            {ELITE_FONTS.map((f) => (
-              <option key={f.id} value={f.id}>
+            className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-[10px] font-black text-white outline-none">
+
+            {ELITE_FONTS.map((f) =>
+            <option key={f.id} value={f.id}>
                 {f.label}
               </option>
-            ))}
+            )}
           </select>
         </div>
       </div>
@@ -323,59 +323,59 @@ const LayerControl: React.FC<any> = ({
         <div className="space-y-1">
           <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest ml-1">Alignment</p>
           <div className="grid grid-cols-5 gap-1">
-            {(["UPON LEFT", "UPON RIGHT", "CENTER", "BUTTON LEFT", "BUTTON RIGHT"] as Position[]).map((p) => (
-              <button
-                key={p}
-                onClick={() => setPos(p)}
-                className={`w-full py-2 rounded-lg text-[6px] font-black uppercase transition-all ${pos === p ? "bg-white text-black" : "bg-slate-800 text-slate-300"}`}
-                title={p}
-              >
-                {p
-                  .split(" ")
-                  .map((s) => s[0])
-                  .join("")}
+            {(["UPON LEFT", "UPON RIGHT", "CENTER", "BUTTON LEFT", "BUTTON RIGHT"] as Position[]).map((p) =>
+            <button
+              key={p}
+              onClick={() => setPos(p)}
+              className={`w-full py-2 rounded-lg text-[6px] font-black uppercase transition-all ${pos === p ? "bg-white text-black" : "bg-slate-800 text-slate-300"}`}
+              title={p}>
+
+                {p.
+              split(" ").
+              map((s) => s[0]).
+              join("")}
               </button>
-            ))}
+            )}
           </div>
         </div>
         <div className="space-y-1">
-          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest text-center">Precise Position</p>
+          <p className="font-black text-slate-400 uppercase tracking-widest text-center text-sm">Precise Position</p>
           <div className="flex items-center justify-center gap-2">
             <button
               onClick={() => setOffset((o: any) => ({ ...o, x: o.x - 5 }))}
-              className="w-6 h-6 bg-white/5 rounded text-[10px]"
-            >
+              className="w-6 h-6 bg-white/5 rounded text-[10px]">
+
               ←
             </button>
             <button
               onClick={() => setOffset((o: any) => ({ ...o, y: o.y - 5 }))}
-              className="w-6 h-6 bg-white/5 rounded text-[10px]"
-            >
+              className="w-6 h-6 bg-white/5 rounded text-[10px]">
+
               ↑
             </button>
             <button
               onClick={() => setOffset({ x: 0, y: 0 })}
-              className="px-2 py-1 bg-rose-500/10 text-rose-400 rounded text-[6px] font-black"
-            >
+              className="px-2 py-1 bg-rose-500/10 text-rose-400 rounded text-[6px] font-black">
+
               RST
             </button>
             <button
               onClick={() => setOffset((o: any) => ({ ...o, y: o.y + 5 }))}
-              className="w-6 h-6 bg-white/5 rounded text-[10px]"
-            >
+              className="w-6 h-6 bg-white/5 rounded text-[10px]">
+
               ↓
             </button>
             <button
               onClick={() => setOffset((o: any) => ({ ...o, x: o.x + 5 }))}
-              className="w-6 h-6 bg-white/5 rounded text-[10px]"
-            >
+              className="w-6 h-6 bg-white/5 rounded text-[10px]">
+
               →
             </button>
           </div>
         </div>
       </div>
-    </div>
-  );
+    </div>);
+
 };
 
 const ThumbnailView: React.FC = () => {
@@ -424,19 +424,19 @@ const ThumbnailView: React.FC = () => {
     "16:9": 16 / 9,
     "9:16": 9 / 16,
     "4:3": 4 / 3,
-    "3:4": 3 / 4,
+    "3:4": 3 / 4
   };
 
   const drawLayer = (
-    ctx: CanvasRenderingContext2D,
-    text: string,
-    styleId: string,
-    effect: FontEffect,
-    font: string,
-    pos: Position,
-    offset: { x: number; y: number },
-    size: number,
-  ) => {
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  styleId: string,
+  effect: FontEffect,
+  font: string,
+  pos: Position,
+  offset: {x: number;y: number;},
+  size: number) =>
+  {
     if (!text) return;
     const style = PREMIUM_COLORS.find((s) => s.id === styleId) || PREMIUM_COLORS[0];
 
@@ -662,30 +662,30 @@ const ThumbnailView: React.FC = () => {
     const timer = setTimeout(drawThumbnail, 150);
     return () => clearTimeout(timer);
   }, [
-    h1,
-    h1Style,
-    h1Effect,
-    h1Font,
-    h1Pos,
-    h1Offset,
-    h1Size,
-    h2,
-    h2Style,
-    h2Effect,
-    h2Font,
-    h2Pos,
-    h2Offset,
-    h2Size,
-    desc,
-    descStyle,
-    descEffect,
-    descFont,
-    descPos,
-    descOffset,
-    descSize,
-    selectedRatio,
-    bgImage,
-  ]);
+  h1,
+  h1Style,
+  h1Effect,
+  h1Font,
+  h1Pos,
+  h1Offset,
+  h1Size,
+  h2,
+  h2Style,
+  h2Effect,
+  h2Font,
+  h2Pos,
+  h2Offset,
+  h2Size,
+  desc,
+  descStyle,
+  descEffect,
+  descFont,
+  descPos,
+  descOffset,
+  descSize,
+  selectedRatio,
+  bgImage]
+  );
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: "REF" | "LOGO") => {
     if (e.target.files) {
@@ -717,7 +717,7 @@ const ThumbnailView: React.FC = () => {
     try {
       const imgUrl = await generateThumbnail(context || h1, apiKey || undefined, {
         referenceImgs: genMode === "REF" ? referenceImages : undefined,
-        aspectRatio: selectedRatio,
+        aspectRatio: selectedRatio
       });
       if (imgUrl) {
         setBgImage(imgUrl);
@@ -749,30 +749,30 @@ const ThumbnailView: React.FC = () => {
         <div className="neon-glass rounded-2xl sm:rounded-3xl p-3 sm:p-4 space-y-2 border border-white/15 shadow-[0_0_60px_rgba(0,0,0,0.7)] overflow-hidden bg-black/80 backdrop-blur-3xl">
           <div className="flex justify-between items-center px-2">
             <span className="text-[9px] font-black text-slate-300 uppercase tracking-[0.3em]">LIVE HD MONITOR</span>
-            {bgImage && (
-              <button
-                onClick={() => {
-                  setBgImage(null);
-                  bgImgRef.current = null;
-                  drawThumbnail();
-                }}
-                className="text-[9px] font-black text-rose-500 uppercase hover:text-rose-400"
-              >
+            {bgImage &&
+            <button
+              onClick={() => {
+                setBgImage(null);
+                bgImgRef.current = null;
+                drawThumbnail();
+              }}
+              className="text-[9px] font-black text-rose-500 uppercase hover:text-rose-400">
+
                 CLEAR CANVAS
               </button>
-            )}
+            }
           </div>
 
           <div
             className="bg-[#020617] rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl relative border border-white/5 flex items-center justify-center max-h-[280px] sm:max-h-[320px] group w-full"
-            style={{ aspectRatio: RATIO_MAP[selectedRatio] }}
-          >
+            style={{ aspectRatio: RATIO_MAP[selectedRatio] }}>
+
             <canvas
               ref={canvasRef}
-              className="max-w-full max-h-full object-contain transition-transform duration-1000 group-hover:scale-[1.02]"
-            />
-            {!bgImage && !loading && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 opacity-30">
+              className="max-w-full max-h-full object-contain transition-transform duration-1000 group-hover:scale-[1.02]" />
+
+            {!bgImage && !loading &&
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 opacity-30">
                 <div className="w-20 h-20 rounded-full border-2 border-dashed border-slate-700 flex items-center justify-center">
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
@@ -782,9 +782,9 @@ const ThumbnailView: React.FC = () => {
                 </div>
                 <span className="text-[11px] font-black uppercase tracking-[0.4em]">Ready for Generation</span>
               </div>
-            )}
-            {loading && (
-              <div className="absolute inset-0 bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center gap-6 z-[110] animate-in fade-in">
+            }
+            {loading &&
+            <div className="absolute inset-0 bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center gap-6 z-[110] animate-in fade-in">
                 <div className="relative">
                   <div className="w-20 h-20 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
                   <div className="absolute inset-0 flex items-center justify-center text-blue-400 text-xs font-black animate-pulse">
@@ -795,11 +795,11 @@ const ThumbnailView: React.FC = () => {
                   Synthesizing Masterpiece...
                 </p>
               </div>
-            )}
+            }
           </div>
 
-          {bgImage && !loading && (
-            <div className="flex gap-3 px-1">
+          {bgImage && !loading &&
+          <div className="flex gap-3 px-1">
               <label className="flex-1 py-2.5 bg-white/5 border border-white/10 rounded-xl flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-white/10 transition-all active:scale-95 group">
                 <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest group-hover:text-white transition-colors">
                   ADD BRAND LOGO
@@ -807,21 +807,21 @@ const ThumbnailView: React.FC = () => {
                 <input type="file" accept="image/*" onChange={(e) => handleFileUpload(e, "LOGO")} className="hidden" />
               </label>
               <button
-                onClick={() => {
-                  const canvas = canvasRef.current;
-                  if (canvas) {
-                    const link = document.createElement("a");
-                    link.download = `ELITE_ART_${Date.now()}.png`;
-                    link.href = canvas.toDataURL("image/png", 1.0);
-                    link.click();
-                  }
-                }}
-                className="flex-1 py-2.5 rounded-xl jewel-emerald jewel-surface text-white font-black text-[9px] uppercase tracking-[0.3em] shadow-3xl active:scale-95 transition-all border border-white/10"
-              >
+              onClick={() => {
+                const canvas = canvasRef.current;
+                if (canvas) {
+                  const link = document.createElement("a");
+                  link.download = `ELITE_ART_${Date.now()}.png`;
+                  link.href = canvas.toDataURL("image/png", 1.0);
+                  link.click();
+                }
+              }}
+              className="flex-1 py-2.5 rounded-xl jewel-emerald jewel-surface text-white font-black text-[9px] uppercase tracking-[0.3em] shadow-3xl active:scale-95 transition-all border border-white/10">
+
                 DOWNLOAD 4K HD
               </button>
             </div>
-          )}
+          }
         </div>
       </div>
 
@@ -830,11 +830,11 @@ const ThumbnailView: React.FC = () => {
         <div className="lg:col-span-12 space-y-6">
           <div className="neon-glass rounded-[56px] p-10 space-y-10 shadow-3xl border border-white/10 relative overflow-hidden">
             <div className="text-center space-y-2">
-              <h2 className="text-3xl font-black text-white tracking-tighter uppercase drop-shadow-2xl">
-                DESIGN <span className="text-blue-500">MASTER</span> HUB
+              <h2 className="text-3xl font-black tracking-tighter uppercase drop-shadow-2xl text-gold">THUMBNAIL MAKER 
+                <span className="text-blue-500">MASTER</span> HUB
               </h2>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.5em] opacity-70">
-                PROFESSIONAL WORKFLOW ENGINE V9
+              <p className="font-black uppercase tracking-[0.5em] opacity-70 text-gold text-sm">PROFESSIONAL WORKFLOW ENGINE
+
               </p>
             </div>
 
@@ -845,8 +845,8 @@ const ThumbnailView: React.FC = () => {
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="Gemini API Key (Optional)..."
-                className="w-full bg-black/50 border border-white/10 rounded-2xl p-4 text-xs font-bold text-white outline-none focus:ring-1 focus:ring-blue-500 transition-all shadow-inner"
-              />
+                className="w-full bg-black/50 border border-white/10 rounded-2xl p-4 text-xs font-bold text-white outline-none focus:ring-1 focus:ring-blue-500 transition-all shadow-inner" />
+
             </div>
 
             {/* TEXT LAYERS (Headline 1, 2, Desc) */}
@@ -867,8 +867,8 @@ const ThumbnailView: React.FC = () => {
                 setOffset={setH1Offset}
                 size={h1Size}
                 setSize={setH1Size}
-                colorTheme="amber"
-              />
+                colorTheme="amber" />
+
               <LayerControl
                 label="HEADLINE 2 (SUB)"
                 text={h2}
@@ -885,8 +885,8 @@ const ThumbnailView: React.FC = () => {
                 setOffset={setH2Offset}
                 size={h2Size}
                 setSize={setH2Size}
-                colorTheme="cyan"
-              />
+                colorTheme="cyan" />
+
               <LayerControl
                 label="DESCRIPTION (INFO)"
                 text={desc}
@@ -903,8 +903,8 @@ const ThumbnailView: React.FC = () => {
                 setOffset={setDescOffset}
                 size={descSize}
                 setSize={setDescSize}
-                colorTheme="rose"
-              />
+                colorTheme="rose" />
+
             </div>
 
             {/* AI BACKGROUND GENERATION CONTROLS */}
@@ -912,20 +912,20 @@ const ThumbnailView: React.FC = () => {
               <div className="flex gap-4 p-2 bg-black/40 rounded-3xl border border-white/5 max-w-xl mx-auto shadow-inner">
                 <button
                   onClick={() => setGenMode("AUTO")}
-                  className={`flex-1 py-4 rounded-2xl text-[10px] font-black uppercase transition-all ${genMode === "AUTO" ? "jewel-sapphire text-white shadow-xl" : "text-slate-500 hover:text-slate-300"}`}
-                >
+                  className={`flex-1 py-4 rounded-2xl text-[10px] font-black uppercase transition-all ${genMode === "AUTO" ? "jewel-sapphire text-white shadow-xl" : "text-slate-500 hover:text-slate-300"}`}>
+
                   AI AUTO ENGINE
                 </button>
                 <button
                   onClick={() => setGenMode("REF")}
-                  className={`flex-1 py-4 rounded-2xl text-[10px] font-black uppercase transition-all ${genMode === "REF" ? "jewel-gold text-white shadow-xl" : "text-slate-500 hover:text-slate-300"}`}
-                >
+                  className={`flex-1 py-4 rounded-2xl text-[10px] font-black uppercase transition-all ${genMode === "REF" ? "jewel-gold text-white shadow-xl" : "text-slate-500 hover:text-slate-300"}`}>
+
                   MULTI-REF (7 SLOTS)
                 </button>
               </div>
 
-              {genMode === "REF" && (
-                <div className="space-y-4 animate-in zoom-in-95 duration-500">
+              {genMode === "REF" &&
+              <div className="space-y-4 animate-in zoom-in-95 duration-500">
                   <div className="flex justify-between items-center px-6">
                     <label className="text-[11px] font-black text-blue-400 uppercase tracking-widest">
                       REFERENCE SYNTHESIS ASSETS
@@ -935,79 +935,79 @@ const ThumbnailView: React.FC = () => {
                     </span>
                   </div>
                   <div className="grid grid-cols-4 sm:grid-cols-7 gap-3 px-4">
-                    {referenceImages.map((img, idx) => (
-                      <div
-                        key={idx}
-                        className="relative aspect-square rounded-2xl overflow-hidden border border-white/15 group shadow-xl hover:scale-105 transition-transform cursor-pointer"
-                      >
+                    {referenceImages.map((img, idx) =>
+                  <div
+                    key={idx}
+                    className="relative aspect-square rounded-2xl overflow-hidden border border-white/15 group shadow-xl hover:scale-105 transition-transform cursor-pointer">
+
                         <img src={img} className="w-full h-full object-cover" />
                         <button
-                          onClick={() => setReferenceImages((prev) => prev.filter((_, i) => i !== idx))}
-                          className="absolute inset-0 bg-rose-600/70 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-2xl transition-opacity font-light"
-                        >
+                      onClick={() => setReferenceImages((prev) => prev.filter((_, i) => i !== idx))}
+                      className="absolute inset-0 bg-rose-600/70 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-2xl transition-opacity font-light">
+
                           ×
                         </button>
                       </div>
-                    ))}
-                    {referenceImages.length < 7 && (
-                      <label className="cursor-pointer flex flex-col items-center justify-center bg-white/5 border-2 border-dashed border-white/10 rounded-2xl aspect-square hover:bg-white/10 hover:border-blue-500/30 transition-all active:scale-95 group">
+                  )}
+                    {referenceImages.length < 7 &&
+                  <label className="cursor-pointer flex flex-col items-center justify-center bg-white/5 border-2 border-dashed border-white/10 rounded-2xl aspect-square hover:bg-white/10 hover:border-blue-500/30 transition-all active:scale-95 group">
                         <input
-                          type="file"
-                          accept="image/*"
-                          multiple
-                          onChange={(e) => handleFileUpload(e, "REF")}
-                          className="hidden"
-                        />
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={(e) => handleFileUpload(e, "REF")}
+                      className="hidden" />
+
                         <span className="text-2xl text-slate-600 group-hover:text-blue-400 transition-colors">+</span>
                       </label>
-                    )}
+                  }
                   </div>
                 </div>
-              )}
+              }
 
               <div className="space-y-3 px-4">
-                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-2">
+                <label className="font-black text-slate-500 uppercase tracking-widest ml-2 text-base">
                   AI SCENE VISION (DESCRIBE NICHE & ATMOSPHERE)
                 </label>
                 <textarea
                   value={context}
                   onChange={(e) => setContext(e.target.value)}
                   placeholder="ဥပမာ - High-end Tech Studio, Dark Cinematic Jungle, Hollywood Movie Poster Lighting..."
-                  className="w-full h-32 bg-black/60 border border-white/10 rounded-[32px] p-6 text-sm font-bold text-white outline-none focus:ring-1 focus:ring-blue-500/50 shadow-inner custom-scrollbar"
-                />
+                  className="w-full h-32 bg-black/60 border border-white/10 rounded-[32px] p-6 text-sm font-bold text-white outline-none focus:ring-1 focus:ring-blue-500/50 shadow-inner custom-scrollbar" />
+
               </div>
 
               <div className="grid grid-cols-5 gap-3 px-4 max-w-3xl mx-auto">
-                {(["1:1", "16:9", "9:16", "4:3", "3:4"] as AspectRatio[]).map((r) => (
-                  <button
-                    key={r}
-                    onClick={() => setSelectedRatio(r)}
-                    className={`py-3 rounded-2xl text-[10px] font-black transition-all border ${selectedRatio === r ? "bg-white text-black shadow-2xl border-transparent scale-110" : "bg-slate-900/60 border-white/5 text-slate-600 hover:text-slate-400"}`}
-                  >
+                {(["1:1", "16:9", "9:16", "4:3", "3:4"] as AspectRatio[]).map((r) =>
+                <button
+                  key={r}
+                  onClick={() => setSelectedRatio(r)}
+                  className={`py-3 rounded-2xl text-[10px] font-black transition-all border ${selectedRatio === r ? "bg-white text-black shadow-2xl border-transparent scale-110" : "bg-slate-900/60 border-white/5 text-slate-600 hover:text-slate-400"}`}>
+
                     {r}
                   </button>
-                ))}
+                )}
               </div>
 
               <div className="pt-6 px-4">
                 <button
                   disabled={loading}
                   onClick={handleGenerate}
-                  className="w-full py-7 rounded-[36px] jewel-sapphire jewel-surface text-white font-black text-sm uppercase tracking-[0.5em] shadow-[0_0_50px_rgba(37,99,235,0.4)] active:scale-[0.98] transition-all border border-white/20"
-                >
-                  {loading
-                    ? "AI IS SYNTHESIZING MASTERPIECE..."
-                    : bgImage
-                      ? "RE-GENERATE BACKGROUND"
-                      : "START ELITE ART GENERATION"}
+                  className="w-full py-7 rounded-[36px] jewel-sapphire jewel-surface text-white font-black text-sm uppercase tracking-[0.5em] shadow-[0_0_50px_rgba(37,99,235,0.4)] active:scale-[0.98] transition-all border border-white/20">
+
+                  {loading ?
+                  "AI IS SYNTHESIZING MASTERPIECE..." :
+                  bgImage ?
+                  "RE-GENERATE BACKGROUND" :
+                  "START ELITE ART GENERATION"}
                 </button>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
-  );
+    </div>);
+
 };
 
 export default ThumbnailView;
