@@ -975,10 +975,8 @@ export default function VideoRecapView() {
       videoRef.current.pause();
       if (audio) audio.pause();
     } else {
-      setupAudioAnalyzer();
-      setIsPlaying(true);
-      videoRef.current.play().catch(() => {});
-      if (audio) audio.play().catch(() => {});
+      // Auto-download: start recording while previewing so downloaded video = preview exactly
+      handleAutoSaveRecord();
     }
   };
 
@@ -2990,7 +2988,7 @@ export default function VideoRecapView() {
             isPlaying ? "bg-rose-600 text-white" : "bg-gradient-to-r from-emerald-600 to-teal-600 text-white"}`
             }>
 
-              {isPlaying ? "⏸ PAUSE" : "▶ PREVIEW"}
+              {isPlaying ? "⏸ PAUSE" : isExporting ? `⬇ ${Math.round(progress)}%` : "▶ PLAY & DOWNLOAD"}
             </button>
             <button
             onClick={handleDownload}
