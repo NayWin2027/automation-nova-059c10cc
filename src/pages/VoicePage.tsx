@@ -1080,7 +1080,7 @@ const VoicePage: React.FC = () => {
 
         {/* 8. Help Info */}
         <div className="space-y-3 pt-2">
-          <div className="border border-white/10 rounded-[28px] p-6 space-y-3 shadow-inner text-gold bg-gold">
+          <div className="border border-white/10 rounded-[28px] p-6 space-y-3 shadow-inner text-gold bg-blue-950">
             <div className="flex items-center gap-2">
               <div className="w-1 h-4 bg-primary rounded-full"></div>
               {isEditing ?
