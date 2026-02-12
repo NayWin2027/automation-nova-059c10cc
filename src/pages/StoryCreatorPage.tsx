@@ -559,7 +559,7 @@ const StoryView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-5 pb-32 animate-in fade-in duration-500 max-w-2xl mx-auto px-1">
+    <div className="space-y-5 pb-32 animate-in fade-in duration-500 max-w-2xl mx-auto px-1 bg-blue-700">
       {/* HOME BUTTON */}
       <div className="flex justify-start p-2">
         <button
@@ -896,7 +896,7 @@ const StoryView: React.FC = () => {
 
           {/* Phase Selector */}
           <div className="space-y-2">
-            <label className="font-black text-slate-400 uppercase tracking-widest ml-1 text-base">
+            <label className="font-black uppercase tracking-widest ml-1 text-base text-gold-light">
               CURRENT STORY PHASE
             </label>
             <div className="grid grid-cols-1 gap-2">
@@ -918,7 +918,7 @@ const StoryView: React.FC = () => {
 
           {/* Plot Focus / Twist Selector (Multi-Select) */}
           <div className="space-y-2">
-            <label className="font-black text-slate-400 uppercase tracking-widest ml-1 text-sm">
+            <label className="font-black uppercase tracking-widest ml-1 text-sm text-white">
               PLOT FOCUS (SELECT MULTIPLE)
             </label>
             <div className="flex flex-wrap gap-2">
