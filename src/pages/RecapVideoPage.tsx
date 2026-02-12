@@ -2348,7 +2348,7 @@ export default function VideoRecapView() {
 
           <div className="space-y-3">
             <div className="space-y-1">
-              <label className="text-[7px] font-black text-slate-500 uppercase tracking-widest">
+              <label className="font-black uppercase tracking-widest text-xs text-neon-rose">
                 VIDEO SIZE / ASPECT RATIO
               </label>
               <select
@@ -2367,7 +2367,7 @@ export default function VideoRecapView() {
             </div>
             <div className="flex gap-4 pt-2">
               <div className="flex-1 space-y-1">
-                <label className="font-black uppercase tracking-widest text-xs text-popover-foreground">
+                <label className="font-black uppercase tracking-widest text-xs text-neon-rose">
                   VIDEO PLAYBACK SPEED ({videoSpeed}x)
                 </label>
                 <input
@@ -2396,7 +2396,7 @@ export default function VideoRecapView() {
               </div>
             </div>
             <div className="space-y-2 pt-2">
-              <label className="text-[7px] font-black text-slate-500 uppercase tracking-widest">
+              <label className="font-black uppercase tracking-widest text-xs text-neon-rose">
                 AI GENERATED SCRIPT (EDITABLE)
               </label>
               <textarea
