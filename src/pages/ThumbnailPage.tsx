@@ -748,7 +748,7 @@ const ThumbnailView: React.FC = () => {
       <div className="sticky top-16 z-[100] pb-1">
         <div className="neon-glass rounded-2xl sm:rounded-3xl p-3 sm:p-4 space-y-2 border border-white/15 shadow-[0_0_60px_rgba(0,0,0,0.7)] overflow-hidden bg-black/80 backdrop-blur-3xl">
           <div className="flex justify-between items-center px-2">
-            <span className="text-[9px] font-black text-slate-300 uppercase tracking-[0.3em]">LIVE HD MONITOR</span>
+            <span className="font-black uppercase tracking-[0.3em] text-secondary-foreground text-xl">LIVE HD MONITOR</span>
             {bgImage &&
             <button
               onClick={() => {
