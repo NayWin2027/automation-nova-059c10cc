@@ -263,13 +263,13 @@ const SrtTranslatorView: React.FC = () => {
 
       <div className="neon-glass rounded-[28px] p-6 flex justify-between items-center border border-white/5 shadow-xl">
         <div className="space-y-1">
-          <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest">APP QUOTA (TODAY)</p>
+          <p className="font-black text-slate-300 uppercase tracking-widest text-sm">APP QUOTA (TODAY)</p>
           <p className="text-xl font-black text-rose-500 drop-shadow-[0_0_10px_rgba(244,63,94,0.4)] font-mono">
             0 / 0 Used
           </p>
         </div>
         <div className="text-right space-y-1">
-          <p className="font-black text-slate-300 uppercase tracking-widest text-xs">STATUS CLASS</p>
+          <p className="font-black text-slate-300 uppercase tracking-widest text-sm">STATUS CLASS</p>
           <p className="text-[11px] font-black text-blue-300 uppercase tracking-widest glow-text">GUEST MODE</p>
         </div>
       </div>
@@ -284,7 +284,7 @@ const SrtTranslatorView: React.FC = () => {
           placeholder="Paste Private Key..."
           className="w-full bg-black/50 border border-white/5 rounded-xl p-4 text-xs font-bold text-white outline-none focus:ring-1 focus:ring-emerald-500" />
 
-          <p className="text-emerald-300/80 ml-1 text-sm">Tab ပိတ်လိုက်ရင် Key ပျောက်သွားပါမယ်</p>
+          <p className="text-emerald-300/80 ml-1 text-lg">Tab ပိတ်လိုက်ရင် Key ပျောက်သွားပါမယ်</p>
         </div>
       }
 
