@@ -649,7 +649,7 @@ const StoryView: React.FC = () => {
         {/* Genres */}
         <div className="space-y-3">
           <div className="flex justify-between items-center px-1">
-            <label className="text-[9px] font-black uppercase tracking-widest drop-shadow-sm text-neon-rose">
+            <label className="font-black uppercase tracking-widest drop-shadow-sm text-neon-rose text-base">
               STORY GENRES
             </label>
             <button
@@ -675,7 +675,7 @@ const StoryView: React.FC = () => {
 
         {/* Author Style */}
         <div className="space-y-3">
-          <label className="text-[9px] font-black uppercase tracking-widest ml-1 drop-shadow-sm text-neon-rose">
+          <label className="font-black uppercase tracking-widest ml-1 drop-shadow-sm text-neon-rose text-base">
             WRITING STYLE
           </label>
           <div className="grid grid-cols-2 gap-2">
@@ -795,7 +795,7 @@ const StoryView: React.FC = () => {
               </div>
             )}
             {characters.length === 0 &&
-            <p className="text-center font-bold py-2 text-xs text-neon-rose">
+            <p className="text-center py-2 text-xs text-neon-rose font-extrabold">
                 NO CHARACTERS? AI WILL AUTO-CAST PREMIUM CHARACTERS.
               </p>
             }
@@ -809,7 +809,7 @@ const StoryView: React.FC = () => {
           </h3>
 
           <div className="space-y-2">
-            <label className="font-black uppercase tracking-widest ml-1 text-sm text-neon-rose">
+            <label className="font-black uppercase tracking-widest ml-1 text-neon-rose text-base">
               CREATIVITY ({creativity}%)
             </label>
             <input
@@ -840,7 +840,7 @@ const StoryView: React.FC = () => {
               </select>
             </div>
             <div className="space-y-1">
-              <label className="font-black uppercase tracking-widest ml-1 text-neon-rose text-sm">
+              <label className="font-black uppercase tracking-widest ml-1 text-neon-rose text-base">
                 POV (ရှုထောင့်)
               </label>
               <select
@@ -896,7 +896,7 @@ const StoryView: React.FC = () => {
 
           {/* Phase Selector */}
           <div className="space-y-2">
-            <label className="font-black text-slate-400 uppercase tracking-widest ml-1 text-sm">
+            <label className="font-black text-slate-400 uppercase tracking-widest ml-1 text-base">
               CURRENT STORY PHASE
             </label>
             <div className="grid grid-cols-1 gap-2">
