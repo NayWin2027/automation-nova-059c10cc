@@ -564,7 +564,7 @@ const StoryView: React.FC = () => {
       <div className="flex justify-start p-2">
         <button
           onClick={() => navigate("/")}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800/80 border border-white/10 text-white text-xs font-bold hover:bg-slate-700 transition-all">
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800/80 border border-white/10 text-xs font-bold hover:bg-slate-700 transition-all text-neon-rose">
 
           <Home className="w-4 h-4" />
           Home
