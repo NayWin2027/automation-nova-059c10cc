@@ -505,7 +505,7 @@ const TranslateView: React.FC = () => {
         </div>
 
         {/* Master Action Button */}
-        <div className="pt-4">
+        <div className="pt-4 text-neon-rose">
           <button
             disabled={loading || !isReady}
             onClick={handleTranslate}
