@@ -298,7 +298,7 @@ const TranslateView: React.FC = () => {
 
       {apiType === "own" &&
       <div className="platinum-glass p-5 rounded-[32px] mb-6 animate-in zoom-in-95 duration-300 max-w-sm mx-auto border border-white/20">
-          <label className="text-[8px] font-black text-blue-500 tracking-[0.4em] uppercase mb-2 block ml-2 premium-font">
+          <label className="font-black text-blue-500 tracking-[0.4em] uppercase mb-2 block ml-2 premium-font text-base">
             AUTHENTICATION KEY
           </label>
           <input
@@ -308,7 +308,7 @@ const TranslateView: React.FC = () => {
           placeholder="PASTE AIza... KEY HERE"
           className="w-full bg-black/50 border border-white/10 rounded-2xl px-6 h-14 text-xs font-black tracking-widest text-white outline-none focus:ring-1 focus:ring-blue-500 shadow-inner" />
 
-          <p className="text-base text-blue-300/80 mt-2 ml-2">Tab ပိတ်လိုက်ရင် Key ပျောက်သွားပါမယ်</p>
+          <p className="mt-2 ml-2 text-neon-rose text-2xl">Tab ပိတ်လိုက်ရင် Key ပျောက်သွားပါမယ်</p>
         </div>
       }
 
