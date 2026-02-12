@@ -405,7 +405,7 @@ export default function TranscriptionView() {
   if (!isAllowed) return null;
 
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-200 p-4 space-y-6 animate-in fade-in duration-500 pb-32">
+    <div className="min-h-screen text-slate-200 p-4 space-y-6 animate-in fade-in duration-500 pb-32 bg-primary-foreground">
       {/* ADMIN EDIT BAR */}
       {isAdmin &&
       <div className="fixed top-2 right-2 z-50 flex gap-2">
@@ -472,7 +472,7 @@ export default function TranscriptionView() {
 
       {/* HEADER SECTION */}
       <div className="space-y-4">
-        <h2 className="font-black text-white uppercase tracking-wider text-xl">
+        <h2 className="text-sm font-black text-white uppercase tracking-wider">
           <EditableText value={s.pageTitle} onChange={(v) => setEditSettings({ ...editSettings, pageTitle: v })} />
         </h2>
 
@@ -758,7 +758,7 @@ export default function TranscriptionView() {
         </div>
         <div className="space-y-3">
           {s.howToUseSteps.map((step, idx) =>
-          <p key={idx} className="font-medium text-slate-300 leading-relaxed text-base">
+          <p key={idx} className="text-[11px] font-medium text-slate-300 leading-relaxed">
               {isEditing ?
             <input
               type="text"
@@ -788,7 +788,7 @@ export default function TranscriptionView() {
 
       {/* PRO TIPS SECTION */}
       <div className="bg-[#0a0f1d] border border-white/5 rounded-2xl p-6 space-y-4">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 text-neon-rose">
           <div className="w-1 h-4 bg-blue-500 rounded-full"></div>
           <h3 className="text-[10px] font-black text-white uppercase tracking-widest">
             <EditableText value={s.proTipsTitle} onChange={(v) => setEditSettings({ ...editSettings, proTipsTitle: v })} />
@@ -796,7 +796,7 @@ export default function TranscriptionView() {
         </div>
         <div className="space-y-3">
           {s.proTips.map((tip, idx) =>
-          <p key={idx} className="font-medium text-amber-500/80 leading-relaxed text-base">
+          <p key={idx} className="text-[11px] font-medium text-amber-500/80 leading-relaxed">
               {isEditing ?
             <input
               type="text"
