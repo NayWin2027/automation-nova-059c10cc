@@ -830,8 +830,8 @@ const ThumbnailView: React.FC = () => {
         <div className="lg:col-span-12 space-y-6">
           <div className="neon-glass rounded-[56px] p-10 space-y-10 shadow-3xl border border-white/10 relative overflow-hidden">
             <div className="text-center space-y-2">
-              <h2 className="text-3xl font-black tracking-tighter uppercase drop-shadow-2xl text-gold">THUMBNAIL MAKER 
-                <span className="text-blue-500">MASTER</span> HUB
+              <h2 className="text-3xl font-black tracking-tighter uppercase drop-shadow-2xl text-gold">THUMBNAIL  MAKER ​
+                <span className="text-blue-500">​</span> HUB
               </h2>
               <p className="font-black uppercase tracking-[0.5em] opacity-70 text-gold text-sm">PROFESSIONAL WORKFLOW ENGINE
 
