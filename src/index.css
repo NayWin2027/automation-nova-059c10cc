@@ -576,4 +576,117 @@
     border: 1px solid hsl(45 60% 65% / 0.3);
     box-shadow: 0 2px 15px hsl(45 50% 50% / 0.08);
   }
+
+  /* Light mode: Force high-contrast text on all tool pages */
+  .light-mode .text-white {
+    color: hsl(220 30% 12%) !important;
+  }
+
+  .light-mode .text-slate-300,
+  .light-mode .text-slate-400,
+  .light-mode .text-slate-500 {
+    color: hsl(220 20% 35%) !important;
+  }
+
+  .light-mode .text-slate-200 {
+    color: hsl(220 25% 20%) !important;
+  }
+
+  .light-mode .text-gray-300,
+  .light-mode .text-gray-400,
+  .light-mode .text-gray-500 {
+    color: hsl(220 15% 38%) !important;
+  }
+
+  .light-mode .placeholder\:text-slate-500::placeholder,
+  .light-mode .placeholder\:text-slate-400::placeholder {
+    color: hsl(220 15% 55%) !important;
+  }
+
+  /* Light mode: Keep gradient card text white for readability on colored backgrounds */
+  .light-mode .tool-glossy-card .text-white,
+  .light-mode .jewel-sapphire .text-white,
+  .light-mode .jewel-ruby .text-white,
+  .light-mode .jewel-gold .text-white,
+  .light-mode .jewel-emerald .text-white,
+  .light-mode .jewel-diamond .text-white,
+  .light-mode [class*="bg-gradient"] .text-white {
+    color: white !important;
+  }
+
+  /* Light mode: Inputs and selects */
+  .light-mode select,
+  .light-mode input[type="text"],
+  .light-mode input[type="password"],
+  .light-mode textarea {
+    background: hsl(40 15% 97%) !important;
+    color: hsl(220 30% 12%) !important;
+    border-color: hsl(35 20% 80%) !important;
+  }
+
+  .light-mode select option {
+    background: hsl(0 0% 100%);
+    color: hsl(220 30% 12%);
+  }
+
+  /* Light mode: neon-glass and dark containers */
+  .light-mode .neon-glass,
+  .light-mode .bg-black\/50,
+  .light-mode .bg-black\/30 {
+    background: hsl(40 15% 95% / 0.9) !important;
+    border-color: hsl(35 20% 82%) !important;
+  }
+
+  /* Light mode: Ensure bg-white/5 bg-white/10 containers are visible */
+  .light-mode .bg-white\/5,
+  .light-mode .bg-white\/10,
+  .light-mode .bg-white\/15 {
+    background: hsl(220 20% 92% / 0.5) !important;
+  }
+
+  /* Light mode: border-white overrides */
+  .light-mode .border-white\/5,
+  .light-mode .border-white\/10,
+  .light-mode .border-white\/15,
+  .light-mode .border-white\/20 {
+    border-color: hsl(35 15% 82%) !important;
+  }
+
+  /* Light mode: Keep colored text visible but adjusted */
+  .light-mode .text-emerald-300,
+  .light-mode .text-emerald-300\/80 {
+    color: hsl(160 80% 30%) !important;
+  }
+
+  .light-mode .text-emerald-400,
+  .light-mode .text-emerald-500 {
+    color: hsl(160 75% 28%) !important;
+  }
+
+  .light-mode .text-blue-300 {
+    color: hsl(210 80% 40%) !important;
+  }
+
+  .light-mode .text-amber-300 {
+    color: hsl(38 90% 40%) !important;
+  }
+
+  .light-mode .text-amber-400 {
+    color: hsl(38 85% 38%) !important;
+  }
+
+  .light-mode .text-rose-500 {
+    color: hsl(350 80% 45%) !important;
+  }
+
+  .light-mode .text-primary\/70 {
+    color: hsl(210 70% 35% / 0.9) !important;
+  }
+
+  /* Light mode: glow text shadows removal for readability */
+  .light-mode .glow-text,
+  .light-mode .drop-shadow-\[0_0_10px_rgba\(244\,63\,94\,0\.4\)\] {
+    filter: none !important;
+    text-shadow: none !important;
+  }
 }
