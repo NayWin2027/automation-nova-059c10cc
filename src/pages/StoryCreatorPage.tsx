@@ -795,7 +795,7 @@ const StoryView: React.FC = () => {
               </div>
             )}
             {characters.length === 0 &&
-            <p className="text-center text-[8px] text-slate-400 font-bold py-2">
+            <p className="text-center font-bold py-2 text-xs text-neon-rose">
                 NO CHARACTERS? AI WILL AUTO-CAST PREMIUM CHARACTERS.
               </p>
             }
@@ -890,7 +890,7 @@ const StoryView: React.FC = () => {
 
         {/* 4. STORY BEAT & TEMPO CONTROLS */}
         <div className="space-y-4 pt-2 bg-white/5 p-4 rounded-[24px] border border-white/5">
-          <h3 className="text-[10px] font-black text-cyan-300 uppercase tracking-widest text-center border-b border-white/10 pb-2 mb-2">
+          <h3 className="font-black text-cyan-300 uppercase tracking-widest text-center border-b border-white/10 pb-2 mb-2 text-base">
             PHASE & FOCUS
           </h3>
 
