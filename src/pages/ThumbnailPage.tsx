@@ -744,11 +744,11 @@ const ThumbnailView: React.FC = () => {
 
   return (
     <div className="space-y-6 pb-40 animate-in fade-in duration-500 max-w-5xl mx-auto px-2 text-white">
-      {/* 1. MONITOR PREVIEW (Sticky Top) */}
-      <div className="sticky top-20 z-[100] pb-2">
-        <div className="neon-glass rounded-[56px] p-6 space-y-5 border border-white/15 shadow-[0_0_100px_rgba(0,0,0,0.9)] overflow-hidden bg-black/80 backdrop-blur-3xl">
-          <div className="flex justify-between items-center px-4">
-            <span className="text-[10px] font-black text-slate-300 uppercase tracking-[0.5em]">LIVE HD MONITOR</span>
+      {/* 1. MONITOR PREVIEW (Sticky Top - Compact) */}
+      <div className="sticky top-16 z-[100] pb-1">
+        <div className="neon-glass rounded-2xl sm:rounded-3xl p-3 sm:p-4 space-y-2 border border-white/15 shadow-[0_0_60px_rgba(0,0,0,0.7)] overflow-hidden bg-black/80 backdrop-blur-3xl">
+          <div className="flex justify-between items-center px-2">
+            <span className="text-[9px] font-black text-slate-300 uppercase tracking-[0.3em]">LIVE HD MONITOR</span>
             {bgImage && (
               <button
                 onClick={() => {
@@ -764,7 +764,7 @@ const ThumbnailView: React.FC = () => {
           </div>
 
           <div
-            className="bg-[#020617] rounded-[48px] overflow-hidden shadow-2xl relative border border-white/5 flex items-center justify-center max-h-[500px] group w-full"
+            className="bg-[#020617] rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl relative border border-white/5 flex items-center justify-center max-h-[280px] sm:max-h-[320px] group w-full"
             style={{ aspectRatio: RATIO_MAP[selectedRatio] }}
           >
             <canvas
@@ -799,9 +799,9 @@ const ThumbnailView: React.FC = () => {
           </div>
 
           {bgImage && !loading && (
-            <div className="flex gap-4 px-2">
-              <label className="flex-1 py-4 bg-white/5 border border-white/10 rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-white/10 transition-all active:scale-95 group">
-                <span className="text-[11px] font-black text-slate-300 uppercase tracking-widest group-hover:text-white transition-colors">
+            <div className="flex gap-3 px-1">
+              <label className="flex-1 py-2.5 bg-white/5 border border-white/10 rounded-xl flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-white/10 transition-all active:scale-95 group">
+                <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest group-hover:text-white transition-colors">
                   ADD BRAND LOGO
                 </span>
                 <input type="file" accept="image/*" onChange={(e) => handleFileUpload(e, "LOGO")} className="hidden" />
@@ -816,7 +816,7 @@ const ThumbnailView: React.FC = () => {
                     link.click();
                   }
                 }}
-                className="flex-1 py-4 rounded-2xl jewel-emerald jewel-surface text-white font-black text-[11px] uppercase tracking-[0.4em] shadow-3xl active:scale-95 transition-all border border-white/10"
+                className="flex-1 py-2.5 rounded-xl jewel-emerald jewel-surface text-white font-black text-[9px] uppercase tracking-[0.3em] shadow-3xl active:scale-95 transition-all border border-white/10"
               >
                 DOWNLOAD 4K HD
               </button>

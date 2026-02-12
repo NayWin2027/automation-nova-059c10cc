@@ -689,4 +689,9 @@
     filter: none !important;
     text-shadow: none !important;
   }
+
+  /* Light mode: Thumbnail monitor */
+  .light-mode .bg-\[\\#020617\] {
+    background: hsl(40 15% 94%) !important;
+  }
 }
