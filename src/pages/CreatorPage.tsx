@@ -248,8 +248,8 @@ const CreatorPage: React.FC = () => {
           {/* Topic Input */}
           <div className="space-y-1.5">
             <div className="flex justify-between items-center px-1">
-              <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest">TOPIC DESCRIPTION</label>
-              <span className="text-[10px] font-black text-primary/70">{topic.length}/2500</span>
+              <label className="font-black text-slate-300 uppercase tracking-widest text-base">TOPIC DESCRIPTION</label>
+              <span className="font-black text-base text-orange-600">{topic.length}/2500</span>
             </div>
             <textarea
               value={topic}
