@@ -758,7 +758,7 @@ export default function TranscriptionView() {
         </div>
         <div className="space-y-3">
           {s.howToUseSteps.map((step, idx) =>
-          <p key={idx} className="text-[11px] font-medium text-slate-300 leading-relaxed">
+          <p key={idx} className="font-medium text-slate-300 leading-relaxed text-base">
               {isEditing ?
             <input
               type="text"
@@ -796,7 +796,7 @@ export default function TranscriptionView() {
         </div>
         <div className="space-y-3">
           {s.proTips.map((tip, idx) =>
-          <p key={idx} className="text-[11px] font-medium text-amber-500/80 leading-relaxed">
+          <p key={idx} className="font-medium text-amber-500/80 leading-relaxed text-base">
               {isEditing ?
             <input
               type="text"
