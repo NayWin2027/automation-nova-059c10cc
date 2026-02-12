@@ -1080,7 +1080,7 @@ const VoicePage: React.FC = () => {
 
         {/* 8. Help Info */}
         <div className="space-y-3 pt-2">
-          <div className="border border-white/10 rounded-[28px] p-6 space-y-3 shadow-inner text-gold bg-background">
+          <div className="border border-white/10 rounded-[28px] p-6 space-y-3 shadow-inner text-gold bg-blue-950">
             <div className="flex items-center gap-2">
               <div className="w-1 h-4 bg-primary rounded-full"></div>
               {isEditing ?
@@ -1094,7 +1094,7 @@ const VoicePage: React.FC = () => {
             {isEditing ?
             <EditableTextarea fieldKey="howToUseText" colorKey="howToUseTextColor" sizeKey="howToUseTextSize" label="How To Use Content (\\n = new line)" /> :
 
-            <div className="space-y-2 font-bold leading-relaxed rounded-lg shadow-lg px-0 pb-0 pr-0 text-white bg-blue-950" style={{ color: vs?.howToUseTextColor || defaultVoiceSettings.howToUseTextColor, fontSize: (vs?.howToUseTextSize || defaultVoiceSettings.howToUseTextSize) + 'px' }}>
+            <div className="space-y-2 font-bold leading-relaxed rounded-lg shadow-lg px-0 pb-0 pr-0 text-white bg-primary-foreground" style={{ color: vs?.howToUseTextColor || defaultVoiceSettings.howToUseTextColor, fontSize: (vs?.howToUseTextSize || defaultVoiceSettings.howToUseTextSize) + 'px' }}>
                 {(vs?.howToUseText || defaultVoiceSettings.howToUseText).split('\n').map((line: string, i: number) =>
               <p key={i}>{line}</p>
               )}
