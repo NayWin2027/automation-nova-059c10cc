@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useSessionEnforcement } from "@/hooks/useSessionEnforcement";
 import { 
   User, Lock, ArrowRight, Eye, EyeOff, 
   LogIn, Home
@@ -75,7 +76,16 @@ const UserLoginPage: React.FC = () => {
           description: "User ID သို့မဟုတ် Password မှားနေပါသည်",
           variant: "destructive",
         });
-      } else if (data.user) {
+      } else if (data.user && data.session) {
+        // Register this device as the active session (Viber-style single device)
+        try {
+          await supabase.rpc('register_active_session', {
+            _user_id: data.user.id,
+            _session_id: data.session.access_token,
+          });
+        } catch (e) {
+          console.error('Failed to register session:', e);
+        }
         toast({
           title: "✅ Login အောင်မြင်ပါပြီ",
           description: "ကြိုဆိုပါတယ်!",

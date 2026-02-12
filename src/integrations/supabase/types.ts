@@ -115,6 +115,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          active_session_id: string | null
           ban_reason: string | null
           created_at: string
           credits: number
@@ -128,6 +129,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          active_session_id?: string | null
           ban_reason?: string | null
           created_at?: string
           credits?: number
@@ -141,6 +143,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          active_session_id?: string | null
           ban_reason?: string | null
           created_at?: string
           credits?: number
@@ -372,6 +375,10 @@ export type Database = {
       }
     }
     Functions: {
+      check_active_session: {
+        Args: { _session_id: string; _user_id: string }
+        Returns: boolean
+      }
       check_admin_2fa_status: { Args: { _user_id: string }; Returns: Json }
       count_user_devices: { Args: { _user_id: string }; Returns: number }
       deduct_user_credits: {
@@ -393,6 +400,10 @@ export type Database = {
       record_tool_outcome: {
         Args: { _outcome: string; _tool_id: string; _user_id: string }
         Returns: Json
+      }
+      register_active_session: {
+        Args: { _session_id: string; _user_id: string }
+        Returns: undefined
       }
       verify_admin_secret: { Args: { secret_input: string }; Returns: boolean }
     }

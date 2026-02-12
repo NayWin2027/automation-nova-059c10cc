@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useSessionEnforcement } from '@/hooks/useSessionEnforcement';
 import { User, Session } from '@supabase/supabase-js';
 
 interface UserProfile {
@@ -25,6 +26,11 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
   const [todayUsage, setTodayUsage] = useState<ToolUsage[]>([]);
 
+  // Viber-style single device enforcement
+  const { registerSession } = useSessionEnforcement(
+    user?.id ?? null,
+    session?.access_token ?? null
+  );
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
