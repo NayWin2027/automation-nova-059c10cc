@@ -1148,7 +1148,7 @@ TRANSLATION QUALITY (CRITICAL):
 
       {/* Info Footer */}
       <div className="text-center opacity-30 pt-8 pb-4">
-        <p className="tracking-[0.5em] uppercase text-xs font-bold text-neon-rose">POWERED BY GEMINI 3 PRO & FLASH • 350K ENGINE</p>
+        <p className="tracking-[0.5em] uppercase text-xs text-neon-rose font-extrabold">POWERED BY GEMINI 3 PRO & FLASH • 350K ENGINE</p>
       </div>
     </div>
     
