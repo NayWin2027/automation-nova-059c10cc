@@ -21,8 +21,8 @@ import {
   Shield,
   Info,
   Sun,
-  Moon,
-} from "lucide-react";
+  Moon } from
+"lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { ToolCard } from "@/components/ToolCard";
 import { BottomNav } from "@/components/BottomNav";
@@ -37,79 +37,79 @@ import { usePromotionTracking } from "@/hooks/usePromotionTracking";
 import ToolLimitsBadge from "@/components/ToolLimitsBadge";
 import AccountInfoCard from "@/components/AccountInfoCard";
 const defaultTools = [
-  {
-    id: "recap",
-    icon: Video,
-    title: "Video Recap",
-    description: "ဗီဒီယို Recap နှင့် အကျဉ်းချုပ်ထုတ်ယူခြင်း။",
-    gradient: "cyan" as const,
-    route: "/recap",
-  },
-  {
-    id: "transcribe",
-    icon: Mic,
-    title: "Transcribe",
-    description: "အသံဖိုင်မှ စာသားပြောင်းလဲခြင်း။",
-    gradient: "blue" as const,
-    route: "/transcribe",
-  },
-  {
-    id: "story",
-    icon: FileText,
-    title: "Story Creator",
-    description: "ပုံပြင်ဖန်တီး ရေးသားခြင်း။",
-    gradient: "violet" as const,
-    route: "/story",
-  },
-  {
-    id: "thumbnail",
-    icon: Image,
-    title: "Thumbnail",
-    description: "AI Thumbnail ပုံရိုက်ခြင်း။",
-    gradient: "amber" as const,
-    route: "/thumbnail",
-  },
-  {
-    id: "translate",
-    icon: Languages,
-    title: "Translate",
-    description: "ဘာသာစကားများ ပြောင်းလဲခြင်း။",
-    gradient: "emerald" as const,
-    route: "/translate",
-  },
-  {
-    id: "srt",
-    icon: FileType,
-    title: "SRT Sub",
-    description: "SRT ဖိုင်များ ဘာသာပြန်ခြင်း။",
-    gradient: "rose" as const,
-    route: "/srt",
-  },
-  {
-    id: "novel",
-    icon: BookOpen,
-    title: "Novel Trans",
-    description: "ဝတ္ထုများ ဘာသာပြန်ခြင်း။",
-    gradient: "blue" as const,
-    route: "/novel",
-  },
-  {
-    id: "voice",
-    icon: Volume2,
-    title: "AI Voice",
-    description: "စာသားမှ အသံထုတ်ခြင်း။",
-    gradient: "amber" as const,
-    route: "/voice",
-  },
-  {
-    id: "creator",
-    icon: PenTool,
-    title: "Creator",
-    description: "မီဒီယာစီမံမှု ဖန်တီးခြင်း။",
-    gradient: "cyan" as const,
-    route: "/creator",
-  },
-];
+{
+  id: "recap",
+  icon: Video,
+  title: "Video Recap",
+  description: "ဗီဒီယို Recap နှင့် အကျဉ်းချုပ်ထုတ်ယူခြင်း။",
+  gradient: "cyan" as const,
+  route: "/recap"
+},
+{
+  id: "transcribe",
+  icon: Mic,
+  title: "Transcribe",
+  description: "အသံဖိုင်မှ စာသားပြောင်းလဲခြင်း။",
+  gradient: "blue" as const,
+  route: "/transcribe"
+},
+{
+  id: "story",
+  icon: FileText,
+  title: "Story Creator",
+  description: "ပုံပြင်ဖန်တီး ရေးသားခြင်း။",
+  gradient: "violet" as const,
+  route: "/story"
+},
+{
+  id: "thumbnail",
+  icon: Image,
+  title: "Thumbnail",
+  description: "AI Thumbnail ပုံရိုက်ခြင်း။",
+  gradient: "amber" as const,
+  route: "/thumbnail"
+},
+{
+  id: "translate",
+  icon: Languages,
+  title: "Translate",
+  description: "ဘာသာစကားများ ပြောင်းလဲခြင်း။",
+  gradient: "emerald" as const,
+  route: "/translate"
+},
+{
+  id: "srt",
+  icon: FileType,
+  title: "SRT Sub",
+  description: "SRT ဖိုင်များ ဘာသာပြန်ခြင်း။",
+  gradient: "rose" as const,
+  route: "/srt"
+},
+{
+  id: "novel",
+  icon: BookOpen,
+  title: "Novel Trans",
+  description: "ဝတ္ထုများ ဘာသာပြန်ခြင်း။",
+  gradient: "blue" as const,
+  route: "/novel"
+},
+{
+  id: "voice",
+  icon: Volume2,
+  title: "AI Voice",
+  description: "စာသားမှ အသံထုတ်ခြင်း။",
+  gradient: "amber" as const,
+  route: "/voice"
+},
+{
+  id: "creator",
+  icon: PenTool,
+  title: "Creator",
+  description: "မီဒီယာစီမံမှု ဖန်တီးခြင်း။",
+  gradient: "cyan" as const,
+  route: "/creator"
+}];
+
 type Tool = (typeof defaultTools)[number];
 
 // Type guard for tools with systemPrompt
@@ -143,22 +143,22 @@ const Index = () => {
   }, [isLightMode]);
 
   // Merge tool settings with default tools
-  const tools = defaultTools
-    .map((tool) => {
-      const setting = toolSettings.find((s) => s.tool_id === tool.id);
-      if (setting) {
-        return {
-          ...tool,
-          title: setting.title,
-          description: setting.description,
-        };
-      }
-      return tool;
-    })
-    .filter((tool) => {
-      const setting = toolSettings.find((s) => s.tool_id === tool.id);
-      return !setting || setting.is_enabled;
-    });
+  const tools = defaultTools.
+  map((tool) => {
+    const setting = toolSettings.find((s) => s.tool_id === tool.id);
+    if (setting) {
+      return {
+        ...tool,
+        title: setting.title,
+        description: setting.description
+      };
+    }
+    return tool;
+  }).
+  filter((tool) => {
+    const setting = toolSettings.find((s) => s.tool_id === tool.id);
+    return !setting || setting.is_enabled;
+  });
   const handleToolClick = (tool: Tool) => {
     const userPlan = profile?.plan || "free";
     const isPremium = userPlan === "premium";
@@ -188,7 +188,7 @@ const Index = () => {
       toast({
         title: "⚠️ Access Denied",
         description: reason,
-        variant: "destructive",
+        variant: "destructive"
       });
       return;
     }
@@ -201,13 +201,13 @@ const Index = () => {
         const promoCheck = checkPromotionAccess(
           tool.id,
           accessControl.promotionDailyLimit || 3,
-          accessControl.promotionToolCount || 3,
+          accessControl.promotionToolCount || 3
         );
         if (!promoCheck.allowed) {
           toast({
             title: "⚠️ Promotion Limit",
             description: promoCheck.reason,
-            variant: "destructive",
+            variant: "destructive"
           });
           return;
         }
@@ -226,72 +226,72 @@ const Index = () => {
     await signOut();
     toast({
       title: "👋 Logged Out",
-      description: "အောင်မြင်စွာ ထွက်လိုက်ပါပြီ",
+      description: "အောင်မြင်စွာ ထွက်လိုက်ပါပြီ"
     });
   };
-  const renderHomeContent = () => (
-    <>
+  const renderHomeContent = () =>
+  <>
       <GatewayBanner />
       <div className="mb-3 flex items-start justify-between">
         <button
-          onClick={() => setIsLightMode(!isLightMode)}
-          className="w-7 h-7 rounded-lg bg-card/60 border border-gold/20 flex items-center justify-center hover:bg-card transition-colors"
-          title={isLightMode ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
-        >
-          {isLightMode ? <Moon className="w-3.5 h-3.5 text-foreground" /> : <Sun className="w-3.5 h-3.5 text-amber-400" />}
+        onClick={() => setIsLightMode(!isLightMode)}
+        className="w-7 h-7 rounded-lg bg-card/60 border border-gold/20 flex items-center justify-center hover:bg-card transition-colors"
+        title={isLightMode ? 'Switch to Dark Mode' : 'Switch to Light Mode'}>
+
+          {isLightMode ? <Moon className="text-foreground w-[25px] h-[20px]" /> : <Sun className="w-3.5 h-3.5 text-amber-400" />}
         </button>
         <div className="flex items-center gap-1.5">
-          {isAuthenticated ? (
-            <>
+          {isAuthenticated ?
+        <>
               <div className="px-2 py-1 rounded-md bg-primary/10 border border-primary/20">
                 <span className="text-3xs text-primary font-medium">
                   {profile?.display_name || user?.email?.split("@")[0]}
                 </span>
               </div>
               <button
-                onClick={handleLogout}
-                className="w-6 h-6 rounded-md bg-secondary/40 border border-border/20 flex items-center justify-center hover:bg-destructive/20 transition-colors"
-              >
+            onClick={handleLogout}
+            className="w-6 h-6 rounded-md bg-secondary/40 border border-border/20 flex items-center justify-center hover:bg-destructive/20 transition-colors">
+
                 <LogOut className="w-3 h-3 text-muted-foreground" />
               </button>
-            </>
-          ) : (
-            <button
-              onClick={() => navigate("/login")}
-              className="flex items-center gap-1 px-2 py-1 rounded-md bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-colors"
-            >
+            </> :
+
+        <button
+          onClick={() => navigate("/login")}
+          className="flex items-center gap-1 px-2 py-1 rounded-md bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-colors">
+
               <User className="w-3 h-3 text-primary" />
               <span className="text-3xs text-primary font-medium">Login</span>
             </button>
-          )}
+        }
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3 sm:gap-4 md:gap-5 max-w-2xl mx-auto">
         {tools.map((tool) => {
-          const setting = toolSettings.find((s) => s.tool_id === tool.id);
-          const isPremiumTool = setting?.is_premium && !accessControl.freeMode;
-          return (
-            <div key={tool.id} className="relative">
-              {isAdmin && setting?.tier_limits && (
-                <ToolLimitsBadge tierLimits={setting.tier_limits} toolTitle={tool.title} />
-              )}
+        const setting = toolSettings.find((s) => s.tool_id === tool.id);
+        const isPremiumTool = setting?.is_premium && !accessControl.freeMode;
+        return (
+          <div key={tool.id} className="relative">
+              {isAdmin && setting?.tier_limits &&
+            <ToolLimitsBadge tierLimits={setting.tier_limits} toolTitle={tool.title} />
+            }
               <ToolCard
-                icon={tool.icon}
-                title={tool.title}
-                description={tool.description}
-                gradient={tool.gradient}
-                isPremium={isPremiumTool}
-                onClick={() => handleToolClick(tool)}
-              />
-            </div>
-          );
-        })}
+              icon={tool.icon}
+              title={tool.title}
+              description={tool.description}
+              gradient={tool.gradient}
+              isPremium={isPremiumTool}
+              onClick={() => handleToolClick(tool)} />
+
+            </div>);
+
+      })}
       </div>
-    </>
-  );
+    </>;
+
   const renderPremiumContent = () => <PlansView />;
-  const renderSettingsContent = () => (
-    <div className="space-y-2">
+  const renderSettingsContent = () =>
+  <div className="space-y-2">
       <h2 className="text-sm font-bold text-foreground mb-2">Settings</h2>
       <div className="space-y-1.5">
         {/* Theme Toggle */}
@@ -310,9 +310,9 @@ const Index = () => {
 
         {/* Contact */}
         <button
-          onClick={() => setShowContactDialog(true)}
-          className="w-full p-2.5 rounded-lg border border-primary/20 bg-card/50 text-left hover:bg-card transition-colors"
-        >
+        onClick={() => setShowContactDialog(true)}
+        className="w-full p-2.5 rounded-lg border border-primary/20 bg-card/50 text-left hover:bg-card transition-colors">
+
           <div className="flex items-center gap-2">
             <Phone className="w-4 h-4 text-primary" />
             <div>
@@ -324,9 +324,9 @@ const Index = () => {
 
         {/* Terms */}
         <button
-          onClick={() => navigate("/terms")}
-          className="w-full p-2.5 rounded-lg border border-border/30 bg-card/50 text-left hover:bg-card transition-colors"
-        >
+        onClick={() => navigate("/terms")}
+        className="w-full p-2.5 rounded-lg border border-border/30 bg-card/50 text-left hover:bg-card transition-colors">
+
           <div className="flex items-center gap-2">
             <FileCheck className="w-4 h-4 text-primary" />
             <div>
@@ -338,9 +338,9 @@ const Index = () => {
 
         {/* Privacy */}
         <button
-          onClick={() => navigate("/privacy")}
-          className="w-full p-2.5 rounded-lg border border-border/30 bg-card/50 text-left hover:bg-card transition-colors"
-        >
+        onClick={() => navigate("/privacy")}
+        className="w-full p-2.5 rounded-lg border border-border/30 bg-card/50 text-left hover:bg-card transition-colors">
+
           <div className="flex items-center gap-2">
             <Shield className="w-4 h-4 text-primary" />
             <div>
@@ -352,9 +352,9 @@ const Index = () => {
 
         {/* About */}
         <button
-          onClick={() => navigate("/about")}
-          className="w-full p-2.5 rounded-lg border border-border/30 bg-card/50 text-left hover:bg-card transition-colors"
-        >
+        onClick={() => navigate("/about")}
+        className="w-full p-2.5 rounded-lg border border-border/30 bg-card/50 text-left hover:bg-card transition-colors">
+
           <div className="flex items-center gap-2">
             <Info className="w-4 h-4 text-primary" />
             <div>
@@ -365,18 +365,18 @@ const Index = () => {
         </button>
 
         {/* Admin Panel - only visible to admins */}
-        {isAdmin && (
-          <button
-            onClick={() => navigate("/admin/login")}
-            className="w-full p-2.5 rounded-lg border border-gold/20 bg-card/50 text-left hover:bg-card transition-colors"
-          >
+        {isAdmin &&
+      <button
+        onClick={() => navigate("/admin/login")}
+        className="w-full p-2.5 rounded-lg border border-gold/20 bg-card/50 text-left hover:bg-card transition-colors">
+
             <h3 className="text-2xs font-semibold text-gold">Admin Panel</h3>
             <p className="text-3xs text-muted-foreground">Access admin dashboard</p>
           </button>
-        )}
+      }
 
-        {isAuthenticated && (
-          <>
+        {isAuthenticated &&
+      <>
             <AccountInfoCard />
             <div className="p-2.5 rounded-lg border border-border/30 bg-card/50">
               <h3 className="text-2xs font-semibold text-foreground">Account</h3>
@@ -385,15 +385,15 @@ const Index = () => {
               </p>
             </div>
           </>
-        )}
+      }
 
         <div className="p-2.5 rounded-lg border border-border/30 bg-card/50">
           <h3 className="text-2xs font-semibold text-foreground">Version</h3>
           <p className="text-3xs text-muted-foreground">App version 8.0</p>
         </div>
       </div>
-    </div>
-  );
+    </div>;
+
   return (
     <div className="min-h-screen premium-background pb-20 bg-secondary">
       {/* Light rays overlay */}
@@ -413,11 +413,11 @@ const Index = () => {
         isOpen={selectedTool !== null}
         onClose={() => setSelectedTool(null)}
         toolName={selectedTool?.title || ""}
-        systemPrompt={selectedTool && hasSystemPrompt(selectedTool) ? selectedTool.systemPrompt : ""}
-      />
+        systemPrompt={selectedTool && hasSystemPrompt(selectedTool) ? selectedTool.systemPrompt : ""} />
+
 
       <ContactDialog isOpen={showContactDialog} onClose={() => setShowContactDialog(false)} />
-    </div>
-  );
+    </div>);
+
 };
 export default Index;
