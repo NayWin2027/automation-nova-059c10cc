@@ -271,7 +271,7 @@ const TranslateView: React.FC = () => {
   if (!isAllowed) return null;
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-40 px-1 max-w-2xl mx-auto">
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-40 px-1 max-w-2xl mx-auto bg-blue-700">
       {/* 1. API Switcher (Syncopate Font) */}
       <div className="flex backdrop-blur-3xl p-1.5 rounded-[28px] border border-white/10 shadow-2xl max-w-sm mx-auto overflow-hidden bg-yellow-950">
         <button
