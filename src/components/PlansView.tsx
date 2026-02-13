@@ -279,7 +279,7 @@ const PlansView: React.FC = () => {
             <div className="relative border-b border-white/5 pb-4 flex justify-between items-end z-10">
               <div className="space-y-1">
                 <p className="font-bold text-slate-500 uppercase text-sm">Phone Number</p>
-                <p className="font-black text-white tracking-widest font-mono drop-shadow-md text-3xl">
+                <p className="font-black tracking-widest font-mono drop-shadow-md text-3xl text-neon-rose">
                   {data.waveNumber}
                 </p>
               </div>
@@ -304,8 +304,8 @@ const PlansView: React.FC = () => {
           <div className="bg-[#05070a] rounded-[40px] p-10 text-center space-y-6 border border-white/5 shadow-3xl relative overflow-hidden group">
             <div className="absolute inset-0 bg-blue-600/5 opacity-50 group-hover:opacity-100 transition-opacity"></div>
             <div className="space-y-2 relative z-10">
-              <h3 className="text-[14px] font-black text-blue-500 uppercase tracking-widest">SEND PAYMENT PROOF</h3>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-relaxed">
+              <h3 className="font-black text-blue-500 uppercase tracking-widest text-base">SEND PAYMENT PROOF</h3>
+              <p className="font-bold uppercase tracking-widest leading-relaxed text-neon-cyan text-base">
                 ငွေလွှဲပြီးပါက Screenshot နှင့်အတူ <br /> Messenger တွင် အကြောင်းကြားပေးပါ။
               </p>
             </div>
@@ -335,7 +335,7 @@ const PlansView: React.FC = () => {
                 <p className="font-black uppercase tracking-widest text-neon-rose text-base">KO YE SWAN</p>
               </div>
             </div>
-            <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.6em] relative z-10 group-hover:text-white transition-colors uppercase">
+            <p className="font-black text-blue-500 uppercase tracking-[0.6em] relative z-10 group-hover:text-white transition-colors uppercase text-base">
               TEAM ASSISTANCE
             </p>
           </div>
