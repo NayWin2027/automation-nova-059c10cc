@@ -544,7 +544,7 @@ const PlansView: React.FC = () => {
 
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-slate-900/40 border border-white/5 p-4 rounded-3xl space-y-1">
-            <p className="font-black uppercase tracking-widest text-sm text-primary-foreground">APP SHARED API</p>
+            <p className="font-black uppercase tracking-widest text-sm text-neon-rose">APP SHARED API</p>
             {isEditing ?
             <input
               value={editData?.pPlusAppApi}
@@ -705,7 +705,7 @@ const PlansView: React.FC = () => {
               className="bg-black/40 border border-white/10 rounded-lg p-2 text-xs font-black text-white w-full outline-none" /> :
 
 
-            <p className="font-black text-white text-base">{data.pAppApi}</p>
+            <p className="font-black text-white text-lg">{data.pAppApi}</p>
             }
           </div>
           <div className="bg-slate-900/40 border border-white/5 p-4 rounded-3xl space-y-1">
@@ -717,7 +717,7 @@ const PlansView: React.FC = () => {
               className="bg-black/40 border border-white/10 rounded-lg p-2 text-xs font-black text-white w-full outline-none" /> :
 
 
-            <p className="font-black text-white text-base">{data.pOwnApi}</p>
+            <p className="font-black text-white text-lg">{data.pOwnApi}</p>
             }
           </div>
         </div>
