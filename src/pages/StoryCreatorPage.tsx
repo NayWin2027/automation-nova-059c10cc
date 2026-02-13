@@ -896,7 +896,7 @@ const StoryView: React.FC = () => {
 
           {/* Phase Selector */}
           <div className="space-y-2">
-            <label className="font-black uppercase tracking-widest ml-1 text-base text-gold-light">
+            <label className="font-black uppercase tracking-widest ml-1 text-base text-white">
               CURRENT STORY PHASE
             </label>
             <div className="grid grid-cols-1 gap-2">
