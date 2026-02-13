@@ -106,7 +106,7 @@ const AccountInfoCard: React.FC = () => {
 
   return (
     <div className="space-y-2">
-      <h3 className="font-bold text-foreground flex items-center gap-1.5 text-sm">
+      <h3 className="font-bold text-foreground flex items-center gap-1.5 text-base">
         <Shield className="w-3.5 h-3.5 text-primary" />
         Account Information
       </h3>
@@ -116,8 +116,8 @@ const AccountInfoCard: React.FC = () => {
         <div className="flex items-center gap-2">
           <Hash className="w-3.5 h-3.5 text-primary/70" />
           <div>
-            <p className="text-3xs text-muted-foreground text-sm">ID No</p>
-            <p className="font-mono font-semibold text-foreground text-sm">{shortId}</p>
+            <p className="text-3xs text-base text-neon-rose">ID No</p>
+            <p className="font-mono font-semibold text-foreground text-base">{shortId}</p>
           </div>
         </div>
 
@@ -125,7 +125,7 @@ const AccountInfoCard: React.FC = () => {
         <div className="flex items-center gap-2">
           <Calendar className="w-3.5 h-3.5 text-primary/70" />
           <div>
-            <p className="text-3xs text-muted-foreground text-sm">Start Date</p>
+            <p className="text-3xs text-base text-neon-rose">Start Date</p>
             <p className="font-semibold text-foreground text-sm">{createdDate}</p>
           </div>
         </div>
@@ -134,8 +134,8 @@ const AccountInfoCard: React.FC = () => {
         <div className="flex items-center gap-2">
           <Coins className="w-3.5 h-3.5 text-primary" />
           <div>
-            <p className="text-3xs text-muted-foreground text-sm">Credit Balance</p>
-            <p className="font-bold text-primary text-sm">{profile.credits ?? 0} credits</p>
+            <p className="text-3xs text-base text-neon-rose">Credit Balance</p>
+            <p className="font-bold text-primary text-base">{profile.credits ?? 0} credits</p>
           </div>
         </div>
 
@@ -143,8 +143,8 @@ const AccountInfoCard: React.FC = () => {
         <div className="flex items-center gap-2">
           <Globe className="w-3.5 h-3.5 text-primary/70" />
           <div>
-            <p className="text-3xs text-muted-foreground text-sm">IP Address</p>
-            <p className="font-mono font-semibold text-foreground text-sm">{ipAddress || '...'}</p>
+            <p className="text-3xs text-base text-neon-rose">IP Address</p>
+            <p className="font-mono font-semibold text-foreground text-base">{ipAddress || '...'}</p>
           </div>
         </div>
 

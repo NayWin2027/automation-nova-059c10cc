@@ -292,7 +292,7 @@ const Index = () => {
   const renderPremiumContent = () => <PlansView />;
   const renderSettingsContent = () =>
   <div className="space-y-2">
-      <h2 className="text-sm font-bold text-foreground mb-2">Settings</h2>
+      <h2 className="font-bold text-foreground mb-2 text-lg">Settings</h2>
       <div className="space-y-1.5">
         {/* Theme Toggle */}
         <div className="w-full p-2.5 rounded-lg border border-gold/20 bg-card/50">
@@ -300,8 +300,8 @@ const Index = () => {
             <div className="flex items-center gap-2">
               {isLightMode ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-primary" />}
               <div>
-                <h3 className="font-semibold text-foreground text-sm">Appearance</h3>
-                <p className="text-3xs text-sm text-neon-rose">{isLightMode ? 'Light Mode' : 'Dark Mode'}</p>
+                <h3 className="font-semibold text-foreground text-base">Appearance</h3>
+                <p className="text-3xs text-neon-rose text-base">{isLightMode ? 'Light Mode' : 'Dark Mode'}</p>
               </div>
             </div>
             <Switch checked={isLightMode} onCheckedChange={setIsLightMode} />
@@ -316,8 +316,8 @@ const Index = () => {
           <div className="flex items-center gap-2">
             <Phone className="w-4 h-4 text-primary" />
             <div>
-              <h3 className="font-semibold text-foreground text-sm">Contact</h3>
-              <p className="text-3xs text-sm text-neon-amber">FB, Viber, Telegram, Messenger</p>
+              <h3 className="font-semibold text-foreground text-base">Contact</h3>
+              <p className="text-3xs text-neon-amber text-base">FB, Viber, Telegram, Messenger</p>
             </div>
           </div>
         </button>
@@ -330,8 +330,8 @@ const Index = () => {
           <div className="flex items-center gap-2">
             <FileCheck className="w-4 h-4 text-primary" />
             <div>
-              <h3 className="font-semibold text-foreground text-sm">Terms of Service</h3>
-              <p className="text-3xs text-sm text-neon-rose">အသုံးပြုမှု စည်းကမ်းချက်များ</p>
+              <h3 className="font-semibold text-foreground text-base">Terms of Service</h3>
+              <p className="text-3xs text-neon-rose text-base">အသုံးပြုမှု စည်းကမ်းချက်များ</p>
             </div>
           </div>
         </button>
@@ -344,8 +344,8 @@ const Index = () => {
           <div className="flex items-center gap-2">
             <Shield className="w-4 h-4 text-primary" />
             <div>
-              <h3 className="font-semibold text-foreground text-sm">Privacy Policy</h3>
-              <p className="text-3xs text-sm text-destructive">ကိုယ်ရေးလုံခြုံမှု မူဝါဒ</p>
+              <h3 className="font-semibold text-foreground text-base">Privacy Policy</h3>
+              <p className="text-3xs text-destructive text-base">ကိုယ်ရေးလုံခြုံမှု မူဝါဒ</p>
             </div>
           </div>
         </button>
@@ -358,8 +358,8 @@ const Index = () => {
           <div className="flex items-center gap-2">
             <Info className="w-4 h-4 text-primary" />
             <div>
-              <h3 className="font-semibold text-foreground text-sm">About</h3>
-              <p className="text-3xs text-sm text-sidebar-primary">App အကြောင်း</p>
+              <h3 className="font-semibold text-foreground text-base">About</h3>
+              <p className="text-3xs text-sidebar-primary text-base">App အကြောင်း</p>
             </div>
           </div>
         </button>
@@ -371,7 +371,7 @@ const Index = () => {
         className="w-full p-2.5 rounded-lg border border-gold/20 bg-card/50 text-left hover:bg-card transition-colors">
 
             <h3 className="font-semibold text-gold text-base">Admin Panel</h3>
-            <p className="text-3xs text-muted-foreground text-sm">Access admin dashboard</p>
+            <p className="text-3xs text-muted-foreground text-base">Access admin dashboard</p>
           </button>
       }
 
@@ -379,8 +379,8 @@ const Index = () => {
       <>
             <AccountInfoCard />
             <div className="p-2.5 rounded-lg border border-border/30 bg-card/50">
-              <h3 className="font-semibold text-foreground text-sm">Account</h3>
-              <p className="text-3xs text-sm text-primary">
+              <h3 className="font-semibold text-foreground text-base">Account</h3>
+              <p className="text-3xs text-primary text-base">
                 {profile?.email} • {profile?.plan?.toUpperCase()} Plan
               </p>
             </div>
@@ -388,8 +388,8 @@ const Index = () => {
       }
 
         <div className="p-2.5 rounded-lg border border-border/30 bg-card/50">
-          <h3 className="font-semibold text-foreground text-sm">Version</h3>
-          <p className="text-3xs text-sm text-gold">App version 8.0</p>
+          <h3 className="font-semibold text-foreground text-base">Version</h3>
+          <p className="text-3xs text-gold text-base">App version 8.0</p>
         </div>
       </div>
     </div>;
