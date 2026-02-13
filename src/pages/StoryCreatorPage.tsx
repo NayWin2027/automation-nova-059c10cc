@@ -613,7 +613,7 @@ const StoryView: React.FC = () => {
 
         {/* Novel Title */}
         <div className="space-y-2">
-          <label className="font-black uppercase tracking-widest ml-1 drop-shadow-sm text-neon-rose text-lg">
+          <label className="font-black uppercase tracking-widest ml-1 drop-shadow-sm text-neon-rose text-base">
             NOVEL TITLE
           </label>
           <input
@@ -627,7 +627,7 @@ const StoryView: React.FC = () => {
 
         {/* Language */}
         <div className="space-y-2">
-          <label className="font-black uppercase tracking-widest ml-1 drop-shadow-sm text-neon-rose text-lg">
+          <label className="font-black uppercase tracking-widest ml-1 drop-shadow-sm text-neon-rose text-base">
             WRITING LANGUAGE
           </label>
           <div className="relative">
@@ -649,7 +649,7 @@ const StoryView: React.FC = () => {
         {/* Genres */}
         <div className="space-y-3">
           <div className="flex justify-between items-center px-1">
-            <label className="font-black uppercase tracking-widest drop-shadow-sm text-neon-rose text-xl">
+            <label className="font-black uppercase tracking-widest drop-shadow-sm text-neon-rose text-base">
               STORY GENRES
             </label>
             <button
@@ -665,7 +665,7 @@ const StoryView: React.FC = () => {
             <button
               key={genre}
               onClick={() => toggleGenre(genre)}
-              className={`px-4 py-2 rounded-xl text-[8px] font-black transition-all border ${selectedGenres.includes(genre) ? "jewel-sapphire border-transparent text-white shadow-lg" : "bg-black/40 border-white/5 text-slate-300 hover:text-slate-200"}`}>
+              className={`px-4 py-2 rounded-xl text-sm font-black transition-all border ${selectedGenres.includes(genre) ? "jewel-sapphire border-transparent text-white shadow-lg" : "bg-black/40 border-white/5 text-slate-300 hover:text-slate-200"}`}>
 
                 {genre}
               </button>
@@ -675,19 +675,19 @@ const StoryView: React.FC = () => {
 
         {/* Author Style */}
         <div className="space-y-3">
-          <label className="font-black uppercase tracking-widest ml-1 drop-shadow-sm text-neon-rose text-lg">
+          <label className="font-black uppercase tracking-widest ml-1 drop-shadow-sm text-neon-rose text-base">
             WRITING STYLE
           </label>
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => setAuthorStyle("master")}
-              className={`py-4 rounded-[20px] font-black text-[8px] uppercase border transition-all ${authorStyle === "master" ? "jewel-sapphire text-white border-transparent shadow-lg" : "bg-black/40 text-slate-300 border-white/5"}`}>
+              className={`py-4 rounded-[20px] font-black text-sm uppercase border transition-all ${authorStyle === "master" ? "jewel-sapphire text-white border-transparent shadow-lg" : "bg-black/40 text-slate-300 border-white/5"}`}>
 
               MASTER STORYTELLER
             </button>
             <button
               onClick={() => setAuthorStyle("modern")}
-              className={`py-4 rounded-[20px] font-black text-[8px] uppercase border transition-all ${authorStyle === "modern" ? "jewel-emerald text-white border-transparent shadow-lg" : "bg-black/40 text-slate-300 border-white/5"}`}>
+              className={`py-4 rounded-[20px] font-black text-sm uppercase border transition-all ${authorStyle === "modern" ? "jewel-emerald text-white border-transparent shadow-lg" : "bg-black/40 text-slate-300 border-white/5"}`}>
 
               MODERN (စကားပြော)
             </button>
@@ -697,7 +697,7 @@ const StoryView: React.FC = () => {
         {/* Character Cast */}
         <div className="bg-[#05070a]/50 rounded-[32px] p-6 space-y-4 border border-white/5 shadow-inner">
           <div className="flex justify-between items-center">
-            <h4 className="font-black text-blue-300 uppercase tracking-widest text-lg">CHARACTER CAST & EXTRAS</h4>
+            <h4 className="font-black text-blue-300 uppercase tracking-widest text-sm">CHARACTER CAST & EXTRAS</h4>
             <div className="flex items-center gap-2">
               <span className="font-black uppercase text-base text-neon-rose">TOTAL:</span>
               <input
@@ -751,7 +751,7 @@ const StoryView: React.FC = () => {
                 {/* Top Row: Type | Name | Delete */}
                 <div className="flex items-center gap-2">
                   <span
-                  className={`px-2 py-1 rounded-lg text-[6px] font-black uppercase shadow-md tracking-wider w-16 text-center shrink-0 ${getCharColor(char.type)}`}>
+                  className={`px-2 py-1 rounded-lg text-xs font-black uppercase shadow-md tracking-wider w-auto text-center shrink-0 ${getCharColor(char.type)}`}>
 
                     {char.type}
                   </span>
@@ -762,7 +762,7 @@ const StoryView: React.FC = () => {
                   setCharacters(characters.map((c) => c.id === char.id ? { ...c, name: e.target.value } : c))
                   }
                   placeholder={char.type === "Extra" ? "Group Name..." : "Name..."}
-                  className="flex-1 bg-transparent border-none focus:ring-0 text-[10px] font-bold text-white placeholder:text-slate-500" />
+                  className="flex-1 bg-transparent border-none focus:ring-0 text-base font-bold text-white placeholder:text-slate-500" />
 
                   <button
                   onClick={() => removeCharacter(char.id)}
@@ -777,7 +777,7 @@ const StoryView: React.FC = () => {
                   <select
                   value={char.archetype}
                   onChange={(e) => changeArchetype(char.id, e.target.value as Archetype)}
-                  className="flex-1 bg-slate-900/50 border border-white/10 rounded-lg py-1 px-2 text-[8px] font-black outline-none focus:border-blue-500/50 text-neon-rose">
+                  className="flex-1 bg-slate-900/50 border border-white/10 rounded-lg py-1 px-2 text-sm font-black outline-none focus:border-blue-500/50 text-neon-rose">
 
                     <option value="CLASSIC">Classic Hero (Romantic/Good)</option>
                     <option value="ROUGH">Rough/Wild (Hard but Not Evil)</option>
@@ -787,7 +787,7 @@ const StoryView: React.FC = () => {
 
                   <button
                   onClick={() => toggleGender(char.id)}
-                  className={`w-8 h-6 rounded-lg text-[7px] font-black flex items-center justify-center transition-colors uppercase shrink-0 ${char.gender === "Male" ? "bg-blue-500/20 text-blue-400" : "bg-pink-500/20 text-pink-400"}`}>
+                  className={`w-8 h-8 rounded-lg text-xs font-black flex items-center justify-center transition-colors uppercase shrink-0 ${char.gender === "Male" ? "bg-blue-500/20 text-blue-400" : "bg-pink-500/20 text-pink-400"}`}>
 
                     {char.gender === "Male" ? "M" : "F"}
                   </button>
@@ -824,13 +824,13 @@ const StoryView: React.FC = () => {
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="font-black uppercase tracking-widest ml-1 text-base text-neon-cyan">
+              <label className="font-black text-slate-300 uppercase tracking-widest ml-1 text-base">
                 ENDING STYLE
               </label>
               <select
                 value={endingStyle}
                 onChange={(e) => setEndingStyle(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-[9px] font-bold text-white outline-none">
+                className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-sm font-bold text-white outline-none">
 
                 {ENDING_STYLES.map((s) =>
                 <option key={s} value={s}>
@@ -846,7 +846,7 @@ const StoryView: React.FC = () => {
               <select
                 value={pov}
                 onChange={(e) => setPov(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-[9px] font-bold text-white outline-none">
+                className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-sm font-bold text-white outline-none">
 
                 {POVS.map((p) =>
                 <option key={p} value={p}>
@@ -856,11 +856,11 @@ const StoryView: React.FC = () => {
               </select>
             </div>
             <div className="space-y-1">
-              <label className="font-black uppercase tracking-widest ml-1 text-sm text-neon-cyan">ATMOSPHERE</label>
+              <label className="font-black text-slate-400 uppercase tracking-widest ml-1 text-base">ATMOSPHERE</label>
               <select
                 value={atmosphere}
                 onChange={(e) => setAtmosphere(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-[9px] font-bold text-white outline-none">
+                className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-sm font-bold text-white outline-none">
 
                 {ATMOSPHERES.map((a) =>
                 <option key={a} value={a}>
@@ -870,13 +870,13 @@ const StoryView: React.FC = () => {
               </select>
             </div>
             <div className="space-y-1">
-              <label className="font-black uppercase tracking-widest ml-1 text-base text-neon-rose">
+              <label className="font-black text-slate-400 uppercase tracking-widest ml-1 text-base">
                 STORY PACE (အသွားအလာ)
               </label>
               <select
                 value={pace}
                 onChange={(e) => setPace(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-[9px] font-bold text-white outline-none">
+                className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-sm font-bold text-white outline-none">
 
                 {PACING.map((p) =>
                 <option key={p} value={p}>
@@ -907,7 +907,7 @@ const StoryView: React.FC = () => {
                 className={`p-3 rounded-xl text-left border transition-all ${storyPhase === p.id ? "bg-purple-600/20 border-purple-500 shadow-lg" : "bg-black/30 border-white/5 text-slate-500"}`}>
 
                   <span
-                  className={`text-[9px] font-black uppercase ${storyPhase === p.id ? "text-white" : "text-slate-400"}`}>
+                  className={`text-sm font-black uppercase ${storyPhase === p.id ? "text-white" : "text-slate-400"}`}>
 
                     {p.label}
                   </span>
@@ -918,7 +918,7 @@ const StoryView: React.FC = () => {
 
           {/* Plot Focus / Twist Selector (Multi-Select) */}
           <div className="space-y-2">
-            <label className="font-black uppercase tracking-widest ml-1 text-white text-base">
+            <label className="font-black uppercase tracking-widest ml-1 text-sm text-white">
               PLOT FOCUS (SELECT MULTIPLE)
             </label>
             <div className="flex flex-wrap gap-2">
@@ -926,7 +926,7 @@ const StoryView: React.FC = () => {
               <button
                 key={f.id}
                 onClick={() => toggleFocus(f.id)}
-                className={`px-3 py-2 rounded-xl text-[8px] font-black uppercase border transition-all ${selectedFocus.includes(f.id) ? "bg-rose-600 text-white border-rose-500 shadow-lg" : "bg-black/30 border-white/5 text-slate-500"}`}>
+                className={`px-3 py-2 rounded-xl text-sm font-black uppercase border transition-all ${selectedFocus.includes(f.id) ? "bg-rose-600 text-white border-rose-500 shadow-lg" : "bg-black/30 border-white/5 text-slate-500"}`}>
 
                   {f.label}
                 </button>
