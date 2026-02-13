@@ -380,7 +380,7 @@ const Index = () => {
             <AccountInfoCard />
             <div className="p-2.5 rounded-lg border border-border/30 bg-card/50">
               <h3 className="font-semibold text-foreground text-base">Account</h3>
-              <p className="text-3xs text-primary text-base">
+              <p className="text-3xs text-base text-gold-light">
                 {profile?.email} • {profile?.plan?.toUpperCase()} Plan
               </p>
             </div>
