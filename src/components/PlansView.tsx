@@ -493,7 +493,7 @@ const PlansView: React.FC = () => {
             </div> :
 
           <h3
-            className="font-black tracking-tight"
+            className="font-black tracking-tight text-3xl text-gold"
             style={{ color: data.pPlusTitleColor, fontSize: data.pPlusTitleSize + "px" }}>
 
               {data.pPlusTitle}
@@ -646,7 +646,7 @@ const PlansView: React.FC = () => {
             </div> :
 
           <h3
-            className="font-black tracking-tight text-neon-rose text-3xl"
+            className="font-black tracking-tight text-3xl text-neon-rose"
             style={{ color: data.pTitleColor, fontSize: data.pTitleSize + "px" }}>
 
               {data.pTitle}
@@ -687,7 +687,7 @@ const PlansView: React.FC = () => {
             </div> :
 
           <p
-            className="font-black tracking-tight text-sidebar-primary text-xl"
+            className="font-black tracking-tight text-xl text-neon-cyan"
             style={{ color: data.pPriceColor, fontSize: data.pPriceSize + "px" }}>
 
               {data.pPrice}
