@@ -1057,7 +1057,7 @@ const PlansView: React.FC = () => {
             </div> :
 
           <p
-            className="font-bold leading-relaxed text-lg"
+            className="font-bold leading-relaxed text-xl"
             style={{ color: data.recTextColor, fontSize: data.recTextSize + "px" }}>
 
               {data.recText}
