@@ -371,7 +371,7 @@ const Index = () => {
         className="w-full p-2.5 rounded-lg border border-gold/20 bg-card/50 text-left hover:bg-card transition-colors">
 
             <h3 className="font-semibold text-gold text-base">Admin Panel</h3>
-            <p className="text-3xs text-muted-foreground text-base">Access admin dashboard</p>
+            <p className="text-3xs text-base text-neon-cyan">Access admin dashboard</p>
           </button>
       }
 
