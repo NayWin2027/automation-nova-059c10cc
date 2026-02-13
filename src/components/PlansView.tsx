@@ -258,8 +258,8 @@ const PlansView: React.FC = () => {
               </button>
             </div>
             <div className="flex justify-between items-center z-10">
-              <p className="text-[11px] font-black text-slate-400 tracking-widest">{data.kpayName}</p>
-              <span className="text-[8px] font-bold text-cyan-500/50 uppercase">Verified Account</span>
+              <p className="text-[11px] font-black tracking-widest text-gold">{data.kpayName}</p>
+              <span className="font-bold text-cyan-500/50 uppercase text-base">Verified Account</span>
             </div>
             <div className="absolute -bottom-12 -right-12 w-32 h-32 bg-cyan-500/5 blur-3xl rounded-full"></div>
           </div>
@@ -294,7 +294,7 @@ const PlansView: React.FC = () => {
               </button>
             </div>
             <div className="flex justify-between items-center z-10">
-              <p className="font-black text-slate-400 tracking-widest text-base">{data.waveName}</p>
+              <p className="font-black tracking-widest text-base text-gold">{data.waveName}</p>
               <span className="font-bold text-amber-500/50 uppercase text-base">Verified Account</span>
             </div>
             <div className="absolute -bottom-12 -right-12 w-32 h-32 bg-amber-500/5 blur-3xl rounded-full"></div>
