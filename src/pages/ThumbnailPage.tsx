@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
+import { useApiAccess } from "@/hooks/useApiAccess";
 import { generateThumbnail } from "../services/geminiService";
 import { useNavigate } from "react-router-dom";
 import { useSecureApiKey } from "../hooks/useSecureApiKey";
@@ -381,6 +382,7 @@ const LayerControl: React.FC<any> = ({
 const ThumbnailView: React.FC = () => {
   const navigate = useNavigate();
   const { isAllowed, isLoading: authLoading } = useAuthGuard('thumbnail');
+  const { appApiAllowed, isLoading: accessLoading } = useApiAccess();
   const { apiKey, setApiKey } = useSecureApiKey("master_thumbnail_api_key");
   const [genMode, setGenMode] = useState<"AUTO" | "REF">("AUTO");
   const [selectedRatio, setSelectedRatio] = useState<AspectRatio>("16:9");
@@ -759,6 +761,16 @@ const ThumbnailView: React.FC = () => {
 
   const handleGenerate = async () => {
     if (!context && !h1) return alert("Vision သို့မဟုတ် Headline တစ်ခုခု အရင်ထည့်ပေးပါ။");
+    
+    // Determine if using own API key
+    const isOwnApi = !!apiKey?.trim();
+    
+    // Block free users from App API when not allowed
+    if (!isOwnApi && !appApiAllowed) {
+      toast.error("Free/Guest users များသည် App API သုံးခွင့်မရှိပါ။ Own API Key ထည့်ပေးပါ။");
+      return;
+    }
+    
     setLoading(true);
     try {
       const imgUrl = await generateThumbnail(context || h1, apiKey || undefined, {

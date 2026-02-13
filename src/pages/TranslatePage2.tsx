@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
+import { useApiAccess } from "@/hooks/useApiAccess";
 import { translateText } from "../services/geminiService";
 import { generateOwnApiText, getOwnApiErrorMessage } from "../services/ownApiService";
 import { useSecureApiKey } from "../hooks/useSecureApiKey";
@@ -158,6 +159,7 @@ const EMOTIONS = [
 
 const TranslateView: React.FC = () => {
   const { isAllowed, isLoading: authLoading } = useAuthGuard('translate');
+  const { appApiAllowed, ownApiAllowed, appApiReason, defaultApiMode, isLoading: accessLoading } = useApiAccess();
   const [apiType, setApiType] = useState<ApiType>("app");
   const { apiKey, setApiKey } = useSecureApiKey("master_translate_api_key");
   const [text, setText] = useState("");
@@ -185,6 +187,17 @@ const TranslateView: React.FC = () => {
     setSelectedTier(tierIndex);
     setTierLocked(true);
   }, [charCount, apiType]);
+
+  // Auto-select available API mode based on access control
+  React.useEffect(() => {
+    if (!accessLoading) {
+      if (!appApiAllowed && ownApiAllowed) {
+        setApiType("own");
+      } else if (appApiAllowed && !ownApiAllowed) {
+        setApiType("app");
+      }
+    }
+  }, [appApiAllowed, ownApiAllowed, accessLoading]);
 
   // Gift Features
   const [selectedEmotion, setSelectedEmotion] = useState("PROFESSIONAL");
@@ -275,8 +288,11 @@ const TranslateView: React.FC = () => {
       {/* 1. API Switcher (Syncopate Font) */}
       <div className="flex backdrop-blur-3xl p-1.5 rounded-[28px] border border-white/10 shadow-2xl max-w-sm mx-auto overflow-hidden bg-yellow-950">
         <button
-          onClick={() => setApiType("app")}
+          onClick={() => appApiAllowed && setApiType("app")}
+          disabled={!appApiAllowed}
+          title={appApiReason || ""}
           className={`flex-1 py-3.5 rounded-2xl premium-font text-[8px] font-bold transition-all flex items-center justify-center gap-2 ${
+          !appApiAllowed ? "opacity-40 cursor-not-allowed text-slate-500" :
           apiType === "app" ?
           "jewel-sapphire jewel-surface text-white shadow-xl scale-105" :
           "text-slate-400 hover:text-slate-200"}`
