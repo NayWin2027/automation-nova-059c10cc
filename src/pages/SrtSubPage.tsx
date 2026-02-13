@@ -291,7 +291,7 @@ const SrtTranslatorView: React.FC = () => {
       {/* 3. MAIN TRANSLATOR INTERFACE */}
       <div className="neon-glass rounded-[48px] p-8 space-y-8 border border-white/10 shadow-3xl relative overflow-hidden">
         <h2 className="font-black uppercase tracking-[0.4em] text-center text-2xl text-neon-amber">SRT TRANSLATOR
-          <span className="text-white text-2xl">TRANSLATOR</span>
+          <span className="text-white text-2xl"></span>
         </h2>
 
         {!fileContent ?
