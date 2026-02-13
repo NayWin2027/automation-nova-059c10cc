@@ -26,22 +26,22 @@ const AccountInfoCard: React.FC = () => {
 
     const fetchData = async () => {
       // Fetch profile created_at
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('created_at')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      const { data: profileData } = await supabase.
+      from('profiles').
+      select('created_at').
+      eq('user_id', user.id).
+      maybeSingle();
 
       if (profileData?.created_at) {
         setAccountCreatedAt(profileData.created_at);
       }
 
       // Fetch devices
-      const { data: deviceData } = await supabase
-        .from('user_devices')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('last_used_at', { ascending: false });
+      const { data: deviceData } = await supabase.
+      from('user_devices').
+      select('*').
+      eq('user_id', user.id).
+      order('last_used_at', { ascending: false });
 
       if (deviceData) {
         setDevices(deviceData as DeviceInfo[]);
@@ -49,10 +49,10 @@ const AccountInfoCard: React.FC = () => {
 
       // Fetch real IP address with fallbacks
       const ipApis = [
-        { url: 'https://api.ipify.org?format=json', key: 'ip' },
-        { url: 'https://api.my-ip.io/v2/ip.json', key: 'ip' },
-        { url: 'https://ipinfo.io/json', key: 'ip' },
-      ];
+      { url: 'https://api.ipify.org?format=json', key: 'ip' },
+      { url: 'https://api.my-ip.io/v2/ip.json', key: 'ip' },
+      { url: 'https://ipinfo.io/json', key: 'ip' }];
+
       let ipFound = false;
       for (const api of ipApis) {
         try {
@@ -85,17 +85,17 @@ const AccountInfoCard: React.FC = () => {
           <div className="h-3 bg-muted/20 rounded w-2/3" />
           <div className="h-3 bg-muted/20 rounded w-1/2" />
         </div>
-      </div>
-    );
+      </div>);
+
   }
 
-  const createdDate = accountCreatedAt
-    ? new Date(accountCreatedAt).toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      })
-    : 'N/A';
+  const createdDate = accountCreatedAt ?
+  new Date(accountCreatedAt).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  }) :
+  'N/A';
 
   const shortId = profile.id?.slice(0, 8).toUpperCase() || 'N/A';
 
@@ -106,7 +106,7 @@ const AccountInfoCard: React.FC = () => {
 
   return (
     <div className="space-y-2">
-      <h3 className="text-2xs font-bold text-foreground flex items-center gap-1.5">
+      <h3 className="font-bold text-foreground flex items-center gap-1.5 text-sm">
         <Shield className="w-3.5 h-3.5 text-primary" />
         Account Information
       </h3>
@@ -116,8 +116,8 @@ const AccountInfoCard: React.FC = () => {
         <div className="flex items-center gap-2">
           <Hash className="w-3.5 h-3.5 text-primary/70" />
           <div>
-            <p className="text-3xs text-muted-foreground">ID No</p>
-            <p className="text-2xs font-mono font-semibold text-foreground">{shortId}</p>
+            <p className="text-3xs text-muted-foreground text-sm">ID No</p>
+            <p className="font-mono font-semibold text-foreground text-sm">{shortId}</p>
           </div>
         </div>
 
@@ -125,8 +125,8 @@ const AccountInfoCard: React.FC = () => {
         <div className="flex items-center gap-2">
           <Calendar className="w-3.5 h-3.5 text-primary/70" />
           <div>
-            <p className="text-3xs text-muted-foreground">Start Date</p>
-            <p className="text-2xs font-semibold text-foreground">{createdDate}</p>
+            <p className="text-3xs text-muted-foreground text-sm">Start Date</p>
+            <p className="font-semibold text-foreground text-sm">{createdDate}</p>
           </div>
         </div>
 
@@ -134,8 +134,8 @@ const AccountInfoCard: React.FC = () => {
         <div className="flex items-center gap-2">
           <Coins className="w-3.5 h-3.5 text-primary" />
           <div>
-            <p className="text-3xs text-muted-foreground">Credit Balance</p>
-            <p className="text-2xs font-bold text-primary">{profile.credits ?? 0} credits</p>
+            <p className="text-3xs text-muted-foreground text-sm">Credit Balance</p>
+            <p className="font-bold text-primary text-sm">{profile.credits ?? 0} credits</p>
           </div>
         </div>
 
@@ -143,41 +143,41 @@ const AccountInfoCard: React.FC = () => {
         <div className="flex items-center gap-2">
           <Globe className="w-3.5 h-3.5 text-primary/70" />
           <div>
-            <p className="text-3xs text-muted-foreground">IP Address</p>
-            <p className="text-2xs font-mono font-semibold text-foreground">{ipAddress || '...'}</p>
+            <p className="text-3xs text-muted-foreground text-sm">IP Address</p>
+            <p className="font-mono font-semibold text-foreground text-sm">{ipAddress || '...'}</p>
           </div>
         </div>
 
         {/* Devices */}
-        {devices.length > 0 && (
-          <div className="pt-1 border-t border-border/20">
+        {devices.length > 0 &&
+        <div className="pt-1 border-t border-border/20">
             <div className="flex items-center gap-1.5 mb-1.5">
               <Smartphone className="w-3.5 h-3.5 text-primary/70" />
               <p className="text-3xs text-muted-foreground">Devices ({devices.length})</p>
             </div>
             <div className="space-y-1">
-              {devices.map((d) => (
-                <div
-                  key={d.id}
-                  className="flex items-center justify-between px-2 py-1 rounded-md bg-muted/10 border border-border/10"
-                >
+              {devices.map((d) =>
+            <div
+              key={d.id}
+              className="flex items-center justify-between px-2 py-1 rounded-md bg-muted/10 border border-border/10">
+
                   <span className="text-3xs text-foreground truncate max-w-[60%]">
                     {parseDeviceName(d.device_info)}
                   </span>
                   <span className="text-3xs text-muted-foreground">
                     {new Date(d.last_used_at).toLocaleDateString('en-GB', {
-                      day: '2-digit',
-                      month: 'short',
-                    })}
+                  day: '2-digit',
+                  month: 'short'
+                })}
                   </span>
                 </div>
-              ))}
+            )}
             </div>
           </div>
-        )}
+        }
       </div>
-    </div>
-  );
+    </div>);
+
 };
 
 export default AccountInfoCard;

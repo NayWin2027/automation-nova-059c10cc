@@ -300,8 +300,8 @@ const Index = () => {
             <div className="flex items-center gap-2">
               {isLightMode ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-primary" />}
               <div>
-                <h3 className="text-2xs font-semibold text-foreground">Appearance</h3>
-                <p className="text-3xs text-muted-foreground">{isLightMode ? 'Light Mode' : 'Dark Mode'}</p>
+                <h3 className="font-semibold text-foreground text-sm">Appearance</h3>
+                <p className="text-3xs text-muted-foreground text-sm">{isLightMode ? 'Light Mode' : 'Dark Mode'}</p>
               </div>
             </div>
             <Switch checked={isLightMode} onCheckedChange={setIsLightMode} />
@@ -316,8 +316,8 @@ const Index = () => {
           <div className="flex items-center gap-2">
             <Phone className="w-4 h-4 text-primary" />
             <div>
-              <h3 className="text-2xs font-semibold text-foreground">Contact</h3>
-              <p className="text-3xs text-muted-foreground">FB, Viber, Telegram, Messenger</p>
+              <h3 className="font-semibold text-foreground text-sm">Contact</h3>
+              <p className="text-3xs text-muted-foreground text-sm">FB, Viber, Telegram, Messenger</p>
             </div>
           </div>
         </button>
@@ -330,8 +330,8 @@ const Index = () => {
           <div className="flex items-center gap-2">
             <FileCheck className="w-4 h-4 text-primary" />
             <div>
-              <h3 className="text-2xs font-semibold text-foreground">Terms of Service</h3>
-              <p className="text-3xs text-muted-foreground">အသုံးပြုမှု စည်းကမ်းချက်များ</p>
+              <h3 className="font-semibold text-foreground text-sm">Terms of Service</h3>
+              <p className="text-3xs text-muted-foreground text-sm">အသုံးပြုမှု စည်းကမ်းချက်များ</p>
             </div>
           </div>
         </button>
@@ -344,8 +344,8 @@ const Index = () => {
           <div className="flex items-center gap-2">
             <Shield className="w-4 h-4 text-primary" />
             <div>
-              <h3 className="text-2xs font-semibold text-foreground">Privacy Policy</h3>
-              <p className="text-3xs text-muted-foreground">ကိုယ်ရေးလုံခြုံမှု မူဝါဒ</p>
+              <h3 className="font-semibold text-foreground text-sm">Privacy Policy</h3>
+              <p className="text-3xs text-muted-foreground text-sm">ကိုယ်ရေးလုံခြုံမှု မူဝါဒ</p>
             </div>
           </div>
         </button>
@@ -358,8 +358,8 @@ const Index = () => {
           <div className="flex items-center gap-2">
             <Info className="w-4 h-4 text-primary" />
             <div>
-              <h3 className="text-2xs font-semibold text-foreground">About</h3>
-              <p className="text-3xs text-muted-foreground">App အကြောင်း</p>
+              <h3 className="font-semibold text-foreground text-sm">About</h3>
+              <p className="text-3xs text-muted-foreground text-sm">App အကြောင်း</p>
             </div>
           </div>
         </button>
@@ -370,8 +370,8 @@ const Index = () => {
         onClick={() => navigate("/admin/login")}
         className="w-full p-2.5 rounded-lg border border-gold/20 bg-card/50 text-left hover:bg-card transition-colors">
 
-            <h3 className="text-2xs font-semibold text-gold">Admin Panel</h3>
-            <p className="text-3xs text-muted-foreground">Access admin dashboard</p>
+            <h3 className="font-semibold text-gold text-base">Admin Panel</h3>
+            <p className="text-3xs text-muted-foreground text-sm">Access admin dashboard</p>
           </button>
       }
 
@@ -379,8 +379,8 @@ const Index = () => {
       <>
             <AccountInfoCard />
             <div className="p-2.5 rounded-lg border border-border/30 bg-card/50">
-              <h3 className="text-2xs font-semibold text-foreground">Account</h3>
-              <p className="text-3xs text-muted-foreground">
+              <h3 className="font-semibold text-foreground text-sm">Account</h3>
+              <p className="text-3xs text-muted-foreground text-sm">
                 {profile?.email} • {profile?.plan?.toUpperCase()} Plan
               </p>
             </div>
@@ -388,8 +388,8 @@ const Index = () => {
       }
 
         <div className="p-2.5 rounded-lg border border-border/30 bg-card/50">
-          <h3 className="text-2xs font-semibold text-foreground">Version</h3>
-          <p className="text-3xs text-muted-foreground">App version 8.0</p>
+          <h3 className="font-semibold text-foreground text-sm">Version</h3>
+          <p className="text-3xs text-muted-foreground text-sm">App version 8.0</p>
         </div>
       </div>
     </div>;
