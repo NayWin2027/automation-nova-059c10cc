@@ -787,7 +787,7 @@ const PlansView: React.FC = () => {
             </div> :
 
           <span
-            className="bg-[#020617] px-8 text-[11px] font-black uppercase tracking-[0.5em]"
+            className="bg-[#020617] px-8 font-black uppercase tracking-[0.5em] text-lg"
             style={{ color: data.topUpTitleColor }}>
 
               {data.topUpTitle}
