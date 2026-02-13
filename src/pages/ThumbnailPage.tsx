@@ -416,6 +416,7 @@ const ThumbnailView: React.FC = () => {
   const [bgImage, setBgImage] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [fontsLoaded, setFontsLoaded] = useState(false);
   const bgImgRef = useRef<HTMLImageElement | null>(null);
   const logoImgRef = useRef<HTMLImageElement | null>(null);
 
@@ -658,6 +659,19 @@ const ThumbnailView: React.FC = () => {
     }
   };
 
+  // Preload elite fonts for canvas rendering
+  useEffect(() => {
+    const fontFamilies = ELITE_FONTS.map(f => f.id);
+    const loadPromises = fontFamilies.map(family => 
+      document.fonts.load(`900 48px "${family}"`)
+    );
+    Promise.all(loadPromises).then(() => {
+      setFontsLoaded(true);
+    }).catch(() => {
+      setFontsLoaded(true); // proceed anyway
+    });
+  }, []);
+
   useEffect(() => {
     const timer = setTimeout(drawThumbnail, 150);
     return () => clearTimeout(timer);
@@ -684,7 +698,8 @@ const ThumbnailView: React.FC = () => {
   descOffset,
   descSize,
   selectedRatio,
-  bgImage]
+  bgImage,
+  fontsLoaded]
   );
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: "REF" | "LOGO") => {
