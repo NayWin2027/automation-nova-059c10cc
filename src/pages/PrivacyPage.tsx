@@ -59,7 +59,7 @@ const PrivacyPolicyView: React.FC = () => {
         <div className="absolute inset-0 bg-gradient-to-br from-blue-500 via-indigo-700 to-purple-800 opacity-90"></div>
         <div className="relative z-10 p-12 text-center space-y-2">
           <h2 className="text-4xl font-black text-white tracking-tighter uppercase drop-shadow-lg">{t.header}</h2>
-          <p className="text-[10px] font-bold text-blue-200 uppercase tracking-[0.3em] opacity-80">{t.subHeader}</p>
+          <p className="font-bold text-blue-200 uppercase tracking-[0.3em] opacity-80 text-lg">{t.subHeader}</p>
         </div>
 
         {/* Compact Language Toggle */}
