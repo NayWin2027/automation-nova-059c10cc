@@ -712,13 +712,13 @@ const StoryView: React.FC = () => {
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => addCharacter("Protagonist")}
-              className="py-2.5 rounded-xl bg-blue-600/10 border border-blue-500/20 font-black text-blue-300 uppercase hover:bg-blue-600/20 transition-all text-xs">
+              className="py-2.5 rounded-xl bg-blue-600/10 border border-blue-500/20 font-black uppercase hover:bg-blue-600/20 transition-all text-xs text-neon-rose">
 
               + PROTAGONIST (ဇာတ်လိုက်)
             </button>
             <button
               onClick={() => addCharacter("Antagonist")}
-              className="py-2.5 rounded-xl bg-rose-600/10 border border-rose-500/20 font-black text-rose-300 uppercase hover:bg-rose-600/20 transition-all text-sm">
+              className="py-2.5 rounded-xl bg-rose-600/10 border border-rose-500/20 font-black uppercase hover:bg-rose-600/20 transition-all text-sm text-orange-600">
 
               + ANTAGONIST (ဗီလိန်)
             </button>
@@ -730,7 +730,7 @@ const StoryView: React.FC = () => {
             </button>
             <button
               onClick={() => addCharacter("Extra")}
-              className="py-2.5 rounded-xl bg-slate-600/10 border border-slate-500/20 font-black uppercase hover:bg-slate-600/20 transition-all text-sm text-black">
+              className="py-2.5 rounded-xl bg-slate-600/10 border border-slate-500/20 font-black uppercase hover:bg-slate-600/20 transition-all text-sm text-white">
 
               + EXTRA (ဖြတ်လျှောက်)
             </button>
