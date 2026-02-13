@@ -843,7 +843,7 @@ const PlansView: React.FC = () => {
 
             <>
                   <h4 className="text-xl font-black text-white">{pkg.credits} Credits</h4>
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{pkg.rate}</p>
+                  <p className="font-bold text-slate-500 uppercase tracking-widest text-base">{pkg.rate}</p>
                 </>
             }
             </div>
