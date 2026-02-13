@@ -712,7 +712,7 @@ const StoryView: React.FC = () => {
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => addCharacter("Protagonist")}
-              className="py-2.5 rounded-xl bg-blue-600/10 border border-blue-500/20 font-black uppercase hover:bg-blue-600/20 transition-all text-xs text-neon-rose">
+              className="py-2.5 rounded-xl bg-blue-600/10 border border-blue-500/20 font-black uppercase hover:bg-blue-600/20 transition-all text-neon-rose text-sm">
 
               + PROTAGONIST (ဇာတ်လိုက်)
             </button>
