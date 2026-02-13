@@ -280,11 +280,35 @@ function normalizeBase32Secret(input: string): string {
             secret: OTPAuth.Secret.fromBase32(normalizeBase32Secret(totpData.totp_secret)),
          });
  
-          const delta = totp.validate({ token: normalizedCode, window: 3 });
+          const delta = totp.validate({ token: normalizedCode, window: 5 });
  
          if (delta === null) {
+           // Drift detection - same as verify-setup
+           const driftDelta = totp.validate({ token: normalizedCode, window: 20 });
+           if (driftDelta !== null) {
+             const approxDriftSeconds = Math.abs(driftDelta) * 30;
+             console.log("admin-2fa verify-login drift-detected", {
+               userId,
+               driftSteps: driftDelta,
+               approxDriftSeconds,
+             });
+             return new Response(
+               JSON.stringify({
+                 success: false,
+                 error: "Code matched but your device time is out of sync. Please enable Automatic date & time on your phone and try again.",
+                 driftDetected: true,
+                 approxDriftSeconds,
+               }),
+               { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+             );
+           }
+
+           console.log("admin-2fa verify-login invalid", {
+             userId,
+             at: new Date().toISOString(),
+           });
            return new Response(
-             JSON.stringify({ success: false, error: "Invalid code" }),
+             JSON.stringify({ success: false, error: "Invalid code. Please make sure you're using the correct authenticator app and try again." }),
              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
            );
          }
