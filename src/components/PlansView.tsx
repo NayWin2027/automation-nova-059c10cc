@@ -231,7 +231,7 @@ const PlansView: React.FC = () => {
           {/* K Pay Card */}
           <div className="bg-[#0f172a] rounded-[32px] p-6 border border-cyan-500/20 space-y-4 shadow-2xl relative overflow-hidden group hover:border-cyan-500/50 transition-all">
             <div className="flex justify-between items-center relative z-10">
-              <p className="text-[11px] font-black text-cyan-400 uppercase tracking-[0.3em]">K PAY</p>
+              <p className="font-black text-cyan-400 uppercase tracking-[0.3em] text-xl">K PAY</p>
               <div className="h-10 w-10 rounded-xl bg-white p-1 shadow-lg">
                 <img
                   src="https://upload.wikimedia.org/wikipedia/commons/d/df/KBZ_Pay_Logo.png"
@@ -242,8 +242,8 @@ const PlansView: React.FC = () => {
             </div>
             <div className="relative border-b border-white/5 pb-4 flex justify-between items-end z-10">
               <div className="space-y-1">
-                <p className="text-[8px] font-bold text-slate-500 uppercase">Phone Number</p>
-                <p className="text-2xl font-black text-white tracking-widest font-mono drop-shadow-md">
+                <p className="font-bold uppercase text-sm text-neon-cyan">Phone Number</p>
+                <p className="text-2xl font-black tracking-widest font-mono drop-shadow-md text-neon-rose">
                   {data.kpayNumber}
                 </p>
               </div>
@@ -267,7 +267,7 @@ const PlansView: React.FC = () => {
           {/* Wave Pay Card */}
           <div className="bg-[#0f172a] rounded-[32px] p-6 border border-amber-500/20 space-y-4 shadow-2xl relative overflow-hidden group hover:border-amber-500/50 transition-all">
             <div className="flex justify-between items-center relative z-10">
-              <p className="text-[11px] font-black text-amber-500 uppercase tracking-[0.3em]">WAVE PAY</p>
+              <p className="font-black text-amber-500 uppercase tracking-[0.3em] text-xl">WAVE PAY</p>
               <div className="h-10 w-10 rounded-xl bg-white p-1 shadow-lg">
                 <img
                   src="https://static.wavemoney.com.mm/web/static/media/wave_logo.c7f8a9a4.png"
@@ -278,8 +278,8 @@ const PlansView: React.FC = () => {
             </div>
             <div className="relative border-b border-white/5 pb-4 flex justify-between items-end z-10">
               <div className="space-y-1">
-                <p className="text-[8px] font-bold text-slate-500 uppercase">Phone Number</p>
-                <p className="text-2xl font-black text-white tracking-widest font-mono drop-shadow-md">
+                <p className="font-bold text-slate-500 uppercase text-sm">Phone Number</p>
+                <p className="font-black text-white tracking-widest font-mono drop-shadow-md text-3xl">
                   {data.waveNumber}
                 </p>
               </div>
@@ -294,8 +294,8 @@ const PlansView: React.FC = () => {
               </button>
             </div>
             <div className="flex justify-between items-center z-10">
-              <p className="text-[11px] font-black text-slate-400 tracking-widest">{data.waveName}</p>
-              <span className="text-[8px] font-bold text-amber-500/50 uppercase">Verified Account</span>
+              <p className="font-black text-slate-400 tracking-widest text-base">{data.waveName}</p>
+              <span className="font-bold text-amber-500/50 uppercase text-base">Verified Account</span>
             </div>
             <div className="absolute -bottom-12 -right-12 w-32 h-32 bg-amber-500/5 blur-3xl rounded-full"></div>
           </div>
@@ -320,7 +320,7 @@ const PlansView: React.FC = () => {
                     <path d="M12 2C6.477 2 2 6.145 2 11.258c0 2.908 1.464 5.501 3.753 7.189v4.225l4.033-2.213c.71.197 1.457.303 2.214.303 5.523 0 10-4.145 10-9.258S17.523 2 12 2zm1.087 12.35l-2.585-2.756-5.048 2.756 5.553-5.897 2.585 2.756 5.048-2.756-5.553 5.897z" />
                   </svg>
                 </a>
-                <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">NAY WIN</p>
+                <p className="font-black uppercase tracking-widest text-gold text-base">NAY WIN</p>
               </div>
               <div className="flex flex-col items-center gap-2">
                 <a
@@ -332,7 +332,7 @@ const PlansView: React.FC = () => {
                     <path d="M12 2C6.477 2 2 6.145 2 11.258c0 2.908 1.464 5.501 3.753 7.189v4.225l4.033-2.213c.71.197 1.457.303 2.214.303 5.523 0 10-4.145 10-9.258S17.523 2 12 2zm1.087 12.35l-2.585-2.756-5.048 2.756 5.553-5.897 2.585 2.756 5.048-2.756-5.553 5.897z" />
                   </svg>
                 </a>
-                <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">KO YE SWAN</p>
+                <p className="font-black uppercase tracking-widest text-neon-rose text-base">KO YE SWAN</p>
               </div>
             </div>
             <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.6em] relative z-10 group-hover:text-white transition-colors uppercase">
