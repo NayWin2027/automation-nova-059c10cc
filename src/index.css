@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Rubik+Glitch&family=Pattaya&family=Fascinate+Inline&family=Kanit:wght@700;900&family=Archivo+Black&family=Anton&family=Bebas+Neue&family=Padauk:wght@700&family=Montserrat:wght@700;900&display=swap');
 
 /* Extra small text utilities */
 .text-3xs {

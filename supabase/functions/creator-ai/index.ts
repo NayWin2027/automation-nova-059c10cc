@@ -276,6 +276,34 @@ serve(async (req) => {
         // Build parts - multimodal if reference images provided
         const parts: any[] = [];
         
+        // Premium Thumbnail Expert System Prompt
+        const thumbnailExpertPrompt = `You are an elite thumbnail designer who creates VIRAL, scroll-stopping thumbnails at the level of MrBeast, Veritasium, and top international YouTubers.
+
+CORE PRINCIPLES FOR PREMIUM THUMBNAILS:
+1. CINEMATIC QUALITY: Hollywood-grade lighting, dramatic shadows, volumetric light rays, lens flares, bokeh effects
+2. DEPTH & DIMENSION: Strong foreground/background separation, depth of field blur, atmospheric haze, parallax layers
+3. COLOR GRADING: Professional color grading like blockbuster movies - teal & orange, dramatic contrast, rich saturated colors
+4. COMPOSITION: Rule of thirds, leading lines, dynamic angles, visual hierarchy that guides the eye
+5. ATMOSPHERE: Smoke, particles, light streaks, dramatic skies, environmental storytelling
+6. TEXTURE: Ultra-detailed textures, realistic materials, photorealistic rendering quality
+
+NICHE-SPECIFIC RULES:
+- TECH: Sleek gradients, neon accents, futuristic elements, clean product shots with dramatic lighting, dark backgrounds with RGB glow
+- TRAVEL/VLOG: Breathtaking landscapes, golden hour lighting, epic wide shots, vivid colors, wanderlust-inducing scenes
+- MOVIE/RECAP: Hollywood movie poster quality - dramatic character poses, cinematic color grading, moody atmospheric lighting, epic scale
+- GAMING: High-energy action, explosive effects, vibrant neon colors, dynamic motion blur, intense atmosphere
+- FOOD: Macro detail, steam/smoke effects, rich warm lighting, appetizing color enhancement, dramatic close-ups
+- EDUCATION: Clean professional look, subtle gradients, organized visual hierarchy, trust-building aesthetics
+- MUSIC: Concert-level lighting, stage effects, dramatic silhouettes, energy and emotion
+- FITNESS: Dynamic action shots, powerful poses, motivational energy, high contrast
+
+CRITICAL RULES:
+- NO TEXT in the image - text will be added separately as overlay
+- Create ONLY the background/scene image
+- Make it so visually striking that viewers CANNOT scroll past it
+- Quality must match or exceed top 0.1% of YouTube thumbnails
+- Every pixel should scream "PREMIUM" and "EXPENSIVE"`;
+
         if (hasReferenceImages) {
           for (const imgData of referenceImages) {
             if (typeof imgData === "string" && imgData.startsWith("data:")) {
@@ -285,9 +313,9 @@ serve(async (req) => {
               }
             }
           }
-          parts.push({ text: `IMPORTANT: Generate a NEW image based on the style and elements from the reference images above.\n\n${prompt}\n\nGenerate a high-quality image now.` });
+          parts.push({ text: `${thumbnailExpertPrompt}\n\nREFERENCE ANALYSIS: Study the reference images above carefully. Extract the best visual elements, color palette, mood, composition style, and production quality. Then create a NEW premium thumbnail background that captures the same energy but elevated to international viral-quality standards.\n\nUSER VISION: ${prompt}\n\nGenerate a breathtaking, scroll-stopping premium thumbnail background NOW. No text overlay.` });
         } else {
-          parts.push({ text: `Generate an image: ${prompt}\n\nCreate this image now. Output the generated image directly.` });
+          parts.push({ text: `${thumbnailExpertPrompt}\n\nUSER VISION: ${prompt}\n\nAnalyze the niche/topic from the description above and generate an ultra-premium, internationally competitive thumbnail background. Apply the appropriate niche-specific rules. Make it so visually stunning that it stops scrolling instantly. No text overlay. Generate the image now.` });
         }
 
         const response = await fetch(
