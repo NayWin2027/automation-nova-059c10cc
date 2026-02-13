@@ -552,7 +552,7 @@ const PlansView: React.FC = () => {
               className="bg-black/40 border border-white/10 rounded-lg p-2 text-xs font-black text-white w-full outline-none" /> :
 
 
-            <p className="text-xs font-black text-white">{data.pPlusAppApi}</p>
+            <p className="font-black text-white text-lg">{data.pPlusAppApi}</p>
             }
           </div>
           <div className="bg-slate-900/40 border border-white/5 p-4 rounded-3xl space-y-1">
@@ -564,7 +564,7 @@ const PlansView: React.FC = () => {
               className="bg-black/40 border border-white/10 rounded-lg p-2 text-xs font-black text-white w-full outline-none" /> :
 
 
-            <p className="text-xs font-black text-white">{data.pPlusOwnApi}</p>
+            <p className="font-black text-white text-lg">{data.pPlusOwnApi}</p>
             }
           </div>
         </div>
@@ -605,7 +605,7 @@ const PlansView: React.FC = () => {
           split("\n").
           filter((s) => s.trim()).
           map((text, idx) =>
-          <li key={idx} className="flex items-start gap-4 text-base text-neon-cyan">
+          <li key={idx} className="flex items-start gap-4 text-neon-cyan text-lg">
                   <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-2 shrink-0 shadow-[0_0_8px_#3b82f6]"></div>
                   <p>{text}</p>
                 </li>
@@ -755,7 +755,7 @@ const PlansView: React.FC = () => {
           split("\n").
           filter((s) => s.trim()).
           map((text, idx) =>
-          <li key={idx} className="flex items-start gap-4 text-base text-neon-cyan">
+          <li key={idx} className="flex items-start gap-4 text-neon-cyan text-lg">
                   <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-2 shrink-0"></div>
                   <p>{text}</p>
                 </li>
@@ -1057,13 +1057,13 @@ const PlansView: React.FC = () => {
             </div> :
 
           <p
-            className="font-bold leading-relaxed"
+            className="font-bold leading-relaxed text-lg"
             style={{ color: data.recTextColor, fontSize: data.recTextSize + "px" }}>
 
               {data.recText}
             </p>
           }
-          <p className="text-base font-black text-indigo-200">
+          <p className="font-black text-indigo-200 text-lg">
             Credit သီးသန့်ဝယ်ယူလို့မရပါဘူး။ Premium or Premium+ Plan ရှိမှ ဝယ်သုံးလို့ရမှာဖြစ်ပါတယ်။
           </p>
         </div>
@@ -1142,7 +1142,7 @@ const PlansView: React.FC = () => {
           split("\n").
           filter((s) => s.trim()).
           map((text, idx) =>
-          <li key={idx} className="flex items-start gap-4 text-base text-neon-cyan">
+          <li key={idx} className="flex items-start gap-4 text-neon-cyan text-lg">
                   <div className="w-2 h-2 rounded-full bg-amber-500 mt-2 shrink-0 shadow-[0_0_8px_#f59e0b]"></div>
                   <p>{text}</p>
                 </li>
