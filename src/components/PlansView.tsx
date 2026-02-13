@@ -534,7 +534,7 @@ const PlansView: React.FC = () => {
             </div> :
 
           <p
-            className="font-black tracking-tight"
+            className="font-black tracking-tight text-xl text-gold-dark"
             style={{ color: data.pPlusPriceColor, fontSize: data.pPlusPriceSize + "px" }}>
 
               {data.pPlusPrice}
@@ -687,7 +687,7 @@ const PlansView: React.FC = () => {
             </div> :
 
           <p
-            className="font-black tracking-tight text-sidebar-primary"
+            className="font-black tracking-tight text-sidebar-primary text-xl"
             style={{ color: data.pPriceColor, fontSize: data.pPriceSize + "px" }}>
 
               {data.pPrice}
