@@ -301,7 +301,7 @@ const Index = () => {
               {isLightMode ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-primary" />}
               <div>
                 <h3 className="font-semibold text-foreground text-sm">Appearance</h3>
-                <p className="text-3xs text-muted-foreground text-sm">{isLightMode ? 'Light Mode' : 'Dark Mode'}</p>
+                <p className="text-3xs text-sm text-neon-rose">{isLightMode ? 'Light Mode' : 'Dark Mode'}</p>
               </div>
             </div>
             <Switch checked={isLightMode} onCheckedChange={setIsLightMode} />
@@ -317,7 +317,7 @@ const Index = () => {
             <Phone className="w-4 h-4 text-primary" />
             <div>
               <h3 className="font-semibold text-foreground text-sm">Contact</h3>
-              <p className="text-3xs text-muted-foreground text-sm">FB, Viber, Telegram, Messenger</p>
+              <p className="text-3xs text-sm text-neon-amber">FB, Viber, Telegram, Messenger</p>
             </div>
           </div>
         </button>
@@ -331,7 +331,7 @@ const Index = () => {
             <FileCheck className="w-4 h-4 text-primary" />
             <div>
               <h3 className="font-semibold text-foreground text-sm">Terms of Service</h3>
-              <p className="text-3xs text-muted-foreground text-sm">အသုံးပြုမှု စည်းကမ်းချက်များ</p>
+              <p className="text-3xs text-sm text-neon-rose">အသုံးပြုမှု စည်းကမ်းချက်များ</p>
             </div>
           </div>
         </button>
@@ -345,7 +345,7 @@ const Index = () => {
             <Shield className="w-4 h-4 text-primary" />
             <div>
               <h3 className="font-semibold text-foreground text-sm">Privacy Policy</h3>
-              <p className="text-3xs text-muted-foreground text-sm">ကိုယ်ရေးလုံခြုံမှု မူဝါဒ</p>
+              <p className="text-3xs text-sm text-destructive">ကိုယ်ရေးလုံခြုံမှု မူဝါဒ</p>
             </div>
           </div>
         </button>
@@ -359,7 +359,7 @@ const Index = () => {
             <Info className="w-4 h-4 text-primary" />
             <div>
               <h3 className="font-semibold text-foreground text-sm">About</h3>
-              <p className="text-3xs text-muted-foreground text-sm">App အကြောင်း</p>
+              <p className="text-3xs text-sm text-sidebar-primary">App အကြောင်း</p>
             </div>
           </div>
         </button>
