@@ -103,6 +103,7 @@ const SrtTranslatorView: React.FC = () => {
   const [targetLang, setTargetLang] = useState("BURMESE");
   const [dualMode, setDualMode] = useState(false);
   const [selectedTier, setSelectedTier] = useState<number>(600);
+  const [tierLocked, setTierLocked] = useState(false);
   const [loading, setLoading] = useState(false);
   const [translated, setTranslated] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -125,8 +126,17 @@ const SrtTranslatorView: React.FC = () => {
       setFileName(file.name);
       const reader = new FileReader();
       reader.onload = (event) => {
-        setFileContent(event.target?.result as string);
+        const content = event.target?.result as string;
+        setFileContent(content);
         setTranslated("");
+
+        // Auto-select tier based on accurate line count
+        const lines = content.split("\n").filter((l) => l.trim()).length;
+        const actualLineCount = Math.round(lines / 3);
+        const tiers = [600, 1200, 1800, 2400];
+        const matchedTier = tiers.find(t => actualLineCount <= t) || tiers[tiers.length - 1];
+        setSelectedTier(matchedTier);
+        setTierLocked(true);
       };
       reader.readAsText(file);
     }
@@ -335,6 +345,7 @@ const SrtTranslatorView: React.FC = () => {
               onClick={() => {
                 setFileContent("");
                 setFileName("");
+                setTierLocked(false);
               }}
               className="w-10 h-10 flex items-center justify-center bg-rose-500/10 hover:bg-rose-500 rounded-xl text-rose-500 hover:text-white transition-all shadow-lg group">
 
@@ -385,20 +396,30 @@ const SrtTranslatorView: React.FC = () => {
                 SELECT CREDIT TIER
               </label>
               <div className="grid grid-cols-4 gap-2">
-                {[600, 1200, 1800, 2400].map((v) =>
+                {[600, 1200, 1800, 2400].map((v) => {
+                  const isSelected = selectedTier === v;
+                  const isDisabled = tierLocked && !isSelected;
+                  return (
               <button
                 key={v}
-                onClick={() => setSelectedTier(v)}
-                className={`py-3 rounded-xl border flex flex-col items-center justify-center transition-all ${selectedTier === v ? "jewel-emerald border-transparent text-white shadow-xl scale-105" : "bg-slate-900/60 border-white/5 text-slate-300"}`}>
+                onClick={() => !tierLocked && setSelectedTier(v)}
+                disabled={isDisabled}
+                className={`py-3 rounded-xl border flex flex-col items-center justify-center transition-all relative ${isDisabled ? "opacity-30 cursor-not-allowed" : ""} ${isSelected ? "jewel-emerald border-transparent text-white shadow-xl scale-105" : "bg-slate-900/60 border-white/5 text-slate-300"}`}>
 
+                    {tierLocked && isSelected && (
+                      <span className="absolute -top-2 left-1/2 -translate-x-1/2 text-[6px] font-black bg-emerald-500 text-white px-1.5 py-0.5 rounded-full uppercase tracking-wider whitespace-nowrap">
+                        AUTO
+                      </span>
+                    )}
                     <span className="text-[9px] font-black uppercase tracking-tight">{v} LINES</span>
                     <span
-                  className={`text-[8px] font-black mt-0.5 ${selectedTier === v ? "text-white" : "text-slate-400"}`}>
+                  className={`text-[8px] font-black mt-0.5 ${isSelected ? "text-white" : "text-slate-400"}`}>
 
                       {Math.round(v / 150)} CRD
                     </span>
                   </button>
-              )}
+                  );
+                })}
               </div>
             </div>
 
