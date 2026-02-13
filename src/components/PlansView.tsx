@@ -455,7 +455,7 @@ const PlansView: React.FC = () => {
               {data.headerTitle}
             </h2>
             <p
-            className="font-black tracking-[0.4em] uppercase"
+            className="font-black tracking-[0.4em] uppercase text-base"
             style={{ color: data.headerSubColor, fontSize: data.headerSubSize + "px" }}>
 
               {data.headerSub}
