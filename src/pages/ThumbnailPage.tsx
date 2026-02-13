@@ -659,17 +659,48 @@ const ThumbnailView: React.FC = () => {
     }
   };
 
-  // Preload elite fonts for canvas rendering
+  // Preload elite fonts for canvas rendering - use FontFace API for reliable loading
   useEffect(() => {
-    const fontFamilies = ELITE_FONTS.map(f => f.id);
-    const loadPromises = fontFamilies.map(family => 
-      document.fonts.load(`900 48px "${family}"`)
-    );
-    Promise.all(loadPromises).then(() => {
-      setFontsLoaded(true);
-    }).catch(() => {
-      setFontsLoaded(true); // proceed anyway
-    });
+    let cancelled = false;
+    const loadFonts = async () => {
+      // First wait for all stylesheet fonts to be parsed
+      await document.fonts.ready;
+      
+      // Then explicitly load each elite font at the weight we use (900)
+      const fontFamilies = ELITE_FONTS.map(f => f.id);
+      const sizes = [48, 120, 180]; // preload at multiple sizes for canvas
+      const loadPromises: Promise<FontFace[]>[] = [];
+      for (const family of fontFamilies) {
+        for (const sz of sizes) {
+          loadPromises.push(
+            document.fonts.load(`900 ${sz}px "${family}"`)
+          );
+        }
+      }
+      
+      try {
+        await Promise.all(loadPromises);
+        // Double-check fonts are truly ready
+        await document.fonts.ready;
+      } catch (e) {
+        console.warn('[ThumbnailPage] Some fonts failed to load:', e);
+      }
+      
+      if (!cancelled) {
+        setFontsLoaded(true);
+        // Force immediate redraw after fonts are confirmed loaded
+        setTimeout(() => {
+          const canvas = canvasRef.current;
+          if (canvas) {
+            const ctx = canvas.getContext("2d");
+            if (ctx) drawThumbnail();
+          }
+        }, 100);
+      }
+    };
+    
+    loadFonts();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
