@@ -380,7 +380,7 @@ const Index = () => {
             <AccountInfoCard />
             <div className="p-2.5 rounded-lg border border-border/30 bg-card/50">
               <h3 className="font-semibold text-foreground text-sm">Account</h3>
-              <p className="text-3xs text-muted-foreground text-sm">
+              <p className="text-3xs text-sm text-black">
                 {profile?.email} • {profile?.plan?.toUpperCase()} Plan
               </p>
             </div>
@@ -389,7 +389,7 @@ const Index = () => {
 
         <div className="p-2.5 rounded-lg border border-border/30 bg-card/50">
           <h3 className="font-semibold text-foreground text-sm">Version</h3>
-          <p className="text-3xs text-muted-foreground text-sm">App version 8.0</p>
+          <p className="text-3xs text-sm text-black">App version 8.0</p>
         </div>
       </div>
     </div>;
