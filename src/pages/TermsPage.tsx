@@ -100,7 +100,7 @@ const TermsOfServiceView: React.FC = () => {
                 <div className="w-1.5 h-6 bg-blue-500 rounded-full shadow-[0_0_10px_#3b82f6]"></div>
                 <h3 className="text-xl font-black text-white tracking-tight">{section.title}</h3>
               </div>
-              <p className="text-sm font-medium text-slate-400 leading-[1.8] text-justify md:text-lg">
+              <p className="text-sm font-medium leading-[1.8] text-justify text-neon-cyan md:text-xl">
                 {section.text}
               </p>
             </div>
