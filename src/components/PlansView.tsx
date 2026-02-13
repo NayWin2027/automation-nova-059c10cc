@@ -258,7 +258,7 @@ const PlansView: React.FC = () => {
               </button>
             </div>
             <div className="flex justify-between items-center z-10">
-              <p className="text-[11px] font-black tracking-widest text-gold">{data.kpayName}</p>
+              <p className="font-black tracking-widest text-gold text-base">{data.kpayName}</p>
               <span className="font-bold text-cyan-500/50 uppercase text-base">Verified Account</span>
             </div>
             <div className="absolute -bottom-12 -right-12 w-32 h-32 bg-cyan-500/5 blur-3xl rounded-full"></div>
