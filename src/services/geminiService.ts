@@ -758,29 +758,28 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
-// Transcribe audio/video using transcribe-google edge function
+// Transcribe audio/video using transcribe-google edge function (FormData for memory efficiency)
 export async function transcribeAudio(
-  base64Data: string,
-  mimeType: string,
+  file: File,
   language: string,
   apiKey?: string,
   customCreditCost?: number
 ): Promise<string | null> {
   try {
-    const body: any = {
-      audioData: base64Data,
-      mimeType,
-      language,
-      apiKey,
-    };
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("languageName", language);
+    if (apiKey) {
+      formData.append("apiKey", apiKey);
+    }
     if (customCreditCost !== undefined && customCreditCost !== null) {
-      body.customCreditCost = customCreditCost;
+      formData.append("customCreditCost", String(customCreditCost));
     }
 
-    const { data, error } = await invokeWithAuthRetry<{ 
+    const { data, error } = await invokeWithAuthRetryRaw<{ 
       text?: string; 
       error?: string;
-    }>('transcribe-google', body);
+    }>('transcribe-google', formData);
 
     if (error) {
       console.error('transcribeAudio error:', error);

@@ -247,42 +247,33 @@ export default function TranscriptionView() {
     setResult("");
 
     try {
-      const reader = new FileReader();
-      reader.readAsDataURL(selectedFile);
-      reader.onload = async () => {
-        try {
-          const base64 = (reader.result as string).split(",")[1];
-          let text: string | null = null;
+      let text: string | null = null;
 
-          if (apiType === "own") {
-            text = await transcribeOwnApi(base64, selectedFile.type, selectedLanguage, apiKey);
-          } else {
-            // App API mode - pass the selected tier's credit cost
-            const tierCredits = getSelectedTierCredits();
-            text = await transcribeAudio(base64, selectedFile.type, selectedLanguage, undefined, tierCredits);
-          }
+      if (apiType === "own") {
+        // Own API still uses base64
+        const reader = new FileReader();
+        const base64 = await new Promise<string>((resolve, reject) => {
+          reader.onload = () => resolve((reader.result as string).split(",")[1]);
+          reader.onerror = () => reject(new Error("Failed to read file."));
+          reader.readAsDataURL(selectedFile);
+        });
+        text = await transcribeOwnApi(base64, selectedFile.type, selectedLanguage, apiKey);
+      } else {
+        // App API mode - send File directly (FormData) for memory efficiency
+        const tierCredits = getSelectedTierCredits();
+        text = await transcribeAudio(selectedFile, selectedLanguage, undefined, tierCredits);
+      }
 
-          if (text) {
-            setResult(text);
-          } else {
-            toast.error("Transcription failed. AI returned no text.");
-          }
-        } catch (err) {
-          console.error(err);
-          const errorMsg = getOwnApiErrorMessage(err);
-          toast.error(errorMsg);
-        } finally {
-          setIsTranscribing(false);
-        }
-      };
-      reader.onerror = () => {
-        toast.error("Failed to read file.");
-        setIsTranscribing(false);
-      };
+      if (text) {
+        setResult(text);
+      } else {
+        toast.error("Transcription failed. AI returned no text.");
+      }
     } catch (err) {
       console.error(err);
       const errorMsg = getOwnApiErrorMessage(err);
       toast.error(errorMsg);
+    } finally {
       setIsTranscribing(false);
     }
   };

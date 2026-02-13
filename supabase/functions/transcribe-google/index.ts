@@ -12,7 +12,7 @@ const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 // Google Files API base URL
 const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1beta/files";
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
-const DEFAULT_TRANSCRIBE_MODEL = "gemini-2.0-flash";
+const DEFAULT_TRANSCRIBE_MODEL = "gemini-2.5-flash";
 
 function tryParseGoogleApiError(errorText: string): {
   status?: string;
@@ -304,6 +304,10 @@ serve(async (req) => {
       fileObj = formData.get("file") as File;
       apiKey = formData.get("apiKey") as string;
       languageName = ((formData.get("languageName") as string) || "BURMESE").replace(/[<>\"'&]/g, "").substring(0, 50);
+      const formCreditCost = formData.get("customCreditCost") as string;
+      if (formCreditCost) {
+        customCreditCost = Number(formCreditCost);
+      }
     }
 
     // ===== INPUT VALIDATION =====
@@ -325,17 +329,7 @@ serve(async (req) => {
         );
       }
 
-      // Use GEMINI_API_KEY directly for App API mode
-      const resolvedMime = mimeTypeFromBody || (fileObj ? getMimeType(fileObj) : "audio/mpeg");
-      let base64: string;
-      if (audioData) {
-        base64 = audioData;
-      } else {
-        const arrayBuffer = await fileObj!.arrayBuffer();
-        base64 = btoa(new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ""));
-      }
-
-      // Credit check - use custom cost from frontend if provided
+      // Credit check
       const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       const rpcParams: any = {
         _user_id: user.id,
@@ -364,41 +358,57 @@ serve(async (req) => {
 
       console.log(`[transcribe-google] App API mode. Credits deducted. Balance: ${creditResult.balance}`);
 
-      const isBurmese = languageName.toUpperCase() === "BURMESE";
-      const prompt = isBurmese
-        ? `🇲🇲 ဤ audio/video ဖိုင်ထဲရှိ ပြောဆိုချက်အားလုံးကို တိကျစွာ ဗမာစာဖြင့် ရေးချပါ။ မြန်မာစာသတ်ပုံကျမ်း အတိုင်း စာလုံးပေါင်း သတ်ပုံ မှန်ကန်ရမည်။ ဘာသာပြန်ခြင်း၊ အနှစ်ချုပ်ခြင်း လုံးဝမလုပ်ပါနဲ့။ ပြောသည့်အတိုင်း အတိအကျ ရေးပါ။ Speaker ပြောင်းရင် line break ခံပါ။`
-        : `Transcribe all spoken words accurately in ${languageName}. Return ONLY the transcription. Do not translate or summarize. Indicate speaker changes with line breaks.`;
-
-      const geminiResponse = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                { text: prompt },
-                { inlineData: { mimeType: resolvedMime, data: base64 } },
-              ],
-            }],
-            generationConfig: {
-              temperature: 0.1,
-              maxOutputTokens: 16384,
-            },
-          }),
+      // Reconstruct File object from base64 if needed (JSON body path)
+      if (audioData && !fileObj) {
+        const binaryString = atob(audioData);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
         }
-      );
+        const resolvedMime = mimeTypeFromBody || "audio/mpeg";
+        fileObj = new File([bytes], "audio_file", { type: resolvedMime });
+      }
 
-      if (!geminiResponse.ok) {
-        console.error("Gemini API error:", geminiResponse.status);
+      const mimeType = getMimeType(fileObj!);
+      
+      // Upload file to Google Files API (memory-efficient, no inlineData)
+      let fileUri: string;
+      try {
+        fileUri = await uploadToGoogleFiles(GEMINI_API_KEY, fileObj!, mimeType);
+      } catch (uploadError) {
+        console.error("App API file upload failed:", uploadError);
+        return new Response(
+          JSON.stringify({ error: "ဖိုင် upload မအောင်မြင်ပါ။ ပြန်စမ်းပါ။", retryable: true }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const fileName = fileUri.includes("/") ? fileUri.split("/").slice(-2).join("/") : fileUri;
+      if (fileName.startsWith("files/")) {
+        try {
+          await waitForFileProcessing(GEMINI_API_KEY, fileName);
+        } catch (processingError) {
+          console.error("App API file processing failed:", processingError);
+          return new Response(
+            JSON.stringify({ error: "ဖိုင် processing မအောင်မြင်ပါ။ ပြန်စမ်းပါ။", retryable: true, retryAfterSeconds: 30 }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+
+      // Transcribe using file URI reference (not inlineData)
+      let text: string;
+      try {
+        text = await transcribeWithGemini(GEMINI_API_KEY, fileUri, mimeType, languageName);
+      } catch (transcribeError) {
+        const errorMessage = transcribeError instanceof Error ? transcribeError.message : "Unknown error";
+        console.error("App API transcription failed:", errorMessage);
         return new Response(
           JSON.stringify({ error: "Transcription မအောင်မြင်ပါ။ ပြန်စမ်းပါ။", retryable: true }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const geminiData = await geminiResponse.json();
-      const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
       console.log("[transcribe-google] App API transcription success, length:", text.length);
 
       return new Response(
