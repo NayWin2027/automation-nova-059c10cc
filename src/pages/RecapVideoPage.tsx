@@ -752,16 +752,19 @@ export default function VideoRecapView() {
 
         const segDur = totalDuration / segments.length;
         const videoDur = videoRef.current?.duration || totalDuration;
-        mappedSegments = segments.map((seg, idx) => ({
-          ...seg,
-          audioStart: idx * segDur,
-          audioEnd: (idx + 1) * segDur,
-          // CRITICAL: ALWAYS recalculate scene data — never trust AI timestamps
-          // AI timestamps are often compressed/wrong, causing video-audio mismatch
-          videoTime: idx / segments.length * videoDur,
-          sceneStart: idx / segments.length * videoDur,
-          sceneEnd: (idx + 1) / segments.length * videoDur
-        }));
+        // CRITICAL: PRESERVE existing scene mapping from Step 1 (matchSegmentsToScenes).
+        // Only fall back to even distribution if no scene data exists.
+        mappedSegments = segments.map((seg, idx) => {
+          const hasSceneData = seg.sceneStart !== undefined && seg.sceneEnd !== undefined;
+          return {
+            ...seg,
+            audioStart: idx * segDur,
+            audioEnd: (idx + 1) * segDur,
+            videoTime: hasSceneData ? seg.videoTime : idx / segments.length * videoDur,
+            sceneStart: hasSceneData ? seg.sceneStart : idx / segments.length * videoDur,
+            sceneEnd: hasSceneData ? seg.sceneEnd : (idx + 1) / segments.length * videoDur
+          };
+        });
       } else {
         // No script: create empty segments (no subtitles) distributed evenly across video
         // This enables video+audio merge without script generation
@@ -949,14 +952,16 @@ export default function VideoRecapView() {
       const videoDur = videoRef.current?.duration || combinedBuffer.duration;
       const mappedSegments = segments.map((seg, idx) => {
         const segDur = segmentDurations[idx];
+        // CRITICAL: PRESERVE existing scene mapping from Step 1 (matchSegmentsToScenes).
+        // Only fall back to even distribution if no scene data exists.
+        const hasSceneData = seg.sceneStart !== undefined && seg.sceneEnd !== undefined;
         const mapped = {
           ...seg,
           audioStart: currentTimePointer,
           audioEnd: currentTimePointer + segDur,
-          // CRITICAL: Override AI timestamps with even distribution
-          videoTime: idx / segments.length * videoDur,
-          sceneStart: idx / segments.length * videoDur,
-          sceneEnd: (idx + 1) / segments.length * videoDur
+          videoTime: hasSceneData ? seg.videoTime : idx / segments.length * videoDur,
+          sceneStart: hasSceneData ? seg.sceneStart : idx / segments.length * videoDur,
+          sceneEnd: hasSceneData ? seg.sceneEnd : (idx + 1) / segments.length * videoDur
         };
         currentTimePointer += segDur;
         return mapped;
