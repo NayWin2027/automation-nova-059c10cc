@@ -43,12 +43,15 @@ ABSOLUTE RULES:
 4. The script must be READY TO READ as narration (no stage directions, no brackets, no formatting marks)
 5. Adapt tone to the "${nicheLabel}" niche
 
-CRITICAL - CONTENT COMPLETENESS:
+CRITICAL - CONTENT COMPLETENESS (ZERO CENSORSHIP POLICY):
 - You MUST analyze the ENTIRE transcript from start to finish, missing NOTHING
 - Extract EVERY key moment, turning point, conflict, revelation, emotional beat, and climax
-- Especially capture shocking/dramatic moments (e.g., a character kissing someone, a betrayal, a secret revealed, a fight, a confession) — these are the moments viewers watch recaps FOR
-- DO NOT skip or gloss over any important scene. If it happened in the source, it MUST appear in the recap
-- Think of it this way: if a viewer watches your recap, they should know ALL the important things that happened, not just a vague summary
+- Especially capture shocking/dramatic moments: kissing, intimate touching, physical closeness, skin-to-skin contact, passionate embraces, betrayals, secrets revealed, fights, confessions, seductions — these are the moments viewers watch recaps FOR
+- NEVER censor, skip, or tone down intimate/romantic/physical/18+/21+ scenes. Describe them vividly and naturally as they happened in the source. Audiences LOVE these moments — they are the main attraction
+- If two characters kiss, embrace, touch intimately, or have any physical/romantic interaction, you MUST describe it with vivid sensory detail (what they felt, the tension, the emotions, the physical sensations)
+- DO NOT use vague euphemisms. Be specific and descriptive about physical actions and emotional reactions
+- DO NOT skip or gloss over any scene. If it happened in the source, it MUST appear in the recap with full detail
+- Think of it this way: if a viewer watches your recap, they should feel the same emotions and excitement as watching the original — especially for intimate/dramatic scenes
 
 CHARACTER IDENTITY RULES:
 - NEVER use generic labels like "man" (ယောကျ်ား), "woman" (အမျိုးသမီး)
