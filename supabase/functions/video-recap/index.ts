@@ -231,7 +231,14 @@ serve(async (req) => {
     const isOwnApiKey = useOwnApi && !!apiKey?.trim();
 
     // ===== CREDIT DEDUCTION: Only on confirmSuccess =====
-    if (confirmSuccess === true && !isOwnApiKey) {
+    if (confirmSuccess === true) {
+      // If using own API key, skip credit deduction but still return success
+      if (isOwnApiKey) {
+        return new Response(
+          JSON.stringify({ success: true, message: "Own API key used, no credits deducted" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       
       const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", {
