@@ -12,7 +12,7 @@ const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 // Google Files API base URL
 const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1beta/files";
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
-const DEFAULT_TRANSCRIBE_MODEL = "gemini-2.5-flash";
+const DEFAULT_TRANSCRIBE_MODEL = "gemini-2.5-flash-lite";
 
 function tryParseGoogleApiError(errorText: string): {
   status?: string;
@@ -126,8 +126,8 @@ async function uploadToGoogleFiles(apiKey: string, file: File, mimeType: string)
 }
 
 async function waitForFileProcessing(apiKey: string, fileName: string): Promise<void> {
-  const maxAttempts = 60;
-  const delay = 5000;
+  const maxAttempts = 90;
+  const delay = 2000;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${apiKey}`);
@@ -157,23 +157,19 @@ async function transcribeWithGemini(apiKey: string, fileUri: string, mimeType: s
   const isBurmese = languageName.toUpperCase() === "BURMESE";
   
   const transcriptionPrompt = isBurmese
-    ? `🇲🇲 High-Speed Burmese Transcription Engine
-
-သင်သည် "Fast-Response Burmese Linguist" ဖြစ်ပြီး မြန်မာစာသတ်ပုံကျမ်း (Official Myanmar Sar Dictionary) ကို gold standard အဖြစ် အသုံးပြုပါ။
-
-လိုအပ်ချက်များ:
-- ဤ audio/video ဖိုင်ထဲရှိ ပြောဆိုချက်အားလုံးကို တိကျစွာ ဗမာစာဖြင့် ရေးချပါ
-- မြန်မာစာသတ်ပုံကျမ်း အတိုင်း စာလုံးပေါင်း သတ်ပုံ 100% မှန်ကန်ရမည်
-- သဘာဝကျသော ဗမာစကားပြောပုံစံဖြင့် ရေးပါ
-- ဘာသာပြန်ခြင်း၊ အနှစ်ချုပ်ခြင်း လုံးဝမလုပ်ပါနဲ့
+    ? `ဤ audio/video ဖိုင်ထဲရှိ ပြောဆိုချက်အားလုံးကို ဗမာစာဖြင့် တိကျစွာ ရေးချပါ။
+စည်းမျဉ်း:
+- မြန်မာစာသတ်ပုံကျမ်းအတိုင်း စာလုံးပေါင်း 100% မှန်ကန်ရမည်
 - ပြောသည့်အတိုင်း အတိအကျ ရေးပါ
+- ဘာသာပြန်ခြင်း/အနှစ်ချုပ်ခြင်း လုံးဝမလုပ်ပါနဲ့
 - Speaker ပြောင်းရင် line break ခံပါ
-- ဗမာစာသာ ပြန်ပေးပါ၊ English လုံးဝမပါစေနဲ့`
-    : `Please transcribe all the spoken words in this audio/video file accurately. 
-The audio is in ${languageName}. 
-Return ONLY the transcription text in ${languageName} without any additional commentary, formatting, or translation.
-If there are multiple speakers, indicate speaker changes with line breaks.
-Transcribe exactly what is spoken - do not translate or summarize.`;
+- ဗမာစာသာ ပြန်ပေးပါ`
+    : `Transcribe all spoken words in this audio/video file accurately in ${languageName}.
+Rules:
+- Return ONLY the transcription text, no commentary or formatting
+- Do not translate or summarize
+- Indicate speaker changes with line breaks
+- Transcribe exactly what is spoken`;
 
   console.log("Sending transcription request to Gemini...");
 
@@ -197,7 +193,7 @@ Transcribe exactly what is spoken - do not translate or summarize.`;
         },
       ],
       generationConfig: {
-        temperature: 0.1,
+        temperature: 0.05,
         maxOutputTokens: 16384,
       },
     }),

@@ -28,49 +28,56 @@ serve(async (req) => {
     const nicheLabel = niche || "General";
     const lang = language || "BURMESE";
 
-    const systemPrompt = `You are a world-class professional scriptwriter and narrator who specializes in creating premium-quality narration scripts for transformative recap videos.
+    const systemPrompt = `You are a world-class professional scriptwriter who creates premium narration scripts for recap videos at Netflix/BBC broadcast standard.
 
 Your writing style:
-- International broadcast standard (Netflix/Discovery/BBC level)
 - Natural spoken ${lang} (conversational, NOT literary/formal)
 - Emotionally engaging storytelling with dramatic pacing
 - Professional narrator voice that hooks viewers from the first sentence
 - Uses rhetorical questions, cliffhangers, and emotional beats
 
-Rules:
-- Write ONLY in ${lang} language
-- Use modern spoken style particles and phrasing
-- NO formal/literary endings
-- Each paragraph should be a natural spoken segment (2-4 sentences)
-- Add natural pauses between dramatic moments
-- The script must be READY TO READ as narration (no stage directions, no brackets)
-- Analyze the transcript deeply to extract the core story, key moments, and emotional arc
-- Transform raw transcript into compelling storytelling narration
-- Adapt tone and style to the "${nicheLabel}" niche
+ABSOLUTE RULES:
+1. Write ONLY in ${lang} language
+2. Use modern spoken style, NOT formal/literary
+3. Each paragraph = natural spoken segment (2-4 sentences)
+4. The script must be READY TO READ as narration (no stage directions, no brackets, no formatting marks)
+5. Adapt tone to the "${nicheLabel}" niche
 
-CRITICAL CHARACTER IDENTITY RULES (applies to ALL niches):
-- NEVER use generic labels like "ယောကျ်ား" (man), "အမျိုးသမီး" (woman), "အဖွဲ့သား" (group member) to refer to characters
-- ALWAYS identify characters by their contextual role from the source: ဆရာ (teacher), ဆရာဝန် (doctor), ကျောင်းသူ (student), အင်ဂျင်နီယာ (engineer), မင်းသား (actor), မင်းသမီး (actress), etc.
-- ALWAYS identify characters by their relationship when applicable: အမေ (mother), အဖေ (father), သား (son), သမီး (daughter), အကို (elder brother), အမ (elder sister), ဇနီး (wife), တပည့် (disciple), အိမ်ဖော် (housekeeper), etc.
-- If character names appear in the transcript/dialogue, USE THEIR ACTUAL NAMES
-- Analyze the source content carefully to determine each character's exact role, profession, or relationship before writing
-- This makes the story vivid and specific - readers must know exactly WHO each character is`;
+CRITICAL - CONTENT COMPLETENESS:
+- You MUST analyze the ENTIRE transcript from start to finish, missing NOTHING
+- Extract EVERY key moment, turning point, conflict, revelation, emotional beat, and climax
+- Especially capture shocking/dramatic moments (e.g., a character kissing someone, a betrayal, a secret revealed, a fight, a confession) — these are the moments viewers watch recaps FOR
+- DO NOT skip or gloss over any important scene. If it happened in the source, it MUST appear in the recap
+- Think of it this way: if a viewer watches your recap, they should know ALL the important things that happened, not just a vague summary
+
+CHARACTER IDENTITY RULES:
+- NEVER use generic labels like "man" (ယောကျ်ား), "woman" (အမျိုးသမီး)
+- ALWAYS identify characters by their role (teacher/ဆရာ, doctor/ဆရာဝန်), relationship (mother/အမေ, wife/ဇနီး), or actual name if mentioned
+- Analyze the source carefully to determine each character's exact identity before writing
+
+STRUCTURE:
+- Hook opening (1 powerful sentence that makes viewers NEED to keep watching)
+- Body: Follow the source's narrative arc chronologically, covering ALL key events
+- Climax: Build to the most dramatic/shocking moment with maximum emotional impact
+- Conclusion: Wrap up with the final outcome/resolution`;
 
     const userPrompt = `Niche: ${nicheLabel}
 
-Below is a raw transcript from a video/audio. Analyze it deeply, extract the key narrative elements, and transform it into a professional premium narration script that a narrator can read directly for a recap video.
+Below is a raw transcript. Your job is to transform it into a professional recap narration script.
 
-The script should:
-1. Hook the audience immediately with a powerful opening
-2. Follow a compelling narrative arc (setup → tension → revelation → conclusion)
-3. Use vivid, engaging language appropriate for "${nicheLabel}" content
-4. Be perfectly paced for voice narration
-5. Be complete and ready-to-use (no placeholders, no instructions)
+CRITICAL INSTRUCTIONS:
+1. Read the ENTIRE transcript carefully — do not skim
+2. Identify ALL key moments, especially dramatic/shocking ones (confrontations, revelations, emotional scenes, physical actions like kisses/fights/tears)
+3. Write a complete recap that covers every important event — a viewer should feel they know the full story
+4. Hook the audience immediately
+5. Follow the source's chronological order
+6. Use vivid, engaging ${lang} appropriate for "${nicheLabel}" content
+7. Be perfectly paced for voice narration
 
 RAW TRANSCRIPT:
 ${transcript}
 
-Write the professional narration script now:`;
+Write the complete professional narration script now — DO NOT leave out any important moments:`;
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
