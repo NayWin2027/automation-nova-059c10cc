@@ -502,22 +502,78 @@ export default function VideoRecapView() {
     }
   }, [charId]);
 
+  // ===== FIX: Recover video frame when returning from background (prevents black screen) =====
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        const video = videoRef.current;
+        if (video) {
+          // Force video element to re-decode current frame by re-seeking
+          const currentTime = video.currentTime;
+          if (video.readyState >= 1) {
+            // Re-seek to same position to force frame decode
+            video.currentTime = currentTime;
+          }
+          // If video lost its decoded data entirely, reload from persistent data URL
+          if (video.readyState === 0 && videoDataUrl) {
+            console.log('[RecapVideo] Video lost on tab return — reloading from dataUrl');
+            video.src = videoDataUrl;
+            video.load();
+            video.addEventListener('loadeddata', () => {
+              video.currentTime = currentTime;
+            }, { once: true });
+          }
+          // Reset freeze canvas to force re-capture on next photo phase
+          freezeCapturedCycleRef.current = -1;
+          wasFreezeModeRef.current = false;
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [videoDataUrl]);
+
   // Helper: Match segments to detected scenes for semantic video seeking
-  // Priority: 1) Exact timestamp match, 2) Nearest scene by time, 3) Sequential fallback
+  // Priority: 1) Sequential distribution when timestamps are identical, 2) Exact match, 3) Nearest match
   const matchSegmentsToScenes = (segments: ScriptSegment[], scenes: VideoScene[]): ScriptSegment[] => {
     if (!scenes || scenes.length === 0) return segments;
 
-    // Sort scenes by start time for reliable nearest-match
+    // Sort scenes by start time for reliable matching
     const sortedScenes = [...scenes].sort((a, b) => a.start - b.start);
+
+    // CRITICAL FIX: Check if segments have meaningful distinct timestamps
+    // If all segments share the same time (e.g., all time=0), distribute them evenly across scenes
+    const uniqueTimes = new Set(segments.map(s => s.time));
+    const hasDistinctTimes = uniqueTimes.size > 1;
+
+    if (!hasDistinctTimes) {
+      // All segments have identical timestamps — distribute sequentially across scenes
+      console.log(`[Recap] All segments have same time (${segments[0]?.time}), distributing across ${sortedScenes.length} scenes`);
+      return segments.map((seg, idx) => {
+        const sceneIdx = Math.min(
+          Math.floor(idx * sortedScenes.length / segments.length),
+          sortedScenes.length - 1
+        );
+        const matchedScene = sortedScenes[sceneIdx];
+        return {
+          ...seg,
+          videoTime: matchedScene.start,
+          sceneStart: matchedScene.start,
+          sceneEnd: matchedScene.end,
+          sceneTopic: matchedScene.topic
+        };
+      });
+    }
 
     return segments.map((seg, idx) => {
       // 1. Exact timestamp match: seg.time falls within a scene's range
       let matchedScene = sortedScenes.find((sc) =>
-      seg.time >= sc.start && seg.time < sc.end
+        seg.time >= sc.start && seg.time < sc.end
       );
 
       if (!matchedScene) {
-        // 2. Nearest scene by timestamp: find the scene whose start is closest to seg.time
+        // 2. Nearest scene by timestamp
         let minDist = Infinity;
         for (const sc of sortedScenes) {
           const dist = Math.abs(seg.time - sc.start);
@@ -533,7 +589,6 @@ export default function VideoRecapView() {
         matchedScene = sortedScenes[Math.min(idx, sortedScenes.length - 1)];
       }
 
-      // Use exact scene start (no arbitrary offset) for precise matching
       return {
         ...seg,
         videoTime: matchedScene.start,
