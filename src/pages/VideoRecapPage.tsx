@@ -186,7 +186,7 @@ interface AccordionItemProps {
 // Fix: silence "Function components cannot be given refs" warnings by forwarding any ref.
 const AccordionItem = React.forwardRef<HTMLDivElement, AccordionItemProps>(function AccordionItem(
   { title, isOpen, onClick, children },
-  ref
+  ref,
 ) {
   return (
     <div
@@ -294,7 +294,7 @@ export default function VideoRecapView() {
   const [logoNeon, setLogoNeon] = useState(false);
   const [channelName, setChannelName] = useState("");
   const [tickerMode, setTickerMode] = useState<"OFF" | "SCROLL" | "BOUNCE">("OFF");
- 
+
   // History state
   const [history, setHistory] = useState<HistoryItem[]>(() => {
     try {
@@ -392,7 +392,7 @@ export default function VideoRecapView() {
       const f = e.target.files[0];
       setFile(f);
       setCurrentFileName(f.name);
-     
+
       // Convert to Base64 Data URL for persistence (survives browser tab switches)
       const reader = new FileReader();
       reader.onload = () => {
@@ -405,7 +405,7 @@ export default function VideoRecapView() {
         setVideoSrc(URL.createObjectURL(f));
       };
       reader.readAsDataURL(f);
-     
+
       setFullScriptText("");
       setScriptSegments([]);
       setAudioBlobUrl(null);
@@ -416,26 +416,29 @@ export default function VideoRecapView() {
   };
 
   // Save to history
-  const saveToHistory = useCallback((script: string, audioUrl: string | null, segments: ScriptSegment[]) => {
-    if (!currentFileName || !script) return;
-   
-    const newItem: HistoryItem = {
-      id: Date.now().toString(),
-      timestamp: Date.now(),
-      fileName: currentFileName,
-      script,
-      audioBlobUrl: audioUrl,
-      segments,
-    };
-   
-    setHistory(prev => {
-      const updated = [newItem, ...prev.slice(0, 19)]; // Keep last 20
-      localStorage.setItem("video_recap_history", JSON.stringify(updated));
-      return updated;
-    });
-   
-    toast.success("History ထဲမှာ သိမ်းပြီးပါပြီ!");
-  }, [currentFileName]);
+  const saveToHistory = useCallback(
+    (script: string, audioUrl: string | null, segments: ScriptSegment[]) => {
+      if (!currentFileName || !script) return;
+
+      const newItem: HistoryItem = {
+        id: Date.now().toString(),
+        timestamp: Date.now(),
+        fileName: currentFileName,
+        script,
+        audioBlobUrl: audioUrl,
+        segments,
+      };
+
+      setHistory((prev) => {
+        const updated = [newItem, ...prev.slice(0, 19)]; // Keep last 20
+        localStorage.setItem("video_recap_history", JSON.stringify(updated));
+        return updated;
+      });
+
+      toast.success("History ထဲမှာ သိမ်းပြီးပါပြီ!");
+    },
+    [currentFileName],
+  );
 
   // Load from history
   const loadFromHistory = (item: HistoryItem) => {
@@ -448,8 +451,8 @@ export default function VideoRecapView() {
 
   // Delete from history
   const deleteFromHistory = (id: string) => {
-    setHistory(prev => {
-      const updated = prev.filter(h => h.id !== id);
+    setHistory((prev) => {
+      const updated = prev.filter((h) => h.id !== id);
       localStorage.setItem("video_recap_history", JSON.stringify(updated));
       return updated;
     });
@@ -489,16 +492,16 @@ export default function VideoRecapView() {
   // Helper: Match segments to detected scenes
   const matchSegmentsToScenes = (segments: ScriptSegment[], scenes: VideoScene[]): ScriptSegment[] => {
     if (!scenes || scenes.length === 0) return segments;
-    
-    return segments.map(seg => {
-      const matchedScene = scenes.find(sc => 
-        seg.time >= sc.start && seg.time < sc.end
-      ) || scenes.reduce((closest, sc) => {
-        const closestDiff = Math.abs(closest.start - seg.time);
-        const thisDiff = Math.abs(sc.start - seg.time);
-        return thisDiff < closestDiff ? sc : closest;
-      }, scenes[0]);
-      
+
+    return segments.map((seg) => {
+      const matchedScene =
+        scenes.find((sc) => seg.time >= sc.start && seg.time < sc.end) ||
+        scenes.reduce((closest, sc) => {
+          const closestDiff = Math.abs(closest.start - seg.time);
+          const thisDiff = Math.abs(sc.start - seg.time);
+          return thisDiff < closestDiff ? sc : closest;
+        }, scenes[0]);
+
       return {
         ...seg,
         videoTime: matchedScene?.start ?? seg.time,
@@ -533,9 +536,9 @@ export default function VideoRecapView() {
     try {
       const customKey = apiType === "own" ? apiKey : undefined;
       const result = await analyzeVideo(file, file.type || "video/mp4", targetLang, customKey);
-      
+
       const { recap: rawRecap, scenes: detectedScenes } = result;
-      
+
       let segments: ScriptSegment[] = [];
       try {
         segments = JSON.parse(rawRecap);
@@ -598,12 +601,12 @@ export default function VideoRecapView() {
         });
         setScriptSegments(mappedSegments);
         setAnalyzing(false);
-       
+
         // Save draft to history; confirm credits only after export succeeds.
         didConfirmSuccessRef.current = false;
         saveToHistory(text, url, mappedSegments);
         toast.success("✨ Premium Recap ပြီးပါပြီ! (Export အောင်မြင်မှ credits ဖြတ်ပါမယ်)");
-       
+
         setTimeout(() => togglePlay(), 500);
       };
     } else {
@@ -684,12 +687,12 @@ export default function VideoRecapView() {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const audio = audioRef.current;
-   
+
     if (!video || !canvas || !audio || !audioBlobUrl) {
       toast.error("Video/Audio မ ready ဖြစ်သေးပါ");
       return;
     }
-   
+
     // Basic capability checks (avoid hard crashes on mobile browsers)
     if (typeof MediaRecorder === "undefined") {
       toast.error("ဒီ browser မှာ Auto Save မထောက်ပံ့ပါ (MediaRecorder မရှိပါ)။ Chrome (Android/Desktop) နဲ့ စမ်းပါ");
@@ -797,9 +800,7 @@ export default function VideoRecapView() {
     try {
       recorder = new MediaRecorder(
         stream,
-        mimeType
-          ? { mimeType, videoBitsPerSecond: 6000000 }
-          : { videoBitsPerSecond: 6000000 }
+        mimeType ? { mimeType, videoBitsPerSecond: 6000000 } : { videoBitsPerSecond: 6000000 },
       );
     } catch {
       toast.error("ဒီ browser မှာ recording format မထောက်ပံ့ပါ—Chrome နဲ့ စမ်းပါ");
@@ -870,9 +871,7 @@ export default function VideoRecapView() {
 
     // Used for progress + safety timeout
     const totalDur =
-      (Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : audioDuration) ||
-      video.duration ||
-      10;
+      (Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : audioDuration) || video.duration || 10;
 
     // Stop when audio ends OR reaches end (some browsers don't fire ended reliably)
     const stopRecording = () => {
@@ -913,12 +912,11 @@ export default function VideoRecapView() {
         stopRecording();
       }
     }, safetyMs);
-   
   }, [audioBlobUrl, audioDuration, apiType, apiKey, setupAudioAnalyzer]);
 
   // Legacy download handler (unused but kept for reference)
   const handleDownload = handleAutoSaveRecord;
- 
+
   // Unified frame render function (same logic for preview and export)
   const renderFrameToCanvas = (
     ctx: CanvasRenderingContext2D,
@@ -927,35 +925,39 @@ export default function VideoRecapView() {
     video: HTMLVideoElement,
     effectiveTime: number,
     wasFreezePrev: boolean,
-    setWasFreeze: (val: boolean) => void
+    setWasFreeze: (val: boolean) => void,
   ) => {
     const targetW = ctx.canvas.width;
     const targetH = ctx.canvas.height;
-   
+
     // Find active segment
     let activeSegment = scriptSegments.find(
       (s) => effectiveTime >= (s.audioStart || 0) && effectiveTime < (s.audioEnd || Infinity),
     );
-    if (!activeSegment && scriptSegments.length > 0 && effectiveTime >= (scriptSegments[scriptSegments.length - 1].audioEnd || 0)) {
+    if (
+      !activeSegment &&
+      scriptSegments.length > 0 &&
+      effectiveTime >= (scriptSegments[scriptSegments.length - 1].audioEnd || 0)
+    ) {
       activeSegment = scriptSegments[scriptSegments.length - 1];
     }
-   
+
     let isFreezeMode = false;
     let crossfadeAlpha = 1.0; // 1 = full video, 0 = full photo
-   
+
     if (activeSegment) {
       const segmentRelativeTime = effectiveTime - (activeSegment.audioStart || 0);
       const CYCLE_DUR = 6.0;
       const cycleTime = segmentRelativeTime % CYCLE_DUR;
-     
+
       // Smooth 6-second cycle: 0-3s video, 3-6s photo zoom
       isFreezeMode = cycleTime >= 3.0 && motionZoom;
-     
+
       // SMOOTH CROSSFADE (0.4s transition)
       const FADE_DUR = 0.4;
       if (cycleTime >= 3.0 - FADE_DUR && cycleTime < 3.0) {
         // Transitioning TO photo
-        crossfadeAlpha = 1.0 - ((cycleTime - (3.0 - FADE_DUR)) / FADE_DUR);
+        crossfadeAlpha = 1.0 - (cycleTime - (3.0 - FADE_DUR)) / FADE_DUR;
       } else if (cycleTime >= 6.0 - FADE_DUR || cycleTime < FADE_DUR) {
         // Transitioning TO video (wrap-around)
         if (cycleTime >= 6.0 - FADE_DUR) {
@@ -967,11 +969,11 @@ export default function VideoRecapView() {
         crossfadeAlpha = isFreezeMode ? 0.0 : 1.0;
       }
     }
-   
+
     // Easing for smoother feel
-    const easeInOut = (t: number) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
     crossfadeAlpha = easeInOut(Math.max(0, Math.min(1, crossfadeAlpha)));
-   
+
     // Calculate video dimensions
     const vw = video.videoWidth || 1280;
     const vh = video.videoHeight || 720;
@@ -980,21 +982,21 @@ export default function VideoRecapView() {
     const dh = vh * scale;
     const dx = (targetW - dw) / 2;
     const dy = (targetH - dh) / 2;
-   
+
     // Clear and fill black
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, targetW, targetH);
-   
+
     ctx.save();
     if (flipVideo) {
       ctx.translate(targetW, 0);
       ctx.scale(-1, 1);
     }
-   
+
     // Capture freeze frame at transition point
-    const needsCapture = (isFreezeMode && !wasFreezePrev) ||
-      (freezeCanvas.width !== targetW || freezeCanvas.height !== targetH);
-   
+    const needsCapture =
+      (isFreezeMode && !wasFreezePrev) || freezeCanvas.width !== targetW || freezeCanvas.height !== targetH;
+
     if (needsCapture && freezeCtx) {
       freezeCanvas.width = targetW;
       freezeCanvas.height = targetH;
@@ -1008,35 +1010,35 @@ export default function VideoRecapView() {
       freezeCtx.drawImage(video, dx, dy, dw, dh);
       if (flipVideo) freezeCtx.restore();
     }
-   
+
     // Draw video layer with crossfade
     if (crossfadeAlpha > 0.01) {
       ctx.globalAlpha = crossfadeAlpha;
       ctx.drawImage(video, dx, dy, dw, dh);
     }
-   
+
     // Draw photo zoom layer with crossfade
     if (crossfadeAlpha < 0.99 && motionZoom) {
-      const segmentRelativeTime = activeSegment ? (effectiveTime - (activeSegment.audioStart || 0)) : 0;
+      const segmentRelativeTime = activeSegment ? effectiveTime - (activeSegment.audioStart || 0) : 0;
       const cycleTime = segmentRelativeTime % 6.0;
       const progressInFreeze = cycleTime >= 3.0 ? (cycleTime - 3.0) / 3.0 : 0;
-     
+
       // Cinematic Ken Burns zoom with easing
       const easedProgress = easeInOut(progressInFreeze);
       const currentZoom = 1.0 + easedProgress * 0.2; // Subtle 1.2x zoom
-     
+
       const zoomedW = targetW * currentZoom;
       const zoomedH = targetH * currentZoom;
       const centerX = (targetW - zoomedW) / 2;
       const centerY = (targetH - zoomedH) / 2;
-     
+
       ctx.globalAlpha = 1.0 - crossfadeAlpha;
       ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH, centerX, centerY, zoomedW, zoomedH);
     }
-   
+
     ctx.globalAlpha = 1.0;
     ctx.restore();
-   
+
     // Apply color grading
     if (autoColor) {
       ctx.fillStyle = "rgba(255, 160, 0, 0.08)";
@@ -1044,7 +1046,7 @@ export default function VideoRecapView() {
       ctx.fillRect(0, 0, targetW, targetH);
       ctx.globalCompositeOperation = "source-over";
     }
-   
+
     // Film grain
     if (filmGrain) {
       const noiseCount = targetW * targetH * 0.003;
@@ -1053,7 +1055,7 @@ export default function VideoRecapView() {
         ctx.fillRect(Math.random() * targetW, Math.random() * targetH, 1, 1);
       }
     }
-   
+
     // Blur band
     if (blurEnabled) {
       const by = targetH * (blurY / 100);
@@ -1061,7 +1063,7 @@ export default function VideoRecapView() {
       ctx.fillStyle = `rgba(0,0,0,${blurOpacity})`;
       ctx.fillRect(0, by, targetW, bh);
     }
-   
+
     // Subtitle rendering
     if (activeSegment) {
       const chunk = String(activeSegment.text || "")
@@ -1071,7 +1073,7 @@ export default function VideoRecapView() {
         .replace(/[•●◆▶️➡️]+/g, " ")
         .replace(/\s{2,}/g, " ")
         .trim();
-     
+
       if (chunk) {
         const by = targetH * (blurY / 100);
         const bh = targetH * (blurH / 100);
@@ -1082,10 +1084,10 @@ export default function VideoRecapView() {
         const maxWidth = targetW * 0.92;
         const maxLines = 2;
         const lineSpacing = 1.15;
-       
+
         let fs = targetH * 0.038 * subScale;
         const minFs = targetH * 0.022;
-       
+
         const wrapText = (text: string, fontSize: number): string[] => {
           ctx.font = `900 ${fontSize}px 'Padauk', sans-serif`;
           const words = text.split(/\s+/).filter(Boolean);
@@ -1103,20 +1105,20 @@ export default function VideoRecapView() {
           if (currentLine) lines.push(currentLine);
           return lines;
         };
-       
+
         let wrappedLines = wrapText(chunk, fs);
         while (wrappedLines.length > maxLines && fs > minFs) {
           fs -= 1;
           wrappedLines = wrapText(chunk, fs);
         }
         const finalLines = wrappedLines.slice(0, maxLines);
-       
+
         ctx.font = `900 ${fs}px 'Padauk', sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.shadowColor = "rgba(0,0,0,0.85)";
         ctx.shadowBlur = 5;
-       
+
         if (subColor === "GOLD") {
           const g = ctx.createLinearGradient(0, ty - fs, 0, ty + fs);
           g.addColorStop(0, "#FFD700");
@@ -1129,21 +1131,21 @@ export default function VideoRecapView() {
         } else {
           ctx.fillStyle = SUB_COLORS.find((c) => c.id === subColor)?.hex || "white";
         }
-       
+
         ctx.save();
         ctx.beginPath();
         ctx.rect(0, clipY, targetW, clipH);
         ctx.clip();
-       
+
         const totalTextHeight = finalLines.length * fs * lineSpacing;
-        const startY = ty - (totalTextHeight / 2) + (fs * lineSpacing / 2);
+        const startY = ty - totalTextHeight / 2 + (fs * lineSpacing) / 2;
         finalLines.forEach((l, i) => {
           ctx.fillText(l, targetW / 2, startY + i * fs * lineSpacing);
         });
         ctx.restore();
       }
     }
-   
+
     setWasFreeze(isFreezeMode);
   };
 
@@ -1183,15 +1185,15 @@ export default function VideoRecapView() {
 
           const effectiveTime = audioBlobUrl && !audio.paused ? audio.currentTime : video.currentTime;
 
-           // Avoid updating React state every frame (causes stutter). Throttle to ~10fps.
-           if (isPlaying) {
-             const now = performance.now();
-             if (now - lastProgressUpdateRef.current > 100) {
-               lastProgressUpdateRef.current = now;
-               const totalDur = audioDuration || video.duration || 1;
-               setProgress((effectiveTime / totalDur) * 100);
-             }
-           }
+          // Avoid updating React state every frame (causes stutter). Throttle to ~10fps.
+          if (isPlaying) {
+            const now = performance.now();
+            if (now - lastProgressUpdateRef.current > 100) {
+              lastProgressUpdateRef.current = now;
+              const totalDur = audioDuration || video.duration || 1;
+              setProgress((effectiveTime / totalDur) * 100);
+            }
+          }
 
           let activeSegment = scriptSegments.find(
             (s) => effectiveTime >= (s.audioStart || 0) && effectiveTime < (s.audioEnd || Infinity),
@@ -1211,16 +1213,16 @@ export default function VideoRecapView() {
           // Always apply 3s/3s cycle when motionZoom is enabled (even without segments)
           const CYCLE_DUR = 6.0;
           const cycleTime = effectiveTime % CYCLE_DUR;
-         
+
           if (motionZoom) {
             // --- SMOOTH 6S CYCLE (3S Video / 3S Photo Zoom) ---
             isFreezeMode = cycleTime >= 3.0;
-           
+
             // SMOOTH CROSSFADE (0.4s transition for professional look)
             const FADE_DUR = 0.4;
             if (cycleTime >= 3.0 - FADE_DUR && cycleTime < 3.0) {
               // Transitioning TO photo
-              crossfadeAlpha = 1.0 - ((cycleTime - (3.0 - FADE_DUR)) / FADE_DUR);
+              crossfadeAlpha = 1.0 - (cycleTime - (3.0 - FADE_DUR)) / FADE_DUR;
             } else if (cycleTime >= 6.0 - FADE_DUR) {
               // Transitioning TO video (end of cycle)
               crossfadeAlpha = (cycleTime - (6.0 - FADE_DUR)) / FADE_DUR;
@@ -1230,9 +1232,9 @@ export default function VideoRecapView() {
             } else {
               crossfadeAlpha = isFreezeMode ? 0.0 : 1.0;
             }
-           
+
             // Easing for smoother feel
-            const easeInOut = (t: number) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+            const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
             crossfadeAlpha = easeInOut(Math.max(0, Math.min(1, crossfadeAlpha)));
           }
 
@@ -1274,7 +1276,7 @@ export default function VideoRecapView() {
           // Capture freeze frame at transition (or if empty)
           const sizeChanged = freezeCanvas.width !== targetW || freezeCanvas.height !== targetH;
           const needsCapture = sizeChanged || (isFreezeMode && !wasFreezeModeRef.current);
-         
+
           if (needsCapture) {
             freezeCanvas.width = targetW;
             freezeCanvas.height = targetH;
@@ -1304,7 +1306,7 @@ export default function VideoRecapView() {
             const progressInFreeze = globalCycleTime >= 3.0 ? (globalCycleTime - 3.0) / 3.0 : 0;
 
             // Cinematic Ken Burns zoom with easing
-            const easeInOut = (t: number) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+            const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
             const easedProgress = easeInOut(progressInFreeze);
             const currentZoom = 1.0 + easedProgress * 0.2; // Subtle 1.2x zoom
 
@@ -1424,7 +1426,7 @@ export default function VideoRecapView() {
             ctx.font = `900 ${tickerFs}px 'Padauk', sans-serif`;
             ctx.shadowColor = "rgba(0,0,0,0.9)";
             ctx.shadowBlur = 6;
-           
+
             // Gradient fill for channel name
             const tickerGrad = ctx.createLinearGradient(0, 0, 0, tickerFs);
             tickerGrad.addColorStop(0, "#FFD700");
@@ -1432,10 +1434,10 @@ export default function VideoRecapView() {
             ctx.fillStyle = tickerGrad;
             ctx.textAlign = "left";
             ctx.textBaseline = "top";
-           
+
             const textWidth = ctx.measureText(channelName).width;
             const padding = 20;
-           
+
             if (tickerMode === "SCROLL") {
               // Horizontal scroll from right to left
               tickerXRef.current -= 2;
@@ -1447,7 +1449,7 @@ export default function VideoRecapView() {
               // Bounce animation (DVD logo style)
               tickerXRef.current += tickerVelXRef.current;
               tickerYRef.current += tickerVelYRef.current;
-             
+
               // Boundary checks
               if (tickerXRef.current <= 0 || tickerXRef.current + textWidth >= targetW) {
                 tickerVelXRef.current *= -1;
@@ -1457,7 +1459,7 @@ export default function VideoRecapView() {
                 tickerVelYRef.current *= -1;
                 tickerYRef.current = Math.max(0, Math.min(tickerYRef.current, targetH - tickerFs));
               }
-             
+
               // Neon glow effect for bounce
               ctx.shadowColor = `hsl(${(Date.now() / 20) % 360}, 100%, 50%)`;
               ctx.shadowBlur = 15;
@@ -1497,17 +1499,17 @@ export default function VideoRecapView() {
               const maxWidth = targetW * 0.92;
               const maxLines = 2;
               const lineSpacing = 1.15;
-             
+
               // Auto-fit font size: start with base size and shrink until text fits in 2 lines
               let fs = targetH * 0.038 * subScale; // Smaller base size
               const minFs = targetH * 0.022; // Minimum readable size
-             
+
               const wrapText = (text: string, fontSize: number): string[] => {
                 ctx.font = `900 ${fontSize}px 'Padauk', sans-serif`;
                 const words = text.split(/\s+/).filter(Boolean);
                 const lines: string[] = [];
                 let currentLine = "";
-               
+
                 for (const word of words) {
                   const testLine = currentLine ? `${currentLine} ${word}` : word;
                   if (ctx.measureText(testLine).width > maxWidth && currentLine) {
@@ -1520,23 +1522,23 @@ export default function VideoRecapView() {
                 if (currentLine) lines.push(currentLine);
                 return lines;
               };
-             
+
               // Find optimal font size that fits all text in maxLines
               let wrappedLines = wrapText(chunk, fs);
               while (wrappedLines.length > maxLines && fs > minFs) {
                 fs -= 1;
                 wrappedLines = wrapText(chunk, fs);
               }
-             
+
               // If still too many lines, take first 2 lines (no ellipsis - text auto-changes with audio)
               const finalLines = wrappedLines.slice(0, maxLines);
-             
+
               ctx.font = `900 ${fs}px 'Padauk', sans-serif`;
               ctx.textAlign = "center";
               ctx.textBaseline = "middle";
               ctx.shadowColor = "rgba(0,0,0,0.85)";
               ctx.shadowBlur = 5;
-             
+
               if (subColor === "GOLD") {
                 const g = ctx.createLinearGradient(0, ty - fs, 0, ty + fs);
                 g.addColorStop(0, "#FFD700");
@@ -1554,11 +1556,11 @@ export default function VideoRecapView() {
               ctx.beginPath();
               ctx.rect(0, clipY, targetW, clipH);
               ctx.clip();
-             
+
               // Center lines vertically within clip area
               const totalTextHeight = finalLines.length * fs * lineSpacing;
-              const startY = ty - (totalTextHeight / 2) + (fs * lineSpacing / 2);
-             
+              const startY = ty - totalTextHeight / 2 + (fs * lineSpacing) / 2;
+
               finalLines.forEach((l, i) => {
                 const yOff = startY + i * fs * lineSpacing;
                 ctx.fillText(l, targetW / 2, yOff);
@@ -1629,7 +1631,7 @@ export default function VideoRecapView() {
         </h1>
         <div className="w-16" /> {/* Spacer for centering */}
       </div>
-     
+
       {/* History Toggle Button */}
       <div className="flex gap-2">
         <button
@@ -1662,32 +1664,21 @@ export default function VideoRecapView() {
       {showHistory && (
         <div className="bg-[#0a0a0a] rounded-2xl border border-white/10 overflow-hidden animate-in slide-in-from-top duration-300">
           <div className="p-3 bg-white/5 border-b border-white/10">
-            <h3 className="text-[10px] font-black text-white uppercase tracking-widest">
-              📼 RECENT RECAPS
-            </h3>
+            <h3 className="text-[10px] font-black text-white uppercase tracking-widest">📼 RECENT RECAPS</h3>
           </div>
           <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
             {history.length === 0 ? (
-              <div className="p-6 text-center text-slate-500 text-xs">
-                History မရှိသေးပါ
-              </div>
+              <div className="p-6 text-center text-slate-500 text-xs">History မရှိသေးပါ</div>
             ) : (
               history.map((item) => (
-                <div
-                  key={item.id}
-                  className="p-3 border-b border-white/5 hover:bg-white/5 transition-colors"
-                >
+                <div key={item.id} className="p-3 border-b border-white/5 hover:bg-white/5 transition-colors">
                   <div className="flex justify-between items-start gap-2">
                     <div className="flex-1 min-w-0">
-                      <p className="text-[10px] font-bold text-white truncate">
-                        {item.fileName}
-                      </p>
+                      <p className="text-[10px] font-bold text-white truncate">{item.fileName}</p>
                       <p className="text-[8px] text-slate-500 mt-0.5">
                         {new Date(item.timestamp).toLocaleString("my-MM")}
                       </p>
-                      <p className="text-[9px] text-slate-400 mt-1 line-clamp-2">
-                        {item.script.substring(0, 100)}...
-                      </p>
+                      <p className="text-[9px] text-slate-400 mt-1 line-clamp-2">{item.script.substring(0, 100)}...</p>
                     </div>
                     <div className="flex gap-1 shrink-0">
                       <button
@@ -2180,4 +2171,4 @@ export default function VideoRecapView() {
       </div>
     </div>
   );
-};
+}
