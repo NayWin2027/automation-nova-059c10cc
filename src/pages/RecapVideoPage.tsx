@@ -661,29 +661,19 @@ export default function VideoRecapView() {
         console.log(`[Recap] Detected ${detectedScenes.length} scenes, matching to ${segments.length} segments`);
         segments = matchSegmentsToScenes(segments, detectedScenes);
       } else {
-        // No scenes from backend — use AI timestamps if valid, else even distribution
+        // No scenes from backend — ALWAYS use even distribution.
+        // AI `time` values are narrative ordering hints, NOT reliable video seek positions.
+        // Using them as seek positions causes all segments to cluster in early seconds of the video.
         const videoDur = videoRef.current?.duration || 120;
-        const aiTimesValid = validateAiTimestamps(segments, videoDur);
-        if (aiTimesValid) {
-          console.log(`[Recap] Using validated AI timestamps for ${segments.length} segments across ${videoDur.toFixed(1)}s video`);
-          segments = segments.map((seg, idx) => ({
-            ...seg,
-            videoTime: seg.time,
-            sceneStart: seg.time,
-            sceneEnd: idx < segments.length - 1 ? segments[idx + 1].time : videoDur,
-            sceneTopic: `AI-Scene ${idx + 1}`
-          }));
-        } else {
-          console.log(`[Recap] AI timestamps invalid — evenly distributing ${segments.length} segments across ${videoDur.toFixed(1)}s video`);
-          const segDur = videoDur / segments.length;
-          segments = segments.map((seg, idx) => ({
-            ...seg,
-            videoTime: idx * segDur,
-            sceneStart: idx * segDur,
-            sceneEnd: (idx + 1) * segDur,
-            sceneTopic: `Auto-Scene ${idx + 1}`
-          }));
-        }
+        console.log(`[Recap] No backend scenes — evenly distributing ${segments.length} segments across ${videoDur.toFixed(1)}s video`);
+        const segDur = videoDur / segments.length;
+        segments = segments.map((seg, idx) => ({
+          ...seg,
+          videoTime: idx * segDur,
+          sceneStart: idx * segDur,
+          sceneEnd: (idx + 1) * segDur,
+          sceneTopic: `Auto-Scene ${idx + 1}`
+        }));
       }
 
       const completeText = segments.
@@ -776,7 +766,7 @@ export default function VideoRecapView() {
 
         const segDur = totalDuration / segments.length;
         const videoDur = videoRef.current?.duration || totalDuration;
-        // Preserve existing scene mapping from Step 1, or use AI timestamps if valid, else even distribution
+        // Preserve existing scene mapping from Step 1, or use even distribution
         mappedSegments = segments.map((seg, idx) => {
           const hasSceneData = seg.sceneStart !== undefined && seg.sceneEnd !== undefined;
           if (hasSceneData) {
@@ -789,18 +779,7 @@ export default function VideoRecapView() {
               sceneEnd: seg.sceneEnd
             };
           }
-          // No scene data — validate AI timestamps as fallback
-          const aiValid = validateAiTimestamps(segments, videoDur);
-          if (aiValid) {
-            return {
-              ...seg,
-              audioStart: idx * segDur,
-              audioEnd: (idx + 1) * segDur,
-              videoTime: seg.time,
-              sceneStart: seg.time,
-              sceneEnd: idx < segments.length - 1 ? segments[idx + 1].time : videoDur
-            };
-          }
+          // No scene data from Step 1 — even distribution across video
           return {
             ...seg,
             audioStart: idx * segDur,
@@ -991,10 +970,9 @@ export default function VideoRecapView() {
       setAudioBlobUrl(url);
       setAudioDuration(combinedBuffer.duration);
 
-      // Map exact audio timings to segments, preserving scene mapping or using AI timestamps
+      // Map exact audio timings to segments, preserving scene mapping from Step 1
       let currentTimePointer = 0;
       const videoDur = videoRef.current?.duration || combinedBuffer.duration;
-      const aiValid = validateAiTimestamps(segments, videoDur);
       const mappedSegments = segments.map((seg, idx) => {
         const segDur = segmentDurations[idx];
         const hasSceneData = seg.sceneStart !== undefined && seg.sceneEnd !== undefined;
@@ -1003,11 +981,8 @@ export default function VideoRecapView() {
           videoTime = seg.videoTime!;
           sceneStart = seg.sceneStart!;
           sceneEnd = seg.sceneEnd!;
-        } else if (aiValid) {
-          videoTime = seg.time;
-          sceneStart = seg.time;
-          sceneEnd = idx < segments.length - 1 ? segments[idx + 1].time : videoDur;
         } else {
+          // No scene data from Step 1 — even distribution across video
           videoTime = idx / segments.length * videoDur;
           sceneStart = idx / segments.length * videoDur;
           sceneEnd = (idx + 1) / segments.length * videoDur;
