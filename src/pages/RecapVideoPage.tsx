@@ -556,53 +556,18 @@ export default function VideoRecapView() {
     // Sort scenes by start time for reliable matching
     const sortedScenes = [...scenes].sort((a, b) => a.start - b.start);
 
-    // CRITICAL FIX: Check if segments have meaningful distinct timestamps
-    // If all segments share the same time (e.g., all time=0), distribute them evenly across scenes
-    const uniqueTimes = new Set(segments.map(s => s.time));
-    const hasDistinctTimes = uniqueTimes.size > 1;
-
-    if (!hasDistinctTimes) {
-      // All segments have identical timestamps — distribute sequentially across scenes
-      console.log(`[Recap] All segments have same time (${segments[0]?.time}), distributing across ${sortedScenes.length} scenes`);
-      return segments.map((seg, idx) => {
-        const sceneIdx = Math.min(
-          Math.floor(idx * sortedScenes.length / segments.length),
-          sortedScenes.length - 1
-        );
-        const matchedScene = sortedScenes[sceneIdx];
-        return {
-          ...seg,
-          videoTime: matchedScene.start,
-          sceneStart: matchedScene.start,
-          sceneEnd: matchedScene.end,
-          sceneTopic: matchedScene.topic
-        };
-      });
-    }
-
+    // CRITICAL FIX: ALWAYS use proportional sequential distribution.
+    // AI generates script segments in chronological scene order, so segment[0] matches scene[0], etc.
+    // Timestamp-based "nearest match" was unreliable because AI timestamps can be compressed
+    // (e.g., 0,2,4,6) while scenes span wide ranges (0-10, 10-20, 20-30),
+    // causing ALL segments to map to the first few scenes — completely wrong sync.
+    console.log(`[Recap] Proportional distribution: ${segments.length} segments → ${sortedScenes.length} scenes`);
     return segments.map((seg, idx) => {
-      // 1. Exact timestamp match: seg.time falls within a scene's range
-      let matchedScene = sortedScenes.find((sc) =>
-        seg.time >= sc.start && seg.time < sc.end
+      const sceneIdx = Math.min(
+        Math.floor(idx * sortedScenes.length / segments.length),
+        sortedScenes.length - 1
       );
-
-      if (!matchedScene) {
-        // 2. Nearest scene by timestamp
-        let minDist = Infinity;
-        for (const sc of sortedScenes) {
-          const dist = Math.abs(seg.time - sc.start);
-          if (dist < minDist) {
-            minDist = dist;
-            matchedScene = sc;
-          }
-        }
-      }
-
-      if (!matchedScene) {
-        // 3. Final fallback: sequential assignment
-        matchedScene = sortedScenes[Math.min(idx, sortedScenes.length - 1)];
-      }
-
+      const matchedScene = sortedScenes[sceneIdx];
       return {
         ...seg,
         videoTime: matchedScene.start,
