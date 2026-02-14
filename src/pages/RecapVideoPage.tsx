@@ -1143,8 +1143,13 @@ export default function VideoRecapView() {
       };
       const t = window.setTimeout(() => {
         cleanup();
-        reject(new Error(`${label} timed out`));
-      }, 12000);
+        // Last chance: if readyState is at least 1 (metadata loaded), allow it
+        if (el.readyState >= 1 && Number.isFinite(el.duration) && el.duration > 0) {
+          resolve();
+        } else {
+          reject(new Error(`${label} timed out`));
+        }
+      }, 20000);
 
       el.addEventListener("loadedmetadata", onReady);
       el.addEventListener("canplay", onReady);
@@ -1175,6 +1180,14 @@ export default function VideoRecapView() {
     didConfirmSuccessRef.current = false;
 
     try {
+      // Ensure video src is loaded (mobile may have lost decoder)
+      if (video.readyState < 2) {
+        const recoveryUrl = videoBlobUrl || videoDataUrl;
+        if (recoveryUrl && video.src !== recoveryUrl) {
+          video.src = recoveryUrl;
+          video.load();
+        }
+      }
       // Ensure media is actually ready (prevents instant-ended → tiny 0s file)
       await Promise.all([waitForPlayable(video, "Video"), waitForPlayable(audio, "Audio")]);
     } catch {
@@ -1182,6 +1195,13 @@ export default function VideoRecapView() {
       setIsExporting(false);
       return;
     }
+
+    // CRITICAL: Reset ALL tracking refs so renderer seeks correctly for new playback
+    lastSeekedSegmentRef.current = -1;
+    lastActiveSegmentIndexRef.current = -1;
+    lastPhaseWasPhotoRef.current = false;
+    freezeCapturedCycleRef.current = -1;
+    wasFreezeModeRef.current = false;
 
     // Reset to start (after ready)
     video.currentTime = 0;
