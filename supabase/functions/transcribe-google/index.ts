@@ -12,7 +12,7 @@ const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 // Google Files API base URL
 const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1beta/files";
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
-const DEFAULT_TRANSCRIBE_MODEL = "gemini-2.5-flash-lite";
+const DEFAULT_TRANSCRIBE_MODEL = "gemini-2.5-flash";
 
 function tryParseGoogleApiError(errorText: string): {
   status?: string;
