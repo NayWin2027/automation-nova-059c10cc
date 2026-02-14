@@ -548,6 +548,21 @@ export default function VideoRecapView() {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [videoDataUrl, videoBlobUrl, isPlaying]);
 
+  // Helper: Validate AI-generated timestamps for scene mapping
+  const validateAiTimestamps = (segments: ScriptSegment[], videoDuration: number): boolean => {
+    if (segments.length <= 1) return false;
+    const times = segments.map(s => s.time);
+    // All zeros or all identical = invalid
+    if (times.every(t => t === times[0])) return false;
+    // Any time exceeds video duration * 1.5 = invalid
+    if (times.some(t => t > videoDuration * 1.5)) return false;
+    // Must be roughly ascending (allow equal consecutive)
+    for (let i = 1; i < times.length; i++) {
+      if (times[i] < times[i - 1]) return false;
+    }
+    return true;
+  };
+
   // Helper: Match segments to detected scenes for semantic video seeking
   // Priority: 1) Sequential distribution when timestamps are identical, 2) Exact match, 3) Nearest match
   const matchSegmentsToScenes = (segments: ScriptSegment[], scenes: VideoScene[]): ScriptSegment[] => {
@@ -646,20 +661,29 @@ export default function VideoRecapView() {
         console.log(`[Recap] Detected ${detectedScenes.length} scenes, matching to ${segments.length} segments`);
         segments = matchSegmentsToScenes(segments, detectedScenes);
       } else {
-        // FIX: No scenes from backend — ALWAYS distribute evenly across video duration.
-        // AI timestamps are unreliable (often compressed to first few seconds),
-        // causing narrator to describe one thing while video shows another.
-        // Sequential even distribution is the ONLY reliable sync method.
+        // No scenes from backend — use AI timestamps if valid, else even distribution
         const videoDur = videoRef.current?.duration || 120;
-        console.log(`[Recap] No scenes — evenly distributing ${segments.length} segments across ${videoDur.toFixed(1)}s video`);
-        const segDur = videoDur / segments.length;
-        segments = segments.map((seg, idx) => ({
-          ...seg,
-          videoTime: idx * segDur,
-          sceneStart: idx * segDur,
-          sceneEnd: (idx + 1) * segDur,
-          sceneTopic: `Auto-Scene ${idx + 1}`
-        }));
+        const aiTimesValid = validateAiTimestamps(segments, videoDur);
+        if (aiTimesValid) {
+          console.log(`[Recap] Using validated AI timestamps for ${segments.length} segments across ${videoDur.toFixed(1)}s video`);
+          segments = segments.map((seg, idx) => ({
+            ...seg,
+            videoTime: seg.time,
+            sceneStart: seg.time,
+            sceneEnd: idx < segments.length - 1 ? segments[idx + 1].time : videoDur,
+            sceneTopic: `AI-Scene ${idx + 1}`
+          }));
+        } else {
+          console.log(`[Recap] AI timestamps invalid — evenly distributing ${segments.length} segments across ${videoDur.toFixed(1)}s video`);
+          const segDur = videoDur / segments.length;
+          segments = segments.map((seg, idx) => ({
+            ...seg,
+            videoTime: idx * segDur,
+            sceneStart: idx * segDur,
+            sceneEnd: (idx + 1) * segDur,
+            sceneTopic: `Auto-Scene ${idx + 1}`
+          }));
+        }
       }
 
       const completeText = segments.
@@ -752,17 +776,38 @@ export default function VideoRecapView() {
 
         const segDur = totalDuration / segments.length;
         const videoDur = videoRef.current?.duration || totalDuration;
-        // CRITICAL: PRESERVE existing scene mapping from Step 1 (matchSegmentsToScenes).
-        // Only fall back to even distribution if no scene data exists.
+        // Preserve existing scene mapping from Step 1, or use AI timestamps if valid, else even distribution
         mappedSegments = segments.map((seg, idx) => {
           const hasSceneData = seg.sceneStart !== undefined && seg.sceneEnd !== undefined;
+          if (hasSceneData) {
+            return {
+              ...seg,
+              audioStart: idx * segDur,
+              audioEnd: (idx + 1) * segDur,
+              videoTime: seg.videoTime,
+              sceneStart: seg.sceneStart,
+              sceneEnd: seg.sceneEnd
+            };
+          }
+          // No scene data — validate AI timestamps as fallback
+          const aiValid = validateAiTimestamps(segments, videoDur);
+          if (aiValid) {
+            return {
+              ...seg,
+              audioStart: idx * segDur,
+              audioEnd: (idx + 1) * segDur,
+              videoTime: seg.time,
+              sceneStart: seg.time,
+              sceneEnd: idx < segments.length - 1 ? segments[idx + 1].time : videoDur
+            };
+          }
           return {
             ...seg,
             audioStart: idx * segDur,
             audioEnd: (idx + 1) * segDur,
-            videoTime: hasSceneData ? seg.videoTime : idx / segments.length * videoDur,
-            sceneStart: hasSceneData ? seg.sceneStart : idx / segments.length * videoDur,
-            sceneEnd: hasSceneData ? seg.sceneEnd : (idx + 1) / segments.length * videoDur
+            videoTime: idx / segments.length * videoDur,
+            sceneStart: idx / segments.length * videoDur,
+            sceneEnd: (idx + 1) / segments.length * videoDur
           };
         });
       } else {
@@ -793,7 +838,7 @@ export default function VideoRecapView() {
       saveToHistory(fullScriptText || "(Custom Audio - No Script)", url, mappedSegments);
       toast.success("✨ Custom Audio Recap ပြီးပါပြီ!");
 
-      setTimeout(() => togglePlay(), 500);
+      setTimeout(() => togglePlay(), 1500);
     } catch (err: any) {
       console.error("Custom audio error:", err);
       toast.error("Custom Audio Error: " + (err.message || "Failed"));
@@ -946,22 +991,34 @@ export default function VideoRecapView() {
       setAudioBlobUrl(url);
       setAudioDuration(combinedBuffer.duration);
 
-      // Map exact timings to segments — ALWAYS recalculate video scene positions
-      // to ensure even distribution across video (AI timestamps are unreliable)
+      // Map exact audio timings to segments, preserving scene mapping or using AI timestamps
       let currentTimePointer = 0;
       const videoDur = videoRef.current?.duration || combinedBuffer.duration;
+      const aiValid = validateAiTimestamps(segments, videoDur);
       const mappedSegments = segments.map((seg, idx) => {
         const segDur = segmentDurations[idx];
-        // CRITICAL: PRESERVE existing scene mapping from Step 1 (matchSegmentsToScenes).
-        // Only fall back to even distribution if no scene data exists.
         const hasSceneData = seg.sceneStart !== undefined && seg.sceneEnd !== undefined;
+        let videoTime: number, sceneStart: number, sceneEnd: number;
+        if (hasSceneData) {
+          videoTime = seg.videoTime!;
+          sceneStart = seg.sceneStart!;
+          sceneEnd = seg.sceneEnd!;
+        } else if (aiValid) {
+          videoTime = seg.time;
+          sceneStart = seg.time;
+          sceneEnd = idx < segments.length - 1 ? segments[idx + 1].time : videoDur;
+        } else {
+          videoTime = idx / segments.length * videoDur;
+          sceneStart = idx / segments.length * videoDur;
+          sceneEnd = (idx + 1) / segments.length * videoDur;
+        }
         const mapped = {
           ...seg,
           audioStart: currentTimePointer,
           audioEnd: currentTimePointer + segDur,
-          videoTime: hasSceneData ? seg.videoTime : idx / segments.length * videoDur,
-          sceneStart: hasSceneData ? seg.sceneStart : idx / segments.length * videoDur,
-          sceneEnd: hasSceneData ? seg.sceneEnd : (idx + 1) / segments.length * videoDur
+          videoTime,
+          sceneStart,
+          sceneEnd
         };
         currentTimePointer += segDur;
         return mapped;
@@ -975,7 +1032,7 @@ export default function VideoRecapView() {
       saveToHistory(text, url, mappedSegments);
       toast.success("✨ Premium Recap ပြီးပါပြီ! (Export အောင်မြင်မှ credits ဖြတ်ပါမယ်)");
 
-      setTimeout(() => togglePlay(), 500);
+      setTimeout(() => togglePlay(), 1500);
     } catch (err: any) {
       console.error("Per-segment TTS error:", err);
       // If quota/rate-limit, show message and stop (no retry loop)
