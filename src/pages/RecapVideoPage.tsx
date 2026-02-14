@@ -258,6 +258,7 @@ export default function VideoRecapView() {
   const [file, setFile] = useState<File | null>(null);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [videoDataUrl, setVideoDataUrl] = useState<string | null>(null); // Persist video as base64
+  const [videoBlobUrl, setVideoBlobUrl] = useState<string | null>(null); // Blob URL fallback for large files
   const [analyzing, setAnalyzing] = useState(false);
   const [statusText, setStatusText] = useState("");
   const [scriptSegments, setScriptSegments] = useState<ScriptSegment[]>([]);
@@ -409,6 +410,10 @@ export default function VideoRecapView() {
       setFile(f);
       setCurrentFileName(f.name);
 
+      // Always create blob URL as reliable fallback (works for any file size)
+      const blobUrl = URL.createObjectURL(f);
+      setVideoBlobUrl(blobUrl);
+
       // Convert to Base64 Data URL for persistence (survives browser tab switches)
       const reader = new FileReader();
       reader.onload = () => {
@@ -417,8 +422,9 @@ export default function VideoRecapView() {
         setVideoSrc(dataUrl); // Use data URL instead of blob URL
       };
       reader.onerror = () => {
-        // Fallback to blob URL if base64 fails
-        setVideoSrc(URL.createObjectURL(f));
+        // Fallback to blob URL if base64 fails (large files)
+        console.log('[RecapVideo] Base64 conversion failed, using blob URL');
+        setVideoSrc(blobUrl);
       };
       reader.readAsDataURL(f);
 
@@ -507,22 +513,29 @@ export default function VideoRecapView() {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         const video = videoRef.current;
-        if (video && videoDataUrl) {
-          console.log('[RecapVideo] Tab visible — recovering video. readyState:', video.readyState);
+        // Use videoDataUrl (base64) if available, otherwise fall back to blob URL
+        const recoveryUrl = videoDataUrl || videoBlobUrl;
+        if (video && recoveryUrl) {
+          console.log('[RecapVideo] Tab visible — recovering video. readyState:', video.readyState, 'using:', videoDataUrl ? 'dataUrl' : 'blobUrl');
           
           const savedTime = video.currentTime;
           
-          // Always force reload from persistent data URL to recover decoder
-          video.src = videoDataUrl;
-          video.load();
-          video.addEventListener('loadeddata', () => {
+          // Force re-seek first (fast recovery without full reload)
+          if (video.readyState >= 2) {
             video.currentTime = savedTime;
-            console.log('[RecapVideo] Video recovered at', savedTime.toFixed(2), 's');
-            // If was playing, resume
-            if (isPlaying && !video.paused) {
-              video.play().catch(() => {});
-            }
-          }, { once: true });
+            console.log('[RecapVideo] Quick recovery via re-seek at', savedTime.toFixed(2), 's');
+          } else {
+            // Decoder evicted — full reload from persistent URL
+            video.src = recoveryUrl;
+            video.load();
+            video.addEventListener('loadeddata', () => {
+              video.currentTime = savedTime;
+              console.log('[RecapVideo] Full recovery at', savedTime.toFixed(2), 's');
+              if (isPlaying) {
+                video.play().catch(() => {});
+              }
+            }, { once: true });
+          }
           
           // Reset freeze canvas to force re-capture on next photo phase
           freezeCapturedCycleRef.current = -1;
@@ -533,7 +546,7 @@ export default function VideoRecapView() {
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [videoDataUrl, isPlaying]);
+  }, [videoDataUrl, videoBlobUrl, isPlaying]);
 
   // Helper: Match segments to detected scenes for semantic video seeking
   // Priority: 1) Sequential distribution when timestamps are identical, 2) Exact match, 3) Nearest match
@@ -668,21 +681,37 @@ export default function VideoRecapView() {
         console.log(`[Recap] Detected ${detectedScenes.length} scenes, matching to ${segments.length} segments`);
         segments = matchSegmentsToScenes(segments, detectedScenes);
       } else {
-        // FIX: No scenes from backend — auto-generate scene boundaries from segment timestamps
-        // This prevents all segments from having undefined sceneStart/sceneEnd which causes
-        // sceneDuration=6.0 modulo wrapping → video looping on same scene
+        // FIX: No scenes from backend — auto-generate scene boundaries
+        // CRITICAL: Check if segments have distinct timestamps or all share the same time (e.g., all 0)
         const videoDur = videoRef.current?.duration || 120;
-        console.log(`[Recap] No scenes detected — auto-distributing ${segments.length} segments across ${videoDur.toFixed(1)}s video`);
-        segments = segments.map((seg, idx) => {
-          const nextTime = idx < segments.length - 1 ? segments[idx + 1].time : videoDur;
-          return {
+        const uniqueTimes = new Set(segments.map(s => s.time));
+        const allSameTime = uniqueTimes.size <= 1;
+        
+        if (allSameTime) {
+          // All segments have identical timestamps → distribute EVENLY across video duration
+          console.log(`[Recap] No scenes + all times identical — evenly distributing ${segments.length} segments across ${videoDur.toFixed(1)}s video`);
+          const segDur = videoDur / segments.length;
+          segments = segments.map((seg, idx) => ({
             ...seg,
-            videoTime: seg.time,
-            sceneStart: seg.time,
-            sceneEnd: Math.max(seg.time + 1, nextTime),
+            videoTime: idx * segDur,
+            sceneStart: idx * segDur,
+            sceneEnd: (idx + 1) * segDur,
             sceneTopic: `Auto-Scene ${idx + 1}`
-          };
-        });
+          }));
+        } else {
+          // Segments have distinct timestamps — use them as scene boundaries
+          console.log(`[Recap] No scenes detected — using segment times across ${videoDur.toFixed(1)}s video`);
+          segments = segments.map((seg, idx) => {
+            const nextTime = idx < segments.length - 1 ? segments[idx + 1].time : videoDur;
+            return {
+              ...seg,
+              videoTime: seg.time,
+              sceneStart: seg.time,
+              sceneEnd: Math.max(seg.time + 1, nextTime),
+              sceneTopic: `Auto-Scene ${idx + 1}`
+            };
+          });
+        }
       }
 
       const completeText = segments.
