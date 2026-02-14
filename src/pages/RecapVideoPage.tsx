@@ -646,37 +646,20 @@ export default function VideoRecapView() {
         console.log(`[Recap] Detected ${detectedScenes.length} scenes, matching to ${segments.length} segments`);
         segments = matchSegmentsToScenes(segments, detectedScenes);
       } else {
-        // FIX: No scenes from backend — auto-generate scene boundaries
-        // CRITICAL: Check if segments have distinct timestamps or all share the same time (e.g., all 0)
+        // FIX: No scenes from backend — ALWAYS distribute evenly across video duration.
+        // AI timestamps are unreliable (often compressed to first few seconds),
+        // causing narrator to describe one thing while video shows another.
+        // Sequential even distribution is the ONLY reliable sync method.
         const videoDur = videoRef.current?.duration || 120;
-        const uniqueTimes = new Set(segments.map(s => s.time));
-        const allSameTime = uniqueTimes.size <= 1;
-        
-        if (allSameTime) {
-          // All segments have identical timestamps → distribute EVENLY across video duration
-          console.log(`[Recap] No scenes + all times identical — evenly distributing ${segments.length} segments across ${videoDur.toFixed(1)}s video`);
-          const segDur = videoDur / segments.length;
-          segments = segments.map((seg, idx) => ({
-            ...seg,
-            videoTime: idx * segDur,
-            sceneStart: idx * segDur,
-            sceneEnd: (idx + 1) * segDur,
-            sceneTopic: `Auto-Scene ${idx + 1}`
-          }));
-        } else {
-          // Segments have distinct timestamps — use them as scene boundaries
-          console.log(`[Recap] No scenes detected — using segment times across ${videoDur.toFixed(1)}s video`);
-          segments = segments.map((seg, idx) => {
-            const nextTime = idx < segments.length - 1 ? segments[idx + 1].time : videoDur;
-            return {
-              ...seg,
-              videoTime: seg.time,
-              sceneStart: seg.time,
-              sceneEnd: Math.max(seg.time + 1, nextTime),
-              sceneTopic: `Auto-Scene ${idx + 1}`
-            };
-          });
-        }
+        console.log(`[Recap] No scenes — evenly distributing ${segments.length} segments across ${videoDur.toFixed(1)}s video`);
+        const segDur = videoDur / segments.length;
+        segments = segments.map((seg, idx) => ({
+          ...seg,
+          videoTime: idx * segDur,
+          sceneStart: idx * segDur,
+          sceneEnd: (idx + 1) * segDur,
+          sceneTopic: `Auto-Scene ${idx + 1}`
+        }));
       }
 
       const completeText = segments.
@@ -773,10 +756,11 @@ export default function VideoRecapView() {
           ...seg,
           audioStart: idx * segDur,
           audioEnd: (idx + 1) * segDur,
-          // CRITICAL: Add scene matching data so renderer syncs video to correct scene
-          videoTime: seg.videoTime ?? idx / segments.length * videoDur,
-          sceneStart: seg.sceneStart ?? idx / segments.length * videoDur,
-          sceneEnd: seg.sceneEnd ?? (idx + 1) / segments.length * videoDur
+          // CRITICAL: ALWAYS recalculate scene data — never trust AI timestamps
+          // AI timestamps are often compressed/wrong, causing video-audio mismatch
+          videoTime: idx / segments.length * videoDur,
+          sceneStart: idx / segments.length * videoDur,
+          sceneEnd: (idx + 1) / segments.length * videoDur
         }));
       } else {
         // No script: create empty segments (no subtitles) distributed evenly across video
@@ -959,14 +943,20 @@ export default function VideoRecapView() {
       setAudioBlobUrl(url);
       setAudioDuration(combinedBuffer.duration);
 
-      // Map exact timings to segments
+      // Map exact timings to segments — ALWAYS recalculate video scene positions
+      // to ensure even distribution across video (AI timestamps are unreliable)
       let currentTimePointer = 0;
+      const videoDur = videoRef.current?.duration || combinedBuffer.duration;
       const mappedSegments = segments.map((seg, idx) => {
         const segDur = segmentDurations[idx];
         const mapped = {
           ...seg,
           audioStart: currentTimePointer,
-          audioEnd: currentTimePointer + segDur
+          audioEnd: currentTimePointer + segDur,
+          // CRITICAL: Override AI timestamps with even distribution
+          videoTime: idx / segments.length * videoDur,
+          sceneStart: idx / segments.length * videoDur,
+          sceneEnd: (idx + 1) / segments.length * videoDur
         };
         currentTimePointer += segDur;
         return mapped;
