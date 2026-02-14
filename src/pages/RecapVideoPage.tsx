@@ -507,22 +507,23 @@ export default function VideoRecapView() {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         const video = videoRef.current;
-        if (video) {
-          // Force video element to re-decode current frame by re-seeking
-          const currentTime = video.currentTime;
-          if (video.readyState >= 1) {
-            // Re-seek to same position to force frame decode
-            video.currentTime = currentTime;
-          }
-          // If video lost its decoded data entirely, reload from persistent data URL
-          if (video.readyState === 0 && videoDataUrl) {
-            console.log('[RecapVideo] Video lost on tab return — reloading from dataUrl');
-            video.src = videoDataUrl;
-            video.load();
-            video.addEventListener('loadeddata', () => {
-              video.currentTime = currentTime;
-            }, { once: true });
-          }
+        if (video && videoDataUrl) {
+          console.log('[RecapVideo] Tab visible — recovering video. readyState:', video.readyState);
+          
+          const savedTime = video.currentTime;
+          
+          // Always force reload from persistent data URL to recover decoder
+          video.src = videoDataUrl;
+          video.load();
+          video.addEventListener('loadeddata', () => {
+            video.currentTime = savedTime;
+            console.log('[RecapVideo] Video recovered at', savedTime.toFixed(2), 's');
+            // If was playing, resume
+            if (isPlaying && !video.paused) {
+              video.play().catch(() => {});
+            }
+          }, { once: true });
+          
           // Reset freeze canvas to force re-capture on next photo phase
           freezeCapturedCycleRef.current = -1;
           wasFreezeModeRef.current = false;
@@ -532,7 +533,7 @@ export default function VideoRecapView() {
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [videoDataUrl]);
+  }, [videoDataUrl, isPlaying]);
 
   // Helper: Match segments to detected scenes for semantic video seeking
   // Priority: 1) Sequential distribution when timestamps are identical, 2) Exact match, 3) Nearest match
@@ -666,6 +667,22 @@ export default function VideoRecapView() {
       if (detectedScenes && detectedScenes.length > 0) {
         console.log(`[Recap] Detected ${detectedScenes.length} scenes, matching to ${segments.length} segments`);
         segments = matchSegmentsToScenes(segments, detectedScenes);
+      } else {
+        // FIX: No scenes from backend — auto-generate scene boundaries from segment timestamps
+        // This prevents all segments from having undefined sceneStart/sceneEnd which causes
+        // sceneDuration=6.0 modulo wrapping → video looping on same scene
+        const videoDur = videoRef.current?.duration || 120;
+        console.log(`[Recap] No scenes detected — auto-distributing ${segments.length} segments across ${videoDur.toFixed(1)}s video`);
+        segments = segments.map((seg, idx) => {
+          const nextTime = idx < segments.length - 1 ? segments[idx + 1].time : videoDur;
+          return {
+            ...seg,
+            videoTime: seg.time,
+            sceneStart: seg.time,
+            sceneEnd: Math.max(seg.time + 1, nextTime),
+            sceneTopic: `Auto-Scene ${idx + 1}`
+          };
+        });
       }
 
       const completeText = segments.
@@ -1588,7 +1605,25 @@ export default function VideoRecapView() {
       const audio = audioRef.current;
       const freezeCanvas = freezeCanvasRef.current;
 
-      if (video && canvas && freezeCanvas && audio && video.readyState >= 2) {
+    if (video && canvas && freezeCanvas && audio) {
+      // FIX: When video decoder is evicted (e.g. mobile tab switch), draw freeze canvas instead of black
+      if (video.readyState < 2) {
+        const ctx = canvas.getContext("2d", { alpha: false });
+        if (ctx) {
+          if (freezeCanvas.width > 0 && freezeCanvas.height > 0) {
+            ctx.drawImage(freezeCanvas, 0, 0, canvas.width, canvas.height);
+          } else {
+            ctx.fillStyle = "#000";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+          }
+          // Signal manual frame for recording
+          if (canvasStreamTrackRef.current?.requestFrame) {
+            canvasStreamTrackRef.current.requestFrame();
+          }
+        }
+        reqRef.current = requestAnimationFrame(render);
+        return;
+      }
         const ctx = canvas.getContext("2d", { alpha: false });
         const freezeCtx = freezeCanvas.getContext("2d", { alpha: false });
 
