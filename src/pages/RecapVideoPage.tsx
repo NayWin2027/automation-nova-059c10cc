@@ -776,40 +776,16 @@ export default function VideoRecapView() {
 
         const segDur = totalDuration / segments.length;
         const videoDur = videoRef.current?.duration || totalDuration;
-        // Preserve existing scene mapping from Step 1, or use AI timestamps if valid, else even distribution
-        mappedSegments = segments.map((seg, idx) => {
-          const hasSceneData = seg.sceneStart !== undefined && seg.sceneEnd !== undefined;
-          if (hasSceneData) {
-            return {
-              ...seg,
-              audioStart: idx * segDur,
-              audioEnd: (idx + 1) * segDur,
-              videoTime: seg.videoTime,
-              sceneStart: seg.sceneStart,
-              sceneEnd: seg.sceneEnd
-            };
-          }
-          // No scene data — validate AI timestamps as fallback
-          const aiValid = validateAiTimestamps(segments, videoDur);
-          if (aiValid) {
-            return {
-              ...seg,
-              audioStart: idx * segDur,
-              audioEnd: (idx + 1) * segDur,
-              videoTime: seg.time,
-              sceneStart: seg.time,
-              sceneEnd: idx < segments.length - 1 ? segments[idx + 1].time : videoDur
-            };
-          }
-          return {
-            ...seg,
-            audioStart: idx * segDur,
-            audioEnd: (idx + 1) * segDur,
-            videoTime: idx / segments.length * videoDur,
-            sceneStart: idx / segments.length * videoDur,
-            sceneEnd: (idx + 1) / segments.length * videoDur
-          };
-        });
+        // Custom audio mode: script is ONLY for subtitles. Audio is user-provided and plays linearly.
+        // Always use even distribution for scene mapping — AI timestamps are irrelevant here.
+        mappedSegments = segments.map((seg, idx) => ({
+          ...seg,
+          audioStart: idx * segDur,
+          audioEnd: (idx + 1) * segDur,
+          videoTime: idx / segments.length * videoDur,
+          sceneStart: idx / segments.length * videoDur,
+          sceneEnd: (idx + 1) / segments.length * videoDur
+        }));
       } else {
         // No script: create empty segments (no subtitles) distributed evenly across video
         // This enables video+audio merge without script generation
