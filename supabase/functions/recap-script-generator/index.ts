@@ -28,7 +28,27 @@ serve(async (req) => {
     const nicheLabel = niche || "General";
     const lang = language || "BURMESE";
 
-    const systemPrompt = `You are a world-class professional scriptwriter who creates premium narration scripts for recap videos at Netflix/BBC broadcast standard.
+    // Niche-specific style instructions
+    const nicheStyles: Record<string, string> = {
+      "MOVIE RECAP": `Write like a top-tier Netflix/Hollywood movie recap narrator. Build suspense, use dramatic pauses, cliffhangers, and emotional peaks. Make viewers feel every twist, betrayal, romance, and revelation as if they're watching the movie.`,
+      "TECH / AI": `Write like MKBHD or Linus Tech Tips — sharp, informative, exciting. Use punchy tech jargon naturally, explain complex concepts simply, and build hype around innovations and breakthroughs.`,
+      "DOCUMENTARY": `Write like David Attenborough or a BBC World documentary narrator — authoritative, insightful, thought-provoking. Layer facts with storytelling to create a compelling narrative arc.`,
+      "TRUE CRIME": `Write like a true crime podcast host — suspenseful, gripping, investigative. Build tension slowly, reveal clues dramatically, and keep the audience on edge with every detail.`,
+      "RELIGIOUS / SPIRITUAL": `Write with reverence and wisdom. Use a warm, respectful tone that honors the spiritual content while making it accessible and emotionally moving for all viewers.`,
+      "POLITICAL COMMENTARY": `Write like a sharp political analyst — balanced yet compelling. Present facts clearly, provide context, and build arguments that keep viewers engaged and informed.`,
+      "TRAVEL / FOOD": `Write like Anthony Bourdain or a premium travel vlog narrator — vivid, sensory-rich, adventurous. Make viewers taste the food, feel the breeze, and smell the streets through your words.`,
+      "EDUCATIONAL": `Write like a TED Talk presenter — clear, inspiring, memorable. Break down complex topics into digestible insights while maintaining intellectual depth and curiosity.`,
+      "ENTERTAINMENT / GOSSIP": `Write like a premium entertainment news anchor — energetic, dramatic, juicy. Highlight the most shocking and exciting moments with flair and personality.`,
+      "SPORTS": `Write like a legendary sports commentator — passionate, electrifying, pulse-pounding. Capture the intensity of every play, the emotion of victory and defeat.`,
+      "BUSINESS / FINANCE": `Write like a Bloomberg or Forbes narrator — authoritative, data-driven yet engaging. Make business stories feel like thriller narratives with stakes and outcomes.`,
+      "HEALTH / WELLNESS": `Write with warmth and authority — informative yet caring. Present health information clearly while being encouraging and empathetic.`,
+      "MUSIC / CONCERT": `Write like a Rolling Stone journalist — passionate, poetic, rhythmic. Capture the energy of performances and the soul of the music.`,
+      "GENERAL": `Write with a versatile, professional narrator voice that adapts to the content's natural tone while maintaining engagement and clarity.`,
+    };
+
+    const nicheStyle = nicheStyles[nicheLabel] || nicheStyles["GENERAL"];
+
+    const systemPrompt = `You are a world-class professional scriptwriter who creates premium narration scripts at Netflix/BBC/HBO broadcast standard.
 
 Your writing style:
 - Natural spoken ${lang} (conversational, NOT literary/formal)
@@ -36,12 +56,15 @@ Your writing style:
 - Professional narrator voice that hooks viewers from the first sentence
 - Uses rhetorical questions, cliffhangers, and emotional beats
 
+NICHE-SPECIFIC STYLE for "${nicheLabel}":
+${nicheStyle}
+
 ABSOLUTE RULES:
 1. Write ONLY in ${lang} language
 2. Use modern spoken style, NOT formal/literary
 3. Each paragraph = natural spoken segment (2-4 sentences)
-4. The script must be READY TO READ as narration (no stage directions, no brackets, no formatting marks)
-5. Adapt tone to the "${nicheLabel}" niche
+4. The script must be READY TO READ as narration (no stage directions, no brackets, no formatting marks, no timestamps)
+5. Fully embody the "${nicheLabel}" niche style described above
 
 CRITICAL - CONTENT COMPLETENESS (ZERO CENSORSHIP POLICY):
 - You MUST analyze the ENTIRE transcript from start to finish, missing NOTHING
