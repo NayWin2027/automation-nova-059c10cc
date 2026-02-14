@@ -157,19 +157,27 @@ async function transcribeWithGemini(apiKey: string, fileUri: string, mimeType: s
   const isBurmese = languageName.toUpperCase() === "BURMESE";
   
   const transcriptionPrompt = isBurmese
-    ? `ဤ audio/video ဖိုင်ထဲရှိ ပြောဆိုချက်အားလုံးကို ဗမာစာဖြင့် တိကျစွာ ရေးချပါ။
-စည်းမျဉ်း:
-- မြန်မာစာသတ်ပုံကျမ်းအတိုင်း စာလုံးပေါင်း 100% မှန်ကန်ရမည်
-- ပြောသည့်အတိုင်း အတိအကျ ရေးပါ
-- ဘာသာပြန်ခြင်း/အနှစ်ချုပ်ခြင်း လုံးဝမလုပ်ပါနဲ့
+    ? `ဤ audio/video ဖိုင်ထဲရှိ ပြောဆိုချက်အားလုံးကို ဗမာစာဖြင့် အစအဆုံး တစ်လုံးမကျန် တိကျစွာ ရေးချပါ။
+
+အရေးကြီးဆုံး စည်းမျဉ်း:
+- ပြောသမျှ စကားလုံးတိုင်းကို 100% အတိအကျ ရေးပါ — တစ်လုံးတစ်ခွန်းမှ မကျန်ခဲ့စေနဲ့
+- မြန်မာစာသတ်ပုံကျမ်းအတိုင်း စာလုံးပေါင်း မှန်ကန်ရမည်
+- ဘာသာပြန်ခြင်း/အနှစ်ချုပ်ခြင်း/ချန်ထားခြင်း လုံးဝမလုပ်ရ
 - Speaker ပြောင်းရင် line break ခံပါ
+- စကားပြောအသံ၊ အော်သံ၊ ငိုသံ၊ ရယ်သံ စတဲ့ အသံတိုင်းကို ပါအတိုင်း ရေးပါ
+- Audio/video အစကနေ အဆုံးထိ နားထောင်ပြီး ကြားသမျှအကုန် ရေးပါ — အလယ်ပိုင်း၊ အဆုံးပိုင်း မကျန်ခဲ့စေနဲ့
 - ဗမာစာသာ ပြန်ပေးပါ`
-    : `Transcribe all spoken words in this audio/video file accurately in ${languageName}.
-Rules:
-- Return ONLY the transcription text, no commentary or formatting
-- Do not translate or summarize
+    : `Transcribe ALL spoken words in this audio/video file with 100% accuracy in ${languageName}.
+
+CRITICAL RULES — ZERO OMISSION POLICY:
+- Listen to the ENTIRE file from start to finish — do NOT stop early or skip any section
+- Transcribe EVERY SINGLE word, sentence, and utterance — nothing should be left out
+- Include ALL dialogue, whispers, shouts, exclamations, emotional expressions
+- Do NOT translate, summarize, paraphrase, or condense — write exactly what is spoken
+- Do NOT add commentary, timestamps, or formatting marks
 - Indicate speaker changes with line breaks
-- Transcribe exactly what is spoken`;
+- If audio is unclear, transcribe your best interpretation rather than skipping it
+- Return ONLY the transcription text`;
 
   console.log("Sending transcription request to Gemini...");
 
@@ -194,7 +202,7 @@ Rules:
       ],
       generationConfig: {
         temperature: 0.05,
-        maxOutputTokens: 16384,
+        maxOutputTokens: 32768,
       },
     }),
   });
