@@ -100,8 +100,8 @@ serve(async (req) => {
       const authHeader = req.headers.get("Authorization");
       if (!authHeader) {
         return new Response(
-          JSON.stringify({ error: "Authentication required for App API mode" }),
-          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ error: "Authentication required for App API mode", useClientTTS: true, text, voiceName: "Puck", languageCode: sanitizedLanguageCode, message: "Login required. Using browser fallback.", errorCode: "AUTH_REQUIRED" }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
@@ -112,8 +112,8 @@ serve(async (req) => {
       const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
       if (authError || !user) {
         return new Response(
-          JSON.stringify({ error: "Invalid or expired token" }),
-          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ error: "Invalid or expired token", useClientTTS: true, text, voiceName: "Puck", languageCode: sanitizedLanguageCode, message: "Session expired. Using browser fallback.", errorCode: "AUTH_EXPIRED" }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
