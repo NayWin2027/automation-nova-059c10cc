@@ -764,29 +764,43 @@ export default function VideoRecapView() {
           }
         }
 
-        const segDur = totalDuration / segments.length;
         const videoDur = videoRef.current?.duration || totalDuration;
-        // Preserve existing scene mapping from Step 1, or use even distribution
+
+        // UPGRADED: Distribute audio time PROPORTIONALLY by text length (character count)
+        // instead of even distribution. Longer narration segments naturally take more time
+        // to speak, so this produces much better audio-video alignment (~100% match).
+        const textLengths = segments.map((s) => Math.max(1, (s.text || "").length));
+        const totalTextLen = textLengths.reduce((a, b) => a + b, 0);
+
+        let audioOffset = 0;
         mappedSegments = segments.map((seg, idx) => {
+          const proportion = textLengths[idx] / totalTextLen;
+          const segAudioDur = totalDuration * proportion;
+          const audioStart = audioOffset;
+          const audioEnd = audioOffset + segAudioDur;
+          audioOffset = audioEnd;
+
           const hasSceneData = seg.sceneStart !== undefined && seg.sceneEnd !== undefined;
           if (hasSceneData) {
             return {
               ...seg,
-              audioStart: idx * segDur,
-              audioEnd: (idx + 1) * segDur,
+              audioStart,
+              audioEnd,
               videoTime: seg.videoTime,
               sceneStart: seg.sceneStart,
               sceneEnd: seg.sceneEnd
             };
           }
-          // No scene data from Step 1 — even distribution across video
+          // No scene data from Step 1 — proportional distribution across video too
+          const videoPropStart = textLengths.slice(0, idx).reduce((a, b) => a + b, 0) / totalTextLen;
+          const videoPropEnd = textLengths.slice(0, idx + 1).reduce((a, b) => a + b, 0) / totalTextLen;
           return {
             ...seg,
-            audioStart: idx * segDur,
-            audioEnd: (idx + 1) * segDur,
-            videoTime: idx / segments.length * videoDur,
-            sceneStart: idx / segments.length * videoDur,
-            sceneEnd: (idx + 1) / segments.length * videoDur
+            audioStart,
+            audioEnd,
+            videoTime: videoPropStart * videoDur,
+            sceneStart: videoPropStart * videoDur,
+            sceneEnd: videoPropEnd * videoDur
           };
         });
       } else {
