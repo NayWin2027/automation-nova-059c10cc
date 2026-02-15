@@ -227,7 +227,7 @@ const UserLoginPage: React.FC = () => {
               <button
               type="button"
               onClick={() => setShowGateDialog(true)}
-              className="transition-colors text-[sidebar-accent-foreground] text-black">
+              className="transition-colors text-[sidebar-accent-foreground] text-black opacity-5">
 
                 Admin
               </button>
