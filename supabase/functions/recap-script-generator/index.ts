@@ -307,7 +307,24 @@ Below is a source video/audio file. Your job is to:
 9. Use vivid, engaging ${lang} appropriate for "${nicheLabel}" content
 10. Be perfectly paced for voice narration
 
-Write the complete professional narration script now — DO NOT leave out any important moments:`;
+CRITICAL OUTPUT FORMAT — You MUST output a JSON array:
+[
+  {"time": 0, "text": "First narration paragraph..."},
+  {"time": 45.5, "text": "Second narration paragraph..."},
+  {"time": 92.0, "text": "Third narration paragraph..."}
+]
+
+CRITICAL TIMESTAMP RULES:
+- "time" = the EXACT second in the source video where the scene described in "text" ACTUALLY APPEARS
+- You are a professional video editor. For each narration segment, identify PRECISELY which part of the video shows that content
+- Example: If your narration talks about "a shark approaching the glass", set "time" to the EXACT second where the shark is visible in the video
+- Example: If your narration talks about "the mother hugging her daughter", set "time" to the EXACT second where that hug happens in the video
+- Example: If your narration talks about "a whale appearing", set "time" to the EXACT second where the whale appears on screen
+- DO NOT use sequential/evenly-spaced timestamps. Each timestamp must reflect WHERE that specific content actually occurs in the video
+- Watch the video carefully and note the precise second for each key scene you describe
+- The timestamps do NOT need to be in order if the narration jumps between scenes for dramatic effect
+
+Output ONLY the JSON array, no other text or markdown:`;
 
       contentParts = [
         { text: userPrompt },
