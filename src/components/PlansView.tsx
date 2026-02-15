@@ -232,12 +232,11 @@ const PlansView: React.FC = () => {
           <div className="bg-[#0f172a] rounded-[32px] p-6 border border-cyan-500/20 space-y-4 shadow-2xl relative overflow-hidden group hover:border-cyan-500/50 transition-all">
             <div className="flex justify-between items-center relative z-10">
               <p className="font-black text-cyan-400 uppercase tracking-[0.3em] text-xl">K PAY</p>
-              <div className="h-10 w-10 rounded-xl bg-white p-1 shadow-lg">
+              <div className="h-12 w-12 rounded-xl bg-white p-1 shadow-lg overflow-hidden">
                 <img
                   src="/images/kpay-logo.png"
-                  className="h-full w-full object-contain"
+                  className="h-full w-full object-contain rounded-lg"
                   alt="KPay" />
-
               </div>
             </div>
             <div className="relative border-b border-white/5 pb-4 flex justify-between items-end z-10">
@@ -268,12 +267,11 @@ const PlansView: React.FC = () => {
           <div className="bg-[#0f172a] rounded-[32px] p-6 border border-amber-500/20 space-y-4 shadow-2xl relative overflow-hidden group hover:border-amber-500/50 transition-all">
             <div className="flex justify-between items-center relative z-10">
               <p className="font-black text-amber-500 uppercase tracking-[0.3em] text-xl">WAVE PAY</p>
-              <div className="h-10 w-10 rounded-xl bg-white p-1 shadow-lg">
+              <div className="h-12 w-12 rounded-xl bg-white p-1 shadow-lg overflow-hidden">
                 <img
                   src="/images/wavepay-logo.png"
-                  className="h-full w-full object-contain"
+                  className="h-full w-full object-contain rounded-lg"
                   alt="WavePay" />
-
               </div>
             </div>
             <div className="relative border-b border-white/5 pb-4 flex justify-between items-end z-10">
