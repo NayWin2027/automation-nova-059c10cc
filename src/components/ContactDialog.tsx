@@ -22,11 +22,25 @@ const contacts = [
     display: "@KoNay2027",
   },
   {
+    name: "Telegram",
+    icon: Send,
+    color: "bg-blue-400",
+    link: "https://t.me/komysmm",
+    display: "@komysmm",
+  },
+  {
     name: "Messenger",
     icon: MessageCircle,
     color: "bg-gradient-to-r from-blue-500 to-purple-500",
     link: "https://m.me/NAYWIN2027",
     display: "NAYWIN2027",
+  },
+  {
+    name: "Messenger",
+    icon: MessageCircle,
+    color: "bg-gradient-to-r from-indigo-500 to-purple-500",
+    link: "https://m.me/koyeswan.tds",
+    display: "koyeswan.tds",
   },
   {
     name: "Facebook",
