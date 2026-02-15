@@ -234,7 +234,7 @@ const PlansView: React.FC = () => {
               <p className="font-black text-cyan-400 uppercase tracking-[0.3em] text-xl">K PAY</p>
               <div className="h-12 w-12 rounded-xl bg-white p-1 shadow-lg overflow-hidden">
                 <img
-                  src="/images/kpay-logo.png"
+                  src="/images/kpay-logo.png?v=2"
                   className="h-full w-full object-contain rounded-lg"
                   alt="KPay" />
               </div>
@@ -269,7 +269,7 @@ const PlansView: React.FC = () => {
               <p className="font-black text-amber-500 uppercase tracking-[0.3em] text-xl">WAVE PAY</p>
               <div className="h-12 w-12 rounded-xl bg-white p-1 shadow-lg overflow-hidden">
                 <img
-                  src="/images/wavepay-logo.png"
+                  src="/images/wavepay-logo.png?v=2"
                   className="h-full w-full object-contain rounded-lg"
                   alt="WavePay" />
               </div>
