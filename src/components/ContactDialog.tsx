@@ -20,6 +20,12 @@ const contacts = [
     color: "bg-blue-500",
     link: "https://t.me/KoNay2027",
     display: "@KoNay2027"
+
+name: "Messenger",
+    icon: MessageCircle,
+    color: "bg-gradient-to-r from-blue-500 to-purple-500",
+    link: "https://m.me/koyeswan.tds",
+    display: "koyeswan.tds"   
   },
   {
     name: "Messenger",
