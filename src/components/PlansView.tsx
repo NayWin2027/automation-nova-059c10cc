@@ -279,7 +279,7 @@ const PlansView: React.FC = () => {
             <div className="relative border-b border-white/5 pb-4 flex justify-between items-end z-10">
               <div className="space-y-1">
                 <p className="font-bold text-slate-500 uppercase text-sm">Phone Number</p>
-                <p className="font-black tracking-widest font-mono drop-shadow-md text-3xl text-neon-rose">
+                <p className="font-black tracking-widest font-mono drop-shadow-md text-neon-rose text-2xl">
                   {data.waveNumber}
                 </p>
               </div>
