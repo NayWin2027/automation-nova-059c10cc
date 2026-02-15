@@ -198,7 +198,7 @@ const PlansView: React.FC = () => {
           <h2 className="text-4xl font-black text-white tracking-tighter uppercase drop-shadow-[0_0_15px_rgba(56,189,248,0.3)]">
             CHECKOUT
           </h2>
-          <p className="text-white/40 font-black tracking-[0.4em] text-[10px] uppercase">SECURE PAYMENT GATEWAY</p>
+          <p className="text-white/40 font-black tracking-[0.4em] uppercase text-base">SECURE PAYMENT GATEWAY</p>
         </div>
 
         <button
