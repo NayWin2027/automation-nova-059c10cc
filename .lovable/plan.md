@@ -1,29 +1,42 @@
 
 
-## Favicon (Browser Tab Icon) ကို ကိုယ်ပိုင် Logo ပြောင်းရန်
+## OG Image (Social Media Preview) ဝါးနေတာ ပြင်ဆင်ခြင်း
 
 ### ပြဿနာ
-Browser tab မှာ Lovable default icon ပေါ်နေတယ်။ Automation Nova AI ရဲ့ ကိုယ်ပိုင် logo icon ပေါ်စေချင်တယ်။
+Facebook/Messenger မှာ link share လုပ်တဲ့အခါ preview image ဝါးနေပြီး ပုံအပြည့် မပေါ်ဘူး။ ခုသုံးနေတဲ့ OG image က Lovable auto-generated screenshot (low quality) ဖြစ်နေလို့ပါ။
+
+### ကန့်သတ်ချက်
+- Social media platforms (Facebook, Messenger, Twitter) တွေက SVG format ကို OG image အဖြစ် support မလုပ်ပါ
+- PNG သို့မဟုတ် JPG format ဖြစ်ရမယ်
+- အကောင်းဆုံး size: 1200x630 pixels
 
 ### လုပ်ဆောင်ရမည့်အရာ
 
-**Step 1: Favicon file ပြင်ဆင်ခြင်း**
-- User upload လုပ်ထားတဲ့ logo image ကို `public/favicon.ico` အဖြစ် copy ပြီး အစားထိုးမယ်
-- ပိုမိုကြည်လင်အောင် PNG format (`public/favicon.png`) လည်း ထည့်မယ်
+**Step 1: OG Image ဖန်တီးခြင်း**
+- Automation Nova AI logo ကို အသုံးပြု၍ 1200x630 pixels OG image တစ်ခု AI image generation ဖြင့် ဖန်တီးမယ်
+- Dark background + Automation Nova AI logo + branding text ပါဝင်မယ်
+- ပုံကို `public/og-image.png` အဖြစ် သိမ်းမယ်
 
-**Step 2: index.html မှာ favicon link ထည့်ခြင်း**
-- `<link rel="icon">` tag ကို index.html ရဲ့ `<head>` ထဲမှာ ထည့်မယ်
-- Apple touch icon လည်း ထည့်မယ်
-
-**Step 3: Meta tags ပြင်ဆင်ခြင်း**
-- `<meta name="author">` ကို "Lovable" မှ "Automation Nova AI" သို့ ပြောင်းမယ်
-- `twitter:site` ကို "@Lovable" မှ ပြောင်းမယ်
+**Step 2: index.html meta tags ပြင်ဆင်ခြင်း**
+- `og:image` URL ကို `https://www.automationnova.app/og-image.png` သို့ ပြောင်းမယ်
+- `twitter:image` URL ကိုလည်း အတူတူ ပြောင်းမယ်
+- `og:image:width` နှင့် `og:image:height` meta tags ထည့်မယ် (1200x630)
 
 ### ထိခိုက်မှု
-- `index.html` file တစ်ခုတည်းကိုသာ ပြင်မယ်
-- Favicon file ကို public folder ထဲ copy မယ်
+- `index.html` meta tags ကိုသာ ပြင်မယ်
+- `public/og-image.png` ဖိုင်အသစ် ထည့်မယ်
 - တခြား code, logic, tools များကို လုံးဝ မထိပါ
 
-### Google SEO အတွက်
-Google မှာ ပေါ်အောင် လုပ်ရမည့် အဆင့်များကို အထက်မှာ ရှင်းပြပြီးပါပြီ။ ၎င်းသည် code ပြင်ရခြင်း မဟုတ်ဘဲ Google Search Console မှာ domain verify + indexing request လုပ်ရခြင်း ဖြစ်ပါသည်။
+### Technical Details
+
+index.html မှာ ပြောင်းရမည့် meta tags:
+```html
+<meta property="og:image" content="https://www.automationnova.app/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:image" content="https://www.automationnova.app/og-image.png">
+```
+
+### မှတ်ချက်
+OG image ပြောင်းပြီးနောက် Facebook cache ကို refresh လုပ်ရန် [Facebook Sharing Debugger](https://developers.facebook.com/tools/debug/) မှာ URL ထည့်ပြီး "Scrape Again" နှိပ်ရပါမယ်။
 
