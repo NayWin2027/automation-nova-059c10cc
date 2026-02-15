@@ -573,7 +573,7 @@ export default function TranscriptionView() {
               )}
             </button>
 
-            <p className="text-[8px] text-amber-300/50 text-center">
+            <p className="text-[13px] text-amber-300/50 text-center">
               <EditableText value={s.scriptHelpText} onChange={(v) => setEditSettings({ ...editSettings, scriptHelpText: v })} />
             </p>
           </div>
