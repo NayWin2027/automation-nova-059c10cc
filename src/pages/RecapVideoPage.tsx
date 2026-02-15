@@ -661,19 +661,44 @@ export default function VideoRecapView() {
         console.log(`[Recap] Detected ${detectedScenes.length} scenes, matching to ${segments.length} segments`);
         segments = matchSegmentsToScenes(segments, detectedScenes);
       } else {
-        // No scenes from backend — ALWAYS use even distribution.
-        // AI `time` values are narrative ordering hints, NOT reliable video seek positions.
-        // Using them as seek positions causes all segments to cluster in early seconds of the video.
+        // USE AI-PROVIDED TIMESTAMPS for scene-to-narration matching.
+        // The AI is instructed to set "time" = the exact video timestamp where that content is shown.
+        // This enables the video to JUMP to the correct scene matching the narration,
+        // rather than playing sequentially from start to end.
         const videoDur = videoRef.current?.duration || 120;
-        console.log(`[Recap] No backend scenes — evenly distributing ${segments.length} segments across ${videoDur.toFixed(1)}s video`);
-        const segDur = videoDur / segments.length;
-        segments = segments.map((seg, idx) => ({
-          ...seg,
-          videoTime: idx * segDur,
-          sceneStart: idx * segDur,
-          sceneEnd: (idx + 1) * segDur,
-          sceneTopic: `Auto-Scene ${idx + 1}`
-        }));
+        console.log(`[Recap] Using AI timestamps for ${segments.length} segments across ${videoDur.toFixed(1)}s video`);
+        
+        // Check if AI timestamps are actually meaningful (not all zero or all identical)
+        const uniqueTimes = new Set(segments.map(s => s.time));
+        const hasValidAITimestamps = uniqueTimes.size > 1 && segments.some(s => s.time > 0);
+        
+        if (hasValidAITimestamps) {
+          // AI provided meaningful timestamps — use them for scene seeking
+          // This allows video to jump to matching scenes instead of playing sequentially
+          segments = segments.map((seg, idx) => {
+            const nextTime = idx < segments.length - 1 ? segments[idx + 1].time : videoDur;
+            // Clamp sceneEnd to video duration and ensure minimum 2s scene length
+            const sceneEnd = Math.min(Math.max(nextTime, seg.time + 2), videoDur);
+            return {
+              ...seg,
+              videoTime: Math.min(seg.time, videoDur),
+              sceneStart: Math.min(seg.time, videoDur),
+              sceneEnd,
+              sceneTopic: `AI-Scene ${idx + 1}`
+            };
+          });
+          console.log(`[Recap] AI timestamps mapped:`, segments.map((s, i) => `Seg${i}: ${s.sceneStart?.toFixed(1)}-${s.sceneEnd?.toFixed(1)}s`).join(', '));
+        } else {
+          // Fallback: AI timestamps not useful — even distribution
+          const segDur = videoDur / segments.length;
+          segments = segments.map((seg, idx) => ({
+            ...seg,
+            videoTime: idx * segDur,
+            sceneStart: idx * segDur,
+            sceneEnd: (idx + 1) * segDur,
+            sceneTopic: `Auto-Scene ${idx + 1}`
+          }));
+        }
       }
 
       const completeText = segments.
