@@ -227,13 +227,21 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - Identify the subject matter, the niche, and the story being told through visuals/actions/music
 - Write a complete, engaging narration script based on your visual/audio analysis
 
+SCRIPT LENGTH RULE (CRITICAL):
+- The narration script MUST be approximately 70% of the original source duration when read aloud
+- For example: a 3-minute video → script should be ~2 minutes when narrated; a 10-minute video → script should be ~7 minutes when narrated
+- NEVER write too short. If the source is long, the script must also be proportionally long
+- Each paragraph should be 2-4 sentences, and the total number of paragraphs must reflect the 70% duration target
+- Estimate: ~150 words per minute of narration. So a 10-minute video needs ~1050 words of script
+
 RECAP WRITING STYLE (KEY-POINT SUMMARY — NOT SCENE-BY-SCENE):
-- Write a CONCISE key-point recap, NOT a micro-detailed play-by-play of every gesture
+- Write an ENGAGING key-point recap, NOT a micro-detailed play-by-play of every gesture
 - Summarize the main dramatic beats: who did what, key interactions, emotional turning points, shocking moments
 - Focus on moments that make viewers CURIOUS: intimate scenes, confrontations, betrayals, revelations, confessions
 - Do NOT describe every tiny action (e.g., "she picked up the bottle, she opened the cap, she squeezed it" → instead: "she gently applied the medicine on his forehead")
-- Keep it engaging and well-paced — not too short, not too detailed
-- The recap should feel like a compelling SUMMARY that makes people want to watch the original
+- But DO cover ALL major story beats thoroughly — the script should feel SUBSTANTIAL and complete
+- The recap should feel like a compelling, DETAILED SUMMARY that makes people want to watch the original
+- Balance: not micro-detailed, but not overly condensed either — aim for rich, engaging storytelling at 70% length
 
 STRUCTURE:
 - Hook opening (1 powerful sentence that grabs attention)
