@@ -1415,7 +1415,7 @@ export default function VideoRecapView() {
     let segLocalTime = 0;
     const CYCLE_DUR = 6.0;
     const MOTION_DUR = 3.0;
-    const FADE_DUR = 0.4;
+    const FADE_DUR = 0.8;
 
     if (activeSegment) {
       segLocalTime = effectiveTime - (activeSegment.audioStart || 0);
@@ -1785,59 +1785,40 @@ export default function VideoRecapView() {
             return Math.max(0, t);
           };
 
-          // CRITICAL FIX: Clamp motion within scene bounds using modulo wrap
-          // This prevents video from seeking past scene end into unrelated scenes
-          const rawMotionElapsed = cycleIndex * MOTION_DUR + Math.min(phase, MOTION_DUR);
-          const motionElapsed = sceneDuration > 0 ? rawMotionElapsed % sceneDuration : 0;
-
-          // Freeze frame: capture at end of current motion period within scene bounds
-          const rawFreezeElapsed = (cycleIndex + 1) * MOTION_DUR;
-          const freezeElapsed = sceneDuration > 0 ? rawFreezeElapsed % sceneDuration : 0;
-
-          const desiredMotionTime = clampTime(sceneStart + motionElapsed);
-          const desiredFreezeTime = clampTime(sceneStart + Math.min(freezeElapsed, Math.max(0, sceneDuration - 0.1)));
+          // Scene bounds are used for seeking and drift correction only
 
           // SMOOTH video control: minimize play/pause toggling
           // Only act on PHASE TRANSITIONS — never call play/pause every frame
           if (motionZoom && isPlaying) {
             if (inPhotoPhase && !lastPhaseWasPhotoRef.current) {
-              // Entering photo phase — set freeze frame position
-              // CRITICAL: During export, do NOT call video.pause() as it stalls MediaRecorder
+              // Entering photo phase — just pause at current frame (NO seek — avoids jank)
               if (!isExporting) video.pause();
-              video.currentTime = desiredFreezeTime;
               lastPhaseWasPhotoRef.current = true;
             } else if (!inPhotoPhase && lastPhaseWasPhotoRef.current) {
-              // Entering motion phase — resume video playback
-              video.currentTime = desiredMotionTime;
+              // Entering motion phase — resume from current position (NO seek — avoids flash)
               if (!isExporting) video.play().catch(() => {});
               lastPhaseWasPhotoRef.current = false;
             }
           }
 
           // SEGMENT-LEVEL SEEKING: only seek when segment actually changes
-          // This is the key to smoothness — don't seek within the same segment during motion
           if (isPlaying && activeSegment && video.duration > 0) {
             const segIdx = scriptSegments.indexOf(activeSegment);
             if (segIdx !== lastSeekedSegmentRef.current) {
-              // New segment — seek to its scene start
+              // New segment — seek to its scene start immediately
               lastSeekedSegmentRef.current = segIdx;
               const targetSeekTime = clampTime(sceneStart);
-              // Only seek if we're not already near the target (avoid stutter from tiny seeks)
-              const currentDiff = Math.abs(video.currentTime - targetSeekTime);
-              if (currentDiff > 1.0) {
-                video.currentTime = targetSeekTime;
-              }
+              video.currentTime = targetSeekTime;
               if (!inPhotoPhase && video.paused) {
                 video.play().catch(() => {});
               }
             } else if (!inPhotoPhase) {
-              // Drift correction: only correct if video is OUTSIDE the scene bounds entirely
-              // Wider tolerance (1s) to prevent micro-seeks that cause stutter
-              const isOutsideScene = sceneEnd ?
-              video.currentTime < sceneStart - 1.0 || video.currentTime > sceneEnd + 1.0 :
-              Math.abs(video.currentTime - desiredMotionTime) > 5.0;
-              if (isOutsideScene) {
-                video.currentTime = desiredMotionTime;
+              // TIGHT drift correction: keep video STRICTLY within scene bounds
+              // This is the key fix — video must NEVER play past sceneEnd into wrong scenes
+              const pastEnd = sceneEnd ? video.currentTime > sceneEnd : false;
+              const beforeStart = video.currentTime < sceneStart - 0.2;
+              if (pastEnd || beforeStart) {
+                video.currentTime = clampTime(sceneStart);
               }
             }
           }
