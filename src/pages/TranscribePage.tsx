@@ -255,6 +255,10 @@ export default function TranscriptionView() {
       const session = await supabase.auth.getSession();
       const token = session.data.session?.access_token;
 
+      // 5-minute timeout for long videos (up to 30 mins)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 300000);
+
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recap-script-generator`,
         {
@@ -263,8 +267,10 @@ export default function TranscriptionView() {
             Authorization: `Bearer ${token}`,
           },
           body: formData,
+          signal: controller.signal,
         }
       );
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         if (response.status === 402) {
@@ -289,9 +295,13 @@ export default function TranscriptionView() {
       } else {
         toast.error("Script generation failed.");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error("Script generation failed. Please try again.");
+      if (err?.name === 'AbortError') {
+        toast.error("Timeout ဖြစ်သွားပါသည်။ ဖိုင်အရွယ်အစား သေးတာကို ကြိုးစားပါ။");
+      } else {
+        toast.error("Script generation failed. Please try again.");
+      }
     } finally {
       setIsGeneratingScript(false);
     }
