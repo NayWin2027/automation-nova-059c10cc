@@ -801,7 +801,7 @@ const ThumbnailView: React.FC = () => {
   if (!isAllowed) return null;
 
   return (
-    <div className="space-y-6 pb-40 animate-in fade-in duration-500 max-w-5xl text-white bg-blue-600 my-px px-[5px] mx-0">
+    <div className="space-y-6 pb-40 animate-in fade-in duration-500 max-w-5xl text-white bg-blue-600 my-px px-[5px] mx-0 sm:mx-auto">
       {/* 1. MONITOR PREVIEW (Sticky Top - Compact) */}
       <div className="sticky top-0 z-[100] pb-1">
         <div className="neon-glass rounded-2xl sm:rounded-3xl p-3 sm:p-4 space-y-2 border border-white/15 shadow-[0_0_60px_rgba(0,0,0,0.7)] overflow-hidden bg-black/80 backdrop-blur-3xl py-0 my-0 px-0 mx-px">
