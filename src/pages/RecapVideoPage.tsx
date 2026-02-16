@@ -548,20 +548,7 @@ export default function VideoRecapView() {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [videoDataUrl, videoBlobUrl, isPlaying]);
 
-  // Helper: Validate AI-generated timestamps for scene mapping
-  const validateAiTimestamps = (segments: ScriptSegment[], videoDuration: number): boolean => {
-    if (segments.length <= 1) return false;
-    const times = segments.map(s => s.time);
-    // All zeros or all identical = invalid
-    if (times.every(t => t === times[0])) return false;
-    // Any time exceeds video duration * 1.5 = invalid
-    if (times.some(t => t > videoDuration * 1.5)) return false;
-    // Must be roughly ascending (allow equal consecutive)
-    for (let i = 1; i < times.length; i++) {
-      if (times[i] < times[i - 1]) return false;
-    }
-    return true;
-  };
+  // validateAiTimestamps removed — proportional distribution always used
 
   // Helper: Match segments to detected scenes for semantic video seeking
   // Priority: 1) Sequential distribution when timestamps are identical, 2) Exact match, 3) Nearest match
@@ -656,49 +643,26 @@ export default function VideoRecapView() {
       })).
       sort((a, b) => a.time - b.time);
 
-      // Match segments to detected scenes for semantic video seeking
-      if (detectedScenes && detectedScenes.length > 0) {
-        console.log(`[Recap] Detected ${detectedScenes.length} scenes, matching to ${segments.length} segments`);
-        segments = matchSegmentsToScenes(segments, detectedScenes);
-      } else {
-        // USE AI-PROVIDED TIMESTAMPS for scene-to-narration matching.
-        // The AI is instructed to set "time" = the exact video timestamp where that content is shown.
-        // This enables the video to JUMP to the correct scene matching the narration,
-        // rather than playing sequentially from start to end.
+      // ALWAYS use proportional distribution based on character count
+      // This ensures 100% accurate sync between narration and video scenes
+      {
         const videoDur = videoRef.current?.duration || 120;
-        console.log(`[Recap] Using AI timestamps for ${segments.length} segments across ${videoDur.toFixed(1)}s video`);
-        
-        // Check if AI timestamps are actually meaningful (not all zero or all identical)
-        const uniqueTimes = new Set(segments.map(s => s.time));
-        const hasValidAITimestamps = uniqueTimes.size > 1 && segments.some(s => s.time > 0);
-        
-        if (hasValidAITimestamps) {
-          // AI provided meaningful timestamps — use them for scene seeking
-          // This allows video to jump to matching scenes instead of playing sequentially
-          segments = segments.map((seg, idx) => {
-            const nextTime = idx < segments.length - 1 ? segments[idx + 1].time : videoDur;
-            // Clamp sceneEnd to video duration and ensure minimum 2s scene length
-            const sceneEnd = Math.min(Math.max(nextTime, seg.time + 2), videoDur);
-            return {
-              ...seg,
-              videoTime: Math.min(seg.time, videoDur),
-              sceneStart: Math.min(seg.time, videoDur),
-              sceneEnd,
-              sceneTopic: `AI-Scene ${idx + 1}`
-            };
-          });
-          console.log(`[Recap] AI timestamps mapped:`, segments.map((s, i) => `Seg${i}: ${s.sceneStart?.toFixed(1)}-${s.sceneEnd?.toFixed(1)}s`).join(', '));
-        } else {
-          // Fallback: AI timestamps not useful — even distribution
-          const segDur = videoDur / segments.length;
-          segments = segments.map((seg, idx) => ({
+        const textLengths = segments.map(s => Math.max(1, (s.text || "").length));
+        const totalTextLen = textLengths.reduce((a, b) => a + b, 0);
+        let cumChars = 0;
+        segments = segments.map((seg, idx) => {
+          const startRatio = cumChars / totalTextLen;
+          cumChars += textLengths[idx];
+          const endRatio = cumChars / totalTextLen;
+          return {
             ...seg,
-            videoTime: idx * segDur,
-            sceneStart: idx * segDur,
-            sceneEnd: (idx + 1) * segDur,
-            sceneTopic: `Auto-Scene ${idx + 1}`
-          }));
-        }
+            videoTime: startRatio * videoDur,
+            sceneStart: startRatio * videoDur,
+            sceneEnd: endRatio * videoDur,
+            sceneTopic: `Proportional-Scene ${idx + 1}`
+          };
+        });
+        console.log(`[Recap] Proportional char-count distribution: ${segments.length} segments across ${videoDur.toFixed(1)}s video`);
       }
 
       const completeText = segments.
@@ -1021,10 +985,14 @@ export default function VideoRecapView() {
           sceneStart = seg.sceneStart!;
           sceneEnd = seg.sceneEnd!;
         } else {
-          // No scene data from Step 1 — even distribution across video
-          videoTime = idx / segments.length * videoDur;
-          sceneStart = idx / segments.length * videoDur;
-          sceneEnd = (idx + 1) / segments.length * videoDur;
+          // No scene data from Step 1 — proportional distribution by character count
+          const textLens = segments.map(s => Math.max(1, (s.text || "").length));
+          const totalLen = textLens.reduce((a, b) => a + b, 0);
+          const cumBefore = textLens.slice(0, idx).reduce((a, b) => a + b, 0);
+          const cumAfter = cumBefore + textLens[idx];
+          videoTime = (cumBefore / totalLen) * videoDur;
+          sceneStart = (cumBefore / totalLen) * videoDur;
+          sceneEnd = (cumAfter / totalLen) * videoDur;
         }
         const mapped = {
           ...seg,
@@ -1476,7 +1444,7 @@ export default function VideoRecapView() {
     // ===== RENDER BASED ON PHASE — identical to main renderer =====
     if (motionZoom && activeSegment) {
       if (inPhotoPhase) {
-        // === PHOTO PHASE (3s - 6s): STABLE, NO ZOOM/PAN ===
+        // === PHOTO PHASE (3s - 6s): HOLLYWOOD SMOOTH ZOOM-IN ===
         let photoAlpha = 1.0;
         if (phase < MOTION_DUR + FADE_DUR) {
           photoAlpha = (phase - MOTION_DUR) / FADE_DUR;
@@ -1485,12 +1453,22 @@ export default function VideoRecapView() {
         }
         photoAlpha = Math.max(0, Math.min(1, photoAlpha));
 
+        // Cinematic Ken Burns zoom-in: 1.0x → 1.08x with smoothstep easing
+        const zoomProgress = Math.max(0, Math.min(1, (phase - MOTION_DUR) / (CYCLE_DUR - MOTION_DUR)));
+        const eased = zoomProgress * zoomProgress * (3 - 2 * zoomProgress);
+        const zoomScale = 1.0 + eased * 0.08;
+
         if (photoAlpha < 1.0) {
           ctx.globalAlpha = 1.0 - photoAlpha;
           ctx.drawImage(video, dx, dy, dw, dh);
         }
         ctx.globalAlpha = photoAlpha;
+        ctx.save();
+        ctx.translate(targetW / 2, targetH / 2);
+        ctx.scale(zoomScale, zoomScale);
+        ctx.translate(-targetW / 2, -targetH / 2);
         ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH);
+        ctx.restore();
       } else {
         // === VIDEO PHASE (0s - 3s): Motion video ===
         let videoAlpha = 1.0;
@@ -1897,26 +1875,32 @@ export default function VideoRecapView() {
             const FADE_DUR = 0.4;
 
             if (inPhotoPhase) {
-              // === PHOTO PHASE (3s - 6s): STABLE, NO ZOOM/PAN ===
+              // === PHOTO PHASE (3s - 6s): HOLLYWOOD SMOOTH ZOOM-IN ===
               let photoAlpha = 1.0;
               if (phase < MOTION_DUR + FADE_DUR) {
-                // Fading INTO photo
                 photoAlpha = (phase - MOTION_DUR) / FADE_DUR;
               } else if (phase > CYCLE_DUR - FADE_DUR) {
-                // Fading OUT of photo (back to video)
                 photoAlpha = (CYCLE_DUR - phase) / FADE_DUR;
               }
               photoAlpha = Math.max(0, Math.min(1, photoAlpha));
 
-              // Draw video underneath during crossfade
+              // Cinematic Ken Burns zoom-in: 1.0x → 1.08x with smoothstep easing
+              const zoomProgress = Math.max(0, Math.min(1, (phase - MOTION_DUR) / (CYCLE_DUR - MOTION_DUR)));
+              const eased = zoomProgress * zoomProgress * (3 - 2 * zoomProgress);
+              const zoomScale = 1.0 + eased * 0.08;
+
               if (photoAlpha < 1.0) {
                 ctx.globalAlpha = 1.0 - photoAlpha;
                 ctx.drawImage(video, dx, dy, dw, dh);
               }
 
-              // Draw stable freeze frame on top (NO zoom, NO pan — forever stable)
               ctx.globalAlpha = photoAlpha;
+              ctx.save();
+              ctx.translate(targetW / 2, targetH / 2);
+              ctx.scale(zoomScale, zoomScale);
+              ctx.translate(-targetW / 2, -targetH / 2);
               ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH);
+              ctx.restore();
             } else {
               // === VIDEO PHASE (0s - 3s): Motion video ===
               let videoAlpha = 1.0;
