@@ -1415,7 +1415,7 @@ export default function VideoRecapView() {
     let segLocalTime = 0;
     const CYCLE_DUR = 6.0;
     const MOTION_DUR = 3.0;
-    const FADE_DUR = 0.8;
+    const FADE_DUR = 0.2;
 
     if (activeSegment) {
       segLocalTime = effectiveTime - (activeSegment.audioStart || 0);
@@ -1785,40 +1785,44 @@ export default function VideoRecapView() {
             return Math.max(0, t);
           };
 
-          // Scene bounds are used for seeking and drift correction only
+          // ===== AUDIO-MASTER CLOCK: Force video.currentTime from audio timing =====
+          // During motion phase, compute exact video position from audio elapsed time
+          // This ensures 100% audio-visual sync — video shows exactly what audio describes
+          const motionElapsedInCycle = Math.min(phase, MOTION_DUR); // 0..3s within cycle
+          const totalMotionElapsed = cycleIndex * MOTION_DUR + motionElapsedInCycle;
+          // Wrap within scene duration to prevent seeking past scene bounds
+          const wrappedMotion = sceneDuration > 0 ? totalMotionElapsed % sceneDuration : 0;
+          const desiredVideoTime = clampTime(sceneStart + wrappedMotion);
 
-          // SMOOTH video control: minimize play/pause toggling
-          // Only act on PHASE TRANSITIONS — never call play/pause every frame
+          // Phase transition control: only pause/play at boundaries
           if (motionZoom && isPlaying) {
             if (inPhotoPhase && !lastPhaseWasPhotoRef.current) {
-              // Entering photo phase — just pause at current frame (NO seek — avoids jank)
+              // Entering photo phase — pause video, freeze frame already captured below
               if (!isExporting) video.pause();
               lastPhaseWasPhotoRef.current = true;
             } else if (!inPhotoPhase && lastPhaseWasPhotoRef.current) {
-              // Entering motion phase — resume from current position (NO seek — avoids flash)
+              // Entering motion phase — resume
               if (!isExporting) video.play().catch(() => {});
               lastPhaseWasPhotoRef.current = false;
             }
           }
 
-          // SEGMENT-LEVEL SEEKING: only seek when segment actually changes
+          // AUDIO-DRIVEN SYNC: force video position every frame during motion phase
           if (isPlaying && activeSegment && video.duration > 0) {
             const segIdx = scriptSegments.indexOf(activeSegment);
             if (segIdx !== lastSeekedSegmentRef.current) {
-              // New segment — seek to its scene start immediately
+              // New segment — immediate seek
               lastSeekedSegmentRef.current = segIdx;
-              const targetSeekTime = clampTime(sceneStart);
-              video.currentTime = targetSeekTime;
+              video.currentTime = desiredVideoTime;
               if (!inPhotoPhase && video.paused) {
                 video.play().catch(() => {});
               }
             } else if (!inPhotoPhase) {
-              // TIGHT drift correction: keep video STRICTLY within scene bounds
-              // This is the key fix — video must NEVER play past sceneEnd into wrong scenes
-              const pastEnd = sceneEnd ? video.currentTime > sceneEnd : false;
-              const beforeStart = video.currentTime < sceneStart - 0.2;
-              if (pastEnd || beforeStart) {
-                video.currentTime = clampTime(sceneStart);
+              // EVERY FRAME: force video.currentTime to match audio clock
+              // This is the critical fix — video position is always driven by audio
+              const drift = Math.abs(video.currentTime - desiredVideoTime);
+              if (drift > 0.15) {
+                video.currentTime = desiredVideoTime;
               }
             }
           }
@@ -1874,8 +1878,8 @@ export default function VideoRecapView() {
 
           // ===== RENDER BASED ON PHASE =====
           if (motionZoom) {
-            // CROSSFADE CONSTANTS
-            const FADE_DUR = 0.8;
+            // CROSSFADE CONSTANTS — very slight for invisible transition
+            const FADE_DUR = 0.2;
 
             if (inPhotoPhase) {
               // === PHOTO PHASE (3s - 6s): HOLLYWOOD SMOOTH ZOOM-IN ===
