@@ -1,70 +1,48 @@
 
 
-# Video Recap - Scene Sync & Premium Zoom-In Upgrade
+# Video Recap - Timestamp Accuracy Improvement Plan
 
-## What This Plan Does
+## Problem Analysis
 
-1. **Script-Driven Scene Sync (100% Accurate)**: Video scenes will change exactly when the narration changes. Each script segment maps to a proportional section of the video based on text length (character count). No reliance on AI timestamps.
+The video-audio sync issue is NOT a code logic bug. The scene-lock engine already correctly jumps to `sceneStart` when segments change and loops within scene bounds. The root cause is **inaccurate AI timestamps** from Gemini.
 
-2. **Manual Audio & Video Speed Controls**: These already exist in the UI (VIDEO PLAYBACK SPEED and AUDIO DURATION / SPEED sliders). No changes needed.
+When the AI says a scene is at `time: 45` but it actually occurs at `time: 120`, the code faithfully seeks to 0:45 -- showing the wrong scene.
 
-3. **Hollywood Premium Smooth Zoom-In**: Replace the current "stable/frozen photo" phase with a cinematic slow zoom-in effect during the 3-second photo phase. Instead of a static freeze frame, the captured frame will smoothly zoom in (Ken Burns effect) creating a professional, premium feel.
+## What We Can Realistically Improve
 
----
+### 1. Upgrade AI Model for Script Generation
 
-## Technical Details
+Change the edge function `supabase/functions/recap-script-generator/index.ts` from `gemini-2.5-flash` to `gemini-2.5-pro` for timestamp analysis. The Pro model has significantly better video understanding and temporal reasoning.
 
-### File: `src/pages/RecapVideoPage.tsx`
+- File: `supabase/functions/recap-script-generator/index.ts`
+- Change: Line 11, `const MODEL = "gemini-2.5-flash"` to `"gemini-2.5-pro"`
 
-**Change 1: Force Proportional Distribution (Remove Timestamp Logic)**
+### 2. Strengthen Timestamp Prompt
 
-In `handleProcess()` (around lines 643-701), after parsing script segments, ALWAYS use proportional distribution based on character count regardless of AI timestamps or detected scenes. This ensures segment-to-video mapping is purely based on narration flow.
+Add explicit instructions to the AI prompt emphasizing frame-accurate timestamp extraction. Add examples and penalties for sequential/evenly-spaced timestamps.
 
-- Remove the `validateAiTimestamps` function (lines 552-564) - no longer needed
-- Simplify `matchSegmentsToScenes` to always use proportional distribution
-- In `handleProcess`, after parsing segments, always distribute proportionally across video duration by character count (not evenly, not by AI timestamps)
-- Each segment gets: `videoTime = (cumulative char ratio) * videoDuration`
+- File: `supabase/functions/recap-script-generator/index.ts`
+- Change: Enhance the user prompt (around line 296-327) with stricter timestamp verification instructions
 
-**Change 2: Hollywood Smooth Zoom-In (Photo Phase)**
+### 3. Add Timestamp Validation on Frontend
 
-Replace the static freeze frame rendering in the photo phase with a smooth, cinematic zoom-in animation. Affects two render locations:
+After receiving AI timestamps, validate them for common AI mistakes:
+- All timestamps bunched at the beginning
+- Timestamps exceeding video duration
+- Timestamps that are suspiciously evenly spaced (indicating AI guessed instead of watching)
 
-1. **Main renderer** (around lines 1899-1919): Photo phase currently draws a static `freezeCanvas`. Replace with a smooth scale transform that goes from 1.0x to ~1.08x over the 3-second photo phase using an ease-in-out curve.
+When validation fails, log a warning and fall back to proportional distribution.
 
-2. **Export renderer** (`renderFrameToCanvas`, around lines 1477-1493): Same zoom-in logic applied here for export consistency.
+- File: `src/pages/RecapVideoPage.tsx`
+- Change: Add validation logic after segment parsing (around lines 648-686)
 
-The zoom-in implementation:
-```text
-zoomProgress = (phase - MOTION_DUR) / (CYCLE_DUR - MOTION_DUR)  // 0 to 1
-eased = zoomProgress * zoomProgress * (3 - 2 * zoomProgress)     // smoothstep
-scale = 1.0 + eased * 0.08                                       // 1.0x to 1.08x
-```
-Then draw the freeze frame centered with the scale applied using `ctx.translate` + `ctx.scale`.
+## What This Will NOT Fix
 
-**Change 3: Proportional Distribution in Custom Audio Path**
+- 100% perfect scene matching is not achievable with current AI technology
+- Professional recap channels use manual video editing software (Premiere Pro, DaVinci Resolve) to achieve perfect sync
+- The browser-based tool provides the best automated approximation possible
 
-In `handleCreateRecapCustom` (around lines 792-830), the proportional character-count distribution already exists. Ensure the video time mapping also uses character-count proportion (already does at lines 820-828). No major changes needed here.
+## Scope
 
-**Change 4: Proportional Distribution in AI Audio Path**
-
-In `generateAudioFromText` mapped segments (around lines 1015-1039), when no scene data exists from Step 1, use character-count proportional distribution instead of even distribution:
-```text
-videoTime = (cumChars / totalChars) * videoDur
-```
-
-### File: `supabase/functions/recap-script-generator/index.ts`
-
-No changes. The edge function will continue generating scripts. The frontend will simply ignore the `time` field from AI output and use proportional distribution instead.
-
----
-
-## What Will NOT Be Touched
-
-- All other tools, pages, services, hooks, admin logic, authentication, credit systems
-- Edge functions (no modifications)
-- UI layout/styling (except photo phase rendering)
-- Audio generation, TTS, custom audio logic
-- Character overlay, subtitles, blur band, borders, timeline, logo, channel name
-- Export/recording pipeline
-- History system
+Only the recap-script-generator edge function prompt/model and the RecapVideoPage timestamp validation will be modified. No other tools, pages, logic, or code will be touched.
 
