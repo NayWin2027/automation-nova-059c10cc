@@ -1800,23 +1800,30 @@ export default function VideoRecapView() {
             }
           }
 
-          // SEGMENT-LEVEL SYNC: Only seek when segment CHANGES — never every frame
-          // This prevents micro-stutters from constant video.currentTime writes
+          // SEMANTIC SCENE-LOCK SYNC: Video MUST stay within [sceneStart, sceneEnd] for each audio segment.
+          // When audio narrates "running", video shows the running scene. When audio switches to "hugging",
+          // video JUMPS to the hugging scene — never plays sequentially past scene boundaries.
           if (isPlaying && activeSegment && video.duration > 0) {
             const segIdx = scriptSegments.indexOf(activeSegment);
+            
+            // New segment — immediately jump to matching scene
             if (segIdx !== lastSeekedSegmentRef.current) {
-              // New segment — seek to scene start ONCE
               lastSeekedSegmentRef.current = segIdx;
-              const targetTime = clampTime(sceneStart);
-              video.currentTime = targetTime;
+              video.currentTime = clampTime(sceneStart);
             }
-            // Keep video playing always — never pause
+            
+            // Keep video playing always
             if (video.paused) {
               video.play().catch(() => {});
             }
-            // Boundary guard: if video drifts past scene end, wrap back (only check occasionally)
-            if (sceneEnd && video.currentTime > sceneEnd + 0.5) {
-              video.currentTime = clampTime(sceneStart);
+            
+            // CONTINUOUS SCENE-LOCK: Every frame, ensure video stays within scene bounds.
+            // If scene is 3s but audio segment is 15s, video loops within those 3s — never drifts out.
+            if (sceneEnd && sceneEnd > sceneStart) {
+              if (video.currentTime >= sceneEnd || video.currentTime < sceneStart - 0.1) {
+                // Wrap back to scene start — keeps video locked to the narrated content
+                video.currentTime = clampTime(sceneStart);
+              }
             }
           }
 
