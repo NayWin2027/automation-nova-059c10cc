@@ -249,9 +249,15 @@ export default function TranscriptionView() {
         return;
       }
 
-      // Step 1: Get Google upload URL from edge function
+      // Step 1: Upload file to Google via edge function proxy
       const fileMime = selectedFile.type || "video/mp4";
       toast.info("ဖိုင် upload လုပ်နေပါသည်...");
+
+      const uploadFormData = new FormData();
+      uploadFormData.append("file", selectedFile);
+      if (apiType === "own") {
+        uploadFormData.append("apiKey", apiKey);
+      }
 
       const urlResponse = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-upload-url`,
@@ -259,46 +265,19 @@ export default function TranscriptionView() {
           method: "POST",
           headers: {
             Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            fileName: selectedFile.name,
-            fileSize: selectedFile.size,
-            mimeType: fileMime,
-            ...(apiType === "own" ? { apiKey } : {}),
-          }),
+          body: uploadFormData,
         }
       );
 
       if (!urlResponse.ok) {
         const errData = await urlResponse.json().catch(() => ({}));
-        toast.error(errData.error || "Upload URL ရယူ၍မရပါ။");
+        toast.error(errData.error || "ဖိုင် upload မအောင်မြင်ပါ။");
         setIsGeneratingScript(false);
         return;
       }
 
-      const { uploadUrl } = await urlResponse.json();
-
-      // Step 2: Upload file DIRECTLY to Google (Client → Google, no middleman)
-      const uploadResponse = await fetch(uploadUrl, {
-        method: "POST",
-        headers: {
-          "X-Goog-Upload-Offset": "0",
-          "X-Goog-Upload-Command": "upload, finalize",
-          "Content-Length": selectedFile.size.toString(),
-        },
-        body: selectedFile,
-      });
-
-      if (!uploadResponse.ok) {
-        toast.error("ဖိုင် upload မအောင်မြင်ပါ။ ပြန်ကြိုးစားပါ။");
-        setIsGeneratingScript(false);
-        return;
-      }
-
-      const uploadResult = await uploadResponse.json();
-      const fileUri = uploadResult.file?.uri || "";
-      const googleFileName = uploadResult.file?.name || "";
+      const { fileUri, googleFileName } = await urlResponse.json();
 
       if (!fileUri) {
         toast.error("ဖိုင် upload မအောင်မြင်ပါ။ ပြန်ကြိုးစားပါ။");

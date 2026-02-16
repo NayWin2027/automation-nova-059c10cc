@@ -35,40 +35,46 @@ serve(async (req) => {
       });
     }
 
-    const { fileName, fileSize, mimeType, apiKey } = await req.json();
+    // Accept file via FormData
+    const formData = await req.formData();
+    const file = formData.get("file") as File;
+    const apiKeyParam = formData.get("apiKey") as string | null;
 
-    if (!fileName || !fileSize || !mimeType) {
-      return new Response(JSON.stringify({ error: "Missing file info" }), {
+    if (!file) {
+      return new Response(JSON.stringify({ error: "No file provided" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const activeApiKey = apiKey || Deno.env.get("GEMINI_API_KEY");
+    const activeApiKey = apiKeyParam || Deno.env.get("GEMINI_API_KEY");
     if (!activeApiKey) {
       return new Response(JSON.stringify({ error: "API key not configured" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Start resumable upload and return the upload URL to the client
+    const mimeType = file.type || "video/mp4";
+    const displayName = file.name.replace(/[\/\\:*?"<>|]/g, "_").substring(0, 255);
+
+    console.log(`[get-upload-url] Uploading file: ${displayName}, size: ${file.size}, mime: ${mimeType}`);
+
+    // Step 1: Start resumable upload
     const startResponse = await fetch(`${GOOGLE_FILES_API}?key=${activeApiKey}`, {
       method: "POST",
       headers: {
         "X-Goog-Upload-Protocol": "resumable",
         "X-Goog-Upload-Command": "start",
-        "X-Goog-Upload-Header-Content-Length": fileSize.toString(),
+        "X-Goog-Upload-Header-Content-Length": file.size.toString(),
         "X-Goog-Upload-Header-Content-Type": mimeType,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        file: { display_name: fileName.replace(/[\/\\:*?"<>|]/g, "_").substring(0, 255) },
-      }),
+      body: JSON.stringify({ file: { display_name: displayName } }),
     });
 
     if (!startResponse.ok) {
       const errorText = await startResponse.text();
       console.error("Google start upload error:", startResponse.status, errorText);
-      return new Response(JSON.stringify({ error: "Upload URL ရယူ၍မရပါ။" }), {
+      return new Response(JSON.stringify({ error: "Google upload စတင်၍မရပါ။" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -80,7 +86,33 @@ serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ uploadUrl }), {
+    // Step 2: Upload file content to Google (stream the file body)
+    const fileBuffer = await file.arrayBuffer();
+    const uploadResponse = await fetch(uploadUrl, {
+      method: "POST",
+      headers: {
+        "X-Goog-Upload-Offset": "0",
+        "X-Goog-Upload-Command": "upload, finalize",
+        "Content-Length": file.size.toString(),
+      },
+      body: fileBuffer,
+    });
+
+    if (!uploadResponse.ok) {
+      const errorText = await uploadResponse.text();
+      console.error("Google upload error:", uploadResponse.status, errorText);
+      return new Response(JSON.stringify({ error: "ဖိုင် upload မအောင်မြင်ပါ။" }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const uploadResult = await uploadResponse.json();
+    const fileUri = uploadResult.file?.uri || "";
+    const googleFileName = uploadResult.file?.name || "";
+
+    console.log(`[get-upload-url] Upload success: ${googleFileName}, uri: ${fileUri}`);
+
+    return new Response(JSON.stringify({ fileUri, googleFileName }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
