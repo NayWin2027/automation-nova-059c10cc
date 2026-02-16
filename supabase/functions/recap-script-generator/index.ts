@@ -175,37 +175,7 @@ serve(async (req) => {
       );
     }
 
-    // ===== CREDIT DEDUCTION (App API only) =====
-    if (!isOwnApi) {
-      const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-      const rpcParams: any = {
-        _user_id: user.id,
-        _tool_id: "narration-script",
-        _is_own_api: false,
-      };
-      if (customCreditCost !== null && !isNaN(customCreditCost)) {
-        rpcParams._custom_cost = customCreditCost;
-      }
-
-      const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", rpcParams);
-
-      if (creditError) {
-        console.error("[recap-script-generator] Credit check error:", creditError);
-        return new Response(
-          JSON.stringify({ error: "Credit စစ်ဆေးမှု မအောင်မြင်ပါ" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      if (!creditResult.success) {
-        return new Response(
-          JSON.stringify({ error: creditResult.error, errorCode: "INSUFFICIENT_CREDITS" }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      console.log(`[recap-script-generator] Credits deducted. Balance: ${creditResult.balance}`);
-    }
+    // Credit deduction moved to AFTER successful script generation (see below)
 
     const activeApiKey = isOwnApi ? userApiKey! : GEMINI_API_KEY;
     const nicheLabel = niche || "GENERAL";
@@ -365,7 +335,7 @@ Write the complete professional narration script now — DO NOT leave out any im
           contents: [{ parts: contentParts }],
           generationConfig: {
             temperature: 0.8,
-            maxOutputTokens: 16384,
+            maxOutputTokens: 32768,
           },
         }),
       }
@@ -386,7 +356,39 @@ Write the complete professional narration script now — DO NOT leave out any im
     const data = await response.json();
     const script = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
+    if (!script || script.trim().length < 10) {
+      console.error("[recap-script-generator] Empty or invalid script output");
+      return new Response(
+        JSON.stringify({ error: "Script generation failed — empty output" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     console.log(`[recap-script-generator] Script generated successfully, length: ${script.length}`);
+
+    // ===== CREDIT DEDUCTION — ONLY after successful script output =====
+    if (!isOwnApi) {
+      const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const rpcParams: any = {
+        _user_id: user.id,
+        _tool_id: "narration-script",
+        _is_own_api: false,
+      };
+      if (customCreditCost !== null && !isNaN(customCreditCost)) {
+        rpcParams._custom_cost = customCreditCost;
+      }
+
+      const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", rpcParams);
+
+      if (creditError) {
+        console.error("[recap-script-generator] Credit deduction error (post-success):", creditError);
+        // Still return the script since generation succeeded
+      } else if (creditResult?.success) {
+        console.log(`[recap-script-generator] Credits deducted after success. Balance: ${creditResult.balance}`);
+      } else {
+        console.warn("[recap-script-generator] Credit deduction returned failure:", creditResult?.error);
+      }
+    }
 
     return new Response(
       JSON.stringify({ script }),
