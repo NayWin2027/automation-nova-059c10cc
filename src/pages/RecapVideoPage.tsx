@@ -643,26 +643,45 @@ export default function VideoRecapView() {
       })).
       sort((a, b) => a.time - b.time);
 
-      // ALWAYS use proportional distribution based on character count
-      // This ensures 100% accurate sync between narration and video scenes
+      // Use AI-provided timestamps for scene-to-video mapping
+      // The AI watches the video and provides exact second where each scene appears
       {
         const videoDur = videoRef.current?.duration || 120;
-        const textLengths = segments.map(s => Math.max(1, (s.text || "").length));
-        const totalTextLen = textLengths.reduce((a, b) => a + b, 0);
-        let cumChars = 0;
-        segments = segments.map((seg, idx) => {
-          const startRatio = cumChars / totalTextLen;
-          cumChars += textLengths[idx];
-          const endRatio = cumChars / totalTextLen;
-          return {
-            ...seg,
-            videoTime: startRatio * videoDur,
-            sceneStart: startRatio * videoDur,
-            sceneEnd: endRatio * videoDur,
-            sceneTopic: `Proportional-Scene ${idx + 1}`
-          };
-        });
-        console.log(`[Recap] Proportional char-count distribution: ${segments.length} segments across ${videoDur.toFixed(1)}s video`);
+        // Check if AI provided meaningful timestamps (not all zeros)
+        const hasRealTimestamps = segments.some((s, i) => i > 0 && s.time > 0);
+        
+        if (hasRealTimestamps) {
+          // USE AI TIMESTAMPS — the AI watched the video and knows WHERE each scene is
+          console.log(`[Recap] Using AI timestamps for ${segments.length} segments (video: ${videoDur.toFixed(1)}s)`);
+          segments = segments.map((seg, idx) => {
+            const nextTime = idx < segments.length - 1 ? segments[idx + 1].time : videoDur;
+            return {
+              ...seg,
+              videoTime: Math.min(seg.time, videoDur - 0.5),
+              sceneStart: Math.min(seg.time, videoDur - 0.5),
+              sceneEnd: Math.min(nextTime, videoDur),
+              sceneTopic: `AI-Scene ${idx + 1}`
+            };
+          });
+        } else {
+          // FALLBACK: proportional distribution when timestamps are all zeros
+          console.log(`[Recap] Fallback: proportional distribution (no valid AI timestamps)`);
+          const textLengths = segments.map(s => Math.max(1, (s.text || "").length));
+          const totalTextLen = textLengths.reduce((a, b) => a + b, 0);
+          let cumChars = 0;
+          segments = segments.map((seg, idx) => {
+            const startRatio = cumChars / totalTextLen;
+            cumChars += textLengths[idx];
+            const endRatio = cumChars / totalTextLen;
+            return {
+              ...seg,
+              videoTime: startRatio * videoDur,
+              sceneStart: startRatio * videoDur,
+              sceneEnd: endRatio * videoDur,
+              sceneTopic: `Proportional-Scene ${idx + 1}`
+            };
+          });
+        }
       }
 
       const completeText = segments.
@@ -1447,9 +1466,11 @@ export default function VideoRecapView() {
         // === PHOTO PHASE (3s - 6s): HOLLYWOOD SMOOTH ZOOM-IN ===
         let photoAlpha = 1.0;
         if (phase < MOTION_DUR + FADE_DUR) {
-          photoAlpha = (phase - MOTION_DUR) / FADE_DUR;
+          const t = (phase - MOTION_DUR) / FADE_DUR;
+          photoAlpha = t * t * (3 - 2 * t); // smoothstep easing
         } else if (phase > CYCLE_DUR - FADE_DUR) {
-          photoAlpha = (CYCLE_DUR - phase) / FADE_DUR;
+          const t = (CYCLE_DUR - phase) / FADE_DUR;
+          photoAlpha = t * t * (3 - 2 * t); // smoothstep easing
         }
         photoAlpha = Math.max(0, Math.min(1, photoAlpha));
 
@@ -1473,7 +1494,8 @@ export default function VideoRecapView() {
         // === VIDEO PHASE (0s - 3s): Motion video ===
         let videoAlpha = 1.0;
         if (phase < FADE_DUR && segLocalTime > FADE_DUR) {
-          videoAlpha = phase / FADE_DUR;
+          const t = phase / FADE_DUR;
+          videoAlpha = t * t * (3 - 2 * t); // smoothstep easing
           ctx.globalAlpha = 1.0 - videoAlpha;
           ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH);
         }
@@ -1872,15 +1894,17 @@ export default function VideoRecapView() {
           // ===== RENDER BASED ON PHASE =====
           if (motionZoom) {
             // CROSSFADE CONSTANTS
-            const FADE_DUR = 0.4;
+            const FADE_DUR = 0.8;
 
             if (inPhotoPhase) {
               // === PHOTO PHASE (3s - 6s): HOLLYWOOD SMOOTH ZOOM-IN ===
               let photoAlpha = 1.0;
               if (phase < MOTION_DUR + FADE_DUR) {
-                photoAlpha = (phase - MOTION_DUR) / FADE_DUR;
+                const t = (phase - MOTION_DUR) / FADE_DUR;
+                photoAlpha = t * t * (3 - 2 * t); // smoothstep easing
               } else if (phase > CYCLE_DUR - FADE_DUR) {
-                photoAlpha = (CYCLE_DUR - phase) / FADE_DUR;
+                const t = (CYCLE_DUR - phase) / FADE_DUR;
+                photoAlpha = t * t * (3 - 2 * t); // smoothstep easing
               }
               photoAlpha = Math.max(0, Math.min(1, photoAlpha));
 
@@ -1889,6 +1913,7 @@ export default function VideoRecapView() {
               const eased = zoomProgress * zoomProgress * (3 - 2 * zoomProgress);
               const zoomScale = 1.0 + eased * 0.08;
 
+              // Always draw video underneath during crossfade for seamless blend
               if (photoAlpha < 1.0) {
                 ctx.globalAlpha = 1.0 - photoAlpha;
                 ctx.drawImage(video, dx, dy, dw, dh);
@@ -1905,10 +1930,11 @@ export default function VideoRecapView() {
               // === VIDEO PHASE (0s - 3s): Motion video ===
               let videoAlpha = 1.0;
 
-              // Handle crossfade from photo phase at cycle boundary
+              // Smooth crossfade from photo phase at cycle boundary
               if (phase < FADE_DUR && segLocalTime > FADE_DUR) {
-                videoAlpha = phase / FADE_DUR;
-                // Draw fading photo underneath (stable, NO zoom)
+                const t = phase / FADE_DUR;
+                videoAlpha = t * t * (3 - 2 * t); // smoothstep easing
+                // Draw fading photo underneath with zoom (maintain visual continuity)
                 ctx.globalAlpha = 1.0 - videoAlpha;
                 ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH);
               }
