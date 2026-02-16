@@ -1,42 +1,70 @@
 
 
-## OG Image (Social Media Preview) ဝါးနေတာ ပြင်ဆင်ခြင်း
+# Video Recap - Scene Sync & Premium Zoom-In Upgrade
 
-### ပြဿနာ
-Facebook/Messenger မှာ link share လုပ်တဲ့အခါ preview image ဝါးနေပြီး ပုံအပြည့် မပေါ်ဘူး။ ခုသုံးနေတဲ့ OG image က Lovable auto-generated screenshot (low quality) ဖြစ်နေလို့ပါ။
+## What This Plan Does
 
-### ကန့်သတ်ချက်
-- Social media platforms (Facebook, Messenger, Twitter) တွေက SVG format ကို OG image အဖြစ် support မလုပ်ပါ
-- PNG သို့မဟုတ် JPG format ဖြစ်ရမယ်
-- အကောင်းဆုံး size: 1200x630 pixels
+1. **Script-Driven Scene Sync (100% Accurate)**: Video scenes will change exactly when the narration changes. Each script segment maps to a proportional section of the video based on text length (character count). No reliance on AI timestamps.
 
-### လုပ်ဆောင်ရမည့်အရာ
+2. **Manual Audio & Video Speed Controls**: These already exist in the UI (VIDEO PLAYBACK SPEED and AUDIO DURATION / SPEED sliders). No changes needed.
 
-**Step 1: OG Image ဖန်တီးခြင်း**
-- Automation Nova AI logo ကို အသုံးပြု၍ 1200x630 pixels OG image တစ်ခု AI image generation ဖြင့် ဖန်တီးမယ်
-- Dark background + Automation Nova AI logo + branding text ပါဝင်မယ်
-- ပုံကို `public/og-image.png` အဖြစ် သိမ်းမယ်
+3. **Hollywood Premium Smooth Zoom-In**: Replace the current "stable/frozen photo" phase with a cinematic slow zoom-in effect during the 3-second photo phase. Instead of a static freeze frame, the captured frame will smoothly zoom in (Ken Burns effect) creating a professional, premium feel.
 
-**Step 2: index.html meta tags ပြင်ဆင်ခြင်း**
-- `og:image` URL ကို `https://www.automationnova.app/og-image.png` သို့ ပြောင်းမယ်
-- `twitter:image` URL ကိုလည်း အတူတူ ပြောင်းမယ်
-- `og:image:width` နှင့် `og:image:height` meta tags ထည့်မယ် (1200x630)
+---
 
-### ထိခိုက်မှု
-- `index.html` meta tags ကိုသာ ပြင်မယ်
-- `public/og-image.png` ဖိုင်အသစ် ထည့်မယ်
-- တခြား code, logic, tools များကို လုံးဝ မထိပါ
+## Technical Details
 
-### Technical Details
+### File: `src/pages/RecapVideoPage.tsx`
 
-index.html မှာ ပြောင်းရမည့် meta tags:
-```html
-<meta property="og:image" content="https://www.automationnova.app/og-image.png">
-<meta property="og:image:width" content="1200">
-<meta property="og:image:height" content="630">
-<meta name="twitter:image" content="https://www.automationnova.app/og-image.png">
+**Change 1: Force Proportional Distribution (Remove Timestamp Logic)**
+
+In `handleProcess()` (around lines 643-701), after parsing script segments, ALWAYS use proportional distribution based on character count regardless of AI timestamps or detected scenes. This ensures segment-to-video mapping is purely based on narration flow.
+
+- Remove the `validateAiTimestamps` function (lines 552-564) - no longer needed
+- Simplify `matchSegmentsToScenes` to always use proportional distribution
+- In `handleProcess`, after parsing segments, always distribute proportionally across video duration by character count (not evenly, not by AI timestamps)
+- Each segment gets: `videoTime = (cumulative char ratio) * videoDuration`
+
+**Change 2: Hollywood Smooth Zoom-In (Photo Phase)**
+
+Replace the static freeze frame rendering in the photo phase with a smooth, cinematic zoom-in animation. Affects two render locations:
+
+1. **Main renderer** (around lines 1899-1919): Photo phase currently draws a static `freezeCanvas`. Replace with a smooth scale transform that goes from 1.0x to ~1.08x over the 3-second photo phase using an ease-in-out curve.
+
+2. **Export renderer** (`renderFrameToCanvas`, around lines 1477-1493): Same zoom-in logic applied here for export consistency.
+
+The zoom-in implementation:
+```text
+zoomProgress = (phase - MOTION_DUR) / (CYCLE_DUR - MOTION_DUR)  // 0 to 1
+eased = zoomProgress * zoomProgress * (3 - 2 * zoomProgress)     // smoothstep
+scale = 1.0 + eased * 0.08                                       // 1.0x to 1.08x
+```
+Then draw the freeze frame centered with the scale applied using `ctx.translate` + `ctx.scale`.
+
+**Change 3: Proportional Distribution in Custom Audio Path**
+
+In `handleCreateRecapCustom` (around lines 792-830), the proportional character-count distribution already exists. Ensure the video time mapping also uses character-count proportion (already does at lines 820-828). No major changes needed here.
+
+**Change 4: Proportional Distribution in AI Audio Path**
+
+In `generateAudioFromText` mapped segments (around lines 1015-1039), when no scene data exists from Step 1, use character-count proportional distribution instead of even distribution:
+```text
+videoTime = (cumChars / totalChars) * videoDur
 ```
 
-### မှတ်ချက်
-OG image ပြောင်းပြီးနောက် Facebook cache ကို refresh လုပ်ရန် [Facebook Sharing Debugger](https://developers.facebook.com/tools/debug/) မှာ URL ထည့်ပြီး "Scrape Again" နှိပ်ရပါမယ်။
+### File: `supabase/functions/recap-script-generator/index.ts`
+
+No changes. The edge function will continue generating scripts. The frontend will simply ignore the `time` field from AI output and use proportional distribution instead.
+
+---
+
+## What Will NOT Be Touched
+
+- All other tools, pages, services, hooks, admin logic, authentication, credit systems
+- Edge functions (no modifications)
+- UI layout/styling (except photo phase rendering)
+- Audio generation, TTS, custom audio logic
+- Character overlay, subtitles, blur band, borders, timeline, logo, channel name
+- Export/recording pipeline
+- History system
 
