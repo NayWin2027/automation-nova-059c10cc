@@ -249,21 +249,58 @@ export default function TranscriptionView() {
         return;
       }
 
-      // Step 1: Upload file to storage (handles large files reliably)
-      const fileExt = selectedFile.name.split(".").pop() || "mp4";
-      const storagePath = `${userId}/${Date.now()}.${fileExt}`;
-
+      // Step 1: Get Google upload URL from edge function
+      const fileMime = selectedFile.type || "video/mp4";
       toast.info("ဖိုင် upload လုပ်နေပါသည်...");
 
-      const { error: uploadError } = await supabase.storage
-        .from("temp-uploads")
-        .upload(storagePath, selectedFile, {
-          cacheControl: "3600",
-          upsert: false,
-        });
+      const urlResponse = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-upload-url`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            fileName: selectedFile.name,
+            fileSize: selectedFile.size,
+            mimeType: fileMime,
+            ...(apiType === "own" ? { apiKey } : {}),
+          }),
+        }
+      );
 
-      if (uploadError) {
-        console.error("Storage upload error:", uploadError);
+      if (!urlResponse.ok) {
+        const errData = await urlResponse.json().catch(() => ({}));
+        toast.error(errData.error || "Upload URL ရယူ၍မရပါ။");
+        setIsGeneratingScript(false);
+        return;
+      }
+
+      const { uploadUrl } = await urlResponse.json();
+
+      // Step 2: Upload file DIRECTLY to Google (Client → Google, no middleman)
+      const uploadResponse = await fetch(uploadUrl, {
+        method: "POST",
+        headers: {
+          "X-Goog-Upload-Offset": "0",
+          "X-Goog-Upload-Command": "upload, finalize",
+          "Content-Length": selectedFile.size.toString(),
+        },
+        body: selectedFile,
+      });
+
+      if (!uploadResponse.ok) {
+        toast.error("ဖိုင် upload မအောင်မြင်ပါ။ ပြန်ကြိုးစားပါ။");
+        setIsGeneratingScript(false);
+        return;
+      }
+
+      const uploadResult = await uploadResponse.json();
+      const fileUri = uploadResult.file?.uri || "";
+      const googleFileName = uploadResult.file?.name || "";
+
+      if (!fileUri) {
         toast.error("ဖိုင် upload မအောင်မြင်ပါ။ ပြန်ကြိုးစားပါ။");
         setIsGeneratingScript(false);
         return;
@@ -271,13 +308,14 @@ export default function TranscriptionView() {
 
       toast.info("Script ထုတ်နေပါသည်...");
 
-      // Step 2: Call edge function with storage path (small JSON payload)
+      // Step 3: Call edge function with Google file URI (small JSON payload)
       const requestBody: any = {
-        storagePath,
+        fileUri,
+        googleFileName,
+        mimeType: fileMime,
         niche: scriptNiche,
         language: selectedLanguage,
         fileName: selectedFile.name,
-        mimeType: selectedFile.type || "video/mp4",
       };
       if (apiType === "own") {
         requestBody.apiKey = apiKey;
@@ -287,7 +325,7 @@ export default function TranscriptionView() {
         requestBody.customCreditCost = tierCredits;
       }
 
-      // 5-minute timeout for long videos (up to 30 mins)
+      // 5-minute timeout for script generation
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 300000);
 
@@ -304,9 +342,6 @@ export default function TranscriptionView() {
         }
       );
       clearTimeout(timeoutId);
-
-      // Clean up storage file in background (don't await)
-      supabase.storage.from("temp-uploads").remove([storagePath]).catch(() => {});
 
       if (!response.ok) {
         if (response.status === 402) {

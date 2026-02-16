@@ -6,55 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1beta/files";
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
 const MODEL = "gemini-2.5-flash";
-
-async function streamUploadToGoogleFiles(apiKey: string, fileStream: ReadableStream, fileSize: number, mimeType: string, fileName: string): Promise<string> {
-  console.log("Streaming upload to Google Files API...", fileName, fileSize, mimeType);
-
-  const startResponse = await fetch(`${GOOGLE_FILES_API}?key=${apiKey}`, {
-    method: "POST",
-    headers: {
-      "X-Goog-Upload-Protocol": "resumable",
-      "X-Goog-Upload-Command": "start",
-      "X-Goog-Upload-Header-Content-Length": fileSize.toString(),
-      "X-Goog-Upload-Header-Content-Type": mimeType,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ file: { display_name: fileName.replace(/[\/\\:*?"<>|]/g, "_").substring(0, 255) } }),
-  });
-
-  if (!startResponse.ok) {
-    const errorText = await startResponse.text();
-    console.error("Failed to start upload:", startResponse.status, errorText);
-    throw new Error(`Failed to start file upload: ${startResponse.status}`);
-  }
-
-  const uploadUrl = startResponse.headers.get("X-Goog-Upload-URL");
-  if (!uploadUrl) throw new Error("No upload URL received from Google");
-
-  // Stream directly from storage to Google - no memory buffering
-  const uploadResponse = await fetch(uploadUrl, {
-    method: "POST",
-    headers: {
-      "X-Goog-Upload-Offset": "0",
-      "X-Goog-Upload-Command": "upload, finalize",
-      "Content-Length": fileSize.toString(),
-    },
-    body: fileStream,
-  });
-
-  if (!uploadResponse.ok) {
-    const errorText = await uploadResponse.text();
-    console.error("Failed to upload file:", uploadResponse.status, errorText);
-    throw new Error(`Failed to upload file: ${uploadResponse.status}`);
-  }
-
-  const uploadResult = await uploadResponse.json();
-  console.log("File uploaded successfully:", uploadResult.file?.name);
-  return uploadResult.file?.uri || uploadResult.file?.name;
-}
 
 async function waitForFileProcessing(apiKey: string, fileName: string): Promise<void> {
   const maxAttempts = 120;
@@ -74,17 +27,6 @@ async function waitForFileProcessing(apiKey: string, fileName: string): Promise<
     await new Promise(r => setTimeout(r, delay));
   }
   throw new Error("File processing timeout");
-}
-
-function guessMimeType(fileName: string, providedMime?: string): string {
-  if (providedMime && providedMime !== "application/octet-stream") return providedMime;
-  const ext = fileName.split(".").pop()?.toLowerCase();
-  const mimeMap: Record<string, string> = {
-    mp3: "audio/mpeg", wav: "audio/wav", m4a: "audio/mp4", mp4: "video/mp4",
-    webm: "video/webm", ogg: "audio/ogg", flac: "audio/flac", aac: "audio/aac",
-    mkv: "video/x-matroska", avi: "video/x-msvideo", mov: "video/quicktime", "3gp": "video/3gpp",
-  };
-  return mimeMap[ext || ""] || "video/mp4";
 }
 
 // Niche-specific style instructions
@@ -141,19 +83,20 @@ serve(async (req) => {
       throw new Error("GEMINI_API_KEY not configured");
     }
 
-    // ===== PARSE REQUEST (JSON body with storage path) =====
+    // ===== PARSE REQUEST =====
     const body = await req.json();
-    const storagePath = body.storagePath as string;
+    const fileUri = body.fileUri as string || "";
+    const googleFileName = body.googleFileName as string || "";
     const niche = body.niche || "GENERAL";
     const language = body.language || "BURMESE";
     const transcript = body.transcript || null;
     const fileName = body.fileName || "upload.mp4";
-    const providedMimeType = body.mimeType || "";
+    const providedMimeType = body.mimeType || "video/mp4";
     let customCreditCost: number | null = body.customCreditCost !== undefined ? Number(body.customCreditCost) : null;
     const userApiKey = body.apiKey || null;
     const isOwnApi = !!userApiKey;
 
-    if (!storagePath && !transcript) {
+    if (!fileUri && !transcript) {
       return new Response(
         JSON.stringify({ error: "No file or transcript provided" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -213,61 +156,11 @@ STRUCTURE:
     // ===== BUILD GEMINI REQUEST =====
     let contentParts: any[] = [];
 
-    if (storagePath) {
-      // Use signed URL + streaming to avoid memory limits
-      console.log(`[recap-script-generator] Preparing streaming upload for: ${storagePath}`);
-      const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    if (fileUri) {
+      // File already uploaded to Google by the client — just wait for processing
+      const mimeType = providedMimeType;
 
-      // Create signed URL (valid 10 minutes)
-      const { data: signedUrlData, error: signedUrlError } = await supabaseAdmin.storage
-        .from("temp-uploads")
-        .createSignedUrl(storagePath, 600);
-
-      if (signedUrlError || !signedUrlData?.signedUrl) {
-        console.error("Signed URL error:", signedUrlError);
-        return new Response(
-          JSON.stringify({ error: "ဖိုင် download မအောင်မြင်ပါ။ ပြန်စမ်းပါ။" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      const mimeType = guessMimeType(fileName, providedMimeType);
-
-      // Get file size via HEAD request (no memory used)
-      const headResp = await fetch(signedUrlData.signedUrl, { method: "HEAD" });
-      const fileSize = parseInt(headResp.headers.get("content-length") || "0");
-      if (fileSize === 0) {
-        return new Response(
-          JSON.stringify({ error: "ဖိုင် size ရယူ၍မရပါ။ ပြန်စမ်းပါ။" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      console.log(`[recap-script-generator] File size: ${fileSize}, mime: ${mimeType}`);
-
-      // Stream file directly from storage to Google Files API (zero memory buffering)
-      const fileResponse = await fetch(signedUrlData.signedUrl);
-      if (!fileResponse.ok || !fileResponse.body) {
-        return new Response(
-          JSON.stringify({ error: "ဖိုင် download မအောင်မြင်ပါ။ ပြန်စမ်းပါ။" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      let fileUri: string;
-      try {
-        fileUri = await streamUploadToGoogleFiles(activeApiKey, fileResponse.body, fileSize, mimeType, fileName);
-      } catch (uploadError) {
-        console.error("Google Files upload failed:", uploadError);
-        return new Response(
-          JSON.stringify({ error: "ဖိုင် upload မအောင်မြင်ပါ။ ပြန်စမ်းပါ။" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      // Wait for file processing
-      const googleFileName = fileUri.includes("/") ? fileUri.split("/").slice(-2).join("/") : fileUri;
-      if (googleFileName.startsWith("files/")) {
+      if (googleFileName && googleFileName.startsWith("files/")) {
         try {
           await waitForFileProcessing(activeApiKey, googleFileName);
         } catch (processingError) {
@@ -278,9 +171,6 @@ STRUCTURE:
           );
         }
       }
-
-      // Clean up storage file in background
-      supabaseAdmin.storage.from("temp-uploads").remove([storagePath]).catch(() => {});
 
       const userPrompt = `Niche: ${nicheLabel}
 

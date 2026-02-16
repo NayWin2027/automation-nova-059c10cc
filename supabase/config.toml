@@ -39,3 +39,6 @@ verify_jwt = false
 [functions.recap-script-generator]
 verify_jwt = false
 wall_clock_limit = 300
+
+[functions.get-upload-url]
+verify_jwt = false
