@@ -113,6 +113,9 @@ export default function TranscriptionView() {
   const [selectedTier, setSelectedTier] = useState<number | null>(null);
   const [tierLocked, setTierLocked] = useState(false);
   const [scriptNiche, setScriptNiche] = useState("MOVIE RECAP");
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [rawTranscript, setRawTranscript] = useState("");
+  const [transcriptCopied, setTranscriptCopied] = useState(false);
   const [isGeneratingScript, setIsGeneratingScript] = useState(false);
   const [generatedScript, setGeneratedScript] = useState("");
   const [scriptCopied, setScriptCopied] = useState(false);
@@ -171,6 +174,7 @@ export default function TranscriptionView() {
     const file = e.target.files?.[0];
     if (file) {
       setSelectedFile(file);
+      setRawTranscript("");
       setGeneratedScript("");
       setSelectedTier(null);
       setTierLocked(false);
@@ -213,7 +217,8 @@ export default function TranscriptionView() {
     }
   };
 
-  const handleGenerateScript = async () => {
+  // ===== STAGE 1: Video → Transcribe =====
+  const handleTranscribe = async () => {
     if (!selectedFile) {
       toast.error("Video or Audio ဖိုင်ကို ရွေးပေးပါ။");
       return;
@@ -222,20 +227,20 @@ export default function TranscriptionView() {
       toast.error("Credit tier ရွေးပေးပါ။");
       return;
     }
-
     if (apiType === "own" && !apiKey.trim()) {
       toast.error("GEMINI API KEY အရင်ထည့်ပေးပါ။");
       return;
     }
 
-    // Pre-check credits
+    // Pre-check credits for transcribe
     if (apiType === "app") {
       const tierCredits = getSelectedTierCredits();
-      const allowed = await preCheckCredits("narration-script", tierCredits);
+      const allowed = await preCheckCredits("transcribe", tierCredits);
       if (!allowed) return;
     }
 
-    setIsGeneratingScript(true);
+    setIsTranscribing(true);
+    setRawTranscript("");
     setGeneratedScript("");
 
     try {
@@ -245,11 +250,11 @@ export default function TranscriptionView() {
 
       if (!token || !userId) {
         toast.error("Authentication required. Please login again.");
-        setIsGeneratingScript(false);
+        setIsTranscribing(false);
         return;
       }
 
-      // Step 1: Get resumable upload URL from edge function (metadata only, no file)
+      // Step 1: Get resumable upload URL
       const fileMime = selectedFile.type || "video/mp4";
       toast.info("ဖိုင် upload လုပ်နေပါသည်...");
 
@@ -273,7 +278,7 @@ export default function TranscriptionView() {
       if (!urlResponse.ok) {
         const errData = await urlResponse.json().catch(() => ({}));
         toast.error(errData.error || "Upload URL ရယူ၍မရပါ။");
-        setIsGeneratingScript(false);
+        setIsTranscribing(false);
         return;
       }
 
@@ -281,12 +286,12 @@ export default function TranscriptionView() {
 
       if (!uploadUrl) {
         toast.error("Upload URL ရယူ၍မရပါ။ ပြန်ကြိုးစားပါ။");
-        setIsGeneratingScript(false);
+        setIsTranscribing(false);
         return;
       }
 
       // Step 2: Upload file directly from browser to Google
-      toast.info("Google ဆီ တိုက်ရိုက် upload လုပ်နေပါသည်...");
+      toast.info("Google ဆီ upload လုပ်နေပါသည်...");
       const fileBuffer = await selectedFile.arrayBuffer();
       const uploadResponse = await fetch(uploadUrl, {
         method: "POST",
@@ -300,7 +305,7 @@ export default function TranscriptionView() {
 
       if (!uploadResponse.ok) {
         toast.error("ဖိုင် upload မအောင်မြင်ပါ။ ပြန်ကြိုးစားပါ။");
-        setIsGeneratingScript(false);
+        setIsTranscribing(false);
         return;
       }
 
@@ -310,20 +315,18 @@ export default function TranscriptionView() {
 
       if (!fileUri) {
         toast.error("ဖိုင် upload မအောင်မြင်ပါ။ ပြန်ကြိုးစားပါ။");
-        setIsGeneratingScript(false);
+        setIsTranscribing(false);
         return;
       }
 
-      toast.info("Script ထုတ်နေပါသည်...");
+      // Step 3: Call transcribe-video edge function
+      toast.info("Transcribe လုပ်နေပါသည်...");
 
-      // Step 3: Call edge function with Google file URI (small JSON payload)
       const requestBody: any = {
         fileUri,
         googleFileName,
         mimeType: fileMime,
-        niche: scriptNiche,
         language: selectedLanguage,
-        fileName: selectedFile.name,
       };
       if (apiType === "own") {
         requestBody.apiKey = apiKey;
@@ -333,7 +336,104 @@ export default function TranscriptionView() {
         requestBody.customCreditCost = tierCredits;
       }
 
-      // 5-minute timeout for script generation
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 300000);
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/transcribe-video`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody),
+          signal: controller.signal,
+        }
+      );
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        if (response.status === 402) {
+          const errData = await response.json();
+          toast.error(errData.error || "Credits မလုံလောက်ပါ။");
+          return;
+        }
+        if (response.status === 429) {
+          toast.error("Rate limit exceeded. ခဏစောင့်ပြီး ပြန်ကြိုးစားပါ။");
+          return;
+        }
+        throw new Error(`Server error: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data?.transcript) {
+        setRawTranscript(data.transcript);
+        toast.success("Transcribe အောင်မြင်ပါပြီ! Script ထုတ်ရန် အောက်က button ကိုနှိပ်ပါ။");
+      } else if (data?.error) {
+        toast.error(data.error);
+      } else {
+        toast.error("Transcription failed.");
+      }
+    } catch (err: any) {
+      console.error(err);
+      if (err?.name === 'AbortError') {
+        toast.error("Timeout ဖြစ်သွားပါသည်။ ဖိုင်အရွယ်အစား သေးတာကို ကြိုးစားပါ။");
+      } else {
+        toast.error("Transcription failed. Please try again.");
+      }
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
+  // ===== STAGE 2: Transcript → Script =====
+  const handleGenerateScript = async () => {
+    if (!rawTranscript) {
+      toast.error("Transcript မရှိသေးပါ။ အရင် Transcribe လုပ်ပါ။");
+      return;
+    }
+    if (apiType === "own" && !apiKey.trim()) {
+      toast.error("GEMINI API KEY အရင်ထည့်ပေးပါ။");
+      return;
+    }
+
+    // Pre-check credits for script generation
+    if (apiType === "app") {
+      const tierCredits = getSelectedTierCredits();
+      const allowed = await preCheckCredits("narration-script", tierCredits);
+      if (!allowed) return;
+    }
+
+    setIsGeneratingScript(true);
+    setGeneratedScript("");
+
+    try {
+      const session = await supabase.auth.getSession();
+      const token = session.data.session?.access_token;
+
+      if (!token) {
+        toast.error("Authentication required. Please login again.");
+        setIsGeneratingScript(false);
+        return;
+      }
+
+      toast.info("Script ထုတ်နေပါသည်...");
+
+      const requestBody: any = {
+        transcript: rawTranscript,
+        niche: scriptNiche,
+        language: selectedLanguage,
+      };
+      if (apiType === "own") {
+        requestBody.apiKey = apiKey;
+      }
+      const tierCredits = getSelectedTierCredits();
+      if (tierCredits !== undefined && apiType === "app") {
+        requestBody.customCreditCost = tierCredits;
+      }
+
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 300000);
 
@@ -377,13 +477,19 @@ export default function TranscriptionView() {
     } catch (err: any) {
       console.error(err);
       if (err?.name === 'AbortError') {
-        toast.error("Timeout ဖြစ်သွားပါသည်။ ဖိုင်အရွယ်အစား သေးတာကို ကြိုးစားပါ။");
+        toast.error("Timeout ဖြစ်သွားပါသည်။");
       } else {
         toast.error("Script generation failed. Please try again.");
       }
     } finally {
       setIsGeneratingScript(false);
     }
+  };
+
+  const handleCopyTranscript = () => {
+    navigator.clipboard.writeText(rawTranscript);
+    setTranscriptCopied(true);
+    setTimeout(() => setTranscriptCopied(false), 2000);
   };
 
   const handleCopyScript = () => {
@@ -557,8 +663,8 @@ export default function TranscriptionView() {
           </p>
         </div>
 
-        {/* CREDIT TIERS + GENERATE BUTTON (ONLY IF FILE SELECTED) */}
-        {selectedFile && !generatedScript && (
+        {/* CREDIT TIERS + TRANSCRIBE BUTTON (ONLY IF FILE SELECTED, NO TRANSCRIPT YET) */}
+        {selectedFile && !rawTranscript && !generatedScript && (
           <div className="space-y-4 animate-in zoom-in-95 duration-300">
             <label className="text-[10px] font-bold text-slate-300 uppercase tracking-widest block text-center">
               SELECT DURATION TIER
@@ -642,12 +748,59 @@ export default function TranscriptionView() {
               </div>
             )}
 
-            {/* GENERATE SCRIPT BUTTON */}
+            {/* STAGE 1: TRANSCRIBE BUTTON */}
+            <button
+              onClick={handleTranscribe}
+              disabled={isTranscribing || selectedTier === null}
+              className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl transition-all active:scale-95 flex items-center justify-center gap-3 ${
+                isTranscribing || selectedTier === null
+                  ? "bg-slate-800 text-slate-400"
+                  : "bg-gradient-to-r from-blue-600 to-cyan-600 text-white hover:from-blue-500 hover:to-cyan-500"
+              }`}>
+              {isTranscribing ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>TRANSCRIBING...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  <span>TRANSCRIBE</span>
+                </>
+              )}
+            </button>
+
+            <p className="text-[13px] text-blue-300/50 text-center">
+              Video/Audio ကို AI က သေချာ analysis လုပ်ပြီး အသေးစိတ် transcribe ထုတ်ပေးပါမယ် (Credit: {getSelectedTierCredits() ?? "—"})
+            </p>
+          </div>
+        )}
+
+        {/* STAGE 1 RESULT: RAW TRANSCRIPT + STAGE 2 GENERATE SCRIPT BUTTON */}
+        {rawTranscript && !generatedScript && (
+          <div className="space-y-4 animate-in fade-in zoom-in-95 duration-500">
+            <div className="flex justify-between items-center px-2">
+              <h3 className="text-[10px] font-black text-blue-400 uppercase tracking-widest">
+                TRANSCRIPTION RESULT
+              </h3>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleCopyTranscript}
+                  className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-slate-300 transition-colors">
+                  {transcriptCopied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+            <div className="bg-[#0a0f1d] border border-blue-500/30 rounded-[32px] p-8 shadow-2xl shadow-blue-500/5 max-h-[400px] overflow-y-auto">
+              <p className="text-sm font-medium leading-relaxed text-slate-100 whitespace-pre-wrap">{rawTranscript}</p>
+            </div>
+
+            {/* STAGE 2: GENERATE SCRIPT BUTTON */}
             <button
               onClick={handleGenerateScript}
-              disabled={isGeneratingScript || selectedTier === null}
+              disabled={isGeneratingScript}
               className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl transition-all active:scale-95 flex items-center justify-center gap-3 ${
-                isGeneratingScript || selectedTier === null
+                isGeneratingScript
                   ? "bg-slate-800 text-slate-400"
                   : "bg-gradient-to-r from-amber-600 to-orange-600 text-white hover:from-amber-500 hover:to-orange-500"
               }`}>
@@ -659,13 +812,13 @@ export default function TranscriptionView() {
               ) : (
                 <>
                   <Sparkles className="w-4 h-4" />
-                  <EditableText value={s.scriptButtonText} onChange={(v) => setEditSettings({ ...editSettings, scriptButtonText: v })} />
+                  <span>GENERATE {scriptNiche} SCRIPT (Credit: {getSelectedTierCredits() ?? "—"})</span>
                 </>
               )}
             </button>
 
             <p className="text-[13px] text-amber-300/50 text-center">
-              <EditableText value={s.scriptHelpText} onChange={(v) => setEditSettings({ ...editSettings, scriptHelpText: v })} />
+              Transcribe ရလာတဲ့ content ကို {scriptNiche} niche style နဲ့ professional script ထုတ်ပေးပါမယ်
             </p>
           </div>
         )}
@@ -695,6 +848,7 @@ export default function TranscriptionView() {
               <button
                 onClick={() => {
                   setGeneratedScript("");
+                  setRawTranscript("");
                   setSelectedFile(null);
                   setSelectedTier(null);
                   setTierLocked(false);
