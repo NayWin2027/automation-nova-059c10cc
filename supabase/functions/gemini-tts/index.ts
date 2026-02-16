@@ -182,15 +182,8 @@ serve(async (req) => {
     const apiUrl = `${GEMINI_TTS_API}?key=${effectiveApiKey}`;
 
     const buildRequestBody = (voice: string) => {
-      const instruction = `You are a professional voice-over narrator for engaging videos.\n` +
-        `Generate natural, continuous speech AUDIO for the following text.\n` +
-        `CRITICAL PACING RULES:\n` +
-        `- Speak fluently and continuously like a professional narrator or podcaster.\n` +
-        `- Keep pauses between sentences VERY SHORT (0.2-0.4 seconds max).\n` +
-        `- Do NOT add long silences or dramatic pauses between sentences.\n` +
-        `- Maintain a smooth, engaging flow that keeps listeners hooked.\n` +
-        `- Natural micro-pauses at commas and periods are fine, but keep them brief.\n` +
-        `- The overall rhythm should feel like a confident storyteller, not a slow reader.\n` +
+      const instruction = `You are a text-to-speech engine.\n` +
+        `Generate natural speech AUDIO only for the following text.\n` +
         `Language (BCP-47): ${sanitizedLanguageCode}\n\n` +
         `TEXT:\n${text}`;
 

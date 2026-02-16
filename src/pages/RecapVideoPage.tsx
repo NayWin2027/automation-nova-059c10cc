@@ -292,10 +292,9 @@ export default function VideoRecapView() {
   const [flipVideo, setFlipVideo] = useState(false);
   const [audioSpeed, setAudioSpeed] = useState(1.0);
   const [smartZoom, setSmartZoom] = useState(true);
-  const [syncMode, setSyncMode] = useState<"auto" | "manual">("auto");
   const [autoColor, setAutoColor] = useState<string>("OFF");
   // Custom Audio Upload states
-  const [audioMode, setAudioMode] = useState<"ai" | "custom">("custom");
+  const [audioMode, setAudioMode] = useState<"ai" | "custom">("ai");
   const [customAudioFile, setCustomAudioFile] = useState<File | null>(null);
   const [customAudioUrl, setCustomAudioUrl] = useState<string | null>(null);
   const [logoSrc, setLogoSrc] = useState<string | null>(null);
@@ -336,10 +335,10 @@ export default function VideoRecapView() {
       } catch {
 
 
-
-
         // ignore; auth guard will handle if the user truly loses session
-      }};const onVisible = () => {if (disposed) return;
+      }};
+    const onVisible = () => {
+      if (disposed) return;
       if (document.visibilityState === "visible") {
         void ensureFreshSession();
       }
@@ -518,9 +517,9 @@ export default function VideoRecapView() {
         const recoveryUrl = videoDataUrl || videoBlobUrl;
         if (video && recoveryUrl) {
           console.log('[RecapVideo] Tab visible — recovering video. readyState:', video.readyState, 'using:', videoDataUrl ? 'dataUrl' : 'blobUrl');
-
+          
           const savedTime = video.currentTime;
-
+          
           // Force re-seek first (fast recovery without full reload)
           if (video.readyState >= 2) {
             video.currentTime = savedTime;
@@ -537,7 +536,7 @@ export default function VideoRecapView() {
               }
             }, { once: true });
           }
-
+          
           // Reset freeze canvas to force re-capture on next photo phase
           freezeCapturedCycleRef.current = -1;
           wasFreezeModeRef.current = false;
@@ -549,7 +548,20 @@ export default function VideoRecapView() {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [videoDataUrl, videoBlobUrl, isPlaying]);
 
-  // validateAiTimestamps removed — proportional distribution always used
+  // Helper: Validate AI-generated timestamps for scene mapping
+  const validateAiTimestamps = (segments: ScriptSegment[], videoDuration: number): boolean => {
+    if (segments.length <= 1) return false;
+    const times = segments.map(s => s.time);
+    // All zeros or all identical = invalid
+    if (times.every(t => t === times[0])) return false;
+    // Any time exceeds video duration * 1.5 = invalid
+    if (times.some(t => t > videoDuration * 1.5)) return false;
+    // Must be roughly ascending (allow equal consecutive)
+    for (let i = 1; i < times.length; i++) {
+      if (times[i] < times[i - 1]) return false;
+    }
+    return true;
+  };
 
   // Helper: Match segments to detected scenes for semantic video seeking
   // Priority: 1) Sequential distribution when timestamps are identical, 2) Exact match, 3) Nearest match
@@ -644,45 +656,24 @@ export default function VideoRecapView() {
       })).
       sort((a, b) => a.time - b.time);
 
-      // Use AI-provided timestamps for scene-to-video mapping
-      // The AI watches the video and provides exact second where each scene appears
-      {
+      // Match segments to detected scenes for semantic video seeking
+      if (detectedScenes && detectedScenes.length > 0) {
+        console.log(`[Recap] Detected ${detectedScenes.length} scenes, matching to ${segments.length} segments`);
+        segments = matchSegmentsToScenes(segments, detectedScenes);
+      } else {
+        // No scenes from backend — ALWAYS use even distribution.
+        // AI `time` values are narrative ordering hints, NOT reliable video seek positions.
+        // Using them as seek positions causes all segments to cluster in early seconds of the video.
         const videoDur = videoRef.current?.duration || 120;
-        // Check if AI provided meaningful timestamps (not all zeros)
-        const hasRealTimestamps = segments.some((s, i) => i > 0 && s.time > 0);
-
-        if (hasRealTimestamps) {
-          // USE AI TIMESTAMPS — the AI watched the video and knows WHERE each scene is
-          console.log(`[Recap] Using AI timestamps for ${segments.length} segments (video: ${videoDur.toFixed(1)}s)`);
-          segments = segments.map((seg, idx) => {
-            const nextTime = idx < segments.length - 1 ? segments[idx + 1].time : videoDur;
-            return {
-              ...seg,
-              videoTime: Math.min(seg.time, videoDur - 0.5),
-              sceneStart: Math.min(seg.time, videoDur - 0.5),
-              sceneEnd: Math.min(nextTime, videoDur),
-              sceneTopic: `AI-Scene ${idx + 1}`
-            };
-          });
-        } else {
-          // FALLBACK: proportional distribution when timestamps are all zeros
-          console.log(`[Recap] Fallback: proportional distribution (no valid AI timestamps)`);
-          const textLengths = segments.map((s) => Math.max(1, (s.text || "").length));
-          const totalTextLen = textLengths.reduce((a, b) => a + b, 0);
-          let cumChars = 0;
-          segments = segments.map((seg, idx) => {
-            const startRatio = cumChars / totalTextLen;
-            cumChars += textLengths[idx];
-            const endRatio = cumChars / totalTextLen;
-            return {
-              ...seg,
-              videoTime: startRatio * videoDur,
-              sceneStart: startRatio * videoDur,
-              sceneEnd: endRatio * videoDur,
-              sceneTopic: `Proportional-Scene ${idx + 1}`
-            };
-          });
-        }
+        console.log(`[Recap] No backend scenes — evenly distributing ${segments.length} segments across ${videoDur.toFixed(1)}s video`);
+        const segDur = videoDur / segments.length;
+        segments = segments.map((seg, idx) => ({
+          ...seg,
+          videoTime: idx * segDur,
+          sceneStart: idx * segDur,
+          sceneEnd: (idx + 1) * segDur,
+          sceneTopic: `Auto-Scene ${idx + 1}`
+        }));
       }
 
       const completeText = segments.
@@ -773,43 +764,29 @@ export default function VideoRecapView() {
           }
         }
 
+        const segDur = totalDuration / segments.length;
         const videoDur = videoRef.current?.duration || totalDuration;
-
-        // UPGRADED: Distribute audio time PROPORTIONALLY by text length (character count)
-        // instead of even distribution. Longer narration segments naturally take more time
-        // to speak, so this produces much better audio-video alignment (~100% match).
-        const textLengths = segments.map((s) => Math.max(1, (s.text || "").length));
-        const totalTextLen = textLengths.reduce((a, b) => a + b, 0);
-
-        let audioOffset = 0;
+        // Preserve existing scene mapping from Step 1, or use even distribution
         mappedSegments = segments.map((seg, idx) => {
-          const proportion = textLengths[idx] / totalTextLen;
-          const segAudioDur = totalDuration * proportion;
-          const audioStart = audioOffset;
-          const audioEnd = audioOffset + segAudioDur;
-          audioOffset = audioEnd;
-
           const hasSceneData = seg.sceneStart !== undefined && seg.sceneEnd !== undefined;
           if (hasSceneData) {
             return {
               ...seg,
-              audioStart,
-              audioEnd,
+              audioStart: idx * segDur,
+              audioEnd: (idx + 1) * segDur,
               videoTime: seg.videoTime,
               sceneStart: seg.sceneStart,
               sceneEnd: seg.sceneEnd
             };
           }
-          // No scene data from Step 1 — proportional distribution across video too
-          const videoPropStart = textLengths.slice(0, idx).reduce((a, b) => a + b, 0) / totalTextLen;
-          const videoPropEnd = textLengths.slice(0, idx + 1).reduce((a, b) => a + b, 0) / totalTextLen;
+          // No scene data from Step 1 — even distribution across video
           return {
             ...seg,
-            audioStart,
-            audioEnd,
-            videoTime: videoPropStart * videoDur,
-            sceneStart: videoPropStart * videoDur,
-            sceneEnd: videoPropEnd * videoDur
+            audioStart: idx * segDur,
+            audioEnd: (idx + 1) * segDur,
+            videoTime: idx / segments.length * videoDur,
+            sceneStart: idx / segments.length * videoDur,
+            sceneEnd: (idx + 1) / segments.length * videoDur
           };
         });
       } else {
@@ -1005,14 +982,10 @@ export default function VideoRecapView() {
           sceneStart = seg.sceneStart!;
           sceneEnd = seg.sceneEnd!;
         } else {
-          // No scene data from Step 1 — proportional distribution by character count
-          const textLens = segments.map((s) => Math.max(1, (s.text || "").length));
-          const totalLen = textLens.reduce((a, b) => a + b, 0);
-          const cumBefore = textLens.slice(0, idx).reduce((a, b) => a + b, 0);
-          const cumAfter = cumBefore + textLens[idx];
-          videoTime = cumBefore / totalLen * videoDur;
-          sceneStart = cumBefore / totalLen * videoDur;
-          sceneEnd = cumAfter / totalLen * videoDur;
+          // No scene data from Step 1 — even distribution across video
+          videoTime = idx / segments.length * videoDur;
+          sceneStart = idx / segments.length * videoDur;
+          sceneEnd = (idx + 1) / segments.length * videoDur;
         }
         const mapped = {
           ...seg,
@@ -1134,47 +1107,47 @@ export default function VideoRecapView() {
     } catch {
 
 
-
-
       // ignore
-    }const waitForPlayable = (el: HTMLMediaElement, label: string) => new Promise<void>((resolve, reject) => {// HAVE_CURRENT_DATA = 2
-        if (el.readyState >= 2 && Number.isFinite(el.duration) && el.duration > 0) return resolve();
+    }const waitForPlayable = (el: HTMLMediaElement, label: string) =>
+    new Promise<void>((resolve, reject) => {
+      // HAVE_CURRENT_DATA = 2
+      if (el.readyState >= 2 && Number.isFinite(el.duration) && el.duration > 0) return resolve();
 
-        let done = false;
-        const cleanup = () => {
-          if (done) return;
-          done = true;
-          el.removeEventListener("loadedmetadata", onReady);
-          el.removeEventListener("canplay", onReady);
-          el.removeEventListener("canplaythrough", onReady);
-          el.removeEventListener("error", onErr);
-          window.clearTimeout(t);
-        };
-        const onReady = () => {
-          if (el.readyState >= 2 && Number.isFinite(el.duration) && el.duration > 0) {
-            cleanup();
-            resolve();
-          }
-        };
-        const onErr = () => {
+      let done = false;
+      const cleanup = () => {
+        if (done) return;
+        done = true;
+        el.removeEventListener("loadedmetadata", onReady);
+        el.removeEventListener("canplay", onReady);
+        el.removeEventListener("canplaythrough", onReady);
+        el.removeEventListener("error", onErr);
+        window.clearTimeout(t);
+      };
+      const onReady = () => {
+        if (el.readyState >= 2 && Number.isFinite(el.duration) && el.duration > 0) {
           cleanup();
-          reject(new Error(`${label} load error`));
-        };
-        const t = window.setTimeout(() => {
-          cleanup();
-          // Last chance: if readyState is at least 1 (metadata loaded), allow it
-          if (el.readyState >= 1 && Number.isFinite(el.duration) && el.duration > 0) {
-            resolve();
-          } else {
-            reject(new Error(`${label} timed out`));
-          }
-        }, 20000);
+          resolve();
+        }
+      };
+      const onErr = () => {
+        cleanup();
+        reject(new Error(`${label} load error`));
+      };
+      const t = window.setTimeout(() => {
+        cleanup();
+        // Last chance: if readyState is at least 1 (metadata loaded), allow it
+        if (el.readyState >= 1 && Number.isFinite(el.duration) && el.duration > 0) {
+          resolve();
+        } else {
+          reject(new Error(`${label} timed out`));
+        }
+      }, 20000);
 
-        el.addEventListener("loadedmetadata", onReady);
-        el.addEventListener("canplay", onReady);
-        el.addEventListener("canplaythrough", onReady);
-        el.addEventListener("error", onErr);
-      });
+      el.addEventListener("loadedmetadata", onReady);
+      el.addEventListener("canplay", onReady);
+      el.addEventListener("canplaythrough", onReady);
+      el.addEventListener("error", onErr);
+    });
 
     const pickMimeType = () => {
       // Prefer MP4 when supported (plays in more phone galleries), otherwise VP8 WebM.
@@ -1352,18 +1325,18 @@ export default function VideoRecapView() {
       } catch {
 
 
-
-
         // ignore
-      }try {if (recorder.state === "recording") {// Helps some browsers finalize a playable file (duration/headers).
-          try {recorder.requestData();
+      }try {if (recorder.state === "recording") {
+          // Helps some browsers finalize a playable file (duration/headers).
+          try {
+            recorder.requestData();
           } catch {
 
 
-
-
             // ignore
-          }window.setTimeout(() => {try {if (recorder.state === "recording") recorder.stop();} catch {
+          }window.setTimeout(() => {try {
+                if (recorder.state === "recording") recorder.stop();
+              } catch {
                 cleanupAfterStop();
               }
             }, 80);
@@ -1464,39 +1437,26 @@ export default function VideoRecapView() {
     // ===== RENDER BASED ON PHASE — identical to main renderer =====
     if (motionZoom && activeSegment) {
       if (inPhotoPhase) {
-        // === PHOTO PHASE (3s - 6s): HOLLYWOOD SMOOTH ZOOM-IN ===
+        // === PHOTO PHASE (3s - 6s): STABLE, NO ZOOM/PAN ===
         let photoAlpha = 1.0;
         if (phase < MOTION_DUR + FADE_DUR) {
-          const t = (phase - MOTION_DUR) / FADE_DUR;
-          photoAlpha = t * t * (3 - 2 * t); // smoothstep easing
+          photoAlpha = (phase - MOTION_DUR) / FADE_DUR;
         } else if (phase > CYCLE_DUR - FADE_DUR) {
-          const t = (CYCLE_DUR - phase) / FADE_DUR;
-          photoAlpha = t * t * (3 - 2 * t); // smoothstep easing
+          photoAlpha = (CYCLE_DUR - phase) / FADE_DUR;
         }
         photoAlpha = Math.max(0, Math.min(1, photoAlpha));
-
-        // Cinematic Ken Burns zoom-in: 1.0x → 1.08x with smoothstep easing
-        const zoomProgress = Math.max(0, Math.min(1, (phase - MOTION_DUR) / (CYCLE_DUR - MOTION_DUR)));
-        const eased = zoomProgress * zoomProgress * (3 - 2 * zoomProgress);
-        const zoomScale = 1.0 + eased * 0.08;
 
         if (photoAlpha < 1.0) {
           ctx.globalAlpha = 1.0 - photoAlpha;
           ctx.drawImage(video, dx, dy, dw, dh);
         }
         ctx.globalAlpha = photoAlpha;
-        ctx.save();
-        ctx.translate(targetW / 2, targetH / 2);
-        ctx.scale(zoomScale, zoomScale);
-        ctx.translate(-targetW / 2, -targetH / 2);
         ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH);
-        ctx.restore();
       } else {
         // === VIDEO PHASE (0s - 3s): Motion video ===
         let videoAlpha = 1.0;
         if (phase < FADE_DUR && segLocalTime > FADE_DUR) {
-          const t = phase / FADE_DUR;
-          videoAlpha = t * t * (3 - 2 * t); // smoothstep easing
+          videoAlpha = phase / FADE_DUR;
           ctx.globalAlpha = 1.0 - videoAlpha;
           ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH);
         }
@@ -1519,7 +1479,7 @@ export default function VideoRecapView() {
         TEAL: "rgba(0, 200, 180, 0.08)",
         PINK: "rgba(255, 80, 150, 0.08)",
         SEPIA: "rgba(180, 120, 60, 0.12)",
-        VINTAGE: "rgba(120, 80, 200, 0.08)"
+        VINTAGE: "rgba(120, 80, 200, 0.08)",
       };
       ctx.fillStyle = colorMap[autoColor] || "rgba(255, 160, 0, 0.08)";
       ctx.globalCompositeOperation = "overlay";
@@ -1686,25 +1646,25 @@ export default function VideoRecapView() {
       const audio = audioRef.current;
       const freezeCanvas = freezeCanvasRef.current;
 
-      if (video && canvas && freezeCanvas && audio) {
-        // FIX: When video decoder is evicted (e.g. mobile tab switch), draw freeze canvas instead of black
-        if (video.readyState < 2) {
-          const ctx = canvas.getContext("2d", { alpha: false });
-          if (ctx) {
-            if (freezeCanvas.width > 0 && freezeCanvas.height > 0) {
-              ctx.drawImage(freezeCanvas, 0, 0, canvas.width, canvas.height);
-            } else {
-              ctx.fillStyle = "#000";
-              ctx.fillRect(0, 0, canvas.width, canvas.height);
-            }
-            // Signal manual frame for recording
-            if (canvasStreamTrackRef.current?.requestFrame) {
-              canvasStreamTrackRef.current.requestFrame();
-            }
+    if (video && canvas && freezeCanvas && audio) {
+      // FIX: When video decoder is evicted (e.g. mobile tab switch), draw freeze canvas instead of black
+      if (video.readyState < 2) {
+        const ctx = canvas.getContext("2d", { alpha: false });
+        if (ctx) {
+          if (freezeCanvas.width > 0 && freezeCanvas.height > 0) {
+            ctx.drawImage(freezeCanvas, 0, 0, canvas.width, canvas.height);
+          } else {
+            ctx.fillStyle = "#000";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
           }
-          reqRef.current = requestAnimationFrame(render);
-          return;
+          // Signal manual frame for recording
+          if (canvasStreamTrackRef.current?.requestFrame) {
+            canvasStreamTrackRef.current.requestFrame();
+          }
         }
+        reqRef.current = requestAnimationFrame(render);
+        return;
+      }
         const ctx = canvas.getContext("2d", { alpha: false });
         const freezeCtx = freezeCanvas.getContext("2d", { alpha: false });
 
@@ -1786,43 +1746,59 @@ export default function VideoRecapView() {
             return Math.max(0, t);
           };
 
-          // ===== ZERO-STUTTER ENGINE =====
-          // CRITICAL: Video plays CONTINUOUSLY — NEVER pause/play toggle at phase boundaries.
-          // During photo phase we simply render from the freezeCanvas buffer while video keeps running.
-          // This eliminates the "camera shutter" stutter effect completely.
+          // CRITICAL FIX: Clamp motion within scene bounds using modulo wrap
+          // This prevents video from seeking past scene end into unrelated scenes
+          const rawMotionElapsed = cycleIndex * MOTION_DUR + Math.min(phase, MOTION_DUR);
+          const motionElapsed = sceneDuration > 0 ? rawMotionElapsed % sceneDuration : 0;
 
-          // Track phase transitions for freeze capture only (NOT for pause/play)
-          if (motionZoom) {
+          // Freeze frame: capture at end of current motion period within scene bounds
+          const rawFreezeElapsed = (cycleIndex + 1) * MOTION_DUR;
+          const freezeElapsed = sceneDuration > 0 ? rawFreezeElapsed % sceneDuration : 0;
+
+          const desiredMotionTime = clampTime(sceneStart + motionElapsed);
+          const desiredFreezeTime = clampTime(sceneStart + Math.min(freezeElapsed, Math.max(0, sceneDuration - 0.1)));
+
+          // SMOOTH video control: minimize play/pause toggling
+          // Only act on PHASE TRANSITIONS — never call play/pause every frame
+          if (motionZoom && isPlaying) {
             if (inPhotoPhase && !lastPhaseWasPhotoRef.current) {
+              // Entering photo phase — set freeze frame position
+              // CRITICAL: During export, do NOT call video.pause() as it stalls MediaRecorder
+              if (!isExporting) video.pause();
+              video.currentTime = desiredFreezeTime;
               lastPhaseWasPhotoRef.current = true;
             } else if (!inPhotoPhase && lastPhaseWasPhotoRef.current) {
+              // Entering motion phase — resume video playback
+              video.currentTime = desiredMotionTime;
+              if (!isExporting) video.play().catch(() => {});
               lastPhaseWasPhotoRef.current = false;
             }
           }
 
-          // SEMANTIC SCENE-LOCK SYNC: Video MUST stay within [sceneStart, sceneEnd] for each audio segment.
-          // When audio narrates "running", video shows the running scene. When audio switches to "hugging",
-          // video JUMPS to the hugging scene — never plays sequentially past scene boundaries.
+          // SEGMENT-LEVEL SEEKING: only seek when segment actually changes
+          // This is the key to smoothness — don't seek within the same segment during motion
           if (isPlaying && activeSegment && video.duration > 0) {
             const segIdx = scriptSegments.indexOf(activeSegment);
-
-            // New segment — immediately jump to matching scene
             if (segIdx !== lastSeekedSegmentRef.current) {
+              // New segment — seek to its scene start
               lastSeekedSegmentRef.current = segIdx;
-              video.currentTime = clampTime(sceneStart);
-            }
-
-            // Keep video playing always
-            if (video.paused) {
-              video.play().catch(() => {});
-            }
-
-            // CONTINUOUS SCENE-LOCK: Every frame, ensure video stays within scene bounds.
-            // If scene is 3s but audio segment is 15s, video loops within those 3s — never drifts out.
-            if (sceneEnd && sceneEnd > sceneStart) {
-              if (video.currentTime >= sceneEnd || video.currentTime < sceneStart - 0.1) {
-                // Wrap back to scene start — keeps video locked to the narrated content
-                video.currentTime = clampTime(sceneStart);
+              const targetSeekTime = clampTime(sceneStart);
+              // Only seek if we're not already near the target (avoid stutter from tiny seeks)
+              const currentDiff = Math.abs(video.currentTime - targetSeekTime);
+              if (currentDiff > 1.0) {
+                video.currentTime = targetSeekTime;
+              }
+              if (!inPhotoPhase && video.paused) {
+                video.play().catch(() => {});
+              }
+            } else if (!inPhotoPhase) {
+              // Drift correction: only correct if video is OUTSIDE the scene bounds entirely
+              // Wider tolerance (1s) to prevent micro-seeks that cause stutter
+              const isOutsideScene = sceneEnd ?
+              video.currentTime < sceneStart - 1.0 || video.currentTime > sceneEnd + 1.0 :
+              Math.abs(video.currentTime - desiredMotionTime) > 5.0;
+              if (isOutsideScene) {
+                video.currentTime = desiredMotionTime;
               }
             }
           }
@@ -1856,74 +1832,60 @@ export default function VideoRecapView() {
           const dx = (targetW - dw) / 2;
           const dy = (targetH - dh) / 2;
 
-          // ===== CAPTURE FREEZE FRAME =====
-          // Capture at EVERY frame near end of motion phase for freshest possible image
-          // This ensures the freeze buffer always has the latest video frame
-          const sizeOk = freezeCanvas.width === targetW && freezeCanvas.height === targetH;
-          const shouldCapture = motionZoom && (
-          // Always capture when entering photo phase
-          inPhotoPhase && freezeCapturedCycleRef.current !== cycleIndex ||
-          // Also capture during last 0.5s of motion phase to pre-buffer
-          !inPhotoPhase && phase >= MOTION_DUR - 0.5 ||
-          // Size mismatch or uninitialized
-          !sizeOk || freezeCanvas.width === 0);
+          // ===== CAPTURE FREEZE FRAME (once per cycle, at photo phase entry) =====
+          const sizeChanged = freezeCanvas.width !== targetW || freezeCanvas.height !== targetH;
+          const enteringFreezeMode = motionZoom && inPhotoPhase && !wasFreezeModeRef.current;
+          const shouldCaptureForCycle = motionZoom && inPhotoPhase && freezeCapturedCycleRef.current !== cycleIndex;
+          const needsCapture =
+          sizeChanged ||
+          enteringFreezeMode ||
+          shouldCaptureForCycle ||
+          motionZoom && (freezeCanvas.width === 0 || freezeCanvas.height === 0);
 
-
-          if (shouldCapture) {
-            if (!sizeOk) {
-              freezeCanvas.width = targetW;
-              freezeCanvas.height = targetH;
-            }
+          if (needsCapture && motionZoom) {
+            freezeCanvas.width = targetW;
+            freezeCanvas.height = targetH;
             freezeCtx.fillStyle = "#000";
             freezeCtx.fillRect(0, 0, targetW, targetH);
+            // Capture current video frame (store raw, unflipped)
             freezeCtx.drawImage(video, dx, dy, dw, dh);
-            if (inPhotoPhase) freezeCapturedCycleRef.current = cycleIndex;
+            freezeCapturedCycleRef.current = cycleIndex;
           }
 
           // ===== RENDER BASED ON PHASE =====
           if (motionZoom) {
-            // CROSSFADE — 0.4s for smooth invisible transition
+            // CROSSFADE CONSTANTS
             const FADE_DUR = 0.4;
 
             if (inPhotoPhase) {
-              // === PHOTO PHASE (3s - 6s): HOLLYWOOD SMOOTH ZOOM-IN ===
+              // === PHOTO PHASE (3s - 6s): STABLE, NO ZOOM/PAN ===
               let photoAlpha = 1.0;
               if (phase < MOTION_DUR + FADE_DUR) {
-                const t = (phase - MOTION_DUR) / FADE_DUR;
-                photoAlpha = t * t * (3 - 2 * t); // smoothstep easing
+                // Fading INTO photo
+                photoAlpha = (phase - MOTION_DUR) / FADE_DUR;
               } else if (phase > CYCLE_DUR - FADE_DUR) {
-                const t = (CYCLE_DUR - phase) / FADE_DUR;
-                photoAlpha = t * t * (3 - 2 * t); // smoothstep easing
+                // Fading OUT of photo (back to video)
+                photoAlpha = (CYCLE_DUR - phase) / FADE_DUR;
               }
               photoAlpha = Math.max(0, Math.min(1, photoAlpha));
 
-              // Cinematic Ken Burns zoom-in: 1.0x → 1.08x with smoothstep easing
-              const zoomProgress = Math.max(0, Math.min(1, (phase - MOTION_DUR) / (CYCLE_DUR - MOTION_DUR)));
-              const eased = zoomProgress * zoomProgress * (3 - 2 * zoomProgress);
-              const zoomScale = 1.0 + eased * 0.08;
-
-              // Always draw video underneath during crossfade for seamless blend
+              // Draw video underneath during crossfade
               if (photoAlpha < 1.0) {
                 ctx.globalAlpha = 1.0 - photoAlpha;
                 ctx.drawImage(video, dx, dy, dw, dh);
               }
 
+              // Draw stable freeze frame on top (NO zoom, NO pan — forever stable)
               ctx.globalAlpha = photoAlpha;
-              ctx.save();
-              ctx.translate(targetW / 2, targetH / 2);
-              ctx.scale(zoomScale, zoomScale);
-              ctx.translate(-targetW / 2, -targetH / 2);
               ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH);
-              ctx.restore();
             } else {
               // === VIDEO PHASE (0s - 3s): Motion video ===
               let videoAlpha = 1.0;
 
-              // Smooth crossfade from photo phase at cycle boundary
+              // Handle crossfade from photo phase at cycle boundary
               if (phase < FADE_DUR && segLocalTime > FADE_DUR) {
-                const t = phase / FADE_DUR;
-                videoAlpha = t * t * (3 - 2 * t); // smoothstep easing
-                // Draw fading photo underneath with zoom (maintain visual continuity)
+                videoAlpha = phase / FADE_DUR;
+                // Draw fading photo underneath (stable, NO zoom)
                 ctx.globalAlpha = 1.0 - videoAlpha;
                 ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH);
               }
@@ -1947,7 +1909,7 @@ export default function VideoRecapView() {
               TEAL: "rgba(0, 200, 180, 0.08)",
               PINK: "rgba(255, 80, 150, 0.08)",
               SEPIA: "rgba(180, 120, 60, 0.12)",
-              VINTAGE: "rgba(120, 80, 200, 0.08)"
+              VINTAGE: "rgba(120, 80, 200, 0.08)",
             };
             ctx.fillStyle = colorMap[autoColor] || "rgba(255, 160, 0, 0.08)";
             ctx.globalCompositeOperation = "overlay";
@@ -2289,7 +2251,7 @@ export default function VideoRecapView() {
           className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-all text-base">
 
           <Home className="w-4 h-4" />
-          <span className="font-black uppercase tracking-widest text-sm text-neon-cyan">Home</span>
+          <span className="text-[9px] font-black uppercase tracking-widest">Home</span>
         </button>
         <h1 className="font-black text-white uppercase tracking-widest text-2xl">NOVA VIDEO  
           <span className="text-neon-rose">RECAP</span>
@@ -2558,44 +2520,6 @@ export default function VideoRecapView() {
                 )}
               </select>
             </div>
-            {/* SYNC MODE TOGGLE */}
-            <div className="space-y-2 pt-2">
-              <label className="font-black uppercase tracking-widest text-xs text-white">
-                🔄 SYNC MODE
-              </label>
-              <div className="flex bg-black/40 p-1 rounded-xl border border-white/10">
-                <button
-                  onClick={() => {
-                    setSyncMode("auto");
-                    setVideoSpeed(1.0);
-                    setAudioSpeed(1.0);
-                  }}
-                  className={`flex-1 py-2.5 rounded-lg font-black text-[8px] uppercase tracking-widest transition-all ${
-                  syncMode === "auto" ?
-                  "bg-emerald-600 text-white shadow-lg shadow-emerald-500/30" :
-                  "text-slate-500 hover:text-white"}`
-                  }>
-                  🤖 AI AUTO SYNC
-                </button>
-                <button
-                  onClick={() => setSyncMode("manual")}
-                  className={`flex-1 py-2.5 rounded-lg font-black text-[8px] uppercase tracking-widest transition-all ${
-                  syncMode === "manual" ?
-                  "bg-orange-600 text-white shadow-lg shadow-orange-500/30" :
-                  "text-slate-500 hover:text-white"}`
-                  }>
-                  🎛️ MANUAL MODE
-                </button>
-              </div>
-              {syncMode === "auto" &&
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                  <span className="text-[7px] text-emerald-400 font-bold">✅ AI AUTO SYNC ON — Audio နဲ့ Video ကွက်တိ ထပ်တူကျအောင် AI က auto ညှိပေးပါမယ်</span>
-                </div>
-              }
-            </div>
-
-            {/* MANUAL SPEED CONTROLS — only visible in manual mode */}
-            {syncMode === "manual" &&
             <div className="flex gap-4 pt-2">
               <div className="flex-1 space-y-1 bg-red-950">
                 <label className="font-black uppercase tracking-widest text-xs text-current">
@@ -2609,6 +2533,7 @@ export default function VideoRecapView() {
                   value={videoSpeed}
                   onChange={(e) => setVideoSpeed(parseFloat(e.target.value))}
                   className="w-full h-1.5 bg-white/10 rounded-full appearance-none accent-blue-500" />
+
               </div>
               <div className="flex-1 space-y-1 bg-red-950">
                 <label className="font-black uppercase tracking-widest text-xs text-destructive-foreground">
@@ -2622,9 +2547,9 @@ export default function VideoRecapView() {
                   value={audioSpeed}
                   onChange={(e) => setAudioSpeed(parseFloat(e.target.value))}
                   className="w-full h-1.5 bg-white/10 rounded-full appearance-none accent-amber-500" />
+
               </div>
             </div>
-            }
             <div className="space-y-2 pt-2 bg-red-950">
               <label className="font-black uppercase tracking-widest text-xs text-white">
                 AI GENERATED SCRIPT (EDITABLE)
@@ -2637,11 +2562,33 @@ export default function VideoRecapView() {
 
             </div>
 
-            {/* Audio Source — Custom Audio Only */}
+            {/* Audio Source Toggle */}
             <div className="space-y-2 pt-2 bg-orange-950">
               <label className="font-black uppercase tracking-widest text-white text-xs">
-                🎵 CUSTOM AUDIO
+                AUDIO SOURCE
               </label>
+              <div className="flex bg-black/40 p-1 rounded-xl border border-white/10">
+                <button
+                  onClick={() => setAudioMode("ai")}
+                  className={`flex-1 py-2 rounded-lg font-black text-[8px] uppercase tracking-widest transition-all ${
+                  audioMode === "ai" ?
+                  "bg-blue-600 text-white shadow-lg" :
+                  "text-slate-500 hover:text-white"}`
+                  }>
+
+                  🤖 AI VOICE
+                </button>
+                <button
+                  onClick={() => setAudioMode("custom")}
+                  className={`flex-1 py-2 rounded-lg font-black text-[8px] uppercase tracking-widest transition-all ${
+                  audioMode === "custom" ?
+                  "bg-purple-600 text-white shadow-lg" :
+                  "text-slate-500 hover:text-white"}`
+                  }>
+
+                  🎵 CUSTOM AUDIO
+                </button>
+              </div>
 
               {/* Custom Audio Upload */}
               {audioMode === "custom" &&
@@ -2790,25 +2737,25 @@ export default function VideoRecapView() {
               <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">🎨 AUTO COLOR GRADE</span>
               <div className="grid grid-cols-4 gap-1.5">
                 {[
-                { id: "OFF", label: "OFF", color: "bg-slate-700" },
-                { id: "WARM", label: "WARM", color: "bg-orange-500" },
-                { id: "COOL", label: "COOL", color: "bg-blue-500" },
-                { id: "TEAL", label: "TEAL", color: "bg-teal-500" },
-                { id: "PINK", label: "PINK", color: "bg-pink-500" },
-                { id: "SEPIA", label: "SEPIA", color: "bg-amber-700" },
-                { id: "VINTAGE", label: "VINTAGE", color: "bg-purple-500" }].
-                map((c) =>
-                <button
-                  key={c.id}
-                  onClick={() => setAutoColor(c.id)}
-                  className={`py-1.5 rounded-lg border text-[6px] font-black uppercase transition-all ${
-                  autoColor === c.id ?
-                  `${c.color} border-white text-white shadow-lg scale-105` :
-                  "border-white/10 text-slate-500 hover:text-white"}`
-                  }>
+                  { id: "OFF", label: "OFF", color: "bg-slate-700" },
+                  { id: "WARM", label: "WARM", color: "bg-orange-500" },
+                  { id: "COOL", label: "COOL", color: "bg-blue-500" },
+                  { id: "TEAL", label: "TEAL", color: "bg-teal-500" },
+                  { id: "PINK", label: "PINK", color: "bg-pink-500" },
+                  { id: "SEPIA", label: "SEPIA", color: "bg-amber-700" },
+                  { id: "VINTAGE", label: "VINTAGE", color: "bg-purple-500" },
+                ].map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => setAutoColor(c.id)}
+                    className={`py-1.5 rounded-lg border text-[6px] font-black uppercase transition-all ${
+                      autoColor === c.id
+                        ? `${c.color} border-white text-white shadow-lg scale-105`
+                        : "border-white/10 text-slate-500 hover:text-white"
+                    }`}>
                     {c.label}
                   </button>
-                )}
+                ))}
               </div>
             </div>
             <div className="bg-white/5 p-3 rounded-xl border border-white/5 space-y-3">
@@ -3084,7 +3031,18 @@ export default function VideoRecapView() {
       </div>
 
       <div className="flex flex-col gap-2 pt-4 sticky bottom-4 z-50">
-        {/* Phase 1: Generate Script — HIDDEN (manual script + custom audio only) */}
+        {/* Phase 1: Generate Script (skip if custom audio mode with file uploaded) */}
+        {!audioBlobUrl && !fullScriptText && !(audioMode === "custom" && customAudioFile) &&
+        <button
+          onClick={handleProcess}
+          disabled={!videoSrc || analyzing}
+          className={`w-full py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all ${
+          analyzing ? "bg-blue-600/80 text-white animate-pulse" : "bg-blue-600 text-white"}`
+          }>
+
+            {analyzing ? statusText || "ANALYZING..." : "📝 GENERATE SCRIPT"}
+          </button>
+        }
 
         {/* Custom Audio Direct Create (skip script step entirely) */}
         {!audioBlobUrl && !fullScriptText && audioMode === "custom" && customAudioFile && !analyzing &&
@@ -3109,9 +3067,17 @@ export default function VideoRecapView() {
           </div>
         }
 
-        {/* Phase 2: Create Recap with Custom Audio (after script exists, before audio) */}
+        {/* Phase 2: Create Recap (after script exists, before audio) */}
         {!audioBlobUrl && fullScriptText && !analyzing &&
         <div className="flex gap-2">
+            {audioMode === "ai" ?
+          <button
+            onClick={handleCreateRecapAI}
+            className="flex-1 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white active:scale-[0.98] transition-all">
+
+                🤖 CREATE RECAP (AI VOICE)
+              </button> :
+
           <button
             onClick={handleCreateRecapCustom}
             disabled={!customAudioFile}
@@ -3123,6 +3089,7 @@ export default function VideoRecapView() {
 
                 🎵 CREATE RECAP (CUSTOM AUDIO)
               </button>
+          }
             <button
             onClick={() => {
               setFullScriptText("");

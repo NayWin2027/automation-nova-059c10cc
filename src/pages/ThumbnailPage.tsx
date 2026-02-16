@@ -667,9 +667,9 @@ const ThumbnailView: React.FC = () => {
     const loadFonts = async () => {
       // First wait for all stylesheet fonts to be parsed
       await document.fonts.ready;
-
+      
       // Then explicitly load each elite font at the weight we use (900)
-      const fontFamilies = ELITE_FONTS.map((f) => f.id);
+      const fontFamilies = ELITE_FONTS.map(f => f.id);
       const sizes = [48, 120, 180]; // preload at multiple sizes for canvas
       const loadPromises: Promise<FontFace[]>[] = [];
       for (const family of fontFamilies) {
@@ -679,7 +679,7 @@ const ThumbnailView: React.FC = () => {
           );
         }
       }
-
+      
       try {
         await Promise.all(loadPromises);
         // Double-check fonts are truly ready
@@ -687,7 +687,7 @@ const ThumbnailView: React.FC = () => {
       } catch (e) {
         console.warn('[ThumbnailPage] Some fonts failed to load:', e);
       }
-
+      
       if (!cancelled) {
         setFontsLoaded(true);
         // Force immediate redraw after fonts are confirmed loaded
@@ -700,9 +700,9 @@ const ThumbnailView: React.FC = () => {
         }, 100);
       }
     };
-
+    
     loadFonts();
-    return () => {cancelled = true;};
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -761,16 +761,16 @@ const ThumbnailView: React.FC = () => {
 
   const handleGenerate = async () => {
     if (!context && !h1) return alert("Vision သို့မဟုတ် Headline တစ်ခုခု အရင်ထည့်ပေးပါ။");
-
+    
     // Determine if using own API key
     const isOwnApi = !!apiKey?.trim();
-
+    
     // Block free users from App API when not allowed
     if (!isOwnApi && !appApiAllowed) {
       toast.error("Free/Guest users များသည် App API သုံးခွင့်မရှိပါ။ Own API Key ထည့်ပေးပါ။");
       return;
     }
-
+    
     setLoading(true);
     try {
       const imgUrl = await generateThumbnail(context || h1, apiKey || undefined, {
@@ -801,7 +801,7 @@ const ThumbnailView: React.FC = () => {
   if (!isAllowed) return null;
 
   return (
-    <div className="space-y-6 pb-40 animate-in fade-in duration-500 max-w-5xl text-white bg-blue-600 my-px px-[5px] mx-0 sm:mx-auto">
+    <div className="space-y-6 pb-40 animate-in fade-in duration-500 max-w-5xl px-2 text-white bg-blue-600 mx-px my-px">
       {/* 1. MONITOR PREVIEW (Sticky Top - Compact) */}
       <div className="sticky top-0 z-[100] pb-1">
         <div className="neon-glass rounded-2xl sm:rounded-3xl p-3 sm:p-4 space-y-2 border border-white/15 shadow-[0_0_60px_rgba(0,0,0,0.7)] overflow-hidden bg-black/80 backdrop-blur-3xl py-0 my-0 px-0 mx-px">
