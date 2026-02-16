@@ -1,70 +1,52 @@
 
 
-# Video Recap - Scene Sync & Premium Zoom-In Upgrade
+# Recap Script Generator Prompt Improvement Plan
 
-## What This Plan Does
+## Problems Identified
 
-1. **Script-Driven Scene Sync (100% Accurate)**: Video scenes will change exactly when the narration changes. Each script segment maps to a proportional section of the video based on text length (character count). No reliance on AI timestamps.
+1. **Timestamps in output**: The edge function asks AI to output JSON with `{"time": X, "text": "..."}` format. Since only the Transcribe page uses this function now (Video Recap removed script generation), users see raw JSON with timestamps — which is unwanted.
 
-2. **Manual Audio & Video Speed Controls**: These already exist in the UI (VIDEO PLAYBACK SPEED and AUDIO DURATION / SPEED sliders). No changes needed.
+2. **Wrong character identification**: The AI labeled characters as "boss/employee" (သူဌေး/ဆန္ဒယာ) when contextual clues (tuition/ကျူရှင်) clearly indicate a teacher-student relationship. The prompt needs stronger instructions to deduce relationships from context clues, not surface-level assumptions.
 
-3. **Hollywood Premium Smooth Zoom-In**: Replace the current "stable/frozen photo" phase with a cinematic slow zoom-in effect during the 3-second photo phase. Instead of a static freeze frame, the captured frame will smoothly zoom in (Ken Burns effect) creating a professional, premium feel.
+3. **Writing style**: Output is too granular (every tiny action described). User wants a concise, key-point recap style that covers the important moments engagingly without excessive micro-detail.
 
----
+## Scope
+
+ONLY `supabase/functions/recap-script-generator/index.ts` will be modified. Specifically the system prompt and the file-mode user prompt. No other files, tools, pages, or logic will be touched.
+
+## Changes
+
+### 1. Change Output Format from JSON to Pure Text
+
+In the file-mode user prompt (around line 280-297), remove the JSON array format requirement and replace with pure text paragraph output. Since only the Transcribe page uses this function now, timestamps are unnecessary.
+
+### 2. Strengthen Character Identity Deduction
+
+Update the CHARACTER IDENTITY RULES section in the system prompt (around line 213-216) to:
+- Require the AI to analyze ALL contextual clues (dialogue, settings, actions) before assigning character roles
+- Explicitly instruct: if a character mentions "tuition" or "class", they are likely a teacher, not a boss
+- Add examples of common misidentification patterns to avoid
+
+### 3. Adjust Writing Style to Key-Point Recap
+
+Update the system prompt STRUCTURE section (around line 224-228) and content rules to:
+- Write a concise KEY-POINT recap, not a scene-by-scene play-by-play
+- Summarize the main dramatic beats: who did what, key interactions, emotional turning points
+- State character relationships clearly (e.g., "ဆရာနဲ့ တပည့်ကျောင်းသူ")
+- Not too short, not too detailed -- engaging and well-paced for narration
+- Focus on moments that make viewers curious (intimate scenes, confrontations, revelations) without micro-describing every gesture
 
 ## Technical Details
 
-### File: `src/pages/RecapVideoPage.tsx`
+File: `supabase/functions/recap-script-generator/index.ts`
 
-**Change 1: Force Proportional Distribution (Remove Timestamp Logic)**
+Changes in the system prompt (lines 185-228):
+- CHARACTER IDENTITY RULES: Add contextual deduction instructions with examples
+- STRUCTURE: Change from "cover ALL key events" to "summarize KEY POINTS engagingly"
+- Add a new RECAP WRITING STYLE section emphasizing concise summary over exhaustive detail
 
-In `handleProcess()` (around lines 643-701), after parsing script segments, ALWAYS use proportional distribution based on character count regardless of AI timestamps or detected scenes. This ensures segment-to-video mapping is purely based on narration flow.
+Changes in the file-mode user prompt (lines 266-297):
+- Remove the JSON array output format requirement
+- Replace with: "Output the narration script as plain text paragraphs only. No JSON, no timestamps, no brackets, no formatting marks."
 
-- Remove the `validateAiTimestamps` function (lines 552-564) - no longer needed
-- Simplify `matchSegmentsToScenes` to always use proportional distribution
-- In `handleProcess`, after parsing segments, always distribute proportionally across video duration by character count (not evenly, not by AI timestamps)
-- Each segment gets: `videoTime = (cumulative char ratio) * videoDuration`
-
-**Change 2: Hollywood Smooth Zoom-In (Photo Phase)**
-
-Replace the static freeze frame rendering in the photo phase with a smooth, cinematic zoom-in animation. Affects two render locations:
-
-1. **Main renderer** (around lines 1899-1919): Photo phase currently draws a static `freezeCanvas`. Replace with a smooth scale transform that goes from 1.0x to ~1.08x over the 3-second photo phase using an ease-in-out curve.
-
-2. **Export renderer** (`renderFrameToCanvas`, around lines 1477-1493): Same zoom-in logic applied here for export consistency.
-
-The zoom-in implementation:
-```text
-zoomProgress = (phase - MOTION_DUR) / (CYCLE_DUR - MOTION_DUR)  // 0 to 1
-eased = zoomProgress * zoomProgress * (3 - 2 * zoomProgress)     // smoothstep
-scale = 1.0 + eased * 0.08                                       // 1.0x to 1.08x
-```
-Then draw the freeze frame centered with the scale applied using `ctx.translate` + `ctx.scale`.
-
-**Change 3: Proportional Distribution in Custom Audio Path**
-
-In `handleCreateRecapCustom` (around lines 792-830), the proportional character-count distribution already exists. Ensure the video time mapping also uses character-count proportion (already does at lines 820-828). No major changes needed here.
-
-**Change 4: Proportional Distribution in AI Audio Path**
-
-In `generateAudioFromText` mapped segments (around lines 1015-1039), when no scene data exists from Step 1, use character-count proportional distribution instead of even distribution:
-```text
-videoTime = (cumChars / totalChars) * videoDur
-```
-
-### File: `supabase/functions/recap-script-generator/index.ts`
-
-No changes. The edge function will continue generating scripts. The frontend will simply ignore the `time` field from AI output and use proportional distribution instead.
-
----
-
-## What Will NOT Be Touched
-
-- All other tools, pages, services, hooks, admin logic, authentication, credit systems
-- Edge functions (no modifications)
-- UI layout/styling (except photo phase rendering)
-- Audio generation, TTS, custom audio logic
-- Character overlay, subtitles, blur band, borders, timeline, logo, channel name
-- Export/recording pipeline
-- History system
-
+The edge function will be redeployed after changes.
