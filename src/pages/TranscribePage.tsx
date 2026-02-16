@@ -239,21 +239,53 @@ export default function TranscriptionView() {
     setGeneratedScript("");
 
     try {
-      // Send file directly via FormData to the edge function
-      const formData = new FormData();
-      formData.append("file", selectedFile);
-      formData.append("niche", scriptNiche);
-      formData.append("language", selectedLanguage);
+      const session = await supabase.auth.getSession();
+      const token = session.data.session?.access_token;
+      const userId = session.data.session?.user?.id;
+
+      if (!token || !userId) {
+        toast.error("Authentication required. Please login again.");
+        setIsGeneratingScript(false);
+        return;
+      }
+
+      // Step 1: Upload file to storage (handles large files reliably)
+      const fileExt = selectedFile.name.split(".").pop() || "mp4";
+      const storagePath = `${userId}/${Date.now()}.${fileExt}`;
+
+      toast.info("ဖိုင် upload လုပ်နေပါသည်...");
+
+      const { error: uploadError } = await supabase.storage
+        .from("temp-uploads")
+        .upload(storagePath, selectedFile, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (uploadError) {
+        console.error("Storage upload error:", uploadError);
+        toast.error("ဖိုင် upload မအောင်မြင်ပါ။ ပြန်ကြိုးစားပါ။");
+        setIsGeneratingScript(false);
+        return;
+      }
+
+      toast.info("Script ထုတ်နေပါသည်...");
+
+      // Step 2: Call edge function with storage path (small JSON payload)
+      const requestBody: any = {
+        storagePath,
+        niche: scriptNiche,
+        language: selectedLanguage,
+        fileName: selectedFile.name,
+        mimeType: selectedFile.type || "video/mp4",
+      };
       if (apiType === "own") {
-        formData.append("apiKey", apiKey);
+        requestBody.apiKey = apiKey;
       }
       const tierCredits = getSelectedTierCredits();
       if (tierCredits !== undefined && apiType === "app") {
-        formData.append("customCreditCost", tierCredits.toString());
+        requestBody.customCreditCost = tierCredits;
       }
-
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
 
       // 5-minute timeout for long videos (up to 30 mins)
       const controller = new AbortController();
@@ -265,12 +297,16 @@ export default function TranscriptionView() {
           method: "POST",
           headers: {
             Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
           },
-          body: formData,
+          body: JSON.stringify(requestBody),
           signal: controller.signal,
         }
       );
       clearTimeout(timeoutId);
+
+      // Clean up storage file in background (don't await)
+      supabase.storage.from("temp-uploads").remove([storagePath]).catch(() => {});
 
       if (!response.ok) {
         if (response.status === 402) {

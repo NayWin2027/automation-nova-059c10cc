@@ -75,15 +75,15 @@ async function waitForFileProcessing(apiKey: string, fileName: string): Promise<
   throw new Error("File processing timeout");
 }
 
-function getMimeType(file: File): string {
-  if (file.type) return file.type;
-  const ext = file.name.split(".").pop()?.toLowerCase();
+function guessMimeType(fileName: string, providedMime?: string): string {
+  if (providedMime && providedMime !== "application/octet-stream") return providedMime;
+  const ext = fileName.split(".").pop()?.toLowerCase();
   const mimeMap: Record<string, string> = {
     mp3: "audio/mpeg", wav: "audio/wav", m4a: "audio/mp4", mp4: "video/mp4",
     webm: "video/webm", ogg: "audio/ogg", flac: "audio/flac", aac: "audio/aac",
     mkv: "video/x-matroska", avi: "video/x-msvideo", mov: "video/quicktime", "3gp": "video/3gpp",
   };
-  return mimeMap[ext || ""] || "audio/mpeg";
+  return mimeMap[ext || ""] || "video/mp4";
 }
 
 // Niche-specific style instructions
@@ -140,43 +140,24 @@ serve(async (req) => {
       throw new Error("GEMINI_API_KEY not configured");
     }
 
-    // ===== PARSE REQUEST =====
-    let fileObj: File | null = null;
-    let niche = "GENERAL";
-    let language = "BURMESE";
-    let transcript: string | null = null;
-    let customCreditCost: number | null = null;
-    let isOwnApi = false;
-    let userApiKey: string | null = null;
+    // ===== PARSE REQUEST (JSON body with storage path) =====
+    const body = await req.json();
+    const storagePath = body.storagePath as string;
+    const niche = body.niche || "GENERAL";
+    const language = body.language || "BURMESE";
+    const transcript = body.transcript || null;
+    const fileName = body.fileName || "upload.mp4";
+    const providedMimeType = body.mimeType || "";
+    let customCreditCost: number | null = body.customCreditCost !== undefined ? Number(body.customCreditCost) : null;
+    const userApiKey = body.apiKey || null;
+    const isOwnApi = !!userApiKey;
 
-    const contentType = req.headers.get("content-type") || "";
-    if (contentType.includes("multipart/form-data")) {
-      const formData = await req.formData();
-      fileObj = formData.get("file") as File;
-      niche = (formData.get("niche") as string) || "GENERAL";
-      language = (formData.get("language") as string) || "BURMESE";
-      const formCreditCost = formData.get("customCreditCost") as string;
-      if (formCreditCost) customCreditCost = Number(formCreditCost);
-      userApiKey = formData.get("apiKey") as string;
-      isOwnApi = !!userApiKey;
-    } else {
-      const body = await req.json();
-      transcript = body.transcript || null;
-      niche = body.niche || "GENERAL";
-      language = body.language || "BURMESE";
-      if (body.customCreditCost !== undefined) customCreditCost = Number(body.customCreditCost);
-      userApiKey = body.apiKey || null;
-      isOwnApi = !!userApiKey;
-    }
-
-    if (!fileObj && !transcript) {
+    if (!storagePath && !transcript) {
       return new Response(
         JSON.stringify({ error: "No file or transcript provided" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    // Credit deduction moved to AFTER successful script generation (see below)
 
     const activeApiKey = isOwnApi ? userApiKey! : GEMINI_API_KEY;
     const nicheLabel = niche || "GENERAL";
@@ -231,19 +212,35 @@ STRUCTURE:
     // ===== BUILD GEMINI REQUEST =====
     let contentParts: any[] = [];
 
-    if (fileObj) {
-      // Direct file analysis mode - upload file to Google Files API
-      const mimeType = getMimeType(fileObj);
-      const arrayBuffer = await fileObj.arrayBuffer();
+    if (storagePath) {
+      // Download file from Supabase Storage using service role
+      console.log(`[recap-script-generator] Downloading file from storage: ${storagePath}`);
+      const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+      const { data: fileData, error: downloadError } = await supabaseAdmin.storage
+        .from("temp-uploads")
+        .download(storagePath);
+
+      if (downloadError || !fileData) {
+        console.error("Storage download error:", downloadError);
+        return new Response(
+          JSON.stringify({ error: "ဖိုင် download မအောင်မြင်ပါ။ ပြန်စမ်းပါ။" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const mimeType = guessMimeType(fileName, providedMimeType);
+      const arrayBuffer = await fileData.arrayBuffer();
       const fileBytes = new Uint8Array(arrayBuffer);
 
-      console.log(`[recap-script-generator] Uploading file: ${fileObj.name}, size: ${fileBytes.length}, mime: ${mimeType}`);
+      console.log(`[recap-script-generator] File downloaded, size: ${fileBytes.length}, mime: ${mimeType}`);
 
+      // Upload to Google Files API
       let fileUri: string;
       try {
-        fileUri = await uploadToGoogleFiles(activeApiKey, fileBytes, mimeType, fileObj.name);
+        fileUri = await uploadToGoogleFiles(activeApiKey, fileBytes, mimeType, fileName);
       } catch (uploadError) {
-        console.error("File upload failed:", uploadError);
+        console.error("Google Files upload failed:", uploadError);
         return new Response(
           JSON.stringify({ error: "ဖိုင် upload မအောင်မြင်ပါ။ ပြန်စမ်းပါ။" }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -251,10 +248,10 @@ STRUCTURE:
       }
 
       // Wait for file processing
-      const fileName = fileUri.includes("/") ? fileUri.split("/").slice(-2).join("/") : fileUri;
-      if (fileName.startsWith("files/")) {
+      const googleFileName = fileUri.includes("/") ? fileUri.split("/").slice(-2).join("/") : fileUri;
+      if (googleFileName.startsWith("files/")) {
         try {
-          await waitForFileProcessing(activeApiKey, fileName);
+          await waitForFileProcessing(activeApiKey, googleFileName);
         } catch (processingError) {
           console.error("File processing failed:", processingError);
           return new Response(
@@ -263,6 +260,9 @@ STRUCTURE:
           );
         }
       }
+
+      // Clean up storage file in background
+      supabaseAdmin.storage.from("temp-uploads").remove([storagePath]).catch(() => {});
 
       const userPrompt = `Niche: ${nicheLabel}
 
@@ -302,7 +302,7 @@ Output ONLY the JSON array, no other text or markdown:`;
         { file_data: { mime_type: mimeType, file_uri: fileUri } },
       ];
     } else {
-      // Legacy transcript mode (kept for backward compatibility)
+      // Legacy transcript mode
       const userPrompt = `Niche: ${nicheLabel}
 
 Below is a raw transcript. Your job is to transform it into a professional recap narration script.
@@ -324,7 +324,7 @@ Write the complete professional narration script now — DO NOT leave out any im
       contentParts = [{ text: userPrompt }];
     }
 
-    console.log(`[recap-script-generator] Sending to Gemini (${fileObj ? 'file mode' : 'transcript mode'})...`);
+    console.log(`[recap-script-generator] Sending to Gemini (${storagePath ? 'storage file mode' : 'transcript mode'})...`);
 
     const response = await fetch(
       `${GOOGLE_AI_API}/${MODEL}:generateContent?key=${activeApiKey}`,
@@ -383,7 +383,6 @@ Write the complete professional narration script now — DO NOT leave out any im
 
       if (creditError) {
         console.error("[recap-script-generator] Credit deduction error (post-success):", creditError);
-        // Still return the script since generation succeeded
       } else if (creditResult?.success) {
         console.log(`[recap-script-generator] Credits deducted after success. Balance: ${creditResult.balance}`);
       } else {
