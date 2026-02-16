@@ -1,73 +1,70 @@
 
 
-## Video Recap: Scene-Audio Sync Fix + "Not Ready" Error Fix
+# Video Recap - Scene Sync & Premium Zoom-In Upgrade
 
-### Root Cause Analysis
+## What This Plan Does
 
-**Problem 1: Scene-Audio Mismatch (narrator says "cat" but video shows "dog")**
+1. **Script-Driven Scene Sync (100% Accurate)**: Video scenes will change exactly when the narration changes. Each script segment maps to a proportional section of the video based on text length (character count). No reliance on AI timestamps.
 
-The backend (`video-recap` edge function) generates script segments with AI-assigned `time` values that represent WHERE in the video each narration belongs (e.g., `time: 15` means "this text describes what's shown at 15 seconds"). However, the frontend **completely ignores these timestamps** and replaces them with even distribution (segment 0 = 0-10s, segment 1 = 10-20s, etc.).
+2. **Manual Audio & Video Speed Controls**: These already exist in the UI (VIDEO PLAYBACK SPEED and AUDIO DURATION / SPEED sliders). No changes needed.
 
-This breaks sync because the AI narrative order doesn't always match even time slicing. For example:
-- Video: 0-8s cat, 8-20s dog, 20-30s house
-- AI script: segment 0 (time:0, about cat), segment 1 (time:8, about dog), segment 2 (time:20, about house)
-- Even distribution maps: seg 0 to 0-10s (OK), seg 1 to 10-20s (partially wrong), seg 2 to 20-30s (OK)
-- AI timestamps would correctly map each segment to the right visual
-
-**Problem 2: "Video/Audio not ready" error**
-
-After `handleCreateRecapCustom` sets `audioBlobUrl` via `setAudioBlobUrl(url)`, it calls `setTimeout(() => togglePlay(), 500)`. But React state updates are asynchronous -- 500ms may not be enough for `audioBlobUrl` to propagate, especially on slower devices. When `togglePlay` fires, `audioBlobUrl` is still `null`, triggering the error toast.
+3. **Hollywood Premium Smooth Zoom-In**: Replace the current "stable/frozen photo" phase with a cinematic slow zoom-in effect during the 3-second photo phase. Instead of a static freeze frame, the captured frame will smoothly zoom in (Ken Burns effect) creating a professional, premium feel.
 
 ---
 
-### Fix Plan
+## Technical Details
 
-**File: `src/pages/RecapVideoPage.tsx`** (only file modified)
+### File: `src/pages/RecapVideoPage.tsx`
 
-**Fix 1: Use AI timestamps for scene mapping (with validation fallback)**
+**Change 1: Force Proportional Distribution (Remove Timestamp Logic)**
 
-In `handleProcess` (around lines 644-663), instead of always doing even distribution when no `detectedScenes` exist:
-- Check if AI-generated `time` values are valid (ascending, within video duration, not all identical)
-- If valid: use them directly as `sceneStart`/`sceneEnd` boundaries
-- If invalid (all zeros, all same, or outside video range): fall back to even distribution
+In `handleProcess()` (around lines 643-701), after parsing script segments, ALWAYS use proportional distribution based on character count regardless of AI timestamps or detected scenes. This ensures segment-to-video mapping is purely based on narration flow.
 
-This preserves the AI's semantic intent ("this text belongs at this video moment") while protecting against garbage timestamps.
+- Remove the `validateAiTimestamps` function (lines 552-564) - no longer needed
+- Simplify `matchSegmentsToScenes` to always use proportional distribution
+- In `handleProcess`, after parsing segments, always distribute proportionally across video duration by character count (not evenly, not by AI timestamps)
+- Each segment gets: `videoTime = (cumulative char ratio) * videoDuration`
 
-**Fix 2: Same logic in `generateAudioFromText` (AI voice mode)**
+**Change 2: Hollywood Smooth Zoom-In (Photo Phase)**
 
-In the segment mapping (around lines 953-968), apply the same validation: if segments already have valid AI-mapped scene data, preserve it. If not, use even distribution.
+Replace the static freeze frame rendering in the photo phase with a smooth, cinematic zoom-in animation. Affects two render locations:
 
-**Fix 3: Same logic in `handleCreateRecapCustom` (custom audio mode)**
+1. **Main renderer** (around lines 1899-1919): Photo phase currently draws a static `freezeCanvas`. Replace with a smooth scale transform that goes from 1.0x to ~1.08x over the 3-second photo phase using an ease-in-out curve.
 
-In the segment mapping (around lines 757-767), same approach.
+2. **Export renderer** (`renderFrameToCanvas`, around lines 1477-1493): Same zoom-in logic applied here for export consistency.
 
-**Fix 4: Fix "Video/Audio not ready" timeout**
+The zoom-in implementation:
+```text
+zoomProgress = (phase - MOTION_DUR) / (CYCLE_DUR - MOTION_DUR)  // 0 to 1
+eased = zoomProgress * zoomProgress * (3 - 2 * zoomProgress)     // smoothstep
+scale = 1.0 + eased * 0.08                                       // 1.0x to 1.08x
+```
+Then draw the freeze frame centered with the scale applied using `ctx.translate` + `ctx.scale`.
 
-In both `handleCreateRecapCustom` (line 796) and `generateAudioFromText` (line 978), replace the fragile `setTimeout(() => togglePlay(), 500)` with a longer delay (1500ms) and a guard check inside `togglePlay` flow. Alternatively, don't auto-play -- just show success toast and let user click PLAY manually.
+**Change 3: Proportional Distribution in Custom Audio Path**
+
+In `handleCreateRecapCustom` (around lines 792-830), the proportional character-count distribution already exists. Ensure the video time mapping also uses character-count proportion (already does at lines 820-828). No major changes needed here.
+
+**Change 4: Proportional Distribution in AI Audio Path**
+
+In `generateAudioFromText` mapped segments (around lines 1015-1039), when no scene data exists from Step 1, use character-count proportional distribution instead of even distribution:
+```text
+videoTime = (cumChars / totalChars) * videoDur
+```
+
+### File: `supabase/functions/recap-script-generator/index.ts`
+
+No changes. The edge function will continue generating scripts. The frontend will simply ignore the `time` field from AI output and use proportional distribution instead.
 
 ---
 
-### Technical Details
+## What Will NOT Be Touched
 
-AI timestamp validation logic:
-```text
-function areTimestampsValid(segments, videoDuration):
-  - If all times are 0 or identical -> INVALID
-  - If any time > videoDuration * 1.5 -> INVALID  
-  - If times are not roughly ascending -> INVALID
-  - Otherwise -> VALID, use them as scene boundaries
-```
-
-When valid, scene boundaries are derived from consecutive AI timestamps:
-```text
-segment[i].sceneStart = segment[i].time
-segment[i].sceneEnd = segment[i+1]?.time || videoDuration
-```
-
-### What Will NOT Be Changed
-- Backend edge functions (video-recap, gemini-tts, etc.)
-- Any other tools (Translate, Voice, Creator, etc.)
-- Admin logic, credit logic, any other pages
-- Video rendering logic, subtitle rendering, export logic
-- Only the segment-to-scene MAPPING code is modified
+- All other tools, pages, services, hooks, admin logic, authentication, credit systems
+- Edge functions (no modifications)
+- UI layout/styling (except photo phase rendering)
+- Audio generation, TTS, custom audio logic
+- Character overlay, subtitles, blur band, borders, timeline, logo, channel name
+- Export/recording pipeline
+- History system
 

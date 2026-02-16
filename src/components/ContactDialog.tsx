@@ -12,29 +12,50 @@ const contacts = [
     icon: Phone,
     color: "bg-purple-500",
     link: "viber://chat?number=+959967793288",
-    display: "09967793288"
+    display: "09967793288",
   },
   {
     name: "Telegram",
     icon: Send,
     color: "bg-blue-500",
     link: "https://t.me/KoNay2027",
-    display: "@KoNay2027"
+    display: "@KoNay2027",
+  },
+  {
+    name: "Telegram",
+    icon: Send,
+    color: "bg-blue-400",
+    link: "https://t.me/komysmm",
+    display: "@komysmm",
   },
   {
     name: "Messenger",
     icon: MessageCircle,
     color: "bg-gradient-to-r from-blue-500 to-purple-500",
     link: "https://m.me/NAYWIN2027",
-    display: "NAYWIN2027"
+    display: "NAYWIN2027",
+  },
+  {
+    name: "Messenger",
+    icon: MessageCircle,
+    color: "bg-gradient-to-r from-indigo-500 to-purple-500",
+    link: "https://m.me/koyeswan.tds",
+    display: "koyeswan.tds",
+  },
+  {
+    name: "Facebook",
+    icon: Facebook,
+    color: "bg-blue-600",
+    link: "https://www.facebook.com/koyeswan.tds",
+    display: "koyeswan.tds",
   },
   {
     name: "Facebook",
     icon: Facebook,
     color: "bg-blue-600",
     link: "https://www.facebook.com/NAYWIN2027",
-    display: "NAYWIN2027"
-  }
+    display: "NAYWIN2027",
+  },
 ];
 
 export function ContactDialog({ isOpen, onClose }: ContactDialogProps) {
@@ -48,7 +69,7 @@ export function ContactDialog({ isOpen, onClose }: ContactDialogProps) {
         <DialogHeader>
           <DialogTitle className="text-center text-foreground">Contact Us</DialogTitle>
         </DialogHeader>
-        
+
         <div className="grid grid-cols-2 gap-3 py-4">
           {contacts.map((contact) => (
             <button
@@ -56,7 +77,9 @@ export function ContactDialog({ isOpen, onClose }: ContactDialogProps) {
               onClick={() => handleContactClick(contact.link)}
               className="flex flex-col items-center gap-2 p-4 rounded-xl bg-card/50 border border-border/30 hover:bg-card/80 hover:border-primary/30 transition-all duration-200 group"
             >
-              <div className={`w-12 h-12 rounded-full ${contact.color} flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform`}>
+              <div
+                className={`w-12 h-12 rounded-full ${contact.color} flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform`}
+              >
                 <contact.icon className="w-6 h-6 text-white" />
               </div>
               <div className="text-center">

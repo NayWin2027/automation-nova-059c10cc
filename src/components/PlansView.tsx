@@ -198,7 +198,7 @@ const PlansView: React.FC = () => {
           <h2 className="text-4xl font-black text-white tracking-tighter uppercase drop-shadow-[0_0_15px_rgba(56,189,248,0.3)]">
             CHECKOUT
           </h2>
-          <p className="text-white/40 font-black tracking-[0.4em] text-[10px] uppercase">SECURE PAYMENT GATEWAY</p>
+          <p className="text-white/40 font-black tracking-[0.4em] uppercase text-base">SECURE PAYMENT GATEWAY</p>
         </div>
 
         <button
@@ -232,12 +232,11 @@ const PlansView: React.FC = () => {
           <div className="bg-[#0f172a] rounded-[32px] p-6 border border-cyan-500/20 space-y-4 shadow-2xl relative overflow-hidden group hover:border-cyan-500/50 transition-all">
             <div className="flex justify-between items-center relative z-10">
               <p className="font-black text-cyan-400 uppercase tracking-[0.3em] text-xl">K PAY</p>
-              <div className="h-10 w-10 rounded-xl bg-white p-1 shadow-lg">
+              <div className="h-12 w-12 rounded-xl bg-white p-1 shadow-lg overflow-hidden">
                 <img
-                  src="https://upload.wikimedia.org/wikipedia/commons/d/df/KBZ_Pay_Logo.png"
-                  className="h-full w-full object-contain"
+                  src="/images/kpay-logo.png?v=2"
+                  className="h-full w-full object-contain rounded-lg"
                   alt="KPay" />
-
               </div>
             </div>
             <div className="relative border-b border-white/5 pb-4 flex justify-between items-end z-10">
@@ -268,18 +267,17 @@ const PlansView: React.FC = () => {
           <div className="bg-[#0f172a] rounded-[32px] p-6 border border-amber-500/20 space-y-4 shadow-2xl relative overflow-hidden group hover:border-amber-500/50 transition-all">
             <div className="flex justify-between items-center relative z-10">
               <p className="font-black text-amber-500 uppercase tracking-[0.3em] text-xl">WAVE PAY</p>
-              <div className="h-10 w-10 rounded-xl bg-white p-1 shadow-lg">
+              <div className="h-12 w-12 rounded-xl bg-white p-1 shadow-lg overflow-hidden">
                 <img
-                  src="https://static.wavemoney.com.mm/web/static/media/wave_logo.c7f8a9a4.png"
-                  className="h-full w-full object-contain"
+                  src="/images/wavepay-logo.png?v=2"
+                  className="h-full w-full object-contain rounded-lg"
                   alt="WavePay" />
-
               </div>
             </div>
             <div className="relative border-b border-white/5 pb-4 flex justify-between items-end z-10">
               <div className="space-y-1">
                 <p className="font-bold text-slate-500 uppercase text-sm">Phone Number</p>
-                <p className="font-black tracking-widest font-mono drop-shadow-md text-3xl text-neon-rose">
+                <p className="font-black tracking-widest font-mono drop-shadow-md text-neon-rose text-2xl">
                   {data.waveNumber}
                 </p>
               </div>
@@ -298,6 +296,45 @@ const PlansView: React.FC = () => {
               <span className="font-bold text-amber-500/50 uppercase text-base">Verified Account</span>
             </div>
             <div className="absolute -bottom-12 -right-12 w-32 h-32 bg-amber-500/5 blur-3xl rounded-full"></div>
+          </div>
+
+          {/* Thai Bank Card */}
+          <div className="bg-[#0f172a] rounded-[32px] p-6 border border-purple-500/20 space-y-4 shadow-2xl relative overflow-hidden group hover:border-purple-500/50 transition-all">
+            <div className="flex justify-between items-center relative z-10">
+              <p className="font-black text-purple-400 uppercase tracking-[0.3em] text-xl">THAI BANK</p>
+              <div className="h-10 w-10 rounded-xl bg-white p-1 shadow-lg flex items-center justify-center">
+                <span className="text-lg font-black text-purple-600">🏦</span>
+              </div>
+            </div>
+            <div className="relative border-b border-white/5 pb-4 z-10 space-y-3">
+              <div className="space-y-1">
+                <p className="font-bold uppercase text-sm text-purple-400">Bank Name</p>
+                <p className="text-lg font-black tracking-wide text-white drop-shadow-md">
+                  {data.thaiBankName}
+                </p>
+              </div>
+              <div className="flex justify-between items-end">
+                <div className="space-y-1">
+                  <p className="font-bold uppercase text-sm text-purple-400">Account Number</p>
+                  <p className="text-2xl font-black tracking-widest font-mono drop-shadow-md text-neon-rose">
+                    {data.thaiBankAcc}
+                  </p>
+                </div>
+                <button
+                  onClick={() => copyToClipboard(data.thaiBankAcc)}
+                  className="w-10 h-10 rounded-xl bg-purple-600/10 border border-purple-500/30 flex items-center justify-center text-purple-400 hover:bg-purple-600 hover:text-white transition-all shadow-lg active:scale-90">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+                    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div className="flex justify-between items-center z-10">
+              <p className="font-black tracking-widest text-gold text-base">{data.thaiBankHolder}</p>
+              <span className="font-bold text-purple-500/50 uppercase text-base">Verified Account</span>
+            </div>
+            <div className="absolute -bottom-12 -right-12 w-32 h-32 bg-purple-500/5 blur-3xl rounded-full"></div>
           </div>
 
           {/* Manual Support - Dual Messenger Links with Fixed Labels */}
