@@ -1226,12 +1226,11 @@ export default function VideoRecapView() {
     video.currentTime = 0;
     audio.currentTime = 0;
 
-    // Capture canvas stream – use 0 (manual frame capture on every rAF paint)
-    // to ensure every rendered frame is captured without drops
-    const stream = canvas.captureStream(0);
-    // Store the video track so the render loop can call requestFrame() on it
-    const videoTrack = stream.getVideoTracks()[0];
-    canvasStreamTrackRef.current = videoTrack;
+    // Capture canvas stream at 30fps auto-capture for reliable frame delivery.
+    // captureStream(0) required manual requestFrame() calls which caused freezing
+    // whenever a frame was missed (React effect gaps, GC pauses, tab throttling).
+    const stream = canvas.captureStream(30);
+    canvasStreamTrackRef.current = null; // No manual requestFrame needed
     // Add audio track if supported
     // Use WebAudio MediaStreamDestination for reliable audio capture (works across all browsers)
     if (mediaStreamDestRef.current) {
@@ -1697,10 +1696,7 @@ export default function VideoRecapView() {
               ctx.fillStyle = "#000";
               ctx.fillRect(0, 0, canvas.width, canvas.height);
             }
-            // Signal manual frame for recording
-            if (canvasStreamTrackRef.current?.requestFrame) {
-              canvasStreamTrackRef.current.requestFrame();
-            }
+            // No manual requestFrame needed — captureStream(30) auto-captures
           }
           reqRef.current = requestAnimationFrame(render);
           return;
@@ -2231,11 +2227,7 @@ export default function VideoRecapView() {
 
           // (freeze mode tracking is now done inside the render logic above)
 
-          // When exporting with captureStream(0), manually request a frame
-          // so MediaRecorder captures every paint without drops
-          if (isExporting && canvasStreamTrackRef.current?.requestFrame) {
-            canvasStreamTrackRef.current.requestFrame();
-          }
+          // captureStream(30) auto-captures — no manual requestFrame needed
         }
       }
       reqRef.current = requestAnimationFrame(render);
