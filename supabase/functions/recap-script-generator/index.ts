@@ -56,10 +56,11 @@ async function uploadToGoogleFiles(apiKey: string, fileBytes: Uint8Array, mimeTy
 }
 
 async function waitForFileProcessing(apiKey: string, fileName: string): Promise<void> {
-  const maxAttempts = 90;
-  const delay = 2000;
+  const maxAttempts = 120;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    // Aggressive polling: 800ms for first 30 attempts, then 1500ms
+    const delay = attempt < 30 ? 800 : 1500;
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${apiKey}`);
     if (!response.ok) {
       await new Promise(r => setTimeout(r, delay));
