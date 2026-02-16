@@ -6,15 +6,60 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1beta/files";
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
 const MODEL = "gemini-2.5-flash";
 
+async function uploadToGoogleFiles(apiKey: string, fileBytes: Uint8Array, mimeType: string, fileName: string): Promise<string> {
+  console.log("Uploading file to Google Files API...", fileName, fileBytes.length, mimeType);
+
+  const startResponse = await fetch(`${GOOGLE_FILES_API}?key=${apiKey}`, {
+    method: "POST",
+    headers: {
+      "X-Goog-Upload-Protocol": "resumable",
+      "X-Goog-Upload-Command": "start",
+      "X-Goog-Upload-Header-Content-Length": fileBytes.length.toString(),
+      "X-Goog-Upload-Header-Content-Type": mimeType,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ file: { display_name: fileName.replace(/[\/\\:*?"<>|]/g, "_").substring(0, 255) } }),
+  });
+
+  if (!startResponse.ok) {
+    const errorText = await startResponse.text();
+    console.error("Failed to start upload:", startResponse.status, errorText);
+    throw new Error(`Failed to start file upload: ${startResponse.status}`);
+  }
+
+  const uploadUrl = startResponse.headers.get("X-Goog-Upload-URL");
+  if (!uploadUrl) throw new Error("No upload URL received from Google");
+
+  const uploadResponse = await fetch(uploadUrl, {
+    method: "POST",
+    headers: {
+      "X-Goog-Upload-Offset": "0",
+      "X-Goog-Upload-Command": "upload, finalize",
+      "Content-Length": fileBytes.length.toString(),
+    },
+    body: fileBytes,
+  });
+
+  if (!uploadResponse.ok) {
+    const errorText = await uploadResponse.text();
+    console.error("Failed to upload file:", uploadResponse.status, errorText);
+    throw new Error(`Failed to upload file: ${uploadResponse.status}`);
+  }
+
+  const uploadResult = await uploadResponse.json();
+  console.log("File uploaded successfully:", uploadResult.file?.name);
+  return uploadResult.file?.uri || uploadResult.file?.name;
+}
+
 async function waitForFileProcessing(apiKey: string, fileName: string): Promise<void> {
-  const maxAttempts = 120;
+  const maxAttempts = 90;
+  const delay = 2000;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    // Aggressive polling: 800ms for first 30 attempts, then 1500ms
-    const delay = attempt < 30 ? 800 : 1500;
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${apiKey}`);
     if (!response.ok) {
       await new Promise(r => setTimeout(r, delay));
@@ -27,6 +72,17 @@ async function waitForFileProcessing(apiKey: string, fileName: string): Promise<
     await new Promise(r => setTimeout(r, delay));
   }
   throw new Error("File processing timeout");
+}
+
+function getMimeType(file: File): string {
+  if (file.type) return file.type;
+  const ext = file.name.split(".").pop()?.toLowerCase();
+  const mimeMap: Record<string, string> = {
+    mp3: "audio/mpeg", wav: "audio/wav", m4a: "audio/mp4", mp4: "video/mp4",
+    webm: "video/webm", ogg: "audio/ogg", flac: "audio/flac", aac: "audio/aac",
+    mkv: "video/x-matroska", avi: "video/x-msvideo", mov: "video/quicktime", "3gp": "video/3gpp",
+  };
+  return mimeMap[ext || ""] || "audio/mpeg";
 }
 
 // Niche-specific style instructions
@@ -84,24 +140,42 @@ serve(async (req) => {
     }
 
     // ===== PARSE REQUEST =====
-    const body = await req.json();
-    const fileUri = body.fileUri as string || "";
-    const googleFileName = body.googleFileName as string || "";
-    const niche = body.niche || "GENERAL";
-    const language = body.language || "BURMESE";
-    const transcript = body.transcript || null;
-    const fileName = body.fileName || "upload.mp4";
-    const providedMimeType = body.mimeType || "video/mp4";
-    let customCreditCost: number | null = body.customCreditCost !== undefined ? Number(body.customCreditCost) : null;
-    const userApiKey = body.apiKey || null;
-    const isOwnApi = !!userApiKey;
+    let fileObj: File | null = null;
+    let niche = "GENERAL";
+    let language = "BURMESE";
+    let transcript: string | null = null;
+    let customCreditCost: number | null = null;
+    let isOwnApi = false;
+    let userApiKey: string | null = null;
 
-    if (!fileUri && !transcript) {
+    const contentType = req.headers.get("content-type") || "";
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await req.formData();
+      fileObj = formData.get("file") as File;
+      niche = (formData.get("niche") as string) || "GENERAL";
+      language = (formData.get("language") as string) || "BURMESE";
+      const formCreditCost = formData.get("customCreditCost") as string;
+      if (formCreditCost) customCreditCost = Number(formCreditCost);
+      userApiKey = formData.get("apiKey") as string;
+      isOwnApi = !!userApiKey;
+    } else {
+      const body = await req.json();
+      transcript = body.transcript || null;
+      niche = body.niche || "GENERAL";
+      language = body.language || "BURMESE";
+      if (body.customCreditCost !== undefined) customCreditCost = Number(body.customCreditCost);
+      userApiKey = body.apiKey || null;
+      isOwnApi = !!userApiKey;
+    }
+
+    if (!fileObj && !transcript) {
       return new Response(
         JSON.stringify({ error: "No file or transcript provided" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // Credit deduction moved to AFTER successful script generation (see below)
 
     const activeApiKey = isOwnApi ? userApiKey! : GEMINI_API_KEY;
     const nicheLabel = niche || "GENERAL";
@@ -156,13 +230,30 @@ STRUCTURE:
     // ===== BUILD GEMINI REQUEST =====
     let contentParts: any[] = [];
 
-    if (fileUri) {
-      // File already uploaded to Google by the client — just wait for processing
-      const mimeType = providedMimeType;
+    if (fileObj) {
+      // Direct file analysis mode - upload file to Google Files API
+      const mimeType = getMimeType(fileObj);
+      const arrayBuffer = await fileObj.arrayBuffer();
+      const fileBytes = new Uint8Array(arrayBuffer);
 
-      if (googleFileName && googleFileName.startsWith("files/")) {
+      console.log(`[recap-script-generator] Uploading file: ${fileObj.name}, size: ${fileBytes.length}, mime: ${mimeType}`);
+
+      let fileUri: string;
+      try {
+        fileUri = await uploadToGoogleFiles(activeApiKey, fileBytes, mimeType, fileObj.name);
+      } catch (uploadError) {
+        console.error("File upload failed:", uploadError);
+        return new Response(
+          JSON.stringify({ error: "ဖိုင် upload မအောင်မြင်ပါ။ ပြန်စမ်းပါ။" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Wait for file processing
+      const fileName = fileUri.includes("/") ? fileUri.split("/").slice(-2).join("/") : fileUri;
+      if (fileName.startsWith("files/")) {
         try {
-          await waitForFileProcessing(activeApiKey, googleFileName);
+          await waitForFileProcessing(activeApiKey, fileName);
         } catch (processingError) {
           console.error("File processing failed:", processingError);
           return new Response(
@@ -210,7 +301,7 @@ Output ONLY the JSON array, no other text or markdown:`;
         { file_data: { mime_type: mimeType, file_uri: fileUri } },
       ];
     } else {
-      // Legacy transcript mode
+      // Legacy transcript mode (kept for backward compatibility)
       const userPrompt = `Niche: ${nicheLabel}
 
 Below is a raw transcript. Your job is to transform it into a professional recap narration script.
@@ -232,7 +323,7 @@ Write the complete professional narration script now — DO NOT leave out any im
       contentParts = [{ text: userPrompt }];
     }
 
-    console.log(`[recap-script-generator] Sending to Gemini (${fileUri ? 'file mode' : 'transcript mode'})...`);
+    console.log(`[recap-script-generator] Sending to Gemini (${fileObj ? 'file mode' : 'transcript mode'})...`);
 
     const response = await fetch(
       `${GOOGLE_AI_API}/${MODEL}:generateContent?key=${activeApiKey}`,
@@ -291,6 +382,7 @@ Write the complete professional narration script now — DO NOT leave out any im
 
       if (creditError) {
         console.error("[recap-script-generator] Credit deduction error (post-success):", creditError);
+        // Still return the script since generation succeeded
       } else if (creditResult?.success) {
         console.log(`[recap-script-generator] Credits deducted after success. Balance: ${creditResult.balance}`);
       } else {
