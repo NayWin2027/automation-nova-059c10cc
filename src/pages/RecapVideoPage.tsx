@@ -651,56 +651,22 @@ export default function VideoRecapView() {
         // Check if AI provided meaningful timestamps (not all zeros)
         const hasRealTimestamps = segments.some((s, i) => i > 0 && s.time > 0);
         
-        // --- TIMESTAMP VALIDATION ---
-        let useAiTimestamps = hasRealTimestamps;
-        if (hasRealTimestamps && segments.length >= 3) {
-          // Check 1: Any timestamps exceed video duration?
-          const overflowCount = segments.filter(s => s.time > videoDur + 1).length;
-          if (overflowCount > segments.length * 0.3) {
-            console.warn(`[Recap] Timestamp validation FAIL: ${overflowCount}/${segments.length} timestamps exceed video duration (${videoDur.toFixed(1)}s)`);
-            useAiTimestamps = false;
-          }
-          
-          // Check 2: Are timestamps suspiciously evenly spaced? (AI guessed instead of watching)
-          if (useAiTimestamps && segments.length >= 4) {
-            const gaps = segments.slice(1).map((s, i) => s.time - segments[i].time);
-            const avgGap = gaps.reduce((a, b) => a + b, 0) / gaps.length;
-            const variance = gaps.reduce((a, g) => a + Math.pow(g - avgGap, 2), 0) / gaps.length;
-            const coeffOfVar = avgGap > 0 ? Math.sqrt(variance) / avgGap : 0;
-            // If coefficient of variation < 0.15, timestamps are suspiciously uniform
-            if (coeffOfVar < 0.15 && avgGap > 5) {
-              console.warn(`[Recap] Timestamp validation FAIL: evenly spaced (CoV=${coeffOfVar.toFixed(3)}, avgGap=${avgGap.toFixed(1)}s) — AI likely guessed`);
-              useAiTimestamps = false;
-            }
-          }
-          
-          // Check 3: All timestamps bunched in first 30% of video?
-          if (useAiTimestamps) {
-            const maxTs = Math.max(...segments.map(s => s.time));
-            if (maxTs < videoDur * 0.3 && videoDur > 60) {
-              console.warn(`[Recap] Timestamp validation FAIL: all timestamps in first ${((maxTs / videoDur) * 100).toFixed(0)}% of video`);
-              useAiTimestamps = false;
-            }
-          }
-        }
-        
-        if (useAiTimestamps) {
+        if (hasRealTimestamps) {
           // USE AI TIMESTAMPS — the AI watched the video and knows WHERE each scene is
           console.log(`[Recap] Using AI timestamps for ${segments.length} segments (video: ${videoDur.toFixed(1)}s)`);
           segments = segments.map((seg, idx) => {
-            const clampedTime = Math.min(Math.max(seg.time, 0), videoDur - 0.5);
-            const nextTime = idx < segments.length - 1 ? Math.min(segments[idx + 1].time, videoDur) : videoDur;
+            const nextTime = idx < segments.length - 1 ? segments[idx + 1].time : videoDur;
             return {
               ...seg,
-              videoTime: clampedTime,
-              sceneStart: clampedTime,
+              videoTime: Math.min(seg.time, videoDur - 0.5),
+              sceneStart: Math.min(seg.time, videoDur - 0.5),
               sceneEnd: Math.min(nextTime, videoDur),
               sceneTopic: `AI-Scene ${idx + 1}`
             };
           });
         } else {
-          // FALLBACK: proportional distribution when timestamps are invalid
-          console.log(`[Recap] Fallback: proportional distribution (AI timestamps failed validation)`);
+          // FALLBACK: proportional distribution when timestamps are all zeros
+          console.log(`[Recap] Fallback: proportional distribution (no valid AI timestamps)`);
           const textLengths = segments.map(s => Math.max(1, (s.text || "").length));
           const totalTextLen = textLengths.reduce((a, b) => a + b, 0);
           let cumChars = 0;

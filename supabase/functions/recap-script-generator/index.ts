@@ -8,7 +8,7 @@ const corsHeaders = {
 
 const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1beta/files";
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
-const MODEL = "gemini-2.5-pro";
+const MODEL = "gemini-2.5-flash";
 
 async function uploadToGoogleFiles(apiKey: string, fileBytes: Uint8Array, mimeType: string, fileName: string): Promise<string> {
   console.log("Uploading file to Google Files API...", fileName, fileBytes.length, mimeType);
@@ -314,28 +314,15 @@ CRITICAL OUTPUT FORMAT — You MUST output a JSON array:
   {"time": 92.0, "text": "Third narration paragraph..."}
 ]
 
-CRITICAL TIMESTAMP RULES — YOUR #1 PRIORITY:
-- "time" = the EXACT second in the source video where the scene described in "text" ACTUALLY APPEARS ON SCREEN
-- You MUST scrub through the video frame-by-frame mentally and identify the PRECISE second for each scene
-- DO NOT guess timestamps. DO NOT space them evenly. DO NOT estimate based on video length.
-
-TIMESTAMP VERIFICATION PROCESS (follow this for EVERY segment):
-1. Read your narration text for the segment
-2. Ask yourself: "At what EXACT second does this specific visual content appear in the video?"
-3. Mentally seek to that second and VERIFY the visual matches your description
-4. Only then assign the timestamp
-
-EXAMPLES OF CORRECT vs WRONG:
-✅ CORRECT: Narration says "the mother hugs her daughter" → You found this hug happens at 1:47 in the video → time: 107
-✅ CORRECT: Narration says "a car chase begins" → You found the chase starts at 3:22 → time: 202
-❌ WRONG: Spacing timestamps every 30 seconds (0, 30, 60, 90...) — this is LAZY GUESSING
-❌ WRONG: Making timestamps sequential without verifying the actual video content
-❌ WRONG: Setting timestamp to 45 when the described scene actually occurs at 120
-
-ANTI-PATTERN DETECTION:
-- If your timestamps look evenly spaced (e.g., 0, 25, 50, 75, 100), you are GUESSING. Stop and re-watch.
-- If ALL timestamps are in the first half of the video, you probably stopped watching early. Fix this.
-- Each timestamp MUST correspond to a REAL visual moment you identified in the video.
+CRITICAL TIMESTAMP RULES:
+- "time" = the EXACT second in the source video where the scene described in "text" ACTUALLY APPEARS
+- You are a professional video editor. For each narration segment, identify PRECISELY which part of the video shows that content
+- Example: If your narration talks about "a shark approaching the glass", set "time" to the EXACT second where the shark is visible in the video
+- Example: If your narration talks about "the mother hugging her daughter", set "time" to the EXACT second where that hug happens in the video
+- Example: If your narration talks about "a whale appearing", set "time" to the EXACT second where the whale appears on screen
+- DO NOT use sequential/evenly-spaced timestamps. Each timestamp must reflect WHERE that specific content actually occurs in the video
+- Watch the video carefully and note the precise second for each key scene you describe
+- The timestamps do NOT need to be in order if the narration jumps between scenes for dramatic effect
 
 Output ONLY the JSON array, no other text or markdown:`;
 
