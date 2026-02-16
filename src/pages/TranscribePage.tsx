@@ -249,15 +249,9 @@ export default function TranscriptionView() {
         return;
       }
 
-      // Step 1: Upload file to Google via edge function proxy
+      // Step 1: Get resumable upload URL from edge function (metadata only, no file)
       const fileMime = selectedFile.type || "video/mp4";
       toast.info("ဖိုင် upload လုပ်နေပါသည်...");
-
-      const uploadFormData = new FormData();
-      uploadFormData.append("file", selectedFile);
-      if (apiType === "own") {
-        uploadFormData.append("apiKey", apiKey);
-      }
 
       const urlResponse = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-upload-url`,
@@ -265,19 +259,54 @@ export default function TranscriptionView() {
           method: "POST",
           headers: {
             Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
           },
-          body: uploadFormData,
+          body: JSON.stringify({
+            fileName: selectedFile.name,
+            mimeType: fileMime,
+            fileSize: selectedFile.size,
+            ...(apiType === "own" ? { apiKey } : {}),
+          }),
         }
       );
 
       if (!urlResponse.ok) {
         const errData = await urlResponse.json().catch(() => ({}));
-        toast.error(errData.error || "ဖိုင် upload မအောင်မြင်ပါ။");
+        toast.error(errData.error || "Upload URL ရယူ၍မရပါ။");
         setIsGeneratingScript(false);
         return;
       }
 
-      const { fileUri, googleFileName } = await urlResponse.json();
+      const { uploadUrl } = await urlResponse.json();
+
+      if (!uploadUrl) {
+        toast.error("Upload URL ရယူ၍မရပါ။ ပြန်ကြိုးစားပါ။");
+        setIsGeneratingScript(false);
+        return;
+      }
+
+      // Step 2: Upload file directly from browser to Google
+      toast.info("Google ဆီ တိုက်ရိုက် upload လုပ်နေပါသည်...");
+      const fileBuffer = await selectedFile.arrayBuffer();
+      const uploadResponse = await fetch(uploadUrl, {
+        method: "POST",
+        headers: {
+          "X-Goog-Upload-Offset": "0",
+          "X-Goog-Upload-Command": "upload, finalize",
+          "Content-Length": selectedFile.size.toString(),
+        },
+        body: fileBuffer,
+      });
+
+      if (!uploadResponse.ok) {
+        toast.error("ဖိုင် upload မအောင်မြင်ပါ။ ပြန်ကြိုးစားပါ။");
+        setIsGeneratingScript(false);
+        return;
+      }
+
+      const uploadResult = await uploadResponse.json();
+      const fileUri = uploadResult.file?.uri || "";
+      const googleFileName = uploadResult.file?.name || "";
 
       if (!fileUri) {
         toast.error("ဖိုင် upload မအောင်မြင်ပါ။ ပြန်ကြိုးစားပါ။");
