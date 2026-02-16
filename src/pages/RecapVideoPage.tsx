@@ -336,9 +336,9 @@ export default function VideoRecapView() {
       } catch {
 
 
+
         // ignore; auth guard will handle if the user truly loses session
-      }};
-    const onVisible = () => {
+      }};const onVisible = () => {
       if (disposed) return;
       if (document.visibilityState === "visible") {
         void ensureFreshSession();
@@ -518,9 +518,9 @@ export default function VideoRecapView() {
         const recoveryUrl = videoDataUrl || videoBlobUrl;
         if (video && recoveryUrl) {
           console.log('[RecapVideo] Tab visible — recovering video. readyState:', video.readyState, 'using:', videoDataUrl ? 'dataUrl' : 'blobUrl');
-          
+
           const savedTime = video.currentTime;
-          
+
           // Force re-seek first (fast recovery without full reload)
           if (video.readyState >= 2) {
             video.currentTime = savedTime;
@@ -537,7 +537,7 @@ export default function VideoRecapView() {
               }
             }, { once: true });
           }
-          
+
           // Reset freeze canvas to force re-capture on next photo phase
           freezeCapturedCycleRef.current = -1;
           wasFreezeModeRef.current = false;
@@ -650,7 +650,7 @@ export default function VideoRecapView() {
         const videoDur = videoRef.current?.duration || 120;
         // Check if AI provided meaningful timestamps (not all zeros)
         const hasRealTimestamps = segments.some((s, i) => i > 0 && s.time > 0);
-        
+
         if (hasRealTimestamps) {
           // USE AI TIMESTAMPS — the AI watched the video and knows WHERE each scene is
           console.log(`[Recap] Using AI timestamps for ${segments.length} segments (video: ${videoDur.toFixed(1)}s)`);
@@ -667,7 +667,7 @@ export default function VideoRecapView() {
         } else {
           // FALLBACK: proportional distribution when timestamps are all zeros
           console.log(`[Recap] Fallback: proportional distribution (no valid AI timestamps)`);
-          const textLengths = segments.map(s => Math.max(1, (s.text || "").length));
+          const textLengths = segments.map((s) => Math.max(1, (s.text || "").length));
           const totalTextLen = textLengths.reduce((a, b) => a + b, 0);
           let cumChars = 0;
           segments = segments.map((seg, idx) => {
@@ -1006,13 +1006,13 @@ export default function VideoRecapView() {
           sceneEnd = seg.sceneEnd!;
         } else {
           // No scene data from Step 1 — proportional distribution by character count
-          const textLens = segments.map(s => Math.max(1, (s.text || "").length));
+          const textLens = segments.map((s) => Math.max(1, (s.text || "").length));
           const totalLen = textLens.reduce((a, b) => a + b, 0);
           const cumBefore = textLens.slice(0, idx).reduce((a, b) => a + b, 0);
           const cumAfter = cumBefore + textLens[idx];
-          videoTime = (cumBefore / totalLen) * videoDur;
-          sceneStart = (cumBefore / totalLen) * videoDur;
-          sceneEnd = (cumAfter / totalLen) * videoDur;
+          videoTime = cumBefore / totalLen * videoDur;
+          sceneStart = cumBefore / totalLen * videoDur;
+          sceneEnd = cumAfter / totalLen * videoDur;
         }
         const mapped = {
           ...seg,
@@ -1134,9 +1134,9 @@ export default function VideoRecapView() {
     } catch {
 
 
+
       // ignore
-    }const waitForPlayable = (el: HTMLMediaElement, label: string) =>
-    new Promise<void>((resolve, reject) => {
+    }const waitForPlayable = (el: HTMLMediaElement, label: string) => new Promise<void>((resolve, reject) => {
       // HAVE_CURRENT_DATA = 2
       if (el.readyState >= 2 && Number.isFinite(el.duration) && el.duration > 0) return resolve();
 
@@ -1352,17 +1352,17 @@ export default function VideoRecapView() {
       } catch {
 
 
+
         // ignore
-      }try {if (recorder.state === "recording") {
-          // Helps some browsers finalize a playable file (duration/headers).
+      }try {if (recorder.state === "recording") {// Helps some browsers finalize a playable file (duration/headers).
           try {
             recorder.requestData();
           } catch {
 
 
+
             // ignore
-          }window.setTimeout(() => {try {
-                if (recorder.state === "recording") recorder.stop();
+          }window.setTimeout(() => {try {if (recorder.state === "recording") recorder.stop();
               } catch {
                 cleanupAfterStop();
               }
@@ -1519,7 +1519,7 @@ export default function VideoRecapView() {
         TEAL: "rgba(0, 200, 180, 0.08)",
         PINK: "rgba(255, 80, 150, 0.08)",
         SEPIA: "rgba(180, 120, 60, 0.12)",
-        VINTAGE: "rgba(120, 80, 200, 0.08)",
+        VINTAGE: "rgba(120, 80, 200, 0.08)"
       };
       ctx.fillStyle = colorMap[autoColor] || "rgba(255, 160, 0, 0.08)";
       ctx.globalCompositeOperation = "overlay";
@@ -1686,25 +1686,25 @@ export default function VideoRecapView() {
       const audio = audioRef.current;
       const freezeCanvas = freezeCanvasRef.current;
 
-    if (video && canvas && freezeCanvas && audio) {
-      // FIX: When video decoder is evicted (e.g. mobile tab switch), draw freeze canvas instead of black
-      if (video.readyState < 2) {
-        const ctx = canvas.getContext("2d", { alpha: false });
-        if (ctx) {
-          if (freezeCanvas.width > 0 && freezeCanvas.height > 0) {
-            ctx.drawImage(freezeCanvas, 0, 0, canvas.width, canvas.height);
-          } else {
-            ctx.fillStyle = "#000";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+      if (video && canvas && freezeCanvas && audio) {
+        // FIX: When video decoder is evicted (e.g. mobile tab switch), draw freeze canvas instead of black
+        if (video.readyState < 2) {
+          const ctx = canvas.getContext("2d", { alpha: false });
+          if (ctx) {
+            if (freezeCanvas.width > 0 && freezeCanvas.height > 0) {
+              ctx.drawImage(freezeCanvas, 0, 0, canvas.width, canvas.height);
+            } else {
+              ctx.fillStyle = "#000";
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+            // Signal manual frame for recording
+            if (canvasStreamTrackRef.current?.requestFrame) {
+              canvasStreamTrackRef.current.requestFrame();
+            }
           }
-          // Signal manual frame for recording
-          if (canvasStreamTrackRef.current?.requestFrame) {
-            canvasStreamTrackRef.current.requestFrame();
-          }
+          reqRef.current = requestAnimationFrame(render);
+          return;
         }
-        reqRef.current = requestAnimationFrame(render);
-        return;
-      }
         const ctx = canvas.getContext("2d", { alpha: false });
         const freezeCtx = freezeCanvas.getContext("2d", { alpha: false });
 
@@ -1805,18 +1805,18 @@ export default function VideoRecapView() {
           // video JUMPS to the hugging scene — never plays sequentially past scene boundaries.
           if (isPlaying && activeSegment && video.duration > 0) {
             const segIdx = scriptSegments.indexOf(activeSegment);
-            
+
             // New segment — immediately jump to matching scene
             if (segIdx !== lastSeekedSegmentRef.current) {
               lastSeekedSegmentRef.current = segIdx;
               video.currentTime = clampTime(sceneStart);
             }
-            
+
             // Keep video playing always
             if (video.paused) {
               video.play().catch(() => {});
             }
-            
+
             // CONTINUOUS SCENE-LOCK: Every frame, ensure video stays within scene bounds.
             // If scene is 3s but audio segment is 15s, video loops within those 3s — never drifts out.
             if (sceneEnd && sceneEnd > sceneStart) {
@@ -1861,13 +1861,13 @@ export default function VideoRecapView() {
           // This ensures the freeze buffer always has the latest video frame
           const sizeOk = freezeCanvas.width === targetW && freezeCanvas.height === targetH;
           const shouldCapture = motionZoom && (
-            // Always capture when entering photo phase
-            (inPhotoPhase && freezeCapturedCycleRef.current !== cycleIndex) ||
-            // Also capture during last 0.5s of motion phase to pre-buffer
-            (!inPhotoPhase && phase >= MOTION_DUR - 0.5) ||
-            // Size mismatch or uninitialized
-            !sizeOk || freezeCanvas.width === 0
-          );
+          // Always capture when entering photo phase
+          inPhotoPhase && freezeCapturedCycleRef.current !== cycleIndex ||
+          // Also capture during last 0.5s of motion phase to pre-buffer
+          !inPhotoPhase && phase >= MOTION_DUR - 0.5 ||
+          // Size mismatch or uninitialized
+          !sizeOk || freezeCanvas.width === 0);
+
 
           if (shouldCapture) {
             if (!sizeOk) {
@@ -1947,7 +1947,7 @@ export default function VideoRecapView() {
               TEAL: "rgba(0, 200, 180, 0.08)",
               PINK: "rgba(255, 80, 150, 0.08)",
               SEPIA: "rgba(180, 120, 60, 0.12)",
-              VINTAGE: "rgba(120, 80, 200, 0.08)",
+              VINTAGE: "rgba(120, 80, 200, 0.08)"
             };
             ctx.fillStyle = colorMap[autoColor] || "rgba(255, 160, 0, 0.08)";
             ctx.globalCompositeOperation = "overlay";
@@ -2289,7 +2289,7 @@ export default function VideoRecapView() {
           className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-all text-base">
 
           <Home className="w-4 h-4" />
-          <span className="text-[9px] font-black uppercase tracking-widest">Home</span>
+          <span className="font-black uppercase tracking-widest text-sm">Home</span>
         </button>
         <h1 className="font-black text-white uppercase tracking-widest text-2xl">NOVA VIDEO  
           <span className="text-neon-rose">RECAP</span>
@@ -2571,31 +2571,31 @@ export default function VideoRecapView() {
                     setAudioSpeed(1.0);
                   }}
                   className={`flex-1 py-2.5 rounded-lg font-black text-[8px] uppercase tracking-widest transition-all ${
-                    syncMode === "auto"
-                      ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/30"
-                      : "text-slate-500 hover:text-white"
-                  }`}>
+                  syncMode === "auto" ?
+                  "bg-emerald-600 text-white shadow-lg shadow-emerald-500/30" :
+                  "text-slate-500 hover:text-white"}`
+                  }>
                   🤖 AI AUTO SYNC
                 </button>
                 <button
                   onClick={() => setSyncMode("manual")}
                   className={`flex-1 py-2.5 rounded-lg font-black text-[8px] uppercase tracking-widest transition-all ${
-                    syncMode === "manual"
-                      ? "bg-orange-600 text-white shadow-lg shadow-orange-500/30"
-                      : "text-slate-500 hover:text-white"
-                  }`}>
+                  syncMode === "manual" ?
+                  "bg-orange-600 text-white shadow-lg shadow-orange-500/30" :
+                  "text-slate-500 hover:text-white"}`
+                  }>
                   🎛️ MANUAL MODE
                 </button>
               </div>
-              {syncMode === "auto" && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+              {syncMode === "auto" &&
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
                   <span className="text-[7px] text-emerald-400 font-bold">✅ AI AUTO SYNC ON — Audio နဲ့ Video ကွက်တိ ထပ်တူကျအောင် AI က auto ညှိပေးပါမယ်</span>
                 </div>
-              )}
+              }
             </div>
 
             {/* MANUAL SPEED CONTROLS — only visible in manual mode */}
-            {syncMode === "manual" && (
+            {syncMode === "manual" &&
             <div className="flex gap-4 pt-2">
               <div className="flex-1 space-y-1 bg-red-950">
                 <label className="font-black uppercase tracking-widest text-xs text-current">
@@ -2624,7 +2624,7 @@ export default function VideoRecapView() {
                   className="w-full h-1.5 bg-white/10 rounded-full appearance-none accent-amber-500" />
               </div>
             </div>
-            )}
+            }
             <div className="space-y-2 pt-2 bg-red-950">
               <label className="font-black uppercase tracking-widest text-xs text-white">
                 AI GENERATED SCRIPT (EDITABLE)
@@ -2790,25 +2790,25 @@ export default function VideoRecapView() {
               <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">🎨 AUTO COLOR GRADE</span>
               <div className="grid grid-cols-4 gap-1.5">
                 {[
-                  { id: "OFF", label: "OFF", color: "bg-slate-700" },
-                  { id: "WARM", label: "WARM", color: "bg-orange-500" },
-                  { id: "COOL", label: "COOL", color: "bg-blue-500" },
-                  { id: "TEAL", label: "TEAL", color: "bg-teal-500" },
-                  { id: "PINK", label: "PINK", color: "bg-pink-500" },
-                  { id: "SEPIA", label: "SEPIA", color: "bg-amber-700" },
-                  { id: "VINTAGE", label: "VINTAGE", color: "bg-purple-500" },
-                ].map((c) => (
-                  <button
-                    key={c.id}
-                    onClick={() => setAutoColor(c.id)}
-                    className={`py-1.5 rounded-lg border text-[6px] font-black uppercase transition-all ${
-                      autoColor === c.id
-                        ? `${c.color} border-white text-white shadow-lg scale-105`
-                        : "border-white/10 text-slate-500 hover:text-white"
-                    }`}>
+                { id: "OFF", label: "OFF", color: "bg-slate-700" },
+                { id: "WARM", label: "WARM", color: "bg-orange-500" },
+                { id: "COOL", label: "COOL", color: "bg-blue-500" },
+                { id: "TEAL", label: "TEAL", color: "bg-teal-500" },
+                { id: "PINK", label: "PINK", color: "bg-pink-500" },
+                { id: "SEPIA", label: "SEPIA", color: "bg-amber-700" },
+                { id: "VINTAGE", label: "VINTAGE", color: "bg-purple-500" }].
+                map((c) =>
+                <button
+                  key={c.id}
+                  onClick={() => setAutoColor(c.id)}
+                  className={`py-1.5 rounded-lg border text-[6px] font-black uppercase transition-all ${
+                  autoColor === c.id ?
+                  `${c.color} border-white text-white shadow-lg scale-105` :
+                  "border-white/10 text-slate-500 hover:text-white"}`
+                  }>
                     {c.label}
                   </button>
-                ))}
+                )}
               </div>
             </div>
             <div className="bg-white/5 p-3 rounded-xl border border-white/5 space-y-3">
