@@ -1226,11 +1226,11 @@ export default function VideoRecapView() {
     video.currentTime = 0;
     audio.currentTime = 0;
 
-    // Capture canvas stream at 30fps auto-capture for reliable frame delivery.
-    // captureStream(0) required manual requestFrame() calls which caused freezing
-    // whenever a frame was missed (React effect gaps, GC pauses, tab throttling).
-    const stream = canvas.captureStream(30);
-    canvasStreamTrackRef.current = null; // No manual requestFrame needed
+    // Use captureStream(0) for manual frame control — we call requestFrame()
+    // UNCONDITIONALLY at the end of every render cycle so no frame is ever missed.
+    const stream = canvas.captureStream(0);
+    const videoTrack = stream.getVideoTracks()[0];
+    canvasStreamTrackRef.current = videoTrack;
     // Add audio track if supported
     // Use WebAudio MediaStreamDestination for reliable audio capture (works across all browsers)
     if (mediaStreamDestRef.current) {
@@ -1696,7 +1696,10 @@ export default function VideoRecapView() {
               ctx.fillStyle = "#000";
               ctx.fillRect(0, 0, canvas.width, canvas.height);
             }
-            // No manual requestFrame needed — captureStream(30) auto-captures
+          }
+          // ALWAYS signal frame for captureStream(0) recording
+          if (canvasStreamTrackRef.current?.requestFrame) {
+            canvasStreamTrackRef.current.requestFrame();
           }
           reqRef.current = requestAnimationFrame(render);
           return;
@@ -2227,7 +2230,10 @@ export default function VideoRecapView() {
 
           // (freeze mode tracking is now done inside the render logic above)
 
-          // captureStream(30) auto-captures — no manual requestFrame needed
+          // ALWAYS signal frame for captureStream(0) — unconditional to prevent freezing
+          if (canvasStreamTrackRef.current?.requestFrame) {
+            canvasStreamTrackRef.current.requestFrame();
+          }
         }
       }
       reqRef.current = requestAnimationFrame(render);
