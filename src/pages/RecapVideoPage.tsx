@@ -292,6 +292,7 @@ export default function VideoRecapView() {
   const [flipVideo, setFlipVideo] = useState(false);
   const [audioSpeed, setAudioSpeed] = useState(1.0);
   const [smartZoom, setSmartZoom] = useState(true);
+  const [syncMode, setSyncMode] = useState<"auto" | "manual">("auto");
   const [autoColor, setAutoColor] = useState<string>("OFF");
   // Custom Audio Upload states
   const [audioMode, setAudioMode] = useState<"ai" | "custom">("ai");
@@ -2550,6 +2551,44 @@ export default function VideoRecapView() {
                 )}
               </select>
             </div>
+            {/* SYNC MODE TOGGLE */}
+            <div className="space-y-2 pt-2">
+              <label className="font-black uppercase tracking-widest text-xs text-white">
+                🔄 SYNC MODE
+              </label>
+              <div className="flex bg-black/40 p-1 rounded-xl border border-white/10">
+                <button
+                  onClick={() => {
+                    setSyncMode("auto");
+                    setVideoSpeed(1.0);
+                    setAudioSpeed(1.0);
+                  }}
+                  className={`flex-1 py-2.5 rounded-lg font-black text-[8px] uppercase tracking-widest transition-all ${
+                    syncMode === "auto"
+                      ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/30"
+                      : "text-slate-500 hover:text-white"
+                  }`}>
+                  🤖 AI AUTO SYNC
+                </button>
+                <button
+                  onClick={() => setSyncMode("manual")}
+                  className={`flex-1 py-2.5 rounded-lg font-black text-[8px] uppercase tracking-widest transition-all ${
+                    syncMode === "manual"
+                      ? "bg-orange-600 text-white shadow-lg shadow-orange-500/30"
+                      : "text-slate-500 hover:text-white"
+                  }`}>
+                  🎛️ MANUAL MODE
+                </button>
+              </div>
+              {syncMode === "auto" && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                  <span className="text-[7px] text-emerald-400 font-bold">✅ AI AUTO SYNC ON — Audio နဲ့ Video ကွက်တိ ထပ်တူကျအောင် AI က auto ညှိပေးပါမယ်</span>
+                </div>
+              )}
+            </div>
+
+            {/* MANUAL SPEED CONTROLS — only visible in manual mode */}
+            {syncMode === "manual" && (
             <div className="flex gap-4 pt-2">
               <div className="flex-1 space-y-1 bg-red-950">
                 <label className="font-black uppercase tracking-widest text-xs text-current">
@@ -2563,7 +2602,6 @@ export default function VideoRecapView() {
                   value={videoSpeed}
                   onChange={(e) => setVideoSpeed(parseFloat(e.target.value))}
                   className="w-full h-1.5 bg-white/10 rounded-full appearance-none accent-blue-500" />
-
               </div>
               <div className="flex-1 space-y-1 bg-red-950">
                 <label className="font-black uppercase tracking-widest text-xs text-destructive-foreground">
@@ -2577,9 +2615,9 @@ export default function VideoRecapView() {
                   value={audioSpeed}
                   onChange={(e) => setAudioSpeed(parseFloat(e.target.value))}
                   className="w-full h-1.5 bg-white/10 rounded-full appearance-none accent-amber-500" />
-
               </div>
             </div>
+            )}
             <div className="space-y-2 pt-2 bg-red-950">
               <label className="font-black uppercase tracking-widest text-xs text-white">
                 AI GENERATED SCRIPT (EDITABLE)
