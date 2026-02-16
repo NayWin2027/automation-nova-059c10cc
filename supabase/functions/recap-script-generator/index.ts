@@ -10,15 +10,15 @@ const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1bet
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
 const MODEL = "gemini-2.5-flash";
 
-async function uploadToGoogleFiles(apiKey: string, fileBytes: Uint8Array, mimeType: string, fileName: string): Promise<string> {
-  console.log("Uploading file to Google Files API...", fileName, fileBytes.length, mimeType);
+async function streamUploadToGoogleFiles(apiKey: string, fileStream: ReadableStream, fileSize: number, mimeType: string, fileName: string): Promise<string> {
+  console.log("Streaming upload to Google Files API...", fileName, fileSize, mimeType);
 
   const startResponse = await fetch(`${GOOGLE_FILES_API}?key=${apiKey}`, {
     method: "POST",
     headers: {
       "X-Goog-Upload-Protocol": "resumable",
       "X-Goog-Upload-Command": "start",
-      "X-Goog-Upload-Header-Content-Length": fileBytes.length.toString(),
+      "X-Goog-Upload-Header-Content-Length": fileSize.toString(),
       "X-Goog-Upload-Header-Content-Type": mimeType,
       "Content-Type": "application/json",
     },
@@ -34,14 +34,15 @@ async function uploadToGoogleFiles(apiKey: string, fileBytes: Uint8Array, mimeTy
   const uploadUrl = startResponse.headers.get("X-Goog-Upload-URL");
   if (!uploadUrl) throw new Error("No upload URL received from Google");
 
+  // Stream directly from storage to Google - no memory buffering
   const uploadResponse = await fetch(uploadUrl, {
     method: "POST",
     headers: {
       "X-Goog-Upload-Offset": "0",
       "X-Goog-Upload-Command": "upload, finalize",
-      "Content-Length": fileBytes.length.toString(),
+      "Content-Length": fileSize.toString(),
     },
-    body: fileBytes,
+    body: fileStream,
   });
 
   if (!uploadResponse.ok) {
@@ -213,16 +214,17 @@ STRUCTURE:
     let contentParts: any[] = [];
 
     if (storagePath) {
-      // Download file from Supabase Storage using service role
-      console.log(`[recap-script-generator] Downloading file from storage: ${storagePath}`);
+      // Use signed URL + streaming to avoid memory limits
+      console.log(`[recap-script-generator] Preparing streaming upload for: ${storagePath}`);
       const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-      const { data: fileData, error: downloadError } = await supabaseAdmin.storage
+      // Create signed URL (valid 10 minutes)
+      const { data: signedUrlData, error: signedUrlError } = await supabaseAdmin.storage
         .from("temp-uploads")
-        .download(storagePath);
+        .createSignedUrl(storagePath, 600);
 
-      if (downloadError || !fileData) {
-        console.error("Storage download error:", downloadError);
+      if (signedUrlError || !signedUrlData?.signedUrl) {
+        console.error("Signed URL error:", signedUrlError);
         return new Response(
           JSON.stringify({ error: "ဖိုင် download မအောင်မြင်ပါ။ ပြန်စမ်းပါ။" }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -230,15 +232,31 @@ STRUCTURE:
       }
 
       const mimeType = guessMimeType(fileName, providedMimeType);
-      const arrayBuffer = await fileData.arrayBuffer();
-      const fileBytes = new Uint8Array(arrayBuffer);
 
-      console.log(`[recap-script-generator] File downloaded, size: ${fileBytes.length}, mime: ${mimeType}`);
+      // Get file size via HEAD request (no memory used)
+      const headResp = await fetch(signedUrlData.signedUrl, { method: "HEAD" });
+      const fileSize = parseInt(headResp.headers.get("content-length") || "0");
+      if (fileSize === 0) {
+        return new Response(
+          JSON.stringify({ error: "ဖိုင် size ရယူ၍မရပါ။ ပြန်စမ်းပါ။" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
-      // Upload to Google Files API
+      console.log(`[recap-script-generator] File size: ${fileSize}, mime: ${mimeType}`);
+
+      // Stream file directly from storage to Google Files API (zero memory buffering)
+      const fileResponse = await fetch(signedUrlData.signedUrl);
+      if (!fileResponse.ok || !fileResponse.body) {
+        return new Response(
+          JSON.stringify({ error: "ဖိုင် download မအောင်မြင်ပါ။ ပြန်စမ်းပါ။" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       let fileUri: string;
       try {
-        fileUri = await uploadToGoogleFiles(activeApiKey, fileBytes, mimeType, fileName);
+        fileUri = await streamUploadToGoogleFiles(activeApiKey, fileResponse.body, fileSize, mimeType, fileName);
       } catch (uploadError) {
         console.error("Google Files upload failed:", uploadError);
         return new Response(
