@@ -232,7 +232,7 @@ Write the complete professional narration script now — DO NOT leave out any im
       contentParts = [{ text: userPrompt }];
     }
 
-    console.log(`[recap-script-generator] Sending to Gemini (${storagePath ? 'storage file mode' : 'transcript mode'})...`);
+    console.log(`[recap-script-generator] Sending to Gemini (${fileUri ? 'file mode' : 'transcript mode'})...`);
 
     const response = await fetch(
       `${GOOGLE_AI_API}/${MODEL}:generateContent?key=${activeApiKey}`,
