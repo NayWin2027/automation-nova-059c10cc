@@ -337,9 +337,9 @@ export default function VideoRecapView() {
 
 
 
+
         // ignore; auth guard will handle if the user truly loses session
-      }};const onVisible = () => {
-      if (disposed) return;
+      }};const onVisible = () => {if (disposed) return;
       if (document.visibilityState === "visible") {
         void ensureFreshSession();
       }
@@ -1135,46 +1135,46 @@ export default function VideoRecapView() {
 
 
 
+
       // ignore
-    }const waitForPlayable = (el: HTMLMediaElement, label: string) => new Promise<void>((resolve, reject) => {
-      // HAVE_CURRENT_DATA = 2
-      if (el.readyState >= 2 && Number.isFinite(el.duration) && el.duration > 0) return resolve();
+    }const waitForPlayable = (el: HTMLMediaElement, label: string) => new Promise<void>((resolve, reject) => {// HAVE_CURRENT_DATA = 2
+        if (el.readyState >= 2 && Number.isFinite(el.duration) && el.duration > 0) return resolve();
 
-      let done = false;
-      const cleanup = () => {
-        if (done) return;
-        done = true;
-        el.removeEventListener("loadedmetadata", onReady);
-        el.removeEventListener("canplay", onReady);
-        el.removeEventListener("canplaythrough", onReady);
-        el.removeEventListener("error", onErr);
-        window.clearTimeout(t);
-      };
-      const onReady = () => {
-        if (el.readyState >= 2 && Number.isFinite(el.duration) && el.duration > 0) {
+        let done = false;
+        const cleanup = () => {
+          if (done) return;
+          done = true;
+          el.removeEventListener("loadedmetadata", onReady);
+          el.removeEventListener("canplay", onReady);
+          el.removeEventListener("canplaythrough", onReady);
+          el.removeEventListener("error", onErr);
+          window.clearTimeout(t);
+        };
+        const onReady = () => {
+          if (el.readyState >= 2 && Number.isFinite(el.duration) && el.duration > 0) {
+            cleanup();
+            resolve();
+          }
+        };
+        const onErr = () => {
           cleanup();
-          resolve();
-        }
-      };
-      const onErr = () => {
-        cleanup();
-        reject(new Error(`${label} load error`));
-      };
-      const t = window.setTimeout(() => {
-        cleanup();
-        // Last chance: if readyState is at least 1 (metadata loaded), allow it
-        if (el.readyState >= 1 && Number.isFinite(el.duration) && el.duration > 0) {
-          resolve();
-        } else {
-          reject(new Error(`${label} timed out`));
-        }
-      }, 20000);
+          reject(new Error(`${label} load error`));
+        };
+        const t = window.setTimeout(() => {
+          cleanup();
+          // Last chance: if readyState is at least 1 (metadata loaded), allow it
+          if (el.readyState >= 1 && Number.isFinite(el.duration) && el.duration > 0) {
+            resolve();
+          } else {
+            reject(new Error(`${label} timed out`));
+          }
+        }, 20000);
 
-      el.addEventListener("loadedmetadata", onReady);
-      el.addEventListener("canplay", onReady);
-      el.addEventListener("canplaythrough", onReady);
-      el.addEventListener("error", onErr);
-    });
+        el.addEventListener("loadedmetadata", onReady);
+        el.addEventListener("canplay", onReady);
+        el.addEventListener("canplaythrough", onReady);
+        el.addEventListener("error", onErr);
+      });
 
     const pickMimeType = () => {
       // Prefer MP4 when supported (plays in more phone galleries), otherwise VP8 WebM.
@@ -1353,17 +1353,17 @@ export default function VideoRecapView() {
 
 
 
+
         // ignore
       }try {if (recorder.state === "recording") {// Helps some browsers finalize a playable file (duration/headers).
-          try {
-            recorder.requestData();
+          try {recorder.requestData();
           } catch {
 
 
 
+
             // ignore
-          }window.setTimeout(() => {try {if (recorder.state === "recording") recorder.stop();
-              } catch {
+          }window.setTimeout(() => {try {if (recorder.state === "recording") recorder.stop();} catch {
                 cleanupAfterStop();
               }
             }, 80);
@@ -2289,7 +2289,7 @@ export default function VideoRecapView() {
           className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-all text-base">
 
           <Home className="w-4 h-4" />
-          <span className="font-black uppercase tracking-widest text-sm">Home</span>
+          <span className="font-black uppercase tracking-widest text-sm text-neon-cyan">Home</span>
         </button>
         <h1 className="font-black text-white uppercase tracking-widest text-2xl">NOVA VIDEO  
           <span className="text-neon-rose">RECAP</span>
