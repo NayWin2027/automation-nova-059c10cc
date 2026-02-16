@@ -295,7 +295,7 @@ export default function VideoRecapView() {
   const [syncMode, setSyncMode] = useState<"auto" | "manual">("auto");
   const [autoColor, setAutoColor] = useState<string>("OFF");
   // Custom Audio Upload states
-  const [audioMode, setAudioMode] = useState<"ai" | "custom">("ai");
+  const [audioMode, setAudioMode] = useState<"ai" | "custom">("custom");
   const [customAudioFile, setCustomAudioFile] = useState<File | null>(null);
   const [customAudioUrl, setCustomAudioUrl] = useState<string | null>(null);
   const [logoSrc, setLogoSrc] = useState<string | null>(null);
@@ -2637,33 +2637,11 @@ export default function VideoRecapView() {
 
             </div>
 
-            {/* Audio Source Toggle */}
+            {/* Audio Source — Custom Audio Only */}
             <div className="space-y-2 pt-2 bg-orange-950">
               <label className="font-black uppercase tracking-widest text-white text-xs">
-                AUDIO SOURCE
+                🎵 CUSTOM AUDIO
               </label>
-              <div className="flex bg-black/40 p-1 rounded-xl border border-white/10">
-                <button
-                  onClick={() => setAudioMode("ai")}
-                  className={`flex-1 py-2 rounded-lg font-black text-[8px] uppercase tracking-widest transition-all ${
-                  audioMode === "ai" ?
-                  "bg-blue-600 text-white shadow-lg" :
-                  "text-slate-500 hover:text-white"}`
-                  }>
-
-                  🤖 AI VOICE
-                </button>
-                <button
-                  onClick={() => setAudioMode("custom")}
-                  className={`flex-1 py-2 rounded-lg font-black text-[8px] uppercase tracking-widest transition-all ${
-                  audioMode === "custom" ?
-                  "bg-purple-600 text-white shadow-lg" :
-                  "text-slate-500 hover:text-white"}`
-                  }>
-
-                  🎵 CUSTOM AUDIO
-                </button>
-              </div>
 
               {/* Custom Audio Upload */}
               {audioMode === "custom" &&
@@ -3106,18 +3084,7 @@ export default function VideoRecapView() {
       </div>
 
       <div className="flex flex-col gap-2 pt-4 sticky bottom-4 z-50">
-        {/* Phase 1: Generate Script (skip if custom audio mode with file uploaded) */}
-        {!audioBlobUrl && !fullScriptText && !(audioMode === "custom" && customAudioFile) &&
-        <button
-          onClick={handleProcess}
-          disabled={!videoSrc || analyzing}
-          className={`w-full py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl transition-all ${
-          analyzing ? "bg-blue-600/80 text-white animate-pulse" : "bg-blue-600 text-white"}`
-          }>
-
-            {analyzing ? statusText || "ANALYZING..." : "📝 GENERATE SCRIPT"}
-          </button>
-        }
+        {/* Phase 1: Generate Script — HIDDEN (manual script + custom audio only) */}
 
         {/* Custom Audio Direct Create (skip script step entirely) */}
         {!audioBlobUrl && !fullScriptText && audioMode === "custom" && customAudioFile && !analyzing &&
@@ -3142,17 +3109,9 @@ export default function VideoRecapView() {
           </div>
         }
 
-        {/* Phase 2: Create Recap (after script exists, before audio) */}
+        {/* Phase 2: Create Recap with Custom Audio (after script exists, before audio) */}
         {!audioBlobUrl && fullScriptText && !analyzing &&
         <div className="flex gap-2">
-            {audioMode === "ai" ?
-          <button
-            onClick={handleCreateRecapAI}
-            className="flex-1 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white active:scale-[0.98] transition-all">
-
-                🤖 CREATE RECAP (AI VOICE)
-              </button> :
-
           <button
             onClick={handleCreateRecapCustom}
             disabled={!customAudioFile}
@@ -3164,7 +3123,6 @@ export default function VideoRecapView() {
 
                 🎵 CREATE RECAP (CUSTOM AUDIO)
               </button>
-          }
             <button
             onClick={() => {
               setFullScriptText("");
