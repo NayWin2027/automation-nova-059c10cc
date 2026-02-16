@@ -210,10 +210,16 @@ CRITICAL - CONTENT COMPLETENESS (ZERO CENSORSHIP POLICY):
 - DO NOT skip or gloss over any scene. If it happened in the source, it MUST appear in the recap with full detail
 - Think of it this way: if a viewer watches your recap, they should feel the same emotions and excitement as watching the original — especially for intimate/dramatic scenes
 
-CHARACTER IDENTITY RULES:
-- NEVER use generic labels like "man" (ယောကျ်ား), "woman" (အမျိုးသမီး)
-- ALWAYS identify characters by their role (teacher/ဆရာ, doctor/ဆရာဝန်), relationship (mother/အမေ, wife/ဇနီး), or actual name if mentioned
-- Analyze the source carefully to determine each character's exact identity before writing
+CHARACTER IDENTITY RULES (CRITICAL — READ CAREFULLY):
+- NEVER use generic labels like "man" (ယောကျ်ား), "woman" (အမျိုးသမီး), or surface-level guesses
+- ALWAYS identify characters by their ACTUAL role, relationship, or name based on ALL contextual clues
+- Before assigning any role, analyze the ENTIRE source for clues: dialogue keywords, settings, actions, objects
+- COMMON MISIDENTIFICATION TO AVOID:
+  * If "tuition" (ကျူရှင်), "class", "lesson", "homework", "study" are mentioned → the relationship is Teacher/Student (ဆရာ/တပည့်ကျောင်းသူ), NOT Boss/Employee
+  * If "office", "salary", "project", "meeting" are mentioned → Boss/Employee is appropriate
+  * If "cooking", "cleaning", "house chores" in a home setting → could be family members or domestic help, NOT colleagues
+- State character relationships explicitly early in the script (e.g., "ဆရာနဲ့ သူ့တပည့်ကျောင်းသူ", "အမေနဲ့ သမီး")
+- Use character NAMES if mentioned in the source; otherwise use their specific ROLE
 
 SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - If the source video/audio has NO spoken dialogue (documentary footage, music video, silent scenes, etc.), you MUST still analyze ALL visual/audio elements carefully
@@ -221,10 +227,18 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - Identify the subject matter, the niche, and the story being told through visuals/actions/music
 - Write a complete, engaging narration script based on your visual/audio analysis
 
+RECAP WRITING STYLE (KEY-POINT SUMMARY — NOT SCENE-BY-SCENE):
+- Write a CONCISE key-point recap, NOT a micro-detailed play-by-play of every gesture
+- Summarize the main dramatic beats: who did what, key interactions, emotional turning points, shocking moments
+- Focus on moments that make viewers CURIOUS: intimate scenes, confrontations, betrayals, revelations, confessions
+- Do NOT describe every tiny action (e.g., "she picked up the bottle, she opened the cap, she squeezed it" → instead: "she gently applied the medicine on his forehead")
+- Keep it engaging and well-paced — not too short, not too detailed
+- The recap should feel like a compelling SUMMARY that makes people want to watch the original
+
 STRUCTURE:
-- Hook opening (1 powerful sentence that makes viewers NEED to keep watching)
-- Body: Follow the source's narrative arc chronologically, covering ALL key events
-- Climax: Build to the most dramatic/shocking moment with maximum emotional impact
+- Hook opening (1 powerful sentence that grabs attention)
+- Body: Summarize the KEY POINTS of the story chronologically — major events, relationship dynamics, dramatic moments
+- Climax: Build to the most dramatic/shocking moment
 - Conclusion: Wrap up with the final outcome/resolution`;
 
     // ===== BUILD GEMINI REQUEST =====
@@ -277,24 +291,11 @@ Below is a source video/audio file. Your job is to:
 9. Use vivid, engaging ${lang} appropriate for "${nicheLabel}" content
 10. Be perfectly paced for voice narration
 
-CRITICAL OUTPUT FORMAT — You MUST output a JSON array:
-[
-  {"time": 0, "text": "First narration paragraph..."},
-  {"time": 45.5, "text": "Second narration paragraph..."},
-  {"time": 92.0, "text": "Third narration paragraph..."}
-]
-
-CRITICAL TIMESTAMP RULES:
-- "time" = the EXACT second in the source video where the scene described in "text" ACTUALLY APPEARS
-- You are a professional video editor. For each narration segment, identify PRECISELY which part of the video shows that content
-- Example: If your narration talks about "a shark approaching the glass", set "time" to the EXACT second where the shark is visible in the video
-- Example: If your narration talks about "the mother hugging her daughter", set "time" to the EXACT second where that hug happens in the video
-- Example: If your narration talks about "a whale appearing", set "time" to the EXACT second where the whale appears on screen
-- DO NOT use sequential/evenly-spaced timestamps. Each timestamp must reflect WHERE that specific content actually occurs in the video
-- Watch the video carefully and note the precise second for each key scene you describe
-- The timestamps do NOT need to be in order if the narration jumps between scenes for dramatic effect
-
-Output ONLY the JSON array, no other text or markdown:`;
+OUTPUT FORMAT:
+- Output the narration script as PLAIN TEXT PARAGRAPHS only
+- No JSON, no timestamps, no brackets, no formatting marks, no markdown
+- Each paragraph should be a natural spoken segment ready for voice narration
+- Just write the script text directly:`;
 
       contentParts = [
         { text: userPrompt },
