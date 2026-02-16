@@ -1415,7 +1415,7 @@ export default function VideoRecapView() {
     let segLocalTime = 0;
     const CYCLE_DUR = 6.0;
     const MOTION_DUR = 3.0;
-    const FADE_DUR = 0.2;
+    const FADE_DUR = 0.4;
 
     if (activeSegment) {
       segLocalTime = effectiveTime - (activeSegment.audioStart || 0);
@@ -1785,45 +1785,37 @@ export default function VideoRecapView() {
             return Math.max(0, t);
           };
 
-          // ===== AUDIO-MASTER CLOCK: Force video.currentTime from audio timing =====
-          // During motion phase, compute exact video position from audio elapsed time
-          // This ensures 100% audio-visual sync — video shows exactly what audio describes
-          const motionElapsedInCycle = Math.min(phase, MOTION_DUR); // 0..3s within cycle
-          const totalMotionElapsed = cycleIndex * MOTION_DUR + motionElapsedInCycle;
-          // Wrap within scene duration to prevent seeking past scene bounds
-          const wrappedMotion = sceneDuration > 0 ? totalMotionElapsed % sceneDuration : 0;
-          const desiredVideoTime = clampTime(sceneStart + wrappedMotion);
+          // ===== ZERO-STUTTER ENGINE =====
+          // CRITICAL: Video plays CONTINUOUSLY — NEVER pause/play toggle at phase boundaries.
+          // During photo phase we simply render from the freezeCanvas buffer while video keeps running.
+          // This eliminates the "camera shutter" stutter effect completely.
 
-          // Phase transition control: only pause/play at boundaries
-          if (motionZoom && isPlaying) {
+          // Track phase transitions for freeze capture only (NOT for pause/play)
+          if (motionZoom) {
             if (inPhotoPhase && !lastPhaseWasPhotoRef.current) {
-              // Entering photo phase — pause video, freeze frame already captured below
-              if (!isExporting) video.pause();
               lastPhaseWasPhotoRef.current = true;
             } else if (!inPhotoPhase && lastPhaseWasPhotoRef.current) {
-              // Entering motion phase — resume
-              if (!isExporting) video.play().catch(() => {});
               lastPhaseWasPhotoRef.current = false;
             }
           }
 
-          // AUDIO-DRIVEN SYNC: force video position every frame during motion phase
+          // SEGMENT-LEVEL SYNC: Only seek when segment CHANGES — never every frame
+          // This prevents micro-stutters from constant video.currentTime writes
           if (isPlaying && activeSegment && video.duration > 0) {
             const segIdx = scriptSegments.indexOf(activeSegment);
             if (segIdx !== lastSeekedSegmentRef.current) {
-              // New segment — immediate seek
+              // New segment — seek to scene start ONCE
               lastSeekedSegmentRef.current = segIdx;
-              video.currentTime = desiredVideoTime;
-              if (!inPhotoPhase && video.paused) {
-                video.play().catch(() => {});
-              }
-            } else if (!inPhotoPhase) {
-              // EVERY FRAME: force video.currentTime to match audio clock
-              // This is the critical fix — video position is always driven by audio
-              const drift = Math.abs(video.currentTime - desiredVideoTime);
-              if (drift > 0.15) {
-                video.currentTime = desiredVideoTime;
-              }
+              const targetTime = clampTime(sceneStart);
+              video.currentTime = targetTime;
+            }
+            // Keep video playing always — never pause
+            if (video.paused) {
+              video.play().catch(() => {});
+            }
+            // Boundary guard: if video drifts past scene end, wrap back (only check occasionally)
+            if (sceneEnd && video.currentTime > sceneEnd + 0.5) {
+              video.currentTime = clampTime(sceneStart);
             }
           }
 
@@ -1856,30 +1848,34 @@ export default function VideoRecapView() {
           const dx = (targetW - dw) / 2;
           const dy = (targetH - dh) / 2;
 
-          // ===== CAPTURE FREEZE FRAME (once per cycle, at photo phase entry) =====
-          const sizeChanged = freezeCanvas.width !== targetW || freezeCanvas.height !== targetH;
-          const enteringFreezeMode = motionZoom && inPhotoPhase && !wasFreezeModeRef.current;
-          const shouldCaptureForCycle = motionZoom && inPhotoPhase && freezeCapturedCycleRef.current !== cycleIndex;
-          const needsCapture =
-          sizeChanged ||
-          enteringFreezeMode ||
-          shouldCaptureForCycle ||
-          motionZoom && (freezeCanvas.width === 0 || freezeCanvas.height === 0);
+          // ===== CAPTURE FREEZE FRAME =====
+          // Capture at EVERY frame near end of motion phase for freshest possible image
+          // This ensures the freeze buffer always has the latest video frame
+          const sizeOk = freezeCanvas.width === targetW && freezeCanvas.height === targetH;
+          const shouldCapture = motionZoom && (
+            // Always capture when entering photo phase
+            (inPhotoPhase && freezeCapturedCycleRef.current !== cycleIndex) ||
+            // Also capture during last 0.5s of motion phase to pre-buffer
+            (!inPhotoPhase && phase >= MOTION_DUR - 0.5) ||
+            // Size mismatch or uninitialized
+            !sizeOk || freezeCanvas.width === 0
+          );
 
-          if (needsCapture && motionZoom) {
-            freezeCanvas.width = targetW;
-            freezeCanvas.height = targetH;
+          if (shouldCapture) {
+            if (!sizeOk) {
+              freezeCanvas.width = targetW;
+              freezeCanvas.height = targetH;
+            }
             freezeCtx.fillStyle = "#000";
             freezeCtx.fillRect(0, 0, targetW, targetH);
-            // Capture current video frame (store raw, unflipped)
             freezeCtx.drawImage(video, dx, dy, dw, dh);
-            freezeCapturedCycleRef.current = cycleIndex;
+            if (inPhotoPhase) freezeCapturedCycleRef.current = cycleIndex;
           }
 
           // ===== RENDER BASED ON PHASE =====
           if (motionZoom) {
-            // CROSSFADE CONSTANTS — very slight for invisible transition
-            const FADE_DUR = 0.2;
+            // CROSSFADE — 0.4s for smooth invisible transition
+            const FADE_DUR = 0.4;
 
             if (inPhotoPhase) {
               // === PHOTO PHASE (3s - 6s): HOLLYWOOD SMOOTH ZOOM-IN ===
