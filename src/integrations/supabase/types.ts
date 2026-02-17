@@ -191,6 +191,39 @@ export type Database = {
         }
         Relationships: []
       }
+      recap_history: {
+        Row: {
+          created_at: string
+          duration_seconds: number | null
+          expires_at: string
+          file_size_bytes: number | null
+          id: string
+          storage_path: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          duration_seconds?: number | null
+          expires_at?: string
+          file_size_bytes?: number | null
+          id?: string
+          storage_path: string
+          title?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          duration_seconds?: number | null
+          expires_at?: string
+          file_size_bytes?: number | null
+          id?: string
+          storage_path?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       tool_settings: {
         Row: {
           created_at: string | null
@@ -380,6 +413,7 @@ export type Database = {
         Returns: boolean
       }
       check_admin_2fa_status: { Args: { _user_id: string }; Returns: Json }
+      cleanup_expired_recaps: { Args: never; Returns: undefined }
       count_user_devices: { Args: { _user_id: string }; Returns: number }
       deduct_user_credits: {
         Args: {
