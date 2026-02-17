@@ -754,27 +754,26 @@ export const ResultView: React.FC<ResultViewProps> = ({
                   onTouchStart={handleDragStart}
                   className="absolute z-30 cursor-move"
                   style={{
-                    left: `${subSettings.x}%`,
-                    top: `${subSettings.y}%`,
-                    transform: `translate(-50%, -50%) scale(${subSettings.scale})`,
-                    maxWidth: `${subSettings.maxWidth}%`,
+                    left: '50%',
+                    bottom: `${100 - subSettings.y}%`,
+                    transform: `translateX(-50%) scale(${subSettings.scale})`,
+                    width: `${subSettings.maxWidth}%`,
                     touchAction: "none",
                   }}
                 >
                   <div
-                    className={`
-                        text-center px-4 py-2 md:px-6 md:py-3
-                        rounded-xl font-bold md:text-xl
-                        backdrop-blur-sm shadow-lg
-                        transition-all duration-300
-                      `}
+                    className="text-center px-6 py-2 font-bold backdrop-blur-sm shadow-lg"
                     style={{
                       backgroundColor: subSettings.bgColor,
                       color: subSettings.textColor,
-                      textShadow: "1px 1px 2px black",
-                      border: `2px solid ${subSettings.borderColor}`,
-                      boxShadow: `0 0 10px ${subSettings.borderColor}, inset 0 0 10px ${subSettings.borderColor}20`,
+                      textShadow: "1px 1px 3px black, 0 0 8px rgba(0,0,0,0.5)",
+                      borderTop: `2px solid ${subSettings.borderColor}`,
+                      borderBottom: `2px solid ${subSettings.borderColor}`,
+                      boxShadow: `0 0 12px ${subSettings.borderColor}40, inset 0 0 20px rgba(0,0,0,0.3)`,
                       fontSize: `${subSettings.fontSize}px`,
+                      lineHeight: '1.4',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
                     }}
                   >
                     {currentSubtitle}
@@ -1189,31 +1188,30 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 onTouchStart={handleDragStart}
                 className="absolute z-20 cursor-move"
                 style={{
-                  left: `${subSettings.x}%`,
-                  top: `${subSettings.y}%`,
-                  transform: `translate(-50%, -50%) scale(${subSettings.scale})`,
-                  maxWidth: `${subSettings.maxWidth}%`,
+                  left: '50%',
+                  bottom: `${100 - subSettings.y}%`,
+                  transform: `translateX(-50%) scale(${subSettings.scale})`,
+                  width: `${subSettings.maxWidth}%`,
                   touchAction: "none",
                 }}
               >
-                <span
-                  className="
-                    inline-block backdrop-blur-md
-                    px-6 py-3 md:px-8 md:py-4
-                    rounded-2xl font-black tracking-wide
-                    shadow-[0_4px_30px_rgba(0,0,0,0.5)] drop-shadow-lg
-                  "
+                <div
+                  className="text-center px-8 py-3 font-black tracking-wide backdrop-blur-md shadow-[0_4px_30px_rgba(0,0,0,0.5)]"
                   style={{
                     textShadow: "2px 2px 0px rgba(0,0,0,0.8)",
                     color: subSettings.textColor,
                     backgroundColor: subSettings.bgColor,
-                    border: `2px solid ${subSettings.borderColor}`,
-                    boxShadow: `0 0 15px ${subSettings.borderColor}`,
+                    borderTop: `2px solid ${subSettings.borderColor}`,
+                    borderBottom: `2px solid ${subSettings.borderColor}`,
+                    boxShadow: `0 0 15px ${subSettings.borderColor}40`,
                     fontSize: `${subSettings.fontSize * 1.5}px`,
+                    lineHeight: '1.4',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
                   }}
                 >
                   {currentSubtitle}
-                </span>
+                </div>
               </div>
             )}
 
