@@ -13,6 +13,47 @@ const MAX_TEXT_LENGTH = 10000; // 10KB max for TTS text
 // Gemini TTS endpoint
 const GEMINI_TTS_API = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent";
 
+/**
+ * Convert raw PCM (Linear16) base64 data to WAV base64 with proper headers.
+ * Gemini TTS returns raw PCM which browsers cannot play directly.
+ */
+function pcmToWavBase64(pcmBase64: string, sampleRate = 24000, numChannels = 1, bitsPerSample = 16): string {
+  // Decode PCM base64 to bytes
+  const raw = Uint8Array.from(atob(pcmBase64), c => c.charCodeAt(0));
+  const dataLength = raw.length;
+  const headerSize = 44;
+  const wav = new Uint8Array(headerSize + dataLength);
+  const view = new DataView(wav.buffer);
+
+  // RIFF header
+  wav.set([0x52, 0x49, 0x46, 0x46], 0); // "RIFF"
+  view.setUint32(4, 36 + dataLength, true);
+  wav.set([0x57, 0x41, 0x56, 0x45], 8); // "WAVE"
+
+  // fmt sub-chunk
+  wav.set([0x66, 0x6d, 0x74, 0x20], 12); // "fmt "
+  view.setUint32(16, 16, true); // sub-chunk size
+  view.setUint16(20, 1, true); // PCM format
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * numChannels * (bitsPerSample / 8), true); // byte rate
+  view.setUint16(32, numChannels * (bitsPerSample / 8), true); // block align
+  view.setUint16(34, bitsPerSample, true);
+
+  // data sub-chunk
+  wav.set([0x64, 0x61, 0x74, 0x61], 36); // "data"
+  view.setUint32(40, dataLength, true);
+  wav.set(raw, headerSize);
+
+  // Encode to base64 in chunks to avoid stack overflow
+  let binary = '';
+  const chunkSize = 8192;
+  for (let i = 0; i < wav.length; i += chunkSize) {
+    binary += String.fromCharCode(...wav.subarray(i, Math.min(i + chunkSize, wav.length)));
+  }
+  return btoa(binary);
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -330,12 +371,26 @@ serve(async (req) => {
       );
     }
 
-    console.log(`[gemini-tts] Successfully generated audio, size: ${result.audio.length} chars`);
+    console.log(`[gemini-tts] Successfully generated audio, size: ${result.audio.length} chars, mime: ${result.mimeType}`);
+
+    // Gemini TTS returns raw PCM (Linear16) — browsers can't play this directly.
+    // Convert to WAV format with proper headers for universal playback.
+    let finalAudio = result.audio;
+    let finalMime = result.mimeType;
+
+    if (result.mimeType && result.mimeType.includes("L16")) {
+      // Extract sample rate from mimeType like "audio/L16;rate=24000"
+      const rateMatch = result.mimeType.match(/rate=(\d+)/);
+      const sampleRate = rateMatch ? parseInt(rateMatch[1], 10) : 24000;
+      console.log(`[gemini-tts] Converting PCM to WAV (rate=${sampleRate})`);
+      finalAudio = pcmToWavBase64(result.audio, sampleRate);
+      finalMime = "audio/wav";
+    }
 
     return new Response(
       JSON.stringify({
-        audio: result.audio,
-        mimeType: result.mimeType,
+        audio: finalAudio,
+        mimeType: finalMime,
         voice: usedVoice,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
