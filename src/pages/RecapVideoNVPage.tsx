@@ -214,271 +214,213 @@ export const ResultView: React.FC<ResultViewProps> = ({
     setIsDraggingSub(false);
   };
 
-  const handleDownloadRecapVideo = async () => {
-    if (isYouTube) {
-      alert(
-        "Due to browser security restrictions, we cannot render YouTube videos directly. Please download the Audio and Video separately.",
-      );
-      return;
+  // Theater-mode auto-record: starts when theater opens, stops when audio ends
+  const theaterRecorderRef = useRef<MediaRecorder | null>(null);
+  const theaterCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const theaterAnimFrameRef = useRef<number>(0);
+
+  const startTheaterRecording = async () => {
+    const videoEl = theaterVideoRef.current;
+    const audioEl = theaterAudioRef.current;
+    if (!videoEl || !audioEl) return;
+
+    // Wait for video metadata
+    if (!videoEl.videoWidth) {
+      await new Promise<void>((resolve) => {
+        videoEl.addEventListener('loadedmetadata', () => resolve(), { once: true });
+      });
     }
 
-    if (!videoRef.current || !audioRef.current) {
-      alert("Video or Audio source is missing. Please make sure both are loaded.");
-      return;
-    }
-
-    // Check supported mime types
     const mimeTypes = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
     const mimeType = mimeTypes.find((type) => MediaRecorder.isTypeSupported(type));
-
     if (!mimeType) {
-      alert("Your browser does not support video recording. Please use a modern browser like Chrome or Firefox.");
+      console.warn("No supported recording mime type");
       return;
     }
 
-    const confirmRender = window.confirm(
-      "To generate the REAL Recap Video, the player will restart and play. \n\nPlease do not switch tabs while recording.\n\nClick OK to start.",
-    );
-    if (!confirmRender) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = videoEl.videoWidth || 1280;
+    canvas.height = videoEl.videoHeight || 720;
+    const ctx = canvas.getContext("2d")!;
+    theaterCanvasRef.current = canvas;
 
-    setIsRendering(true);
-    setRenderedBlobUrl(null);
-
-    const videoEl = videoRef.current;
-    const audioEl = audioRef.current;
+    const canvasStream = canvas.captureStream(30);
     const chunks: BlobPart[] = [];
 
+    // Audio capture
+    let audioCtx: AudioContext | null = null;
     try {
-      // Create offscreen canvas for recording
-      const canvas = document.createElement("canvas");
-      canvas.width = videoEl.videoWidth || 1280;
-      canvas.height = videoEl.videoHeight || 720;
-      const ctx = canvas.getContext("2d")!;
-
-      // Reset to start
-      videoEl.currentTime = 0;
-      audioEl.currentTime = 0;
-      videoEl.muted = true;
-      videoEl.controls = false;
-
-      await videoEl.play();
-      await audioEl.play();
-      await new Promise((r) => setTimeout(r, 200));
-
-      // Canvas-based stream (much more compatible than videoEl.captureStream)
-      const canvasStream = canvas.captureStream(30);
-
-      // Add audio tracks using AudioContext (more reliable than captureStream)
-      let audioCtx: AudioContext | null = null;
-      try {
-        audioCtx = new AudioContext();
-        const source = audioCtx.createMediaElementSource(audioEl);
-        const dest = audioCtx.createMediaStreamDestination();
-        source.connect(dest);
-        source.connect(audioCtx.destination); // Also play through speakers
-        dest.stream.getAudioTracks().forEach((track: MediaStreamTrack) => canvasStream.addTrack(track));
-        console.log("[Render] Audio track added via AudioContext");
-      } catch (audioErr) {
-        console.warn("Could not capture audio stream, video will be silent:", audioErr);
-      }
-
-      const recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: 2500000 });
-
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) chunks.push(e.data);
-      };
-
-      recorder.onstop = async () => {
-        // Cleanup AudioContext
-        if (audioCtx) {
-          try { audioCtx.close(); } catch (_) {}
-        }
-
-        if (chunks.length === 0) {
-          alert("Recording failed: No data captured. Please try again.");
-          setIsRendering(false);
-          videoEl.controls = true;
-          videoEl.muted = false;
-          return;
-        }
-
-        const blob = new Blob(chunks, { type: mimeType });
-        const url = URL.createObjectURL(blob);
-        const ext = mimeType.includes("mp4") ? "mp4" : "webm";
-
-        // Auto download
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `recap_${scriptData.title.replace(/\s+/g, "_")}_${Date.now()}.${ext}`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-
-        setRenderedBlobUrl(url);
-        setIsRendering(false);
-        videoEl.controls = true;
-        videoEl.muted = false;
-
-        // Save to storage + DB for history (7 days)
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            const fileName = `${user.id}/${Date.now()}_recap.${ext}`;
-            const { error: uploadErr } = await supabase.storage
-              .from('recap-videos')
-              .upload(fileName, blob, { contentType: mimeType });
-
-            if (!uploadErr) {
-              await supabase.from('recap_history').insert({
-                user_id: user.id,
-                title: scriptData.title || 'Untitled Recap',
-                storage_path: fileName,
-                file_size_bytes: blob.size,
-              } as any);
-              // Refresh history
-              onRecapSaved?.();
-            } else {
-              console.error('Failed to upload recap to storage:', uploadErr);
-            }
-          }
-        } catch (saveErr) {
-          console.error('Failed to save recap to history:', saveErr);
-        }
-      };
-
-      recorder.start(100);
-
-      // Sync logic: Use audio as master clock, draw video frames + subtitles onto canvas
-      const lastIdx = { current: -1 };
-      const drawFrame = () => {
-        if (audioEl.ended || videoEl.ended) return;
-
-        // Draw current video frame to canvas
-        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-
-        // Apply video filters on canvas (flip, bypass etc)
-        if (editorState.flip) {
-          ctx.save();
-          ctx.translate(canvas.width, 0);
-          ctx.scale(-1, 1);
-          ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-          ctx.restore();
-        }
-
-        // Sync video to audio (same logic as theater mode)
-        if (audioEl.duration > 0 && videoEl.duration > 0) {
-          const aPct = audioEl.currentTime / audioEl.duration;
-          const activeIndex = syncSegments.findIndex((s) => aPct >= s.aStartPct && aPct <= s.aEndPct);
-          const active = syncSegments[activeIndex];
-
-          if (active) {
-            if (activeIndex !== lastIdx.current) {
-              if (Math.abs(videoEl.currentTime - active.vStart) > 0.2) {
-                videoEl.currentTime = active.vStart;
-              }
-              lastIdx.current = activeIndex;
-            }
-
-            const segAudioPct = active.aEndPct - active.aStartPct;
-            if (segAudioPct > 0.001) {
-              const progressInSeg = (aPct - active.aStartPct) / segAudioPct;
-              const vActualEnd = active.vEnd === -1 ? videoEl.duration : active.vEnd;
-              const targetTime = active.vStart + progressInSeg * (vActualEnd - active.vStart);
-              const drift = targetTime - videoEl.currentTime;
-              if (Math.abs(drift) > 0.5) videoEl.currentTime = targetTime;
-              const audioSecs = segAudioPct * audioEl.duration;
-              const videoSecs = vActualEnd - active.vStart;
-              if (audioSecs > 0 && videoSecs > 0) {
-                let rate = videoSecs / audioSecs + drift * 1.0;
-                videoEl.playbackRate = Math.min(Math.max(rate, 0.1), 5.0);
-              }
-            }
-
-            // Draw subtitle text onto canvas (burned in)
-            const text = active.text;
-            if (text) {
-              const fontSize = Math.round(canvas.height * 0.04);
-              ctx.font = `bold ${fontSize}px sans-serif`;
-              ctx.textAlign = "center";
-              ctx.textBaseline = "bottom";
-
-              const maxWidth = canvas.width * 0.85;
-              const words = text.split(" ");
-              const lines: string[] = [];
-              let currentLine = "";
-
-              for (const word of words) {
-                const testLine = currentLine ? currentLine + " " + word : word;
-                if (ctx.measureText(testLine).width > maxWidth && currentLine) {
-                  lines.push(currentLine);
-                  currentLine = word;
-                } else {
-                  currentLine = testLine;
-                }
-              }
-              if (currentLine) lines.push(currentLine);
-
-              const lineHeight = fontSize * 1.3;
-              const totalHeight = lines.length * lineHeight;
-              const yBase = canvas.height - 40;
-
-              // Draw background box
-              const bgPadX = 16;
-              const bgPadY = 8;
-              let maxLineWidth = 0;
-              for (const line of lines) {
-                const w = ctx.measureText(line).width;
-                if (w > maxLineWidth) maxLineWidth = w;
-              }
-              ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
-              ctx.roundRect?.(
-                canvas.width / 2 - maxLineWidth / 2 - bgPadX,
-                yBase - totalHeight - bgPadY,
-                maxLineWidth + bgPadX * 2,
-                totalHeight + bgPadY * 2,
-                8
-              );
-              ctx.fill();
-
-              // Draw text
-              ctx.fillStyle = subSettings.textColor || "#FFFFFF";
-              ctx.strokeStyle = "rgba(0,0,0,0.8)";
-              ctx.lineWidth = 3;
-              for (let li = 0; li < lines.length; li++) {
-                const ly = yBase - totalHeight + (li + 1) * lineHeight;
-                ctx.strokeText(lines[li], canvas.width / 2, ly);
-                ctx.fillText(lines[li], canvas.width / 2, ly);
-              }
-            }
-          }
-        }
-
-        requestAnimationFrame(drawFrame);
-      };
-
-      requestAnimationFrame(drawFrame);
-
-      // Monitor end
-      const checkEnd = setInterval(() => {
-        if (audioEl.ended || videoEl.ended) {
-          clearInterval(checkEnd);
-          if (recorder.state !== "inactive") {
-            recorder.stop();
-            videoEl.pause();
-            audioEl.pause();
-            videoEl.playbackRate = 1.0;
-          }
-        }
-      }, 500);
-    } catch (e) {
-      console.error("Recording error:", e);
-      alert("Failed to initialize recording. Browser might not support this feature.\n\nError: " + (e as Error).message);
-      setIsRendering(false);
-      if (videoRef.current) {
-        videoRef.current.controls = true;
-        videoRef.current.muted = false;
-      }
+      audioCtx = new AudioContext();
+      const source = audioCtx.createMediaElementSource(audioEl);
+      const dest = audioCtx.createMediaStreamDestination();
+      source.connect(dest);
+      source.connect(audioCtx.destination);
+      dest.stream.getAudioTracks().forEach((track: MediaStreamTrack) => canvasStream.addTrack(track));
+    } catch (audioErr) {
+      console.warn("Could not capture audio for recording:", audioErr);
     }
+
+    const recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: 2500000 });
+    theaterRecorderRef.current = recorder;
+
+    recorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) chunks.push(e.data);
+    };
+
+    recorder.onstop = async () => {
+      if (audioCtx) try { audioCtx.close(); } catch (_) {}
+      cancelAnimationFrame(theaterAnimFrameRef.current);
+
+      if (chunks.length === 0) {
+        setIsRendering(false);
+        return;
+      }
+
+      const blob = new Blob(chunks, { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const ext = mimeType.includes("mp4") ? "mp4" : "webm";
+
+      // Auto download
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `recap_${scriptData.title.replace(/\s+/g, "_")}_${Date.now()}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      setRenderedBlobUrl(url);
+      setIsRendering(false);
+      setIsTheaterMode(false);
+
+      // Save to storage + DB
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const fileName = `${user.id}/${Date.now()}_recap.${ext}`;
+          const { error: uploadErr } = await supabase.storage
+            .from('recap-videos')
+            .upload(fileName, blob, { contentType: mimeType });
+          if (!uploadErr) {
+            await supabase.from('recap_history').insert({
+              user_id: user.id,
+              title: scriptData.title || 'Untitled Recap',
+              storage_path: fileName,
+              file_size_bytes: blob.size,
+            } as any);
+            onRecapSaved?.();
+          }
+        }
+      } catch (saveErr) {
+        console.error('Failed to save recap to history:', saveErr);
+      }
+    };
+
+    setIsRendering(true);
+    recorder.start(100);
+
+    // Draw loop: capture theater video + cinematic subtitle bar
+    const lastIdx = { current: -1 };
+    const drawFrame = () => {
+      if (!videoEl || !audioEl) return;
+      if (audioEl.ended || videoEl.ended) return;
+
+      // Draw video frame
+      if (editorState.flip) {
+        ctx.save();
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+        ctx.restore();
+      } else {
+        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+      }
+
+      // Apply filter overlay if bypass
+      if (editorState.bypass) {
+        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+      }
+
+      // Find current subtitle
+      if (audioEl.duration > 0) {
+        const aPct = audioEl.currentTime / audioEl.duration;
+        const activeIndex = syncSegments.findIndex((s) => aPct >= s.aStartPct && aPct <= s.aEndPct);
+        const active = syncSegments[activeIndex];
+
+        if (active && active.text) {
+          // CINEMATIC HORIZONTAL BAR subtitle at bottom
+          const fontSize = Math.round(canvas.height * 0.035);
+          ctx.font = `bold ${fontSize}px sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+
+          const barMaxWidth = canvas.width * (subSettings.maxWidth / 100);
+          const text = active.text;
+
+          // Word-wrap within bar width
+          const words = text.split(/\s+/);
+          const lines: string[] = [];
+          let currentLine = "";
+          for (const word of words) {
+            const testLine = currentLine ? currentLine + " " + word : word;
+            if (ctx.measureText(testLine).width > barMaxWidth - 40 && currentLine) {
+              lines.push(currentLine);
+              currentLine = word;
+            } else {
+              currentLine = testLine;
+            }
+          }
+          if (currentLine) lines.push(currentLine);
+
+          const lineHeight = fontSize * 1.4;
+          const barHeight = lines.length * lineHeight + 16;
+          const barY = canvas.height - barHeight - 20; // 20px from bottom
+
+          // Draw cinematic bar background
+          ctx.fillStyle = subSettings.bgColor;
+          const barX = (canvas.width - barMaxWidth) / 2;
+          ctx.fillRect(barX, barY, barMaxWidth, barHeight);
+
+          // Draw top/bottom borders
+          ctx.strokeStyle = subSettings.borderColor;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(barX, barY);
+          ctx.lineTo(barX + barMaxWidth, barY);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(barX, barY + barHeight);
+          ctx.lineTo(barX + barMaxWidth, barY + barHeight);
+          ctx.stroke();
+
+          // Draw text lines
+          ctx.fillStyle = subSettings.textColor || "#FACC15";
+          ctx.strokeStyle = "rgba(0,0,0,0.8)";
+          ctx.lineWidth = 2;
+          for (let li = 0; li < lines.length; li++) {
+            const ly = barY + 8 + (li + 0.5) * lineHeight;
+            ctx.strokeText(lines[li], canvas.width / 2, ly);
+            ctx.fillText(lines[li], canvas.width / 2, ly);
+          }
+        }
+      }
+
+      theaterAnimFrameRef.current = requestAnimationFrame(drawFrame);
+    };
+
+    theaterAnimFrameRef.current = requestAnimationFrame(drawFrame);
+
+    // Monitor end
+    const checkEnd = setInterval(() => {
+      if (audioEl.ended || videoEl.ended) {
+        clearInterval(checkEnd);
+        if (recorder.state !== "inactive") {
+          recorder.stop();
+          videoEl.pause();
+          audioEl.pause();
+          videoEl.playbackRate = 1.0;
+        }
+      }
+    }, 500);
   };
 
   // Construct video styles based on editor state
@@ -531,7 +473,14 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
       const onPlaying = () => setTheaterPlaying(true);
       const onPaused = () => setTheaterPlaying(false);
-      const onEnded = () => setIsTheaterMode(false);
+      const onEnded = () => {
+        // Stop recorder first (which will auto-download and close theater)
+        if (theaterRecorderRef.current && theaterRecorderRef.current.state !== "inactive") {
+          theaterRecorderRef.current.stop();
+        } else {
+          setIsTheaterMode(false);
+        }
+      };
 
       let animFrame: number;
 
@@ -593,11 +542,18 @@ export const ResultView: React.FC<ResultViewProps> = ({
       a.play().catch(console.error);
       v.play().catch(console.error);
 
+      // Auto-start recording when theater mode opens
+      setTimeout(() => startTheaterRecording(), 500);
+
       return () => {
         cancelAnimationFrame(animFrame);
+        cancelAnimationFrame(theaterAnimFrameRef.current);
         v.removeEventListener("playing", onPlaying);
         v.removeEventListener("pause", onPaused);
         a.removeEventListener("ended", onEnded);
+        if (theaterRecorderRef.current && theaterRecorderRef.current.state !== "inactive") {
+          theaterRecorderRef.current.stop();
+        }
         if (theaterVideoRef.current) theaterVideoRef.current.playbackRate = 1.0;
       };
     }
@@ -1103,7 +1059,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 !isYouTube &&
                 videoUrl && (
                   <button
-                    onClick={handleDownloadRecapVideo}
+                    onClick={() => setIsTheaterMode(true)}
                     className="flex items-center justify-center px-4 py-3 bg-neon-cyan hover:bg-neon-hover text-charcoal-900 font-bold rounded-lg transition-colors shadow-lg"
                   >
                     <svg className="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1114,7 +1070,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                         d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
                       />
                     </svg>
-                    Render & Download Recap Video
+                    Watch & Record Recap Video
                   </button>
                 )
               )}
