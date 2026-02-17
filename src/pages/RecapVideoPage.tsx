@@ -1226,11 +1226,11 @@ export default function VideoRecapView() {
     video.currentTime = 0;
     audio.currentTime = 0;
 
-    // Use captureStream(0) for manual frame control — we call requestFrame()
-    // UNCONDITIONALLY at the end of every render cycle so no frame is ever missed.
-    const stream = canvas.captureStream(0);
-    const videoTrack = stream.getVideoTracks()[0];
-    canvasStreamTrackRef.current = videoTrack;
+    // Use captureStream(30) for AUTOMATIC 30fps frame capture by the browser.
+    // This is more reliable than captureStream(0)+requestFrame() because rAF
+    // gets throttled under memory pressure / background tabs, causing freeze.
+    const stream = canvas.captureStream(30);
+    canvasStreamTrackRef.current = null; // No manual requestFrame needed
     // Add audio track if supported
     // Use WebAudio MediaStreamDestination for reliable audio capture (works across all browsers)
     if (mediaStreamDestRef.current) {
@@ -1496,8 +1496,15 @@ export default function VideoRecapView() {
         if (phase < FADE_DUR && segLocalTime > FADE_DUR) {
           const t = phase / FADE_DUR;
           videoAlpha = t * t * (3 - 2 * t); // smoothstep easing
+          // Draw fading photo with ENDING ZOOM applied (no flash)
+          const endZoomScale = 1.0 + 0.08;
           ctx.globalAlpha = 1.0 - videoAlpha;
+          ctx.save();
+          ctx.translate(targetW / 2, targetH / 2);
+          ctx.scale(endZoomScale, endZoomScale);
+          ctx.translate(-targetW / 2, -targetH / 2);
           ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH);
+          ctx.restore();
         }
         ctx.globalAlpha = Math.max(0.01, videoAlpha);
         ctx.drawImage(video, dx, dy, dw, dh);
@@ -1677,6 +1684,7 @@ export default function VideoRecapView() {
 
   useEffect(() => {
     if (!freezeCanvasRef.current) freezeCanvasRef.current = document.createElement("canvas");
+    let exportIntervalId: ReturnType<typeof setInterval> | null = null;
 
     // --- SHARED MASTER RENDERER (LOCK PREVIEW TO EXPORT) ---
     const render = () => {
@@ -1697,11 +1705,13 @@ export default function VideoRecapView() {
               ctx.fillRect(0, 0, canvas.width, canvas.height);
             }
           }
-          // ALWAYS signal frame for captureStream(0) recording
-          if (canvasStreamTrackRef.current?.requestFrame) {
-            canvasStreamTrackRef.current.requestFrame();
+          // Recovery: try to re-play the video if it stalled during export
+          if (isExporting && video.paused) {
+            video.play().catch(() => {});
           }
-          reqRef.current = requestAnimationFrame(render);
+          if (!isExporting) {
+            reqRef.current = requestAnimationFrame(render);
+          }
           return;
         }
         const ctx = canvas.getContext("2d", { alpha: false });
@@ -1922,9 +1932,15 @@ export default function VideoRecapView() {
               if (phase < FADE_DUR && segLocalTime > FADE_DUR) {
                 const t = phase / FADE_DUR;
                 videoAlpha = t * t * (3 - 2 * t); // smoothstep easing
-                // Draw fading photo underneath with zoom (maintain visual continuity)
+                // Draw fading photo with ENDING ZOOM applied (maintain visual continuity, no flash)
+                const endZoomScale = 1.0 + 0.08; // final zoom state from photo phase
                 ctx.globalAlpha = 1.0 - videoAlpha;
+                ctx.save();
+                ctx.translate(targetW / 2, targetH / 2);
+                ctx.scale(endZoomScale, endZoomScale);
+                ctx.translate(-targetW / 2, -targetH / 2);
                 ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH);
+                ctx.restore();
               }
 
               // Draw video
@@ -2229,17 +2245,28 @@ export default function VideoRecapView() {
           }
 
           // (freeze mode tracking is now done inside the render logic above)
-
-          // ALWAYS signal frame for captureStream(0) — unconditional to prevent freezing
-          if (canvasStreamTrackRef.current?.requestFrame) {
-            canvasStreamTrackRef.current.requestFrame();
-          }
         }
       }
-      reqRef.current = requestAnimationFrame(render);
+      // Schedule next frame (only for preview; export uses setInterval below)
+      if (!isExporting) {
+        reqRef.current = requestAnimationFrame(render);
+      }
     };
-    reqRef.current = requestAnimationFrame(render);
-    return () => cancelAnimationFrame(reqRef.current!);
+
+    // CRITICAL FIX: During export, use setInterval at ~30fps instead of requestAnimationFrame.
+    // rAF gets throttled by browsers under memory pressure or when tab is backgrounded,
+    // causing the canvas to stop updating → downloaded video freezes midway.
+    // setInterval keeps running regardless of tab visibility or GPU pressure.
+    if (isExporting) {
+      exportIntervalId = setInterval(render, 33); // ~30fps
+    } else {
+      reqRef.current = requestAnimationFrame(render);
+    }
+
+    return () => {
+      if (reqRef.current) cancelAnimationFrame(reqRef.current);
+      if (exportIntervalId) clearInterval(exportIntervalId);
+    };
   }, [
   isPlaying,
   isExporting,
