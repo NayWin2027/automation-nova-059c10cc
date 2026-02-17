@@ -1089,36 +1089,179 @@ const RecapVideoNVPage: React.FC = () => {
   const navigate = useNavigate();
 
   const [scriptData, setScriptData] = useState<RecapScript>({
-    title: 'Recap Video NV - Test',
+    title: 'Recap Video NV',
     full_script: '',
     segments: [],
   });
   const [audioUrl, setAudioUrl] = useState<string | undefined>(undefined);
   const [videoUrl, setVideoUrl] = useState<string | undefined>(undefined);
   const [status, setStatus] = useState<ProcessingStatus>('idle');
+  const [progressMsg, setProgressMsg] = useState('');
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const videoDurationRef = useRef<number>(0);
 
   const handleUpdateScript = (newScript: string) => {
     setScriptData(prev => ({ ...prev, full_script: newScript }));
   };
 
   const handleGenerateVoice = () => {
-    // Placeholder - wire up later
-    console.log('Generate voice triggered');
+    // Manual re-generate voice from edited script
+    if (scriptData.full_script) {
+      generateVoice(scriptData.full_script);
+    }
+  };
+
+  // Convert plain text script into segments with proportional timestamps
+  const scriptToSegments = (scriptText: string, videoDuration: number): RecapSegment[] => {
+    const paragraphs = scriptText.split('\n').filter(p => p.trim().length > 0);
+    if (paragraphs.length === 0) return [];
+
+    const totalChars = paragraphs.reduce((sum, p) => sum + p.length, 0);
+    let timeCursor = 0;
+
+    return paragraphs.map((text) => {
+      const proportion = text.length / totalChars;
+      const segDuration = proportion * videoDuration;
+      const startSec = timeCursor;
+      timeCursor += segDuration;
+
+      const mins = Math.floor(startSec / 60);
+      const secs = Math.floor(startSec % 60);
+      const timestamp = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+
+      return { timestamp, text: text.trim() };
+    });
+  };
+
+  // Step 2: Generate AI Voice
+  const generateVoice = async (scriptText: string) => {
+    setProgressMsg('🎙️ AI Voice ဖန်တီးနေပါသည်...');
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gemini-tts`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            text: scriptText,
+            voiceName: 'Kore',
+            languageCode: 'my',
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.useClientTTS || !data.audio) {
+        throw new Error(data.message || data.error || 'TTS generation failed');
+      }
+
+      // Convert base64 audio to blob URL
+      const binaryStr = atob(data.audio);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+      const audioBlob = new Blob([bytes], { type: data.mimeType || 'audio/mp3' });
+      const url = URL.createObjectURL(audioBlob);
+      setAudioUrl(url);
+
+      setStatus('done');
+      setProgressMsg('✅ Auto Recap Video အဆင်သင့်ဖြစ်ပါပြီ!');
+    } catch (err: any) {
+      console.error('TTS error:', err);
+      setStatus('error');
+      setProgressMsg(`❌ Voice generation failed: ${err.message}`);
+    }
+  };
+
+  // Step 1: Upload video → AI Analysis → Script Generation → Auto TTS
+  const startAutoPipeline = async (file: File) => {
+    setStatus('processing');
+    setProgressMsg('🎬 AI is watching the video...');
+
+    try {
+      // Get video duration
+      const tempUrl = URL.createObjectURL(file);
+      const duration = await new Promise<number>((resolve) => {
+        const v = document.createElement('video');
+        v.preload = 'metadata';
+        v.onloadedmetadata = () => {
+          resolve(v.duration || 120);
+          URL.revokeObjectURL(tempUrl);
+        };
+        v.onerror = () => {
+          resolve(120);
+          URL.revokeObjectURL(tempUrl);
+        };
+        v.src = tempUrl;
+      });
+      videoDurationRef.current = duration;
+
+      // Set video URL for ResultView preview
+      const videoBlob = URL.createObjectURL(file);
+      setVideoUrl(videoBlob);
+
+      // Call recap-script-generator with file
+      setProgressMsg('🧠 AI analyzing and writing script...');
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('niche', 'MOVIE RECAP');
+      formData.append('language', 'BURMESE');
+
+      const scriptResponse = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recap-script-generator`,
+        {
+          method: 'POST',
+          headers: {
+            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: formData,
+        }
+      );
+
+      if (!scriptResponse.ok) {
+        const errData = await scriptResponse.json().catch(() => ({}));
+        throw new Error(errData.error || `Script generation failed (${scriptResponse.status})`);
+      }
+
+      const scriptResult = await scriptResponse.json();
+      const scriptText = scriptResult.script || '';
+
+      if (!scriptText || scriptText.trim().length < 10) {
+        throw new Error('AI script generation returned empty result');
+      }
+
+      // Parse script into segments
+      const segments = scriptToSegments(scriptText, duration);
+      setScriptData({
+        title: file.name.replace(/\.[^.]+$/, ''),
+        full_script: scriptText,
+        segments,
+      });
+
+      setProgressMsg('📝 Script generated! Now generating AI voice...');
+
+      // Auto-generate voice
+      await generateVoice(scriptText);
+    } catch (err: any) {
+      console.error('Pipeline error:', err);
+      setStatus('error');
+      setProgressMsg(`❌ Error: ${err.message}`);
+    }
   };
 
   const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      const url = URL.createObjectURL(file);
-      setVideoUrl(url);
-    }
-  };
-
-  const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      const url = URL.createObjectURL(file);
-      setAudioUrl(url);
+      setVideoFile(file);
+      // Auto-start the full pipeline
+      startAutoPipeline(file);
     }
   };
 
@@ -1134,39 +1277,45 @@ const RecapVideoNVPage: React.FC = () => {
 
         {/* Upload Section */}
         <div className="mb-6 p-4 bg-secondary/30 rounded-xl border border-border space-y-4">
-          <h3 className="text-lg font-semibold text-foreground">Upload Sources</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-muted-foreground">Video File</label>
-              <input
-                type="file"
-                accept="video/*"
-                onChange={handleVideoUpload}
-                className="w-full text-sm text-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-primary file:text-primary-foreground file:font-semibold file:cursor-pointer hover:file:opacity-90"
-              />
-              {videoUrl && <p className="text-xs text-green-500">✅ Video loaded</p>}
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-muted-foreground">Audio File (Narration)</label>
-              <input
-                type="file"
-                accept="audio/*"
-                onChange={handleAudioUpload}
-                className="w-full text-sm text-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-primary file:text-primary-foreground file:font-semibold file:cursor-pointer hover:file:opacity-90"
-              />
-              {audioUrl && <p className="text-xs text-green-500">✅ Audio loaded</p>}
-            </div>
+          <h3 className="text-lg font-semibold text-foreground">🎬 Auto Recap Video (NV)</h3>
+          <p className="text-sm text-muted-foreground">
+            Video တစ်ခုကို upload လုပ်လိုက်ရုံပဲ — AI က အလိုအလျောက် analyze လုပ်ပြီး script ရေးပေးပြီး voice over ထည့်ပေးပါမယ်။
+          </p>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-muted-foreground">Video File</label>
+            <input
+              type="file"
+              accept="video/*"
+              onChange={handleVideoUpload}
+              disabled={status === 'processing'}
+              className="w-full text-sm text-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-primary file:text-primary-foreground file:font-semibold file:cursor-pointer hover:file:opacity-90 disabled:opacity-50"
+            />
           </div>
+
+          {/* Progress indicator */}
+          {progressMsg && (
+            <div className={`p-3 rounded-lg text-sm font-medium ${
+              status === 'processing' ? 'bg-blue-500/10 text-blue-400 animate-pulse' :
+              status === 'error' ? 'bg-red-500/10 text-red-400' :
+              status === 'done' ? 'bg-green-500/10 text-green-400' :
+              'bg-secondary/50 text-muted-foreground'
+            }`}>
+              {progressMsg}
+            </div>
+          )}
         </div>
 
-        <ResultView
-          scriptData={scriptData}
-          onUpdateScript={handleUpdateScript}
-          onGenerateVoice={handleGenerateVoice}
-          audioUrl={audioUrl}
-          videoUrl={videoUrl}
-          status={status}
-        />
+        {/* Show ResultView when we have data */}
+        {(scriptData.segments.length > 0 || videoUrl) && (
+          <ResultView
+            scriptData={scriptData}
+            onUpdateScript={handleUpdateScript}
+            onGenerateVoice={handleGenerateVoice}
+            audioUrl={audioUrl}
+            videoUrl={videoUrl}
+            status={status}
+          />
+        )}
       </div>
     </div>
   );
