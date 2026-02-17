@@ -1106,6 +1106,22 @@ const RecapVideoNVPage: React.FC = () => {
     console.log('Generate voice triggered');
   };
 
+  const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      const url = URL.createObjectURL(file);
+      setVideoUrl(url);
+    }
+  };
+
+  const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      const url = URL.createObjectURL(file);
+      setAudioUrl(url);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="p-4">
@@ -1115,6 +1131,34 @@ const RecapVideoNVPage: React.FC = () => {
         >
           ← Home
         </button>
+
+        {/* Upload Section */}
+        <div className="mb-6 p-4 bg-secondary/30 rounded-xl border border-border space-y-4">
+          <h3 className="text-lg font-semibold text-foreground">Upload Sources</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-muted-foreground">Video File</label>
+              <input
+                type="file"
+                accept="video/*"
+                onChange={handleVideoUpload}
+                className="w-full text-sm text-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-primary file:text-primary-foreground file:font-semibold file:cursor-pointer hover:file:opacity-90"
+              />
+              {videoUrl && <p className="text-xs text-green-500">✅ Video loaded</p>}
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-muted-foreground">Audio File (Narration)</label>
+              <input
+                type="file"
+                accept="audio/*"
+                onChange={handleAudioUpload}
+                className="w-full text-sm text-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-primary file:text-primary-foreground file:font-semibold file:cursor-pointer hover:file:opacity-90"
+              />
+              {audioUrl && <p className="text-xs text-green-500">✅ Audio loaded</p>}
+            </div>
+          </div>
+        </div>
+
         <ResultView
           scriptData={scriptData}
           onUpdateScript={handleUpdateScript}
