@@ -1138,6 +1138,9 @@ const RecapVideoNVPage: React.FC = () => {
   const generateVoice = async (scriptText: string) => {
     setProgressMsg('🎙️ AI Voice ဖန်တီးနေပါသည်...');
     try {
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      const userToken = currentSession?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gemini-tts`,
         {
@@ -1145,7 +1148,7 @@ const RecapVideoNVPage: React.FC = () => {
           headers: {
             'Content-Type': 'application/json',
             'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            'Authorization': `Bearer ${userToken}`,
           },
           body: JSON.stringify({
             text: scriptText,
@@ -1277,6 +1280,10 @@ const RecapVideoNVPage: React.FC = () => {
       // === Call recap-script-generator with fileUri ===
       setProgressMsg('🧠 AI is watching the video and writing script...');
 
+      // Get user session token for authenticated call
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      const userToken = currentSession?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
       const scriptResponse = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recap-script-generator`,
         {
@@ -1284,7 +1291,7 @@ const RecapVideoNVPage: React.FC = () => {
           headers: {
             'Content-Type': 'application/json',
             'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            'Authorization': `Bearer ${userToken}`,
           },
           body: JSON.stringify({
             fileUri: fileUri,
