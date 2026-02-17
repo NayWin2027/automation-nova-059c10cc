@@ -260,12 +260,16 @@ export const ResultView: React.FC<ResultViewProps> = ({
       // Canvas-based stream (much more compatible than videoEl.captureStream)
       const canvasStream = canvas.captureStream(30);
 
-      // Add audio tracks
+      // Add audio tracks using AudioContext (more reliable than captureStream)
+      let audioCtx: AudioContext | null = null;
       try {
-        const audioStream = (audioEl as any).captureStream?.() || (audioEl as any).mozCaptureStream?.();
-        if (audioStream) {
-          audioStream.getAudioTracks().forEach((track: MediaStreamTrack) => canvasStream.addTrack(track));
-        }
+        audioCtx = new AudioContext();
+        const source = audioCtx.createMediaElementSource(audioEl);
+        const dest = audioCtx.createMediaStreamDestination();
+        source.connect(dest);
+        source.connect(audioCtx.destination); // Also play through speakers
+        dest.stream.getAudioTracks().forEach((track: MediaStreamTrack) => canvasStream.addTrack(track));
+        console.log("[Render] Audio track added via AudioContext");
       } catch (audioErr) {
         console.warn("Could not capture audio stream, video will be silent:", audioErr);
       }
@@ -277,6 +281,11 @@ export const ResultView: React.FC<ResultViewProps> = ({
       };
 
       recorder.onstop = () => {
+        // Cleanup AudioContext
+        if (audioCtx) {
+          try { audioCtx.close(); } catch (_) {}
+        }
+
         if (chunks.length === 0) {
           alert("Recording failed: No data captured. Please try again.");
           setIsRendering(false);
