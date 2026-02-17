@@ -1,5 +1,17 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
-import { RecapScript, ProcessingStatus } from "../types";
+
+interface RecapSegment {
+  timestamp: string;
+  text: string;
+}
+
+interface RecapScript {
+  title: string;
+  full_script: string;
+  segments: RecapSegment[];
+}
+
+type ProcessingStatus = "idle" | "processing" | "done" | "error";
 
 interface ResultViewProps {
   scriptData: RecapScript;
@@ -1071,3 +1083,13 @@ export const ResultView: React.FC<ResultViewProps> = ({
     </>
   );
 };
+
+const RecapVideoNVPage: React.FC = () => {
+  return (
+    <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
+      <h1 className="text-2xl font-bold">Video Recap NV — Admin Test Page</h1>
+    </div>
+  );
+};
+
+export default RecapVideoNVPage;
