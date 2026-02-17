@@ -802,6 +802,14 @@ const ThumbnailView: React.FC = () => {
 
   return (
     <div className="space-y-6 pb-40 animate-in fade-in duration-500 max-w-5xl text-white bg-blue-600 my-px px-[5px] mx-0 sm:mx-auto">
+      {/* Home Button */}
+      <button
+        onClick={() => navigate("/")}
+        className="fixed top-3 left-3 z-50 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-black/40 backdrop-blur-md border border-white/10 text-white/80 hover:text-white hover:bg-black/60 transition-all duration-200 shadow-lg"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span className="text-[10px] font-bold uppercase tracking-wider">Home</span>
+      </button>
       {/* 1. MONITOR PREVIEW (Sticky Top - Compact) */}
       <div className="sticky top-0 z-[100] pb-1">
         <div className="neon-glass rounded-2xl sm:rounded-3xl p-3 sm:p-4 space-y-2 border border-white/15 shadow-[0_0_60px_rgba(0,0,0,0.7)] overflow-hidden bg-black/80 backdrop-blur-3xl py-0 my-0 px-0 mx-px">

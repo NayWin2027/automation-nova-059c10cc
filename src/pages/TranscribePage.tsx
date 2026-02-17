@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
-import { Download, ChevronDown, Loader2, Copy, Check, Sparkles, X, Edit3, Save } from "lucide-react";
+import { Download, ChevronDown, Loader2, Copy, Check, Sparkles, X, Edit3, Save, Home } from "lucide-react";
 import { useSecureApiKey } from "../hooks/useSecureApiKey";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -106,6 +107,7 @@ const db = {
 };
 
 export default function TranscriptionView() {
+  const navigate = useNavigate();
   const { isAllowed, isLoading: authLoading } = useAuthGuard('transcribe');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedLanguage, setSelectedLanguage] = useState("BURMESE");
@@ -351,6 +353,14 @@ export default function TranscriptionView() {
 
   return (
     <div className="min-h-screen text-slate-200 p-4 space-y-6 animate-in fade-in duration-500 pb-32 bg-primary-foreground">
+      {/* Home Button */}
+      <button
+        onClick={() => navigate("/")}
+        className="fixed top-3 left-3 z-50 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-black/40 backdrop-blur-md border border-white/10 text-white/80 hover:text-white hover:bg-black/60 transition-all duration-200 shadow-lg"
+      >
+        <Home className="w-4 h-4" />
+        <span className="text-[10px] font-bold uppercase tracking-wider">Home</span>
+      </button>
       {/* ADMIN EDIT BAR */}
       {isAdmin &&
         <div className="fixed top-2 right-2 z-50 flex gap-2">

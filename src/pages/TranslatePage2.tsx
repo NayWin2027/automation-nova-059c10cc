@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useApiAccess } from "@/hooks/useApiAccess";
 import { translateText } from "../services/geminiService";
@@ -17,7 +18,8 @@ import {
   Sparkles,
   Wand2,
   MessageSquareQuote,
-  ShieldCheck } from
+  ShieldCheck,
+  Home } from
 "lucide-react";
 
 type ApiType = "app" | "own";
@@ -158,6 +160,7 @@ const EMOTIONS = [
 
 
 const TranslateView: React.FC = () => {
+  const navigate = useNavigate();
   const { isAllowed, isLoading: authLoading } = useAuthGuard('translate');
   const { appApiAllowed, ownApiAllowed, appApiReason, defaultApiMode, isLoading: accessLoading } = useApiAccess();
   const [apiType, setApiType] = useState<ApiType>("app");
@@ -285,6 +288,14 @@ const TranslateView: React.FC = () => {
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-40 px-1 max-w-2xl mx-auto bg-blue-700">
+      {/* Home Button */}
+      <button
+        onClick={() => navigate("/")}
+        className="fixed top-3 left-3 z-50 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-black/40 backdrop-blur-md border border-white/10 text-white/80 hover:text-white hover:bg-black/60 transition-all duration-200 shadow-lg"
+      >
+        <Home className="w-4 h-4" />
+        <span className="text-[10px] font-bold uppercase tracking-wider">Home</span>
+      </button>
       {/* 1. API Switcher (Syncopate Font) */}
       <div className="flex backdrop-blur-3xl p-1.5 rounded-[28px] border border-white/10 shadow-2xl max-w-sm mx-auto overflow-hidden bg-yellow-950">
         <button
