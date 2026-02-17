@@ -1461,7 +1461,6 @@ const RecapVideoNVPage: React.FC = () => {
         const { data: chunkData, error: chunkError } = await supabase.functions.invoke('video-recap', {
           body: chunkBuf,
           headers: {
-            'content-type': 'application/octet-stream',
             'x-recap-action': 'uploadChunkBinary',
             'x-upload-url': initData.uploadUrl,
             'x-chunk-index': String(i),
