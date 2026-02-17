@@ -291,10 +291,10 @@ const TranslateView: React.FC = () => {
       {/* Home Button */}
       <button
         onClick={() => navigate("/")}
-        className="fixed top-3 left-3 z-50 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-black/40 backdrop-blur-md border border-white/10 text-white/80 hover:text-white hover:bg-black/60 transition-all duration-200 shadow-lg"
-      >
-        <Home className="w-4 h-4" />
-        <span className="text-[10px] font-bold uppercase tracking-wider">Home</span>
+        className="fixed top-3 left-3 z-50 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-black/40 backdrop-blur-md border border-white/10 text-white/80 hover:text-white hover:bg-black/60 transition-all duration-200 shadow-lg">
+
+        <Home className="w-4 h-4 text-purple-900" />
+        <span className="text-[10px] uppercase tracking-wider text-neon-rose font-extrabold">Home</span>
       </button>
       {/* 1. API Switcher (Syncopate Font) */}
       <div className="flex backdrop-blur-3xl p-1.5 rounded-[28px] border border-white/10 shadow-2xl max-w-sm mx-auto overflow-hidden bg-yellow-950">
