@@ -12,6 +12,7 @@ const TranscribePage = lazy(() => import("./pages/TranscribePage"));
 const VideoRecapPage = lazy(() => import("./pages/VideoRecapPage"));
 const TransformativeVideoPage = lazy(() => import("./pages/TransformativeVideoPage"));
 const RecapVideoPage = lazy(() => import("./pages/RecapVideoPage"));
+const RecapVideoNVPage = lazy(() => import("./pages/RecapVideoNVPage"));
 const VoicePage = lazy(() => import("./pages/VoicePage"));
 const CreatorPage = lazy(() => import("./pages/CreatorPage"));
 const StoryCreatorPage = lazy(() => import("./pages/StoryCreatorPage"));
@@ -44,6 +45,7 @@ const App = () => (
             <Route path="/video-recap" element={<VideoRecapPage />} />
             <Route path="/transformative" element={<TransformativeVideoPage />} />
             <Route path="/recap" element={<RecapVideoPage />} />
+            <Route path="/recap-nv" element={<Suspense fallback={null}><AdminRoute><RecapVideoNVPage /></AdminRoute></Suspense>} />
             <Route path="/voice" element={<VoicePage />} />
             <Route path="/creator" element={<CreatorPage />} />
             <Route path="/story" element={<StoryCreatorPage />} />
