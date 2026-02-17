@@ -41,6 +41,7 @@ interface SubtitleSettings {
   borderColor: string; // New: Neon Border Color
   fontSize: number; // New: Font Size
   scale: number; // New: Box Scale
+  maxWidth: number; // New: Max Width percentage 20-100
 }
 
 export const ResultView: React.FC<ResultViewProps> = ({
@@ -87,6 +88,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
     borderColor: "#00E5FF", // Cyan Neon default
     fontSize: 20,
     scale: 1,
+    maxWidth: 80,
   });
 
   // Drag State
@@ -751,7 +753,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                     left: `${subSettings.x}%`,
                     top: `${subSettings.y}%`,
                     transform: `translate(-50%, -50%) scale(${subSettings.scale})`,
-                    maxWidth: "80%",
+                    maxWidth: `${subSettings.maxWidth}%`,
                     touchAction: "none",
                   }}
                 >
@@ -777,13 +779,18 @@ export const ResultView: React.FC<ResultViewProps> = ({
               )}
 
               {renderedBlobUrl ? (
-                <div className="relative w-full h-full group">
-                  <video src={renderedBlobUrl} className="w-full h-full" controls playsInline />
-                  <div className="absolute top-0 left-0 w-full h-full pointer-events-none flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <span className="text-white text-sm bg-black/70 px-4 py-2 rounded-full backdrop-blur-sm border border-white/10">
-                      Right click to "Save Video As..."
-                    </span>
-                  </div>
+                <div className="relative w-full h-full flex flex-col items-center">
+                  <video src={renderedBlobUrl} className="w-full h-full" controls playsInline autoPlay />
+                  <a
+                    href={renderedBlobUrl}
+                    download={`recap_${scriptData.title.replace(/\s+/g, "_")}.webm`}
+                    className="mt-3 flex items-center justify-center gap-2 px-6 py-3 bg-neon-cyan hover:bg-neon-hover text-charcoal-900 font-bold rounded-xl transition-colors shadow-[0_0_20px_rgba(0,229,255,0.4)] text-lg w-full max-w-md"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Download Recap Video
+                  </a>
                 </div>
               ) : isYouTube && youtubeId ? (
                 <iframe
@@ -969,6 +976,21 @@ export const ResultView: React.FC<ResultViewProps> = ({
                       className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full"
                     />
                   </div>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-500">Box Width</span>
+                      <span className="text-xs text-neon-cyan">{subSettings.maxWidth}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="20"
+                      max="100"
+                      step="5"
+                      value={subSettings.maxWidth}
+                      onChange={(e) => setSubSettings((s) => ({ ...s, maxWidth: Number(e.target.value) }))}
+                      className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full"
+                    />
+                  </div>
                   <div className="flex items-center gap-4">
                     <span className="text-xs text-gray-500 w-16">Neon Border</span>
                     <div className="flex gap-2 flex-wrap">
@@ -1131,41 +1153,46 @@ export const ResultView: React.FC<ResultViewProps> = ({
               style={{
                 filter: videoStyles.filter,
                 transform: videoStyles.transform,
+                aspectRatio: editorState.ratio === "auto" ? undefined : editorState.ratio,
+                width: editorState.ratio === "auto" ? undefined : "auto",
+                height: editorState.ratio === "auto" ? undefined : "85vh",
               }}
             />
 
-            {/* Premium Professional Auto-Subtitles - Theater Mode (Fixed Position) */}
-            <div className="absolute bottom-12 md:bottom-20 left-0 right-0 flex justify-center px-4 pointer-events-none z-20">
+            {/* Premium Professional Auto-Subtitles - Theater Mode (Draggable) */}
+            {currentSubtitle && (
               <div
-                className={`
-                        transition-all duration-200 transform
-                        ${currentSubtitle ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-4 scale-95"}
-                        max-w-4xl text-center
-                    `}
+                onMouseDown={handleDragStart}
+                onTouchStart={handleDragStart}
+                className="absolute z-20 cursor-move"
+                style={{
+                  left: `${subSettings.x}%`,
+                  top: `${subSettings.y}%`,
+                  transform: `translate(-50%, -50%) scale(${subSettings.scale})`,
+                  maxWidth: `${subSettings.maxWidth}%`,
+                  touchAction: "none",
+                }}
               >
                 <span
                   className="
-                                inline-block
-                                backdrop-blur-md
-                                px-6 py-3 md:px-8 md:py-4
-                                rounded-2xl
-                                font-black tracking-wide
-                                shadow-[0_4px_30px_rgba(0,0,0,0.5)]
-                                drop-shadow-lg
-                            "
+                    inline-block backdrop-blur-md
+                    px-6 py-3 md:px-8 md:py-4
+                    rounded-2xl font-black tracking-wide
+                    shadow-[0_4px_30px_rgba(0,0,0,0.5)] drop-shadow-lg
+                  "
                   style={{
                     textShadow: "2px 2px 0px rgba(0,0,0,0.8)",
                     color: subSettings.textColor,
                     backgroundColor: subSettings.bgColor,
                     border: `2px solid ${subSettings.borderColor}`,
                     boxShadow: `0 0 15px ${subSettings.borderColor}`,
-                    fontSize: `${subSettings.fontSize * 1.5}px`, // Larger in full screen
+                    fontSize: `${subSettings.fontSize * 1.5}px`,
                   }}
                 >
                   {currentSubtitle}
                 </span>
               </div>
-            </div>
+            )}
 
             {/* Logo in Theater Mode */}
             {logo.url && (
