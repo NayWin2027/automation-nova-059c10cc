@@ -6,28 +6,37 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 
+// Retry wrapper for dynamic imports (handles stale chunk errors)
+const lazyRetry = (importFn: () => Promise<any>) =>
+  lazy(() =>
+    importFn().catch(() => {
+      window.location.reload();
+      return importFn();
+    })
+  );
+
 // Lazy-loaded pages for instant navigation
-const TranslatePage2 = lazy(() => import("./pages/TranslatePage2"));
-const TranscribePage = lazy(() => import("./pages/TranscribePage"));
-const VideoRecapPage = lazy(() => import("./pages/VideoRecapPage"));
-const TransformativeVideoPage = lazy(() => import("./pages/TransformativeVideoPage"));
-const RecapVideoPage = lazy(() => import("./pages/RecapVideoPage"));
-const RecapVideoNVPage = lazy(() => import("./pages/RecapVideoNVPage"));
-const VoicePage = lazy(() => import("./pages/VoicePage"));
-const CreatorPage = lazy(() => import("./pages/CreatorPage"));
-const StoryCreatorPage = lazy(() => import("./pages/StoryCreatorPage"));
-const NovelTransPage = lazy(() => import("./pages/NovelTransPage"));
-const ThumbnailPage = lazy(() => import("./pages/ThumbnailPage"));
-const SrtSubPage = lazy(() => import("./pages/SrtSubPage"));
-const AdminRegisterPage = lazy(() => import("./pages/AdminRegisterPage"));
-const AdminLoginPage = lazy(() => import("./pages/AdminLoginPage"));
-const AdminDashboardPage = lazy(() => import("./pages/AdminDashboardPage"));
-const AdminRoute = lazy(() => import("./components/AdminRoute"));
-const UserLoginPage = lazy(() => import("./pages/UserLoginPage"));
-const TermsPage = lazy(() => import("./pages/TermsPage"));
-const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
-const AboutPage = lazy(() => import("./pages/AboutPage"));
-const NotFound = lazy(() => import("./pages/NotFound"));
+const TranslatePage2 = lazyRetry(() => import("./pages/TranslatePage2"));
+const TranscribePage = lazyRetry(() => import("./pages/TranscribePage"));
+const VideoRecapPage = lazyRetry(() => import("./pages/VideoRecapPage"));
+const TransformativeVideoPage = lazyRetry(() => import("./pages/TransformativeVideoPage"));
+const RecapVideoPage = lazyRetry(() => import("./pages/RecapVideoPage"));
+const RecapVideoNVPage = lazyRetry(() => import("./pages/RecapVideoNVPage"));
+const VoicePage = lazyRetry(() => import("./pages/VoicePage"));
+const CreatorPage = lazyRetry(() => import("./pages/CreatorPage"));
+const StoryCreatorPage = lazyRetry(() => import("./pages/StoryCreatorPage"));
+const NovelTransPage = lazyRetry(() => import("./pages/NovelTransPage"));
+const ThumbnailPage = lazyRetry(() => import("./pages/ThumbnailPage"));
+const SrtSubPage = lazyRetry(() => import("./pages/SrtSubPage"));
+const AdminRegisterPage = lazyRetry(() => import("./pages/AdminRegisterPage"));
+const AdminLoginPage = lazyRetry(() => import("./pages/AdminLoginPage"));
+const AdminDashboardPage = lazyRetry(() => import("./pages/AdminDashboardPage"));
+const AdminRoute = lazyRetry(() => import("./components/AdminRoute"));
+const UserLoginPage = lazyRetry(() => import("./pages/UserLoginPage"));
+const TermsPage = lazyRetry(() => import("./pages/TermsPage"));
+const PrivacyPage = lazyRetry(() => import("./pages/PrivacyPage"));
+const AboutPage = lazyRetry(() => import("./pages/AboutPage"));
+const NotFound = lazyRetry(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
 
