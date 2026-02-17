@@ -1493,21 +1493,8 @@ export default function VideoRecapView() {
         ctx.restore();
       } else {
         // === VIDEO PHASE (0s - 3s): Motion video ===
-        let videoAlpha = 1.0;
-        if (phase < FADE_DUR && segLocalTime > FADE_DUR) {
-          const t = phase / FADE_DUR;
-          videoAlpha = t * t * (3 - 2 * t); // smoothstep easing
-          // Draw fading photo with ENDING ZOOM applied (no flash)
-          const endZoomScale = 1.0 + 0.08;
-          ctx.globalAlpha = 1.0 - videoAlpha;
-          ctx.save();
-          ctx.translate(targetW / 2, targetH / 2);
-          ctx.scale(endZoomScale, endZoomScale);
-          ctx.translate(-targetW / 2, -targetH / 2);
-          ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH);
-          ctx.restore();
-        }
-        ctx.globalAlpha = Math.max(0.01, videoAlpha);
+        // No crossfade here — photo phase exit crossfade already handled the transition
+        ctx.globalAlpha = 1.0;
         ctx.drawImage(video, dx, dy, dw, dh);
       }
     } else {
@@ -1927,25 +1914,10 @@ export default function VideoRecapView() {
               ctx.restore();
             } else {
               // === VIDEO PHASE (0s - 3s): Motion video ===
-              let videoAlpha = 1.0;
-
-              // Smooth crossfade from photo phase at cycle boundary
-              if (phase < FADE_DUR && segLocalTime > FADE_DUR) {
-                const t = phase / FADE_DUR;
-                videoAlpha = t * t * (3 - 2 * t); // smoothstep easing
-                // Draw fading photo with ENDING ZOOM applied (maintain visual continuity, no flash)
-                const endZoomScale = 1.0 + 0.08; // final zoom state from photo phase
-                ctx.globalAlpha = 1.0 - videoAlpha;
-                ctx.save();
-                ctx.translate(targetW / 2, targetH / 2);
-                ctx.scale(endZoomScale, endZoomScale);
-                ctx.translate(-targetW / 2, -targetH / 2);
-                ctx.drawImage(freezeCanvas, 0, 0, targetW, targetH);
-                ctx.restore();
-              }
-
-              // Draw video
-              ctx.globalAlpha = Math.max(0.01, videoAlpha);
+              // NO crossfade needed here — the photo phase exit crossfade (lines above)
+              // already smoothly reveals video at full opacity before the cycle wraps.
+              // Drawing freeze canvas again here would cause the "lightning flash" discontinuity.
+              ctx.globalAlpha = 1.0;
               ctx.drawImage(video, dx, dy, dw, dh);
             }
           } else {
