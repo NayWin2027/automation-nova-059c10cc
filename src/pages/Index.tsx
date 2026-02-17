@@ -286,6 +286,19 @@ const Index = () => {
             </div>);
 
       })}
+
+        {/* Admin-only: Video Recap NV */}
+        {isAdmin && (
+          <div className="relative">
+            <ToolCard
+              icon={Video}
+              title="Video Recap NV"
+              description="Admin Test — Video Recap NV"
+              gradient="rose"
+              onClick={() => navigate("/recap-nv")}
+            />
+          </div>
+        )}
       </div>
     </>;
 
