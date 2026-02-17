@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 
 interface RecapSegment {
   timestamp: string;
@@ -1085,9 +1086,44 @@ export const ResultView: React.FC<ResultViewProps> = ({
 };
 
 const RecapVideoNVPage: React.FC = () => {
+  const navigate = useNavigate();
+
+  const [scriptData, setScriptData] = useState<RecapScript>({
+    title: 'Recap Video NV - Test',
+    full_script: '',
+    segments: [],
+  });
+  const [audioUrl, setAudioUrl] = useState<string | undefined>(undefined);
+  const [videoUrl, setVideoUrl] = useState<string | undefined>(undefined);
+  const [status, setStatus] = useState<ProcessingStatus>('idle');
+
+  const handleUpdateScript = (newScript: string) => {
+    setScriptData(prev => ({ ...prev, full_script: newScript }));
+  };
+
+  const handleGenerateVoice = () => {
+    // Placeholder - wire up later
+    console.log('Generate voice triggered');
+  };
+
   return (
-    <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
-      <h1 className="text-2xl font-bold">Video Recap NV — Admin Test Page</h1>
+    <div className="min-h-screen bg-background text-foreground">
+      <div className="p-4">
+        <button
+          onClick={() => navigate('/')}
+          className="mb-4 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:opacity-90 transition-opacity"
+        >
+          ← Home
+        </button>
+        <ResultView
+          scriptData={scriptData}
+          onUpdateScript={handleUpdateScript}
+          onGenerateVoice={handleGenerateVoice}
+          audioUrl={audioUrl}
+          videoUrl={videoUrl}
+          status={status}
+        />
+      </div>
     </div>
   );
 };
