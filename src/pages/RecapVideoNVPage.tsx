@@ -19,6 +19,7 @@ interface ResultViewProps {
   scriptData: RecapScript;
   onUpdateScript: (newScript: string) => void;
   onGenerateVoice: () => void;
+  onRecapSaved?: () => void;
   audioUrl?: string;
   videoUrl?: string;
   status: ProcessingStatus;
@@ -46,6 +47,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
   scriptData,
   onUpdateScript,
   onGenerateVoice,
+  onRecapSaved,
   audioUrl,
   videoUrl,
   status,
@@ -280,7 +282,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
         if (e.data && e.data.size > 0) chunks.push(e.data);
       };
 
-      recorder.onstop = () => {
+      recorder.onstop = async () => {
         // Cleanup AudioContext
         if (audioCtx) {
           try { audioCtx.close(); } catch (_) {}
@@ -296,11 +298,11 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
         const blob = new Blob(chunks, { type: mimeType });
         const url = URL.createObjectURL(blob);
+        const ext = mimeType.includes("mp4") ? "mp4" : "webm";
 
         // Auto download
         const a = document.createElement("a");
         a.href = url;
-        const ext = mimeType.includes("mp4") ? "mp4" : "webm";
         a.download = `recap_${scriptData.title.replace(/\s+/g, "_")}_${Date.now()}.${ext}`;
         document.body.appendChild(a);
         a.click();
@@ -310,6 +312,32 @@ export const ResultView: React.FC<ResultViewProps> = ({
         setIsRendering(false);
         videoEl.controls = true;
         videoEl.muted = false;
+
+        // Save to storage + DB for history (7 days)
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const fileName = `${user.id}/${Date.now()}_recap.${ext}`;
+            const { error: uploadErr } = await supabase.storage
+              .from('recap-videos')
+              .upload(fileName, blob, { contentType: mimeType });
+
+            if (!uploadErr) {
+              await supabase.from('recap_history').insert({
+                user_id: user.id,
+                title: scriptData.title || 'Untitled Recap',
+                storage_path: fileName,
+                file_size_bytes: blob.size,
+              } as any);
+              // Refresh history
+              onRecapSaved?.();
+            } else {
+              console.error('Failed to upload recap to storage:', uploadErr);
+            }
+          }
+        } catch (saveErr) {
+          console.error('Failed to save recap to history:', saveErr);
+        }
       };
 
       recorder.start(100);
@@ -1194,6 +1222,16 @@ export const ResultView: React.FC<ResultViewProps> = ({
   );
 };
 
+interface RecapHistoryItem {
+  id: string;
+  title: string;
+  storage_path: string;
+  file_size_bytes: number | null;
+  created_at: string;
+  expires_at: string;
+  video_url?: string;
+}
+
 const RecapVideoNVPage: React.FC = () => {
   const navigate = useNavigate();
 
@@ -1208,6 +1246,71 @@ const RecapVideoNVPage: React.FC = () => {
   const [progressMsg, setProgressMsg] = useState('');
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const videoDurationRef = useRef<number>(0);
+  const [recapHistory, setRecapHistory] = useState<RecapHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  // Load recap history on mount
+  useEffect(() => {
+    loadRecapHistory();
+  }, []);
+
+  const loadRecapHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setHistoryLoading(false); return; }
+
+      // Clean up expired recaps first
+      const { data: expiredItems } = await supabase
+        .from('recap_history')
+        .select('id, storage_path')
+        .lt('expires_at', new Date().toISOString());
+
+      if (expiredItems && expiredItems.length > 0) {
+        for (const item of expiredItems) {
+          await supabase.storage.from('recap-videos').remove([item.storage_path]);
+          await supabase.from('recap_history').delete().eq('id', item.id);
+        }
+      }
+
+      // Fetch active recaps
+      const { data, error } = await supabase
+        .from('recap_history')
+        .select('*')
+        .gte('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false });
+
+      if (error) { console.error('History load error:', error); }
+      else {
+        // Get signed URLs for each
+        const itemsWithUrls: RecapHistoryItem[] = [];
+        for (const item of (data || [])) {
+          const { data: signedData } = await supabase.storage
+            .from('recap-videos')
+            .createSignedUrl(item.storage_path, 3600); // 1 hour signed URL
+          itemsWithUrls.push({
+            ...item,
+            video_url: signedData?.signedUrl || undefined,
+          });
+        }
+        setRecapHistory(itemsWithUrls);
+      }
+    } catch (err) {
+      console.error('Failed to load history:', err);
+    }
+    setHistoryLoading(false);
+  };
+
+  const deleteRecapItem = async (item: RecapHistoryItem) => {
+    if (!confirm('ဒီ recap video ကို ဖျက်မှာ သေချာပါသလား?')) return;
+    try {
+      await supabase.storage.from('recap-videos').remove([item.storage_path]);
+      await supabase.from('recap_history').delete().eq('id', item.id);
+      setRecapHistory(prev => prev.filter(h => h.id !== item.id));
+    } catch (err) {
+      console.error('Delete failed:', err);
+    }
+  };
 
   const handleUpdateScript = (newScript: string) => {
     setScriptData(prev => ({ ...prev, full_script: newScript }));
@@ -1494,11 +1597,81 @@ const RecapVideoNVPage: React.FC = () => {
             scriptData={scriptData}
             onUpdateScript={handleUpdateScript}
             onGenerateVoice={handleGenerateVoice}
+            onRecapSaved={loadRecapHistory}
             audioUrl={audioUrl}
             videoUrl={videoUrl}
             status={status}
           />
         )}
+
+        {/* Recap History Section */}
+        <div className="mt-6 p-4 bg-secondary/30 rounded-xl border border-border space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-foreground">📁 Recap History (7 Days)</h3>
+            <button
+              onClick={loadRecapHistory}
+              disabled={historyLoading}
+              className="text-xs px-3 py-1 bg-secondary text-secondary-foreground rounded hover:opacity-80"
+            >
+              {historyLoading ? '...' : 'Refresh'}
+            </button>
+          </div>
+
+          {historyLoading && (
+            <p className="text-sm text-muted-foreground animate-pulse">Loading history...</p>
+          )}
+
+          {!historyLoading && recapHistory.length === 0 && (
+            <p className="text-sm text-muted-foreground">Recap video history မရှိသေးပါ။</p>
+          )}
+
+          {recapHistory.map((item) => {
+            const createdDate = new Date(item.created_at);
+            const expiresDate = new Date(item.expires_at);
+            const daysLeft = Math.max(0, Math.ceil((expiresDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+            const sizeStr = item.file_size_bytes
+              ? `${(item.file_size_bytes / (1024 * 1024)).toFixed(1)} MB`
+              : '';
+
+            return (
+              <div key={item.id} className="p-3 bg-secondary/50 rounded-lg border border-border space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-foreground text-sm truncate max-w-[200px]">{item.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {createdDate.toLocaleDateString()} · {sizeStr} · {daysLeft} days left
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => deleteRecapItem(item)}
+                    className="text-xs text-destructive hover:underline"
+                  >
+                    Delete
+                  </button>
+                </div>
+
+                {item.video_url && (
+                  <video
+                    src={item.video_url}
+                    controls
+                    playsInline
+                    className="w-full max-h-[300px] rounded-lg bg-black"
+                  />
+                )}
+
+                {item.video_url && (
+                  <a
+                    href={item.video_url}
+                    download={`${item.title.replace(/\s+/g, '_')}.webm`}
+                    className="inline-block text-xs px-3 py-1.5 bg-primary text-primary-foreground rounded hover:opacity-90"
+                  >
+                    Download
+                  </a>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
