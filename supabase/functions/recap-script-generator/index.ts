@@ -147,6 +147,8 @@ serve(async (req) => {
     let customCreditCost: number | null = null;
     let isOwnApi = false;
     let userApiKey: string | null = null;
+    let fileUri: string | null = null;
+    let fileMimeType: string | null = null;
 
     const contentType = req.headers.get("content-type") || "";
     if (contentType.includes("multipart/form-data")) {
@@ -161,6 +163,8 @@ serve(async (req) => {
     } else {
       const body = await req.json();
       transcript = body.transcript || null;
+      fileUri = body.fileUri || null;
+      fileMimeType = body.fileMimeType || null;
       niche = body.niche || "GENERAL";
       language = body.language || "BURMESE";
       if (body.customCreditCost !== undefined) customCreditCost = Number(body.customCreditCost);
@@ -168,9 +172,9 @@ serve(async (req) => {
       isOwnApi = !!userApiKey;
     }
 
-    if (!fileObj && !transcript) {
+    if (!fileObj && !transcript && !fileUri) {
       return new Response(
-        JSON.stringify({ error: "No file or transcript provided" }),
+        JSON.stringify({ error: "No file, fileUri, or transcript provided" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -252,36 +256,45 @@ STRUCTURE:
     // ===== BUILD GEMINI REQUEST =====
     let contentParts: any[] = [];
 
-    if (fileObj) {
-      // Direct file analysis mode - upload file to Google Files API
-      const mimeType = getMimeType(fileObj);
-      const arrayBuffer = await fileObj.arrayBuffer();
-      const fileBytes = new Uint8Array(arrayBuffer);
+    if (fileObj || fileUri) {
+      // File analysis mode - either direct upload or pre-uploaded fileUri
+      let resolvedFileUri = fileUri;
+      let resolvedMimeType = fileMimeType || "video/mp4";
 
-      console.log(`[recap-script-generator] Uploading file: ${fileObj.name}, size: ${fileBytes.length}, mime: ${mimeType}`);
+      if (fileObj && !fileUri) {
+        // Direct file upload mode (small files via FormData)
+        resolvedMimeType = getMimeType(fileObj);
+        const arrayBuffer = await fileObj.arrayBuffer();
+        const fileBytes = new Uint8Array(arrayBuffer);
 
-      let fileUri: string;
-      try {
-        fileUri = await uploadToGoogleFiles(activeApiKey, fileBytes, mimeType, fileObj.name);
-      } catch (uploadError) {
-        console.error("File upload failed:", uploadError);
-        return new Response(
-          JSON.stringify({ error: "ဖိုင် upload မအောင်မြင်ပါ။ ပြန်စမ်းပါ။" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+        console.log(`[recap-script-generator] Uploading file: ${fileObj.name}, size: ${fileBytes.length}, mime: ${resolvedMimeType}`);
 
-      // Wait for file processing
-      const fileName = fileUri.includes("/") ? fileUri.split("/").slice(-2).join("/") : fileUri;
-      if (fileName.startsWith("files/")) {
         try {
-          await waitForFileProcessing(activeApiKey, fileName);
-        } catch (processingError) {
-          console.error("File processing failed:", processingError);
+          resolvedFileUri = await uploadToGoogleFiles(activeApiKey, fileBytes, resolvedMimeType, fileObj.name);
+        } catch (uploadError) {
+          console.error("File upload failed:", uploadError);
           return new Response(
-            JSON.stringify({ error: "ဖိုင် processing မအောင်မြင်ပါ။ ပြန်စမ်းပါ။" }),
+            JSON.stringify({ error: "ဖိုင် upload မအောင်မြင်ပါ။ ပြန်စမ်းပါ။" }),
             { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
+        }
+      } else {
+        console.log(`[recap-script-generator] Using pre-uploaded fileUri: ${fileUri}`);
+      }
+
+      // Wait for file processing if needed
+      if (resolvedFileUri) {
+        const fName = resolvedFileUri.includes("/") ? resolvedFileUri.split("/").slice(-2).join("/") : resolvedFileUri;
+        if (fName.startsWith("files/")) {
+          try {
+            await waitForFileProcessing(activeApiKey, fName);
+          } catch (processingError) {
+            console.error("File processing failed:", processingError);
+            return new Response(
+              JSON.stringify({ error: "ဖိုင် processing မအောင်မြင်ပါ။ ပြန်စမ်းပါ။" }),
+              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
         }
       }
 
@@ -307,9 +320,9 @@ OUTPUT FORMAT:
 
       contentParts = [
         { text: userPrompt },
-        { file_data: { mime_type: mimeType, file_uri: fileUri } },
+        { file_data: { mime_type: resolvedMimeType, file_uri: resolvedFileUri } },
       ];
-    } else {
+    } else if (transcript) {
       // Legacy transcript mode (kept for backward compatibility)
       const userPrompt = `Niche: ${nicheLabel}
 
