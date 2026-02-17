@@ -1,5 +1,19 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
-import { RecapScript, ProcessingStatus } from "../types";
+import { useNavigate } from "react-router-dom";
+
+// Local types (previously from ../types)
+interface RecapSegment {
+  timestamp: string;
+  text: string;
+}
+
+interface RecapScript {
+  title: string;
+  full_script: string;
+  segments: RecapSegment[];
+}
+
+type ProcessingStatus = "idle" | "processing" | "done" | "error";
 
 interface ResultViewProps {
   scriptData: RecapScript;
@@ -1071,3 +1085,26 @@ export const ResultView: React.FC<ResultViewProps> = ({
     </>
   );
 };
+
+// Default export page wrapper for routing
+const RecapVideoNVPage: React.FC = () => {
+  const navigate = useNavigate();
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 text-white">
+      <button
+        onClick={() => navigate("/")}
+        className="fixed top-3 left-3 z-50 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-black/40 backdrop-blur-md border border-white/10 text-white/80 hover:text-white hover:border-white/30 transition-all duration-200"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span className="text-[10px] font-bold uppercase tracking-wider">Home</span>
+      </button>
+      <div className="p-6 pt-16">
+        <h1 className="text-2xl font-bold text-center mb-4">Video Recap NV</h1>
+        <p className="text-center text-gray-400 text-sm">Admin Test Page — Add your logic here.</p>
+      </div>
+    </div>
+  );
+};
+
+export default RecapVideoNVPage;
