@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 
 interface RecapSegment {
   timestamp: string;
@@ -1182,7 +1183,7 @@ const RecapVideoNVPage: React.FC = () => {
   // Step 1: Upload video → AI Analysis → Script Generation → Auto TTS
   const startAutoPipeline = async (file: File) => {
     setStatus('processing');
-    setProgressMsg('🎬 AI is watching the video...');
+    setProgressMsg('🎬 Video ကို upload လုပ်နေပါသည်...');
 
     try {
       // Get video duration
@@ -1206,22 +1207,91 @@ const RecapVideoNVPage: React.FC = () => {
       const videoBlob = URL.createObjectURL(file);
       setVideoUrl(videoBlob);
 
-      // Call recap-script-generator with file
-      setProgressMsg('🧠 AI analyzing and writing script...');
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('niche', 'MOVIE RECAP');
-      formData.append('language', 'BURMESE');
+      // Determine mime type
+      const ext = file.name.split('.').pop()?.toLowerCase() || '';
+      const mimeMap: Record<string, string> = {
+        mp4: 'video/mp4', webm: 'video/webm', mkv: 'video/x-matroska',
+        avi: 'video/x-msvideo', mov: 'video/quicktime', '3gp': 'video/3gpp',
+        mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', ogg: 'audio/ogg',
+      };
+      const mimeType = file.type || mimeMap[ext] || 'video/mp4';
+
+      // === Upload to Google Files API via video-recap chunked upload ===
+      setProgressMsg('📤 Google AI ဆီ video upload လုပ်နေပါသည်...');
+
+      const { data: initData, error: initError } = await supabase.functions.invoke('video-recap', {
+        body: {
+          action: 'initUpload',
+          fileName: file.name,
+          fileSize: file.size,
+          mimeType: mimeType,
+          useOwnApi: false,
+        },
+      });
+
+      if (initError || initData?.error || !initData?.uploadUrl) {
+        throw new Error(initData?.error || initError?.message || 'Upload URL ရယူ၍ မအောင်မြင်ပါ');
+      }
+
+      const CHUNK_SIZE = 8 * 1024 * 1024; // 8MB
+      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+      let fileUri = '';
+
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, file.size);
+        const chunk = file.slice(start, end);
+        const isLastChunk = i === totalChunks - 1;
+
+        setProgressMsg(`📤 Uploading... (${i + 1}/${totalChunks})`);
+
+        const chunkBuf = await chunk.arrayBuffer();
+        const { data: chunkData, error: chunkError } = await supabase.functions.invoke('video-recap', {
+          body: chunkBuf,
+          headers: {
+            'content-type': 'application/octet-stream',
+            'x-recap-action': 'uploadChunkBinary',
+            'x-upload-url': initData.uploadUrl,
+            'x-chunk-index': String(i),
+            'x-total-chunks': String(totalChunks),
+            'x-offset': String(start),
+            'x-total-size': String(file.size),
+            'x-mime-type': mimeType,
+            'x-is-last-chunk': String(isLastChunk),
+          },
+        });
+
+        if (chunkError || chunkData?.error) {
+          throw new Error(chunkData?.error || chunkError?.message || `Chunk ${i + 1} upload failed`);
+        }
+
+        if (isLastChunk && chunkData?.fileUri) {
+          fileUri = chunkData.fileUri;
+        }
+      }
+
+      if (!fileUri) {
+        throw new Error('File URI ရယူ၍ မအောင်မြင်ပါ');
+      }
+
+      // === Call recap-script-generator with fileUri ===
+      setProgressMsg('🧠 AI is watching the video and writing script...');
 
       const scriptResponse = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recap-script-generator`,
         {
           method: 'POST',
           headers: {
+            'Content-Type': 'application/json',
             'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
             'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
-          body: formData,
+          body: JSON.stringify({
+            fileUri: fileUri,
+            fileMimeType: mimeType,
+            niche: 'MOVIE RECAP',
+            language: 'BURMESE',
+          }),
         }
       );
 
