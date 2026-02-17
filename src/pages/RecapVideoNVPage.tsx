@@ -94,6 +94,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
   // Drag State
   const [isDraggingSub, setIsDraggingSub] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const theaterContainerRef = useRef<HTMLDivElement>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -188,10 +189,13 @@ export const ResultView: React.FC<ResultViewProps> = ({
   };
 
   const handleDragMove = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDraggingSub || !containerRef.current) return;
+    if (!isDraggingSub) return;
+    // Use theater container ref if in theater mode, otherwise editor container
+    const activeContainer = isTheaterMode ? theaterContainerRef.current : containerRef.current;
+    if (!activeContainer) return;
     e.preventDefault(); // Prevent scroll on touch
 
-    const container = containerRef.current.getBoundingClientRect();
+    const container = activeContainer.getBoundingClientRect();
     const clientX = "touches" in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
     const clientY = "touches" in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
 
@@ -778,21 +782,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 </div>
               )}
 
-              {renderedBlobUrl ? (
-                <div className="relative w-full h-full flex flex-col items-center">
-                  <video src={renderedBlobUrl} className="w-full h-full" controls playsInline autoPlay />
-                  <a
-                    href={renderedBlobUrl}
-                    download={`recap_${scriptData.title.replace(/\s+/g, "_")}.webm`}
-                    className="mt-3 flex items-center justify-center gap-2 px-6 py-3 bg-neon-cyan hover:bg-neon-hover text-charcoal-900 font-bold rounded-xl transition-colors shadow-[0_0_20px_rgba(0,229,255,0.4)] text-lg w-full max-w-md"
-                  >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    Download Recap Video
-                  </a>
-                </div>
-              ) : isYouTube && youtubeId ? (
+              {isYouTube && youtubeId ? (
                 <iframe
                   className="w-full h-full"
                   style={{
@@ -820,6 +810,33 @@ export const ResultView: React.FC<ResultViewProps> = ({
               )}
             </div>
           </div>
+
+          {/* Rendered Output Video + Download - OUTSIDE constrained container */}
+          {renderedBlobUrl && (
+            <div className="w-full flex flex-col items-center gap-4 p-4 bg-charcoal-800 rounded-xl border border-neon-cyan/50 shadow-[0_0_20px_rgba(0,229,255,0.2)]">
+              <div className="text-center">
+                <h3 className="text-lg font-bold text-neon-cyan mb-1">✅ Recap Video Ready!</h3>
+                <p className="text-xs text-gray-400"> သင့်ရဲ့ recap video အဆင်သင့်ဖြစ်ပါပြီ</p>
+              </div>
+              <video
+                src={renderedBlobUrl}
+                className="w-full max-h-[70vh] rounded-lg bg-black"
+                controls
+                playsInline
+                autoPlay
+              />
+              <a
+                href={renderedBlobUrl}
+                download={`recap_${scriptData.title.replace(/\s+/g, "_")}.webm`}
+                className="flex items-center justify-center gap-2 px-8 py-4 bg-neon-cyan hover:bg-neon-hover text-charcoal-900 font-black rounded-xl transition-colors shadow-[0_0_25px_rgba(0,229,255,0.5)] text-lg w-full max-w-lg"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Download Recap Video
+              </a>
+            </div>
+          )}
 
           {/* Editor Toolbar */}
           {!renderedBlobUrl && (
@@ -1143,19 +1160,25 @@ export const ResultView: React.FC<ResultViewProps> = ({
             }
           }}
         >
-          <div className="relative w-full h-full flex flex-col items-center justify-center">
+          <div
+            ref={theaterContainerRef}
+            className="relative w-full h-full flex flex-col items-center justify-center"
+          >
             <video
               ref={theaterVideoRef}
               src={videoUrl}
-              className="max-w-full max-h-[85vh] object-contain transition-all"
+              className="transition-all"
               playsInline
               crossOrigin={isLocalSource(videoUrl) ? undefined : "anonymous"}
               style={{
                 filter: videoStyles.filter,
                 transform: videoStyles.transform,
-                aspectRatio: editorState.ratio === "auto" ? undefined : editorState.ratio,
-                width: editorState.ratio === "auto" ? undefined : "auto",
-                height: editorState.ratio === "auto" ? undefined : "85vh",
+                aspectRatio: editorState.ratio === "auto" ? undefined : editorState.ratio.replace("/", "/"),
+                maxWidth: "100%",
+                maxHeight: "85vh",
+                width: editorState.ratio === "auto" ? "auto" : "auto",
+                height: editorState.ratio === "auto" ? "85vh" : "85vh",
+                objectFit: editorState.ratio === "auto" ? "contain" : "cover",
               }}
             />
 
