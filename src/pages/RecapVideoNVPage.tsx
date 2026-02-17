@@ -1164,13 +1164,11 @@ const RecapVideoNVPage: React.FC = () => {
         throw new Error(data.message || data.error || 'TTS generation failed');
       }
 
-      // Convert base64 audio to blob URL
-      const binaryStr = atob(data.audio);
-      const bytes = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
-      }
-      const audioBlob = new Blob([bytes], { type: data.mimeType || 'audio/mp3' });
+      // Convert base64 audio to blob URL using data URI (most reliable for large audio)
+      const mimeForAudio = data.mimeType || 'audio/mpeg';
+      const dataUri = `data:${mimeForAudio};base64,${data.audio}`;
+      const audioFetchResp = await fetch(dataUri);
+      const audioBlob = await audioFetchResp.blob();
       const url = URL.createObjectURL(audioBlob);
       setAudioUrl(url);
 
