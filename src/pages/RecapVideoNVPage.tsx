@@ -354,6 +354,14 @@ export const ResultView: React.FC<ResultViewProps> = ({
     setIsRendering(true);
     recorder.start(100);
 
+    // Pre-load logo image for canvas drawing
+    let logoImg: HTMLImageElement | null = null;
+    if (logo.url) {
+      logoImg = new Image();
+      logoImg.crossOrigin = "anonymous";
+      logoImg.src = logo.url;
+    }
+
     const drawFrame = () => {
       if (!videoEl || !audioEl) { recapAnimFrameRef.current = requestAnimationFrame(drawFrame); return; }
       // Stop rendering only when audio ends
@@ -368,15 +376,20 @@ export const ResultView: React.FC<ResultViewProps> = ({
         const targetAR = outW / outH;
         const srcAR = srcW / srcH;
         if (targetAR < srcAR) {
-          // crop sides
           srcCropW = Math.round(srcH * targetAR);
           srcCropX = Math.round((srcW - srcCropW) / 2);
         } else {
-          // crop top/bottom
           srcCropH = Math.round(srcW / targetAR);
           srcCropY = Math.round((srcH - srcCropH) / 2);
         }
       }
+
+      // Apply color grading filter from editorState
+      const contrast = editorState.bypass ? 115 : editorState.contrast;
+      const brightness = editorState.bypass ? 105 : editorState.brightness;
+      const saturate = editorState.bypass ? 115 : editorState.saturate;
+      const hue = editorState.bypass ? 5 : editorState.hue;
+      ctx.filter = `contrast(${contrast}%) brightness(${brightness}%) saturate(${saturate}%) hue-rotate(${hue}deg)`;
 
       if (editorState.flip) {
         ctx.save();
@@ -388,6 +401,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.drawImage(videoEl, srcCropX, srcCropY, srcCropW, srcCropH, 0, 0, canvas.width, canvas.height);
       }
 
+      ctx.filter = "none";
+
+      // Draw blur box region
       if (blurSettings.enabled) {
         const blurW = canvas.width * (blurSettings.width / 100);
         const blurH = canvas.height * (blurSettings.height / 100);
@@ -405,19 +421,31 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.restore();
       }
 
-      // Draw subtitle ONLY when blur box is enabled — inside blur box region only
-      if (audioEl.duration > 0 && blurSettings.enabled) {
+      // Draw subtitle — inside blur box if enabled, else at bottom of canvas
+      if (audioEl.duration > 0) {
         const aPct = audioEl.currentTime / audioEl.duration;
         const activeIndex = syncSegmentsRef.current.findIndex((s: any) => aPct >= s.aStartPct && aPct <= s.aEndPct);
         const active = (syncSegmentsRef.current as any[])[activeIndex];
 
         if (active && active.text) {
-          const blurW = canvas.width * (blurSettings.width / 100);
-          const blurH = canvas.height * (blurSettings.height / 100);
-          const blurCX = canvas.width * (blurSettings.x / 100);
-          const blurCY = canvas.height * (blurSettings.y / 100);
-          const blurX = Math.max(0, Math.min(canvas.width - blurW, blurCX - blurW / 2));
-          const blurY = Math.max(0, Math.min(canvas.height - blurH, blurCY - blurH / 2));
+          let subAreaX: number, subAreaY: number, subAreaW: number, subAreaH: number;
+
+          if (blurSettings.enabled) {
+            const blurW = canvas.width * (blurSettings.width / 100);
+            const blurH = canvas.height * (blurSettings.height / 100);
+            const blurCX = canvas.width * (blurSettings.x / 100);
+            const blurCY = canvas.height * (blurSettings.y / 100);
+            subAreaX = Math.max(0, Math.min(canvas.width - blurW, blurCX - blurW / 2));
+            subAreaY = Math.max(0, Math.min(canvas.height - blurH, blurCY - blurH / 2));
+            subAreaW = blurW;
+            subAreaH = blurH;
+          } else {
+            // Render at bottom of canvas when blur is disabled
+            subAreaW = canvas.width;
+            subAreaH = canvas.height * 0.15;
+            subAreaX = 0;
+            subAreaY = canvas.height - subAreaH;
+          }
 
           const scaleFactor = canvas.height / 500;
           const fontSize = Math.max(10, Math.round(subSettings.fontSize * scaleFactor));
@@ -425,7 +453,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
 
-          const maxTextWidth = blurW - 24;
+          const maxTextWidth = subAreaW - 24;
           const words = active.text.split(/\s+/);
           const lines: string[] = [];
           let currentLine = "";
@@ -442,11 +470,11 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
           const lineHeight = fontSize * 1.4;
           const textBlockH = lines.length * lineHeight + 16;
-          const textStartY = blurY + (blurH - textBlockH) / 2;
-          const textCenterX = blurX + blurW / 2;
+          const textStartY = subAreaY + (subAreaH - textBlockH) / 2;
+          const textCenterX = subAreaX + subAreaW / 2;
 
           ctx.fillStyle = "rgba(0,0,0,0.55)";
-          ctx.fillRect(blurX, textStartY, blurW, textBlockH);
+          ctx.fillRect(subAreaX, textStartY, subAreaW, textBlockH);
 
           ctx.fillStyle = subSettings.textColor || "#FACC15";
           ctx.strokeStyle = "rgba(0,0,0,0.9)";
@@ -457,6 +485,26 @@ export const ResultView: React.FC<ResultViewProps> = ({
             ctx.fillText(lines[li], textCenterX, ly);
           }
         }
+      }
+
+      // Draw logo overlay on canvas (top-right)
+      if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
+        const logoSize = canvas.width * (logo.size / 100);
+        const logoPad = 16;
+        const logoX = canvas.width - logoSize - logoPad;
+        const logoY = logoPad;
+
+        ctx.save();
+        if (logo.isCircle) {
+          ctx.beginPath();
+          ctx.arc(logoX + logoSize / 2, logoY + logoSize / 2, logoSize / 2, 0, Math.PI * 2);
+          ctx.clip();
+        }
+        // Neon glow
+        ctx.shadowColor = logo.neonColor;
+        ctx.shadowBlur = 15;
+        ctx.drawImage(logoImg, logoX, logoY, logoSize, logoSize);
+        ctx.restore();
       }
 
       recapAnimFrameRef.current = requestAnimationFrame(drawFrame);
