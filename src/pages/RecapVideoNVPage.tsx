@@ -477,7 +477,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
       // Style matches DOM preview exactly: bold, textShadow, no background
       const subText = currentSubtitleRef.current;
       if (subText) {
-        const fontSize = subSettings.fontSize;
+        // Scale fontSize from preview DOM pixels to canvas pixels
+        const previewW = containerRef.current?.offsetWidth || canvas.width;
+        const scaleFactor = canvas.width / previewW;
+        const fontSize = subSettings.fontSize * scaleFactor;
         ctx.save();
         ctx.font = `bold ${fontSize}px sans-serif`;
         ctx.textAlign = "center";
