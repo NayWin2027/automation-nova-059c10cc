@@ -120,6 +120,44 @@ export const ResultView: React.FC<ResultViewProps> = ({
   const lastIndexRef = useRef<number>(-1);
   const recapAnimFrameRef = useRef<number>(0);
   const recapRecorderRef = useRef<MediaRecorder | null>(null);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+
+  // Request Wake Lock to prevent screen from turning off during recap/recording
+  useEffect(() => {
+    const isActive = isRecapPlaying || isRendering;
+
+    const requestWakeLock = async () => {
+      if (!('wakeLock' in navigator)) return;
+      try {
+        wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+        console.log('[WakeLock] Screen wake lock acquired');
+      } catch (err) {
+        console.log('[WakeLock] Could not acquire wake lock:', err);
+      }
+    };
+
+    const releaseWakeLock = async () => {
+      if (wakeLockRef.current) {
+        try {
+          await wakeLockRef.current.release();
+          wakeLockRef.current = null;
+          console.log('[WakeLock] Screen wake lock released');
+        } catch (err) {
+          console.log('[WakeLock] Could not release wake lock:', err);
+        }
+      }
+    };
+
+    if (isActive) {
+      requestWakeLock();
+    } else {
+      releaseWakeLock();
+    }
+
+    return () => {
+      releaseWakeLock();
+    };
+  }, [isRecapPlaying, isRendering]);
 
   const isYouTube = useMemo(() => {
     return videoUrl ? videoUrl.includes("youtube.com") || videoUrl.includes("youtu.be") : false;
