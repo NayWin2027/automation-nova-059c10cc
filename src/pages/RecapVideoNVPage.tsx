@@ -119,8 +119,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
   const audioRef = useRef<HTMLAudioElement>(null);
   const lastIndexRef = useRef<number>(-1);
   const recapAnimFrameRef = useRef<number>(0);
+  const recapIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recapRecorderRef = useRef<MediaRecorder | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  const logoAngleRef = useRef<number>(0); // for logo spin in canvas
 
   // Request Wake Lock to prevent screen from turning off during recap/recording
   useEffect(() => {
@@ -341,13 +343,15 @@ export const ResultView: React.FC<ResultViewProps> = ({
       console.warn("Could not capture audio for recording:", audioErr);
     }
 
-    const recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: 2500000 });
+    const recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: 4000000 });
     recapRecorderRef.current = recorder;
 
     recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunks.push(e.data); };
 
     recorder.onstop = async () => {
       if (audioCtx) try { audioCtx.close(); } catch (_) {}
+      // Cleanup both interval and rAF just in case
+      if (recapIntervalRef.current) { clearInterval(recapIntervalRef.current); recapIntervalRef.current = null; }
       cancelAnimationFrame(recapAnimFrameRef.current);
 
       if (chunks.length === 0) { setIsRendering(false); return; }
@@ -398,22 +402,31 @@ export const ResultView: React.FC<ResultViewProps> = ({
       logoImg = new Image();
       logoImg.crossOrigin = "anonymous";
       logoImg.src = logo.url;
+      await new Promise<void>((res) => {
+        if (logoImg!.complete) { res(); return; }
+        logoImg!.onload = () => res();
+        logoImg!.onerror = () => res();
+      });
     }
 
+    logoAngleRef.current = 0;
+    let lastFrameTime = performance.now();
+
     const drawFrame = () => {
-      if (!videoEl || !audioEl) { recapAnimFrameRef.current = requestAnimationFrame(drawFrame); return; }
-      // Stop rendering only when audio ends
+      if (!videoEl || !audioEl) return;
       if (audioEl.ended) return;
+
+      const now = performance.now();
+      const dt = (now - lastFrameTime) / 1000; // seconds since last frame
+      lastFrameTime = now;
 
       // Draw video frame — crop source to match output ratio
       const srcW = videoEl.videoWidth || rawW;
       const srcH = videoEl.videoHeight || rawH;
-      // Calculate source crop region centered in original video
       let srcCropX = 0, srcCropY = 0, srcCropW = srcW, srcCropH = srcH;
       if (editorState.ratio !== "auto") {
         const targetAR = outW / outH;
-        const srcAR = srcW / srcH;
-        if (targetAR < srcAR) {
+        if (targetAR < srcW / srcH) {
           srcCropW = Math.round(srcH * targetAR);
           srcCropX = Math.round((srcW - srcCropW) / 2);
         } else {
@@ -422,7 +435,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
         }
       }
 
-      // Apply color grading filter from editorState
+      // Apply color grading filter
       const contrast = editorState.bypass ? 115 : editorState.contrast;
       const brightness = editorState.bypass ? 105 : editorState.brightness;
       const saturate = editorState.bypass ? 115 : editorState.saturate;
@@ -438,7 +451,6 @@ export const ResultView: React.FC<ResultViewProps> = ({
       } else {
         ctx.drawImage(videoEl, srcCropX, srcCropY, srcCropW, srcCropH, 0, 0, canvas.width, canvas.height);
       }
-
       ctx.filter = "none";
 
       // Draw blur box region
@@ -459,7 +471,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.restore();
       }
 
-      // Draw subtitle — inside blur box if enabled, else at bottom of canvas
+      // Draw subtitle on canvas only (no DOM subtitle box in editor when blur is OFF)
       if (audioEl.duration > 0) {
         const aPct = audioEl.currentTime / audioEl.duration;
         const activeIndex = syncSegmentsRef.current.findIndex((s: any) => aPct >= s.aStartPct && aPct <= s.aEndPct);
@@ -478,7 +490,6 @@ export const ResultView: React.FC<ResultViewProps> = ({
             subAreaW = blurW;
             subAreaH = blurH;
           } else {
-            // Render at bottom of canvas when blur is disabled
             subAreaW = canvas.width;
             subAreaH = canvas.height * 0.15;
             subAreaX = 0;
@@ -511,7 +522,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
           const textStartY = subAreaY + (subAreaH - textBlockH) / 2;
           const textCenterX = subAreaX + subAreaW / 2;
 
-          ctx.fillStyle = "rgba(0,0,0,0.55)";
+          ctx.fillStyle = "rgba(0,0,0,0.6)";
           ctx.fillRect(subAreaX, textStartY, subAreaW, textBlockH);
 
           ctx.fillStyle = subSettings.textColor || "#FACC15";
@@ -525,34 +536,42 @@ export const ResultView: React.FC<ResultViewProps> = ({
         }
       }
 
-      // Draw logo overlay on canvas (top-right)
+      // Draw logo with SPIN support (rotate around center) — top-right corner
       if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
         const logoSize = canvas.width * (logo.size / 100);
         const logoPad = 16;
-        const logoX = canvas.width - logoSize - logoPad;
-        const logoY = logoPad;
+        const logoCX = canvas.width - logoSize / 2 - logoPad;
+        const logoCY = logoSize / 2 + logoPad;
+
+        // Advance spin angle: full 360° rotation every 8 seconds
+        if (logo.spin) {
+          logoAngleRef.current = (logoAngleRef.current + (360 / 8) * dt) % 360;
+        }
 
         ctx.save();
+        ctx.translate(logoCX, logoCY);
+        if (logo.spin) {
+          ctx.rotate((logoAngleRef.current * Math.PI) / 180);
+        }
+        // Clip to circle if needed
         if (logo.isCircle) {
           ctx.beginPath();
-          ctx.arc(logoX + logoSize / 2, logoY + logoSize / 2, logoSize / 2, 0, Math.PI * 2);
+          ctx.arc(0, 0, logoSize / 2, 0, Math.PI * 2);
           ctx.clip();
         }
         // Neon glow
         ctx.shadowColor = logo.neonColor;
-        ctx.shadowBlur = 15;
-        ctx.drawImage(logoImg, logoX, logoY, logoSize, logoSize);
+        ctx.shadowBlur = 18;
+        ctx.drawImage(logoImg, -logoSize / 2, -logoSize / 2, logoSize, logoSize);
         ctx.restore();
       }
-
-      recapAnimFrameRef.current = requestAnimationFrame(drawFrame);
     };
 
-    recapAnimFrameRef.current = requestAnimationFrame(drawFrame);
-
-    const checkEnd = setInterval(() => {
-      if (audioEl.ended || videoEl.ended) {
-        clearInterval(checkEnd);
+    // Use stable setInterval at 33ms (~30fps) for smooth recording
+    recapIntervalRef.current = setInterval(() => {
+      drawFrame();
+      if (audioEl.ended) {
+        if (recapIntervalRef.current) clearInterval(recapIntervalRef.current);
         if (recorder.state !== "inactive") {
           recorder.stop();
           videoEl.pause();
@@ -560,7 +579,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
           videoEl.playbackRate = 1.0;
         }
       }
-    }, 500);
+    }, 33);
   };
 
   // Recap playback in editor: play video (muted) + TTS audio with subtitle sync
@@ -602,24 +621,35 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
         if (active) {
           const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
+
+          // On segment change: hard-snap video to segment start if far off
           if (activeIndex !== lastIndexRef.current) {
-            if (Math.abs(vv.currentTime - active.vStart) > 1.5) {
+            if (Math.abs(vv.currentTime - active.vStart) > 0.5) {
               vv.currentTime = active.vStart;
             }
             lastIndexRef.current = activeIndex;
           }
+
           const segmentAudioPct = active.aEndPct - active.aStartPct;
           if (segmentAudioPct > 0.001) {
             const progressInSegment = (aPct - active.aStartPct) / segmentAudioPct;
             const targetVideoTime = active.vStart + progressInSegment * (vActualEnd - active.vStart);
             const drift = targetVideoTime - vv.currentTime;
-            if (Math.abs(drift) > 2.0) vv.currentTime = targetVideoTime;
+
+            // Hard seek if drift > 0.5s (tight tolerance for 2000% match)
+            if (Math.abs(drift) > 0.5) {
+              vv.currentTime = targetVideoTime;
+            }
+
+            // Proportional rate control: base rate + gentle drift correction
             const audioSecs = segmentAudioPct * av.duration;
             const videoSecs = vActualEnd - active.vStart;
             if (audioSecs > 0 && videoSecs > 0) {
-              let idealRate = videoSecs / audioSecs;
-              idealRate += drift * 1.0;
-              vv.playbackRate = Math.min(Math.max(idealRate, 0.1), 5.0);
+              const baseRate = videoSecs / audioSecs;
+              // PD correction: small gain to correct drift smoothly without jitter
+              const correction = drift * 0.3;
+              const targetRate = baseRate + correction;
+              vv.playbackRate = Math.min(Math.max(targetRate, 0.25), 4.0);
             }
           }
           setCurrentSubtitle(active.text);
@@ -836,7 +866,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 </div>
               )}
 
-              {/* Draggable Blur Box Layer — subtitle is rendered INSIDE the blur box */}
+              {/* Blur Box Layer with subtitle inside when blur is ON */}
               {blurSettings.enabled && (
                 <div
                   onMouseDown={handleBlurDragStart}
@@ -856,14 +886,13 @@ export const ResultView: React.FC<ResultViewProps> = ({
                     overflow: 'hidden',
                   }}
                 >
-                  {/* Subtitle rendered ONLY inside blur box — no old box */}
                   {currentSubtitle && (
                     <div
                       className="w-full text-center font-bold"
                       style={{
-                        backgroundColor: "rgba(0,0,0,0.55)",
+                        backgroundColor: "rgba(0,0,0,0.6)",
                         color: subSettings.textColor,
-                        textShadow: "1px 1px 3px black, 0 0 8px rgba(0,0,0,0.5)",
+                        textShadow: "1px 1px 3px black",
                         fontSize: `${subSettings.fontSize}px`,
                         lineHeight: '1.4',
                         whiteSpace: 'pre-wrap',
@@ -875,6 +904,28 @@ export const ResultView: React.FC<ResultViewProps> = ({
                       {currentSubtitle}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Subtitle overlay at bottom when blur is OFF */}
+              {!blurSettings.enabled && currentSubtitle && isRecapPlaying && (
+                <div
+                  className="absolute z-20 w-full text-center font-bold pointer-events-none"
+                  style={{
+                    bottom: '8%',
+                    left: 0,
+                    right: 0,
+                    padding: '6px 16px',
+                    backgroundColor: "rgba(0,0,0,0.6)",
+                    color: subSettings.textColor,
+                    textShadow: "1px 1px 3px black",
+                    fontSize: `${subSettings.fontSize}px`,
+                    lineHeight: '1.4',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {currentSubtitle}
                 </div>
               )}
 
