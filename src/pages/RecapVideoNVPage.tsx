@@ -514,15 +514,20 @@ export const ResultView: React.FC<ResultViewProps> = ({
   }, [isDraggingSub, isDraggingBlur]);
 
   useEffect(() => {
-    if (isTheaterMode && theaterAudioRef.current && theaterVideoRef.current && !isYouTube) {
+    if (!isTheaterMode || isYouTube) return;
+
+    // Wait for DOM to mount theater video/audio elements
+    const initTimer = setTimeout(() => {
       const a = theaterAudioRef.current;
       const v = theaterVideoRef.current;
+      if (!a || !v) return;
+
       v.muted = true;
+      lastIndexRef.current = -1;
 
       const onPlaying = () => setTheaterPlaying(true);
       const onPaused = () => setTheaterPlaying(false);
       const onEnded = () => {
-        // Stop recorder first (which will auto-download and close theater)
         if (theaterRecorderRef.current && theaterRecorderRef.current.state !== "inactive") {
           theaterRecorderRef.current.stop();
         } else {
@@ -533,45 +538,37 @@ export const ResultView: React.FC<ResultViewProps> = ({
       let animFrame: number;
 
       const syncLoop = () => {
-        if (!v.paused && !a.paused && a.duration > 0 && v.duration > 0) {
-          const aPct = a.currentTime / a.duration;
+        const av = theaterAudioRef.current;
+        const vv = theaterVideoRef.current;
+        if (!av || !vv) return;
+        if (!vv.paused && !av.paused && av.duration > 0 && vv.duration > 0) {
+          const aPct = av.currentTime / av.duration;
           const activeIndex = syncSegments.findIndex((s) => aPct >= s.aStartPct && aPct <= s.aEndPct);
           const active = syncSegments[activeIndex];
 
           if (active) {
-            const vActualEnd = active.vEnd === -1 ? v.duration : active.vEnd;
+            const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
 
-            // 1000% MATCH LOGIC: Snap to segment start on change
             if (activeIndex !== lastIndexRef.current) {
-              if (Math.abs(v.currentTime - active.vStart) > 0.2) {
-                v.currentTime = active.vStart;
+              if (Math.abs(vv.currentTime - active.vStart) > 0.2) {
+                vv.currentTime = active.vStart;
               }
               lastIndexRef.current = activeIndex;
             }
 
             const segmentAudioPct = active.aEndPct - active.aStartPct;
-
             if (segmentAudioPct > 0.001) {
               const progressInSegment = (aPct - active.aStartPct) / segmentAudioPct;
-              // Target time based on EXACT audio progress
               const targetVideoTime = active.vStart + progressInSegment * (vActualEnd - active.vStart);
-              const drift = targetVideoTime - v.currentTime;
+              const drift = targetVideoTime - vv.currentTime;
+              if (Math.abs(drift) > 0.5) vv.currentTime = targetVideoTime;
 
-              // Stronger correction for "Exact Match"
-              if (Math.abs(drift) > 0.5) {
-                v.currentTime = targetVideoTime;
-              }
-
-              const audioSecs = segmentAudioPct * a.duration;
+              const audioSecs = segmentAudioPct * av.duration;
               const videoSecs = vActualEnd - active.vStart;
-
               if (audioSecs > 0 && videoSecs > 0) {
                 let idealRate = videoSecs / audioSecs;
-                // Aggressive Proportional Control
-                const kp = 1.0;
-                idealRate += drift * kp;
-                // Allow faster rate to catch up for "recap" effect
-                v.playbackRate = Math.min(Math.max(idealRate, 0.1), 5.0);
+                idealRate += drift * 1.0;
+                vv.playbackRate = Math.min(Math.max(idealRate, 0.1), 5.0);
               }
             }
             setCurrentSubtitle(active.text);
@@ -585,17 +582,18 @@ export const ResultView: React.FC<ResultViewProps> = ({
       v.addEventListener("playing", onPlaying);
       v.addEventListener("pause", onPaused);
       a.addEventListener("ended", onEnded);
-      animFrame = requestAnimationFrame(syncLoop);
 
+      // Play both
       a.play().catch(console.error);
       v.play().catch(console.error);
 
-      // Auto-start recording when theater mode opens
-      setTimeout(() => startTheaterRecording(), 500);
+      animFrame = requestAnimationFrame(syncLoop);
+
+      // Auto-start recording after video starts
+      setTimeout(() => startTheaterRecording(), 600);
 
       return () => {
         cancelAnimationFrame(animFrame);
-        cancelAnimationFrame(theaterAnimFrameRef.current);
         v.removeEventListener("playing", onPlaying);
         v.removeEventListener("pause", onPaused);
         a.removeEventListener("ended", onEnded);
@@ -604,7 +602,17 @@ export const ResultView: React.FC<ResultViewProps> = ({
         }
         if (theaterVideoRef.current) theaterVideoRef.current.playbackRate = 1.0;
       };
-    }
+    }, 150); // Wait 150ms for DOM to mount
+
+    return () => {
+      clearTimeout(initTimer);
+      cancelAnimationFrame(theaterAnimFrameRef.current);
+      if (theaterRecorderRef.current && theaterRecorderRef.current.state !== "inactive") {
+        theaterRecorderRef.current.stop();
+      }
+      if (theaterVideoRef.current) theaterVideoRef.current.playbackRate = 1.0;
+      setCurrentSubtitle("");
+    };
   }, [isTheaterMode, syncSegments, isYouTube]);
 
   return (
@@ -1238,7 +1246,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
       {isTheaterMode && videoUrl && audioUrl && (
         <div
-          className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center"
+          className="fixed inset-0 z-50 bg-black"
+          style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0 }}
           onClick={() => {
             if (theaterVideoRef.current?.paused) {
               theaterVideoRef.current.play();
@@ -1250,27 +1259,25 @@ export const ResultView: React.FC<ResultViewProps> = ({
           }}
         >
           <div
-          ref={theaterContainerRef}
-            className="relative w-full h-full"
-            style={{ position: "relative", width: "100%", height: "100%" }}
+            ref={theaterContainerRef}
+            style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
           >
           <video
               ref={theaterVideoRef}
               src={videoUrl}
-              className="transition-all"
               playsInline
+              muted
               crossOrigin={isLocalSource(videoUrl) ? undefined : "anonymous"}
               style={{
                 filter: videoStyles.filter,
                 transform: videoStyles.transform,
-                maxWidth: "100%",
-                maxHeight: "100vh",
-                width: "100%",
-                height: "100%",
                 objectFit: "contain",
                 position: "absolute",
                 top: 0,
                 left: 0,
+                width: "100%",
+                height: "100%",
+                display: "block",
               }}
             />
 
@@ -1294,7 +1301,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
               />
             )}
 
-            {/* Auto-Subtitles - Theater Mode: same font size as editor (no multiplier) */}
+            {/* Auto-Subtitles - Theater Mode: viewport-relative font size */}
             {currentSubtitle && (
               <div
                 onMouseDown={handleDragStart}
@@ -1317,7 +1324,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                     borderTop: `2px solid ${subSettings.borderColor}`,
                     borderBottom: `2px solid ${subSettings.borderColor}`,
                     boxShadow: `0 0 12px ${subSettings.borderColor}40, inset 0 0 20px rgba(0,0,0,0.3)`,
-                    fontSize: `${subSettings.fontSize}px`,
+                    fontSize: `${(subSettings.fontSize / 500) * 100}vh`,
                     lineHeight: '1.4',
                     whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
