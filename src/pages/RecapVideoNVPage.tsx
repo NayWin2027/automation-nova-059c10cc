@@ -38,10 +38,20 @@ interface SubtitleSettings {
   y: number; // Percentage 0-100
   textColor: string;
   bgColor: string;
-  borderColor: string; // New: Neon Border Color
-  fontSize: number; // New: Font Size
-  scale: number; // New: Box Scale
-  maxWidth: number; // New: Max Width percentage 20-100
+  borderColor: string;
+  fontSize: number;
+  scale: number;
+  maxWidth: number; // Max Width percentage 20-100
+}
+
+interface BlurSettings {
+  enabled: boolean;
+  x: number; // Percentage 0-100 (center)
+  y: number; // Percentage 0-100 (center)
+  width: number; // Percentage 10-100
+  height: number; // Percentage 5-50
+  opacity: number; // 0-100 blur intensity
+  isDragging: boolean;
 }
 
 export const ResultView: React.FC<ResultViewProps> = ({
@@ -83,16 +93,27 @@ export const ResultView: React.FC<ResultViewProps> = ({
   const [subSettings, setSubSettings] = useState<SubtitleSettings>({
     x: 50,
     y: 85,
-    textColor: "#FACC15", // Yellow default
+    textColor: "#FACC15",
     bgColor: "rgba(0,0,0,0.6)",
-    borderColor: "#00E5FF", // Cyan Neon default
+    borderColor: "#00E5FF",
     fontSize: 20,
     scale: 1,
     maxWidth: 80,
   });
 
-  // Drag State
+  const [blurSettings, setBlurSettings] = useState<BlurSettings>({
+    enabled: false,
+    x: 50,
+    y: 82,
+    width: 80,
+    height: 15,
+    opacity: 70,
+    isDragging: false,
+  });
+
+  // Drag States
   const [isDraggingSub, setIsDraggingSub] = useState(false);
+  const [isDraggingBlur, setIsDraggingBlur] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const theaterContainerRef = useRef<HTMLDivElement>(null);
 
@@ -182,36 +203,43 @@ export const ResultView: React.FC<ResultViewProps> = ({
     }
   };
 
-  // Dragging Logic
+  // Dragging Logic - Subtitle
   const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
     setIsDraggingSub(true);
   };
 
   const handleDragMove = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDraggingSub) return;
-    // Use theater container ref if in theater mode, otherwise editor container
+    if (!isDraggingSub && !isDraggingBlur) return;
     const activeContainer = isTheaterMode ? theaterContainerRef.current : containerRef.current;
     if (!activeContainer) return;
-    e.preventDefault(); // Prevent scroll on touch
+    e.preventDefault();
 
     const container = activeContainer.getBoundingClientRect();
     const clientX = "touches" in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
     const clientY = "touches" in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
 
-    // Calculate percentage position
     let x = ((clientX - container.left) / container.width) * 100;
     let y = ((clientY - container.top) / container.height) * 100;
-
-    // Clamp
     x = Math.max(0, Math.min(100, x));
     y = Math.max(0, Math.min(100, y));
 
-    setSubSettings((prev) => ({ ...prev, x, y }));
+    if (isDraggingSub) {
+      setSubSettings((prev) => ({ ...prev, x, y }));
+    } else if (isDraggingBlur) {
+      setBlurSettings((prev) => ({ ...prev, x, y }));
+    }
   };
 
   const handleDragEnd = () => {
     setIsDraggingSub(false);
+    setIsDraggingBlur(false);
+  };
+
+  // Blur drag start
+  const handleBlurDragStart = (e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    setIsDraggingBlur(true);
   };
 
   // Theater-mode auto-record: starts when theater opens, stops when audio ends
@@ -318,8 +346,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
     setIsRendering(true);
     recorder.start(100);
 
-    // Draw loop: capture theater video + cinematic subtitle bar
-    const lastIdx = { current: -1 };
+    // Draw loop: capture theater video + user-configured cinematic subtitle bar + blur
     const drawFrame = () => {
       if (!videoEl || !audioEl) return;
       if (audioEl.ended || videoEl.ended) return;
@@ -335,20 +362,37 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
       }
 
-      // Apply filter overlay if bypass
-      if (editorState.bypass) {
+      // === BLUR BOX: render blur region first (under subtitle) ===
+      if (blurSettings.enabled) {
+        const blurW = canvas.width * (blurSettings.width / 100);
+        const blurH = canvas.height * (blurSettings.height / 100);
+        const blurX = canvas.width * (blurSettings.x / 100) - blurW / 2;
+        const blurY = canvas.height * (blurSettings.y / 100) - blurH / 2;
+        const blurClampedX = Math.max(0, Math.min(canvas.width - blurW, blurX));
+        const blurClampedY = Math.max(0, Math.min(canvas.height - blurH, blurY));
+
+        // Gaussian blur via multiple passes with scaled canvas draw
+        const blurAmount = Math.round((blurSettings.opacity / 100) * 20);
+        ctx.save();
+        ctx.filter = `blur(${blurAmount}px)`;
+        // Draw just the region clipped
+        ctx.beginPath();
+        ctx.rect(blurClampedX, blurClampedY, blurW, blurH);
+        ctx.clip();
         ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+        ctx.restore();
       }
 
-      // Find current subtitle
+      // === SUBTITLE: exact user settings ===
       if (audioEl.duration > 0) {
         const aPct = audioEl.currentTime / audioEl.duration;
         const activeIndex = syncSegments.findIndex((s) => aPct >= s.aStartPct && aPct <= s.aEndPct);
         const active = syncSegments[activeIndex];
 
         if (active && active.text) {
-          // CINEMATIC HORIZONTAL BAR subtitle at bottom
-          const fontSize = Math.round(canvas.height * 0.035);
+          // Use user's fontSize scaled to canvas resolution
+          const scaleFactor = canvas.height / 500; // normalize against 500px reference height
+          const fontSize = Math.max(12, Math.round(subSettings.fontSize * scaleFactor));
           ctx.font = `bold ${fontSize}px sans-serif`;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
@@ -372,32 +416,37 @@ export const ResultView: React.FC<ResultViewProps> = ({
           if (currentLine) lines.push(currentLine);
 
           const lineHeight = fontSize * 1.4;
-          const barHeight = lines.length * lineHeight + 16;
-          const barY = canvas.height - barHeight - 20; // 20px from bottom
+          const barHeight = lines.length * lineHeight + 20;
 
-          // Draw cinematic bar background
-          ctx.fillStyle = subSettings.bgColor;
+          // Use user's Y position (subSettings.y = % from top, so bottom = canvas.height * y/100)
+          const barCenterY = canvas.height * (subSettings.y / 100);
+          const barY = barCenterY - barHeight / 2;
           const barX = (canvas.width - barMaxWidth) / 2;
+
+          // Draw cinematic bar background using user's bgColor
+          ctx.fillStyle = subSettings.bgColor;
           ctx.fillRect(barX, barY, barMaxWidth, barHeight);
 
-          // Draw top/bottom borders
-          ctx.strokeStyle = subSettings.borderColor;
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.moveTo(barX, barY);
-          ctx.lineTo(barX + barMaxWidth, barY);
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.moveTo(barX, barY + barHeight);
-          ctx.lineTo(barX + barMaxWidth, barY + barHeight);
-          ctx.stroke();
+          // Draw top/bottom neon borders using user's borderColor
+          if (subSettings.borderColor && subSettings.borderColor !== "transparent") {
+            ctx.strokeStyle = subSettings.borderColor;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(barX, barY);
+            ctx.lineTo(barX + barMaxWidth, barY);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(barX, barY + barHeight);
+            ctx.lineTo(barX + barMaxWidth, barY + barHeight);
+            ctx.stroke();
+          }
 
-          // Draw text lines
+          // Draw text using user's textColor
           ctx.fillStyle = subSettings.textColor || "#FACC15";
-          ctx.strokeStyle = "rgba(0,0,0,0.8)";
-          ctx.lineWidth = 2;
+          ctx.strokeStyle = "rgba(0,0,0,0.9)";
+          ctx.lineWidth = Math.max(2, fontSize * 0.08);
           for (let li = 0; li < lines.length; li++) {
-            const ly = barY + 8 + (li + 0.5) * lineHeight;
+            const ly = barY + 10 + (li + 0.5) * lineHeight;
             ctx.strokeText(lines[li], canvas.width / 2, ly);
             ctx.fillText(lines[li], canvas.width / 2, ly);
           }
@@ -450,8 +499,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
   };
 
   useEffect(() => {
-    // Add Global Listeners for dragging if active
-    if (isDraggingSub) {
+    if (isDraggingSub || isDraggingBlur) {
       window.addEventListener("mousemove", handleDragMove as any);
       window.addEventListener("mouseup", handleDragEnd);
       window.addEventListener("touchmove", handleDragMove as any, { passive: false });
@@ -463,7 +511,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
       window.removeEventListener("touchmove", handleDragMove as any);
       window.removeEventListener("touchend", handleDragEnd);
     };
-  }, [isDraggingSub]);
+  }, [isDraggingSub, isDraggingBlur]);
 
   useEffect(() => {
     if (isTheaterMode && theaterAudioRef.current && theaterVideoRef.current && !isYouTube) {
@@ -703,7 +751,28 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 </div>
               )}
 
-              {/* Draggable Subtitles Layer */}
+              {/* Draggable Blur Box Layer */}
+              {blurSettings.enabled && (
+                <div
+                  onMouseDown={handleBlurDragStart}
+                  onTouchStart={handleBlurDragStart}
+                  className="absolute z-20 cursor-move"
+                  style={{
+                    left: `${blurSettings.x}%`,
+                    top: `${blurSettings.y}%`,
+                    transform: 'translate(-50%, -50%)',
+                    width: `${blurSettings.width}%`,
+                    height: `${blurSettings.height}%`,
+                    backdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
+                    WebkitBackdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
+                    border: '1px dashed rgba(0,229,255,0.5)',
+                    touchAction: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              )}
+
+              {/* Draggable Subtitles Layer (on top of blur box) */}
               {currentSubtitle && (
                 <div
                   onMouseDown={handleDragStart}
@@ -1019,6 +1088,62 @@ export const ResultView: React.FC<ResultViewProps> = ({
                   </p>
                 </div>
               </div>
+
+              {/* Blur Box Settings */}
+              <div className="border-t border-charcoal-700 pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-bold text-gray-300 uppercase tracking-wider">Blur Region</h4>
+                  <button
+                    onClick={() => setBlurSettings((b) => ({ ...b, enabled: !b.enabled }))}
+                    className={`px-3 py-1 rounded text-xs font-bold transition-all ${blurSettings.enabled ? "bg-neon-cyan text-charcoal-900" : "bg-charcoal-700 text-gray-400"}`}
+                  >
+                    {blurSettings.enabled ? "ON" : "OFF"}
+                  </button>
+                </div>
+                {blurSettings.enabled && (
+                  <div className="space-y-3">
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-500">Blur Intensity</span>
+                        <span className="text-xs text-neon-cyan">{blurSettings.opacity}%</span>
+                      </div>
+                      <input
+                        type="range" min="10" max="100" step="5"
+                        value={blurSettings.opacity}
+                        onChange={(e) => setBlurSettings((b) => ({ ...b, opacity: Number(e.target.value) }))}
+                        className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-500">Box Width</span>
+                        <span className="text-xs text-neon-cyan">{blurSettings.width}%</span>
+                      </div>
+                      <input
+                        type="range" min="10" max="100" step="5"
+                        value={blurSettings.width}
+                        onChange={(e) => setBlurSettings((b) => ({ ...b, width: Number(e.target.value) }))}
+                        className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-500">Box Height</span>
+                        <span className="text-xs text-neon-cyan">{blurSettings.height}%</span>
+                      </div>
+                      <input
+                        type="range" min="5" max="50" step="5"
+                        value={blurSettings.height}
+                        onChange={(e) => setBlurSettings((b) => ({ ...b, height: Number(e.target.value) }))}
+                        className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full"
+                      />
+                    </div>
+                    <p className="text-[10px] text-gray-500 italic">
+                      Tip: Drag the blur box on the video to position it. Subtitle renders on top.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -1137,12 +1262,32 @@ export const ResultView: React.FC<ResultViewProps> = ({
               }}
             />
 
+            {/* Blur Box - Theater Mode */}
+            {blurSettings.enabled && (
+              <div
+                onMouseDown={handleBlurDragStart}
+                onTouchStart={handleBlurDragStart}
+                className="absolute z-20 cursor-move"
+                style={{
+                  left: `${blurSettings.x}%`,
+                  top: `${blurSettings.y}%`,
+                  transform: 'translate(-50%, -50%)',
+                  width: `${blurSettings.width}%`,
+                  height: `${blurSettings.height}%`,
+                  backdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
+                  WebkitBackdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
+                  border: '1px dashed rgba(0,229,255,0.4)',
+                  touchAction: 'none',
+                }}
+              />
+            )}
+
             {/* Premium Professional Auto-Subtitles - Theater Mode (Draggable) */}
             {currentSubtitle && (
               <div
                 onMouseDown={handleDragStart}
                 onTouchStart={handleDragStart}
-                className="absolute z-20 cursor-move"
+                className="absolute z-30 cursor-move"
                 style={{
                   left: '50%',
                   bottom: `${100 - subSettings.y}%`,
