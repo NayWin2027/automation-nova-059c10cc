@@ -474,34 +474,37 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
 
       // Draw subtitles on canvas (burns into recorded output)
-      // Style matches DOM preview exactly: bold, textShadow, no background
+      // KEY FIX: Use the same % ratio as DOM preview.
+      // DOM preview uses fontSize in CSS px relative to the preview container.
+      // Canvas must use fontSize as the same % of canvas height that the CSS px is of the preview container height.
       const subText = currentSubtitleRef.current;
       if (subText) {
-        // Scale fontSize using HEIGHT ratio — container is aspect-ratio/height-driven,
-        // so height is the correct anchor for pixel-perfect match between preview and output.
-        const previewH = containerRef.current?.offsetHeight || canvas.height;
-        const scaleFactor = canvas.height / previewH;
-        const fontSize = subSettings.fontSize * scaleFactor;
+        const previewH = containerRef.current?.offsetHeight || 450;
+        // fontSize as fraction of preview container height → apply same fraction to canvas height
+        const fontSizeFraction = subSettings.fontSize / previewH;
+        const canvasFontSize = Math.round(canvas.height * fontSizeFraction);
+
         ctx.save();
-        ctx.font = `bold ${fontSize}px sans-serif`;
+        ctx.font = `bold ${canvasFontSize}px sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
+
         let subCX: number, subCY: number, maxW: number;
         if (blurSettings.enabled) {
           subCX = canvas.width * (blurSettings.x / 100);
           subCY = canvas.height * (blurSettings.y / 100);
-          maxW = canvas.width * (blurSettings.width / 100) - (16 * scaleFactor);
+          maxW = canvas.width * (blurSettings.width / 100) - canvasFontSize;
         } else {
           subCX = canvas.width / 2;
           subCY = canvas.height * 0.88;
           maxW = canvas.width * (subSettings.maxWidth / 100);
         }
-        // No background — transparent (matches DOM preview)
-        // Text shadow: 0 1px 4px rgba(0,0,0,0.9) — matches DOM textShadow
+
+        // Shadow proportional to font size (matches CSS textShadow look)
         ctx.shadowColor = "rgba(0,0,0,0.9)";
-        ctx.shadowBlur = 8 * scaleFactor;
+        ctx.shadowBlur = canvasFontSize * 0.3;
         ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 2 * scaleFactor;
+        ctx.shadowOffsetY = canvasFontSize * 0.08;
         ctx.fillStyle = subSettings.textColor;
         ctx.fillText(subText, subCX, subCY, maxW);
         ctx.restore();
@@ -545,21 +548,23 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.stroke();
         ctx.restore();
 
-        // === Draw logo image with clip + glow ===
+        // === Draw logo image with clip — CLEAR shadow first so image is sharp ===
         ctx.save();
         ctx.translate(logoCX, logoCY);
         if (logo.spin) {
           ctx.rotate((logoAngleRef.current * Math.PI) / 180);
         }
+        // CRITICAL: Reset shadow before drawing the image so it stays sharp (not blurry)
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
         // Clip to circle if needed
         if (logo.isCircle) {
           ctx.beginPath();
           ctx.arc(0, 0, logoSize / 2, 0, Math.PI * 2);
           ctx.clip();
         }
-        // Subtle glow on the image itself
-        ctx.shadowColor = logo.neonColor;
-        ctx.shadowBlur = 15;
         ctx.globalAlpha = 1.0;
         ctx.drawImage(logoImg, -logoSize / 2, -logoSize / 2, logoSize, logoSize);
         ctx.restore();
