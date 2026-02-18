@@ -1398,6 +1398,11 @@ const RecapVideoNVPage: React.FC = () => {
   const [recapHistory, setRecapHistory] = useState<RecapHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
+  // API Mode
+  const [apiMode, setApiMode] = useState<'app' | 'own'>('app');
+  const [ownApiKey, setOwnApiKey] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
+
   // Load recap history on mount
   useEffect(() => {
     loadRecapHistory();
@@ -1468,7 +1473,8 @@ const RecapVideoNVPage: React.FC = () => {
   const handleGenerateVoice = () => {
     // Manual re-generate voice from edited script
     if (scriptData.full_script) {
-      generateVoice(scriptData.full_script);
+      const resolvedOwnKey = apiMode === 'own' ? ownApiKey.trim() : '';
+      generateVoice(scriptData.full_script, resolvedOwnKey || undefined);
     }
   };
 
@@ -1495,11 +1501,18 @@ const RecapVideoNVPage: React.FC = () => {
   };
 
   // Step 2: Generate AI Voice
-  const generateVoice = async (scriptText: string) => {
+  const generateVoice = async (scriptText: string, useOwnKey?: string) => {
     setProgressMsg('🎙️ AI Voice ဖန်တီးနေပါသည်...');
     try {
       const { data: { session: currentSession } } = await supabase.auth.getSession();
       const userToken = currentSession?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+      const bodyPayload: Record<string, string> = {
+        text: scriptText,
+        voiceName: 'Kore',
+        languageCode: 'my',
+      };
+      if (useOwnKey) bodyPayload.ownApiKey = useOwnKey;
 
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gemini-tts`,
@@ -1510,11 +1523,7 @@ const RecapVideoNVPage: React.FC = () => {
             'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
             'Authorization': `Bearer ${userToken}`,
           },
-          body: JSON.stringify({
-            text: scriptText,
-            voiceName: 'Kore',
-            languageCode: 'my',
-          }),
+          body: JSON.stringify(bodyPayload),
         }
       );
 
@@ -1543,6 +1552,15 @@ const RecapVideoNVPage: React.FC = () => {
 
   // Step 1: Upload video → AI Analysis → Script Generation → Auto TTS
   const startAutoPipeline = async (file: File) => {
+    // Validate own API key if own mode selected
+    const resolvedApiMode = apiMode;
+    const resolvedOwnKey = apiMode === 'own' ? ownApiKey.trim() : '';
+    if (resolvedApiMode === 'own' && !resolvedOwnKey) {
+      setProgressMsg('❌ Own API mode ရွေးထားပါသည်။ Google API Key ထည့်ပေးပါ။');
+      setStatus('error');
+      return;
+    }
+
     setStatus('processing');
     setProgressMsg('🎬 Video ကို upload လုပ်နေပါသည်...');
 
@@ -1580,14 +1598,17 @@ const RecapVideoNVPage: React.FC = () => {
       // === Upload to Google Files API via video-recap chunked upload ===
       setProgressMsg('📤 Google AI ဆီ video upload လုပ်နေပါသည်...');
 
+      const initBody: Record<string, unknown> = {
+        action: 'initUpload',
+        fileName: file.name,
+        fileSize: file.size,
+        mimeType: mimeType,
+        useOwnApi: resolvedApiMode === 'own',
+      };
+      if (resolvedOwnKey) initBody.ownApiKey = resolvedOwnKey;
+
       const { data: initData, error: initError } = await supabase.functions.invoke('video-recap', {
-        body: {
-          action: 'initUpload',
-          fileName: file.name,
-          fileSize: file.size,
-          mimeType: mimeType,
-          useOwnApi: false,
-        },
+        body: initBody,
       });
 
       if (initError || initData?.error || !initData?.uploadUrl) {
@@ -1607,18 +1628,20 @@ const RecapVideoNVPage: React.FC = () => {
         setProgressMsg(`📤 Uploading... (${i + 1}/${totalChunks})`);
 
         const chunkBuf = await chunk.arrayBuffer();
+        const chunkHeaders: Record<string, string> = {
+          'x-recap-action': 'uploadChunkBinary',
+          'x-upload-url': initData.uploadUrl,
+          'x-chunk-index': String(i),
+          'x-total-chunks': String(totalChunks),
+          'x-offset': String(start),
+          'x-total-size': String(file.size),
+          'x-mime-type': mimeType,
+          'x-is-last-chunk': String(isLastChunk),
+        };
+        if (resolvedOwnKey) chunkHeaders['x-own-api-key'] = resolvedOwnKey;
         const { data: chunkData, error: chunkError } = await supabase.functions.invoke('video-recap', {
           body: chunkBuf,
-          headers: {
-            'x-recap-action': 'uploadChunkBinary',
-            'x-upload-url': initData.uploadUrl,
-            'x-chunk-index': String(i),
-            'x-total-chunks': String(totalChunks),
-            'x-offset': String(start),
-            'x-total-size': String(file.size),
-            'x-mime-type': mimeType,
-            'x-is-last-chunk': String(isLastChunk),
-          },
+          headers: chunkHeaders,
         });
 
         if (chunkError || chunkData?.error) {
@@ -1641,6 +1664,14 @@ const RecapVideoNVPage: React.FC = () => {
       const { data: { session: currentSession } } = await supabase.auth.getSession();
       const userToken = currentSession?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
+      const scriptBody: Record<string, unknown> = {
+        fileUri: fileUri,
+        fileMimeType: mimeType,
+        niche: 'MOVIE RECAP',
+        language: 'BURMESE',
+      };
+      if (resolvedOwnKey) scriptBody.ownApiKey = resolvedOwnKey;
+
       const scriptResponse = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recap-script-generator`,
         {
@@ -1650,12 +1681,7 @@ const RecapVideoNVPage: React.FC = () => {
             'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
             'Authorization': `Bearer ${userToken}`,
           },
-          body: JSON.stringify({
-            fileUri: fileUri,
-            fileMimeType: mimeType,
-            niche: 'MOVIE RECAP',
-            language: 'BURMESE',
-          }),
+          body: JSON.stringify(scriptBody),
         }
       );
 
@@ -1681,8 +1707,8 @@ const RecapVideoNVPage: React.FC = () => {
 
       setProgressMsg('📝 Script generated! Now generating AI voice...');
 
-      // Auto-generate voice
-      await generateVoice(scriptText);
+      // Auto-generate voice (pass own key if needed)
+      await generateVoice(scriptText, resolvedOwnKey || undefined);
     } catch (err: any) {
       console.error('Pipeline error:', err);
       setStatus('error');
@@ -1715,6 +1741,59 @@ const RecapVideoNVPage: React.FC = () => {
           <p className="text-sm text-muted-foreground">
             Video တစ်ခုကို upload လုပ်လိုက်ရုံပဲ — AI က အလိုအလျောက် analyze လုပ်ပြီး script ရေးပေးပြီး voice over ထည့်ပေးပါမယ်။
           </p>
+
+          {/* API Mode Selector */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-muted-foreground">🔑 API Mode</label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setApiMode('app')}
+                className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${
+                  apiMode === 'app'
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-secondary text-secondary-foreground border-border hover:opacity-80'
+                }`}
+              >
+                🖥️ App API
+                <span className="block text-xs font-normal opacity-70">Admin · Premium · Pro</span>
+              </button>
+              <button
+                onClick={() => setApiMode('own')}
+                className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${
+                  apiMode === 'own'
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-secondary text-secondary-foreground border-border hover:opacity-80'
+                }`}
+              >
+                🔑 Own API Key
+                <span className="block text-xs font-normal opacity-70">သင့်ကိုယ်ပိုင် Key</span>
+              </button>
+            </div>
+
+            {/* Own API Key Input */}
+            {apiMode === 'own' && (
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Google AI API Key (billing enabled)</label>
+                <div className="flex gap-2">
+                  <input
+                    type={showApiKey ? 'text' : 'password'}
+                    value={ownApiKey}
+                    onChange={e => setOwnApiKey(e.target.value)}
+                    placeholder="AIza..."
+                    className="flex-1 px-3 py-2 text-sm bg-background border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                  <button
+                    onClick={() => setShowApiKey(prev => !prev)}
+                    className="px-3 py-2 text-xs bg-secondary text-secondary-foreground rounded-lg border border-border hover:opacity-80"
+                  >
+                    {showApiKey ? '🙈' : '👁️'}
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground">⚠️ Session ပိတ်ရင် key ပျောက်သွားမည်</p>
+              </div>
+            )}
+          </div>
+
           <div className="space-y-2">
             <label className="text-sm font-medium text-muted-foreground">Video File</label>
             <input
