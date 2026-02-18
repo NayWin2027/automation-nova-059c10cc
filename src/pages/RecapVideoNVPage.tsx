@@ -480,43 +480,74 @@ export const ResultView: React.FC<ResultViewProps> = ({
       const subText = currentSubtitleRef.current;
       if (subText) {
         const previewH = containerRef.current?.offsetHeight || 450;
-        // fontSize as fraction of preview container height → apply same fraction to canvas height
+        // fontSize as fraction of preview container height → same fraction on canvas
         const fontSizeFraction = subSettings.fontSize / previewH;
         const canvasFontSize = Math.round(canvas.height * fontSizeFraction);
+        const lineHeight = canvasFontSize * 1.45;
 
         ctx.save();
         ctx.font = `bold ${canvasFontSize}px sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
 
+        // ── Determine subtitle area ──────────────────────────────────────
+        let boxX: number, boxY: number, boxW: number, boxH: number;
         let subCX: number, subCY: number, maxW: number;
+
         if (blurSettings.enabled) {
-          subCX = canvas.width * (blurSettings.x / 100);
-          subCY = canvas.height * (blurSettings.y / 100);
-          maxW = canvas.width * (blurSettings.width / 100) - canvasFontSize;
+          // Background box = EXACT blur box size (pixel-perfect match with DOM)
+          boxW = canvas.width * (blurSettings.width / 100);
+          boxH = canvas.height * (blurSettings.height / 100);
+          boxX = canvas.width * (blurSettings.x / 100) - boxW / 2;
+          boxY = canvas.height * (blurSettings.y / 100) - boxH / 2;
+          subCX = boxX + boxW / 2;
+          subCY = boxY + boxH / 2;
+          maxW = boxW - canvasFontSize * 0.6; // inner padding
         } else {
+          // Free-position: background wraps text tightly
+          maxW = canvas.width * (subSettings.maxWidth / 100);
           subCX = canvas.width / 2;
           subCY = canvas.height * 0.88;
-          maxW = canvas.width * (subSettings.maxWidth / 100);
+          // We'll compute boxW/H after word-wrap below
+          boxW = 0; boxH = 0; boxX = 0; boxY = 0;
         }
 
-        // --- Draw subtitle BACKGROUND box first (matches preview bgColor) ---
-        const lineHeight = canvasFontSize * 1.4;
-        // Measure text width to fit the background box
-        ctx.font = `bold ${canvasFontSize}px sans-serif`;
-        const measuredW = Math.min(ctx.measureText(subText).width + canvasFontSize * 1.2, maxW + canvasFontSize * 1.2);
-        const boxW = measuredW;
-        const boxH = lineHeight;
-        const boxX = subCX - boxW / 2;
-        const boxY = subCY - boxH / 2;
-        const bgRadius = canvasFontSize * 0.25;
+        // ── Word-wrap into max 2 lines ───────────────────────────────────
+        const words = subText.split(" ");
+        const lines: string[] = [];
+        let currentLine = "";
+        for (const word of words) {
+          const testLine = currentLine ? `${currentLine} ${word}` : word;
+          if (ctx.measureText(testLine).width > maxW && currentLine) {
+            lines.push(currentLine);
+            currentLine = word;
+            if (lines.length >= 2) { // max 2 lines — append remainder to line 2
+              currentLine = words.slice(words.indexOf(word)).join(" ");
+              break;
+            }
+          } else {
+            currentLine = testLine;
+          }
+        }
+        if (currentLine) lines.push(currentLine);
+        const clampedLines = lines.slice(0, 2);
+        const totalTextH = clampedLines.length * lineHeight;
 
-        // Parse bgColor into canvas fillStyle (supports rgba strings directly)
+        // For free-position mode, compute box from text
+        if (!blurSettings.enabled) {
+          const longestW = Math.max(...clampedLines.map(l => ctx.measureText(l).width));
+          boxW = longestW + canvasFontSize * 0.8;
+          boxH = totalTextH + canvasFontSize * 0.5;
+          boxX = subCX - boxW / 2;
+          boxY = subCY - boxH / 2;
+        }
+
+        // ── Draw background (full blur-box size when blur enabled) ───────
         ctx.fillStyle = subSettings.bgColor;
         ctx.shadowColor = "transparent";
         ctx.shadowBlur = 0;
-        // Draw rounded rect background
         ctx.beginPath();
+        const bgRadius = Math.min(canvasFontSize * 0.3, 10);
         if (ctx.roundRect) {
           ctx.roundRect(boxX, boxY, boxW, boxH, bgRadius);
         } else {
@@ -524,18 +555,23 @@ export const ResultView: React.FC<ResultViewProps> = ({
         }
         ctx.fill();
 
-        // --- Draw border ---
+        // ── Draw border ──────────────────────────────────────────────────
         ctx.strokeStyle = subSettings.borderColor;
         ctx.lineWidth = Math.max(1, canvasFontSize * 0.05);
         ctx.stroke();
 
-        // --- Draw text on top of background ---
+        // ── Draw each line of text ───────────────────────────────────────
         ctx.shadowColor = "rgba(0,0,0,0.9)";
-        ctx.shadowBlur = canvasFontSize * 0.3;
+        ctx.shadowBlur = canvasFontSize * 0.25;
         ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = canvasFontSize * 0.08;
+        ctx.shadowOffsetY = canvasFontSize * 0.07;
         ctx.fillStyle = subSettings.textColor;
-        ctx.fillText(subText, subCX, subCY, maxW);
+
+        const startY = subCY - (totalTextH / 2) + lineHeight / 2;
+        clampedLines.forEach((line, i) => {
+          ctx.fillText(line, subCX, startY + i * lineHeight, maxW);
+        });
+
         ctx.restore();
       }
 
@@ -949,15 +985,29 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 >
                   {currentSubtitle && (
                     <div
-                      className="w-full text-center font-bold px-2 py-1 pointer-events-none"
+                      className="absolute inset-0 flex items-center justify-center pointer-events-none"
                       style={{
-                        color: subSettings.textColor,
-                        fontSize: `${subSettings.fontSize}px`,
-                        lineHeight: 1.4,
-                        textShadow: "0 1px 4px rgba(0,0,0,0.9)",
+                        backgroundColor: subSettings.bgColor,
+                        borderRadius: "inherit",
                       }}
                     >
-                      {currentSubtitle}
+                      <div
+                        className="w-full text-center font-bold px-3"
+                        style={{
+                          color: subSettings.textColor,
+                          fontSize: `${subSettings.fontSize}px`,
+                          lineHeight: 1.45,
+                          textShadow: "0 1px 4px rgba(0,0,0,0.9)",
+                          wordBreak: "break-word",
+                          overflowWrap: "break-word",
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {currentSubtitle}
+                      </div>
                     </div>
                   )}
                 </div>
