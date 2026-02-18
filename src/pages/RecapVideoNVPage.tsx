@@ -500,7 +500,36 @@ export const ResultView: React.FC<ResultViewProps> = ({
           maxW = canvas.width * (subSettings.maxWidth / 100);
         }
 
-        // Shadow proportional to font size (matches CSS textShadow look)
+        // --- Draw subtitle BACKGROUND box first (matches preview bgColor) ---
+        const lineHeight = canvasFontSize * 1.4;
+        // Measure text width to fit the background box
+        ctx.font = `bold ${canvasFontSize}px sans-serif`;
+        const measuredW = Math.min(ctx.measureText(subText).width + canvasFontSize * 1.2, maxW + canvasFontSize * 1.2);
+        const boxW = measuredW;
+        const boxH = lineHeight;
+        const boxX = subCX - boxW / 2;
+        const boxY = subCY - boxH / 2;
+        const bgRadius = canvasFontSize * 0.25;
+
+        // Parse bgColor into canvas fillStyle (supports rgba strings directly)
+        ctx.fillStyle = subSettings.bgColor;
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+        // Draw rounded rect background
+        ctx.beginPath();
+        if (ctx.roundRect) {
+          ctx.roundRect(boxX, boxY, boxW, boxH, bgRadius);
+        } else {
+          ctx.rect(boxX, boxY, boxW, boxH);
+        }
+        ctx.fill();
+
+        // --- Draw border ---
+        ctx.strokeStyle = subSettings.borderColor;
+        ctx.lineWidth = Math.max(1, canvasFontSize * 0.05);
+        ctx.stroke();
+
+        // --- Draw text on top of background ---
         ctx.shadowColor = "rgba(0,0,0,0.9)";
         ctx.shadowBlur = canvasFontSize * 0.3;
         ctx.shadowOffsetX = 0;
@@ -524,28 +553,53 @@ export const ResultView: React.FC<ResultViewProps> = ({
           logoAngleRef.current = (logoAngleRef.current + (360 / 8) * dt) % 360;
         }
 
-        // === Draw multi-layer neon glow ring BEFORE logo (outside save/clip) ===
+        // === Draw multi-layer animated neon glow ring (NOT rotated — matches CSS preview) ===
+        // Animate neon hue using logoAngleRef so color cycles like the preview CSS animation
+        const neonHue = (logoAngleRef.current * 1.5) % 360;
+        const animatedNeonColor = `hsl(${neonHue}, 100%, 60%)`;
+        const animatedNeonColor2 = `hsl(${(neonHue + 120) % 360}, 100%, 60%)`;
+
+        ctx.save();
+        ctx.translate(logoCX, logoCY);
+        // Layer 1: outer diffuse neon glow — NOT rotated, stays as ring
+        ctx.shadowColor = animatedNeonColor;
+        ctx.shadowBlur = logoSize * 0.25;
+        ctx.strokeStyle = animatedNeonColor;
+        ctx.lineWidth = logoSize * 0.04;
+        ctx.globalAlpha = 0.8;
+        ctx.beginPath();
+        ctx.arc(0, 0, logoSize / 2 + logoSize * 0.05, 0, Math.PI * 2);
+        ctx.stroke();
+        // Layer 2: inner sharp neon ring with second color
+        ctx.shadowColor = animatedNeonColor2;
+        ctx.shadowBlur = logoSize * 0.12;
+        ctx.strokeStyle = animatedNeonColor2;
+        ctx.lineWidth = logoSize * 0.025;
+        ctx.globalAlpha = 1.0;
+        ctx.beginPath();
+        ctx.arc(0, 0, logoSize / 2 + logoSize * 0.02, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+
+        // === Draw logo image with clip — CLEAR shadow first so image is sharp ===
         ctx.save();
         ctx.translate(logoCX, logoCY);
         if (logo.spin) {
           ctx.rotate((logoAngleRef.current * Math.PI) / 180);
         }
-        // Layer 1: outer diffuse neon glow
-        ctx.shadowColor = logo.neonColor;
-        ctx.shadowBlur = 40;
-        ctx.strokeStyle = logo.neonColor;
-        ctx.lineWidth = 3;
-        ctx.globalAlpha = 0.7;
-        ctx.beginPath();
-        ctx.arc(0, 0, logoSize / 2 + 4, 0, Math.PI * 2);
-        ctx.stroke();
-        // Layer 2: inner sharp neon ring
-        ctx.shadowBlur = 20;
-        ctx.lineWidth = 2;
+        // CRITICAL: Reset shadow before drawing the image so it stays sharp (not blurry)
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+        // Clip to circle if needed
+        if (logo.isCircle) {
+          ctx.beginPath();
+          ctx.arc(0, 0, logoSize / 2, 0, Math.PI * 2);
+          ctx.clip();
+        }
         ctx.globalAlpha = 1.0;
-        ctx.beginPath();
-        ctx.arc(0, 0, logoSize / 2 + 1, 0, Math.PI * 2);
-        ctx.stroke();
+        ctx.drawImage(logoImg, -logoSize / 2, -logoSize / 2, logoSize, logoSize);
         ctx.restore();
 
         // === Draw logo image with clip — CLEAR shadow first so image is sharp ===
