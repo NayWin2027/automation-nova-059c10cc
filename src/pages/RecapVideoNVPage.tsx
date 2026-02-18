@@ -190,18 +190,21 @@ export const ResultView: React.FC<ResultViewProps> = ({
   const syncSegmentsRef = useRef<ReturnType<typeof Array.prototype.map>>([]);
 
   const syncSegments = useMemo(() => {
-    const getWeight = (text: string) => {
-      const punctuationBonus = (text.match(/[.,!?;]/g) || []).length * 15;
-      return text.length + punctuationBonus;
+    // Word-count proportional: each segment gets audio time proportional to word count.
+    // This ensures ALL text is shown (no cut-off) and matches audio speech pace accurately.
+    const getWordCount = (text: string) => {
+      // Count words; give slight bonus for longer words (≥4 chars) to account for speech duration
+      const words = text.trim().split(/\s+/).filter(Boolean);
+      return words.reduce((acc, w) => acc + 1 + (w.length >= 4 ? 0.2 : 0), 0);
     };
 
-    const totalWeight = scriptData.segments.reduce((acc, s) => acc + getWeight(s.text), 0);
-    let weightCursor = 0;
+    const totalWords = scriptData.segments.reduce((acc, s) => acc + getWordCount(s.text), 0);
+    let wordCursor = 0;
 
     return scriptData.segments.map((seg, i) => {
-      const currentWeight = getWeight(seg.text);
-      const startWeight = weightCursor;
-      weightCursor += currentWeight;
+      const segWords = getWordCount(seg.text);
+      const startWords = wordCursor;
+      wordCursor += segWords;
 
       const vStart = parseTime(seg.timestamp);
       const nextSeg = scriptData.segments[i + 1];
@@ -210,8 +213,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
       return {
         vStart,
         vEnd,
-        aStartPct: totalWeight > 0 ? startWeight / totalWeight : 0,
-        aEndPct: totalWeight > 0 ? weightCursor / totalWeight : 0,
+        // Audio time percentages based on word count — accurate proportional speech pacing
+        aStartPct: totalWords > 0 ? startWords / totalWords : 0,
+        aEndPct: totalWords > 0 ? wordCursor / totalWords : 1,
         text: seg.text,
       };
     });
@@ -301,7 +305,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
       });
     }
 
-    const mimeTypes = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
+    // Prefer MP4 for universal phone/social media compatibility, fallback to webm
+    const mimeTypes = ["video/mp4;codecs=avc1,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"];
     const mimeType = mimeTypes.find((type) => MediaRecorder.isTypeSupported(type));
     if (!mimeType) { console.warn("No supported recording mime type"); return; }
 
@@ -710,14 +715,23 @@ export const ResultView: React.FC<ResultViewProps> = ({
       if (av.duration > 0 && vv.duration > 0) {
         const aPct = av.currentTime / av.duration;
         const segs = syncSegmentsRef.current as typeof syncSegments;
-        const activeIndex = segs.findIndex((s: any) => aPct >= s.aStartPct && aPct <= s.aEndPct);
-        const active = segs[activeIndex];
+        let activeIndex = segs.findIndex((s: any) => aPct >= s.aStartPct && aPct <= s.aEndPct);
+
+        // Fallback: if past last segment end pct, show last segment until audio ends
+        // This prevents subtitle cut-off at the end of audio
+        if (activeIndex === -1 && segs.length > 0 && aPct > 0) {
+          const lastSeg = segs[segs.length - 1] as any;
+          if (aPct > lastSeg.aStartPct) {
+            activeIndex = segs.length - 1;
+          }
+        }
+
+        const active = segs[activeIndex] as any;
 
         if (active) {
           const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
 
           // On segment CHANGE only: hard-snap video to segment start
-          // (Never hard-seek WITHIN a segment — that causes the rubber-band loop)
           if (activeIndex !== lastIndexRef.current) {
             vv.currentTime = active.vStart;
             lastIndexRef.current = activeIndex;
@@ -728,20 +742,16 @@ export const ResultView: React.FC<ResultViewProps> = ({
             const audioSecs = segmentAudioPct * av.duration;
             const videoSecs = vActualEnd - active.vStart;
             if (audioSecs > 0 && videoSecs > 0) {
-              // Base rate: how fast video should play relative to audio for this segment
               const baseRate = videoSecs / audioSecs;
 
-              // Tight drift correction — aggressive sync for 3000% match
               const progressInSegment = (aPct - active.aStartPct) / segmentAudioPct;
               const targetVideoTime = active.vStart + progressInSegment * videoSecs;
               const drift = targetVideoTime - vv.currentTime;
 
-              // Hard re-sync if drift > 0.5s (tighter threshold for perfect sync)
               if (Math.abs(drift) > 0.5) {
                 vv.currentTime = targetVideoTime;
               }
 
-              // Aggressive rate nudge: gain 0.3 for fast drift correction without oscillation
               const correction = Math.max(-0.5, Math.min(0.5, drift * 0.3));
               const targetRate = baseRate + correction;
               vv.playbackRate = Math.min(Math.max(targetRate, 0.5), 2.0);
@@ -1064,7 +1074,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
               />
               <a
                 href={renderedBlobUrl}
-                download={`recap_${scriptData.title.replace(/\s+/g, "_")}.webm`}
+                  download={`recap_${scriptData.title.replace(/\s+/g, "_")}.mp4`}
                 className="flex items-center justify-center gap-2 px-8 py-4 bg-neon-cyan hover:bg-neon-hover text-charcoal-900 font-black rounded-xl transition-colors shadow-[0_0_25px_rgba(0,229,255,0.5)] text-lg w-full max-w-lg"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
