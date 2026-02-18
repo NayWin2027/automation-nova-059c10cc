@@ -64,8 +64,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
   status,
 }) => {
   const [activeTab, setActiveTab] = useState<"script" | "segments">("script");
-  const [isTheaterMode, setIsTheaterMode] = useState(false);
-  const [theaterPlaying, setTheaterPlaying] = useState(false);
+  const [isRecapPlaying, setIsRecapPlaying] = useState(false);
   const [currentSubtitle, setCurrentSubtitle] = useState("");
   const [isRendering, setIsRendering] = useState(false);
   const [renderedBlobUrl, setRenderedBlobUrl] = useState<string | null>(null);
@@ -115,13 +114,12 @@ export const ResultView: React.FC<ResultViewProps> = ({
   const [isDraggingSub, setIsDraggingSub] = useState(false);
   const [isDraggingBlur, setIsDraggingBlur] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const theaterContainerRef = useRef<HTMLDivElement>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
-  const theaterVideoRef = useRef<HTMLVideoElement>(null);
-  const theaterAudioRef = useRef<HTMLAudioElement>(null);
   const lastIndexRef = useRef<number>(-1);
+  const recapAnimFrameRef = useRef<number>(0);
+  const recapRecorderRef = useRef<MediaRecorder | null>(null);
 
   const isYouTube = useMemo(() => {
     return videoUrl ? videoUrl.includes("youtube.com") || videoUrl.includes("youtu.be") : false;
@@ -219,7 +217,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
   const handleDragMove = (e: React.MouseEvent | React.TouchEvent) => {
     if (!isDraggingSub && !isDraggingBlur) return;
-    const activeContainer = isTheaterMode ? theaterContainerRef.current : containerRef.current;
+    const activeContainer = containerRef.current;
     if (!activeContainer) return;
     e.preventDefault();
 
@@ -250,17 +248,12 @@ export const ResultView: React.FC<ResultViewProps> = ({
     setIsDraggingBlur(true);
   };
 
-  // Theater-mode auto-record: starts when theater opens, stops when audio ends
-  const theaterRecorderRef = useRef<MediaRecorder | null>(null);
-  const theaterCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const theaterAnimFrameRef = useRef<number>(0);
-
-  const startTheaterRecording = async () => {
-    const videoEl = theaterVideoRef.current;
-    const audioEl = theaterAudioRef.current;
+  // startRecapRecording: captures editor video+audio via canvas into a webm blob
+  const startRecapRecording = async () => {
+    const videoEl = videoRef.current;
+    const audioEl = audioRef.current;
     if (!videoEl || !audioEl) return;
 
-    // Wait for video metadata
     if (!videoEl.videoWidth) {
       await new Promise<void>((resolve) => {
         videoEl.addEventListener('loadedmetadata', () => resolve(), { once: true });
@@ -269,21 +262,16 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
     const mimeTypes = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
     const mimeType = mimeTypes.find((type) => MediaRecorder.isTypeSupported(type));
-    if (!mimeType) {
-      console.warn("No supported recording mime type");
-      return;
-    }
+    if (!mimeType) { console.warn("No supported recording mime type"); return; }
 
     const canvas = document.createElement("canvas");
     canvas.width = videoEl.videoWidth || 1280;
     canvas.height = videoEl.videoHeight || 720;
     const ctx = canvas.getContext("2d")!;
-    theaterCanvasRef.current = canvas;
 
     const canvasStream = canvas.captureStream(30);
     const chunks: BlobPart[] = [];
 
-    // Audio capture
     let audioCtx: AudioContext | null = null;
     try {
       audioCtx = new AudioContext();
@@ -297,26 +285,20 @@ export const ResultView: React.FC<ResultViewProps> = ({
     }
 
     const recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: 2500000 });
-    theaterRecorderRef.current = recorder;
+    recapRecorderRef.current = recorder;
 
-    recorder.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0) chunks.push(e.data);
-    };
+    recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunks.push(e.data); };
 
     recorder.onstop = async () => {
       if (audioCtx) try { audioCtx.close(); } catch (_) {}
-      cancelAnimationFrame(theaterAnimFrameRef.current);
+      cancelAnimationFrame(recapAnimFrameRef.current);
 
-      if (chunks.length === 0) {
-        setIsRendering(false);
-        return;
-      }
+      if (chunks.length === 0) { setIsRendering(false); return; }
 
       const blob = new Blob(chunks, { type: mimeType });
       const url = URL.createObjectURL(blob);
       const ext = mimeType.includes("mp4") ? "mp4" : "webm";
 
-      // Auto download
       const a = document.createElement("a");
       a.href = url;
       a.download = `recap_${scriptData.title.replace(/\s+/g, "_")}_${Date.now()}.${ext}`;
@@ -326,9 +308,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
       setRenderedBlobUrl(url);
       setIsRendering(false);
-      setIsTheaterMode(false);
+      setIsRecapPlaying(false);
 
-      // Save to storage + DB
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
@@ -354,12 +335,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
     setIsRendering(true);
     recorder.start(100);
 
-    // Draw loop: capture theater video + user-configured cinematic subtitle bar + blur
     const drawFrame = () => {
       if (!videoEl || !audioEl) return;
       if (audioEl.ended || videoEl.ended) return;
 
-      // Draw video frame
       if (editorState.flip) {
         ctx.save();
         ctx.translate(canvas.width, 0);
@@ -370,7 +349,6 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
       }
 
-      // === BLUR BOX: render blur region first (under subtitle) ===
       if (blurSettings.enabled) {
         const blurW = canvas.width * (blurSettings.width / 100);
         const blurH = canvas.height * (blurSettings.height / 100);
@@ -378,12 +356,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
         const blurY = canvas.height * (blurSettings.y / 100) - blurH / 2;
         const blurClampedX = Math.max(0, Math.min(canvas.width - blurW, blurX));
         const blurClampedY = Math.max(0, Math.min(canvas.height - blurH, blurY));
-
-        // Gaussian blur via multiple passes with scaled canvas draw
         const blurAmount = Math.round((blurSettings.opacity / 100) * 20);
         ctx.save();
         ctx.filter = `blur(${blurAmount}px)`;
-        // Draw just the region clipped
         ctx.beginPath();
         ctx.rect(blurClampedX, blurClampedY, blurW, blurH);
         ctx.clip();
@@ -391,25 +366,20 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.restore();
       }
 
-      // === SUBTITLE: exact user settings ===
       if (audioEl.duration > 0) {
         const aPct = audioEl.currentTime / audioEl.duration;
-        const activeIndex = syncSegments.findIndex((s) => aPct >= s.aStartPct && aPct <= s.aEndPct);
-        const active = syncSegments[activeIndex];
+        const activeIndex = syncSegmentsRef.current.findIndex((s: any) => aPct >= s.aStartPct && aPct <= s.aEndPct);
+        const active = (syncSegmentsRef.current as any[])[activeIndex];
 
         if (active && active.text) {
-          // Use user's fontSize scaled to canvas resolution
-          const scaleFactor = canvas.height / 500; // normalize against 500px reference height
+          const scaleFactor = canvas.height / 500;
           const fontSize = Math.max(12, Math.round(subSettings.fontSize * scaleFactor));
           ctx.font = `bold ${fontSize}px sans-serif`;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
 
           const barMaxWidth = canvas.width * (subSettings.maxWidth / 100);
-          const text = active.text;
-
-          // Word-wrap within bar width
-          const words = text.split(/\s+/);
+          const words = active.text.split(/\s+/);
           const lines: string[] = [];
           let currentLine = "";
           for (const word of words) {
@@ -425,17 +395,13 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
           const lineHeight = fontSize * 1.4;
           const barHeight = lines.length * lineHeight + 20;
-
-          // Use user's Y position (subSettings.y = % from top, so bottom = canvas.height * y/100)
           const barCenterY = canvas.height * (subSettings.y / 100);
           const barY = barCenterY - barHeight / 2;
           const barX = (canvas.width - barMaxWidth) / 2;
 
-          // Draw cinematic bar background using user's bgColor
           ctx.fillStyle = subSettings.bgColor;
           ctx.fillRect(barX, barY, barMaxWidth, barHeight);
 
-          // Draw top/bottom neon borders using user's borderColor
           if (subSettings.borderColor && subSettings.borderColor !== "transparent") {
             ctx.strokeStyle = subSettings.borderColor;
             ctx.lineWidth = 3;
@@ -449,7 +415,6 @@ export const ResultView: React.FC<ResultViewProps> = ({
             ctx.stroke();
           }
 
-          // Draw text using user's textColor
           ctx.fillStyle = subSettings.textColor || "#FACC15";
           ctx.strokeStyle = "rgba(0,0,0,0.9)";
           ctx.lineWidth = Math.max(2, fontSize * 0.08);
@@ -461,12 +426,11 @@ export const ResultView: React.FC<ResultViewProps> = ({
         }
       }
 
-      theaterAnimFrameRef.current = requestAnimationFrame(drawFrame);
+      recapAnimFrameRef.current = requestAnimationFrame(drawFrame);
     };
 
-    theaterAnimFrameRef.current = requestAnimationFrame(drawFrame);
+    recapAnimFrameRef.current = requestAnimationFrame(drawFrame);
 
-    // Monitor end
     const checkEnd = setInterval(() => {
       if (audioEl.ended || videoEl.ended) {
         clearInterval(checkEnd);
@@ -480,6 +444,88 @@ export const ResultView: React.FC<ResultViewProps> = ({
     }, 500);
   };
 
+  // Recap playback in editor: play video (muted) + TTS audio with subtitle sync
+  useEffect(() => {
+    if (!isRecapPlaying || isYouTube) return;
+
+    const a = audioRef.current;
+    const v = videoRef.current;
+    if (!a || !v) return;
+
+    v.muted = true;
+    lastIndexRef.current = -1;
+    setCurrentSubtitle("");
+
+    const onEnded = () => {
+      if (recapRecorderRef.current && recapRecorderRef.current.state !== "inactive") {
+        recapRecorderRef.current.stop();
+      } else {
+        setIsRecapPlaying(false);
+      }
+    };
+
+    let animFrame: number;
+    const syncLoop = () => {
+      const av = audioRef.current;
+      const vv = videoRef.current;
+      if (!av || !vv) return;
+      if (!vv.paused && !av.paused && av.duration > 0 && vv.duration > 0) {
+        const aPct = av.currentTime / av.duration;
+        const segs = syncSegmentsRef.current as typeof syncSegments;
+        const activeIndex = segs.findIndex((s: any) => aPct >= s.aStartPct && aPct <= s.aEndPct);
+        const active = segs[activeIndex];
+
+        if (active) {
+          const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
+          if (activeIndex !== lastIndexRef.current) {
+            if (Math.abs(vv.currentTime - active.vStart) > 0.2) {
+              vv.currentTime = active.vStart;
+            }
+            lastIndexRef.current = activeIndex;
+          }
+          const segmentAudioPct = active.aEndPct - active.aStartPct;
+          if (segmentAudioPct > 0.001) {
+            const progressInSegment = (aPct - active.aStartPct) / segmentAudioPct;
+            const targetVideoTime = active.vStart + progressInSegment * (vActualEnd - active.vStart);
+            const drift = targetVideoTime - vv.currentTime;
+            if (Math.abs(drift) > 0.5) vv.currentTime = targetVideoTime;
+            const audioSecs = segmentAudioPct * av.duration;
+            const videoSecs = vActualEnd - active.vStart;
+            if (audioSecs > 0 && videoSecs > 0) {
+              let idealRate = videoSecs / audioSecs;
+              idealRate += drift * 1.0;
+              vv.playbackRate = Math.min(Math.max(idealRate, 0.1), 5.0);
+            }
+          }
+          setCurrentSubtitle(active.text);
+        } else {
+          setCurrentSubtitle("");
+        }
+      }
+      animFrame = requestAnimationFrame(syncLoop);
+    };
+
+    a.addEventListener("ended", onEnded);
+    a.currentTime = 0;
+    v.currentTime = 0;
+    a.play().catch(console.error);
+    v.play().catch(console.error);
+    animFrame = requestAnimationFrame(syncLoop);
+
+    setTimeout(() => startRecapRecording(), 400);
+
+    return () => {
+      cancelAnimationFrame(animFrame);
+      a.removeEventListener("ended", onEnded);
+      a.pause();
+      if (v) { v.muted = false; v.playbackRate = 1.0; }
+      setCurrentSubtitle("");
+      if (recapRecorderRef.current && recapRecorderRef.current.state !== "inactive") {
+        recapRecorderRef.current.stop();
+      }
+    };
+  }, [isRecapPlaying, isYouTube]);
+
   // Construct video styles based on editor state
   const videoStyles: React.CSSProperties = {
     filter: `contrast(${editorState.bypass ? 115 : editorState.contrast}%) brightness(${editorState.bypass ? 105 : editorState.brightness}%) saturate(${editorState.bypass ? 115 : editorState.saturate}%) hue-rotate(${editorState.bypass ? 5 : editorState.hue}deg)`,
@@ -490,10 +536,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
     transition: "all 0.3s ease",
   };
 
-  // Improved Container Styles for Auto Fit - Ensuring visibility
   const containerStyles: React.CSSProperties = {
     aspectRatio: editorState.ratio === "auto" ? undefined : editorState.ratio,
-    height: editorState.ratio === "auto" ? "450px" : "auto", // Fixed height for auto to prevent collapse
+    height: editorState.ratio === "auto" ? "450px" : "auto",
     width: editorState.ratio === "auto" ? "100%" : "auto",
     maxHeight: "60vh",
     maxWidth: "100%",
@@ -501,128 +546,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#000", // Ensure black background
+    backgroundColor: "#000",
     position: "relative",
     userSelect: "none",
   };
-
-  useEffect(() => {
-    if (isDraggingSub || isDraggingBlur) {
-      window.addEventListener("mousemove", handleDragMove as any);
-      window.addEventListener("mouseup", handleDragEnd);
-      window.addEventListener("touchmove", handleDragMove as any, { passive: false });
-      window.addEventListener("touchend", handleDragEnd);
-    }
-    return () => {
-      window.removeEventListener("mousemove", handleDragMove as any);
-      window.removeEventListener("mouseup", handleDragEnd);
-      window.removeEventListener("touchmove", handleDragMove as any);
-      window.removeEventListener("touchend", handleDragEnd);
-    };
-  }, [isDraggingSub, isDraggingBlur]);
-
-  useEffect(() => {
-    if (!isTheaterMode || isYouTube) return;
-
-    // Wait for DOM to mount theater video/audio elements
-    const initTimer = setTimeout(() => {
-      const a = theaterAudioRef.current;
-      const v = theaterVideoRef.current;
-      if (!a || !v) return;
-
-      v.muted = true;
-      lastIndexRef.current = -1;
-
-      const onPlaying = () => setTheaterPlaying(true);
-      const onPaused = () => setTheaterPlaying(false);
-      const onEnded = () => {
-        if (theaterRecorderRef.current && theaterRecorderRef.current.state !== "inactive") {
-          theaterRecorderRef.current.stop();
-        } else {
-          setIsTheaterMode(false);
-        }
-      };
-
-      let animFrame: number;
-
-      const syncLoop = () => {
-        const av = theaterAudioRef.current;
-        const vv = theaterVideoRef.current;
-        if (!av || !vv) return;
-        if (!vv.paused && !av.paused && av.duration > 0 && vv.duration > 0) {
-          const aPct = av.currentTime / av.duration;
-          const segs = syncSegmentsRef.current as typeof syncSegments;
-          const activeIndex = segs.findIndex((s: any) => aPct >= s.aStartPct && aPct <= s.aEndPct);
-          const active = segs[activeIndex];
-
-          if (active) {
-            const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
-
-            if (activeIndex !== lastIndexRef.current) {
-              if (Math.abs(vv.currentTime - active.vStart) > 0.2) {
-                vv.currentTime = active.vStart;
-              }
-              lastIndexRef.current = activeIndex;
-            }
-
-            const segmentAudioPct = active.aEndPct - active.aStartPct;
-            if (segmentAudioPct > 0.001) {
-              const progressInSegment = (aPct - active.aStartPct) / segmentAudioPct;
-              const targetVideoTime = active.vStart + progressInSegment * (vActualEnd - active.vStart);
-              const drift = targetVideoTime - vv.currentTime;
-              if (Math.abs(drift) > 0.5) vv.currentTime = targetVideoTime;
-
-              const audioSecs = segmentAudioPct * av.duration;
-              const videoSecs = vActualEnd - active.vStart;
-              if (audioSecs > 0 && videoSecs > 0) {
-                let idealRate = videoSecs / audioSecs;
-                idealRate += drift * 1.0;
-                vv.playbackRate = Math.min(Math.max(idealRate, 0.1), 5.0);
-              }
-            }
-            setCurrentSubtitle(active.text);
-          } else {
-            setCurrentSubtitle("");
-          }
-        }
-        animFrame = requestAnimationFrame(syncLoop);
-      };
-
-      v.addEventListener("playing", onPlaying);
-      v.addEventListener("pause", onPaused);
-      a.addEventListener("ended", onEnded);
-
-      // Play both
-      a.play().catch(console.error);
-      v.play().catch(console.error);
-
-      animFrame = requestAnimationFrame(syncLoop);
-
-      // Auto-start recording after video starts
-      setTimeout(() => startTheaterRecording(), 600);
-
-      return () => {
-        cancelAnimationFrame(animFrame);
-        v.removeEventListener("playing", onPlaying);
-        v.removeEventListener("pause", onPaused);
-        a.removeEventListener("ended", onEnded);
-        if (theaterRecorderRef.current && theaterRecorderRef.current.state !== "inactive") {
-          theaterRecorderRef.current.stop();
-        }
-        if (theaterVideoRef.current) theaterVideoRef.current.playbackRate = 1.0;
-      };
-    }, 150); // Wait 150ms for DOM to mount
-
-    return () => {
-      clearTimeout(initTimer);
-      cancelAnimationFrame(theaterAnimFrameRef.current);
-      if (theaterRecorderRef.current && theaterRecorderRef.current.state !== "inactive") {
-        theaterRecorderRef.current.stop();
-      }
-      if (theaterVideoRef.current) theaterVideoRef.current.playbackRate = 1.0;
-      setCurrentSubtitle("");
-    };
-  }, [isTheaterMode, isYouTube]);
 
   return (
     <>
@@ -724,7 +651,13 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
           {/* Video Player & Studio Canvas */}
           <div className="flex flex-col items-center justify-center w-full bg-black rounded-xl border border-charcoal-600 overflow-hidden shadow-2xl relative p-2 md:p-4">
-            {/* Rendering Indicator */}
+            {/* Recap Active / Recording Indicator */}
+            {isRecapPlaying && !isRendering && (
+              <div className="absolute top-4 left-4 z-50 flex items-center gap-2 bg-neon-cyan/20 backdrop-blur-md px-3 py-1.5 rounded-full border border-neon-cyan/60">
+                <div className="w-3 h-3 bg-neon-cyan rounded-full animate-pulse"></div>
+                <span className="text-neon-cyan font-bold text-xs tracking-wider">RECAP ACTIVE</span>
+              </div>
+            )}
             {isRendering && (
               <div className="absolute top-4 right-4 z-50 flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-red-500/50">
                 <div className="w-3 h-3 bg-red-600 rounded-full animate-pulse shadow-[0_0_10px_rgba(220,38,38,0.8)]"></div>
@@ -735,7 +668,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
             <div
               ref={containerRef}
               className={`relative overflow-hidden transition-all duration-300 shadow-lg flex items-center justify-center bg-black`}
-              style={isTheaterMode ? { width: 0, height: 0, overflow: 'hidden', padding: 0, margin: 0 } : containerStyles}
+              style={containerStyles}
             >
               {/* Logo Layer */}
               {logo.url && (
@@ -842,7 +775,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
                   src={videoUrl}
                   className="w-full h-full"
                   style={videoStyles}
-                  controls={!isRendering} // Disable controls while recording
+                  muted={isRecapPlaying}
+                  controls={!isRendering && !isRecapPlaying}
                   playsInline
                   crossOrigin={isLocalSource(videoUrl) ? undefined : "anonymous"}
                 />
@@ -1175,10 +1109,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
           {audioUrl && !isYouTube && !renderedBlobUrl && (
             <button
-              onClick={() => setIsTheaterMode(true)}
-              className="w-full bg-neon-cyan hover:bg-white text-charcoal-900 font-black text-lg py-4 rounded-xl shadow-[0_0_20px_rgba(0,229,255,0.4)] animate-pulse border-4 border-charcoal-800"
+              onClick={() => setIsRecapPlaying((v) => !v)}
+              className={`w-full font-black text-lg py-4 rounded-xl border-4 border-charcoal-800 transition-all ${isRecapPlaying ? "bg-red-500 hover:bg-red-400 text-white shadow-[0_0_20px_rgba(239,68,68,0.5)]" : "bg-neon-cyan hover:bg-white text-charcoal-900 shadow-[0_0_20px_rgba(0,229,255,0.4)] animate-pulse"}`}
             >
-              WATCH AUTO RECAP (EXACT MATCH)
+              {isRecapPlaying ? "⏹ STOP RECAP" : "▶ WATCH AUTO RECAP"}
             </button>
           )}
 
@@ -1209,10 +1143,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
               ) : (
                 !isYouTube &&
                 videoUrl && (
-                  <button
-                    onClick={() => setIsTheaterMode(true)}
-                    className="flex items-center justify-center px-4 py-3 bg-neon-cyan hover:bg-neon-hover text-charcoal-900 font-bold rounded-lg transition-colors shadow-lg"
-                  >
+                   <button
+                     onClick={() => setIsRecapPlaying((v) => !v)}
+                     className="flex items-center justify-center px-4 py-3 bg-neon-cyan hover:bg-neon-hover text-charcoal-900 font-bold rounded-lg transition-colors shadow-lg"
+                   >
                     <svg className="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path
                         strokeLinecap="round"
@@ -1253,148 +1187,6 @@ export const ResultView: React.FC<ResultViewProps> = ({
         </div>
       </div>
 
-      {isTheaterMode && videoUrl && audioUrl && (
-        <div
-          className="fixed inset-0 z-50 bg-black"
-          style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0 }}
-          onClick={() => {
-            if (theaterVideoRef.current?.paused) {
-              theaterVideoRef.current.play();
-              theaterAudioRef.current?.play();
-            } else {
-              theaterVideoRef.current?.pause();
-              theaterAudioRef.current?.pause();
-            }
-          }}
-        >
-          <div
-            ref={theaterContainerRef}
-            style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
-          >
-          <video
-              ref={theaterVideoRef}
-              src={videoUrl}
-              playsInline
-              muted
-              crossOrigin={isLocalSource(videoUrl) ? undefined : "anonymous"}
-              style={{
-                filter: videoStyles.filter,
-                transform: videoStyles.transform,
-                objectFit: "contain",
-                position: "absolute",
-                top: 0,
-                left: 0,
-                width: "100%",
-                height: "100%",
-                display: "block",
-              }}
-            />
-
-            {/* Blur Box - Theater Mode */}
-            {blurSettings.enabled && (
-              <div
-                onMouseDown={handleBlurDragStart}
-                onTouchStart={handleBlurDragStart}
-                className="absolute z-20 cursor-move"
-                style={{
-                  left: `${blurSettings.x}%`,
-                  top: `${blurSettings.y}%`,
-                  transform: 'translate(-50%, -50%)',
-                  width: `${blurSettings.width}%`,
-                  height: `${blurSettings.height}%`,
-                  backdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
-                  WebkitBackdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
-                  border: '1px dashed rgba(0,229,255,0.4)',
-                  touchAction: 'none',
-                }}
-              />
-            )}
-
-            {/* Auto-Subtitles - Theater Mode: match editor bottom positioning exactly */}
-            {currentSubtitle && (
-              <div
-                onMouseDown={handleDragStart}
-                onTouchStart={handleDragStart}
-                className="absolute z-30 cursor-move"
-                style={{
-                  left: '50%',
-                  bottom: `${100 - subSettings.y}%`,
-                  transform: `translateX(-50%) scale(${subSettings.scale})`,
-                  width: `${subSettings.maxWidth}%`,
-                  touchAction: "none",
-                }}
-              >
-                <div
-                  className="text-center px-6 py-2 font-bold shadow-lg"
-                  style={{
-                    textShadow: "1px 1px 3px black, 0 0 8px rgba(0,0,0,0.5)",
-                    color: subSettings.textColor,
-                    backgroundColor: subSettings.bgColor,
-                    borderTop: `2px solid ${subSettings.borderColor}`,
-                    borderBottom: `2px solid ${subSettings.borderColor}`,
-                    boxShadow: `0 0 12px ${subSettings.borderColor}40, inset 0 0 20px rgba(0,0,0,0.3)`,
-                    fontSize: `${subSettings.fontSize}px`,
-                    lineHeight: '1.4',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                  }}
-                >
-                  {currentSubtitle}
-                </div>
-              </div>
-            )}
-
-            {/* Logo in Theater Mode */}
-            {logo.url && (
-              <div
-                className="absolute z-20 pointer-events-none"
-                style={{
-                  top: "20px",
-                  right: "20px",
-                  width: `${logo.size * 0.8}%`, // Slightly smaller in fullscreen relative to viewport
-                }}
-              >
-                <div
-                  className={`
-                      relative w-full aspect-square 
-                      ${logo.isCircle ? "rounded-full" : "rounded-none"}
-                      overflow-hidden
-                    `}
-                  style={{
-                    boxShadow: `0 0 15px ${logo.neonColor}, 0 0 30px ${logo.neonColor}`,
-                    border: `2px solid ${logo.neonColor}`,
-                  }}
-                >
-                  <img
-                    src={logo.url}
-                    className={`w-full h-full object-cover ${logo.spin ? "animate-[spin_8s_linear_infinite]" : ""}`}
-                    alt="Logo"
-                  />
-                </div>
-              </div>
-            )}
-
-            <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/80 to-transparent flex justify-between items-center z-30">
-              <span className="text-neon-cyan font-bold tracking-widest text-sm uppercase flex items-center gap-2">
-                <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-                Smart Sync Active
-              </span>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsTheaterMode(false);
-                }}
-                className="bg-white/10 hover:bg-white/20 text-white p-2 rounded-full backdrop-blur-sm transition-all"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          </div>
-          <audio ref={theaterAudioRef} key={String(isTheaterMode)} src={audioUrl} />
-        </div>
-      )}
     </>
   );
 };
