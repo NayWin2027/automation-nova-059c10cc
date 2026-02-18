@@ -859,6 +859,15 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 </svg>
                 Download Recap Video
               </a>
+              <button
+                onClick={() => setRenderedBlobUrl(null)}
+                className="flex items-center justify-center gap-2 px-6 py-3 bg-charcoal-700 hover:bg-charcoal-600 text-gray-300 font-bold rounded-xl transition-colors w-full max-w-lg border border-charcoal-500"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" />
+                </svg>
+                Back to Editor
+              </button>
             </div>
           )}
 
@@ -1241,10 +1250,11 @@ export const ResultView: React.FC<ResultViewProps> = ({
           }}
         >
           <div
-            ref={theaterContainerRef}
-            className="relative w-full h-full flex flex-col items-center justify-center"
+          ref={theaterContainerRef}
+            className="relative w-full h-full"
+            style={{ position: "relative", width: "100%", height: "100%" }}
           >
-            <video
+          <video
               ref={theaterVideoRef}
               src={videoUrl}
               className="transition-all"
@@ -1253,12 +1263,14 @@ export const ResultView: React.FC<ResultViewProps> = ({
               style={{
                 filter: videoStyles.filter,
                 transform: videoStyles.transform,
-                aspectRatio: editorState.ratio === "auto" ? undefined : editorState.ratio.replace("/", "/"),
                 maxWidth: "100%",
-                maxHeight: "85vh",
-                width: editorState.ratio === "auto" ? "auto" : "auto",
-                height: editorState.ratio === "auto" ? "85vh" : "85vh",
-                objectFit: editorState.ratio === "auto" ? "contain" : "cover",
+                maxHeight: "100vh",
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+                position: "absolute",
+                top: 0,
+                left: 0,
               }}
             />
 
@@ -1282,7 +1294,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
               />
             )}
 
-            {/* Premium Professional Auto-Subtitles - Theater Mode (Draggable) */}
+            {/* Auto-Subtitles - Theater Mode: same font size as editor (no multiplier) */}
             {currentSubtitle && (
               <div
                 onMouseDown={handleDragStart}
@@ -1290,22 +1302,22 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 className="absolute z-30 cursor-move"
                 style={{
                   left: '50%',
-                  bottom: `${100 - subSettings.y}%`,
-                  transform: `translateX(-50%) scale(${subSettings.scale})`,
+                  top: `${subSettings.y}%`,
+                  transform: `translateX(-50%) translateY(-50%) scale(${subSettings.scale})`,
                   width: `${subSettings.maxWidth}%`,
                   touchAction: "none",
                 }}
               >
                 <div
-                  className="text-center px-8 py-3 font-black tracking-wide backdrop-blur-md shadow-[0_4px_30px_rgba(0,0,0,0.5)]"
+                  className="text-center px-6 py-2 font-bold shadow-lg"
                   style={{
-                    textShadow: "2px 2px 0px rgba(0,0,0,0.8)",
+                    textShadow: "1px 1px 3px black, 0 0 8px rgba(0,0,0,0.5)",
                     color: subSettings.textColor,
                     backgroundColor: subSettings.bgColor,
                     borderTop: `2px solid ${subSettings.borderColor}`,
                     borderBottom: `2px solid ${subSettings.borderColor}`,
-                    boxShadow: `0 0 15px ${subSettings.borderColor}40`,
-                    fontSize: `${subSettings.fontSize * 1.5}px`,
+                    boxShadow: `0 0 12px ${subSettings.borderColor}40, inset 0 0 20px rgba(0,0,0,0.3)`,
+                    fontSize: `${subSettings.fontSize}px`,
                     lineHeight: '1.4',
                     whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
