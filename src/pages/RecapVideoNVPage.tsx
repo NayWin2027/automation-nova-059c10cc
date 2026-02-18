@@ -474,6 +474,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
 
       // Draw subtitles on canvas (burns into recorded output)
+      // Style matches DOM preview exactly: bold, textShadow, no background
       const subText = currentSubtitleRef.current;
       if (subText) {
         const fontSize = subSettings.fontSize;
@@ -491,16 +492,13 @@ export const ResultView: React.FC<ResultViewProps> = ({
           subCY = canvas.height * 0.88;
           maxW = canvas.width * (subSettings.maxWidth / 100);
         }
-        const measured = ctx.measureText(subText).width;
-        const bgW = Math.min(measured + 24, maxW);
-        const bgH = fontSize + 16;
-        ctx.fillStyle = "rgba(0,0,0,0.65)";
-        ctx.beginPath();
-        ctx.roundRect(subCX - bgW / 2, subCY - bgH / 2, bgW, bgH, 8);
-        ctx.fill();
-        ctx.fillStyle = subSettings.textColor;
+        // No background — transparent (matches DOM preview)
+        // Text shadow: 0 1px 4px rgba(0,0,0,0.9) — matches DOM textShadow
         ctx.shadowColor = "rgba(0,0,0,0.9)";
-        ctx.shadowBlur = 4;
+        ctx.shadowBlur = 8;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 2;
+        ctx.fillStyle = subSettings.textColor;
         ctx.fillText(subText, subCX, subCY, maxW);
         ctx.restore();
       }
@@ -890,7 +888,6 @@ export const ResultView: React.FC<ResultViewProps> = ({
                     <div
                       className="w-full text-center font-bold px-2 py-1 pointer-events-none"
                       style={{
-                        backgroundColor: "rgba(0,0,0,0.6)",
                         color: subSettings.textColor,
                         fontSize: `${subSettings.fontSize}px`,
                         lineHeight: 1.4,
