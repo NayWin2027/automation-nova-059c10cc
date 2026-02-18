@@ -958,36 +958,6 @@ export const ResultView: React.FC<ResultViewProps> = ({
                       className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full"
                     />
                   </div>
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-500">Box Scale</span>
-                      <span className="text-xs text-neon-cyan">{subSettings.scale}x</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0.5"
-                      max="2"
-                      step="0.1"
-                      value={subSettings.scale}
-                      onChange={(e) => setSubSettings((s) => ({ ...s, scale: Number(e.target.value) }))}
-                      className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-500">Box Width</span>
-                      <span className="text-xs text-neon-cyan">{subSettings.maxWidth}%</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="20"
-                      max="100"
-                      step="5"
-                      value={subSettings.maxWidth}
-                      onChange={(e) => setSubSettings((s) => ({ ...s, maxWidth: Number(e.target.value) }))}
-                      className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full"
-                    />
-                  </div>
                   <div className="flex items-center gap-4">
                     <span className="text-xs text-gray-500 w-16">Neon Border</span>
                     <div className="flex gap-2 flex-wrap">
