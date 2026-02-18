@@ -735,7 +735,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
             <div
               ref={containerRef}
               className={`relative overflow-hidden transition-all duration-300 shadow-lg flex items-center justify-center bg-black`}
-              style={containerStyles}
+              style={isTheaterMode ? { width: 0, height: 0, overflow: 'hidden', padding: 0, margin: 0 } : containerStyles}
             >
               {/* Logo Layer */}
               {logo.url && (
@@ -1310,7 +1310,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
               />
             )}
 
-            {/* Auto-Subtitles - Theater Mode: viewport-relative font size */}
+            {/* Auto-Subtitles - Theater Mode: match editor bottom positioning exactly */}
             {currentSubtitle && (
               <div
                 onMouseDown={handleDragStart}
@@ -1318,8 +1318,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 className="absolute z-30 cursor-move"
                 style={{
                   left: '50%',
-                  top: `${subSettings.y}%`,
-                  transform: `translateX(-50%) translateY(-50%) scale(${subSettings.scale})`,
+                  bottom: `${100 - subSettings.y}%`,
+                  transform: `translateX(-50%) scale(${subSettings.scale})`,
                   width: `${subSettings.maxWidth}%`,
                   touchAction: "none",
                 }}
@@ -1392,7 +1392,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
               </button>
             </div>
           </div>
-          <audio ref={theaterAudioRef} src={audioUrl} />
+          <audio ref={theaterAudioRef} key={String(isTheaterMode)} src={audioUrl} />
         </div>
       )}
     </>
