@@ -264,9 +264,28 @@ export const ResultView: React.FC<ResultViewProps> = ({
     const mimeType = mimeTypes.find((type) => MediaRecorder.isTypeSupported(type));
     if (!mimeType) { console.warn("No supported recording mime type"); return; }
 
+    // Apply ratio crop to canvas output dimensions
+    const rawW = videoEl.videoWidth || 1280;
+    const rawH = videoEl.videoHeight || 720;
+    let outW = rawW;
+    let outH = rawH;
+    if (editorState.ratio !== "auto") {
+      const [rw, rh] = editorState.ratio.split("/").map(Number);
+      const targetRatio = rw / rh;
+      const srcRatio = rawW / rawH;
+      if (targetRatio > srcRatio) {
+        // letterbox height
+        outW = rawW;
+        outH = Math.round(rawW / targetRatio);
+      } else {
+        // pillarbox width
+        outH = rawH;
+        outW = Math.round(rawH * targetRatio);
+      }
+    }
     const canvas = document.createElement("canvas");
-    canvas.width = videoEl.videoWidth || 1280;
-    canvas.height = videoEl.videoHeight || 720;
+    canvas.width = outW;
+    canvas.height = outH;
     const ctx = canvas.getContext("2d")!;
 
     const canvasStream = canvas.captureStream(30);
@@ -337,17 +356,36 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
     const drawFrame = () => {
       if (!videoEl || !audioEl) { recapAnimFrameRef.current = requestAnimationFrame(drawFrame); return; }
-      // Stop rendering only when audio ends (don't stop on videoEl.ended to prevent freeze)
+      // Stop rendering only when audio ends
       if (audioEl.ended) return;
+
+      // Draw video frame — crop source to match output ratio
+      const srcW = videoEl.videoWidth || rawW;
+      const srcH = videoEl.videoHeight || rawH;
+      // Calculate source crop region centered in original video
+      let srcCropX = 0, srcCropY = 0, srcCropW = srcW, srcCropH = srcH;
+      if (editorState.ratio !== "auto") {
+        const targetAR = outW / outH;
+        const srcAR = srcW / srcH;
+        if (targetAR < srcAR) {
+          // crop sides
+          srcCropW = Math.round(srcH * targetAR);
+          srcCropX = Math.round((srcW - srcCropW) / 2);
+        } else {
+          // crop top/bottom
+          srcCropH = Math.round(srcW / targetAR);
+          srcCropY = Math.round((srcH - srcCropH) / 2);
+        }
+      }
 
       if (editorState.flip) {
         ctx.save();
         ctx.translate(canvas.width, 0);
         ctx.scale(-1, 1);
-        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+        ctx.drawImage(videoEl, srcCropX, srcCropY, srcCropW, srcCropH, 0, 0, canvas.width, canvas.height);
         ctx.restore();
       } else {
-        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+        ctx.drawImage(videoEl, srcCropX, srcCropY, srcCropW, srcCropH, 0, 0, canvas.width, canvas.height);
       }
 
       if (blurSettings.enabled) {
@@ -363,18 +401,17 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.beginPath();
         ctx.rect(blurClampedX, blurClampedY, blurW, blurH);
         ctx.clip();
-        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+        ctx.drawImage(videoEl, srcCropX, srcCropY, srcCropW, srcCropH, 0, 0, canvas.width, canvas.height);
         ctx.restore();
       }
 
-      // Draw subtitle ONLY inside blur box region (matching blur box position/size)
+      // Draw subtitle ONLY when blur box is enabled — inside blur box region only
       if (audioEl.duration > 0 && blurSettings.enabled) {
         const aPct = audioEl.currentTime / audioEl.duration;
         const activeIndex = syncSegmentsRef.current.findIndex((s: any) => aPct >= s.aStartPct && aPct <= s.aEndPct);
         const active = (syncSegmentsRef.current as any[])[activeIndex];
 
         if (active && active.text) {
-          // Calculate blur box bounds in canvas coordinates
           const blurW = canvas.width * (blurSettings.width / 100);
           const blurH = canvas.height * (blurSettings.height / 100);
           const blurCX = canvas.width * (blurSettings.x / 100);
@@ -388,7 +425,6 @@ export const ResultView: React.FC<ResultViewProps> = ({
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
 
-          // Word-wrap constrained to blur box width
           const maxTextWidth = blurW - 24;
           const words = active.text.split(/\s+/);
           const lines: string[] = [];
@@ -406,27 +442,11 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
           const lineHeight = fontSize * 1.4;
           const textBlockH = lines.length * lineHeight + 16;
-          // Center text vertically inside blur box
           const textStartY = blurY + (blurH - textBlockH) / 2;
           const textCenterX = blurX + blurW / 2;
 
-          // Background
-          ctx.fillStyle = subSettings.bgColor;
+          ctx.fillStyle = "rgba(0,0,0,0.55)";
           ctx.fillRect(blurX, textStartY, blurW, textBlockH);
-
-          // Border lines
-          if (subSettings.borderColor && subSettings.borderColor !== "transparent") {
-            ctx.strokeStyle = subSettings.borderColor;
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(blurX, textStartY);
-            ctx.lineTo(blurX + blurW, textStartY);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(blurX, textStartY + textBlockH);
-            ctx.lineTo(blurX + blurW, textStartY + textBlockH);
-            ctx.stroke();
-          }
 
           ctx.fillStyle = subSettings.textColor || "#FACC15";
           ctx.strokeStyle = "rgba(0,0,0,0.9)";
@@ -750,16 +770,14 @@ export const ResultView: React.FC<ResultViewProps> = ({
                     overflow: 'hidden',
                   }}
                 >
-                  {/* Subtitle rendered inside blur box only */}
+                  {/* Subtitle rendered ONLY inside blur box — no old box */}
                   {currentSubtitle && (
                     <div
                       className="w-full text-center font-bold"
                       style={{
-                        backgroundColor: subSettings.bgColor,
+                        backgroundColor: "rgba(0,0,0,0.55)",
                         color: subSettings.textColor,
                         textShadow: "1px 1px 3px black, 0 0 8px rgba(0,0,0,0.5)",
-                        borderTop: `2px solid ${subSettings.borderColor}`,
-                        borderBottom: `2px solid ${subSettings.borderColor}`,
                         fontSize: `${subSettings.fontSize}px`,
                         lineHeight: '1.4',
                         whiteSpace: 'pre-wrap',
@@ -983,25 +1001,6 @@ export const ResultView: React.FC<ResultViewProps> = ({
                     />
                   </div>
                   <div className="flex items-center gap-4">
-                    <span className="text-xs text-gray-500 w-16">Neon Border</span>
-                    <div className="flex gap-2 flex-wrap">
-                      {["#00E5FF", "#F43F5E", "#10B981", "#FACC15", "#A855F7", "transparent"].map((c) => (
-                        <button
-                          key={c}
-                          onClick={() => setSubSettings((s) => ({ ...s, borderColor: c }))}
-                          className={`w-5 h-5 rounded border ${subSettings.borderColor === c ? "ring-2 ring-white scale-110" : "border-gray-600"}`}
-                          style={{ backgroundColor: c === "transparent" ? "#333" : c, position: "relative" }}
-                        >
-                          {c === "transparent" && (
-                            <span className="absolute inset-0 flex items-center justify-center text-[8px] text-white">
-                              X
-                            </span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
                     <span className="text-xs text-gray-500 w-16">Text Color</span>
                     <div className="flex gap-2 flex-wrap">
                       {["#FFFFFF", "#FACC15", "#00E5FF", "#F43F5E", "#10B981"].map((c) => (
@@ -1014,27 +1013,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
                       ))}
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-xs text-gray-500 w-16">Box Color</span>
-                    <div className="flex gap-2 flex-wrap">
-                      {[
-                        "rgba(0,0,0,0.6)",
-                        "rgba(0,0,0,0)",
-                        "rgba(255,255,255,0.2)",
-                        "rgba(220, 38, 38, 0.6)",
-                        "rgba(37, 99, 235, 0.6)",
-                      ].map((c) => (
-                        <button
-                          key={c}
-                          onClick={() => setSubSettings((s) => ({ ...s, bgColor: c }))}
-                          className={`w-5 h-5 rounded border border-gray-600 ${subSettings.bgColor === c ? "ring-2 ring-white" : ""}`}
-                          style={{ backgroundColor: c }}
-                        />
-                      ))}
-                    </div>
-                  </div>
                   <p className="text-[10px] text-gray-500 italic">
-                    Tip: Drag the subtitle box on the video to move it.
+                    Tip: Blur Region ON ထားရင် subtitle blur box ထဲမှာပဲ ပေါ်မည်။
                   </p>
                 </div>
               </div>
