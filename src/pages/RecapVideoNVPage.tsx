@@ -123,6 +123,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
   const recapRecorderRef = useRef<MediaRecorder | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const logoAngleRef = useRef<number>(0); // for logo spin in canvas
+  const currentSubtitleRef = useRef<string>(""); // for canvas subtitle drawing during recording
 
   // Request Wake Lock to prevent screen from turning off during recap/recording
   useEffect(() => {
@@ -471,7 +472,40 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.restore();
       }
 
-      // Subtitles are rendered via DOM inside blur box — no canvas subtitle drawing
+
+      // Draw subtitles on canvas (burns into recorded output)
+      const subText = currentSubtitleRef.current;
+      if (subText) {
+        const fontSize = subSettings.fontSize;
+        ctx.save();
+        ctx.font = `bold ${fontSize}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        let subCX: number, subCY: number, maxW: number;
+        if (blurSettings.enabled) {
+          subCX = canvas.width * (blurSettings.x / 100);
+          subCY = canvas.height * (blurSettings.y / 100);
+          maxW = canvas.width * (blurSettings.width / 100) - 16;
+        } else {
+          subCX = canvas.width / 2;
+          subCY = canvas.height * 0.88;
+          maxW = canvas.width * (subSettings.maxWidth / 100);
+        }
+        const measured = ctx.measureText(subText).width;
+        const bgW = Math.min(measured + 24, maxW);
+        const bgH = fontSize + 16;
+        ctx.fillStyle = "rgba(0,0,0,0.65)";
+        ctx.beginPath();
+        ctx.roundRect(subCX - bgW / 2, subCY - bgH / 2, bgW, bgH, 8);
+        ctx.fill();
+        ctx.fillStyle = subSettings.textColor;
+        ctx.shadowColor = "rgba(0,0,0,0.9)";
+        ctx.shadowBlur = 4;
+        ctx.fillText(subText, subCX, subCY, maxW);
+        ctx.restore();
+      }
+
+
 
       // Draw logo with SPIN + NEON GLOW support (rotate around center) — top-right corner
       if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
@@ -617,8 +651,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
             }
           }
           setCurrentSubtitle(active.text);
+          currentSubtitleRef.current = active.text;
         } else {
           setCurrentSubtitle("");
+          currentSubtitleRef.current = "";
         }
       }
       animFrame = requestAnimationFrame(syncLoop);
