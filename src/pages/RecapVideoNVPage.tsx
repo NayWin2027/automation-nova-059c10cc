@@ -913,24 +913,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                     overflow: 'hidden',
                   }}
                 >
-                  {currentSubtitle && (
-                    <div
-                      className="w-full text-center font-bold"
-                      style={{
-                        backgroundColor: "rgba(0,0,0,0.6)",
-                        color: subSettings.textColor,
-                        textShadow: "1px 1px 3px black",
-                        fontSize: `${subSettings.fontSize}px`,
-                        lineHeight: '1.4',
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-word',
-                        padding: '4px 12px',
-                        pointerEvents: 'none',
-                      }}
-                    >
-                      {currentSubtitle}
-                    </div>
-                  )}
+                  {/* Subtitle rendered exclusively on canvas — DOM subtitle intentionally removed */}
                 </div>
               )}
 
