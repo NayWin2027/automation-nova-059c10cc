@@ -731,18 +731,18 @@ export const ResultView: React.FC<ResultViewProps> = ({
               // Base rate: how fast video should play relative to audio for this segment
               const baseRate = videoSecs / audioSecs;
 
-              // Gentle drift correction — only nudge rate, never hard-seek mid-segment
+              // Tight drift correction — aggressive sync for 3000% match
               const progressInSegment = (aPct - active.aStartPct) / segmentAudioPct;
               const targetVideoTime = active.vStart + progressInSegment * videoSecs;
               const drift = targetVideoTime - vv.currentTime;
 
-              // Emergency re-sync only if severely out of sync (>2s) — avoids rubber-band
-              if (Math.abs(drift) > 2.0) {
+              // Hard re-sync if drift > 0.5s (tighter threshold for perfect sync)
+              if (Math.abs(drift) > 0.5) {
                 vv.currentTime = targetVideoTime;
               }
 
-              // Smooth rate nudge: very small gain (0.1) to prevent oscillation
-              const correction = Math.max(-0.3, Math.min(0.3, drift * 0.1));
+              // Aggressive rate nudge: gain 0.3 for fast drift correction without oscillation
+              const correction = Math.max(-0.5, Math.min(0.5, drift * 0.3));
               const targetRate = baseRate + correction;
               vv.playbackRate = Math.min(Math.max(targetRate, 0.5), 2.0);
             }
