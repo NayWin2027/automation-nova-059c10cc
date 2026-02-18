@@ -471,70 +471,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.restore();
       }
 
-      // Draw subtitle on canvas only (no DOM subtitle box in editor when blur is OFF)
-      if (audioEl.duration > 0) {
-        const aPct = audioEl.currentTime / audioEl.duration;
-        const activeIndex = syncSegmentsRef.current.findIndex((s: any) => aPct >= s.aStartPct && aPct <= s.aEndPct);
-        const active = (syncSegmentsRef.current as any[])[activeIndex];
-
-        if (active && active.text) {
-          let subAreaX: number, subAreaY: number, subAreaW: number, subAreaH: number;
-
-          if (blurSettings.enabled) {
-            const blurW = canvas.width * (blurSettings.width / 100);
-            const blurH = canvas.height * (blurSettings.height / 100);
-            const blurCX = canvas.width * (blurSettings.x / 100);
-            const blurCY = canvas.height * (blurSettings.y / 100);
-            subAreaX = Math.max(0, Math.min(canvas.width - blurW, blurCX - blurW / 2));
-            subAreaY = Math.max(0, Math.min(canvas.height - blurH, blurCY - blurH / 2));
-            subAreaW = blurW;
-            subAreaH = blurH;
-          } else {
-            subAreaW = canvas.width;
-            subAreaH = canvas.height * 0.15;
-            subAreaX = 0;
-            subAreaY = canvas.height - subAreaH;
-          }
-
-          const scaleFactor = canvas.height / 500;
-          const fontSize = Math.max(10, Math.round(subSettings.fontSize * scaleFactor));
-          ctx.font = `bold ${fontSize}px sans-serif`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-
-          const maxTextWidth = subAreaW - 24;
-          const words = active.text.split(/\s+/);
-          const lines: string[] = [];
-          let currentLine = "";
-          for (const word of words) {
-            const testLine = currentLine ? currentLine + " " + word : word;
-            if (ctx.measureText(testLine).width > maxTextWidth && currentLine) {
-              lines.push(currentLine);
-              currentLine = word;
-            } else {
-              currentLine = testLine;
-            }
-          }
-          if (currentLine) lines.push(currentLine);
-
-          const lineHeight = fontSize * 1.4;
-          const textBlockH = lines.length * lineHeight + 16;
-          const textStartY = subAreaY + (subAreaH - textBlockH) / 2;
-          const textCenterX = subAreaX + subAreaW / 2;
-
-          ctx.fillStyle = "rgba(0,0,0,0.6)";
-          ctx.fillRect(subAreaX, textStartY, subAreaW, textBlockH);
-
-          ctx.fillStyle = subSettings.textColor || "#FACC15";
-          ctx.strokeStyle = "rgba(0,0,0,0.9)";
-          ctx.lineWidth = Math.max(2, fontSize * 0.08);
-          for (let li = 0; li < lines.length; li++) {
-            const ly = textStartY + 8 + (li + 0.5) * lineHeight;
-            ctx.strokeText(lines[li], textCenterX, ly);
-            ctx.fillText(lines[li], textCenterX, ly);
-          }
-        }
-      }
+      // Subtitles are rendered via DOM inside blur box — no canvas subtitle drawing
 
       // Draw logo with SPIN + NEON GLOW support (rotate around center) — top-right corner
       if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
@@ -893,7 +830,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 </div>
               )}
 
-              {/* Blur Box Layer with subtitle inside when blur is ON */}
+              {/* Blur Box Layer — subtitle rendered inside via DOM */}
               {blurSettings.enabled && (
                 <div
                   onMouseDown={handleBlurDragStart}
@@ -913,7 +850,20 @@ export const ResultView: React.FC<ResultViewProps> = ({
                     overflow: 'hidden',
                   }}
                 >
-                  {/* Subtitle rendered exclusively on canvas — DOM subtitle intentionally removed */}
+                  {currentSubtitle && (
+                    <div
+                      className="w-full text-center font-bold px-2 py-1 pointer-events-none"
+                      style={{
+                        backgroundColor: "rgba(0,0,0,0.6)",
+                        color: subSettings.textColor,
+                        fontSize: `${subSettings.fontSize}px`,
+                        lineHeight: 1.4,
+                        textShadow: "0 1px 4px rgba(0,0,0,0.9)",
+                      }}
+                    >
+                      {currentSubtitle}
+                    </div>
+                  )}
                 </div>
               )}
 
