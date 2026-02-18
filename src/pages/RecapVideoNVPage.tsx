@@ -147,6 +147,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
     return 0;
   };
 
+  // Keep syncSegments in a ref so theater useEffect doesn't re-run when it changes
+  const syncSegmentsRef = useRef<ReturnType<typeof Array.prototype.map>>([]);
+
   const syncSegments = useMemo(() => {
     const getWeight = (text: string) => {
       const punctuationBonus = (text.match(/[.,!?;]/g) || []).length * 15;
@@ -174,6 +177,11 @@ export const ResultView: React.FC<ResultViewProps> = ({
       };
     });
   }, [scriptData]);
+
+  // Keep ref in sync so theater useEffect can always read latest without re-running
+  useEffect(() => {
+    syncSegmentsRef.current = syncSegments;
+  }, [syncSegments]);
 
   const downloadSRT = () => {
     let srtContent = "";
@@ -543,8 +551,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
         if (!av || !vv) return;
         if (!vv.paused && !av.paused && av.duration > 0 && vv.duration > 0) {
           const aPct = av.currentTime / av.duration;
-          const activeIndex = syncSegments.findIndex((s) => aPct >= s.aStartPct && aPct <= s.aEndPct);
-          const active = syncSegments[activeIndex];
+          const segs = syncSegmentsRef.current as typeof syncSegments;
+          const activeIndex = segs.findIndex((s: any) => aPct >= s.aStartPct && aPct <= s.aEndPct);
+          const active = segs[activeIndex];
 
           if (active) {
             const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
@@ -613,7 +622,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
       if (theaterVideoRef.current) theaterVideoRef.current.playbackRate = 1.0;
       setCurrentSubtitle("");
     };
-  }, [isTheaterMode, syncSegments, isYouTube]);
+  }, [isTheaterMode, isYouTube]);
 
   return (
     <>
@@ -1324,7 +1333,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                     borderTop: `2px solid ${subSettings.borderColor}`,
                     borderBottom: `2px solid ${subSettings.borderColor}`,
                     boxShadow: `0 0 12px ${subSettings.borderColor}40, inset 0 0 20px rgba(0,0,0,0.3)`,
-                    fontSize: `${(subSettings.fontSize / 500) * 100}vh`,
+                    fontSize: `${subSettings.fontSize}px`,
                     lineHeight: '1.4',
                     whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
