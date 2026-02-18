@@ -648,34 +648,35 @@ export const ResultView: React.FC<ResultViewProps> = ({
         if (active) {
           const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
 
-          // On segment change: hard-snap video to segment start if far off
+          // On segment CHANGE only: hard-snap video to segment start
+          // (Never hard-seek WITHIN a segment — that causes the rubber-band loop)
           if (activeIndex !== lastIndexRef.current) {
-            if (Math.abs(vv.currentTime - active.vStart) > 0.5) {
-              vv.currentTime = active.vStart;
-            }
+            vv.currentTime = active.vStart;
             lastIndexRef.current = activeIndex;
           }
 
           const segmentAudioPct = active.aEndPct - active.aStartPct;
           if (segmentAudioPct > 0.001) {
-            const progressInSegment = (aPct - active.aStartPct) / segmentAudioPct;
-            const targetVideoTime = active.vStart + progressInSegment * (vActualEnd - active.vStart);
-            const drift = targetVideoTime - vv.currentTime;
-
-            // Hard seek if drift > 0.5s (tight tolerance for 2000% match)
-            if (Math.abs(drift) > 0.5) {
-              vv.currentTime = targetVideoTime;
-            }
-
-            // Proportional rate control: base rate + gentle drift correction
             const audioSecs = segmentAudioPct * av.duration;
             const videoSecs = vActualEnd - active.vStart;
             if (audioSecs > 0 && videoSecs > 0) {
+              // Base rate: how fast video should play relative to audio for this segment
               const baseRate = videoSecs / audioSecs;
-              // PD correction: small gain to correct drift smoothly without jitter
-              const correction = drift * 0.3;
+
+              // Gentle drift correction — only nudge rate, never hard-seek mid-segment
+              const progressInSegment = (aPct - active.aStartPct) / segmentAudioPct;
+              const targetVideoTime = active.vStart + progressInSegment * videoSecs;
+              const drift = targetVideoTime - vv.currentTime;
+
+              // Emergency re-sync only if severely out of sync (>2s) — avoids rubber-band
+              if (Math.abs(drift) > 2.0) {
+                vv.currentTime = targetVideoTime;
+              }
+
+              // Smooth rate nudge: very small gain (0.1) to prevent oscillation
+              const correction = Math.max(-0.3, Math.min(0.3, drift * 0.1));
               const targetRate = baseRate + correction;
-              vv.playbackRate = Math.min(Math.max(targetRate, 0.25), 4.0);
+              vv.playbackRate = Math.min(Math.max(targetRate, 0.5), 2.0);
             }
           }
           setCurrentSubtitle(active.text);
