@@ -536,7 +536,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
         }
       }
 
-      // Draw logo with SPIN support (rotate around center) — top-right corner
+      // Draw logo with SPIN + NEON GLOW support (rotate around center) — top-right corner
       if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
         const logoSize = canvas.width * (logo.size / 100);
         const logoPad = 16;
@@ -548,6 +548,31 @@ export const ResultView: React.FC<ResultViewProps> = ({
           logoAngleRef.current = (logoAngleRef.current + (360 / 8) * dt) % 360;
         }
 
+        // === Draw multi-layer neon glow ring BEFORE logo (outside save/clip) ===
+        ctx.save();
+        ctx.translate(logoCX, logoCY);
+        if (logo.spin) {
+          ctx.rotate((logoAngleRef.current * Math.PI) / 180);
+        }
+        // Layer 1: outer diffuse neon glow
+        ctx.shadowColor = logo.neonColor;
+        ctx.shadowBlur = 40;
+        ctx.strokeStyle = logo.neonColor;
+        ctx.lineWidth = 3;
+        ctx.globalAlpha = 0.7;
+        ctx.beginPath();
+        ctx.arc(0, 0, logoSize / 2 + 4, 0, Math.PI * 2);
+        ctx.stroke();
+        // Layer 2: inner sharp neon ring
+        ctx.shadowBlur = 20;
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 1.0;
+        ctx.beginPath();
+        ctx.arc(0, 0, logoSize / 2 + 1, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+
+        // === Draw logo image with clip + glow ===
         ctx.save();
         ctx.translate(logoCX, logoCY);
         if (logo.spin) {
@@ -559,9 +584,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
           ctx.arc(0, 0, logoSize / 2, 0, Math.PI * 2);
           ctx.clip();
         }
-        // Neon glow
+        // Subtle glow on the image itself
         ctx.shadowColor = logo.neonColor;
-        ctx.shadowBlur = 18;
+        ctx.shadowBlur = 15;
+        ctx.globalAlpha = 1.0;
         ctx.drawImage(logoImg, -logoSize / 2, -logoSize / 2, logoSize, logoSize);
         ctx.restore();
       }
@@ -907,27 +933,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 </div>
               )}
 
-              {/* Subtitle overlay at bottom when blur is OFF */}
-              {!blurSettings.enabled && currentSubtitle && isRecapPlaying && (
-                <div
-                  className="absolute z-20 w-full text-center font-bold pointer-events-none"
-                  style={{
-                    bottom: '8%',
-                    left: 0,
-                    right: 0,
-                    padding: '6px 16px',
-                    backgroundColor: "rgba(0,0,0,0.6)",
-                    color: subSettings.textColor,
-                    textShadow: "1px 1px 3px black",
-                    fontSize: `${subSettings.fontSize}px`,
-                    lineHeight: '1.4',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                  }}
-                >
-                  {currentSubtitle}
-                </div>
-              )}
+              {/* Subtitles are rendered exclusively on canvas during recording.
+                  DOM subtitle is intentionally removed to prevent double-rendering. */}
 
               {isYouTube && youtubeId ? (
                 <iframe
