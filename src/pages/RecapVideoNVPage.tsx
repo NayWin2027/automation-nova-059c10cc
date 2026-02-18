@@ -485,7 +485,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
         if (active) {
           const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
           if (activeIndex !== lastIndexRef.current) {
-            if (Math.abs(vv.currentTime - active.vStart) > 0.2) {
+            if (Math.abs(vv.currentTime - active.vStart) > 1.5) {
               vv.currentTime = active.vStart;
             }
             lastIndexRef.current = activeIndex;
@@ -495,7 +495,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
             const progressInSegment = (aPct - active.aStartPct) / segmentAudioPct;
             const targetVideoTime = active.vStart + progressInSegment * (vActualEnd - active.vStart);
             const drift = targetVideoTime - vv.currentTime;
-            if (Math.abs(drift) > 0.5) vv.currentTime = targetVideoTime;
+            if (Math.abs(drift) > 2.0) vv.currentTime = targetVideoTime;
             const audioSecs = segmentAudioPct * av.duration;
             const videoSecs = vActualEnd - active.vStart;
             if (audioSecs > 0 && videoSecs > 0) {
@@ -774,6 +774,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
                   muted={isRecapPlaying}
                   controls={!isRendering && !isRecapPlaying}
                   playsInline
+                  autoPlay
+                  loop={!isRecapPlaying}
                   crossOrigin={isLocalSource(videoUrl) ? undefined : "anonymous"}
                 />
               ) : (
