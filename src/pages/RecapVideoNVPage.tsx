@@ -336,8 +336,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
     recorder.start(100);
 
     const drawFrame = () => {
-      if (!videoEl || !audioEl) return;
-      if (audioEl.ended || videoEl.ended) return;
+      if (!videoEl || !audioEl) { recapAnimFrameRef.current = requestAnimationFrame(drawFrame); return; }
+      // Stop rendering only when audio ends (don't stop on videoEl.ended to prevent freeze)
+      if (audioEl.ended) return;
 
       if (editorState.flip) {
         ctx.save();
@@ -468,8 +469,14 @@ export const ResultView: React.FC<ResultViewProps> = ({
     const syncLoop = () => {
       const av = audioRef.current;
       const vv = videoRef.current;
-      if (!av || !vv) return;
-      if (!vv.paused && !av.paused && av.duration > 0 && vv.duration > 0) {
+      if (!av || !vv) { animFrame = requestAnimationFrame(syncLoop); return; }
+
+      // Auto-recover if video stalls while audio is playing
+      if (!av.paused && vv.paused && !vv.ended) {
+        vv.play().catch(() => {});
+      }
+
+      if (av.duration > 0 && vv.duration > 0) {
         const aPct = av.currentTime / av.duration;
         const segs = syncSegmentsRef.current as typeof syncSegments;
         const activeIndex = segs.findIndex((s: any) => aPct >= s.aStartPct && aPct <= s.aEndPct);
@@ -701,12 +708,12 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 </div>
               )}
 
-              {/* Draggable Blur Box Layer */}
+              {/* Draggable Blur Box Layer — subtitle is rendered INSIDE the blur box */}
               {blurSettings.enabled && (
                 <div
                   onMouseDown={handleBlurDragStart}
                   onTouchStart={handleBlurDragStart}
-                  className="absolute z-20 cursor-move"
+                  className="absolute z-20 cursor-move flex items-center justify-center"
                   style={{
                     left: `${blurSettings.x}%`,
                     top: `${blurSettings.y}%`,
@@ -718,41 +725,30 @@ export const ResultView: React.FC<ResultViewProps> = ({
                     border: '1px dashed rgba(0,229,255,0.5)',
                     touchAction: 'none',
                     boxSizing: 'border-box',
-                  }}
-                />
-              )}
-
-              {/* Draggable Subtitles Layer (on top of blur box) */}
-              {currentSubtitle && (
-                <div
-                  onMouseDown={handleDragStart}
-                  onTouchStart={handleDragStart}
-                  className="absolute z-30 cursor-move"
-                  style={{
-                    left: '50%',
-                    bottom: `${100 - subSettings.y}%`,
-                    transform: `translateX(-50%) scale(${subSettings.scale})`,
-                    width: `${subSettings.maxWidth}%`,
-                    touchAction: "none",
+                    overflow: 'hidden',
                   }}
                 >
-                  <div
-                    className="text-center px-6 py-2 font-bold backdrop-blur-sm shadow-lg"
-                    style={{
-                      backgroundColor: subSettings.bgColor,
-                      color: subSettings.textColor,
-                      textShadow: "1px 1px 3px black, 0 0 8px rgba(0,0,0,0.5)",
-                      borderTop: `2px solid ${subSettings.borderColor}`,
-                      borderBottom: `2px solid ${subSettings.borderColor}`,
-                      boxShadow: `0 0 12px ${subSettings.borderColor}40, inset 0 0 20px rgba(0,0,0,0.3)`,
-                      fontSize: `${subSettings.fontSize}px`,
-                      lineHeight: '1.4',
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-word',
-                    }}
-                  >
-                    {currentSubtitle}
-                  </div>
+                  {/* Subtitle rendered inside blur box only */}
+                  {currentSubtitle && (
+                    <div
+                      className="w-full text-center font-bold"
+                      style={{
+                        backgroundColor: subSettings.bgColor,
+                        color: subSettings.textColor,
+                        textShadow: "1px 1px 3px black, 0 0 8px rgba(0,0,0,0.5)",
+                        borderTop: `2px solid ${subSettings.borderColor}`,
+                        borderBottom: `2px solid ${subSettings.borderColor}`,
+                        fontSize: `${subSettings.fontSize}px`,
+                        lineHeight: '1.4',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                        padding: '4px 12px',
+                        pointerEvents: 'none',
+                      }}
+                    >
+                      {currentSubtitle}
+                    </div>
+                  )}
                 </div>
               )}
 
