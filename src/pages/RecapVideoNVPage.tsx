@@ -477,9 +477,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
       // Style matches DOM preview exactly: bold, textShadow, no background
       const subText = currentSubtitleRef.current;
       if (subText) {
-        // Scale fontSize from preview DOM pixels to canvas pixels
-        const previewW = containerRef.current?.offsetWidth || canvas.width;
-        const scaleFactor = canvas.width / previewW;
+        // Scale fontSize using HEIGHT ratio — container is aspect-ratio/height-driven,
+        // so height is the correct anchor for pixel-perfect match between preview and output.
+        const previewH = containerRef.current?.offsetHeight || canvas.height;
+        const scaleFactor = canvas.height / previewH;
         const fontSize = subSettings.fontSize * scaleFactor;
         ctx.save();
         ctx.font = `bold ${fontSize}px sans-serif`;
@@ -489,7 +490,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
         if (blurSettings.enabled) {
           subCX = canvas.width * (blurSettings.x / 100);
           subCY = canvas.height * (blurSettings.y / 100);
-          maxW = canvas.width * (blurSettings.width / 100) - 16;
+          maxW = canvas.width * (blurSettings.width / 100) - (16 * scaleFactor);
         } else {
           subCX = canvas.width / 2;
           subCY = canvas.height * 0.88;
@@ -498,9 +499,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
         // No background — transparent (matches DOM preview)
         // Text shadow: 0 1px 4px rgba(0,0,0,0.9) — matches DOM textShadow
         ctx.shadowColor = "rgba(0,0,0,0.9)";
-        ctx.shadowBlur = 8;
+        ctx.shadowBlur = 8 * scaleFactor;
         ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 2;
+        ctx.shadowOffsetY = 2 * scaleFactor;
         ctx.fillStyle = subSettings.textColor;
         ctx.fillText(subText, subCX, subCY, maxW);
         ctx.restore();
