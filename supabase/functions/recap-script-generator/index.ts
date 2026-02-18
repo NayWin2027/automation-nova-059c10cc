@@ -231,27 +231,33 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - Identify the subject matter, the niche, and the story being told through visuals/actions/music
 - Write a complete, engaging narration script based on your visual/audio analysis
 
-SCRIPT LENGTH RULE (CRITICAL):
-- The narration script MUST be approximately 70% of the original source duration when read aloud
-- For example: a 3-minute video → script should be ~2 minutes when narrated; a 10-minute video → script should be ~7 minutes when narrated
-- NEVER write too short. If the source is long, the script must also be proportionally long
-- Each paragraph should be 2-4 sentences, and the total number of paragraphs must reflect the 70% duration target
-- Estimate: ~150 words per minute of narration. So a 10-minute video needs ~1050 words of script
+SCRIPT LENGTH RULE (CRITICAL — HARD LIMIT):
+- The narration script MUST be EXACTLY 70% of the original source duration when read aloud — NEVER longer, NEVER shorter
+- For example: a 3-minute video → script ~2 min; a 10-minute video → script ~7 min; a 30-minute video → script ~21 min
+- Estimate: ~150 words per minute of narration. A 10-min video = ~1050 words MAX
+- NEVER exceed this 70% word count. If too long, cut the least important filler details first
+- Every sentence must earn its place — no padding, no repetition, no over-explanation
 
-RECAP WRITING STYLE (KEY-POINT SUMMARY — NOT SCENE-BY-SCENE):
-- Write an ENGAGING key-point recap, NOT a micro-detailed play-by-play of every gesture
-- Summarize the main dramatic beats: who did what, key interactions, emotional turning points, shocking moments
-- Focus on moments that make viewers CURIOUS: intimate scenes, confrontations, betrayals, revelations, confessions
-- Do NOT describe every tiny action (e.g., "she picked up the bottle, she opened the cap, she squeezed it" → instead: "she gently applied the medicine on his forehead")
-- But DO cover ALL major story beats thoroughly — the script should feel SUBSTANTIAL and complete
-- The recap should feel like a compelling, DETAILED SUMMARY that makes people want to watch the original
-- Balance: not micro-detailed, but not overly condensed either — aim for rich, engaging storytelling at 70% length
+VIRAL HOOK RULE (MANDATORY — FIRST 3 SECONDS):
+- The VERY FIRST sentence MUST be a 3-second viral hook designed to stop the scroll instantly
+- It must be shocking, provocative, or emotionally magnetic — NOT a generic intro
+- Great hook examples: "No one expected what happened next." / "This moment destroyed everything." / "She had no idea her whole life was about to collapse."
+- The hook MUST target the single most shocking/dramatic moment in the source
+- After the hook, transition naturally into the story recap
+
+RECAP WRITING STYLE (BILLION-VIEW YOUTUBE STANDARD):
+- Write like a billion-view YouTube narrator: MrBeast energy for drama, Coffeezilla tension for exposés, Mark Rober precision for tech
+- Key-point summary ONLY — NOT micro-detailed play-by-play
+- Hit ONLY the dramatic peaks: shocking moments, confrontations, betrayals, intimate scenes, revelations
+- Every sentence must create curiosity for the next — use cliffhangers between paragraphs
+- Cut all filler: no "and then", no "after that", no "meanwhile" — go straight to the punch
+- Each paragraph = one explosive beat, 2-3 sentences max, designed to keep viewers locked in
 
 STRUCTURE:
-- Hook opening (1 powerful sentence that grabs attention)
-- Body: Summarize the KEY POINTS of the story chronologically — major events, relationship dynamics, dramatic moments
-- Climax: Build to the most dramatic/shocking moment
-- Conclusion: Wrap up with the final outcome/resolution`;
+- HOOK (1 viral sentence — 3-second scroll-stopper)
+- Rising tension: Build with only the most gripping beats in chronological order
+- Climax: The single most shocking/dramatic moment at peak intensity
+- Resolution: Short, punchy ending that leaves viewers wanting more`;
 
     // ===== BUILD GEMINI REQUEST =====
     let contentParts: any[] = [];
