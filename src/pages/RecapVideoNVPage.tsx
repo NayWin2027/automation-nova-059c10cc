@@ -367,25 +367,35 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.restore();
       }
 
-      if (audioEl.duration > 0) {
+      // Draw subtitle ONLY inside blur box region (matching blur box position/size)
+      if (audioEl.duration > 0 && blurSettings.enabled) {
         const aPct = audioEl.currentTime / audioEl.duration;
         const activeIndex = syncSegmentsRef.current.findIndex((s: any) => aPct >= s.aStartPct && aPct <= s.aEndPct);
         const active = (syncSegmentsRef.current as any[])[activeIndex];
 
         if (active && active.text) {
+          // Calculate blur box bounds in canvas coordinates
+          const blurW = canvas.width * (blurSettings.width / 100);
+          const blurH = canvas.height * (blurSettings.height / 100);
+          const blurCX = canvas.width * (blurSettings.x / 100);
+          const blurCY = canvas.height * (blurSettings.y / 100);
+          const blurX = Math.max(0, Math.min(canvas.width - blurW, blurCX - blurW / 2));
+          const blurY = Math.max(0, Math.min(canvas.height - blurH, blurCY - blurH / 2));
+
           const scaleFactor = canvas.height / 500;
-          const fontSize = Math.max(12, Math.round(subSettings.fontSize * scaleFactor));
+          const fontSize = Math.max(10, Math.round(subSettings.fontSize * scaleFactor));
           ctx.font = `bold ${fontSize}px sans-serif`;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
 
-          const barMaxWidth = canvas.width * (subSettings.maxWidth / 100);
+          // Word-wrap constrained to blur box width
+          const maxTextWidth = blurW - 24;
           const words = active.text.split(/\s+/);
           const lines: string[] = [];
           let currentLine = "";
           for (const word of words) {
             const testLine = currentLine ? currentLine + " " + word : word;
-            if (ctx.measureText(testLine).width > barMaxWidth - 40 && currentLine) {
+            if (ctx.measureText(testLine).width > maxTextWidth && currentLine) {
               lines.push(currentLine);
               currentLine = word;
             } else {
@@ -395,24 +405,26 @@ export const ResultView: React.FC<ResultViewProps> = ({
           if (currentLine) lines.push(currentLine);
 
           const lineHeight = fontSize * 1.4;
-          const barHeight = lines.length * lineHeight + 20;
-          const barCenterY = canvas.height * (subSettings.y / 100);
-          const barY = barCenterY - barHeight / 2;
-          const barX = (canvas.width - barMaxWidth) / 2;
+          const textBlockH = lines.length * lineHeight + 16;
+          // Center text vertically inside blur box
+          const textStartY = blurY + (blurH - textBlockH) / 2;
+          const textCenterX = blurX + blurW / 2;
 
+          // Background
           ctx.fillStyle = subSettings.bgColor;
-          ctx.fillRect(barX, barY, barMaxWidth, barHeight);
+          ctx.fillRect(blurX, textStartY, blurW, textBlockH);
 
+          // Border lines
           if (subSettings.borderColor && subSettings.borderColor !== "transparent") {
             ctx.strokeStyle = subSettings.borderColor;
-            ctx.lineWidth = 3;
+            ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.moveTo(barX, barY);
-            ctx.lineTo(barX + barMaxWidth, barY);
+            ctx.moveTo(blurX, textStartY);
+            ctx.lineTo(blurX + blurW, textStartY);
             ctx.stroke();
             ctx.beginPath();
-            ctx.moveTo(barX, barY + barHeight);
-            ctx.lineTo(barX + barMaxWidth, barY + barHeight);
+            ctx.moveTo(blurX, textStartY + textBlockH);
+            ctx.lineTo(blurX + blurW, textStartY + textBlockH);
             ctx.stroke();
           }
 
@@ -420,9 +432,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
           ctx.strokeStyle = "rgba(0,0,0,0.9)";
           ctx.lineWidth = Math.max(2, fontSize * 0.08);
           for (let li = 0; li < lines.length; li++) {
-            const ly = barY + 10 + (li + 0.5) * lineHeight;
-            ctx.strokeText(lines[li], canvas.width / 2, ly);
-            ctx.fillText(lines[li], canvas.width / 2, ly);
+            const ly = textStartY + 8 + (li + 0.5) * lineHeight;
+            ctx.strokeText(lines[li], textCenterX, ly);
+            ctx.fillText(lines[li], textCenterX, ly);
           }
         }
       }
@@ -525,7 +537,12 @@ export const ResultView: React.FC<ResultViewProps> = ({
       cancelAnimationFrame(animFrame);
       a.removeEventListener("ended", onEnded);
       a.pause();
-      if (v) { v.muted = false; v.playbackRate = 1.0; }
+      if (v) {
+        v.muted = false;
+        v.playbackRate = 1.0;
+        // Resume normal playback so video doesn't freeze after recap ends
+        v.play().catch(() => {});
+      }
       setCurrentSubtitle("");
       if (recapRecorderRef.current && recapRecorderRef.current.state !== "inactive") {
         recapRecorderRef.current.stop();
@@ -676,6 +693,11 @@ export const ResultView: React.FC<ResultViewProps> = ({
               ref={containerRef}
               className={`relative overflow-hidden transition-all duration-300 shadow-lg flex items-center justify-center bg-black`}
               style={containerStyles}
+              onMouseMove={handleDragMove}
+              onMouseUp={handleDragEnd}
+              onMouseLeave={handleDragEnd}
+              onTouchMove={handleDragMove}
+              onTouchEnd={handleDragEnd}
             >
               {/* Logo Layer */}
               {logo.url && (
