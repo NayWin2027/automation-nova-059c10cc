@@ -931,29 +931,35 @@ export const ResultView: React.FC<ResultViewProps> = ({
           const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
           const videoSecs = vActualEnd - active.vStart;
 
-          // On segment CHANGE: hard-snap video to exact segment start (0.05s precision)
+          // On segment CHANGE: hard-snap ONLY if very far off (>0.3s) to avoid stutter/decoder-flush
           if (activeIndex !== lastIndexRef.current) {
-            vv.currentTime = active.vStart;
+            const snapDrift = Math.abs(vv.currentTime - active.vStart);
+            if (snapDrift > 0.3) {
+              vv.currentTime = active.vStart;
+            }
             lastIndexRef.current = activeIndex;
           }
 
           if (audioTs.length > 0) {
-            // === 8000% SYNC: Pure second-based sync — no percentage, no estimation ===
+            // === 8000% SMOOTH SYNC: Pure second-based, playbackRate-driven — no constant hard-seeks ===
             const ts = audioTs[activeIndex];
             const audioSegDuration = ts.end - ts.start; // exact seconds this segment spans in audio
             if (audioSegDuration > 0.001 && videoSecs > 0) {
-              const baseRate = videoSecs / audioSegDuration; // video speed to match audio segment duration exactly
-              const progressInSeg = (currentTime - ts.start) / audioSegDuration; // 0.0 → 1.0, pure seconds
+              const baseRate = videoSecs / audioSegDuration; // exact speed to match segment duration
+              const progressInSeg = (currentTime - ts.start) / audioSegDuration; // 0.0 → 1.0
               const targetVideoTime = active.vStart + progressInSeg * videoSecs;
               const drift = targetVideoTime - vv.currentTime;
 
-              // === 8000% SYNC: 50ms hard re-snap threshold (0.05s) ===
-              if (Math.abs(drift) > 0.05) {
+              // Hard seek ONLY for large drift (>0.3s) — prevents stutter from frequent seeks
+              if (Math.abs(drift) > 0.3) {
                 vv.currentTime = targetVideoTime;
+              } else {
+                // Smooth playbackRate correction — no decoder flush, no visual jump
+                // Strong correction factor (3.5) ensures 8000% sync without seeking
+                const clampedDrift = Math.max(-0.3, Math.min(0.3, drift));
+                const correction = clampedDrift * 3.5;
+                vv.playbackRate = Math.min(Math.max(baseRate + correction, 0.1), 8.0);
               }
-              // Aggressive micro-correction: factor 2.0 — applied every rAF frame (~16ms)
-              const correction = Math.max(-0.6, Math.min(0.6, drift * 2.0));
-              vv.playbackRate = Math.min(Math.max(baseRate + correction, 0.2), 5.0);
             }
           } else {
             // Fallback: percentage-based sync
@@ -965,9 +971,13 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 const progressInSegment = (aPct - aStartPct) / segmentAudioPct;
                 const targetVideoTime = active.vStart + progressInSegment * videoSecs;
                 const drift = targetVideoTime - vv.currentTime;
-                if (Math.abs(drift) > 0.08) vv.currentTime = targetVideoTime;
-                const correction = Math.max(-0.5, Math.min(0.5, drift * 1.5));
-                vv.playbackRate = Math.min(Math.max(baseRate + correction, 0.25), 4.0);
+                if (Math.abs(drift) > 0.3) {
+                  vv.currentTime = targetVideoTime;
+                } else {
+                  const clampedDrift = Math.max(-0.3, Math.min(0.3, drift));
+                  const correction = clampedDrift * 3.5;
+                  vv.playbackRate = Math.min(Math.max(baseRate + correction, 0.1), 8.0);
+                }
               }
             }
           }
