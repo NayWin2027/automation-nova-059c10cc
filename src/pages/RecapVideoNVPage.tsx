@@ -509,80 +509,108 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
 
       // Draw subtitles on canvas (burns into recorded output)
-      // KEY FIX: Use the same % ratio as DOM preview.
-      // DOM preview uses fontSize in CSS px relative to the preview container.
-      // Canvas must use fontSize as the same % of canvas height that the CSS px is of the preview container height.
+      // Sub box = EXACT blur box pixel dimensions (1000% fit)
+      // Auto-scales font size to fit all text within the box — no text cut-off
       const subText = currentSubtitleRef.current;
       if (subText) {
-        const previewH = containerRef.current?.offsetHeight || 450;
-        // fontSize as fraction of preview container height → same fraction on canvas
-        const fontSizeFraction = subSettings.fontSize / previewH;
-        const canvasFontSize = Math.round(canvas.height * fontSizeFraction);
-        const lineHeight = canvasFontSize * 1.45;
-
         ctx.save();
-        ctx.font = `bold ${canvasFontSize}px sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
 
-        // ── Determine subtitle area ──────────────────────────────────────
+        // ── Determine subtitle box area ──────────────────────────────────
         let boxX: number, boxY: number, boxW: number, boxH: number;
-        let subCX: number, subCY: number, maxW: number;
+        let subCX: number, subCY: number;
 
         if (blurSettings.enabled) {
-          // Background box = EXACT blur box size (pixel-perfect match with DOM)
+          // EXACT blur box pixel dimensions — perfect 1:1 match with DOM blur box
           boxW = canvas.width * (blurSettings.width / 100);
           boxH = canvas.height * (blurSettings.height / 100);
           boxX = canvas.width * (blurSettings.x / 100) - boxW / 2;
           boxY = canvas.height * (blurSettings.y / 100) - boxH / 2;
           subCX = boxX + boxW / 2;
           subCY = boxY + boxH / 2;
-          maxW = boxW - canvasFontSize * 0.6; // inner padding
         } else {
-          // Free-position: background wraps text tightly
-          maxW = canvas.width * (subSettings.maxWidth / 100);
+          // Free-position: use user fontSize setting as base
+          const previewH = containerRef.current?.offsetHeight || 450;
+          const fontSizeFraction = subSettings.fontSize / previewH;
+          const baseFontSize = Math.round(canvas.height * fontSizeFraction);
+          const maxTextW = canvas.width * (subSettings.maxWidth / 100);
           subCX = canvas.width / 2;
           subCY = canvas.height * 0.88;
-          // We'll compute boxW/H after word-wrap below
-          boxW = 0; boxH = 0; boxX = 0; boxY = 0;
-        }
-
-        // ── Word-wrap into max 2 lines ───────────────────────────────────
-        const words = subText.split(" ");
-        const lines: string[] = [];
-        let currentLine = "";
-        for (const word of words) {
-          const testLine = currentLine ? `${currentLine} ${word}` : word;
-          if (ctx.measureText(testLine).width > maxW && currentLine) {
-            lines.push(currentLine);
-            currentLine = word;
-            if (lines.length >= 2) { // max 2 lines — append remainder to line 2
-              currentLine = words.slice(words.indexOf(word)).join(" ");
-              break;
-            }
-          } else {
-            currentLine = testLine;
+          // temp draw to measure
+          ctx.font = `bold ${baseFontSize}px sans-serif`;
+          const words2 = subText.split(" ");
+          const lines2: string[] = [];
+          let cl2 = "";
+          for (const w of words2) {
+            const tl = cl2 ? `${cl2} ${w}` : w;
+            if (ctx.measureText(tl).width > maxTextW - baseFontSize * 0.6 && cl2) {
+              lines2.push(cl2); cl2 = w;
+            } else { cl2 = tl; }
           }
-        }
-        if (currentLine) lines.push(currentLine);
-        const clampedLines = lines.slice(0, 2);
-        const totalTextH = clampedLines.length * lineHeight;
-
-        // For free-position mode, compute box from text
-        if (!blurSettings.enabled) {
-          const longestW = Math.max(...clampedLines.map(l => ctx.measureText(l).width));
-          boxW = longestW + canvasFontSize * 0.8;
-          boxH = totalTextH + canvasFontSize * 0.5;
+          if (cl2) lines2.push(cl2);
+          const lineH2 = baseFontSize * 1.45;
+          const longestW2 = Math.max(...lines2.map(l => ctx.measureText(l).width));
+          boxW = longestW2 + baseFontSize * 0.8;
+          boxH = lines2.length * lineH2 + baseFontSize * 0.5;
           boxX = subCX - boxW / 2;
           boxY = subCY - boxH / 2;
         }
+
+        // ── Auto-fit font size so ALL text fits within box (no cut-off) ──
+        // Start from a reasonable size and shrink until text fits in ≤ N lines
+        const innerPadX = boxW * 0.04; // 4% horizontal padding each side
+        const innerPadY = boxH * 0.08; // 8% vertical padding each side
+        const maxTextWidth = boxW - innerPadX * 2;
+        const maxTextHeight = boxH - innerPadY * 2;
+
+        let fontSize = Math.round(boxH * 0.35); // start at 35% of box height
+        let fittedLines: string[] = [];
+
+        // Shrink font until all words fit within maxTextHeight
+        while (fontSize >= 8) {
+          ctx.font = `bold ${fontSize}px sans-serif`;
+          const lineHeight = fontSize * 1.4;
+
+          // Word-wrap with current font
+          const words = subText.split(" ");
+          const lines: string[] = [];
+          let currentLine = "";
+          for (const word of words) {
+            const testLine = currentLine ? `${currentLine} ${word}` : word;
+            if (ctx.measureText(testLine).width > maxTextWidth && currentLine) {
+              lines.push(currentLine);
+              currentLine = word;
+            } else {
+              currentLine = testLine;
+            }
+          }
+          if (currentLine) lines.push(currentLine);
+
+          const totalH = lines.length * lineHeight;
+          if (totalH <= maxTextHeight) {
+            fittedLines = lines;
+            break;
+          }
+          fontSize -= 1;
+        }
+
+        if (fittedLines.length === 0) {
+          // Absolute fallback: one line with ellipsis
+          fontSize = 8;
+          ctx.font = `bold ${fontSize}px sans-serif`;
+          fittedLines = [subText];
+        }
+
+        const lineHeight = fontSize * 1.4;
+        const totalTextH = fittedLines.length * lineHeight;
 
         // ── Draw background (full blur-box size when blur enabled) ───────
         ctx.fillStyle = subSettings.bgColor;
         ctx.shadowColor = "transparent";
         ctx.shadowBlur = 0;
         ctx.beginPath();
-        const bgRadius = Math.min(canvasFontSize * 0.3, 10);
+        const bgRadius = Math.min(fontSize * 0.3, 10);
         if (ctx.roundRect) {
           ctx.roundRect(boxX, boxY, boxW, boxH, bgRadius);
         } else {
@@ -592,19 +620,19 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
         // ── Draw border ──────────────────────────────────────────────────
         ctx.strokeStyle = subSettings.borderColor;
-        ctx.lineWidth = Math.max(1, canvasFontSize * 0.05);
+        ctx.lineWidth = Math.max(1, fontSize * 0.05);
         ctx.stroke();
 
-        // ── Draw each line of text ───────────────────────────────────────
+        // ── Draw each line of text centered in box ───────────────────────
         ctx.shadowColor = "rgba(0,0,0,0.9)";
-        ctx.shadowBlur = canvasFontSize * 0.25;
+        ctx.shadowBlur = fontSize * 0.25;
         ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = canvasFontSize * 0.07;
+        ctx.shadowOffsetY = fontSize * 0.07;
         ctx.fillStyle = subSettings.textColor;
 
         const startY = subCY - (totalTextH / 2) + lineHeight / 2;
-        clampedLines.forEach((line, i) => {
-          ctx.fillText(line, subCX, startY + i * lineHeight, maxW);
+        fittedLines.forEach((line, i) => {
+          ctx.fillText(line, subCX, startY + i * lineHeight, maxTextWidth);
         });
 
         ctx.restore();
@@ -1047,26 +1075,25 @@ export const ResultView: React.FC<ResultViewProps> = ({
                   }}
                 >
                   {currentSubtitle && (
-                    <div
+                  <div
                       className="absolute inset-0 flex items-center justify-center pointer-events-none"
                       style={{
                         backgroundColor: subSettings.bgColor,
                         borderRadius: "inherit",
+                        padding: "4% 4%",
                       }}
                     >
                       <div
-                        className="w-full text-center font-bold px-3"
+                        className="w-full text-center font-bold"
                         style={{
                           color: subSettings.textColor,
-                          fontSize: `${subSettings.fontSize}px`,
-                          lineHeight: 1.45,
+                          fontSize: `clamp(8px, ${subSettings.fontSize}px, 100%)`,
+                          lineHeight: 1.4,
                           textShadow: "0 1px 4px rgba(0,0,0,0.9)",
                           wordBreak: "break-word",
                           overflowWrap: "break-word",
-                          display: "-webkit-box",
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: "vertical",
-                          overflow: "hidden",
+                          overflow: "visible",
+                          whiteSpace: "normal",
                         }}
                       >
                         {currentSubtitle}
@@ -1364,14 +1391,6 @@ export const ResultView: React.FC<ResultViewProps> = ({
             </div>
           )}
 
-          {audioUrl && !isYouTube && !renderedBlobUrl && (
-            <button
-              onClick={() => setIsRecapPlaying((v) => !v)}
-              className={`w-full font-black text-lg py-4 rounded-xl border-4 border-charcoal-800 transition-all ${isRecapPlaying ? "bg-red-500 hover:bg-red-400 text-white shadow-[0_0_20px_rgba(239,68,68,0.5)]" : "bg-neon-cyan hover:bg-white text-charcoal-900 shadow-[0_0_20px_rgba(0,229,255,0.4)] animate-pulse"}`}
-            >
-              {isRecapPlaying ? "⏹ STOP RECAP" : "▶ WATCH AUTO RECAP"}
-            </button>
-          )}
 
           <div className="p-6 bg-charcoal-800 rounded-xl border border-charcoal-600 shadow-lg flex flex-col space-y-4">
             <h3 className="text-lg font-semibold text-white">Download & Export</h3>
@@ -1397,25 +1416,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                     Back to Editor
                   </button>
                 </div>
-              ) : (
-                !isYouTube &&
-                videoUrl && (
-                   <button
-                     onClick={() => setIsRecapPlaying((v) => !v)}
-                     className="flex items-center justify-center px-4 py-3 bg-neon-cyan hover:bg-neon-hover text-charcoal-900 font-bold rounded-lg transition-colors shadow-lg"
-                   >
-                    <svg className="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                      />
-                    </svg>
-                    Watch & Record Recap Video
-                  </button>
-                )
-              )}
+              ) : null}
 
               {audioUrl && (
                 <a
