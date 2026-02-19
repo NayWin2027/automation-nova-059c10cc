@@ -108,6 +108,14 @@ const defaultTools = [
   description: "မီဒီယာစီမံမှု ဖန်တီးခြင်း။",
   gradient: "cyan" as const,
   route: "/creator"
+},
+{
+  id: "recap-nv",
+  icon: Video,
+  title: "Video Recap NV",
+  description: "Video Recap NV ဆောင်းပါး ဖန်တီးခြင်း။",
+  gradient: "rose" as const,
+  route: "/recap-nv"
 }];
 
 type Tool = (typeof defaultTools)[number];
@@ -287,18 +295,6 @@ const Index = () => {
 
       })}
 
-        {/* Admin-only: Video Recap NV */}
-        {isAdmin && (
-          <div className="relative">
-            <ToolCard
-              icon={Video}
-              title="Video Recap NV"
-              description="Admin Test — Video Recap NV"
-              gradient="rose"
-              onClick={() => navigate("/recap-nv")}
-            />
-          </div>
-        )}
       </div>
     </>;
 
