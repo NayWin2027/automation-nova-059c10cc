@@ -171,14 +171,25 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
   // Auto-start recording when parent signals pipeline is complete
   useEffect(() => {
-    if (autoStartRecap && audioUrl && videoUrl && !isRecapPlaying && !isRendering && !renderedBlobUrl) {
-      onAutoStartConsumed?.();
-      // Small delay to allow audio/video elements to mount and load
-      const t = setTimeout(() => {
+    if (!autoStartRecap || !audioUrl || !videoUrl || isRecapPlaying || isRendering || renderedBlobUrl) return;
+    onAutoStartConsumed?.();
+
+    // Poll until both audio & video elements are mounted and have data, then auto-start
+    let attempts = 0;
+    const maxAttempts = 40; // 40 × 150ms = 6 seconds max wait
+    const poll = setInterval(() => {
+      attempts++;
+      const a = audioRef.current;
+      const v = videoRef.current;
+      const audioReady = a && (a.readyState >= 2 || a.duration > 0);
+      const videoReady = v && (v.readyState >= 2 || v.duration > 0);
+      if ((audioReady && videoReady) || attempts >= maxAttempts) {
+        clearInterval(poll);
         setIsRecapPlaying(true);
-      }, 800);
-      return () => clearTimeout(t);
-    }
+      }
+    }, 150);
+
+    return () => clearInterval(poll);
   }, [autoStartRecap, audioUrl, videoUrl]);
 
   const isYouTube = useMemo(() => {
