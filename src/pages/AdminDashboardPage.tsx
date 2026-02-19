@@ -4,10 +4,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAdmin } from "@/hooks/useAdmin";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { 
-  Shield, Users, Activity, Settings, LogOut, 
-  RefreshCw, Home, Sparkles, BarChart3
-} from "lucide-react";
+import {
+  Shield, Users, Activity, Settings, LogOut,
+  RefreshCw, Home, Sparkles, BarChart3 } from
+"lucide-react";
 import AdminUsersTab from "@/components/admin/AdminUsersTab";
 import AdminActivityTab from "@/components/admin/AdminActivityTab";
 import AdminSettingsTab from "@/components/admin/AdminSettingsTab";
@@ -25,7 +25,7 @@ const AdminDashboardPage: React.FC = () => {
     fetchStats,
     fetchProfiles,
     fetchActivityLogs,
-    signOut,
+    signOut
   } = useAdmin();
 
   const [refreshing, setRefreshing] = useState(false);
@@ -38,7 +38,7 @@ const AdminDashboardPage: React.FC = () => {
       toast({
         title: "Access Denied",
         description: "Admin privileges required",
-        variant: "destructive",
+        variant: "destructive"
       });
       navigate('/admin/login');
     }
@@ -48,40 +48,40 @@ const AdminDashboardPage: React.FC = () => {
   useEffect(() => {
     const verify2FAStatus = async () => {
       if (!user || !isAdmin) return;
-      
+
       try {
         const { data: status2FA, error } = await supabase.functions.invoke("admin-2fa", {
-          body: { action: "status" },
+          body: { action: "status" }
         });
-        
+
         if (error) {
           // Security check failed - redirect to login
-          toast({ 
-            title: "Security Check Failed", 
+          toast({
+            title: "Security Check Failed",
             description: "Please login again",
-            variant: "destructive" 
+            variant: "destructive"
           });
           await signOut();
           navigate('/admin/login');
           return;
         }
-        
+
         if (status2FA?.enabled) {
           // Check if 2FA was verified in this session
           const verified = sessionStorage.getItem(`2fa_verified_${user.id}`);
           if (!verified) {
             // 2FA not verified - redirect to login
-            toast({ 
-              title: "2FA Required", 
+            toast({
+              title: "2FA Required",
               description: "Please verify your identity",
-              variant: "destructive" 
+              variant: "destructive"
             });
             await signOut();
             navigate('/admin/login');
             return;
           }
         }
-        
+
         setTwoFAChecked(true);
       } catch (err) {
         console.error("2FA check error:", err);
@@ -89,7 +89,7 @@ const AdminDashboardPage: React.FC = () => {
         navigate('/admin/login');
       }
     };
-    
+
     if (!loading && isAdmin && user) {
       verify2FAStatus();
     }
@@ -106,14 +106,14 @@ const AdminDashboardPage: React.FC = () => {
   const handleRefresh = async () => {
     setRefreshing(true);
     await Promise.all([
-      fetchStats(),
-      fetchProfiles(),
-      fetchActivityLogs(),
-    ]);
+    fetchStats(),
+    fetchProfiles(),
+    fetchActivityLogs()]
+    );
     setRefreshing(false);
     toast({
       title: "✅ Data Refreshed",
-      description: "All statistics updated",
+      description: "All statistics updated"
     });
   };
 
@@ -132,8 +132,8 @@ const AdminDashboardPage: React.FC = () => {
           </div>
           <p className="text-xs text-muted-foreground uppercase tracking-wider">Loading...</p>
         </div>
-      </div>
-    );
+      </div>);
+
   }
 
   if (!isAdmin) {
@@ -157,21 +157,21 @@ const AdminDashboardPage: React.FC = () => {
           <div className="flex items-center gap-1.5">
             <button
               onClick={() => navigate("/")}
-              className="p-2 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors"
-            >
-              <Home className="w-3.5 h-3.5 text-muted-foreground" />
+              className="p-2 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors">
+
+              <Home className="text-fuchsia-700 w-[20px] h-[20px]" />
             </button>
             <button
               onClick={handleRefresh}
               disabled={refreshing}
-              className="p-2 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors"
-            >
+              className="p-2 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors">
+
               <RefreshCw className={`w-3.5 h-3.5 text-muted-foreground ${refreshing ? 'animate-spin' : ''}`} />
             </button>
             <button
               onClick={handleLogout}
-              className="p-2 rounded-lg bg-destructive/10 hover:bg-destructive/20 transition-colors"
-            >
+              className="p-2 rounded-lg bg-destructive/10 hover:bg-destructive/20 transition-colors">
+
               <LogOut className="w-3.5 h-3.5 text-destructive" />
             </button>
           </div>
@@ -220,8 +220,8 @@ const AdminDashboardPage: React.FC = () => {
           </TabsContent>
         </Tabs>
       </main>
-    </div>
-  );
+    </div>);
+
 };
 
 export default AdminDashboardPage;
