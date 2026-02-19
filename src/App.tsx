@@ -10,8 +10,10 @@ import Index from "./pages/Index";
 const lazyRetry = (importFn: () => Promise<any>) =>
   lazy(() =>
     importFn().catch(() => {
+      // Reload to fetch fresh chunks; return a never-resolving promise
+      // since calling importFn() again before reload completes also fails
       window.location.reload();
-      return importFn();
+      return new Promise<{ default: React.ComponentType<any> }>(() => {});
     })
   );
 
