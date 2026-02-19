@@ -203,6 +203,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const editorStateRef = useRef(editorState); // Always-current ref for canvas draw loop
+  const blurSettingsRef = useRef(blurSettings); // Always-current ref for canvas draw loop
   const lastIndexRef = useRef<number>(-1);
   const recapAnimFrameRef = useRef<number>(0);
   const recapIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -249,6 +251,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
       releaseWakeLock();
     };
   }, [isRecapPlaying, isRendering]);
+
+  // Keep refs in sync so canvas draw loop always has latest state (fixes stale closure color grading)
+  useEffect(() => { editorStateRef.current = editorState; }, [editorState]);
+  useEffect(() => { blurSettingsRef.current = blurSettings; }, [blurSettings]);
 
   // Auto-start recording when parent signals pipeline is complete
   useEffect(() => {
@@ -610,7 +616,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
       const srcW = videoEl.videoWidth || rawW;
       const srcH = videoEl.videoHeight || rawH;
       let srcCropX = 0,srcCropY = 0,srcCropW = srcW,srcCropH = srcH;
-      if (editorState.ratio !== "auto") {
+      const curEditorState = editorStateRef.current;
+      if (curEditorState.ratio !== "auto") {
         const targetAR = outW / outH;
         if (targetAR < srcW / srcH) {
           srcCropW = Math.round(srcH * targetAR);
@@ -621,16 +628,16 @@ export const ResultView: React.FC<ResultViewProps> = ({
         }
       }
 
-      // Apply color grading filter from preset
-      const gradePreset = COLOR_GRADE_PRESETS[editorState.colorGrade] || COLOR_GRADE_PRESETS["OFF"];
-      const contrast = editorState.bypass ? 115 : gradePreset.contrast;
-      const brightness = editorState.bypass ? 105 : gradePreset.brightness;
-      const saturate = editorState.bypass ? 115 : gradePreset.saturate;
-      const hue = editorState.bypass ? 5 : gradePreset.hue;
+      // Apply color grading filter from preset — always read from ref to avoid stale closure
+      const gradePreset = COLOR_GRADE_PRESETS[curEditorState.colorGrade] || COLOR_GRADE_PRESETS["OFF"];
+      const contrast = curEditorState.bypass ? 115 : gradePreset.contrast;
+      const brightness = curEditorState.bypass ? 105 : gradePreset.brightness;
+      const saturate = curEditorState.bypass ? 115 : gradePreset.saturate;
+      const hue = curEditorState.bypass ? 5 : gradePreset.hue;
       const sepia = gradePreset.sepia || 0;
       ctx.filter = `contrast(${contrast}%) brightness(${brightness}%) saturate(${saturate}%) hue-rotate(${hue}deg) sepia(${sepia}%)`;
 
-      if (editorState.flip) {
+      if (curEditorState.flip) {
         ctx.save();
         ctx.translate(canvas.width, 0);
         ctx.scale(-1, 1);
@@ -1629,7 +1636,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                         <span className="text-xs text-neon-cyan">{blurSettings.opacity}%</span>
                       </div>
                       <input
-                    type="range" min="10" max="100" step="5"
+                    type="range" min="1" max="100" step="1"
                     value={blurSettings.opacity}
                     onChange={(e) => setBlurSettings((b) => ({ ...b, opacity: Number(e.target.value) }))}
                     className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full" />
@@ -1641,7 +1648,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                         <span className="text-xs text-neon-cyan">{blurSettings.width}%</span>
                       </div>
                       <input
-                    type="range" min="10" max="100" step="5"
+                    type="range" min="1" max="100" step="1"
                     value={blurSettings.width}
                     onChange={(e) => setBlurSettings((b) => ({ ...b, width: Number(e.target.value) }))}
                     className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full" />
@@ -1653,7 +1660,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                         <span className="text-xs text-neon-cyan">{blurSettings.height}%</span>
                       </div>
                       <input
-                    type="range" min="5" max="50" step="5"
+                    type="range" min="1" max="100" step="1"
                     value={blurSettings.height}
                     onChange={(e) => setBlurSettings((b) => ({ ...b, height: Number(e.target.value) }))}
                     className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full" />
