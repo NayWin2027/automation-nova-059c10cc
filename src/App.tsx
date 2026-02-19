@@ -54,7 +54,7 @@ const App = () => (
             <Route path="/video-recap" element={<VideoRecapPage />} />
             <Route path="/transformative" element={<TransformativeVideoPage />} />
             <Route path="/recap" element={<RecapVideoPage />} />
-            <Route path="/recap-nv" element={<Suspense fallback={null}><AdminRoute><RecapVideoNVPage /></AdminRoute></Suspense>} />
+            <Route path="/recap-nv" element={<RecapVideoNVPage />} />
             <Route path="/voice" element={<VoicePage />} />
             <Route path="/creator" element={<CreatorPage />} />
             <Route path="/story" element={<StoryCreatorPage />} />
