@@ -24,6 +24,8 @@ interface ResultViewProps {
   videoUrl?: string;
   status: ProcessingStatus;
   audioTimestampsRef: React.MutableRefObject<{ index: number; start: number; end: number }[]>;
+  autoStartRecap?: boolean; // When true, auto-start recording immediately
+  onAutoStartConsumed?: () => void; // Called after auto-start is triggered to reset flag
 }
 
 interface LogoSettings {
@@ -64,6 +66,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
   videoUrl,
   status,
   audioTimestampsRef,
+  autoStartRecap,
+  onAutoStartConsumed,
 }) => {
   const [activeTab, setActiveTab] = useState<"script" | "segments">("script");
   const [isRecapPlaying, setIsRecapPlaying] = useState(false);
@@ -164,6 +168,18 @@ export const ResultView: React.FC<ResultViewProps> = ({
       releaseWakeLock();
     };
   }, [isRecapPlaying, isRendering]);
+
+  // Auto-start recording when parent signals pipeline is complete
+  useEffect(() => {
+    if (autoStartRecap && audioUrl && videoUrl && !isRecapPlaying && !isRendering && !renderedBlobUrl) {
+      onAutoStartConsumed?.();
+      // Small delay to allow audio/video elements to mount and load
+      const t = setTimeout(() => {
+        setIsRecapPlaying(true);
+      }, 800);
+      return () => clearTimeout(t);
+    }
+  }, [autoStartRecap, audioUrl, videoUrl]);
 
   const isYouTube = useMemo(() => {
     return videoUrl ? videoUrl.includes("youtube.com") || videoUrl.includes("youtu.be") : false;
@@ -1447,6 +1463,8 @@ const RecapVideoNVPage: React.FC = () => {
   const videoDurationRef = useRef<number>(0);
   // Exact per-segment timestamps from gemini-tts WAV header — passed into generateVoice
   const pageAudioTimestampsRef = useRef<{ index: number; start: number; end: number }[]>([]);
+  // Flag: auto-start recap recording when pipeline completes (state so ResultView re-renders)
+  const [autoStartRecap, setAutoStartRecap] = useState(false);
   const [recapHistory, setRecapHistory] = useState<RecapHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
@@ -1607,7 +1625,10 @@ const RecapVideoNVPage: React.FC = () => {
       setAudioUrl(url);
 
       setStatus('done');
-      setProgressMsg('✅ Auto Recap Video အဆင်သင့်ဖြစ်ပါပြီ!');
+      setProgressMsg('✅ Recording အလိုအလျောက် စတင်မည်...');
+
+      // Auto-start recap recording after a short delay for audio element to mount
+      setAutoStartRecap(true);
     } catch (err: any) {
       console.error('TTS error:', err);
       setStatus('error');
@@ -1893,6 +1914,8 @@ const RecapVideoNVPage: React.FC = () => {
             videoUrl={videoUrl}
             status={status}
             audioTimestampsRef={pageAudioTimestampsRef}
+            autoStartRecap={autoStartRecap}
+            onAutoStartConsumed={() => setAutoStartRecap(false)}
           />
         )}
 
