@@ -1931,11 +1931,43 @@ const RecapVideoNVPage: React.FC = () => {
         console.log('[TTS] No segmentTimestamps — falling back to word-count sync');
       }
 
-      // Convert base64 audio to blob URL using data URI (most reliable for large audio)
-      const mimeForAudio = data.mimeType || 'audio/mpeg';
-      const dataUri = `data:${mimeForAudio};base64,${data.audio}`;
-      const audioFetchResp = await fetch(dataUri);
-      const audioBlob = await audioFetchResp.blob();
+      // Convert audio to blob URL.
+      // If edge function returned raw PCM (audio/pcm), convert to WAV in browser
+      // to avoid edge function memory limits with large audio files.
+      let audioBlob: Blob;
+      if (data.mimeType === 'audio/pcm') {
+        const sampleRate = data.sampleRate || 24000;
+        const numChannels = 1;
+        const bitsPerSample = 16;
+        const pcmBytes = Uint8Array.from(atob(data.audio), c => c.charCodeAt(0));
+        const dataLength = pcmBytes.length;
+        const headerSize = 44;
+        const wav = new Uint8Array(headerSize + dataLength);
+        const view = new DataView(wav.buffer);
+        // RIFF header
+        wav.set([0x52,0x49,0x46,0x46], 0); // "RIFF"
+        view.setUint32(4, 36 + dataLength, true);
+        wav.set([0x57,0x41,0x56,0x45], 8); // "WAVE"
+        // fmt sub-chunk
+        wav.set([0x66,0x6d,0x74,0x20], 12); // "fmt "
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true); // PCM
+        view.setUint16(22, numChannels, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * numChannels * (bitsPerSample / 8), true);
+        view.setUint16(32, numChannels * (bitsPerSample / 8), true);
+        view.setUint16(34, bitsPerSample, true);
+        // data sub-chunk
+        wav.set([0x64,0x61,0x74,0x61], 36); // "data"
+        view.setUint32(40, dataLength, true);
+        wav.set(pcmBytes, headerSize);
+        audioBlob = new Blob([wav], { type: 'audio/wav' });
+      } else {
+        const mimeForAudio = data.mimeType || 'audio/mpeg';
+        const dataUri = `data:${mimeForAudio};base64,${data.audio}`;
+        const audioFetchResp = await fetch(dataUri);
+        audioBlob = await audioFetchResp.blob();
+      }
       const url = URL.createObjectURL(audioBlob);
       setAudioUrl(url);
 

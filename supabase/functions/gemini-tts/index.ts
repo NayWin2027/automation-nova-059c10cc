@@ -391,36 +391,44 @@ serve(async (req) => {
 
     console.log(`[gemini-tts] Successfully generated audio, size: ${result.audio.length} chars, mime: ${result.mimeType}`);
 
-    // Gemini TTS returns raw PCM (Linear16) — browsers can't play this directly.
-    // Convert to WAV format with proper headers for universal playback.
+    // Gemini TTS returns raw PCM (Linear16).
+    // To avoid edge function memory limits with large audio files, return PCM to client
+    // and let the browser handle WAV conversion with AudioContext (no memory limit).
     let finalAudio = result.audio;
     let finalMime = result.mimeType;
+    let pcmSampleRate = 24000;
 
     if (result.mimeType && result.mimeType.includes("L16")) {
       // Extract sample rate from mimeType like "audio/L16;rate=24000"
       const rateMatch = result.mimeType.match(/rate=(\d+)/);
-      const sampleRate = rateMatch ? parseInt(rateMatch[1], 10) : 24000;
-      console.log(`[gemini-tts] Converting PCM to WAV (rate=${sampleRate})`);
-      finalAudio = pcmToWavBase64(result.audio, sampleRate);
-      finalMime = "audio/wav";
+      pcmSampleRate = rateMatch ? parseInt(rateMatch[1], 10) : 24000;
+      // Do NOT convert here — send raw PCM to client to avoid memory limit
+      finalMime = "audio/pcm"; // signal to client to convert
+      console.log(`[gemini-tts] Returning raw PCM to client (rate=${pcmSampleRate}) - WAV conversion offloaded to browser`);
     }
 
-    // ===== COMPUTE PER-SEGMENT TIMESTAMPS FROM EXACT WAV DURATION =====
+    // ===== COMPUTE PER-SEGMENT TIMESTAMPS FROM PCM BYTE COUNT =====
+    // PCM duration = byteCount / (sampleRate * channels * bytesPerSample)
     let segmentTimestamps: { index: number; start: number; end: number }[] = [];
-    if (Array.isArray(segments) && segments.length > 0 && finalMime === "audio/wav") {
-      const wavDuration = getWavDurationSeconds(finalAudio);
-      if (wavDuration > 0) {
-        // Proportion by character count (better speech proxy than word count)
-        const totalChars = segments.reduce((sum: number, s: { text: string }) => sum + (s.text?.length || 0), 0);
-        let cursor = 0;
-        segmentTimestamps = (segments as { text: string }[]).map((seg, idx) => {
-          const charPct = totalChars > 0 ? (seg.text?.length || 0) / totalChars : 1 / segments.length;
-          const start = parseFloat((cursor).toFixed(3));
-          cursor += charPct * wavDuration;
-          const end = parseFloat((idx === segments.length - 1 ? wavDuration : cursor).toFixed(3));
-          return { index: idx, start, end };
-        });
-        console.log(`[gemini-tts] segmentTimestamps: ${segments.length} segs, wavDuration=${wavDuration.toFixed(2)}s`);
+    if (Array.isArray(segments) && segments.length > 0) {
+      try {
+        // base64 length → raw byte count (approximation, exact enough for timestamps)
+        const pcmBytes = Math.floor(finalAudio.length * 0.75);
+        const pcmDuration = pcmBytes / (pcmSampleRate * 1 * 2); // mono, 16-bit
+        if (pcmDuration > 0) {
+          const totalChars = segments.reduce((sum: number, s: { text: string }) => sum + (s.text?.length || 0), 0);
+          let cursor = 0;
+          segmentTimestamps = (segments as { text: string }[]).map((seg, idx) => {
+            const charPct = totalChars > 0 ? (seg.text?.length || 0) / totalChars : 1 / segments.length;
+            const start = parseFloat((cursor).toFixed(3));
+            cursor += charPct * pcmDuration;
+            const end = parseFloat((idx === segments.length - 1 ? pcmDuration : cursor).toFixed(3));
+            return { index: idx, start, end };
+          });
+          console.log(`[gemini-tts] segmentTimestamps: ${segments.length} segs, pcmDuration=${pcmDuration.toFixed(2)}s`);
+        }
+      } catch (e) {
+        console.error("[gemini-tts] Failed to compute segmentTimestamps:", e);
       }
     }
 
@@ -428,6 +436,7 @@ serve(async (req) => {
       JSON.stringify({
         audio: finalAudio,
         mimeType: finalMime,
+        sampleRate: pcmSampleRate,
         voice: usedVoice,
         segmentTimestamps,
       }),
