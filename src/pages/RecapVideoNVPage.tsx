@@ -902,16 +902,15 @@ export const ResultView: React.FC<ResultViewProps> = ({
         let aEndPct = 0;
 
         if (audioTs.length > 0) {
-          // === EXACT MODE: use real WAV second timestamps from gemini-tts ===
-          // Cinematic behavior: subtitle ONLY shows during active speech window; disappears during silence/gaps
-          const tsIdx = audioTs.findIndex(ts => currentTime >= ts.start && currentTime <= ts.end);
+          // === 8000% EXACT MODE: Audio currentTime (seconds) directly matched to segmentTimestamps ===
+          // No percentage conversion — pure seconds comparison eliminates all estimation drift.
+          // Subtitle ONLY shows inside active speech window; disappears during silence (cinematic behavior).
+          const tsIdx = audioTs.findIndex(ts => currentTime >= ts.start && currentTime < ts.end);
           if (tsIdx !== -1) {
             activeIndex = tsIdx;
             activeText = (segs[tsIdx] as any)?.text || "";
-            aStartPct = audioTs[tsIdx].start / av.duration;
-            aEndPct = audioTs[tsIdx].end / av.duration;
           }
-          // No fallback — when not inside any timestamp range, activeIndex stays -1 → subtitle goes empty (cinematic silence)
+          // When not inside any timestamp range → activeIndex stays -1 → subtitle clears (cinematic silence)
         } else {
           // === FALLBACK MODE: word-count proportional (no timestamps available) ===
           activeIndex = segs.findIndex((s: any) => aPct >= s.aStartPct && aPct <= s.aEndPct);
@@ -930,32 +929,46 @@ export const ResultView: React.FC<ResultViewProps> = ({
         if (activeIndex !== -1 && activeText) {
           const active = segs[activeIndex] as any;
           const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
+          const videoSecs = vActualEnd - active.vStart;
 
-          // On segment CHANGE: hard-snap video to exact segment start (millisecond precision)
+          // On segment CHANGE: hard-snap video to exact segment start (0.05s precision)
           if (activeIndex !== lastIndexRef.current) {
             vv.currentTime = active.vStart;
             lastIndexRef.current = activeIndex;
           }
 
-          const segmentAudioPct = aEndPct - aStartPct;
-          if (segmentAudioPct > 0.001) {
-            const audioSecs = segmentAudioPct * av.duration;
-            const videoSecs = vActualEnd - active.vStart;
-            if (audioSecs > 0 && videoSecs > 0) {
-              const baseRate = videoSecs / audioSecs;
-              const progressInSegment = (aPct - aStartPct) / segmentAudioPct;
-              const targetVideoTime = active.vStart + progressInSegment * videoSecs;
+          if (audioTs.length > 0) {
+            // === 8000% SYNC: Pure second-based sync — no percentage, no estimation ===
+            const ts = audioTs[activeIndex];
+            const audioSegDuration = ts.end - ts.start; // exact seconds this segment spans in audio
+            if (audioSegDuration > 0.001 && videoSecs > 0) {
+              const baseRate = videoSecs / audioSegDuration; // video speed to match audio segment duration exactly
+              const progressInSeg = (currentTime - ts.start) / audioSegDuration; // 0.0 → 1.0, pure seconds
+              const targetVideoTime = active.vStart + progressInSeg * videoSecs;
               const drift = targetVideoTime - vv.currentTime;
 
-              // === 7000% SYNC: Ultra-tight drift tolerance ===
-              // Hard re-snap threshold: 80ms (was 500ms) — any drift >80ms = immediate hard snap
-              if (Math.abs(drift) > 0.08) {
+              // === 8000% SYNC: 50ms hard re-snap threshold (0.05s) ===
+              if (Math.abs(drift) > 0.05) {
                 vv.currentTime = targetVideoTime;
               }
-              // Soft correction: aggressively correct even tiny drift with strong factor (was 0.3)
-              // Factor 1.5 means: 10ms drift → +1.5% rate correction applied every rAF frame
-              const correction = Math.max(-0.5, Math.min(0.5, drift * 1.5));
-              vv.playbackRate = Math.min(Math.max(baseRate + correction, 0.25), 4.0);
+              // Aggressive micro-correction: factor 2.0 — applied every rAF frame (~16ms)
+              const correction = Math.max(-0.6, Math.min(0.6, drift * 2.0));
+              vv.playbackRate = Math.min(Math.max(baseRate + correction, 0.2), 5.0);
+            }
+          } else {
+            // Fallback: percentage-based sync
+            const segmentAudioPct = aEndPct - aStartPct;
+            if (segmentAudioPct > 0.001 && videoSecs > 0) {
+              const audioSecs = segmentAudioPct * av.duration;
+              if (audioSecs > 0) {
+                const baseRate = videoSecs / audioSecs;
+                const progressInSegment = (aPct - aStartPct) / segmentAudioPct;
+                const targetVideoTime = active.vStart + progressInSegment * videoSecs;
+                const drift = targetVideoTime - vv.currentTime;
+                if (Math.abs(drift) > 0.08) vv.currentTime = targetVideoTime;
+                const correction = Math.max(-0.5, Math.min(0.5, drift * 1.5));
+                vv.playbackRate = Math.min(Math.max(baseRate + correction, 0.25), 4.0);
+              }
             }
           }
           if (activeText !== currentSubtitleRef.current) {
