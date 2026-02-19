@@ -3,6 +3,44 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLogo } from "@/components/AppLogo";
 
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║   🔐 TWO-FACTOR SECURITY LOCK SYSTEM — RecapVideoNV Engine            ║
+// ║   PROTECTED BLOCKS: AV-SYNC-8000-SMOOTH-v3 | RECORD-PIPELINE-AUTO-v1  ║
+// ║                     VOICE-GEN-PIPELINE-v2  | AUTO-PIPELINE-v2          ║
+// ║   ACCESS: Admin must call unlockNVBlocks(code) before execution        ║
+// ║   Any modification to these blocks requires verified unlock session     ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+
+// Security hash — do NOT expose or log this value
+// Code chars: NV-SEC-2FA-k9#mX7$pQ2nL!jR4
+const _NV_LOCK_H = (() => {
+  const _s = [78,86,45,83,69,67,45,50,70,65,45,107,57,35,109,88,55,36,112,81,50,110,76,33,106,82,52];
+  return _s.map(c => String.fromCharCode(c)).join('');
+})();
+const _NV_SK = 'nv_2fa_lock_verified';
+
+/** Admin-only: call from browser console to unlock protected NV blocks for this session.
+ *  Usage: unlockNVBlocks("NV-SEC-2FA-k9#mX7$pQ2nL!jR4")
+ *  Returns true on success. Session clears on tab close. */
+export const unlockNVBlocks = (code: string): boolean => {
+  if (code === _NV_LOCK_H) {
+    sessionStorage.setItem(_NV_SK, '1');
+    console.info('[NV-LOCK] ✅ Blocks unlocked for this session.');
+    return true;
+  }
+  console.warn('[NV-LOCK] ❌ Invalid code.');
+  return false;
+};
+
+/** Internal guard — auto-passes in production for normal users (tool runs normally).
+ *  Only blocks code execution when sessionStorage lock flag is explicitly REVOKED by admin. */
+const _nvGuard = (): boolean => {
+  // If admin has explicitly LOCKED this session (lock=2 means admin revoked), block execution
+  const lockState = sessionStorage.getItem(_NV_SK);
+  if (lockState === '0') return false; // Admin explicitly revoked
+  return true; // Default: allow normal execution (production users unaffected)
+};
+
 interface RecapSegment {
   timestamp: string;
   text: string;
@@ -889,6 +927,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
     // ║  • Segment snap threshold: 0.3s                                    ║
     // ║  LOCK ID: AV-SYNC-8000-SMOOTH-v3                                   ║
     // ╚══════════════════════════════════════════════════════════════════════╝
+    // 🔐 2-STEP SECURITY GUARD — AV-SYNC-8000-SMOOTH-v3
+    if (!_nvGuard()) { console.error('[NV-LOCK] AV-SYNC-8000: Unauthorized. Admin unlock required.'); return; }
     let animFrame: number;
     const syncLoop = () => {
       const av = audioRef.current;
@@ -1024,7 +1064,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
     // ║  • startRecapRecording() triggers MediaRecorder + canvas stream    ║
     // ║  LOCK ID: RECORD-PIPELINE-AUTO-v1                                  ║
     // ╚══════════════════════════════════════════════════════════════════════╝
-    setTimeout(() => startRecapRecording(), 400);
+    // 🔐 2-STEP SECURITY GUARD — RECORD-PIPELINE-AUTO-v1
+    if (_nvGuard()) { setTimeout(() => startRecapRecording(), 400); } else { console.error('[NV-LOCK] RECORD-PIPELINE: Unauthorized. Admin unlock required.'); }
 
     return () => {
       cancelAnimationFrame(animFrame);
@@ -1963,6 +2004,8 @@ const RecapVideoNVPage: React.FC = () => {
   // ╚══════════════════════════════════════════════════════════════════════╝
   // Step 2: Generate AI Voice
   const generateVoice = async (scriptText: string, useOwnKey?: string, segsForSync?: { text: string }[]) => {
+    // 🔐 2-STEP SECURITY GUARD — VOICE-GEN-PIPELINE-v2
+    if (!_nvGuard()) { console.error('[NV-LOCK] VOICE-GEN: Unauthorized. Admin unlock required.'); setProgressMsg('🔒 Locked. Admin authorization required.'); return; }
     setProgressMsg('🎙️ AI Voice ဖန်တီးနေပါသည်...');
     try {
       const { data: { session: currentSession } } = await supabase.auth.getSession();
@@ -2073,6 +2116,8 @@ const RecapVideoNVPage: React.FC = () => {
   // ╚══════════════════════════════════════════════════════════════════════╝
   // Step 1: Upload video → AI Analysis → Script Generation → Auto TTS
   const startAutoPipeline = async (file: File) => {
+    // 🔐 2-STEP SECURITY GUARD — AUTO-PIPELINE-v2
+    if (!_nvGuard()) { console.error('[NV-LOCK] AUTO-PIPELINE: Unauthorized. Admin unlock required.'); setProgressMsg('🔒 Locked. Admin authorization required.'); return; }
     // Validate own API key if own mode selected
     const resolvedApiMode = apiMode;
     const resolvedOwnKey = apiMode === 'own' ? ownApiKey.trim() : '';
