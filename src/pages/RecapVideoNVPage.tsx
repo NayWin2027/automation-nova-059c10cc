@@ -1352,7 +1352,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
 
               {/* Subtitles are rendered exclusively on canvas during recording.
-                    DOM subtitle is intentionally removed to prevent double-rendering. */}
+                                   DOM subtitle is intentionally removed to prevent double-rendering. */}
 
               {isYouTube && youtubeId ?
               <iframe
@@ -2384,8 +2384,8 @@ const RecapVideoNVPage: React.FC = () => {
 
         {/* Upload Section */}
         <div className="mb-6 p-4 bg-secondary/30 rounded-xl border border-border space-y-4">
-          <h3 className="text-lg font-semibold text-foreground">🎬 Auto Recap Video (NV)</h3>
-          <p className="text-sm text-neon-cyan">
+          <h3 className="font-semibold text-purple-600 text-4xl">🎬 Nova Auto Recap</h3>
+          <p className="text-neon-cyan text-lg">
             Video တစ်ခုကို upload လုပ်လိုက်ရုံပဲ — AI က အလိုအလျောက် analyze လုပ်ပြီး script ရေးပေးပြီး voice over ထည့်ပေးပါမယ်။
           </p>
 
@@ -2442,7 +2442,7 @@ const RecapVideoNVPage: React.FC = () => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-muted-foreground">Video File</label>
+            <label className="text-sm font-medium text-neon-cyan">Video File</label>
             <input
               type="file"
               accept="video/*"
@@ -2485,7 +2485,7 @@ const RecapVideoNVPage: React.FC = () => {
         {/* Recap History Section */}
         <div className="mt-6 p-4 bg-secondary/30 rounded-xl border border-border space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-foreground">📁 Recap History (7 Days)</h3>
+            <h3 className="text-lg font-semibold text-neon-rose">📁 Recap History (7 Days)</h3>
             <button
               onClick={loadRecapHistory}
               disabled={historyLoading}
