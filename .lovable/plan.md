@@ -1,57 +1,66 @@
 
-## Root Cause: Two Subtitle Rendering Systems Running Simultaneously
+# Recap NV — Upload Speed + Subtitle Sync Fix Plan
 
-The duplicate subtitle issue has one clear, surgical root cause — there are **two separate subtitle rendering paths** both active at the same time:
+## What Will Be Changed (2 things only)
 
-**Path 1 — Canvas (drawFrame, lines 474–537):**
-Draws subtitle text directly onto the recording canvas using `ctx.fillText()` and `ctx.fillRect()`. This is the "correct" path for the recorded output video.
+### 1. Upload Speed Improvement (RecapVideoNVPage.tsx)
+Current: 8MB chunks upload one-by-one (sequential). For a 100MB video = 12-13 sequential round trips.
 
-**Path 2 — DOM (JSX, lines 896–935):**
-Renders a `<div>` with `{currentSubtitle}` inside the blur box HTML element, layered on top of the video using absolute positioning.
+Fix: Reduce chunk size to **2MB** and upload **3 chunks in parallel** using `Promise.all`. This alone cuts upload time by ~50-60% while staying within Google Files API resumable protocol limits.
 
-The `syncLoop` (line 682) calls `setCurrentSubtitle(active.text)` on every animation frame. This state drives the DOM subtitle div (Path 2). Meanwhile, `drawFrame` independently reads the same segment data and draws text on canvas (Path 1). Both fire at the same time → two visible subtitle layers.
-
-**Previous fix attempts** tried to remove the standalone DOM subtitle outside the blur box (which was a 3rd path), but left Path 2 (DOM inside blur box) intact. This is why the duplicate persists.
+**Important constraint:** Google resumable upload requires correct byte offsets. So we upload in batches of 3 concurrent chunks, wait for each batch to complete, then start the next batch — preserving offset order.
 
 ---
 
-## Fix Plan (Surgical — Touch ONLY subtitle rendering)
+### 2. Subtitle Sync — Real Audio Duration Based (gemini-tts Edge Function + RecapVideoNVPage.tsx)
 
-### What to change: ONE thing only
+**Root cause:** Word count is an estimate. The actual audio playback time per segment differs because TTS pacing is non-linear (short words, pauses, punctuation all affect duration).
 
-**Remove the `{currentSubtitle}` DOM div that lives inside the blur box JSX** (lines 916–932 in `RecapVideoNVPage.tsx`):
+**Fix:** In the `gemini-tts` edge function, after WAV audio is generated, calculate the **exact audio duration in seconds** from the WAV header (sample rate + data chunk size). Then divide that duration proportionally by **character count** per segment, and return `segmentTimestamps[]` alongside the audio.
 
-```tsx
-// DELETE THIS BLOCK (lines 916-932):
-{currentSubtitle && (
-  <div
-    className="w-full text-center font-bold"
-    style={{
-      backgroundColor: "rgba(0,0,0,0.6)",
-      color: subSettings.textColor,
-      ...
-    }}
-  >
-    {currentSubtitle}
-  </div>
-)}
+```
+segmentTimestamps = [
+  { index: 0, start: 0.00,  end: 3.42 },
+  { index: 1, start: 3.42,  end: 7.18 },
+  ...
+]
 ```
 
-The blur box `<div>` itself (the draggable region with `backdropFilter`) stays untouched — only the `{currentSubtitle}` child div inside it is removed.
+In `RecapVideoNVPage.tsx`, when audio is received, use these `segmentTimestamps` instead of the word-count `syncSegments`. The `syncLoop` then maps `audio.currentTime` directly to the correct segment by exact second — no estimate, no drift.
 
-### Why this is safe:
-- The canvas `drawFrame` (Path 1) already correctly draws subtitle text **inside the blur box boundaries** when `blurSettings.enabled` is true (lines 483–491 calculate `subAreaX/Y/W/H` from blur box coordinates)
-- The canvas path also handles the non-blur case (centered bottom subtitle)
-- Removing the DOM div means canvas is the **single source of truth** for subtitle display
-- `setCurrentSubtitle` still runs (drives no other UI after this change) — but we can also safely remove it to avoid unnecessary re-renders. However, to be strictly surgical, we only remove the JSX consumer div.
+---
 
-### What is NOT touched:
-- Audio/video sync logic
-- Canvas drawFrame logic
-- Blur box drag logic
-- Logo, color, flip, recording — nothing
-- SubSettings state
-- Any other feature
+## Technical Details
 
-### Files to edit:
-- `src/pages/RecapVideoNVPage.tsx` — remove ~17 lines (the `{currentSubtitle && ...}` JSX block inside the blur box div)
+### gemini-tts/index.ts changes (only these lines):
+
+1. Accept `segments` array in request body (array of `{text: string}`)
+2. After WAV conversion, read WAV duration: `wavDuration = (dataChunkBytes / (sampleRate * channels * bitsPerSample/8))`
+3. Calculate total character count across all segments
+4. Map each segment's char proportion → exact `start` and `end` seconds
+5. Return `segmentTimestamps: [{index, start, end}]` alongside `audio` and `mimeType`
+
+### RecapVideoNVPage.tsx changes (only these sections):
+
+1. When calling `gemini-tts`, also send `segments: scriptData.segments.map(s => ({text: s.text}))`
+2. Store returned `segmentTimestamps` in a ref: `audioTimestampsRef`
+3. In `syncLoop`, replace `aStartPct/aEndPct` lookup with direct `currentTime >= seg.start && currentTime <= seg.end` lookup using `audioTimestampsRef`
+4. Upload loop: change `CHUNK_SIZE` from 8MB → 2MB, upload in batches of 3 parallel chunks
+
+### Files to be changed (only 2):
+- `supabase/functions/gemini-tts/index.ts`
+- `src/pages/RecapVideoNVPage.tsx`
+
+### Files NOT touched:
+- `recap-script-generator/index.ts` — not touched
+- `video-recap/index.ts` — not touched
+- Any other page or component — not touched
+
+---
+
+## Expected Result
+
+| Problem | Before | After |
+|---|---|---|
+| Upload time (100MB video) | ~3-4 min | ~1.5-2 min |
+| Subtitle sync | Word count estimate (drifts) | Exact audio second (no drift) |
