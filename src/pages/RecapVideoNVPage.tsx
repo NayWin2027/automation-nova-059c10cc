@@ -1872,6 +1872,72 @@ interface RecapHistoryItem {
 const RecapVideoNVPage: React.FC = () => {
   const navigate = useNavigate();
 
+  // ── ACCESS CONTROL (Admin / Pro / Premium only) ──────────────────────────
+  const [accessStatus, setAccessStatus] = useState<'checking' | 'allowed' | 'denied'>('checking');
+
+  useEffect(() => {
+    const checkAccess = async () => {
+      try {
+        // 1. Check promotion mode first
+        const { data: acSetting } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'access_control')
+          .maybeSingle();
+
+        const ac = acSetting?.value as any;
+        if (ac?.promotionMode) {
+          setAccessStatus('allowed');
+          return;
+        }
+
+        // 2. Check if user is logged in
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          setAccessStatus('denied');
+          return;
+        }
+
+        // 3. Check admin role
+        const { data: isAdmin } = await supabase.rpc('has_role', {
+          _user_id: user.id,
+          _role: 'admin' as const,
+        });
+        if (isAdmin) {
+          setAccessStatus('allowed');
+          return;
+        }
+
+        // 4. Check plan (pro or premium only)
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('plan, is_banned')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (profile?.is_banned) {
+          setAccessStatus('denied');
+          return;
+        }
+
+        if (profile?.plan === 'pro' || profile?.plan === 'premium') {
+          setAccessStatus('allowed');
+          return;
+        }
+
+        // Free user — deny
+        setAccessStatus('denied');
+      } catch (err) {
+        console.error('[RecapNV] Access check error:', err);
+        setAccessStatus('denied');
+      }
+    };
+
+    checkAccess();
+  }, []);
+
+  // ── END ACCESS CONTROL ────────────────────────────────────────────────────
+
   const [scriptData, setScriptData] = useState<RecapScript>({
     title: 'Recap Video NV',
     full_script: '',
@@ -2289,6 +2355,46 @@ const RecapVideoNVPage: React.FC = () => {
       startAutoPipeline(file);
     }
   };
+
+  // Access gate — render before main UI
+  if (accessStatus === 'checking') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-muted-foreground">Checking access...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (accessStatus === 'denied') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <div className="max-w-sm w-full text-center space-y-4">
+          <div className="text-5xl">🔒</div>
+          <h1 className="text-xl font-bold text-foreground">Access Denied</h1>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Video Recap NV သည် <span className="text-primary font-semibold">Pro / Premium</span> users များနှင့် Admin များသာ အသုံးပြုနိုင်ပါသည်။
+          </p>
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={() => navigate('/plans')}
+              className="w-full py-2.5 px-4 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+            >
+              Upgrade to Pro / Premium
+            </button>
+            <button
+              onClick={() => navigate('/')}
+              className="w-full py-2.5 px-4 border border-border text-foreground rounded-lg text-sm font-medium hover:bg-muted transition-colors"
+            >
+              Back to Home
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground">
