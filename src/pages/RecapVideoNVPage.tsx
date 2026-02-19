@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLogo } from "@/components/AppLogo";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
+import { useApiAccess } from "@/hooks/useApiAccess";
 
 // ╔══════════════════════════════════════════════════════════════════════════╗
 // ║   🔐 TWO-FACTOR SECURITY LOCK SYSTEM — RecapVideoNV Engine            ║
@@ -1872,70 +1874,10 @@ interface RecapHistoryItem {
 const RecapVideoNVPage: React.FC = () => {
   const navigate = useNavigate();
 
-  // ── ACCESS CONTROL (Admin / Pro / Premium only) ──────────────────────────
-  const [accessStatus, setAccessStatus] = useState<'checking' | 'allowed' | 'denied'>('checking');
-
-  useEffect(() => {
-    const checkAccess = async () => {
-      try {
-        // 1. Check promotion mode first
-        const { data: acSetting } = await supabase
-          .from('app_settings')
-          .select('value')
-          .eq('key', 'access_control')
-          .maybeSingle();
-
-        const ac = acSetting?.value as any;
-        if (ac?.promotionMode) {
-          setAccessStatus('allowed');
-          return;
-        }
-
-        // 2. Check if user is logged in
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          setAccessStatus('denied');
-          return;
-        }
-
-        // 3. Check admin role
-        const { data: isAdmin } = await supabase.rpc('has_role', {
-          _user_id: user.id,
-          _role: 'admin' as const,
-        });
-        if (isAdmin) {
-          setAccessStatus('allowed');
-          return;
-        }
-
-        // 4. Check plan (pro or premium only)
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('plan, is_banned')
-          .eq('user_id', user.id)
-          .maybeSingle();
-
-        if (profile?.is_banned) {
-          setAccessStatus('denied');
-          return;
-        }
-
-        if (profile?.plan === 'pro' || profile?.plan === 'premium') {
-          setAccessStatus('allowed');
-          return;
-        }
-
-        // Free user — deny
-        setAccessStatus('denied');
-      } catch (err) {
-        console.error('[RecapNV] Access check error:', err);
-        setAccessStatus('denied');
-      }
-    };
-
-    checkAccess();
-  }, []);
-
+  // ── ACCESS CONTROL via useAuthGuard + useApiAccess (same pattern as Transcribe/VideoRecap/NovelTrans) ──
+  const { isAllowed, isLoading: authLoading } = useAuthGuard('recap-nv');
+  const { appApiAllowed, ownApiAllowed, defaultApiMode, isLoading: accessLoading } = useApiAccess();
+  const isAccessLoading = authLoading || accessLoading;
   // ── END ACCESS CONTROL ────────────────────────────────────────────────────
 
   const [scriptData, setScriptData] = useState<RecapScript>({
@@ -2357,7 +2299,7 @@ const RecapVideoNVPage: React.FC = () => {
   };
 
   // Access gate — render before main UI
-  if (accessStatus === 'checking') {
+  if (isAccessLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">
@@ -2368,7 +2310,7 @@ const RecapVideoNVPage: React.FC = () => {
     );
   }
 
-  if (accessStatus === 'denied') {
+  if (!isAllowed) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <div className="max-w-sm w-full text-center space-y-4">
