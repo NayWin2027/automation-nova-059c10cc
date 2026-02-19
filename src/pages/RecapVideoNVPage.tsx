@@ -167,6 +167,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
   const logoAngleRef = useRef<number>(0); // for logo spin in canvas
   // audioTimestampsRef is passed in as a prop from RecapVideoNVPage
   const currentSubtitleRef = useRef<string>(""); // for canvas subtitle drawing during recording
+  const fixedCanvasFontSizeRef = useRef<number>(0); // fixed font size for canvas subtitles — computed once per recording session
 
   // Request Wake Lock to prevent screen from turning off during recap/recording
   useEffect(() => {
@@ -507,8 +508,50 @@ export const ResultView: React.FC<ResultViewProps> = ({
       } catch (_) { logoImg = null; }
     }
 
+    // ── Pre-compute a single fixed canvas font size for ALL subtitle segments ────────────────────
+    // This ensures consistent font size from video start to end (no per-segment shrinking).
+    // Strategy: find the longest segment text → compute the largest font that fits it → use for all.
+    fixedCanvasFontSizeRef.current = (() => {
+      if (blurSettings.enabled) {
+        const bW = canvas.width * (blurSettings.width / 100);
+        const bH = canvas.height * (blurSettings.height / 100);
+        const padX = bW * 0.04;
+        const padY = bH * 0.08;
+        const maxTW = bW - padX * 2;
+        const maxTH = bH - padY * 2;
+
+        const longestText = scriptData.segments.reduce((best, seg) =>
+          seg.text.length > best.length ? seg.text : best, "");
+
+        const tc = document.createElement("canvas").getContext("2d")!;
+        let fs = Math.round(bH * 0.35);
+        while (fs >= 8) {
+          tc.font = `bold ${fs}px sans-serif`;
+          const lh = fs * 1.4;
+          const words = longestText.split(" ");
+          const lines: string[] = [];
+          let cur = "";
+          for (const w of words) {
+            const tl = cur ? `${cur} ${w}` : w;
+            if (tc.measureText(tl).width > maxTW && cur) { lines.push(cur); cur = w; }
+            else cur = tl;
+          }
+          if (cur) lines.push(cur);
+          if (lines.length * lh <= maxTH) break;
+          fs--;
+        }
+        return Math.max(fs, 8);
+      } else {
+        // Non-blur mode: use subSettings.fontSize proportionally mapped to canvas
+        const previewH = containerRef.current?.offsetHeight || 450;
+        const fraction = subSettings.fontSize / previewH;
+        return Math.max(8, Math.round(canvas.height * fraction));
+      }
+    })();
+
     logoAngleRef.current = 0;
     let lastFrameTime = performance.now();
+
 
     const drawFrame = () => {
       if (!videoEl || !audioEl) return;
@@ -652,52 +695,30 @@ export const ResultView: React.FC<ResultViewProps> = ({
           boxY = subCY - boxH / 2;
         }
 
-        // ── Auto-fit font size so ALL text fits within box (no cut-off) ──
-        // Start from a reasonable size and shrink until text fits in ≤ N lines
-        const innerPadX = boxW * 0.04; // 4% horizontal padding each side
-        const innerPadY = boxH * 0.08; // 8% vertical padding each side
+        // ── Fixed font size — consistent from first to last segment (no per-segment shrinking) ──
+        const innerPadX = boxW * 0.04;
         const maxTextWidth = boxW - innerPadX * 2;
-        const maxTextHeight = boxH - innerPadY * 2;
 
-        let fontSize = Math.round(boxH * 0.35); // start at 35% of box height
-        let fittedLines: string[] = [];
-
-        // Shrink font until all words fit within maxTextHeight
-        while (fontSize >= 8) {
-          ctx.font = `bold ${fontSize}px sans-serif`;
-          const lineHeight = fontSize * 1.4;
-
-          // Word-wrap with current font
-          const words = subText.split(" ");
-          const lines: string[] = [];
-          let currentLine = "";
-          for (const word of words) {
-            const testLine = currentLine ? `${currentLine} ${word}` : word;
-            if (ctx.measureText(testLine).width > maxTextWidth && currentLine) {
-              lines.push(currentLine);
-              currentLine = word;
-            } else {
-              currentLine = testLine;
-            }
-          }
-          if (currentLine) lines.push(currentLine);
-
-          const totalH = lines.length * lineHeight;
-          if (totalH <= maxTextHeight) {
-            fittedLines = lines;
-            break;
-          }
-          fontSize -= 1;
-        }
-
-        if (fittedLines.length === 0) {
-          // Absolute fallback: one line with ellipsis
-          fontSize = 8;
-          ctx.font = `bold ${fontSize}px sans-serif`;
-          fittedLines = [subText];
-        }
-
+        // Pre-computed fixed size from recording start (based on longest segment)
+        const fontSize = fixedCanvasFontSizeRef.current || Math.max(8, Math.round(boxH * 0.18));
+        ctx.font = `bold ${fontSize}px sans-serif`;
         const lineHeight = fontSize * 1.4;
+
+        // Word-wrap at fixed font size
+        const words = subText.split(" ");
+        const fittedLines: string[] = [];
+        let currentLine = "";
+        for (const word of words) {
+          const testLine = currentLine ? `${currentLine} ${word}` : word;
+          if (ctx.measureText(testLine).width > maxTextWidth && currentLine) {
+            fittedLines.push(currentLine);
+            currentLine = word;
+          } else {
+            currentLine = testLine;
+          }
+        }
+        if (currentLine) fittedLines.push(currentLine);
+
         const totalTextH = fittedLines.length * lineHeight;
 
         // ── Draw background (full blur-box size when blur enabled) ───────
@@ -882,22 +903,15 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
         if (audioTs.length > 0) {
           // === EXACT MODE: use real WAV second timestamps from gemini-tts ===
+          // Cinematic behavior: subtitle ONLY shows during active speech window; disappears during silence/gaps
           const tsIdx = audioTs.findIndex(ts => currentTime >= ts.start && currentTime <= ts.end);
           if (tsIdx !== -1) {
             activeIndex = tsIdx;
             activeText = (segs[tsIdx] as any)?.text || "";
             aStartPct = audioTs[tsIdx].start / av.duration;
             aEndPct = audioTs[tsIdx].end / av.duration;
-          } else if (currentTime > 0 && audioTs.length > 0) {
-            // Past last segment — show last subtitle
-            const lastTs = audioTs[audioTs.length - 1];
-            if (currentTime > lastTs.start) {
-              activeIndex = audioTs.length - 1;
-              activeText = (segs[activeIndex] as any)?.text || "";
-              aStartPct = lastTs.start / av.duration;
-              aEndPct = 1;
-            }
           }
+          // No fallback — when not inside any timestamp range, activeIndex stays -1 → subtitle goes empty (cinematic silence)
         } else {
           // === FALLBACK MODE: word-count proportional (no timestamps available) ===
           activeIndex = segs.findIndex((s: any) => aPct >= s.aStartPct && aPct <= s.aEndPct);
