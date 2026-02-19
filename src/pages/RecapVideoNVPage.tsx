@@ -1030,6 +1030,24 @@ export const ResultView: React.FC<ResultViewProps> = ({
           src={audioUrl}
           crossOrigin={isLocalSource(audioUrl) ? undefined : "anonymous"}
           style={{ position: "absolute", opacity: 0, pointerEvents: "none" }}
+          onLoadedMetadata={() => {
+            // Rescale segmentTimestamps to match real audio duration from WAV metadata.
+            // Edge function estimates duration from base64 byte count which can be off by ±5–10%.
+            // Real duration from the audio element is exact — use it to rescale all timestamps.
+            const realDuration = audioRef.current?.duration;
+            const ts = audioTimestampsRef.current;
+            if (!realDuration || realDuration <= 0 || ts.length === 0) return;
+            const estimatedDuration = ts[ts.length - 1]?.end;
+            if (!estimatedDuration || estimatedDuration <= 0) return;
+            if (Math.abs(realDuration - estimatedDuration) < 0.1) return; // already close enough
+            const scale = realDuration / estimatedDuration;
+            audioTimestampsRef.current = ts.map(t => ({
+              index: t.index,
+              start: parseFloat((t.start * scale).toFixed(3)),
+              end: parseFloat((t.end * scale).toFixed(3)),
+            }));
+            console.log(`[TTS] Rescaled timestamps: estimated=${estimatedDuration.toFixed(2)}s → real=${realDuration.toFixed(2)}s (scale=${scale.toFixed(4)})`);
+          }}
         />
       )}
 
