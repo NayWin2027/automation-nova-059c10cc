@@ -204,6 +204,16 @@ ABSOLUTE RULES:
 4. The script must be READY TO READ as narration (no stage directions, no brackets, no formatting marks, no timestamps)
 5. Fully embody the "${nicheLabel}" niche style described above
 
+CRITICAL - DIALOGUE TRANSLATION RULE (MOST IMPORTANT):
+- If characters or people in the video/audio SPEAK any dialogue — in ANY language (English, Thai, Korean, Chinese, Japanese, etc.) — you MUST translate and include what they actually said
+- Do NOT just describe that they "spoke" or "said something" — translate their EXACT words into ${lang} and weave it naturally into the narration
+- Preserve the EMOTIONAL TONE of the original dialogue: if it was funny, translate it funny; if it was sad, translate it heartbreakingly; if it was shocking, make it shocking in ${lang}
+- For animals, sounds, or non-verbal emotional expressions — describe them vividly so the audience FEELS the emotion
+- Example BAD (visual-only): "ထိုနောက် သူမ စကားပြောသည်" 
+- Example GOOD (dialogue translated): "သူမက 'ငါ မင်းကို ချစ်တယ်၊ ဒါပေမဲ့ ငါ မင်းကို ထားနိုင်မှာ မဟုတ်ဘူး' လို့ ငိုရင်းပြောလိုက်တယ်"
+- Use Google-quality translation: natural, accurate, and emotionally faithful to the original
+- Quoted dialogue in the narration should feel ALIVE — not robotic or literal
+
 CRITICAL - CONTENT COMPLETENESS (ZERO CENSORSHIP POLICY):
 - You MUST analyze the ENTIRE source from start to finish, missing NOTHING
 - Extract EVERY key moment, turning point, conflict, revelation, emotional beat, and climax
