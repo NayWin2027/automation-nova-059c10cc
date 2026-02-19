@@ -63,7 +63,8 @@ export function useCreditDeduction() {
   // Deduct credits after successful tool use (only for app API key usage)
   const deductCredits = useCallback(async (
     toolId: string, 
-    isOwnApiKey: boolean = false
+    isOwnApiKey: boolean = false,
+    customCost?: number
   ): Promise<CreditDeductionResult> => {
     // Skip deduction if using own API key
     if (isOwnApiKey) {
@@ -80,7 +81,7 @@ export function useCreditDeduction() {
       }
 
       // Get tool credit cost
-      const creditCost = await getToolCreditCost(toolId);
+      const creditCost = customCost !== undefined ? customCost : await getToolCreditCost(toolId);
 
       // Get current credits
       const { data: profile, error: profileError } = await supabase
@@ -114,11 +115,13 @@ export function useCreditDeduction() {
       }
 
       // Use server-side RPC for atomic credit deduction (secure)
-      const { data: rpcResult, error: rpcError } = await supabase.rpc('deduct_user_credits', {
+      const rpcArgs: Record<string, unknown> = {
         _user_id: user.id,
         _tool_id: toolId,
         _is_own_api: false,
-      });
+      };
+      if (customCost !== undefined) rpcArgs._custom_cost = customCost;
+      const { data: rpcResult, error: rpcError } = await supabase.rpc('deduct_user_credits', rpcArgs as any);
 
       if (rpcError) {
         return { success: false, error: rpcError.message };
