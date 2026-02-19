@@ -80,18 +80,18 @@ export const ResultView: React.FC<ResultViewProps> = ({
   const subNeonHueRef = useRef(0);
   const [subBorderColor, setSubBorderColor] = useState("hsl(180,100%,60%)"); // cyan start
 
-  // Color Grading Presets
+  // Color Grading Presets — industry-standard subtle values for realistic, non-artificial look
   const COLOR_GRADE_PRESETS: Record<string, { contrast: number; brightness: number; saturate: number; hue: number; sepia?: number; label: string; emoji: string }> = {
-    "OFF":        { contrast: 100, brightness: 100, saturate: 100, hue: 0,   label: "Off",        emoji: "⚫" },
-    "CINEMATIC":  { contrast: 118, brightness: 92,  saturate: 85,  hue: 5,   label: "Cinematic",  emoji: "🎬" },
-    "VINTAGE":    { contrast: 108, brightness: 95,  saturate: 70,  hue: 15,  sepia: 30, label: "Vintage", emoji: "📷" },
-    "COOL":       { contrast: 105, brightness: 100, saturate: 110, hue: -18, label: "Cool",       emoji: "🧊" },
-    "WARM":       { contrast: 108, brightness: 105, saturate: 120, hue: 18,  label: "Warm",       emoji: "🔥" },
-    "TEAL":       { contrast: 115, brightness: 95,  saturate: 130, hue: -35, label: "Teal & Orange", emoji: "🌊" },
-    "PINK":       { contrast: 105, brightness: 105, saturate: 130, hue: 330, label: "Pink",       emoji: "🌸" },
-    "NEON":       { contrast: 125, brightness: 110, saturate: 200, hue: 10,  label: "Neon",       emoji: "⚡" },
-    "NOIR":       { contrast: 140, brightness: 85,  saturate: 20,  hue: 0,   label: "Noir",       emoji: "🎭" },
-    "GOLDEN":     { contrast: 110, brightness: 110, saturate: 150, hue: 22,  label: "Golden Hour", emoji: "🌅" },
+    "OFF":        { contrast: 100, brightness: 100, saturate: 100, hue: 0,    label: "Off",         emoji: "⚫" },
+    "CINEMATIC":  { contrast: 112, brightness: 94,  saturate: 78,  hue: 3,    label: "Cinematic",   emoji: "🎬" }, // desaturated, lifted blacks, slight warm cast
+    "VINTAGE":    { contrast: 103, brightness: 97,  saturate: 72,  hue: 8,    sepia: 18, label: "Vintage", emoji: "📷" }, // faded, warm tint, low sepia
+    "COOL":       { contrast: 104, brightness: 99,  saturate: 95,  hue: -10,  label: "Cool",        emoji: "🧊" }, // subtle blue shift, no over-saturation
+    "WARM":       { contrast: 106, brightness: 103, saturate: 105, hue: 10,   label: "Warm",        emoji: "🔥" }, // gentle warmth, slight amber
+    "TEAL":       { contrast: 110, brightness: 96,  saturate: 108, hue: -20,  label: "Teal & Orange", emoji: "🌊" }, // Hollywood teal-orange — subtle
+    "PINK":       { contrast: 103, brightness: 102, saturate: 108, hue: 340,  label: "Pink",        emoji: "🌸" }, // soft rose grade
+    "NEON":       { contrast: 115, brightness: 104, saturate: 140, hue: 5,    label: "Neon",        emoji: "⚡" }, // punchy but not overdone
+    "NOIR":       { contrast: 118, brightness: 88,  saturate: 30,  hue: 0,    label: "Noir",        emoji: "🎭" }, // crushed blacks, near-mono — not full desat
+    "GOLDEN":     { contrast: 107, brightness: 106, saturate: 118, hue: 15,   label: "Golden Hour", emoji: "🌅" }, // warm golden hour glow
   };
 
   // Editor States
@@ -970,17 +970,17 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
       <div className="flex flex-col lg:grid lg:grid-cols-2 gap-6 h-full overflow-y-auto lg:overflow-hidden pb-20 lg:pb-0">
         <div className="order-2 lg:order-1 flex flex-col bg-charcoal-800 rounded-xl border border-charcoal-600 overflow-hidden shadow-lg h-[500px] lg:h-auto">
-          <div className="flex items-center justify-between p-4 border-b border-charcoal-600 bg-charcoal-900/50">
-            <div className="flex space-x-2">
+          <div className="flex items-center justify-between p-3 border-b border-charcoal-600 bg-charcoal-900/50">
+            <div className="flex space-x-1">
               <button
                 onClick={() => setActiveTab("script")}
-                className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === "script" ? "bg-charcoal-700 text-neon-cyan" : "text-gray-400"}`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${activeTab === "script" ? "bg-charcoal-700 text-neon-cyan" : "text-gray-400"}`}
               >
                 Full Script
               </button>
               <button
                 onClick={() => setActiveTab("segments")}
-                className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === "segments" ? "bg-charcoal-700 text-neon-cyan" : "text-gray-400"}`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${activeTab === "segments" ? "bg-charcoal-700 text-neon-cyan" : "text-gray-400"}`}
               >
                 Segments
               </button>
@@ -997,22 +997,22 @@ export const ResultView: React.FC<ResultViewProps> = ({
           <div className="flex-1 overflow-hidden">
             {activeTab === "script" ? (
               <textarea
-                className="w-full h-full p-6 bg-charcoal-800 text-gray-200 text-lg leading-relaxed focus:outline-none resize-none"
+                className="w-full h-full p-4 bg-charcoal-800 text-gray-200 text-sm leading-relaxed focus:outline-none resize-none"
                 value={scriptData.full_script}
                 onChange={(e) => onUpdateScript(e.target.value)}
               />
             ) : (
-              <div className="h-full overflow-y-auto p-4 space-y-4">
+              <div className="h-full overflow-y-auto p-3 space-y-2">
                 {scriptData.segments.map((seg, idx) => (
                   <div
                     key={idx}
-                    className="flex gap-4 p-3 rounded-lg bg-charcoal-700/30 border border-charcoal-700 hover:bg-charcoal-700 cursor-pointer"
+                    className="flex gap-3 p-2.5 rounded-lg bg-charcoal-700/30 border border-charcoal-700 hover:bg-charcoal-700 cursor-pointer"
                     onClick={() => {
                       if (videoRef.current && !isYouTube) videoRef.current.currentTime = parseTime(seg.timestamp);
                     }}
                   >
-                    <span className="text-neon-cyan font-mono font-bold shrink-0">{seg.timestamp}</span>
-                    <p className="text-gray-300 text-sm">{seg.text}</p>
+                    <span className="text-neon-cyan font-mono font-semibold text-xs shrink-0">{seg.timestamp}</span>
+                    <p className="text-gray-300 text-xs leading-relaxed">{seg.text}</p>
                   </div>
                 ))}
               </div>
@@ -1020,28 +1020,28 @@ export const ResultView: React.FC<ResultViewProps> = ({
           </div>
         </div>
 
-        <div className="order-1 lg:order-2 flex flex-col space-y-6 h-auto lg:h-full lg:overflow-y-auto">
-          <div className="p-6 bg-charcoal-800 rounded-xl border border-charcoal-600 shadow-lg flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold text-white mb-1">{scriptData.title}</h1>
+        <div className="order-1 lg:order-2 flex flex-col space-y-4 h-auto lg:h-full lg:overflow-y-auto">
+          <div className="p-4 bg-charcoal-800 rounded-xl border border-charcoal-600 shadow-lg flex justify-between items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <h1 className="text-sm font-bold text-white mb-1 truncate">{scriptData.title}</h1>
               <div className="flex items-center text-xs text-gray-400 space-x-2">
-                <span className="px-2 py-1 bg-charcoal-700 rounded text-neon-cyan border border-neon-cyan/30">
+                <span className="px-2 py-0.5 bg-charcoal-700 rounded text-neon-cyan border border-neon-cyan/30 text-xs">
                   Premium Script
                 </span>
                 {editorState.bypass && (
-                  <span className="px-2 py-1 bg-green-900/50 text-green-400 rounded border border-green-500/30">
-                    Safe Mode Active
+                  <span className="px-2 py-0.5 bg-green-900/50 text-green-400 rounded border border-green-500/30 text-xs">
+                    Safe Mode
                   </span>
                 )}
               </div>
             </div>
             {/* Studio Header Controls */}
-            <div className="flex gap-2">
+            <div className="flex gap-2 shrink-0">
               <button
                 onClick={() => setEditorState((s) => ({ ...s, bypass: !s.bypass }))}
-                className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-all flex items-center gap-1 ${editorState.bypass ? "bg-green-500 text-black shadow-[0_0_10px_rgba(74,222,128,0.5)]" : "bg-charcoal-700 text-gray-400"}`}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${editorState.bypass ? "bg-green-500 text-black shadow-[0_0_10px_rgba(74,222,128,0.5)]" : "bg-charcoal-700 text-gray-400"}`}
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -1049,7 +1049,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                     d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
                   />
                 </svg>
-                <span>Copyright Bypass</span>
+                <span>Copyright Safe</span>
               </button>
             </div>
           </div>
@@ -1245,11 +1245,11 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
           {/* Editor Toolbar */}
           {!renderedBlobUrl && (
-            <div className="bg-charcoal-800 rounded-xl border border-charcoal-600 p-4 space-y-6">
+            <div className="bg-charcoal-800 rounded-xl border border-charcoal-600 p-4 space-y-5">
               {/* Visual Settings */}
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-sm font-bold text-gray-300 uppercase tracking-wider">Visuals & Filters</h4>
+                  <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Visuals & Filters</h4>
                   <button
                     onClick={() => setEditorState((s) => ({ ...s, flip: !s.flip }))}
                     className={`p-2 rounded hover:bg-charcoal-700 ${editorState.flip ? "text-neon-cyan bg-charcoal-700" : "text-gray-400"}`}
@@ -1302,7 +1302,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
               {/* Logo Settings */}
               <div className="border-t border-charcoal-700 pt-4">
-                <h4 className="text-sm font-bold text-gray-300 uppercase tracking-wider mb-3">Logo Overlay</h4>
+                <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider mb-3">Logo Overlay</h4>
                 <div className="flex gap-4 items-start">
                   <div className="w-20 h-20 bg-charcoal-900 border border-charcoal-600 rounded-lg flex items-center justify-center overflow-hidden relative cursor-pointer hover:border-neon-cyan group">
                     {logo.url ? (
@@ -1363,9 +1363,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
               {/* Subtitle Settings */}
               <div className="border-t border-charcoal-700 pt-4">
-                <h4 className="text-sm font-bold text-gray-300 uppercase tracking-wider mb-3">Subtitle Style</h4>
-                <div className="space-y-4">
-                  <div className="flex flex-col gap-2">
+                <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider mb-3">Subtitle Style</h4>
+                <div className="space-y-3">
+                  <div className="flex flex-col gap-1.5">
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-gray-500">Font Size</span>
                       <span className="text-xs text-neon-cyan">{subSettings.fontSize}px</span>
@@ -1379,21 +1379,21 @@ export const ResultView: React.FC<ResultViewProps> = ({
                       className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full"
                     />
                   </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-xs text-gray-500 w-16">Text Color</span>
-                    <div className="flex gap-2 flex-wrap">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-500 shrink-0">Text Color</span>
+                    <div className="flex gap-1.5 flex-wrap">
                       {["#FFFFFF", "#FACC15", "#00E5FF", "#F43F5E", "#10B981"].map((c) => (
                         <button
                           key={c}
                           onClick={() => setSubSettings((s) => ({ ...s, textColor: c }))}
-                          className={`w-5 h-5 rounded-full border border-gray-600 ${subSettings.textColor === c ? "ring-2 ring-white" : ""}`}
+                          className={`w-4 h-4 rounded-full border border-gray-600 ${subSettings.textColor === c ? "ring-2 ring-white scale-110" : ""}`}
                           style={{ backgroundColor: c }}
                         />
                       ))}
                     </div>
                   </div>
-                  <p className="text-[10px] text-gray-500 italic">
-                    Tip: Blur Region ON ထားရင် subtitle blur box ထဲမှာပဲ ပေါ်မည်။
+                  <p className="text-xs text-gray-500 italic">
+                    Tip: Blur Region ON ထားရင် subtitle blur box ထဲ ပေါ်မည်။
                   </p>
                 </div>
               </div>
@@ -1401,10 +1401,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
               {/* Blur Box Settings */}
               <div className="border-t border-charcoal-700 pt-4">
                 <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-sm font-bold text-gray-300 uppercase tracking-wider">Blur Region</h4>
+                  <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Blur Region</h4>
                   <button
                     onClick={() => setBlurSettings((b) => ({ ...b, enabled: !b.enabled }))}
-                    className={`px-3 py-1 rounded text-xs font-bold transition-all ${blurSettings.enabled ? "bg-neon-cyan text-charcoal-900" : "bg-charcoal-700 text-gray-400"}`}
+                    className={`px-2.5 py-1 rounded text-xs font-semibold transition-all ${blurSettings.enabled ? "bg-neon-cyan text-charcoal-900" : "bg-charcoal-700 text-gray-400"}`}
                   >
                     {blurSettings.enabled ? "ON" : "OFF"}
                   </button>
@@ -1447,8 +1447,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
                         className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full"
                       />
                     </div>
-                    <p className="text-[10px] text-gray-500 italic">
-                      Tip: Drag the blur box on the video to position it. Subtitle renders on top.
+                    <p className="text-xs text-gray-500 italic">
+                      Tip: Drag the blur box on the video to position it.
                     </p>
                   </div>
                 )}
@@ -1457,9 +1457,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
           )}
 
 
-          <div className="p-6 bg-charcoal-800 rounded-xl border border-charcoal-600 shadow-lg flex flex-col space-y-4">
-            <h3 className="text-lg font-semibold text-white">Download & Export</h3>
-            <div className="flex flex-col gap-3">
+          <div className="p-4 bg-charcoal-800 rounded-xl border border-charcoal-600 shadow-lg flex flex-col space-y-3">
+            <h3 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Download & Export</h3>
+            <div className="flex flex-col gap-2">
               {renderedBlobUrl ? (
                 <div className="space-y-3">
                   <div className="p-3 bg-green-900/30 border border-green-500/50 rounded-lg text-green-400 text-sm text-center">
