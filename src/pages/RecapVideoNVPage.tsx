@@ -172,22 +172,31 @@ export const ResultView: React.FC<ResultViewProps> = ({
   // Auto-start recording when parent signals pipeline is complete
   useEffect(() => {
     if (!autoStartRecap || !audioUrl || !videoUrl || isRecapPlaying || isRendering || renderedBlobUrl) return;
-    onAutoStartConsumed?.();
 
     // Poll until both audio & video elements are mounted and have data, then auto-start
+    // NOTE: onAutoStartConsumed is called AFTER setIsRecapPlaying to prevent flag reset before trigger
     let attempts = 0;
-    const maxAttempts = 40; // 40 × 150ms = 6 seconds max wait
+    const maxAttempts = 60; // 60 × 200ms = 12 seconds max wait
+
     const poll = setInterval(() => {
       attempts++;
       const a = audioRef.current;
       const v = videoRef.current;
-      const audioReady = a && (a.readyState >= 2 || a.duration > 0);
-      const videoReady = v && (v.readyState >= 2 || v.duration > 0);
+
+      // Accept if elements exist with any readyState >= 1 (metadata loaded) or has src
+      const audioReady = a && a.src && (a.readyState >= 1 || a.duration > 0);
+      const videoReady = v && v.src && (v.readyState >= 1 || v.duration > 0);
+
       if ((audioReady && videoReady) || attempts >= maxAttempts) {
         clearInterval(poll);
-        setIsRecapPlaying(true);
+        // Consume flag first, then start — avoids double-trigger on re-render
+        onAutoStartConsumed?.();
+        // Small delay so React state flush completes before playback starts
+        setTimeout(() => {
+          setIsRecapPlaying(true);
+        }, 300);
       }
-    }, 150);
+    }, 200);
 
     return () => clearInterval(poll);
   }, [autoStartRecap, audioUrl, videoUrl]);
