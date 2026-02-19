@@ -4,6 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppLogo } from "@/components/AppLogo";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useApiAccess } from "@/hooks/useApiAccess";
+import { preCheckCredits } from "@/utils/creditPreCheck";
+import { useCreditDeduction } from "@/hooks/useCreditDeduction";
 
 // ╔══════════════════════════════════════════════════════════════════════════╗
 // ║   🔐 TWO-FACTOR SECURITY LOCK SYSTEM — RecapVideoNV Engine            ║
@@ -1880,6 +1882,11 @@ const RecapVideoNVPage: React.FC = () => {
   const isAccessLoading = authLoading || accessLoading;
   // ── END ACCESS CONTROL ────────────────────────────────────────────────────
 
+  // ── CREDIT DEDUCTION (6 credits/min, deducted once per successful audio generation) ──
+  const { deductCredits } = useCreditDeduction();
+  const didDeductRef = useRef(false); // Idempotency: deduct only once per pipeline run
+  // ── END CREDIT ────────────────────────────────────────────────────────────
+
   const [scriptData, setScriptData] = useState<RecapScript>({
     title: 'Recap Video NV',
     full_script: '',
@@ -1902,6 +1909,20 @@ const RecapVideoNVPage: React.FC = () => {
   const [apiMode, setApiMode] = useState<'app' | 'own'>('app');
   const [ownApiKey, setOwnApiKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
+
+  // ── CREDIT DEDUCTION: Watch audioUrl — deduct once when audio is successfully generated ──
+  useEffect(() => {
+    if (!audioUrl || didDeductRef.current) return;
+    if (apiMode === 'own') return; // Own API key — no credit deduction
+
+    const durationSecs = videoDurationRef.current || 0;
+    const durationMins = durationSecs / 60;
+    const customCost = Math.max(1, Math.ceil(durationMins) * 6); // 6 credits/min, minimum 1
+
+    didDeductRef.current = true; // Mark as deducted before async call (idempotency)
+    deductCredits('recap-nv', false, customCost);
+  }, [audioUrl]);
+  // ── END CREDIT DEDUCTION ──────────────────────────────────────────────────
 
   // Load recap history on mount
   useEffect(() => {
@@ -2289,9 +2310,19 @@ const RecapVideoNVPage: React.FC = () => {
     }
   };
 
-  const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+
+      // Pre-check: only for App API mode (Own API skips credit check)
+      if (apiMode === 'app') {
+        const hasCredits = await preCheckCredits('recap-nv');
+        if (!hasCredits) return;
+      }
+
+      // Reset deduct flag for new pipeline run
+      didDeductRef.current = false;
+
       setVideoFile(file);
       // Auto-start the full pipeline
       startAutoPipeline(file);
