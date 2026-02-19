@@ -38,12 +38,12 @@ import ToolLimitsBadge from "@/components/ToolLimitsBadge";
 import AccountInfoCard from "@/components/AccountInfoCard";
 const defaultTools = [
 {
-  id: "recap",
+  id: "recap-nv",
   icon: Video,
-  title: "Video Recap",
-  description: "ဗီဒီယို Recap နှင့် အကျဉ်းချုပ်ထုတ်ယူခြင်း။",
-  gradient: "cyan" as const,
-  route: "/recap"
+  title: "Video Recap NV",
+  description: "Video Recap NV ဆောင်းပါး ဖန်တီးခြင်း။",
+  gradient: "neon" as const,
+  route: "/recap-nv"
 },
 {
   id: "transcribe",
@@ -52,6 +52,14 @@ const defaultTools = [
   description: "အသံဖိုင်မှ စာသားပြောင်းလဲခြင်း။",
   gradient: "blue" as const,
   route: "/transcribe"
+},
+{
+  id: "recap",
+  icon: Video,
+  title: "Video Recap",
+  description: "ဗီဒီယို Recap နှင့် အကျဉ်းချုပ်ထုတ်ယူခြင်း။",
+  gradient: "cyan" as const,
+  route: "/recap"
 },
 {
   id: "story",
@@ -109,14 +117,7 @@ const defaultTools = [
   gradient: "cyan" as const,
   route: "/creator"
 },
-{
-  id: "recap-nv",
-  icon: Video,
-  title: "Video Recap NV",
-  description: "Video Recap NV ဆောင်းပါး ဖန်တီးခြင်း။",
-  gradient: "rose" as const,
-  route: "/recap-nv"
-}];
+];
 
 type Tool = (typeof defaultTools)[number];
 
