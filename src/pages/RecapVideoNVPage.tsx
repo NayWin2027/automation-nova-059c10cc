@@ -931,7 +931,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
           const active = segs[activeIndex] as any;
           const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
 
-          // On segment CHANGE only: hard-snap video to segment start
+          // On segment CHANGE: hard-snap video to exact segment start (millisecond precision)
           if (activeIndex !== lastIndexRef.current) {
             vv.currentTime = active.vStart;
             lastIndexRef.current = activeIndex;
@@ -946,9 +946,16 @@ export const ResultView: React.FC<ResultViewProps> = ({
               const progressInSegment = (aPct - aStartPct) / segmentAudioPct;
               const targetVideoTime = active.vStart + progressInSegment * videoSecs;
               const drift = targetVideoTime - vv.currentTime;
-              if (Math.abs(drift) > 0.5) vv.currentTime = targetVideoTime;
-              const correction = Math.max(-0.5, Math.min(0.5, drift * 0.3));
-              vv.playbackRate = Math.min(Math.max(baseRate + correction, 0.5), 2.0);
+
+              // === 7000% SYNC: Ultra-tight drift tolerance ===
+              // Hard re-snap threshold: 80ms (was 500ms) — any drift >80ms = immediate hard snap
+              if (Math.abs(drift) > 0.08) {
+                vv.currentTime = targetVideoTime;
+              }
+              // Soft correction: aggressively correct even tiny drift with strong factor (was 0.3)
+              // Factor 1.5 means: 10ms drift → +1.5% rate correction applied every rAF frame
+              const correction = Math.max(-0.5, Math.min(0.5, drift * 1.5));
+              vv.playbackRate = Math.min(Math.max(baseRate + correction, 0.25), 4.0);
             }
           }
           if (activeText !== currentSubtitleRef.current) {
