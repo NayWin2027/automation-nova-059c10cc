@@ -54,6 +54,24 @@ function pcmToWavBase64(pcmBase64: string, sampleRate = 24000, numChannels = 1, 
   return btoa(binary);
 }
 
+/**
+ * Calculate exact WAV duration from WAV base64.
+ * Formula: dataChunkBytes / (sampleRate * numChannels * bytesPerSample)
+ */
+function getWavDurationSeconds(wavBase64: string): number {
+  try {
+    const raw = Uint8Array.from(atob(wavBase64), c => c.charCodeAt(0));
+    const view = new DataView(raw.buffer);
+    const sampleRate = view.getUint32(24, true);
+    const numChannels = view.getUint16(22, true);
+    const bitsPerSample = view.getUint16(34, true);
+    const dataBytes = view.getUint32(40, true);
+    return dataBytes / (sampleRate * numChannels * (bitsPerSample / 8));
+  } catch {
+    return 0;
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -62,7 +80,7 @@ serve(async (req) => {
 
   try {
     // ===== INPUT VALIDATION =====
-    const { text, voiceName, apiKey: userApiKey, languageCode, customCreditCost } = await req.json();
+    const { text, voiceName, apiKey: userApiKey, languageCode, customCreditCost, segments } = await req.json();
 
     // Validate text
     if (!text || typeof text !== "string" || !text.trim()) {
@@ -387,11 +405,31 @@ serve(async (req) => {
       finalMime = "audio/wav";
     }
 
+    // ===== COMPUTE PER-SEGMENT TIMESTAMPS FROM EXACT WAV DURATION =====
+    let segmentTimestamps: { index: number; start: number; end: number }[] = [];
+    if (Array.isArray(segments) && segments.length > 0 && finalMime === "audio/wav") {
+      const wavDuration = getWavDurationSeconds(finalAudio);
+      if (wavDuration > 0) {
+        // Proportion by character count (better speech proxy than word count)
+        const totalChars = segments.reduce((sum: number, s: { text: string }) => sum + (s.text?.length || 0), 0);
+        let cursor = 0;
+        segmentTimestamps = (segments as { text: string }[]).map((seg, idx) => {
+          const charPct = totalChars > 0 ? (seg.text?.length || 0) / totalChars : 1 / segments.length;
+          const start = parseFloat((cursor).toFixed(3));
+          cursor += charPct * wavDuration;
+          const end = parseFloat((idx === segments.length - 1 ? wavDuration : cursor).toFixed(3));
+          return { index: idx, start, end };
+        });
+        console.log(`[gemini-tts] segmentTimestamps: ${segments.length} segs, wavDuration=${wavDuration.toFixed(2)}s`);
+      }
+    }
+
     return new Response(
       JSON.stringify({
         audio: finalAudio,
         mimeType: finalMime,
         voice: usedVoice,
+        segmentTimestamps,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

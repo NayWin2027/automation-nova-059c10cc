@@ -23,6 +23,7 @@ interface ResultViewProps {
   audioUrl?: string;
   videoUrl?: string;
   status: ProcessingStatus;
+  audioTimestampsRef: React.MutableRefObject<{ index: number; start: number; end: number }[]>;
 }
 
 interface LogoSettings {
@@ -62,6 +63,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
   audioUrl,
   videoUrl,
   status,
+  audioTimestampsRef,
 }) => {
   const [activeTab, setActiveTab] = useState<"script" | "segments">("script");
   const [isRecapPlaying, setIsRecapPlaying] = useState(false);
@@ -123,6 +125,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
   const recapRecorderRef = useRef<MediaRecorder | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const logoAngleRef = useRef<number>(0); // for logo spin in canvas
+  // audioTimestampsRef is passed in as a prop from RecapVideoNVPage
   const currentSubtitleRef = useRef<string>(""); // for canvas subtitle drawing during recording
 
   // Request Wake Lock to prevent screen from turning off during recap/recording
@@ -713,22 +716,51 @@ export const ResultView: React.FC<ResultViewProps> = ({
       }
 
       if (av.duration > 0 && vv.duration > 0) {
-        const aPct = av.currentTime / av.duration;
+        const currentTime = av.currentTime;
+        const aPct = currentTime / av.duration;
         const segs = syncSegmentsRef.current as typeof syncSegments;
-        let activeIndex = segs.findIndex((s: any) => aPct >= s.aStartPct && aPct <= s.aEndPct);
+        const audioTs = audioTimestampsRef.current;
 
-        // Fallback: if past last segment end pct, show last segment until audio ends
-        // This prevents subtitle cut-off at the end of audio
-        if (activeIndex === -1 && segs.length > 0 && aPct > 0) {
-          const lastSeg = segs[segs.length - 1] as any;
-          if (aPct > lastSeg.aStartPct) {
-            activeIndex = segs.length - 1;
+        let activeIndex = -1;
+        let activeText = "";
+        let aStartPct = 0;
+        let aEndPct = 0;
+
+        if (audioTs.length > 0) {
+          // === EXACT MODE: use real WAV second timestamps from gemini-tts ===
+          const tsIdx = audioTs.findIndex(ts => currentTime >= ts.start && currentTime <= ts.end);
+          if (tsIdx !== -1) {
+            activeIndex = tsIdx;
+            activeText = (segs[tsIdx] as any)?.text || "";
+            aStartPct = audioTs[tsIdx].start / av.duration;
+            aEndPct = audioTs[tsIdx].end / av.duration;
+          } else if (currentTime > 0 && audioTs.length > 0) {
+            // Past last segment — show last subtitle
+            const lastTs = audioTs[audioTs.length - 1];
+            if (currentTime > lastTs.start) {
+              activeIndex = audioTs.length - 1;
+              activeText = (segs[activeIndex] as any)?.text || "";
+              aStartPct = lastTs.start / av.duration;
+              aEndPct = 1;
+            }
+          }
+        } else {
+          // === FALLBACK MODE: word-count proportional (no timestamps available) ===
+          activeIndex = segs.findIndex((s: any) => aPct >= s.aStartPct && aPct <= s.aEndPct);
+          if (activeIndex === -1 && segs.length > 0 && aPct > 0) {
+            const lastSeg = segs[segs.length - 1] as any;
+            if (aPct > lastSeg.aStartPct) activeIndex = segs.length - 1;
+          }
+          if (activeIndex !== -1) {
+            const s = segs[activeIndex] as any;
+            activeText = s.text;
+            aStartPct = s.aStartPct;
+            aEndPct = s.aEndPct;
           }
         }
 
-        const active = segs[activeIndex] as any;
-
-        if (active) {
+        if (activeIndex !== -1 && activeText) {
+          const active = segs[activeIndex] as any;
           const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
 
           // On segment CHANGE only: hard-snap video to segment start
@@ -737,28 +769,22 @@ export const ResultView: React.FC<ResultViewProps> = ({
             lastIndexRef.current = activeIndex;
           }
 
-          const segmentAudioPct = active.aEndPct - active.aStartPct;
+          const segmentAudioPct = aEndPct - aStartPct;
           if (segmentAudioPct > 0.001) {
             const audioSecs = segmentAudioPct * av.duration;
             const videoSecs = vActualEnd - active.vStart;
             if (audioSecs > 0 && videoSecs > 0) {
               const baseRate = videoSecs / audioSecs;
-
-              const progressInSegment = (aPct - active.aStartPct) / segmentAudioPct;
+              const progressInSegment = (aPct - aStartPct) / segmentAudioPct;
               const targetVideoTime = active.vStart + progressInSegment * videoSecs;
               const drift = targetVideoTime - vv.currentTime;
-
-              if (Math.abs(drift) > 0.5) {
-                vv.currentTime = targetVideoTime;
-              }
-
+              if (Math.abs(drift) > 0.5) vv.currentTime = targetVideoTime;
               const correction = Math.max(-0.5, Math.min(0.5, drift * 0.3));
-              const targetRate = baseRate + correction;
-              vv.playbackRate = Math.min(Math.max(targetRate, 0.5), 2.0);
+              vv.playbackRate = Math.min(Math.max(baseRate + correction, 0.5), 2.0);
             }
           }
-          setCurrentSubtitle(active.text);
-          currentSubtitleRef.current = active.text;
+          setCurrentSubtitle(activeText);
+          currentSubtitleRef.current = activeText;
         } else {
           setCurrentSubtitle("");
           currentSubtitleRef.current = "";
@@ -1419,6 +1445,8 @@ const RecapVideoNVPage: React.FC = () => {
   const [progressMsg, setProgressMsg] = useState('');
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const videoDurationRef = useRef<number>(0);
+  // Exact per-segment timestamps from gemini-tts WAV header — passed into generateVoice
+  const pageAudioTimestampsRef = useRef<{ index: number; start: number; end: number }[]>([]);
   const [recapHistory, setRecapHistory] = useState<RecapHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
@@ -1525,18 +1553,22 @@ const RecapVideoNVPage: React.FC = () => {
   };
 
   // Step 2: Generate AI Voice
-  const generateVoice = async (scriptText: string, useOwnKey?: string) => {
+  const generateVoice = async (scriptText: string, useOwnKey?: string, segsForSync?: { text: string }[]) => {
     setProgressMsg('🎙️ AI Voice ဖန်တီးနေပါသည်...');
     try {
       const { data: { session: currentSession } } = await supabase.auth.getSession();
       const userToken = currentSession?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-      const bodyPayload: Record<string, string> = {
+      const bodyPayload: Record<string, unknown> = {
         text: scriptText,
         voiceName: 'Kore',
         languageCode: 'my',
       };
       if (useOwnKey) bodyPayload.ownApiKey = useOwnKey;
+      // Send segments so gemini-tts can return exact per-segment timestamps from WAV header
+      if (segsForSync && segsForSync.length > 0) {
+        bodyPayload.segments = segsForSync;
+      }
 
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gemini-tts`,
@@ -1555,6 +1587,15 @@ const RecapVideoNVPage: React.FC = () => {
 
       if (data.useClientTTS || !data.audio) {
         throw new Error(data.message || data.error || 'TTS generation failed');
+      }
+
+      // Store exact segment timestamps for syncLoop (replaces word-count estimate)
+      if (Array.isArray(data.segmentTimestamps) && data.segmentTimestamps.length > 0) {
+        pageAudioTimestampsRef.current = data.segmentTimestamps;
+        console.log('[TTS] Using exact WAV segmentTimestamps:', data.segmentTimestamps.length, 'segments');
+      } else {
+        pageAudioTimestampsRef.current = [];
+        console.log('[TTS] No segmentTimestamps — falling back to word-count sync');
       }
 
       // Convert base64 audio to blob URL using data URI (most reliable for large audio)
@@ -1639,18 +1680,18 @@ const RecapVideoNVPage: React.FC = () => {
         throw new Error(initData?.error || initError?.message || 'Upload URL ရယူ၍ မအောင်မြင်ပါ');
       }
 
-      const CHUNK_SIZE = 8 * 1024 * 1024; // 8MB
+      // Parallel chunked upload: 2MB chunks, 3 concurrent per batch
+      const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB — smaller = more parallelism
+      const PARALLEL_BATCH = 3;            // 3 concurrent uploads per batch
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
       let fileUri = '';
 
-      for (let i = 0; i < totalChunks; i++) {
+      // Upload a single chunk and return its result
+      const uploadChunk = async (i: number) => {
         const start = i * CHUNK_SIZE;
         const end = Math.min(start + CHUNK_SIZE, file.size);
         const chunk = file.slice(start, end);
         const isLastChunk = i === totalChunks - 1;
-
-        setProgressMsg(`📤 Uploading... (${i + 1}/${totalChunks})`);
-
         const chunkBuf = await chunk.arrayBuffer();
         const chunkHeaders: Record<string, string> = {
           'x-recap-action': 'uploadChunkBinary',
@@ -1663,17 +1704,30 @@ const RecapVideoNVPage: React.FC = () => {
           'x-is-last-chunk': String(isLastChunk),
         };
         if (resolvedOwnKey) chunkHeaders['x-own-api-key'] = resolvedOwnKey;
-        const { data: chunkData, error: chunkError } = await supabase.functions.invoke('video-recap', {
+        const { data, error } = await supabase.functions.invoke('video-recap', {
           body: chunkBuf,
           headers: chunkHeaders,
         });
-
-        if (chunkError || chunkData?.error) {
-          throw new Error(chunkData?.error || chunkError?.message || `Chunk ${i + 1} upload failed`);
+        if (error || data?.error) {
+          throw new Error(data?.error || error?.message || `Chunk ${i + 1} upload failed`);
         }
+        return { isLastChunk, data };
+      };
 
-        if (isLastChunk && chunkData?.fileUri) {
-          fileUri = chunkData.fileUri;
+      // Upload in batches of PARALLEL_BATCH — preserves byte-offset order per batch
+      for (let batchStart = 0; batchStart < totalChunks; batchStart += PARALLEL_BATCH) {
+        const batchEnd = Math.min(batchStart + PARALLEL_BATCH, totalChunks);
+        const batchIndices = Array.from({ length: batchEnd - batchStart }, (_, k) => batchStart + k);
+
+        const doneCount = batchStart;
+        setProgressMsg(`📤 Uploading... (${doneCount + 1}–${batchEnd}/${totalChunks})`);
+
+        const results = await Promise.all(batchIndices.map(uploadChunk));
+
+        for (const r of results) {
+          if (r.isLastChunk && r.data?.fileUri) {
+            fileUri = r.data.fileUri;
+          }
         }
       }
 
@@ -1731,8 +1785,8 @@ const RecapVideoNVPage: React.FC = () => {
 
       setProgressMsg('📝 Script generated! Now generating AI voice...');
 
-      // Auto-generate voice (pass own key if needed)
-      await generateVoice(scriptText, resolvedOwnKey || undefined);
+      // Auto-generate voice — pass segments so gemini-tts returns exact WAV timestamps
+      await generateVoice(scriptText, resolvedOwnKey || undefined, segments.map(s => ({ text: s.text })));
     } catch (err: any) {
       console.error('Pipeline error:', err);
       setStatus('error');
@@ -1852,6 +1906,7 @@ const RecapVideoNVPage: React.FC = () => {
             audioUrl={audioUrl}
             videoUrl={videoUrl}
             status={status}
+            audioTimestampsRef={pageAudioTimestampsRef}
           />
         )}
 
