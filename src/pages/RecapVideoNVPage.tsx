@@ -879,6 +879,16 @@ export const ResultView: React.FC<ResultViewProps> = ({
       }
     };
 
+    // ╔══════════════════════════════════════════════════════════════════════╗
+    // ║  🔒 TWO-FACTOR LOCKED — DO NOT MODIFY WITHOUT ADMIN PERMISSION 🔒  ║
+    // ║  BLOCK: 8000% SMOOTH A/V SYNC ENGINE                               ║
+    // ║  • Pure seconds-based sync (audio.currentTime master clock)        ║
+    // ║  • playbackRate-driven smooth correction (factor 3.5)              ║
+    // ║  • Hard seek ONLY when drift > 0.3s (prevents decoder stutter)     ║
+    // ║  • playbackRate range: 0.1x – 8.0x                                ║
+    // ║  • Segment snap threshold: 0.3s                                    ║
+    // ║  LOCK ID: AV-SYNC-8000-SMOOTH-v3                                   ║
+    // ╚══════════════════════════════════════════════════════════════════════╝
     let animFrame: number;
     const syncLoop = () => {
       const av = audioRef.current;
@@ -998,6 +1008,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
       setSubBorderColor(`hsl(${subNeonHueRef.current}, 100%, 60%)`);
       animFrame = requestAnimationFrame(syncLoop);
     };
+    // ╚══ END TWO-FACTOR LOCK: AV-SYNC-8000-SMOOTH-v3 ══╝
 
     a.addEventListener("ended", onEnded);
     a.currentTime = 0;
@@ -1006,6 +1017,13 @@ export const ResultView: React.FC<ResultViewProps> = ({
     v.play().catch(console.error);
     animFrame = requestAnimationFrame(syncLoop);
 
+    // ╔══════════════════════════════════════════════════════════════════════╗
+    // ║  🔒 TWO-FACTOR LOCKED — DO NOT MODIFY WITHOUT ADMIN PERMISSION 🔒  ║
+    // ║  BLOCK: AUTO-START RECORDING PIPELINE                              ║
+    // ║  • 400ms delay ensures first frame is rendered before capture      ║
+    // ║  • startRecapRecording() triggers MediaRecorder + canvas stream    ║
+    // ║  LOCK ID: RECORD-PIPELINE-AUTO-v1                                  ║
+    // ╚══════════════════════════════════════════════════════════════════════╝
     setTimeout(() => startRecapRecording(), 400);
 
     return () => {
@@ -1933,6 +1951,16 @@ const RecapVideoNVPage: React.FC = () => {
     });
   };
 
+  // ╔══════════════════════════════════════════════════════════════════════╗
+  // ║  🔒 TWO-FACTOR LOCKED — DO NOT MODIFY WITHOUT ADMIN PERMISSION 🔒  ║
+  // ║  BLOCK: VOICE GENERATION + SEGMENT TIMESTAMP PIPELINE              ║
+  // ║  • Calls gemini-tts edge function with segments[] for exact sync   ║
+  // ║  • Stores segmentTimestamps → audioTimestampsRef (master for sync) ║
+  // ║  • PCM→WAV browser-side conversion (avoids edge memory limit)      ║
+  // ║  • Sets audioUrl blob → triggers ResultView render                 ║
+  // ║  • Auto-starts recording via setAutoStartRecap(true)               ║
+  // ║  LOCK ID: VOICE-GEN-PIPELINE-v2                                    ║
+  // ╚══════════════════════════════════════════════════════════════════════╝
   // Step 2: Generate AI Voice
   const generateVoice = async (scriptText: string, useOwnKey?: string, segsForSync?: { text: string }[]) => {
     setProgressMsg('🎙️ AI Voice ဖန်တီးနေပါသည်...');
@@ -2031,6 +2059,18 @@ const RecapVideoNVPage: React.FC = () => {
     }
   };
 
+  // ╚══ END TWO-FACTOR LOCK: VOICE-GEN-PIPELINE-v2 ══╝
+
+  // ╔══════════════════════════════════════════════════════════════════════╗
+  // ║  🔒 TWO-FACTOR LOCKED — DO NOT MODIFY WITHOUT ADMIN PERMISSION 🔒  ║
+  // ║  BLOCK: AUTO PIPELINE (Upload → Script → Voice → Record)           ║
+  // ║  • Video upload with chunked parallel upload (2MB chunks, 3 at a   ║
+  // ║    time) to Google Files API resumable endpoint                     ║
+  // ║  • Script generation via recap-script-generator edge function       ║
+  // ║  • Calls generateVoice() with segment[] for sync timestamps         ║
+  // ║  • setAutoStartRecap(true) triggers immediate recording start       ║
+  // ║  LOCK ID: AUTO-PIPELINE-v2                                          ║
+  // ╚══════════════════════════════════════════════════════════════════════╝
   // Step 1: Upload video → AI Analysis → Script Generation → Auto TTS
   const startAutoPipeline = async (file: File) => {
     // Validate own API key if own mode selected
