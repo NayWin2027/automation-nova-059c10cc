@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from "react";
+import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLogo } from "@/components/AppLogo";
@@ -63,6 +63,7 @@ interface ResultViewProps {
   onUpdateScript: (newScript: string) => void;
   onGenerateVoice: () => void;
   onRecapSaved?: () => void;
+  onVideoReady?: () => void; // Called when rendered video blob is ready ("Recap Video Ready!" shown)
   audioUrl?: string;
   videoUrl?: string;
   status: ProcessingStatus;
@@ -105,6 +106,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
   onUpdateScript,
   onGenerateVoice,
   onRecapSaved,
+  onVideoReady,
   audioUrl,
   videoUrl,
   status,
@@ -492,6 +494,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
       document.body.removeChild(a);
 
       setRenderedBlobUrl(url);
+      onVideoReady?.(); // Trigger credit deduction: "Recap Video Ready!" ပေါ်လာပြီ
       setIsRendering(false);
       setIsRecapPlaying(false);
 
@@ -1910,9 +1913,9 @@ const RecapVideoNVPage: React.FC = () => {
   const [ownApiKey, setOwnApiKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
 
-  // ── CREDIT DEDUCTION: Watch audioUrl — deduct once when audio is successfully generated ──
-  useEffect(() => {
-    if (!audioUrl || didDeductRef.current) return;
+  // ── CREDIT DEDUCTION: Called via onVideoReady callback when "Recap Video Ready!" appears ──
+  const handleVideoReady = useCallback(() => {
+    if (didDeductRef.current) return;
     if (apiMode === 'own') return; // Own API key — no credit deduction
 
     const durationSecs = videoDurationRef.current || 0;
@@ -1921,7 +1924,7 @@ const RecapVideoNVPage: React.FC = () => {
 
     didDeductRef.current = true; // Mark as deducted before async call (idempotency)
     deductCredits('recap-nv', false, customCost);
-  }, [audioUrl]);
+  }, [apiMode, deductCredits]);
   // ── END CREDIT DEDUCTION ──────────────────────────────────────────────────
 
   // Load recap history on mount
@@ -2469,6 +2472,7 @@ const RecapVideoNVPage: React.FC = () => {
             onUpdateScript={handleUpdateScript}
             onGenerateVoice={handleGenerateVoice}
             onRecapSaved={loadRecapHistory}
+            onVideoReady={handleVideoReady}
             audioUrl={audioUrl}
             videoUrl={videoUrl}
             status={status}
