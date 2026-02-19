@@ -132,6 +132,26 @@ export const ResultView: React.FC<ResultViewProps> = ({
     isDragging: false,
   });
 
+  // Timeline Bar state
+  const [timelineBar, setTimelineBar] = useState({
+    enabled: true,
+    color: "#00E5FF",
+    thickness: 5, // px (1–15)
+    openPanel: false,
+  });
+
+  // Video Border state
+  const [videoBorder, setVideoBorder] = useState({
+    enabled: false,
+    color: "#FACC15",
+    width: 8, // px (1–50)
+    openPanel: false,
+  });
+
+  // Preset color swatches
+  const COLOR_SWATCHES = ["#00E5FF", "#F43F5E", "#FACC15", "#10B981", "#A855F7", "#3B82F6", "#F97316", "#EC4899", "#6B7280"];
+
+
   // Drag States
   const [isDraggingSub, setIsDraggingSub] = useState(false);
   const [isDraggingBlur, setIsDraggingBlur] = useState(false);
@@ -532,6 +552,37 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.drawImage(videoEl, srcCropX, srcCropY, srcCropW, srcCropH, 0, 0, canvas.width, canvas.height);
       }
       ctx.filter = "none";
+
+      // ── Draw Video Border (on top of video, under overlays) ─────────
+      if (videoBorder.enabled && videoBorder.width > 0) {
+        ctx.save();
+        ctx.strokeStyle = videoBorder.color;
+        ctx.lineWidth = videoBorder.width * 2; // strokeRect draws half inside, half outside; double to get full inner border
+        ctx.shadowColor = videoBorder.color;
+        ctx.shadowBlur = videoBorder.width * 1.5;
+        ctx.globalAlpha = 0.92;
+        ctx.strokeRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+      }
+
+      // ── Draw Timeline Bar (progress bar at bottom) ───────────────────
+      if (timelineBar.enabled && audioEl.duration > 0) {
+        const progress = Math.min(1, audioEl.currentTime / audioEl.duration);
+        const barH = timelineBar.thickness;
+        const barY = canvas.height - barH;
+        // Track background (semi-transparent dark)
+        ctx.save();
+        ctx.globalAlpha = 0.35;
+        ctx.fillStyle = "#000000";
+        ctx.fillRect(0, barY, canvas.width, barH);
+        ctx.globalAlpha = 1;
+        // Progress fill with glow
+        ctx.shadowColor = timelineBar.color;
+        ctx.shadowBlur = barH * 2.5;
+        ctx.fillStyle = timelineBar.color;
+        ctx.fillRect(0, barY, canvas.width * progress, barH);
+        ctx.restore();
+      }
 
       // Draw blur box region
       if (blurSettings.enabled) {
@@ -1204,6 +1255,39 @@ export const ResultView: React.FC<ResultViewProps> = ({
               ) : (
                 <div className="text-gray-500 py-20">Video Not Available</div>
               )}
+
+              {/* ── DOM: Video Border overlay ─────────────────────── */}
+              {videoBorder.enabled && (
+                <div
+                  className="absolute inset-0 pointer-events-none z-30"
+                  style={{
+                    boxShadow: `inset 0 0 0 ${videoBorder.width}px ${videoBorder.color}, inset 0 0 ${videoBorder.width * 2}px ${videoBorder.color}55`,
+                    borderRadius: "inherit",
+                  }}
+                />
+              )}
+
+              {/* ── DOM: Timeline Bar (bottom progress bar) ─────────── */}
+              {timelineBar.enabled && audioRef.current && (
+                <div
+                  className="absolute bottom-0 left-0 right-0 z-30 pointer-events-none"
+                  style={{ height: `${timelineBar.thickness}px` }}
+                >
+                  {/* Track */}
+                  <div className="absolute inset-0 bg-black/30" />
+                  {/* Fill — driven by audio currentTime via CSS custom property */}
+                  <div
+                    className="absolute inset-y-0 left-0 transition-none"
+                    style={{
+                      width: audioRef.current?.duration
+                        ? `${Math.min(100, (audioRef.current.currentTime / audioRef.current.duration) * 100)}%`
+                        : "0%",
+                      backgroundColor: timelineBar.color,
+                      boxShadow: `0 0 ${timelineBar.thickness * 2}px ${timelineBar.color}`,
+                    }}
+                  />
+                </div>
+              )}
             </div>
           </div>
 
@@ -1453,8 +1537,148 @@ export const ResultView: React.FC<ResultViewProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* ── Timeline Bar Drop Box ──────────────────────────────── */}
+              <div className="border-t border-charcoal-700 pt-4">
+                <button
+                  onClick={() => setTimelineBar((t) => ({ ...t, openPanel: !t.openPanel }))}
+                  className="w-full flex items-center justify-between group"
+                >
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Timeline Bar</h4>
+                    <div
+                      className="w-4 h-4 rounded border border-gray-600"
+                      style={{ backgroundColor: timelineBar.color }}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`px-2 py-0.5 rounded text-xs font-semibold transition-all ${timelineBar.enabled ? "bg-neon-cyan text-charcoal-900" : "bg-charcoal-700 text-gray-400"}`}
+                      onClick={(e) => { e.stopPropagation(); setTimelineBar((t) => ({ ...t, enabled: !t.enabled })); }}
+                    >
+                      {timelineBar.enabled ? "ON" : "OFF"}
+                    </span>
+                    <svg className={`w-4 h-4 text-gray-400 transition-transform ${timelineBar.openPanel ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </button>
+
+                {timelineBar.openPanel && (
+                  <div className="mt-3 space-y-3 bg-charcoal-900/60 rounded-xl p-3 border border-charcoal-700">
+                    {/* Thickness */}
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-500">Thickness</span>
+                        <span className="text-xs text-neon-cyan">{timelineBar.thickness}px</span>
+                      </div>
+                      <input
+                        type="range" min="1" max="15" step="1"
+                        value={timelineBar.thickness}
+                        onChange={(e) => setTimelineBar((t) => ({ ...t, thickness: Number(e.target.value) }))}
+                        className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full"
+                      />
+                    </div>
+                    {/* Color Swatches */}
+                    <div>
+                      <p className="text-xs text-gray-500 mb-2">Color</p>
+                      <div className="flex flex-wrap gap-1.5 items-center">
+                        {COLOR_SWATCHES.map((c) => (
+                          <button
+                            key={c}
+                            onClick={() => setTimelineBar((t) => ({ ...t, color: c }))}
+                            className={`w-6 h-6 rounded-full border-2 transition-transform ${timelineBar.color === c ? "ring-2 ring-white scale-110 border-white" : "border-gray-600"}`}
+                            style={{ backgroundColor: c }}
+                          />
+                        ))}
+                        {/* Custom color picker */}
+                        <label className="w-6 h-6 rounded-full border-2 border-dashed border-gray-500 flex items-center justify-center cursor-pointer hover:border-gray-300 relative overflow-hidden" title="Custom color">
+                          <span className="text-gray-400 text-xs">+</span>
+                          <input
+                            type="color"
+                            value={timelineBar.color}
+                            onChange={(e) => setTimelineBar((t) => ({ ...t, color: e.target.value }))}
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Video Border Drop Box ──────────────────────────────── */}
+              <div className="border-t border-charcoal-700 pt-4">
+                <button
+                  onClick={() => setVideoBorder((v) => ({ ...v, openPanel: !v.openPanel }))}
+                  className="w-full flex items-center justify-between group"
+                >
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Video Border</h4>
+                    <div
+                      className="w-4 h-4 rounded border border-gray-600"
+                      style={{ backgroundColor: videoBorder.color }}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`px-2 py-0.5 rounded text-xs font-semibold transition-all ${videoBorder.enabled ? "bg-neon-cyan text-charcoal-900" : "bg-charcoal-700 text-gray-400"}`}
+                      onClick={(e) => { e.stopPropagation(); setVideoBorder((v) => ({ ...v, enabled: !v.enabled })); }}
+                    >
+                      {videoBorder.enabled ? "ON" : "OFF"}
+                    </span>
+                    <svg className={`w-4 h-4 text-gray-400 transition-transform ${videoBorder.openPanel ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </button>
+
+                {videoBorder.openPanel && (
+                  <div className="mt-3 space-y-3 bg-charcoal-900/60 rounded-xl p-3 border border-charcoal-700">
+                    {/* Width */}
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-500">Width</span>
+                        <span className="text-xs text-neon-cyan">{videoBorder.width}px</span>
+                      </div>
+                      <input
+                        type="range" min="1" max="50" step="1"
+                        value={videoBorder.width}
+                        onChange={(e) => setVideoBorder((v) => ({ ...v, width: Number(e.target.value) }))}
+                        className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full"
+                      />
+                    </div>
+                    {/* Color Swatches */}
+                    <div>
+                      <p className="text-xs text-gray-500 mb-2">Color</p>
+                      <div className="flex flex-wrap gap-1.5 items-center">
+                        {COLOR_SWATCHES.map((c) => (
+                          <button
+                            key={c}
+                            onClick={() => setVideoBorder((v) => ({ ...v, color: c }))}
+                            className={`w-6 h-6 rounded-full border-2 transition-transform ${videoBorder.color === c ? "ring-2 ring-white scale-110 border-white" : "border-gray-600"}`}
+                            style={{ backgroundColor: c }}
+                          />
+                        ))}
+                        {/* Custom color picker */}
+                        <label className="w-6 h-6 rounded-full border-2 border-dashed border-gray-500 flex items-center justify-center cursor-pointer hover:border-gray-300 relative overflow-hidden" title="Custom color">
+                          <span className="text-gray-400 text-xs">+</span>
+                          <input
+                            type="color"
+                            value={videoBorder.color}
+                            onChange={(e) => setVideoBorder((v) => ({ ...v, color: e.target.value }))}
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
             </div>
           )}
+
 
 
           <div className="p-4 bg-charcoal-800 rounded-xl border border-charcoal-600 shadow-lg flex flex-col space-y-3">
