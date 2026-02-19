@@ -80,15 +80,26 @@ export const ResultView: React.FC<ResultViewProps> = ({
   const subNeonHueRef = useRef(0);
   const [subBorderColor, setSubBorderColor] = useState("hsl(180,100%,60%)"); // cyan start
 
+  // Color Grading Presets
+  const COLOR_GRADE_PRESETS: Record<string, { contrast: number; brightness: number; saturate: number; hue: number; sepia?: number; label: string; emoji: string }> = {
+    "OFF":        { contrast: 100, brightness: 100, saturate: 100, hue: 0,   label: "Off",        emoji: "⚫" },
+    "CINEMATIC":  { contrast: 118, brightness: 92,  saturate: 85,  hue: 5,   label: "Cinematic",  emoji: "🎬" },
+    "VINTAGE":    { contrast: 108, brightness: 95,  saturate: 70,  hue: 15,  sepia: 30, label: "Vintage", emoji: "📷" },
+    "COOL":       { contrast: 105, brightness: 100, saturate: 110, hue: -18, label: "Cool",       emoji: "🧊" },
+    "WARM":       { contrast: 108, brightness: 105, saturate: 120, hue: 18,  label: "Warm",       emoji: "🔥" },
+    "TEAL":       { contrast: 115, brightness: 95,  saturate: 130, hue: -35, label: "Teal & Orange", emoji: "🌊" },
+    "PINK":       { contrast: 105, brightness: 105, saturate: 130, hue: 330, label: "Pink",       emoji: "🌸" },
+    "NEON":       { contrast: 125, brightness: 110, saturate: 200, hue: 10,  label: "Neon",       emoji: "⚡" },
+    "NOIR":       { contrast: 140, brightness: 85,  saturate: 20,  hue: 0,   label: "Noir",       emoji: "🎭" },
+    "GOLDEN":     { contrast: 110, brightness: 110, saturate: 150, hue: 22,  label: "Golden Hour", emoji: "🌅" },
+  };
+
   // Editor States
   const [editorState, setEditorState] = useState({
     ratio: "auto" as "auto" | "16/9" | "9/16" | "1/1" | "4/3",
     flip: false,
     bypass: false,
-    contrast: 100,
-    brightness: 100,
-    saturate: 100,
-    hue: 0,
+    colorGrade: "OFF" as string,
   });
 
   // Logo & Subtitle States
@@ -502,12 +513,14 @@ export const ResultView: React.FC<ResultViewProps> = ({
         }
       }
 
-      // Apply color grading filter
-      const contrast = editorState.bypass ? 115 : editorState.contrast;
-      const brightness = editorState.bypass ? 105 : editorState.brightness;
-      const saturate = editorState.bypass ? 115 : editorState.saturate;
-      const hue = editorState.bypass ? 5 : editorState.hue;
-      ctx.filter = `contrast(${contrast}%) brightness(${brightness}%) saturate(${saturate}%) hue-rotate(${hue}deg)`;
+      // Apply color grading filter from preset
+      const gradePreset = COLOR_GRADE_PRESETS[editorState.colorGrade] || COLOR_GRADE_PRESETS["OFF"];
+      const contrast = editorState.bypass ? 115 : gradePreset.contrast;
+      const brightness = editorState.bypass ? 105 : gradePreset.brightness;
+      const saturate = editorState.bypass ? 115 : gradePreset.saturate;
+      const hue = editorState.bypass ? 5 : gradePreset.hue;
+      const sepia = gradePreset.sepia || 0;
+      ctx.filter = `contrast(${contrast}%) brightness(${brightness}%) saturate(${saturate}%) hue-rotate(${hue}deg) sepia(${sepia}%)`;
 
       if (editorState.flip) {
         ctx.save();
@@ -918,8 +931,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
   }, [isRecapPlaying, isYouTube]);
 
   // Construct video styles based on editor state
+  const activeGrade = COLOR_GRADE_PRESETS[editorState.colorGrade] || COLOR_GRADE_PRESETS["OFF"];
   const videoStyles: React.CSSProperties = {
-    filter: `contrast(${editorState.bypass ? 115 : editorState.contrast}%) brightness(${editorState.bypass ? 105 : editorState.brightness}%) saturate(${editorState.bypass ? 115 : editorState.saturate}%) hue-rotate(${editorState.bypass ? 5 : editorState.hue}deg)`,
+    filter: `contrast(${editorState.bypass ? 115 : activeGrade.contrast}%) brightness(${editorState.bypass ? 105 : activeGrade.brightness}%) saturate(${editorState.bypass ? 115 : activeGrade.saturate}%) hue-rotate(${editorState.bypass ? 5 : activeGrade.hue}deg) sepia(${activeGrade.sepia || 0}%)`,
     transform: `${editorState.flip ? "scaleX(-1)" : "scaleX(1)"} ${editorState.bypass ? "scale(1.03)" : "scale(1)"}`,
     objectFit: editorState.ratio === "auto" ? "contain" : "cover",
     width: "100%",
@@ -1264,28 +1278,24 @@ export const ResultView: React.FC<ResultViewProps> = ({
                   ))}
                 </div>
 
-                <div className="space-y-3">
-                  <div className="flex items-center space-x-4">
-                    <span className="text-xs text-gray-500 w-16">Contrast</span>
-                    <input
-                      type="range"
-                      min="50"
-                      max="200"
-                      value={editorState.contrast}
-                      onChange={(e) => setEditorState((s) => ({ ...s, contrast: Number(e.target.value) }))}
-                      className="flex-1 accent-neon-cyan h-1 bg-charcoal-600 rounded-lg appearance-none cursor-pointer"
-                    />
-                  </div>
-                  <div className="flex items-center space-x-4">
-                    <span className="text-xs text-gray-500 w-16">Bright</span>
-                    <input
-                      type="range"
-                      min="50"
-                      max="200"
-                      value={editorState.brightness}
-                      onChange={(e) => setEditorState((s) => ({ ...s, brightness: Number(e.target.value) }))}
-                      className="flex-1 accent-neon-cyan h-1 bg-charcoal-600 rounded-lg appearance-none cursor-pointer"
-                    />
+                {/* Auto Color Grading Presets */}
+                <div className="mt-3">
+                  <p className="text-xs text-gray-500 mb-2">🎨 Auto Color Grade</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {Object.entries(COLOR_GRADE_PRESETS).map(([key, preset]) => (
+                      <button
+                        key={key}
+                        onClick={() => setEditorState((s) => ({ ...s, colorGrade: key }))}
+                        className={`flex items-center gap-1.5 px-2 py-1.5 rounded text-xs font-semibold border transition-all ${
+                          editorState.colorGrade === key
+                            ? "bg-neon-cyan text-charcoal-900 border-neon-cyan shadow-[0_0_8px_rgba(0,229,255,0.5)]"
+                            : "bg-charcoal-900 text-gray-400 border-charcoal-700 hover:border-gray-500"
+                        }`}
+                      >
+                        <span>{preset.emoji}</span>
+                        <span>{preset.label}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
