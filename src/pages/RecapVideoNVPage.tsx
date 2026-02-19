@@ -1680,8 +1680,8 @@ const RecapVideoNVPage: React.FC = () => {
         throw new Error(initData?.error || initError?.message || 'Upload URL ရယူ၍ မအောင်မြင်ပါ');
       }
 
-      // Sequential chunked upload: 2MB chunks (Google resumable upload requires strict sequential order)
-      const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB
+      // Sequential chunked upload: 8MB chunks (Google resumable upload requires multiples of 8,388,608 bytes)
+      const CHUNK_SIZE = 8 * 1024 * 1024; // 8MB — Google Files API chunk granularity requirement
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
       let fileUri = '';
 
