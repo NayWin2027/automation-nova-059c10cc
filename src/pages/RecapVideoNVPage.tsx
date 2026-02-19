@@ -1680,14 +1680,12 @@ const RecapVideoNVPage: React.FC = () => {
         throw new Error(initData?.error || initError?.message || 'Upload URL ရယူ၍ မအောင်မြင်ပါ');
       }
 
-      // Parallel chunked upload: 2MB chunks, 3 concurrent per batch
-      const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB — smaller = more parallelism
-      const PARALLEL_BATCH = 3;            // 3 concurrent uploads per batch
+      // Sequential chunked upload: 2MB chunks (Google resumable upload requires strict sequential order)
+      const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
       let fileUri = '';
 
-      // Upload a single chunk and return its result
-      const uploadChunk = async (i: number) => {
+      for (let i = 0; i < totalChunks; i++) {
         const start = i * CHUNK_SIZE;
         const end = Math.min(start + CHUNK_SIZE, file.size);
         const chunk = file.slice(start, end);
@@ -1704,6 +1702,9 @@ const RecapVideoNVPage: React.FC = () => {
           'x-is-last-chunk': String(isLastChunk),
         };
         if (resolvedOwnKey) chunkHeaders['x-own-api-key'] = resolvedOwnKey;
+
+        setProgressMsg(`📤 Uploading... (${i + 1}/${totalChunks})`);
+
         const { data, error } = await supabase.functions.invoke('video-recap', {
           body: chunkBuf,
           headers: chunkHeaders,
@@ -1711,23 +1712,8 @@ const RecapVideoNVPage: React.FC = () => {
         if (error || data?.error) {
           throw new Error(data?.error || error?.message || `Chunk ${i + 1} upload failed`);
         }
-        return { isLastChunk, data };
-      };
-
-      // Upload in batches of PARALLEL_BATCH — preserves byte-offset order per batch
-      for (let batchStart = 0; batchStart < totalChunks; batchStart += PARALLEL_BATCH) {
-        const batchEnd = Math.min(batchStart + PARALLEL_BATCH, totalChunks);
-        const batchIndices = Array.from({ length: batchEnd - batchStart }, (_, k) => batchStart + k);
-
-        const doneCount = batchStart;
-        setProgressMsg(`📤 Uploading... (${doneCount + 1}–${batchEnd}/${totalChunks})`);
-
-        const results = await Promise.all(batchIndices.map(uploadChunk));
-
-        for (const r of results) {
-          if (r.isLastChunk && r.data?.fileUri) {
-            fileUri = r.data.fileUri;
-          }
+        if (isLastChunk && data?.fileUri) {
+          fileUri = data.fileUri;
         }
       }
 
