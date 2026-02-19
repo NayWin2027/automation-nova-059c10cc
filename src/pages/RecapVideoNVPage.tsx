@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { AppLogo } from "@/components/AppLogo";
 
 interface RecapSegment {
   timestamp: string;
@@ -72,8 +73,12 @@ export const ResultView: React.FC<ResultViewProps> = ({
   const [activeTab, setActiveTab] = useState<"script" | "segments">("script");
   const [isRecapPlaying, setIsRecapPlaying] = useState(false);
   const [currentSubtitle, setCurrentSubtitle] = useState("");
+  const [subtitleKey, setSubtitleKey] = useState(0); // increments on each subtitle change for animation
   const [isRendering, setIsRendering] = useState(false);
   const [renderedBlobUrl, setRenderedBlobUrl] = useState<string | null>(null);
+  // Neon hue for subtitle box border cycling (DOM preview)
+  const subNeonHueRef = useRef(0);
+  const [subBorderColor, setSubBorderColor] = useState("hsl(180,100%,60%)"); // cyan start
 
   // Editor States
   const [editorState, setEditorState] = useState({
@@ -442,6 +447,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
     recorder.start(100);
 
     // Pre-load logo image for canvas drawing
+    // If no custom logo, rasterize the AppLogo SVG into an Image via Blob URL
     let logoImg: HTMLImageElement | null = null;
     if (logo.url) {
       logoImg = new Image();
@@ -452,6 +458,22 @@ export const ResultView: React.FC<ResultViewProps> = ({
         logoImg!.onload = () => res();
         logoImg!.onerror = () => res();
       });
+    } else {
+      // Rasterize AppLogo SVG → canvas-drawable image
+      try {
+        const svgSize = 256;
+        const svgStr = `<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" width="${svgSize}" height="${svgSize}"><defs><radialGradient id="bg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#1a0b2e"/><stop offset="100%" stop-color="#050505"/></radialGradient><linearGradient id="ch" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#ffffff"/><stop offset="40%" stop-color="#e8eff5"/><stop offset="100%" stop-color="#556270"/></linearGradient><filter id="gl" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="8" result="blur"/><feComposite in="SourceGraphic" in2="blur" operator="over"/></filter></defs><rect width="512" height="512" rx="80" fill="url(#bg)"/><g transform="translate(40,40) skewX(-10)"><path d="M60 320 C60 320 120 100 180 120 C240 140 150 350 280 320 C350 300 380 180 420 180 M280 320 C320 320 400 250 440 100" stroke="#00ffff" stroke-width="28" fill="none" stroke-linecap="round" filter="url(#gl)" opacity="0.35"/><path d="M60 320 C60 320 120 100 180 120 C240 140 150 350 280 320 C350 300 380 180 420 180 M280 320 C320 320 400 250 440 100" stroke="url(#ch)" stroke-width="24" fill="none" stroke-linecap="round"/></g></svg>`;
+        const blobUrl = URL.createObjectURL(new Blob([svgStr], { type: 'image/svg+xml' }));
+        const tmpImg = new Image();
+        tmpImg.src = blobUrl;
+        await new Promise<void>((res) => {
+          if (tmpImg.complete && tmpImg.naturalWidth > 0) { res(); return; }
+          tmpImg.onload = () => res();
+          tmpImg.onerror = () => res();
+        });
+        URL.revokeObjectURL(blobUrl);
+        if (tmpImg.naturalWidth > 0) logoImg = tmpImg;
+      } catch (_) { logoImg = null; }
     }
 
     logoAngleRef.current = 0;
@@ -627,10 +649,14 @@ export const ResultView: React.FC<ResultViewProps> = ({
         }
         ctx.fill();
 
-        // ── Draw border ──────────────────────────────────────────────────
-        ctx.strokeStyle = subSettings.borderColor;
-        ctx.lineWidth = Math.max(1, fontSize * 0.05);
+        // ── Draw border (neon cycling color) ────────────────────────────
+        const canvasNeonColor = `hsl(${subNeonHueRef.current}, 100%, 60%)`;
+        ctx.strokeStyle = canvasNeonColor;
+        ctx.shadowColor = canvasNeonColor;
+        ctx.shadowBlur = Math.max(4, fontSize * 0.3);
+        ctx.lineWidth = Math.max(2, fontSize * 0.06);
         ctx.stroke();
+        ctx.shadowBlur = 0;
 
         // ── Draw each line of text centered in box ───────────────────────
         ctx.shadowColor = "rgba(0,0,0,0.9)";
@@ -847,13 +873,21 @@ export const ResultView: React.FC<ResultViewProps> = ({
               vv.playbackRate = Math.min(Math.max(baseRate + correction, 0.5), 2.0);
             }
           }
-          setCurrentSubtitle(activeText);
-          currentSubtitleRef.current = activeText;
+          if (activeText !== currentSubtitleRef.current) {
+            setCurrentSubtitle(activeText);
+            setSubtitleKey(k => k + 1); // trigger pop-in animation on change
+            currentSubtitleRef.current = activeText;
+          }
         } else {
-          setCurrentSubtitle("");
-          currentSubtitleRef.current = "";
+          if (currentSubtitleRef.current !== "") {
+            setCurrentSubtitle("");
+            currentSubtitleRef.current = "";
+          }
         }
       }
+      // Cycle neon border hue every rAF frame (smooth color cycling)
+      subNeonHueRef.current = (subNeonHueRef.current + 0.8) % 360;
+      setSubBorderColor(`hsl(${subNeonHueRef.current}, 100%, 60%)`);
       animFrame = requestAnimationFrame(syncLoop);
     };
 
@@ -1032,23 +1066,19 @@ export const ResultView: React.FC<ResultViewProps> = ({
               onTouchMove={handleDragMove}
               onTouchEnd={handleDragEnd}
             >
-              {/* Logo Layer */}
-              {logo.url && (
-                <div
-                  className="absolute z-20 pointer-events-none"
-                  style={{
-                    top: "20px",
-                    right: "20px",
-                    width: `${logo.size}%`,
-                    transition: "all 0.3s ease",
-                  }}
-                >
+              {/* Logo Layer — AppLogo shown by default; custom image if uploaded */}
+              <div
+                className="absolute z-20 pointer-events-none"
+                style={{
+                  top: "12px",
+                  right: "12px",
+                  width: `${logo.size}%`,
+                  transition: "all 0.3s ease",
+                }}
+              >
+                {logo.url ? (
                   <div
-                    className={`
-                      relative w-full aspect-square 
-                      ${logo.isCircle ? "rounded-full" : "rounded-none"}
-                      overflow-hidden
-                    `}
+                    className={`relative w-full aspect-square ${logo.isCircle ? "rounded-full" : "rounded-none"} overflow-hidden`}
                     style={{
                       boxShadow: `0 0 15px ${logo.neonColor}, 0 0 30px ${logo.neonColor}`,
                       border: `2px solid ${logo.neonColor}`,
@@ -1060,10 +1090,17 @@ export const ResultView: React.FC<ResultViewProps> = ({
                       alt="Logo"
                     />
                   </div>
-                </div>
-              )}
+                ) : (
+                  /* Default AppLogo with spin effect when no custom logo uploaded */
+                  <div
+                    className={`relative w-full aspect-square flex items-center justify-center ${logo.spin ? "animate-[spin_8s_linear_infinite]" : ""}`}
+                  >
+                    <AppLogo size={64} />
+                  </div>
+                )}
+              </div>
 
-              {/* Blur Box Layer — subtitle rendered inside via DOM */}
+              {/* Blur Box Layer — subtitle with cinematic pop-in + neon border cycling */}
               {blurSettings.enabled && (
                 <div
                   onMouseDown={handleBlurDragStart}
@@ -1077,14 +1114,18 @@ export const ResultView: React.FC<ResultViewProps> = ({
                     height: `${blurSettings.height}%`,
                     backdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
                     WebkitBackdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
-                    border: '1px dashed rgba(0,229,255,0.5)',
+                    // Dynamic neon cycling border (replaces static dashed border)
+                    border: `2px solid ${subBorderColor}`,
+                    boxShadow: `0 0 8px ${subBorderColor}, inset 0 0 6px ${subBorderColor}22`,
                     touchAction: 'none',
                     boxSizing: 'border-box',
                     overflow: 'hidden',
+                    borderRadius: '6px',
+                    transition: 'border-color 0.1s, box-shadow 0.1s',
                   }}
                 >
                   {currentSubtitle && (
-                  <div
+                    <div
                       className="absolute inset-0 flex items-center justify-center pointer-events-none"
                       style={{
                         backgroundColor: subSettings.bgColor,
@@ -1092,17 +1133,21 @@ export const ResultView: React.FC<ResultViewProps> = ({
                         padding: "4% 4%",
                       }}
                     >
+                      {/* key prop triggers CSS animation on every subtitle change */}
                       <div
+                        key={subtitleKey}
                         className="w-full text-center font-bold"
                         style={{
                           color: subSettings.textColor,
                           fontSize: `clamp(8px, ${subSettings.fontSize}px, 100%)`,
                           lineHeight: 1.4,
-                          textShadow: "0 1px 4px rgba(0,0,0,0.9)",
+                          textShadow: `0 0 8px ${subBorderColor}, 0 1px 4px rgba(0,0,0,0.9)`,
                           wordBreak: "break-word",
                           overflowWrap: "break-word",
                           overflow: "visible",
                           whiteSpace: "normal",
+                          // Cinematic slide-up + fade-in on subtitle change
+                          animation: "subtitlePopin 0.25s cubic-bezier(0.22,1,0.36,1) both",
                         }}
                       >
                         {currentSubtitle}
@@ -1111,6 +1156,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                   )}
                 </div>
               )}
+
 
               {/* Subtitles are rendered exclusively on canvas during recording.
                   DOM subtitle is intentionally removed to prevent double-rendering. */}
