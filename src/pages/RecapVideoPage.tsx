@@ -2861,82 +2861,182 @@ export default function VideoRecapView() {
           isOpen={openSection === "color"}
           onClick={() => setOpenSection(openSection === "color" ? null : "color")}>
 
-          <div className="space-y-4">
-            <div className="space-y-2 bg-white/5 p-3 rounded-xl border border-white/5">
-              <div className="flex justify-between items-center">
-                <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">TIMELINE BAR</span>
-                <input
-                  type="color"
-                  value={timelineColor}
-                  onChange={(e) => setTimelineColor(e.target.value)}
-                  className="w-6 h-6 rounded bg-transparent border-none cursor-pointer" />
+          <div className="space-y-3">
 
+            {/* ───── TIMELINE BAR ───── */}
+            <div className="rounded-2xl overflow-hidden border border-white/10 bg-black/40">
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 py-3 bg-white/5 border-b border-white/5">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: timelineColor }} />
+                  <span className="text-[9px] font-black text-white uppercase tracking-[0.18em]">TIMELINE BAR</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[7px] text-slate-400 font-bold">{timelineHeight}px</span>
+                  {/* Custom color picker */}
+                  <label className="relative cursor-pointer" title="Custom Color">
+                    <input
+                      type="color"
+                      value={timelineColor}
+                      onChange={(e) => setTimelineColor(e.target.value)}
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+                    <div
+                      className="w-6 h-6 rounded-lg border-2 border-white/20 shadow-lg"
+                      style={{ backgroundColor: timelineColor }} />
+                  </label>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[7px] text-slate-500 w-12">THICKNESS</span>
-                <input
-                  type="range"
-                  min="1"
-                  max="15"
-                  value={timelineHeight}
-                  onChange={(e) => setTimelineHeight(parseInt(e.target.value))}
-                  className="flex-1 h-1.5 bg-black rounded-full appearance-none accent-white" />
 
-              </div>
-              <div className="flex gap-2 pt-1">
-                {COLORS.map((c) =>
-                <button
-                  key={c.id}
-                  onClick={() => setTimelineColor(c.hex)}
-                  className={`w-4 h-4 rounded-full border ${timelineColor === c.hex ? "border-white scale-125" : "border-transparent opacity-40"}`}
-                  style={{ backgroundColor: c.hex }} />
+              <div className="px-4 py-3 space-y-3">
+                {/* Thickness slider */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between">
+                    <span className="text-[7px] font-bold text-slate-500 uppercase tracking-wider">THICKNESS</span>
+                    <span className="text-[7px] text-slate-400">{timelineHeight}px</span>
+                  </div>
+                  <div className="relative h-5 flex items-center">
+                    <div className="absolute inset-x-0 h-1 bg-white/10 rounded-full" />
+                    <div
+                      className="absolute left-0 h-1 rounded-full"
+                      style={{ width: `${((timelineHeight - 1) / 14) * 100}%`, backgroundColor: timelineColor }} />
+                    <input
+                      type="range"
+                      min="1"
+                      max="15"
+                      value={timelineHeight}
+                      onChange={(e) => setTimelineHeight(parseInt(e.target.value))}
+                      className="relative w-full appearance-none bg-transparent cursor-pointer"
+                      style={{ height: "20px" }} />
+                  </div>
+                  {/* Preview bar */}
+                  <div className="w-full bg-white/5 rounded-full overflow-hidden" style={{ height: `${Math.max(2, timelineHeight)}px` }}>
+                    <div className="w-3/5 h-full rounded-full" style={{ backgroundColor: timelineColor }} />
+                  </div>
+                </div>
 
-                )}
+                {/* Preset colors */}
+                <div className="space-y-1">
+                  <span className="text-[7px] text-slate-500 uppercase tracking-wider font-bold">PRESETS</span>
+                  <div className="flex gap-2 flex-wrap">
+                    {[
+                      { hex: "#00FFFF", label: "Cyan" },
+                      { hex: "#ef4444", label: "Red" },
+                      { hex: "#fbbf24", label: "Gold" },
+                      { hex: "#22c55e", label: "Green" },
+                      { hex: "#c084fc", label: "Purple" },
+                      { hex: "#3b82f6", label: "Blue" },
+                      { hex: "#ffffff", label: "White" },
+                      { hex: "#f97316", label: "Orange" },
+                      { hex: "#ec4899", label: "Pink" },
+                    ].map((c) => (
+                      <button
+                        key={c.hex}
+                        title={c.label}
+                        onClick={() => setTimelineColor(c.hex)}
+                        className="relative w-7 h-7 rounded-full border-2 transition-all hover:scale-110 active:scale-95"
+                        style={{
+                          backgroundColor: c.hex,
+                          borderColor: timelineColor === c.hex ? "#fff" : "transparent",
+                          boxShadow: timelineColor === c.hex ? `0 0 8px ${c.hex}` : "none",
+                        }} />
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="space-y-2 bg-white/5 p-3 rounded-xl border border-white/5">
-              <div className="flex justify-between items-center">
-                <button
-                  onClick={() => setBorderEnabled(!borderEnabled)}
-                  className={`px-2 py-1 rounded text-[6px] font-black uppercase ${borderEnabled ? "bg-blue-500 text-white" : "bg-slate-800 text-slate-500"}`}>
 
-                  VIDEO BORDER: {borderEnabled ? "ON" : "OFF"}
-                </button>
-                {borderEnabled &&
-                <input
-                  type="color"
-                  value={borderColor}
-                  onChange={(e) => setBorderColor(e.target.value)}
-                  className="w-6 h-6 rounded bg-transparent border-none cursor-pointer" />
-
-                }
-              </div>
-              {borderEnabled &&
-              <div className="flex items-center gap-2">
-                  <span className="text-[7px] text-slate-500 w-12">WIDTH</span>
-                  <input
-                  type="range"
-                  min="1"
-                  max="50"
-                  value={borderWidth}
-                  onChange={(e) => setBorderWidth(parseInt(e.target.value))}
-                  className="flex-1 h-1.5 bg-black rounded-full appearance-none accent-white" />
-
+            {/* ───── VIDEO BORDER ───── */}
+            <div className="rounded-2xl overflow-hidden border border-white/10 bg-black/40">
+              {/* Header with toggle */}
+              <div className="flex items-center justify-between px-4 py-3 bg-white/5 border-b border-white/5">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setBorderEnabled(!borderEnabled)}
+                    className={`relative w-8 h-4 rounded-full transition-colors ${borderEnabled ? "bg-blue-500" : "bg-white/10"}`}>
+                    <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-all ${borderEnabled ? "left-4" : "left-0.5"}`} />
+                  </button>
+                  <span className="text-[9px] font-black text-white uppercase tracking-[0.18em]">VIDEO BORDER</span>
+                  <span className={`text-[7px] font-bold ${borderEnabled ? "text-blue-400" : "text-slate-600"}`}>
+                    {borderEnabled ? "ON" : "OFF"}
+                  </span>
                 </div>
-              }
-              {borderEnabled &&
-              <div className="flex gap-2 pt-1">
-                  {COLORS.map((c) =>
-                <button
-                  key={c.id}
-                  onClick={() => setBorderColor(c.hex)}
-                  className={`w-4 h-4 rounded-full border ${borderColor === c.hex ? "border-white scale-125" : "border-transparent opacity-40"}`}
-                  style={{ backgroundColor: c.hex }} />
-
+                {borderEnabled && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[7px] text-slate-400 font-bold">{borderWidth}px</span>
+                    <label className="relative cursor-pointer" title="Custom Color">
+                      <input
+                        type="color"
+                        value={borderColor}
+                        onChange={(e) => setBorderColor(e.target.value)}
+                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+                      <div
+                        className="w-6 h-6 rounded-lg border-2 border-white/20 shadow-lg"
+                        style={{ backgroundColor: borderColor }} />
+                    </label>
+                  </div>
                 )}
+              </div>
+
+              {borderEnabled && (
+                <div className="px-4 py-3 space-y-3">
+                  {/* Width slider */}
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between">
+                      <span className="text-[7px] font-bold text-slate-500 uppercase tracking-wider">WIDTH</span>
+                      <span className="text-[7px] text-slate-400">{borderWidth}px</span>
+                    </div>
+                    <div className="relative h-5 flex items-center">
+                      <div className="absolute inset-x-0 h-1 bg-white/10 rounded-full" />
+                      <div
+                        className="absolute left-0 h-1 rounded-full"
+                        style={{ width: `${((borderWidth - 1) / 49) * 100}%`, backgroundColor: borderColor }} />
+                      <input
+                        type="range"
+                        min="1"
+                        max="50"
+                        value={borderWidth}
+                        onChange={(e) => setBorderWidth(parseInt(e.target.value))}
+                        className="relative w-full appearance-none bg-transparent cursor-pointer"
+                        style={{ height: "20px" }} />
+                    </div>
+                    {/* Preview border box */}
+                    <div
+                      className="w-full h-8 rounded-lg bg-black/40"
+                      style={{ border: `${Math.min(borderWidth, 8)}px solid ${borderColor}`, boxShadow: `0 0 ${borderWidth * 2}px ${borderColor}40` }} />
+                  </div>
+
+                  {/* Preset colors */}
+                  <div className="space-y-1">
+                    <span className="text-[7px] text-slate-500 uppercase tracking-wider font-bold">PRESETS</span>
+                    <div className="flex gap-2 flex-wrap">
+                      {[
+                        { hex: "#00FFFF", label: "Cyan" },
+                        { hex: "#ef4444", label: "Red" },
+                        { hex: "#fbbf24", label: "Gold" },
+                        { hex: "#22c55e", label: "Green" },
+                        { hex: "#c084fc", label: "Purple" },
+                        { hex: "#3b82f6", label: "Blue" },
+                        { hex: "#ffffff", label: "White" },
+                        { hex: "#f97316", label: "Orange" },
+                        { hex: "#ec4899", label: "Pink" },
+                      ].map((c) => (
+                        <button
+                          key={c.hex}
+                          title={c.label}
+                          onClick={() => setBorderColor(c.hex)}
+                          className="relative w-7 h-7 rounded-full border-2 transition-all hover:scale-110 active:scale-95"
+                          style={{
+                            backgroundColor: c.hex,
+                            borderColor: borderColor === c.hex ? "#fff" : "transparent",
+                            boxShadow: borderColor === c.hex ? `0 0 8px ${c.hex}` : "none",
+                          }} />
+                      ))}
+                    </div>
+                  </div>
                 </div>
-              }
+              )}
             </div>
+
           </div>
         </AccordionItem>
         <AccordionItem
