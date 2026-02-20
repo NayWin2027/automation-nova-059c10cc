@@ -2600,6 +2600,24 @@ const RecapVideoNVPage: React.FC = () => {
               </SelectContent>
             </Select>
           </div>
+
+          {/* Voice Speed Mode Toggle */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-neon-cyan">🎚️ Voice Speed</label>
+            <div className="flex items-center gap-2 bg-charcoal-900/50 rounded-xl p-1.5">
+              <button
+                onClick={() => setVoiceMode('modern')}
+                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${voiceMode === 'modern' ? 'bg-neon-cyan text-black shadow-[0_0_10px_rgba(0,229,255,0.4)] ring-2 ring-neon-cyan' : 'bg-charcoal-700 text-gray-400 hover:text-gray-200'}`}>
+                ⚡ Modern Version
+              </button>
+              <button
+                onClick={() => setVoiceMode('normal')}
+                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${voiceMode === 'normal' ? 'bg-charcoal-600 text-white shadow-md ring-2 ring-white' : 'bg-charcoal-700 text-gray-400 hover:text-gray-200'}`}>
+                🎙️ Normal Version
+              </button>
+            </div>
+          </div>
+
           <div className="space-y-2">
             <label className="text-sm font-medium text-neon-cyan">Video File</label>
             <input
