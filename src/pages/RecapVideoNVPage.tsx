@@ -75,6 +75,7 @@ interface ResultViewProps {
   onGenerateVoice: () => void;
   onRecapSaved?: () => void;
   onVideoReady?: () => void; // Called when rendered video blob is ready ("Recap Video Ready!" shown)
+  creditPerMinRate?: number; // Admin-configurable CR/MIN rate for display
   audioUrl?: string;
   videoUrl?: string;
   status: ProcessingStatus;
@@ -118,6 +119,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
   onGenerateVoice,
   onRecapSaved,
   onVideoReady,
+  creditPerMinRate = 6,
   audioUrl,
   videoUrl,
   status,
@@ -1444,7 +1446,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
           {renderedBlobUrl &&
           <div className="w-full flex flex-col items-center gap-4 p-4 bg-charcoal-800 rounded-xl border border-neon-cyan/50 shadow-[0_0_20px_rgba(0,229,255,0.2)]">
               <div className="text-center">
-                <h3 className="text-lg font-bold text-neon-cyan mb-1">✅ Recap Video Ready!</h3>
+                <h3 className="text-lg font-bold text-neon-cyan mb-1">✅ Recap Video Ready! <span className="text-amber-400 text-sm font-semibold">({creditPerMinRate}CR/MIN)</span></h3>
                 <p className="text-xs text-gray-400"> သင့်ရဲ့ recap video အဆင်သင့်ဖြစ်ပါပြီ</p>
               </div>
               <video
@@ -1906,9 +1908,25 @@ const RecapVideoNVPage: React.FC = () => {
   const isAccessLoading = authLoading || accessLoading;
   // ── END ACCESS CONTROL ────────────────────────────────────────────────────
 
-  // ── CREDIT DEDUCTION (6 credits/min, deducted once per successful audio generation) ──
+  // ── CREDIT DEDUCTION (CR/MIN rate from tool_settings, deducted once per successful video render) ──
   const { deductCredits } = useCreditDeduction();
   const didDeductRef = useRef(false); // Idempotency: deduct only once per pipeline run
+  const [creditPerMinRate, setCreditPerMinRate] = useState<number>(6); // Default 6 CR/MIN, admin-configurable
+
+  // Fetch CR/MIN rate from tool_settings on mount
+  useEffect(() => {
+    const fetchRate = async () => {
+      const { data } = await supabase
+        .from('tool_settings')
+        .select('credit_cost')
+        .eq('tool_id', 'recap-nv')
+        .maybeSingle();
+      if (data?.credit_cost) {
+        setCreditPerMinRate(data.credit_cost);
+      }
+    };
+    fetchRate();
+  }, []);
   // ── END CREDIT ────────────────────────────────────────────────────────────
 
   const [scriptData, setScriptData] = useState<RecapScript>({
@@ -1966,16 +1984,18 @@ const RecapVideoNVPage: React.FC = () => {
 
   // ── CREDIT DEDUCTION: Called via onVideoReady callback when "Recap Video Ready!" appears ──
   const handleVideoReady = useCallback(() => {
+    console.log('[CREDIT] handleVideoReady called. didDeduct:', didDeductRef.current, 'apiMode:', apiMode);
     if (didDeductRef.current) return;
     if (apiMode === 'own') return; // Own API key — no credit deduction
 
     const durationSecs = videoDurationRef.current || 0;
     const durationMins = durationSecs / 60;
-    const customCost = Math.max(1, Math.ceil(durationMins) * 6); // 6 credits/min, minimum 1
+    const customCost = Math.max(1, Math.ceil(durationMins) * creditPerMinRate);
 
+    console.log('[CREDIT] Deducting:', customCost, 'credits (duration:', durationSecs, 's, rate:', creditPerMinRate, 'CR/MIN)');
     didDeductRef.current = true; // Mark as deducted before async call (idempotency)
     deductCredits('recap-nv', false, customCost);
-  }, [apiMode, deductCredits]);
+  }, [apiMode, deductCredits, creditPerMinRate]);
   // ── END CREDIT DEDUCTION ──────────────────────────────────────────────────
 
   // Load recap history on mount
@@ -2589,6 +2609,7 @@ const RecapVideoNVPage: React.FC = () => {
           onGenerateVoice={handleGenerateVoice}
           onRecapSaved={loadRecapHistory}
           onVideoReady={handleVideoReady}
+          creditPerMinRate={creditPerMinRate}
           audioUrl={audioUrl}
           videoUrl={videoUrl}
           status={status}
