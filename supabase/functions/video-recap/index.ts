@@ -5,7 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   // Include common Supabase headers + our custom binary-chunk headers
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-recap-action, x-upload-url, x-chunk-index, x-total-chunks, x-offset, x-total-size, x-mime-type, x-is-last-chunk",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-recap-action, x-upload-url, x-chunk-index, x-total-chunks, x-offset, x-total-size, x-mime-type, x-is-last-chunk, x-own-api-key",
 };
 
 // Input validation constants
