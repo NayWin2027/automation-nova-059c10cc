@@ -145,6 +145,7 @@ serve(async (req) => {
     let language = "BURMESE";
     let transcript: string | null = null;
     let customCreditCost: number | null = null;
+    let skipCreditDeduction = false;
     let isOwnApi = false;
     let userApiKey: string | null = null;
     let fileUri: string | null = null;
@@ -170,6 +171,7 @@ serve(async (req) => {
       if (body.customCreditCost !== undefined) customCreditCost = Number(body.customCreditCost);
       userApiKey = body.apiKey || null;
       isOwnApi = !!userApiKey;
+      skipCreditDeduction = !!body.skipCreditDeduction;
     }
 
     if (!fileObj && !transcript && !fileUri) {
@@ -406,7 +408,7 @@ Write the complete professional narration script now — DO NOT leave out any im
 
     // ===== CREDIT DEDUCTION — ONLY after successful script output =====
     // skipCreditDeduction: when called from recap-nv, credits are deducted at final video output stage
-    const skipCredits = body?.skipCreditDeduction === true || (contentType.includes("multipart/form-data") && false);
+    const skipCredits = skipCreditDeduction;
     if (!isOwnApi && !skipCredits) {
       const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       const rpcParams: any = {
