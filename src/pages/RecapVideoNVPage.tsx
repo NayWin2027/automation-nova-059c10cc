@@ -205,7 +205,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
   const [videoBorder, setVideoBorder] = useState({
     enabled: true,
     color: "#FFFFFF",
-    width: 15, // px (1–50)
+    width: 12, // px (1–50)
     openPanel: false
   });
 
