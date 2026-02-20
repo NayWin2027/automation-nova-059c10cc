@@ -8,7 +8,7 @@ const corsHeaders = {
 
 const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1beta/files";
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
-const MODEL = "gemini-2.5-flash";
+const MODEL = "gemini-2.5-pro";
 
 async function uploadToGoogleFiles(apiKey: string, fileBytes: Uint8Array, mimeType: string, fileName: string): Promise<string> {
   console.log("Uploading file to Google Files API...", fileName, fileBytes.length, mimeType);
@@ -190,13 +190,31 @@ serve(async (req) => {
 
     console.log(`[recap-script-generator] Language: ${lang}, Niche: ${nicheLabel}, isOwnApi: ${isOwnApi}`);
 
-    const systemPrompt = `You are a world-class professional scriptwriter who creates premium narration scripts at Netflix/BBC/HBO broadcast standard.
+    // Map language name to a clear, unambiguous native label for the AI
+    const langNativeMap: Record<string, string> = {
+      "ENGLISH": "English", "JAPANESE": "日本語 (Japanese)", "KOREAN": "한국어 (Korean)",
+      "CHINESE": "中文 (Chinese)", "THAI": "ภาษาไทย (Thai)", "HINDI": "हिन्दी (Hindi)",
+      "SPANISH": "Español (Spanish)", "FRENCH": "Français (French)", "GERMAN": "Deutsch (German)",
+      "ITALIAN": "Italiano (Italian)", "PORTUGUESE": "Português (Portuguese)", "RUSSIAN": "Русский (Russian)",
+      "ARABIC": "العربية (Arabic)", "VIETNAMESE": "Tiếng Việt (Vietnamese)", "INDONESIAN": "Bahasa Indonesia (Indonesian)",
+      "BURMESE": "မြန်မာ (Burmese)",
+    };
+    const langLabel = langNativeMap[lang] || lang;
 
-LANGUAGE MANDATE (NON-NEGOTIABLE — HIGHEST PRIORITY RULE): 
-You MUST write the ENTIRE script in ${lang} language ONLY. Not Burmese. Not English. ONLY ${lang}.
-If ${lang} is "ENGLISH", write everything in English. If ${lang} is "JAPANESE", write everything in Japanese. If ${lang} is "KOREAN", write everything in Korean. If ${lang} is "THAI", write everything in Thai. And so on for ANY language.
-Do NOT default to Burmese or Myanmar language unless ${lang} is explicitly "BURMESE".
-EVERY word, sentence, paragraph, hook, dialogue, narration — ALL must be in ${lang}. Zero exceptions. This overrides all other instructions.
+    const systemPrompt = `You are a world-class professional scriptwriter. You write premium narration scripts at Netflix/BBC/HBO broadcast standard.
+
+###############################################################
+# LANGUAGE: ${langLabel}
+# YOU MUST WRITE 100% OF YOUR OUTPUT IN ${lang} LANGUAGE.
+# IF ${lang} IS "ENGLISH" → WRITE IN ENGLISH.
+# IF ${lang} IS "JAPANESE" → WRITE IN JAPANESE (日本語).
+# IF ${lang} IS "KOREAN" → WRITE IN KOREAN (한국어).  
+# IF ${lang} IS "THAI" → WRITE IN THAI (ภาษาไทย).
+# IF ${lang} IS "HINDI" → WRITE IN HINDI (हिन्दी).
+# DO NOT WRITE IN BURMESE/MYANMAR UNLESS ${lang} IS "BURMESE".
+# ZERO BURMESE WORDS IF ${lang} IS NOT "BURMESE".
+# THIS IS THE #1 HIGHEST PRIORITY RULE. IT OVERRIDES EVERYTHING.
+###############################################################
 
 Your writing style:
 - Natural spoken ${lang} (conversational, NOT literary/formal)
@@ -277,7 +295,12 @@ STRUCTURE:
 - HOOK (1 viral sentence — 3-second scroll-stopper)
 - Rising tension: Build with only the most gripping beats in chronological order
 - Climax: The single most shocking/dramatic moment at peak intensity
-- Resolution: Short, punchy ending that leaves viewers wanting more`;
+- Resolution: Short, punchy ending that leaves viewers wanting more
+
+###############################################################
+# FINAL ENFORCEMENT: YOUR ENTIRE OUTPUT MUST BE IN ${lang}.
+# NOT BURMESE. NOT MYANMAR. ONLY ${lang}. EVERY SINGLE WORD.
+###############################################################`;
 
     // ===== BUILD GEMINI REQUEST =====
     let contentParts: any[] = [];
@@ -324,7 +347,10 @@ STRUCTURE:
         }
       }
 
-      const userPrompt = `Niche: ${nicheLabel}
+      const userPrompt = `[LANGUAGE: ${lang} — ${langLabel}]
+[NICHE: ${nicheLabel}]
+
+INSTRUCTION: Write the narration script in ${lang} language ONLY.
 
 Below is a source video/audio file. Your job is to:
 1. Watch/listen to the ENTIRE source from start to finish — do NOT skim or skip any part
@@ -344,16 +370,19 @@ OUTPUT FORMAT:
 - Each paragraph should be a natural spoken segment ready for voice narration
 - Just write the script text directly
 
-FINAL REMINDER: Write EVERYTHING in ${lang} language. NOT Burmese unless ${lang} is BURMESE.:`;
+⚠️ MANDATORY: Every word of your output MUST be in ${lang}. If you write even one word in Burmese/Myanmar and ${lang} is NOT "BURMESE", your output is REJECTED.`;
       contentParts = [
         { text: userPrompt },
         { file_data: { mime_type: resolvedMimeType, file_uri: resolvedFileUri } },
       ];
     } else if (transcript) {
       // Legacy transcript mode (kept for backward compatibility)
-      const userPrompt = `Niche: ${nicheLabel}
+      const userPrompt = `[LANGUAGE: ${lang} — ${langLabel}]
+[NICHE: ${nicheLabel}]
 
-Below is a raw transcript. Your job is to transform it into a professional recap narration script.
+INSTRUCTION: Write the narration script in ${lang} language ONLY.
+
+Below is a raw transcript. Transform it into a professional recap narration script.
 
 CRITICAL INSTRUCTIONS:
 1. Read the ENTIRE transcript carefully — do not skim
@@ -367,7 +396,7 @@ CRITICAL INSTRUCTIONS:
 RAW TRANSCRIPT:
 ${transcript}
 
-Write the complete professional narration script now in ${lang} language — DO NOT write in Burmese unless ${lang} is BURMESE — DO NOT leave out any important moments:`;
+⚠️ MANDATORY: Every word of your output MUST be in ${lang}. If you write even one word in Burmese/Myanmar and ${lang} is NOT "BURMESE", your output is REJECTED.`;
       contentParts = [{ text: userPrompt }];
     }
 
