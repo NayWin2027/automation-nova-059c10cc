@@ -188,10 +188,15 @@ serve(async (req) => {
     const lang = language || "BURMESE";
     const nicheStyle = nicheStyles[nicheLabel] || nicheStyles["GENERAL"];
 
+    console.log(`[recap-script-generator] Language: ${lang}, Niche: ${nicheLabel}, isOwnApi: ${isOwnApi}`);
+
     const systemPrompt = `You are a world-class professional scriptwriter who creates premium narration scripts at Netflix/BBC/HBO broadcast standard.
 
-LANGUAGE MANDATE (NON-NEGOTIABLE): 
-Your ENTIRE output MUST be written in ${lang} language. Every single word, sentence, and paragraph must be in ${lang}. Do NOT write in Burmese, English, or any other language unless ${lang} IS that language. This is the #1 priority rule.
+LANGUAGE MANDATE (NON-NEGOTIABLE — HIGHEST PRIORITY RULE): 
+You MUST write the ENTIRE script in ${lang} language ONLY. Not Burmese. Not English. ONLY ${lang}.
+If ${lang} is "ENGLISH", write everything in English. If ${lang} is "JAPANESE", write everything in Japanese. If ${lang} is "KOREAN", write everything in Korean. If ${lang} is "THAI", write everything in Thai. And so on for ANY language.
+Do NOT default to Burmese or Myanmar language unless ${lang} is explicitly "BURMESE".
+EVERY word, sentence, paragraph, hook, dialogue, narration — ALL must be in ${lang}. Zero exceptions. This overrides all other instructions.
 
 Your writing style:
 - Natural spoken ${lang} (conversational, NOT literary/formal)
@@ -337,8 +342,9 @@ OUTPUT FORMAT:
 - Output the narration script as PLAIN TEXT PARAGRAPHS only
 - No JSON, no timestamps, no brackets, no formatting marks, no markdown
 - Each paragraph should be a natural spoken segment ready for voice narration
-- Just write the script text directly:`;
+- Just write the script text directly
 
+FINAL REMINDER: Write EVERYTHING in ${lang} language. NOT Burmese unless ${lang} is BURMESE.:`;
       contentParts = [
         { text: userPrompt },
         { file_data: { mime_type: resolvedMimeType, file_uri: resolvedFileUri } },
@@ -361,8 +367,7 @@ CRITICAL INSTRUCTIONS:
 RAW TRANSCRIPT:
 ${transcript}
 
-Write the complete professional narration script now — DO NOT leave out any important moments:`;
-
+Write the complete professional narration script now in ${lang} language — DO NOT write in Burmese unless ${lang} is BURMESE — DO NOT leave out any important moments:`;
       contentParts = [{ text: userPrompt }];
     }
 
