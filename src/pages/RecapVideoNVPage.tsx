@@ -2005,10 +2005,29 @@ const RecapVideoNVPage: React.FC = () => {
   const [showApiKey, setShowApiKey] = useState(false);
 
   // ── CREDIT DEDUCTION: Called via onVideoReady callback when "Recap Video Ready!" appears ──
-  const handleVideoReady = useCallback(() => {
+  const handleVideoReady = useCallback(async () => {
     console.log('[CREDIT] handleVideoReady called. didDeduct:', didDeductRef.current, 'apiMode:', apiMode);
     if (didDeductRef.current) return;
     if (apiMode === 'own') return; // Own API key — no credit deduction
+
+    // Check if Promotion Mode is active — skip credit deduction entirely
+    try {
+      const { data: appSettings } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'access_control')
+        .maybeSingle();
+      if (appSettings?.value) {
+        const ac = appSettings.value as any;
+        if (ac.promotionMode) {
+          console.log('[CREDIT] Promotion Mode active — skipping credit deduction');
+          didDeductRef.current = true;
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('[CREDIT] Could not check promotion mode, proceeding with deduction');
+    }
 
     const durationSecs = videoDurationRef.current || 0;
     const durationMins = durationSecs / 60;
@@ -2016,7 +2035,19 @@ const RecapVideoNVPage: React.FC = () => {
 
     console.log('[CREDIT] Deducting:', customCost, 'credits (duration:', durationSecs, 's, rate:', creditPerMinRate, 'CR/MIN)');
     didDeductRef.current = true; // Mark as deducted before async call (idempotency)
-    deductCredits('recap-nv', false, customCost);
+
+    try {
+      const result = await deductCredits('recap-nv', false, customCost);
+      if (result.success) {
+        console.log('[CREDIT] ✅ Deduction SUCCESS. New balance:', result.newBalance);
+      } else {
+        console.error('[CREDIT] ❌ Deduction FAILED:', result.error);
+        didDeductRef.current = false; // Allow retry on failure
+      }
+    } catch (err) {
+      console.error('[CREDIT] ❌ Deduction ERROR:', err);
+      didDeductRef.current = false; // Allow retry on failure
+    }
   }, [apiMode, deductCredits, creditPerMinRate]);
   // ── END CREDIT DEDUCTION ──────────────────────────────────────────────────
 
