@@ -225,10 +225,12 @@ serve(async (req) => {
       action = req.headers.get("x-recap-action");
     }
 
-    const { videoUrl, useOwnApi, apiKey, targetLang, fileName, fileSize, mimeType, fileUri, confirmSuccess } = body;
+    const { videoUrl, useOwnApi, apiKey, ownApiKey, targetLang, fileName, fileSize, mimeType, fileUri, confirmSuccess } = body;
     
     const BACKEND_GEMINI_KEY = Deno.env.get("GEMINI_API_KEY");
-    const isOwnApiKey = useOwnApi && !!apiKey?.trim();
+    // Support both field names: "apiKey" (legacy) and "ownApiKey" (current frontend)
+    const resolvedOwnKey = (ownApiKey || apiKey || '').trim();
+    const isOwnApiKey = useOwnApi && !!resolvedOwnKey;
 
     // ===== CREDIT DEDUCTION: Only on confirmSuccess =====
     if (confirmSuccess === true) {
@@ -270,7 +272,7 @@ serve(async (req) => {
       }
 
       const sanitizedFileName = fileName.replace(/[\/\\:*?"<>|]/g, "_").substring(0, 255);
-      const apiKeyToUse = isOwnApiKey ? apiKey : BACKEND_GEMINI_KEY;
+      const apiKeyToUse = isOwnApiKey ? resolvedOwnKey : BACKEND_GEMINI_KEY;
       
       if (!apiKeyToUse) {
         return new Response(
@@ -732,7 +734,7 @@ serve(async (req) => {
       }
 
       response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${resolvedOwnKey}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

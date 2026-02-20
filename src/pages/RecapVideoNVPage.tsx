@@ -138,15 +138,15 @@ export const ResultView: React.FC<ResultViewProps> = ({
   // Color Grading Presets — industry-standard subtle values for realistic, non-artificial look
   const COLOR_GRADE_PRESETS: Record<string, {contrast: number;brightness: number;saturate: number;hue: number;sepia?: number;label: string;emoji: string;}> = {
     "OFF": { contrast: 100, brightness: 100, saturate: 100, hue: 0, label: "Off", emoji: "⚫" },
-    "CINEMATIC": { contrast: 112, brightness: 94, saturate: 78, hue: 3, label: "Cinematic", emoji: "🎬" }, // desaturated, lifted blacks, slight warm cast
-    "VINTAGE": { contrast: 103, brightness: 97, saturate: 72, hue: 8, sepia: 18, label: "Vintage", emoji: "📷" }, // faded, warm tint, low sepia
-    "COOL": { contrast: 104, brightness: 99, saturate: 95, hue: -10, label: "Cool", emoji: "🧊" }, // subtle blue shift, no over-saturation
-    "WARM": { contrast: 106, brightness: 103, saturate: 105, hue: 10, label: "Warm", emoji: "🔥" }, // gentle warmth, slight amber
-    "TEAL": { contrast: 110, brightness: 96, saturate: 108, hue: -20, label: "Teal & Orange", emoji: "🌊" }, // Hollywood teal-orange — subtle
-    "PINK": { contrast: 103, brightness: 102, saturate: 108, hue: 340, label: "Pink", emoji: "🌸" }, // soft rose grade
-    "NEON": { contrast: 115, brightness: 104, saturate: 140, hue: 5, label: "Neon", emoji: "⚡" }, // punchy but not overdone
-    "NOIR": { contrast: 118, brightness: 88, saturate: 30, hue: 0, label: "Noir", emoji: "🎭" }, // crushed blacks, near-mono — not full desat
-    "GOLDEN": { contrast: 107, brightness: 106, saturate: 118, hue: 15, label: "Golden Hour", emoji: "🌅" } // warm golden hour glow
+    "CINEMATIC": { contrast: 120, brightness: 90, saturate: 65, hue: 5, label: "Cinematic", emoji: "🎬" },
+    "VINTAGE": { contrast: 108, brightness: 95, saturate: 60, hue: 12, sepia: 30, label: "Vintage", emoji: "📷" },
+    "COOL": { contrast: 110, brightness: 97, saturate: 90, hue: -25, label: "Cool", emoji: "🧊" },
+    "WARM": { contrast: 112, brightness: 108, saturate: 120, hue: 18, label: "Warm", emoji: "🔥" },
+    "TEAL": { contrast: 118, brightness: 93, saturate: 125, hue: -35, label: "Teal & Orange", emoji: "🌊" },
+    "PINK": { contrast: 108, brightness: 105, saturate: 130, hue: 330, label: "Pink", emoji: "🌸" },
+    "NEON": { contrast: 125, brightness: 108, saturate: 160, hue: 8, label: "Neon", emoji: "⚡" },
+    "NOIR": { contrast: 130, brightness: 82, saturate: 15, hue: 0, label: "Noir", emoji: "🎭" },
+    "GOLDEN": { contrast: 115, brightness: 112, saturate: 135, hue: 22, label: "Golden Hour", emoji: "🌅" }
   };
 
   // Editor States
@@ -640,11 +640,13 @@ export const ResultView: React.FC<ResultViewProps> = ({
       }
 
       // Apply color grading filter from preset — always read from ref to avoid stale closure
+      // When bypass is ON, ADD extra offsets on top of the selected color grade (not replace)
       const gradePreset = COLOR_GRADE_PRESETS[curEditorState.colorGrade] || COLOR_GRADE_PRESETS["OFF"];
-      const contrast = curEditorState.bypass ? 115 : gradePreset.contrast;
-      const brightness = curEditorState.bypass ? 105 : gradePreset.brightness;
-      const saturate = curEditorState.bypass ? 115 : gradePreset.saturate;
-      const hue = curEditorState.bypass ? 5 : gradePreset.hue;
+      const bypassBoost = curEditorState.bypass ? { contrast: 15, brightness: 5, saturate: 15, hue: 5 } : { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
+      const contrast = gradePreset.contrast + bypassBoost.contrast;
+      const brightness = gradePreset.brightness + bypassBoost.brightness;
+      const saturate = gradePreset.saturate + bypassBoost.saturate;
+      const hue = gradePreset.hue + bypassBoost.hue;
       const sepia = gradePreset.sepia || 0;
       ctx.filter = `contrast(${contrast}%) brightness(${brightness}%) saturate(${saturate}%) hue-rotate(${hue}deg) sepia(${sepia}%)`;
 
@@ -1111,8 +1113,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
   // Construct video styles based on editor state
   const activeGrade = COLOR_GRADE_PRESETS[editorState.colorGrade] || COLOR_GRADE_PRESETS["OFF"];
+  const bypassBoostCSS = editorState.bypass ? { contrast: 15, brightness: 5, saturate: 15, hue: 5 } : { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
   const videoStyles: React.CSSProperties = {
-    filter: `contrast(${editorState.bypass ? 115 : activeGrade.contrast}%) brightness(${editorState.bypass ? 105 : activeGrade.brightness}%) saturate(${editorState.bypass ? 115 : activeGrade.saturate}%) hue-rotate(${editorState.bypass ? 5 : activeGrade.hue}deg) sepia(${activeGrade.sepia || 0}%)`,
+    filter: `contrast(${activeGrade.contrast + bypassBoostCSS.contrast}%) brightness(${activeGrade.brightness + bypassBoostCSS.brightness}%) saturate(${activeGrade.saturate + bypassBoostCSS.saturate}%) hue-rotate(${activeGrade.hue + bypassBoostCSS.hue}deg) sepia(${activeGrade.sepia || 0}%)`,
     transform: `${editorState.flip ? "scaleX(-1)" : "scaleX(1)"} ${editorState.bypass ? "scale(1.03)" : "scale(1)"}`,
     objectFit: editorState.ratio === "auto" ? "contain" : "cover",
     width: "100%",
