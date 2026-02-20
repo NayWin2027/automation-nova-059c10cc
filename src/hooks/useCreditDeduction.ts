@@ -94,10 +94,8 @@ export function useCreditDeduction() {
         return { success: false, error: 'Could not fetch profile' };
       }
 
-      // Premium users don't lose credits (or have unlimited)
-      if (profile.plan === 'premium') {
-        return { success: true, newBalance: profile.credits };
-      }
+      // Admin exemption is handled server-side in RPC
+      // Premium and Pro users ARE charged credits (only Admin exempt)
 
       const currentCredits = profile.credits || 0;
 
