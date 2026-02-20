@@ -1928,31 +1928,33 @@ const RecapVideoNVPage: React.FC = () => {
 
   // Language & Voice selection
   const VOICE_OPTIONS = [
-    { value: 'Kore', label: 'Kore (Female)', gender: '♀️' },
-    { value: 'Aoede', label: 'Aoede (Female)', gender: '♀️' },
-    { value: 'Leda', label: 'Leda (Female)', gender: '♀️' },
-    { value: 'Zephyr', label: 'Zephyr (Female)', gender: '♀️' },
-    { value: 'Puck', label: 'Puck (Male)', gender: '♂️' },
-    { value: 'Charon', label: 'Charon (Male)', gender: '♂️' },
-    { value: 'Fenrir', label: 'Fenrir (Male)', gender: '♂️' },
-    { value: 'Orus', label: 'Orus (Male)', gender: '♂️' },
-    { value: 'en-US-Standard-A', label: 'US Standard A (Female)', gender: '♀️' },
-    { value: 'en-US-Standard-B', label: 'US Standard B (Male)', gender: '♂️' },
-    { value: 'en-US-Standard-C', label: 'US Standard C (Female)', gender: '♀️' },
-    { value: 'en-US-Standard-D', label: 'US Standard D (Male)', gender: '♂️' },
-    { value: 'en-GB-Standard-A', label: 'UK Standard A (Female)', gender: '♀️' },
-    { value: 'en-GB-Standard-B', label: 'UK Standard B (Male)', gender: '♂️' },
-    { value: 'en-GB-Standard-C', label: 'UK Standard C (Female)', gender: '♀️' },
-    { value: 'en-GB-Standard-D', label: 'UK Standard D (Male)', gender: '♂️' },
-    { value: 'Achernar', label: 'Achernar (Female)', gender: '♀️' },
-    { value: 'Gacrux', label: 'Gacrux (Male)', gender: '♂️' },
-    { value: 'Sulafat', label: 'Sulafat (Female)', gender: '♀️' },
-    { value: 'Alnilam', label: 'Alnilam (Male)', gender: '♂️' },
-    { value: 'Schedar', label: 'Schedar (Female)', gender: '♀️' },
-    { value: 'Umbriel', label: 'Umbriel (Male)', gender: '♂️' },
+    { value: 'Kore', label: 'Kore', gender: 'Female' },
+    { value: 'Aoede', label: 'Aoede', gender: 'Female' },
+    { value: 'Leda', label: 'Leda', gender: 'Female' },
+    { value: 'Zephyr', label: 'Zephyr', gender: 'Female' },
+    { value: 'Puck', label: 'Puck', gender: 'Male' },
+    { value: 'Charon', label: 'Charon', gender: 'Male' },
+    { value: 'Fenrir', label: 'Fenrir', gender: 'Male' },
+    { value: 'Orus', label: 'Orus', gender: 'Male' },
+    { value: 'en-US-Standard-A', label: 'US Standard A', gender: 'Female' },
+    { value: 'en-US-Standard-B', label: 'US Standard B', gender: 'Male' },
+    { value: 'en-US-Standard-C', label: 'US Standard C', gender: 'Female' },
+    { value: 'en-US-Standard-D', label: 'US Standard D', gender: 'Male' },
+    { value: 'en-GB-Standard-A', label: 'UK Standard A', gender: 'Female' },
+    { value: 'en-GB-Standard-B', label: 'UK Standard B', gender: 'Male' },
+    { value: 'en-GB-Standard-C', label: 'UK Standard C', gender: 'Female' },
+    { value: 'en-GB-Standard-D', label: 'UK Standard D', gender: 'Male' },
+    { value: 'Achernar', label: 'Achernar', gender: 'Female' },
+    { value: 'Gacrux', label: 'Gacrux', gender: 'Male' },
+    { value: 'Sulafat', label: 'Sulafat', gender: 'Female' },
+    { value: 'Alnilam', label: 'Alnilam', gender: 'Male' },
+    { value: 'Schedar', label: 'Schedar', gender: 'Female' },
+    { value: 'Umbriel', label: 'Umbriel', gender: 'Male' },
+    { value: 'Algieba', label: 'Algieba', gender: 'Male' },
   ];
   const [selectedLanguage, setSelectedLanguage] = useState('my-MM');
   const [selectedVoice, setSelectedVoice] = useState('Kore');
+  const [langPopoverOpen, setLangPopoverOpen] = useState(false);
 
   // API Mode
   const [apiMode, setApiMode] = useState<'app' | 'own'>('app');
@@ -2492,11 +2494,12 @@ const RecapVideoNVPage: React.FC = () => {
           {/* Language Selection - Searchable */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-neon-cyan">🌐 ဘာသာစကား (Language)</label>
-            <Popover>
+            <Popover open={langPopoverOpen} onOpenChange={setLangPopoverOpen}>
               <PopoverTrigger asChild>
                 <button
                   className="flex h-10 w-full items-center justify-between rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                   role="combobox"
+                  aria-expanded={langPopoverOpen}
                 >
                   {(() => {
                     const lang = languages.find(l => l.code === selectedLanguage);
@@ -2506,16 +2509,22 @@ const RecapVideoNVPage: React.FC = () => {
                 </button>
               </PopoverTrigger>
               <PopoverContent className="w-[--radix-popover-trigger-width] p-0 z-50" align="start">
-                <Command>
+                <Command filter={(value, search) => {
+                  if (value.toLowerCase().includes(search.toLowerCase())) return 1;
+                  return 0;
+                }}>
                   <CommandInput placeholder="Search language..." />
-                  <CommandList className="max-h-[300px]">
+                  <CommandList className="max-h-[250px]">
                     <CommandEmpty>No language found.</CommandEmpty>
                     <CommandGroup>
                       {languages.map((lang) => (
                         <CommandItem
                           key={lang.code}
                           value={`${lang.name} ${lang.nativeName}`}
-                          onSelect={() => setSelectedLanguage(lang.code)}
+                          onSelect={() => {
+                            setSelectedLanguage(lang.code);
+                            setLangPopoverOpen(false);
+                          }}
                         >
                           <Check className={`mr-2 h-4 w-4 ${selectedLanguage === lang.code ? 'opacity-100' : 'opacity-0'}`} />
                           {lang.nativeName} — {lang.name}
@@ -2535,10 +2544,10 @@ const RecapVideoNVPage: React.FC = () => {
               <SelectTrigger className="w-full bg-background border-border text-foreground">
                 <SelectValue placeholder="အသံ ရွေးပါ" />
               </SelectTrigger>
-              <SelectContent className="max-h-[300px]">
+                <SelectContent className="max-h-[250px] z-50">
                 {VOICE_OPTIONS.map((v) => (
                   <SelectItem key={v.value} value={v.value}>
-                    {v.gender} {v.label}
+                    {v.label} ({v.gender})
                   </SelectItem>
                 ))}
               </SelectContent>
