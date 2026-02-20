@@ -2313,11 +2313,12 @@ const RecapVideoNVPage: React.FC = () => {
       const { data: { session: currentSession } } = await supabase.auth.getSession();
       const userToken = currentSession?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
+      const selectedLangName = languages.find(l => l.code === selectedLanguage)?.name || 'BURMESE';
       const scriptBody: Record<string, unknown> = {
         fileUri: fileUri,
         fileMimeType: mimeType,
         niche: 'MOVIE RECAP',
-        language: 'BURMESE',
+        language: selectedLangName,
         skipCreditDeduction: true // Credits deducted at final video output (handleVideoReady)
       };
       if (resolvedOwnKey) scriptBody.ownApiKey = resolvedOwnKey;
