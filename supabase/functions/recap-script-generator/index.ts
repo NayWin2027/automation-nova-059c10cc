@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-own-api-key",
 };
 
 const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1beta/files";
@@ -56,7 +56,7 @@ async function uploadToGoogleFiles(apiKey: string, fileBytes: Uint8Array, mimeTy
 }
 
 async function waitForFileProcessing(apiKey: string, fileName: string): Promise<void> {
-  const maxAttempts = 90;
+  const maxAttempts = 30;
   const delay = 2000;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -169,7 +169,7 @@ serve(async (req) => {
       niche = body.niche || "GENERAL";
       language = body.language || "BURMESE";
       if (body.customCreditCost !== undefined) customCreditCost = Number(body.customCreditCost);
-      userApiKey = body.apiKey || null;
+      userApiKey = body.apiKey || body.ownApiKey || null;
       isOwnApi = !!userApiKey;
       skipCreditDeduction = !!body.skipCreditDeduction;
     }
