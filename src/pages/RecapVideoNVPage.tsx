@@ -140,10 +140,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
   // Editor States
   const [editorState, setEditorState] = useState({
-    ratio: "auto" as "auto" | "16/9" | "9/16" | "1/1" | "4/3",
-    flip: false,
-    bypass: false,
-    colorGrade: "OFF" as string
+    ratio: "1/1" as "auto" | "16/9" | "9/16" | "1/1" | "4/3",
+    flip: true,
+    bypass: true,
+    colorGrade: "PINK" as string
   });
 
   // Logo & Subtitle States
@@ -161,34 +161,34 @@ export const ResultView: React.FC<ResultViewProps> = ({
     textColor: "#FACC15",
     bgColor: "rgba(0,0,0,0.6)",
     borderColor: "#00E5FF",
-    fontSize: 20,
+    fontSize: 15,
     scale: 1,
     maxWidth: 80
   });
 
   const [blurSettings, setBlurSettings] = useState<BlurSettings>({
-    enabled: false,
+    enabled: true,
     x: 50,
     y: 82,
-    width: 80,
-    height: 15,
-    opacity: 70,
+    width: 100,
+    height: 20,
+    opacity: 15,
     isDragging: false
   });
 
   // Timeline Bar state
   const [timelineBar, setTimelineBar] = useState({
     enabled: true,
-    color: "#00E5FF",
-    thickness: 5, // px (1–15)
+    color: "#4B0082",
+    thickness: 6, // px (1–15)
     openPanel: false
   });
 
   // Video Border state
   const [videoBorder, setVideoBorder] = useState({
-    enabled: false,
-    color: "#FACC15",
-    width: 8, // px (1–50)
+    enabled: true,
+    color: "#FFFFFF",
+    width: 15, // px (1–50)
     openPanel: false
   });
 
