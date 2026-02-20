@@ -34,7 +34,7 @@ export const languages: Language[] = [
   { code: 'vi-VN', name: 'Vietnamese', nativeName: 'Tiếng Việt', bcp47: 'vi-VN' },
   { code: 'id-ID', name: 'Indonesian', nativeName: 'Bahasa Indonesia', bcp47: 'id-ID' },
   { code: 'ms-MY', name: 'Malay', nativeName: 'Bahasa Melayu', bcp47: 'ms-MY' },
-  { code: 'tl-PH', name: 'Filipino/Tagalog', nativeName: 'Filipino', bcp47: 'fil-PH' },
+  { code: 'tl-PH', name: 'Filipino (Tagalog)', nativeName: 'Filipino', bcp47: 'fil-PH' },
   { code: 'km-KH', name: 'Khmer', nativeName: 'ភាសាខ្មែរ', bcp47: 'km-KH' },
   { code: 'lo-LA', name: 'Lao', nativeName: 'ລາວ', bcp47: 'lo-LA' },
   
@@ -84,7 +84,7 @@ export const languages: Language[] = [
   { code: 'tr-TR', name: 'Turkish', nativeName: 'Türkçe', bcp47: 'tr-TR' },
   { code: 'az-AZ', name: 'Azerbaijani', nativeName: 'Azərbaycan', bcp47: 'az-AZ' },
   { code: 'ka-GE', name: 'Georgian', nativeName: 'ქართული', bcp47: 'ka-GE' },
-  { code: 'hy-AM', name: 'Armenian', nativeName: 'Հայdelays', bcp47: 'hy-AM' },
+  { code: 'hy-AM', name: 'Armenian', nativeName: 'Հայերեն', bcp47: 'hy-AM' },
   
   // African Languages
   { code: 'sw-KE', name: 'Swahili', nativeName: 'Kiswahili', bcp47: 'sw-KE' },
@@ -102,7 +102,6 @@ export const languages: Language[] = [
   { code: 'mn-MN', name: 'Mongolian', nativeName: 'Монгол', bcp47: 'mn-MN' },
   
   // Others
-  { code: 'fil-PH', name: 'Filipino', nativeName: 'Filipino', bcp47: 'fil-PH' },
   { code: 'jv-ID', name: 'Javanese', nativeName: 'Basa Jawa', bcp47: 'jv-ID' },
   { code: 'su-ID', name: 'Sundanese', nativeName: 'Basa Sunda', bcp47: 'su-ID' },
 ];
