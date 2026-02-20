@@ -107,16 +107,14 @@ export function usePromotionTracking() {
 
   const fetchUsage = async () => {
     const today = new Date().toISOString().split('T')[0];
-    const { data } = await supabase
-      .from('promotion_usage_tracking' as any)
-      .select('tool_id, usage_count')
-      .eq('ip_address', ipAddress)
-      .eq('usage_date', today);
+    const { data: result, error } = await supabase.functions.invoke('promotion-tracking', {
+      body: { action: 'get_usage', ip_address: ipAddress, usage_date: today }
+    });
 
-    if (data && Array.isArray(data)) {
+    if (!error && result?.data && Array.isArray(result.data)) {
       // Aggregate by tool_id across all devices with same IP
       const aggregated: Record<string, number> = {};
-      (data as any[]).forEach((d: any) => {
+      (result.data as any[]).forEach((d: any) => {
         aggregated[d.tool_id] = (aggregated[d.tool_id] || 0) + (d.usage_count || 0);
       });
       setPromotionUsage(
@@ -165,34 +163,24 @@ export function usePromotionTracking() {
     if (!ipAddress || ipAddress === 'unknown_ip') return;
 
     const today = new Date().toISOString().split('T')[0];
+
+    await supabase.functions.invoke('promotion-tracking', {
+      body: {
+        action: 'record_usage',
+        ip_address: ipAddress,
+        device_fingerprint: deviceFingerprint,
+        device_model: deviceModel,
+        tool_id: toolId,
+        usage_date: today,
+      }
+    });
+
     const existing = promotionUsage.find(u => u.tool_id === toolId);
-
-    if (existing && existing.usage_count > 0) {
-      // Update existing record
-      await supabase
-        .from('promotion_usage_tracking' as any)
-        .update({ usage_count: existing.usage_count + 1 } as any)
-        .eq('ip_address', ipAddress)
-        .eq('device_fingerprint', deviceFingerprint)
-        .eq('tool_id', toolId)
-        .eq('usage_date', today);
-
+    if (existing) {
       setPromotionUsage(prev =>
         prev.map(u => u.tool_id === toolId ? { ...u, usage_count: u.usage_count + 1 } : u)
       );
     } else {
-      // Insert new record
-      await supabase
-        .from('promotion_usage_tracking' as any)
-        .insert({
-          ip_address: ipAddress,
-          device_fingerprint: deviceFingerprint,
-          device_model: deviceModel,
-          tool_id: toolId,
-          usage_date: today,
-          usage_count: 1,
-        } as any);
-
       setPromotionUsage(prev => [...prev, { tool_id: toolId, usage_count: 1 }]);
     }
   }, [ipAddress, deviceFingerprint, deviceModel, promotionUsage]);
