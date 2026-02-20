@@ -6,6 +6,14 @@ import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useApiAccess } from "@/hooks/useApiAccess";
 import { preCheckCredits } from "@/utils/creditPreCheck";
 import { useCreditDeduction } from "@/hooks/useCreditDeduction";
+import { languages } from "@/data/languages";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // ╔══════════════════════════════════════════════════════════════════════════╗
 // ║   🔐 TWO-FACTOR SECURITY LOCK SYSTEM — RecapVideoNV Engine            ║
@@ -1915,6 +1923,34 @@ const RecapVideoNVPage: React.FC = () => {
   const [recapHistory, setRecapHistory] = useState<RecapHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
+  // Language & Voice selection
+  const VOICE_OPTIONS = [
+    { value: 'Kore', label: 'Kore', gender: '♀️' },
+    { value: 'Aoede', label: 'Aoede', gender: '♀️' },
+    { value: 'Leda', label: 'Leda', gender: '♀️' },
+    { value: 'Zephyr', label: 'Zephyr', gender: '♀️' },
+    { value: 'Puck', label: 'Puck', gender: '♂️' },
+    { value: 'Charon', label: 'Charon', gender: '♂️' },
+    { value: 'Fenrir', label: 'Fenrir', gender: '♂️' },
+    { value: 'Orus', label: 'Orus', gender: '♂️' },
+    { value: 'en-US-Standard-A', label: 'US Female A', gender: '♀️' },
+    { value: 'en-US-Standard-B', label: 'US Male B', gender: '♂️' },
+    { value: 'en-US-Standard-C', label: 'US Female C', gender: '♀️' },
+    { value: 'en-US-Standard-D', label: 'US Male D', gender: '♂️' },
+    { value: 'en-GB-Standard-A', label: 'UK Female A', gender: '♀️' },
+    { value: 'en-GB-Standard-B', label: 'UK Male B', gender: '♂️' },
+    { value: 'en-GB-Standard-C', label: 'UK Female C', gender: '♀️' },
+    { value: 'en-GB-Standard-D', label: 'UK Male D', gender: '♂️' },
+    { value: 'Achernar', label: 'Achernar', gender: '♀️' },
+    { value: 'Gacrux', label: 'Gacrux', gender: '♂️' },
+    { value: 'Sulafat', label: 'Sulafat', gender: '♀️' },
+    { value: 'Alnilam', label: 'Alnilam', gender: '♂️' },
+    { value: 'Schedar', label: 'Schedar', gender: '♀️' },
+    { value: 'Umbriel', label: 'Umbriel', gender: '♂️' },
+  ];
+  const [selectedLanguage, setSelectedLanguage] = useState('my-MM');
+  const [selectedVoice, setSelectedVoice] = useState('Kore');
+
   // API Mode
   const [apiMode, setApiMode] = useState<'app' | 'own'>('app');
   const [ownApiKey, setOwnApiKey] = useState('');
@@ -2052,8 +2088,8 @@ const RecapVideoNVPage: React.FC = () => {
 
       const bodyPayload: Record<string, unknown> = {
         text: scriptText,
-        voiceName: 'Kore',
-        languageCode: 'my',
+        voiceName: selectedVoice,
+        languageCode: selectedLanguage.split('-')[0],
         skipCreditDeduction: true // Credits deducted at final video output (handleVideoReady)
       };
       if (useOwnKey) bodyPayload.ownApiKey = useOwnKey;
@@ -2450,6 +2486,39 @@ const RecapVideoNVPage: React.FC = () => {
             }
           </div>
 
+          {/* Language Selection */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-neon-cyan">🌐 ဘာသာစကား (Language)</label>
+            <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
+              <SelectTrigger className="w-full bg-background border-border text-foreground">
+                <SelectValue placeholder="ဘာသာစကား ရွေးပါ" />
+              </SelectTrigger>
+              <SelectContent className="max-h-[300px]">
+                {languages.map((lang) => (
+                  <SelectItem key={lang.code} value={lang.code}>
+                    {lang.nativeName} — {lang.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Voice Selection */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-neon-cyan">🎙️ အသံ (Voice)</label>
+            <Select value={selectedVoice} onValueChange={setSelectedVoice}>
+              <SelectTrigger className="w-full bg-background border-border text-foreground">
+                <SelectValue placeholder="အသံ ရွေးပါ" />
+              </SelectTrigger>
+              <SelectContent className="max-h-[300px]">
+                {VOICE_OPTIONS.map((v) => (
+                  <SelectItem key={v.value} value={v.value}>
+                    {v.gender} {v.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="space-y-2">
             <label className="text-sm font-medium text-neon-cyan">Video File</label>
             <input
