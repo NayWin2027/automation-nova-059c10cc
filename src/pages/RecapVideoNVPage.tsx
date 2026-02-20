@@ -73,6 +73,8 @@ interface ResultViewProps {
   scriptData: RecapScript;
   onUpdateScript: (newScript: string) => void;
   onGenerateVoice: () => void;
+  voiceMode: 'modern' | 'normal';
+  onVoiceModeChange: (mode: 'modern' | 'normal') => void;
   onRecapSaved?: () => void;
   onVideoReady?: () => void; // Called when rendered video blob is ready ("Recap Video Ready!" shown)
   creditPerMinRate?: number; // Admin-configurable CR/MIN rate for display
@@ -120,6 +122,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
   onRecapSaved,
   onVideoReady,
   creditPerMinRate = 6,
+  voiceMode,
+  onVoiceModeChange,
   audioUrl,
   videoUrl,
   status,
@@ -1876,6 +1880,19 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 </a>
               }
             </div>
+            {/* Voice Mode Toggle */}
+            <div className="flex items-center gap-2 bg-charcoal-900/50 rounded-xl p-1.5">
+              <button
+                onClick={() => onVoiceModeChange('modern')}
+                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${voiceMode === 'modern' ? 'bg-neon-cyan text-black shadow-[0_0_10px_rgba(0,229,255,0.4)]' : 'text-gray-400 hover:text-gray-200'}`}>
+                Modern Version
+              </button>
+              <button
+                onClick={() => onVoiceModeChange('normal')}
+                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${voiceMode === 'normal' ? 'bg-charcoal-600 text-white shadow-md' : 'text-gray-400 hover:text-gray-200'}`}>
+                Normal Version
+              </button>
+            </div>
             {!audioUrl &&
             <button onClick={onGenerateVoice} className="w-full py-3 bg-charcoal-700 text-white font-bold rounded-xl">
                 Generate Voiceover
@@ -1944,6 +1961,7 @@ const RecapVideoNVPage: React.FC = () => {
   const pageAudioTimestampsRef = useRef<{index: number;start: number;end: number;}[]>([]);
   // Flag: auto-start recap recording when pipeline completes (state so ResultView re-renders)
   const [autoStartRecap, setAutoStartRecap] = useState(false);
+  const [voiceMode, setVoiceMode] = useState<'modern' | 'normal'>('modern');
   const [recapHistory, setRecapHistory] = useState<RecapHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
@@ -2118,7 +2136,8 @@ const RecapVideoNVPage: React.FC = () => {
         text: scriptText,
         voiceName: selectedVoice,
         languageCode: selectedLanguage.split('-')[0],
-        skipCreditDeduction: true // Credits deducted at final video output (handleVideoReady)
+        skipCreditDeduction: true, // Credits deducted at final video output (handleVideoReady)
+        speedMode: voiceMode // 'modern' = fast & continuous, 'normal' = standard pacing
       };
       if (useOwnKey) bodyPayload.ownApiKey = useOwnKey;
       // Send segments so gemini-tts can return exact per-segment timestamps from WAV header
@@ -2615,7 +2634,9 @@ const RecapVideoNVPage: React.FC = () => {
           status={status}
           audioTimestampsRef={pageAudioTimestampsRef}
           autoStartRecap={autoStartRecap}
-          onAutoStartConsumed={() => setAutoStartRecap(false)} />
+          onAutoStartConsumed={() => setAutoStartRecap(false)}
+          voiceMode={voiceMode}
+          onVoiceModeChange={setVoiceMode} />
 
         }
 

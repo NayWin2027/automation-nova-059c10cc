@@ -80,7 +80,7 @@ serve(async (req) => {
 
   try {
     // ===== INPUT VALIDATION =====
-    const { text, voiceName, apiKey: userApiKey, languageCode, customCreditCost, segments, skipCreditDeduction } = await req.json();
+    const { text, voiceName, apiKey: userApiKey, languageCode, customCreditCost, segments, skipCreditDeduction, speedMode } = await req.json();
 
     // Validate text
     if (!text || typeof text !== "string" || !text.trim()) {
@@ -245,18 +245,32 @@ serve(async (req) => {
     // ===== GENERATE TTS =====
     const apiUrl = `${GEMINI_TTS_API}?key=${effectiveApiKey}`;
 
+    const isModernSpeed = speedMode === 'modern';
     const buildRequestBody = (voice: string) => {
-      const instruction = `You are a professional voice-over narrator for engaging videos.\n` +
-        `Generate natural, continuous speech AUDIO for the following text.\n` +
-        `CRITICAL PACING RULES:\n` +
-        `- Speak fluently and continuously like a professional narrator or podcaster.\n` +
-        `- Keep pauses between sentences VERY SHORT (0.2-0.4 seconds max).\n` +
-        `- Do NOT add long silences or dramatic pauses between sentences.\n` +
-        `- Maintain a smooth, engaging flow that keeps listeners hooked.\n` +
-        `- Natural micro-pauses at commas and periods are fine, but keep them brief.\n` +
-        `- The overall rhythm should feel like a confident storyteller, not a slow reader.\n` +
-        `Language (BCP-47): ${sanitizedLanguageCode}\n\n` +
-        `TEXT:\n${text}`;
+      const instruction = isModernSpeed
+        ? `You are a professional voice-over narrator for engaging videos.\n` +
+          `Generate natural, continuous speech AUDIO for the following text.\n` +
+          `CRITICAL PACING RULES (MODERN / FAST & CONTINUOUS):\n` +
+          `- Speak at a FASTER pace (approximately 1.3x normal speed).\n` +
+          `- Keep pauses between sentences EXTREMELY SHORT (0.05-0.15 seconds max).\n` +
+          `- Sentences should flow almost continuously with barely any gap.\n` +
+          `- Do NOT add any silences or dramatic pauses between sentences.\n` +
+          `- The rhythm should feel like rapid-fire professional narration — swift, confident, and non-stop.\n` +
+          `- Speak clearly but quickly, like a fast-paced documentary narrator.\n` +
+          `- Natural breathing pauses are fine but keep them minimal and quick.\n` +
+          `Language (BCP-47): ${sanitizedLanguageCode}\n\n` +
+          `TEXT:\n${text}`
+        : `You are a professional voice-over narrator for engaging videos.\n` +
+          `Generate natural, continuous speech AUDIO for the following text.\n` +
+          `CRITICAL PACING RULES:\n` +
+          `- Speak fluently and continuously like a professional narrator or podcaster.\n` +
+          `- Keep pauses between sentences VERY SHORT (0.2-0.4 seconds max).\n` +
+          `- Do NOT add long silences or dramatic pauses between sentences.\n` +
+          `- Maintain a smooth, engaging flow that keeps listeners hooked.\n` +
+          `- Natural micro-pauses at commas and periods are fine, but keep them brief.\n` +
+          `- The overall rhythm should feel like a confident storyteller, not a slow reader.\n` +
+          `Language (BCP-47): ${sanitizedLanguageCode}\n\n` +
+          `TEXT:\n${text}`;
 
       return {
         contents: [{
