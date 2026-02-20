@@ -1893,9 +1893,13 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 Normal Version
               </button>
             </div>
-            {!audioUrl &&
+            {!audioUrl ?
             <button onClick={onGenerateVoice} className="w-full py-3 bg-charcoal-700 text-white font-bold rounded-xl">
                 Generate Voiceover
+              </button>
+            :
+            <button onClick={onGenerateVoice} className="w-full py-2.5 bg-charcoal-700 hover:bg-charcoal-600 text-gray-300 text-xs font-bold rounded-xl border border-charcoal-500 transition-colors">
+                🔄 Regenerate Voice ({voiceMode === 'modern' ? 'Modern' : 'Normal'})
               </button>
             }
           </div>
