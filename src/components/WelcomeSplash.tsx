@@ -140,8 +140,8 @@ export function WelcomeSplash({ onDone }: { onDone: () => void }) {
   const [phase, setPhase] = useState<"visible" | "fading">("visible");
 
   useEffect(() => {
-    const t1 = setTimeout(() => setPhase("fading"), 6200);
-    const t2 = setTimeout(() => onDone(), 7000);
+    const t1 = setTimeout(() => setPhase("fading"), 29200);
+    const t2 = setTimeout(() => onDone(), 30000);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [onDone]);
 
@@ -170,7 +170,7 @@ export function WelcomeSplash({ onDone }: { onDone: () => void }) {
 
       {/* Content */}
       <div
-        className="relative z-10 flex flex-col items-center px-6 max-w-md mx-auto text-center"
+        className="relative z-10 flex flex-col items-center justify-center px-6 w-full h-full text-center"
         style={{
           animation: "splashFadeUp 1.2s ease-out both",
         }}
