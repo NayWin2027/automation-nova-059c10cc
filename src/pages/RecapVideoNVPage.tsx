@@ -14,6 +14,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Check, ChevronsUpDown } from "lucide-react";
 
 // ╔══════════════════════════════════════════════════════════════════════════╗
 // ║   🔐 TWO-FACTOR SECURITY LOCK SYSTEM — RecapVideoNV Engine            ║
@@ -1925,28 +1928,28 @@ const RecapVideoNVPage: React.FC = () => {
 
   // Language & Voice selection
   const VOICE_OPTIONS = [
-    { value: 'Kore', label: 'Kore', gender: '♀️' },
-    { value: 'Aoede', label: 'Aoede', gender: '♀️' },
-    { value: 'Leda', label: 'Leda', gender: '♀️' },
-    { value: 'Zephyr', label: 'Zephyr', gender: '♀️' },
-    { value: 'Puck', label: 'Puck', gender: '♂️' },
-    { value: 'Charon', label: 'Charon', gender: '♂️' },
-    { value: 'Fenrir', label: 'Fenrir', gender: '♂️' },
-    { value: 'Orus', label: 'Orus', gender: '♂️' },
-    { value: 'en-US-Standard-A', label: 'US Female A', gender: '♀️' },
-    { value: 'en-US-Standard-B', label: 'US Male B', gender: '♂️' },
-    { value: 'en-US-Standard-C', label: 'US Female C', gender: '♀️' },
-    { value: 'en-US-Standard-D', label: 'US Male D', gender: '♂️' },
-    { value: 'en-GB-Standard-A', label: 'UK Female A', gender: '♀️' },
-    { value: 'en-GB-Standard-B', label: 'UK Male B', gender: '♂️' },
-    { value: 'en-GB-Standard-C', label: 'UK Female C', gender: '♀️' },
-    { value: 'en-GB-Standard-D', label: 'UK Male D', gender: '♂️' },
-    { value: 'Achernar', label: 'Achernar', gender: '♀️' },
-    { value: 'Gacrux', label: 'Gacrux', gender: '♂️' },
-    { value: 'Sulafat', label: 'Sulafat', gender: '♀️' },
-    { value: 'Alnilam', label: 'Alnilam', gender: '♂️' },
-    { value: 'Schedar', label: 'Schedar', gender: '♀️' },
-    { value: 'Umbriel', label: 'Umbriel', gender: '♂️' },
+    { value: 'Kore', label: 'Kore (Female)', gender: '♀️' },
+    { value: 'Aoede', label: 'Aoede (Female)', gender: '♀️' },
+    { value: 'Leda', label: 'Leda (Female)', gender: '♀️' },
+    { value: 'Zephyr', label: 'Zephyr (Female)', gender: '♀️' },
+    { value: 'Puck', label: 'Puck (Male)', gender: '♂️' },
+    { value: 'Charon', label: 'Charon (Male)', gender: '♂️' },
+    { value: 'Fenrir', label: 'Fenrir (Male)', gender: '♂️' },
+    { value: 'Orus', label: 'Orus (Male)', gender: '♂️' },
+    { value: 'en-US-Standard-A', label: 'US Standard A (Female)', gender: '♀️' },
+    { value: 'en-US-Standard-B', label: 'US Standard B (Male)', gender: '♂️' },
+    { value: 'en-US-Standard-C', label: 'US Standard C (Female)', gender: '♀️' },
+    { value: 'en-US-Standard-D', label: 'US Standard D (Male)', gender: '♂️' },
+    { value: 'en-GB-Standard-A', label: 'UK Standard A (Female)', gender: '♀️' },
+    { value: 'en-GB-Standard-B', label: 'UK Standard B (Male)', gender: '♂️' },
+    { value: 'en-GB-Standard-C', label: 'UK Standard C (Female)', gender: '♀️' },
+    { value: 'en-GB-Standard-D', label: 'UK Standard D (Male)', gender: '♂️' },
+    { value: 'Achernar', label: 'Achernar (Female)', gender: '♀️' },
+    { value: 'Gacrux', label: 'Gacrux (Male)', gender: '♂️' },
+    { value: 'Sulafat', label: 'Sulafat (Female)', gender: '♀️' },
+    { value: 'Alnilam', label: 'Alnilam (Male)', gender: '♂️' },
+    { value: 'Schedar', label: 'Schedar (Female)', gender: '♀️' },
+    { value: 'Umbriel', label: 'Umbriel (Male)', gender: '♂️' },
   ];
   const [selectedLanguage, setSelectedLanguage] = useState('my-MM');
   const [selectedVoice, setSelectedVoice] = useState('Kore');
@@ -2486,21 +2489,43 @@ const RecapVideoNVPage: React.FC = () => {
             }
           </div>
 
-          {/* Language Selection */}
+          {/* Language Selection - Searchable */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-neon-cyan">🌐 ဘာသာစကား (Language)</label>
-            <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
-              <SelectTrigger className="w-full bg-background border-border text-foreground">
-                <SelectValue placeholder="ဘာသာစကား ရွေးပါ" />
-              </SelectTrigger>
-              <SelectContent className="max-h-[300px]">
-                {languages.map((lang) => (
-                  <SelectItem key={lang.code} value={lang.code}>
-                    {lang.nativeName} — {lang.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  className="flex h-10 w-full items-center justify-between rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  role="combobox"
+                >
+                  {(() => {
+                    const lang = languages.find(l => l.code === selectedLanguage);
+                    return lang ? `${lang.nativeName} — ${lang.name}` : 'ဘာသာစကား ရွေးပါ';
+                  })()}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[--radix-popover-trigger-width] p-0 z-50" align="start">
+                <Command>
+                  <CommandInput placeholder="Search language..." />
+                  <CommandList className="max-h-[300px]">
+                    <CommandEmpty>No language found.</CommandEmpty>
+                    <CommandGroup>
+                      {languages.map((lang) => (
+                        <CommandItem
+                          key={lang.code}
+                          value={`${lang.name} ${lang.nativeName}`}
+                          onSelect={() => setSelectedLanguage(lang.code)}
+                        >
+                          <Check className={`mr-2 h-4 w-4 ${selectedLanguage === lang.code ? 'opacity-100' : 'opacity-0'}`} />
+                          {lang.nativeName} — {lang.name}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
 
           {/* Voice Selection */}
