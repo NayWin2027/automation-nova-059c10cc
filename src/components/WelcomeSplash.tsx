@@ -140,8 +140,8 @@ export function WelcomeSplash({ onDone }: { onDone: () => void }) {
   const [phase, setPhase] = useState<"visible" | "fading">("visible");
 
   useEffect(() => {
-    const t1 = setTimeout(() => setPhase("fading"), 29200);
-    const t2 = setTimeout(() => onDone(), 30000);
+    const t1 = setTimeout(() => setPhase("fading"), 6200);
+    const t2 = setTimeout(() => onDone(), 7000);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [onDone]);
 
