@@ -2053,7 +2053,8 @@ const RecapVideoNVPage: React.FC = () => {
       const bodyPayload: Record<string, unknown> = {
         text: scriptText,
         voiceName: 'Kore',
-        languageCode: 'my'
+        languageCode: 'my',
+        skipCreditDeduction: true // Credits deducted at final video output (handleVideoReady)
       };
       if (useOwnKey) bodyPayload.ownApiKey = useOwnKey;
       // Send segments so gemini-tts can return exact per-segment timestamps from WAV header
@@ -2272,7 +2273,8 @@ const RecapVideoNVPage: React.FC = () => {
         fileUri: fileUri,
         fileMimeType: mimeType,
         niche: 'MOVIE RECAP',
-        language: 'BURMESE'
+        language: 'BURMESE',
+        skipCreditDeduction: true // Credits deducted at final video output (handleVideoReady)
       };
       if (resolvedOwnKey) scriptBody.ownApiKey = resolvedOwnKey;
 

@@ -405,7 +405,9 @@ Write the complete professional narration script now — DO NOT leave out any im
     console.log(`[recap-script-generator] Script generated successfully, length: ${script.length}`);
 
     // ===== CREDIT DEDUCTION — ONLY after successful script output =====
-    if (!isOwnApi) {
+    // skipCreditDeduction: when called from recap-nv, credits are deducted at final video output stage
+    const skipCredits = body?.skipCreditDeduction === true || (contentType.includes("multipart/form-data") && false);
+    if (!isOwnApi && !skipCredits) {
       const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       const rpcParams: any = {
         _user_id: user.id,
@@ -426,6 +428,8 @@ Write the complete professional narration script now — DO NOT leave out any im
       } else {
         console.warn("[recap-script-generator] Credit deduction returned failure:", creditResult?.error);
       }
+    } else if (skipCredits) {
+      console.log("[recap-script-generator] Skipping credit deduction (recap-nv pipeline handles it)");
     }
 
     return new Response(

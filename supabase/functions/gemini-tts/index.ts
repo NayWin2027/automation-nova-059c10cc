@@ -80,7 +80,7 @@ serve(async (req) => {
 
   try {
     // ===== INPUT VALIDATION =====
-    const { text, voiceName, apiKey: userApiKey, languageCode, customCreditCost, segments } = await req.json();
+    const { text, voiceName, apiKey: userApiKey, languageCode, customCreditCost, segments, skipCreditDeduction } = await req.json();
 
     // Validate text
     if (!text || typeof text !== "string" || !text.trim()) {
@@ -179,38 +179,43 @@ serve(async (req) => {
       userId = user.id;
       console.log(`[gemini-tts] Authenticated user: ${userId}`);
 
-      // Credit check and deduction
-      const rpcParams: any = {
-        _user_id: userId,
-        _tool_id: "voice",
-        _is_own_api: false
-      };
-      if (customCreditCost !== undefined && customCreditCost !== null) {
-        rpcParams._custom_cost = Number(customCreditCost);
-      }
-      const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", rpcParams);
+      // Skip credit deduction when called from recap-nv pipeline (credits deducted at final video output)
+      if (skipCreditDeduction) {
+        console.log("[gemini-tts] Skipping credit deduction (recap-nv pipeline handles it)");
+      } else {
+        // Credit check and deduction
+        const rpcParams: any = {
+          _user_id: userId,
+          _tool_id: "voice",
+          _is_own_api: false
+        };
+        if (customCreditCost !== undefined && customCreditCost !== null) {
+          rpcParams._custom_cost = Number(customCreditCost);
+        }
+        const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", rpcParams);
 
-      if (creditError) {
-        console.error("[gemini-tts] Credit check error:", creditError);
-        return new Response(
-          JSON.stringify({ error: "Failed to process credits" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+        if (creditError) {
+          console.error("[gemini-tts] Credit check error:", creditError);
+          return new Response(
+            JSON.stringify({ error: "Failed to process credits" }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
 
-      if (!creditResult.success) {
-        return new Response(
-          JSON.stringify({
-            error: creditResult.error,
-            balance: creditResult.balance,
-            required: creditResult.required,
-            errorCode: "INSUFFICIENT_CREDITS"
-          }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+        if (!creditResult.success) {
+          return new Response(
+            JSON.stringify({
+              error: creditResult.error,
+              balance: creditResult.balance,
+              required: creditResult.required,
+              errorCode: "INSUFFICIENT_CREDITS"
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
 
-      console.log(`[gemini-tts] Credits deducted. New balance: ${creditResult.balance}`);
+        console.log(`[gemini-tts] Credits deducted. New balance: ${creditResult.balance}`);
+      }
     } else {
       console.log("[gemini-tts] Using own API key - skipping auth & credit check");
     }
