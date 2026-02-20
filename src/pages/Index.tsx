@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import PlansView from "@/components/PlansView";
 import { useNavigate } from "react-router-dom";
 import {
@@ -29,6 +29,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { GatewayBanner } from "@/components/GatewayBanner";
 import { ChatDialog } from "@/components/ChatDialog";
 import { ContactDialog } from "@/components/ContactDialog";
+import { WelcomeSplash } from "@/components/WelcomeSplash";
 import { useAuth } from "@/hooks/useAuth";
 import { useToolSettings } from "@/hooks/useToolSettings";
 import { useToast } from "@/hooks/use-toast";
@@ -141,6 +142,14 @@ const Index = () => {
   const [isLightMode, setIsLightMode] = useState(() => {
     return localStorage.getItem('theme-mode') === 'light';
   });
+  const [showSplash, setShowSplash] = useState(() => {
+    const shown = sessionStorage.getItem('splash-shown');
+    return !shown;
+  });
+  const handleSplashDone = useCallback(() => {
+    setShowSplash(false);
+    sessionStorage.setItem('splash-shown', '1');
+  }, []);
 
   useEffect(() => {
     if (isLightMode) {
@@ -405,6 +414,8 @@ const Index = () => {
     </div>;
 
   return (
+    <>
+    {showSplash && <WelcomeSplash onDone={handleSplashDone} />}
     <div className="min-h-screen premium-background pb-20 bg-secondary">
       {/* Light rays overlay */}
       <div className="premium-rays" />
@@ -427,7 +438,8 @@ const Index = () => {
 
 
       <ContactDialog isOpen={showContactDialog} onClose={() => setShowContactDialog(false)} />
-    </div>);
+    </div>
+    </>);
 
 };
 export default Index;
