@@ -186,7 +186,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
   const [blurSettings, setBlurSettings] = useState<BlurSettings>({
     enabled: true,
     x: 50,
-    y: 82,
+    y: 88,
     width: 100,
     height: 20,
     opacity: 15,
@@ -2591,7 +2591,7 @@ const RecapVideoNVPage: React.FC = () => {
               <SelectTrigger className="w-full bg-background border-border text-foreground">
                 <SelectValue placeholder="အသံ ရွေးပါ" />
               </SelectTrigger>
-                <SelectContent className="max-h-[250px] z-50">
+                <SelectContent className="max-h-[250px] z-50 overflow-y-auto scroll-smooth" position="popper" sideOffset={4}>
                 {VOICE_OPTIONS.map((v) => (
                   <SelectItem key={v.value} value={v.value}>
                     {v.label} ({v.gender})
