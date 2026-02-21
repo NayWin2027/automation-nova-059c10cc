@@ -402,29 +402,63 @@ ${transcript}
 
     console.log(`[recap-script-generator] Sending to Gemini (${fileObj ? 'file mode' : 'transcript mode'})...`);
 
-    const response = await fetch(
-      `${GOOGLE_AI_API}/${MODEL}:generateContent?key=${activeApiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: systemPrompt }] },
-          contents: [{ parts: contentParts }],
-          generationConfig: {
-            temperature: 0.8,
-            maxOutputTokens: 32768,
-          },
-        }),
-      }
-    );
+    // Retry logic for Gemini API (handles 429 rate limits & 503 overloaded)
+    const MAX_RETRIES = 4;
+    let response: Response | null = null;
+    let lastError = "";
 
-    if (!response.ok) {
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      response = await fetch(
+        `${GOOGLE_AI_API}/${MODEL}:generateContent?key=${activeApiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: systemPrompt }] },
+            contents: [{ parts: contentParts }],
+            generationConfig: {
+              temperature: 0.8,
+              maxOutputTokens: 32768,
+            },
+          }),
+        }
+      );
+
+      if (response.ok) break;
+
       const errorText = await response.text();
-      console.error("Gemini API error:", response.status, errorText);
-      if (response.status === 429) {
+      lastError = errorText;
+      console.warn(`[recap-script-generator] Gemini API error (attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${response.status} ${errorText.substring(0, 200)}`);
+
+      // Only retry on 429 (rate limit) or 503 (overloaded)
+      if (response.status === 429 || response.status === 503) {
+        if (attempt < MAX_RETRIES) {
+          // Parse retryDelay from Google's error if available, otherwise exponential backoff
+          let waitMs = Math.min(2000 * Math.pow(2, attempt), 30000);
+          try {
+            const errJson = JSON.parse(errorText);
+            const retryDelay = errJson?.error?.details?.find((d: any) => d.retryDelay)?.retryDelay;
+            if (retryDelay) {
+              const parsed = parseFloat(retryDelay);
+              if (!isNaN(parsed)) waitMs = Math.ceil(parsed * 1000);
+            }
+          } catch {}
+          console.log(`[recap-script-generator] Retrying in ${waitMs}ms...`);
+          await new Promise(r => setTimeout(r, waitMs));
+          continue;
+        }
+      }
+
+      // Non-retryable error — fail immediately
+      break;
+    }
+
+    if (!response || !response.ok) {
+      console.error("Gemini API final error:", response?.status, lastError.substring(0, 300));
+      if (response?.status === 429) {
         return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ error: "API Request limit ဖြစ်နေပါသည်။ ခဏစောင့်ပြီး ပြန်စမ်းပါ။", retryable: true, retryAfterSeconds: 30 }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       throw new Error("Script generation failed");
