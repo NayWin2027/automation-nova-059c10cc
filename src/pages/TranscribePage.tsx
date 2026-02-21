@@ -244,58 +244,20 @@ export default function TranscriptionView() {
       const session = await supabase.auth.getSession();
       const token = session.data.session?.access_token;
 
-      // === STEP 1: Get resumable upload URL from backend ===
-      const mimeType = selectedFile.type || "video/mp4";
+      // === Send file directly to recap-script-generator via FormData ===
+      const tierCredits = getSelectedTierCredits();
       const ownApiKey = apiType === "own" ? apiKey : undefined;
 
-      const urlRes = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-upload-url`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            fileName: selectedFile.name,
-            fileSize: selectedFile.size,
-            mimeType,
-            ...(ownApiKey ? { apiKey: ownApiKey } : {}),
-          }),
-        }
-      );
-
-      if (!urlRes.ok) {
-        const errData = await urlRes.json().catch(() => ({}));
-        throw new Error(errData.error || `Upload URL failed: ${urlRes.status}`);
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+      formData.append("niche", scriptNiche);
+      formData.append("language", selectedLanguage);
+      if (ownApiKey) formData.append("apiKey", ownApiKey);
+      if (tierCredits !== undefined && apiType === "app") {
+        formData.append("customCreditCost", tierCredits.toString());
       }
 
-      const { uploadUrl } = await urlRes.json();
-
-      // === STEP 2: Upload file DIRECTLY from browser to Google ===
-      console.log("[TranscribePage] Direct uploading to Google...");
-      const arrayBuffer = await selectedFile.arrayBuffer();
-
-      const uploadRes = await fetch(uploadUrl, {
-        method: "POST",
-        headers: {
-          "X-Goog-Upload-Offset": "0",
-          "X-Goog-Upload-Command": "upload, finalize",
-          "Content-Length": selectedFile.size.toString(),
-        },
-        body: arrayBuffer,
-      });
-
-      if (!uploadRes.ok) {
-        throw new Error(`Direct upload failed: ${uploadRes.status}`);
-      }
-
-      const uploadResult = await uploadRes.json();
-      const fileUri = uploadResult.file?.uri || uploadResult.file?.name;
-      console.log("[TranscribePage] File uploaded directly, URI:", fileUri);
-
-      // === STEP 3: Send only fileUri to recap-script-generator (no file transfer!) ===
-      const tierCredits = getSelectedTierCredits();
+      console.log("[TranscribePage] Sending file to recap-script-generator...");
       const scriptController = new AbortController();
       const scriptTimeout = setTimeout(() => scriptController.abort(), 300000); // 5-min timeout
       const response = await fetch(
@@ -304,16 +266,8 @@ export default function TranscriptionView() {
           method: "POST",
           headers: {
             Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            fileUri,
-            fileMimeType: mimeType,
-            niche: scriptNiche,
-            language: selectedLanguage,
-            ...(ownApiKey ? { apiKey: ownApiKey } : {}),
-            ...(tierCredits !== undefined && apiType === "app" ? { customCreditCost: tierCredits } : {}),
-          }),
+          body: formData,
           signal: scriptController.signal,
         }
       );
