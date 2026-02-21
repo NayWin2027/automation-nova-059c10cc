@@ -51,10 +51,7 @@ const DEFAULT_SETTINGS: TranscribeSettings = {
   creditTiers: [
   { label: "UNDER 5 MINUTES", credits: 4, value: 5 },
   { label: "UNDER 10 MINUTES", credits: 8, value: 10 },
-  { label: "UNDER 15 MINUTES", credits: 12, value: 15 },
-  { label: "UNDER 20 MINUTES", credits: 16, value: 20 },
-  { label: "UNDER 25 MINUTES", credits: 20, value: 25 },
-  { label: "UNDER 30 MINUTES", credits: 24, value: 30 }]
+  { label: "UNDER 15 MINUTES", credits: 12, value: 15 }]
 
 };
 
@@ -192,8 +189,8 @@ export default function TranscriptionView() {
         URL.revokeObjectURL(url);
         const durationMinutes = media.duration / 60;
 
-        if (durationMinutes > 30) {
-          toast.error("30 မိနစ်ထက်ကျော်တဲ့ ဖိုင်ကို လက်မခံပါ။ ဖိုင်ကို ခွဲပြီး ထပ်ကြိုးစားပါ။");
+        if (durationMinutes > 15) {
+          toast.error("15 မိနစ်ထက်ကျော်တဲ့ ဖိုင်ကို လက်မခံပါ။ ဖိုင်ကို ခွဲပြီး ထပ်ကြိုးစားပါ။");
           setSelectedFile(null);
           if (fileInputRef.current) fileInputRef.current.value = "";
           return;
