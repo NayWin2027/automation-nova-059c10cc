@@ -296,6 +296,8 @@ export default function TranscriptionView() {
 
       // === STEP 3: Send only fileUri to recap-script-generator (no file transfer!) ===
       const tierCredits = getSelectedTierCredits();
+      const scriptController = new AbortController();
+      const scriptTimeout = setTimeout(() => scriptController.abort(), 300000); // 5-min timeout
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recap-script-generator`,
         {
@@ -312,8 +314,10 @@ export default function TranscriptionView() {
             ...(ownApiKey ? { apiKey: ownApiKey } : {}),
             ...(tierCredits !== undefined && apiType === "app" ? { customCreditCost: tierCredits } : {}),
           }),
+          signal: scriptController.signal,
         }
       );
+      clearTimeout(scriptTimeout);
 
       if (!response.ok) {
         if (response.status === 402) {

@@ -8,7 +8,7 @@ const corsHeaders = {
 
 const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1beta/files";
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
-const MODEL = "gemini-2.5-pro";
+const MODEL = "gemini-2.5-flash";
 
 async function uploadToGoogleFiles(apiKey: string, fileBytes: Uint8Array, mimeType: string, fileName: string): Promise<string> {
   console.log("Uploading file to Google Files API...", fileName, fileBytes.length, mimeType);
@@ -56,8 +56,8 @@ async function uploadToGoogleFiles(apiKey: string, fileBytes: Uint8Array, mimeTy
 }
 
 async function waitForFileProcessing(apiKey: string, fileName: string): Promise<void> {
-  const maxAttempts = 30;
-  const delay = 2000;
+  const maxAttempts = 60;
+  const delay = 800;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${apiKey}`);
