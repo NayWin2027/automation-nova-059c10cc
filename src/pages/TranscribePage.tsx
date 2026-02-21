@@ -172,6 +172,12 @@ export default function TranscriptionView() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Check file size limit: 1GB
+      if (file.size > 1024 * 1024 * 1024) {
+        toast.error("ဖိုင် size 1GB ထက်ကျော်လို့ မရပါ။");
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      }
       setSelectedFile(file);
       setGeneratedScript("");
       setSelectedTier(null);
@@ -243,62 +249,98 @@ export default function TranscriptionView() {
     try {
       const session = await supabase.auth.getSession();
       const token = session.data.session?.access_token;
-
-      // === Send file directly to recap-script-generator via FormData ===
       const tierCredits = getSelectedTierCredits();
       const ownApiKey = apiType === "own" ? apiKey : undefined;
+      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
-      const formData = new FormData();
-      formData.append("file", selectedFile);
-      formData.append("niche", scriptNiche);
-      formData.append("language", selectedLanguage);
-      if (ownApiKey) formData.append("apiKey", ownApiKey);
-      if (tierCredits !== undefined && apiType === "app") {
-        formData.append("customCreditCost", tierCredits.toString());
+      // === STEP 1: Get resumable upload URL from edge function ===
+      console.log("[TranscribePage] Step 1: Getting upload URL...");
+      const uploadUrlRes = await fetch(`${SUPABASE_URL}/functions/v1/get-upload-url`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          fileName: selectedFile.name,
+          fileSize: selectedFile.size,
+          mimeType: selectedFile.type || "video/mp4",
+          apiKey: ownApiKey,
+        }),
+      });
+
+      if (!uploadUrlRes.ok) {
+        const errData = await uploadUrlRes.json().catch(() => ({}));
+        throw new Error(errData.error || "Upload URL ရယူမှု မအောင်မြင်ပါ");
       }
 
-      console.log("[TranscribePage] Sending file to recap-script-generator...");
+      const { uploadUrl } = await uploadUrlRes.json();
+      if (!uploadUrl) throw new Error("Upload URL မရရှိပါ");
+
+      // === STEP 2: Upload file directly from browser to Google ===
+      console.log("[TranscribePage] Step 2: Uploading file to Google...", selectedFile.size);
+      const uploadRes = await fetch(uploadUrl, {
+        method: "POST",
+        headers: {
+          "X-Goog-Upload-Offset": "0",
+          "X-Goog-Upload-Command": "upload, finalize",
+          "Content-Length": selectedFile.size.toString(),
+        },
+        body: selectedFile,
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error("Google ဆီ ဖိုင်တင်မှု မအောင်မြင်ပါ");
+      }
+
+      const uploadResult = await uploadRes.json();
+      const fileUri = uploadResult.file?.uri || uploadResult.file?.name;
+      const fileMimeType = selectedFile.type || "video/mp4";
+      console.log("[TranscribePage] Step 2 done. fileUri:", fileUri);
+
+      // === STEP 3: Send fileUri to recap-script-generator ===
+      console.log("[TranscribePage] Step 3: Generating script...");
       const scriptController = new AbortController();
       const scriptTimeout = setTimeout(() => scriptController.abort(), 300000); // 5-min timeout
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recap-script-generator`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          body: formData,
-          signal: scriptController.signal,
-        }
-      );
+
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/recap-script-generator`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          fileUri,
+          fileMimeType: fileMimeType,
+          niche: scriptNiche,
+          language: selectedLanguage,
+          apiKey: ownApiKey,
+          customCreditCost: apiType === "app" ? tierCredits : undefined,
+        }),
+        signal: scriptController.signal,
+      });
       clearTimeout(scriptTimeout);
 
-      if (!response.ok) {
-        if (response.status === 402) {
-          const errData = await response.json();
-          toast.error(errData.error || "Credits မလုံလောက်ပါ။");
-          return;
-        }
-        if (response.status === 429) {
-          toast.error("Rate limit exceeded. ခဏစောင့်ပြီး ပြန်ကြိုးစားပါ။");
-          return;
-        }
-        throw new Error(`Server error: ${response.status}`);
-      }
-
       const data = await response.json();
+
+      if (data?.error) {
+        toast.error(data.error);
+        return;
+      }
 
       if (data?.script) {
         setGeneratedScript(data.script);
         toast.success("Script အောင်မြင်စွာ ထွက်လာပါပြီ!");
-      } else if (data?.error) {
-        toast.error(data.error);
       } else {
         toast.error("Script generation failed.");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error("Script generation failed. Please try again.");
+      if (err?.name === "AbortError") {
+        toast.error("Request timeout ဖြစ်သွားပါပြီ။ ဖိုင် သေးသေးနဲ့ ပြန်စမ်းပါ။");
+      } else {
+        toast.error(err?.message || "Script generation failed. Please try again.");
+      }
     } finally {
       setIsGeneratingScript(false);
     }
