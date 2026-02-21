@@ -1971,7 +1971,7 @@ const RecapVideoNVPage: React.FC = () => {
   const pageAudioTimestampsRef = useRef<{index: number;start: number;end: number;}[]>([]);
   // Flag: auto-start recap recording when pipeline completes (state so ResultView re-renders)
   const [autoStartRecap, setAutoStartRecap] = useState(false);
-  const [voiceMode, setVoiceMode] = useState<'modern' | 'normal'>('modern');
+  const [voiceMode, setVoiceMode] = useState<'modern' | 'normal'>('normal');
   const [recapHistory, setRecapHistory] = useState<RecapHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
