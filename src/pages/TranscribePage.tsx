@@ -252,26 +252,80 @@ export default function TranscriptionView() {
       const tierCredits = getSelectedTierCredits();
       const ownApiKey = apiType === "own" ? apiKey : undefined;
 
-      // === Send file via FormData to recap-script-generator ===
-      const formData = new FormData();
-      formData.append("file", selectedFile);
-      formData.append("niche", scriptNiche);
-      formData.append("language", selectedLanguage);
-      if (ownApiKey) formData.append("apiKey", ownApiKey);
-      if (tierCredits !== undefined && apiType === "app") {
-        formData.append("customCreditCost", tierCredits.toString());
-      }
-
-      console.log("[TranscribePage] Sending file to recap-script-generator...", selectedFile.size);
       const scriptController = new AbortController();
       const scriptTimeout = setTimeout(() => scriptController.abort(), 300000); // 5-min timeout
 
-      const response = await fetch(
+      let response: Response;
+
+      // Step 1: Get resumable upload URL from backend (avoids CORS issues)
+      console.log("[TranscribePage] Step 1: Getting upload URL...", selectedFile.size);
+      const uploadUrlRes = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-upload-url`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            fileName: selectedFile.name,
+            fileSize: selectedFile.size,
+            mimeType: selectedFile.type || "video/mp4",
+            apiKey: ownApiKey || undefined,
+          }),
+          signal: scriptController.signal,
+        }
+      );
+      const uploadUrlData = await uploadUrlRes.json();
+
+      if (!uploadUrlData.uploadUrl) {
+        throw new Error(uploadUrlData.error || "Upload URL ရယူ၍မရပါ။");
+      }
+
+      // Step 2: Upload file directly to Google (browser → Google, no edge function memory)
+      console.log("[TranscribePage] Step 2: Uploading directly to Google...");
+      const uploadRes = await fetch(uploadUrlData.uploadUrl, {
+        method: "POST",
+        headers: {
+          "X-Goog-Upload-Offset": "0",
+          "X-Goog-Upload-Command": "upload, finalize",
+          "Content-Length": selectedFile.size.toString(),
+        },
+        body: selectedFile,
+        signal: scriptController.signal,
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error("Google သို့ ဖိုင်တင်၍မရပါ။ ပြန်စမ်းပါ။");
+      }
+
+      const uploadResult = await uploadRes.json();
+      const fileUri = uploadResult.file?.uri || uploadResult.file?.name;
+      const fileMimeType = selectedFile.type || "video/mp4";
+
+      if (!fileUri) {
+        throw new Error("File URI ရယူ၍မရပါ။");
+      }
+
+      console.log("[TranscribePage] Step 3: Sending fileUri to script generator...", fileUri);
+
+      // Step 3: Send only fileUri to recap-script-generator (no file data = no memory issue)
+      response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recap-script-generator`,
         {
           method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-          body: formData,
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            fileUri,
+            fileMimeType,
+            niche: scriptNiche,
+            language: selectedLanguage,
+            apiKey: ownApiKey || undefined,
+            customCreditCost: tierCredits !== undefined && apiType === "app" ? tierCredits : undefined,
+          }),
           signal: scriptController.signal,
         }
       );
