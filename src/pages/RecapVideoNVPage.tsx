@@ -495,9 +495,12 @@ export const ResultView: React.FC<ResultViewProps> = ({
     const recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: 4000000 });
     recapRecorderRef.current = recorder;
 
+    const recordingStartTime = Date.now(); // Track actual recording elapsed time for accurate credit deduction
+
     recorder.ondataavailable = (e) => {if (e.data && e.data.size > 0) chunks.push(e.data);};
 
     recorder.onstop = async () => {
+      const recordingElapsedSecs = (Date.now() - recordingStartTime) / 1000; // Reliable elapsed time
       if (audioCtx) try {audioCtx.close();} catch (_) {}
       // Cleanup both interval and rAF just in case
       if (recapIntervalRef.current) {clearInterval(recapIntervalRef.current);recapIntervalRef.current = null;}
@@ -518,17 +521,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
       setRenderedBlobUrl(url);
 
-      // Get OUTPUT video duration for accurate credit deduction
-      const outputDuration: number = await new Promise((resolve) => {
-        const tempVid = document.createElement('video');
-        tempVid.preload = 'metadata';
-        const tempUrl = URL.createObjectURL(blob);
-        tempVid.onloadedmetadata = () => { resolve(tempVid.duration || 0); URL.revokeObjectURL(tempUrl); };
-        tempVid.onerror = () => { resolve(0); URL.revokeObjectURL(tempUrl); };
-        tempVid.src = tempUrl;
-      });
-      console.log('[CREDIT] Output video duration:', outputDuration, 'seconds');
-      onVideoReady?.(outputDuration); // Trigger credit deduction with OUTPUT duration
+      // Use actual recording elapsed time (reliable) instead of blob metadata (unreliable for MediaRecorder blobs)
+      console.log('[CREDIT] Output video duration (elapsed timer):', recordingElapsedSecs, 'seconds');
+      onVideoReady?.(recordingElapsedSecs); // Trigger credit deduction with accurate OUTPUT duration
       setIsRendering(false);
       setIsRecapPlaying(false);
 
