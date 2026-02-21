@@ -2037,8 +2037,11 @@ const RecapVideoNVPage: React.FC = () => {
 
     // Use OUTPUT video duration (passed from rendered blob), not input video duration
     const durationSecs = outputDurationSecs || 0;
-    const durationMins = durationSecs / 60;
-    const customCost = Math.max(1, Math.ceil(durationMins) * creditPerMinRate);
+    const totalMinutes = Math.floor(durationSecs / 60);
+    const remainingSeconds = durationSecs % 60;
+    // Round: ≤30s stays at current minute, >30s rounds up to next minute
+    const billedMinutes = remainingSeconds > 30 ? totalMinutes + 1 : totalMinutes;
+    const customCost = Math.max(1, Math.max(1, billedMinutes) * creditPerMinRate);
 
     console.log('[CREDIT] Deducting:', customCost, 'credits (output duration:', durationSecs, 's, rate:', creditPerMinRate, 'CR/MIN)');
     didDeductRef.current = true; // Mark as deducted before async call (idempotency)
