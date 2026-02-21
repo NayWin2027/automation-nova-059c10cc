@@ -381,7 +381,7 @@ export async function compressVideoFor480p(
 
   await ffmpeg.exec([
     "-i", "input.mp4",
-    "-vf", "scale=-2:480",
+    "-vf", "scale=-2:360",
     "-c:v", "libx264",
     "-preset", "ultrafast",
     "-crf", "28",
