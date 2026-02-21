@@ -44,3 +44,6 @@ verify_jwt = false
 
 [functions.get-upload-url]
 verify_jwt = false
+
+[functions.upload-chunk]
+verify_jwt = false

@@ -282,26 +282,47 @@ export default function TranscriptionView() {
         throw new Error(uploadUrlData.error || "Upload URL ရယူ၍မရပါ။");
       }
 
-      // Step 2: Upload file directly to Google (browser → Google, no edge function memory)
-      console.log("[TranscribePage] Step 2: Uploading directly to Google...");
-      const uploadRes = await fetch(uploadUrlData.uploadUrl, {
-        method: "POST",
-        headers: {
-          "X-Goog-Upload-Offset": "0",
-          "X-Goog-Upload-Command": "upload, finalize",
-          "Content-Length": selectedFile.size.toString(),
-        },
-        body: selectedFile,
-        signal: scriptController.signal,
-      });
+      // Step 2: Upload file in 8MB chunks via edge function proxy (avoids CORS + memory issues)
+      console.log("[TranscribePage] Step 2: Uploading via chunked proxy...");
+      const CHUNK_SIZE = 8 * 1024 * 1024; // 8MB
+      const totalChunks = Math.ceil(selectedFile.size / CHUNK_SIZE);
+      let fileUri = "";
+      let fileMimeType = selectedFile.type || "video/mp4";
 
-      if (!uploadRes.ok) {
-        throw new Error("Google သို့ ဖိုင်တင်၍မရပါ။ ပြန်စမ်းပါ။");
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, selectedFile.size);
+        const chunkBlob = selectedFile.slice(start, end);
+        const isLast = i === totalChunks - 1;
+        const command = isLast ? "upload, finalize" : "upload";
+
+        const chunkForm = new FormData();
+        chunkForm.append("uploadUrl", uploadUrlData.uploadUrl);
+        chunkForm.append("offset", start.toString());
+        chunkForm.append("command", command);
+        chunkForm.append("chunk", chunkBlob, `chunk_${i}`);
+
+        console.log(`[TranscribePage] Uploading chunk ${i + 1}/${totalChunks} (${chunkBlob.size} bytes)`);
+
+        const chunkRes = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/upload-chunk`,
+          {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: chunkForm,
+            signal: scriptController.signal,
+          }
+        );
+
+        const chunkData = await chunkRes.json();
+        if (chunkData.error) {
+          throw new Error(chunkData.error);
+        }
+
+        if (isLast && chunkData.file) {
+          fileUri = chunkData.file.uri || chunkData.file.name;
+        }
       }
-
-      const uploadResult = await uploadRes.json();
-      const fileUri = uploadResult.file?.uri || uploadResult.file?.name;
-      const fileMimeType = selectedFile.type || "video/mp4";
 
       if (!fileUri) {
         throw new Error("File URI ရယူ၍မရပါ။");
