@@ -139,7 +139,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
   const [renderedBlobUrl, setRenderedBlobUrl] = useState<string | null>(null);
   // Neon hue for subtitle box border cycling (DOM preview)
   const subNeonHueRef = useRef(0);
-  const [subBorderColor, setSubBorderColor] = useState("hsl(180,100%,60%)"); // cyan start
+  const [subBorderColor, setSubBorderColor] = useState("hsl(180,100%,75%)"); // cyan start — bright neon
 
   // Color Grading Presets — industry-standard subtle values for realistic, non-artificial look
   const COLOR_GRADE_PRESETS: Record<string, {contrast: number;brightness: number;saturate: number;hue: number;sepia?: number;label: string;emoji: string;}> = {
@@ -231,6 +231,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
   // audioTimestampsRef is passed in as a prop from RecapVideoNVPage
   const currentSubtitleRef = useRef<string>(""); // for canvas subtitle drawing during recording
   const fixedCanvasFontSizeRef = useRef<number>(0); // fixed font size for canvas subtitles — computed once per recording session
+  // Subtitle 3-line paging refs — max 3 lines visible, remaining text cycles to next page
+  const subtitleLastTextRef = useRef<string>(""); // detect text change to reset page
+  const subtitlePageStartRef = useRef<number>(0); // timestamp when current text started
 
   // Request Wake Lock to prevent screen from turning off during recap/recording
   useEffect(() => {
@@ -594,11 +597,13 @@ export const ResultView: React.FC<ResultViewProps> = ({
         const maxTW = bW - padX * 2;
         const maxTH = bH - padY * 2;
 
+        // With 3-line max paging, font size is computed for max 3 lines fitting in the box
         const longestText = scriptData.segments.reduce((best, seg) =>
         seg.text.length > best.length ? seg.text : best, "");
 
         const tc = document.createElement("canvas").getContext("2d")!;
         let fs = Math.round(bH * 0.35);
+        const MAX_LINES_PER_PAGE = 3;
         while (fs >= 8) {
           tc.font = `bold ${fs}px sans-serif`;
           const lh = fs * 1.4;
@@ -611,7 +616,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
             cur = tl;
           }
           if (cur) lines.push(cur);
-          if (lines.length * lh <= maxTH) break;
+          // Only need to fit max 3 lines (paging handles the rest)
+          const linesToFit = Math.min(lines.length, MAX_LINES_PER_PAGE);
+          if (linesToFit * lh <= maxTH) break;
           fs--;
         }
         return Math.max(fs, 8);
@@ -796,7 +803,24 @@ export const ResultView: React.FC<ResultViewProps> = ({
         }
         if (currentLine) fittedLines.push(currentLine);
 
-        const totalTextH = fittedLines.length * lineHeight;
+        // ── 3-line max paging: show max 3 lines, cycle remaining text pages ──
+        const MAX_LINES = 3;
+        let displayLines = fittedLines;
+        if (fittedLines.length > MAX_LINES) {
+          // Detect subtitle text change → reset page timer
+          if (subText !== subtitleLastTextRef.current) {
+            subtitleLastTextRef.current = subText;
+            subtitlePageStartRef.current = performance.now();
+          }
+          const totalPages = Math.ceil(fittedLines.length / MAX_LINES);
+          const elapsed = (performance.now() - subtitlePageStartRef.current) / 1000;
+          // Each page shows for 2.5 seconds before cycling to next
+          const currentPage = Math.min(Math.floor(elapsed / 2.5), totalPages - 1);
+          const startIdx = currentPage * MAX_LINES;
+          displayLines = fittedLines.slice(startIdx, startIdx + MAX_LINES);
+        }
+
+        const totalTextH = displayLines.length * lineHeight;
 
         // ── Draw background (full blur-box size when blur enabled) ───────
         ctx.fillStyle = subSettings.bgColor;
@@ -812,11 +836,11 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.fill();
 
         // ── Draw border (neon cycling color) ────────────────────────────
-        const canvasNeonColor = `hsl(${subNeonHueRef.current}, 100%, 60%)`;
+        const canvasNeonColor = `hsl(${subNeonHueRef.current}, 100%, 75%)`;
         ctx.strokeStyle = canvasNeonColor;
         ctx.shadowColor = canvasNeonColor;
-        ctx.shadowBlur = Math.max(4, fontSize * 0.3);
-        ctx.lineWidth = Math.max(2, fontSize * 0.06);
+        ctx.shadowBlur = Math.max(8, fontSize * 0.5);
+        ctx.lineWidth = Math.max(2.5, fontSize * 0.08);
         ctx.stroke();
         ctx.shadowBlur = 0;
 
@@ -828,7 +852,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.fillStyle = subSettings.textColor;
 
         const startY = subCY - totalTextH / 2 + lineHeight / 2;
-        fittedLines.forEach((line, i) => {
+        displayLines.forEach((line, i) => {
           ctx.fillText(line, subCX, startY + i * lineHeight, maxTextWidth);
         });
 
@@ -852,25 +876,25 @@ export const ResultView: React.FC<ResultViewProps> = ({
         // === Draw multi-layer animated neon glow ring (NOT rotated — matches CSS preview) ===
         // Animate neon hue using logoAngleRef so color cycles like the preview CSS animation
         const neonHue = logoAngleRef.current * 1.5 % 360;
-        const animatedNeonColor = `hsl(${neonHue}, 100%, 60%)`;
-        const animatedNeonColor2 = `hsl(${(neonHue + 120) % 360}, 100%, 60%)`;
+        const animatedNeonColor = `hsl(${neonHue}, 100%, 75%)`;
+        const animatedNeonColor2 = `hsl(${(neonHue + 120) % 360}, 100%, 75%)`;
 
         ctx.save();
         ctx.translate(logoCX, logoCY);
         // Layer 1: outer diffuse neon glow — NOT rotated, stays as ring
         ctx.shadowColor = animatedNeonColor;
-        ctx.shadowBlur = logoSize * 0.25;
+        ctx.shadowBlur = logoSize * 0.35;
         ctx.strokeStyle = animatedNeonColor;
-        ctx.lineWidth = logoSize * 0.04;
-        ctx.globalAlpha = 0.8;
+        ctx.lineWidth = logoSize * 0.05;
+        ctx.globalAlpha = 0.9;
         ctx.beginPath();
         ctx.arc(0, 0, logoSize / 2 + logoSize * 0.05, 0, Math.PI * 2);
         ctx.stroke();
         // Layer 2: inner sharp neon ring with second color
         ctx.shadowColor = animatedNeonColor2;
-        ctx.shadowBlur = logoSize * 0.12;
+        ctx.shadowBlur = logoSize * 0.18;
         ctx.strokeStyle = animatedNeonColor2;
-        ctx.lineWidth = logoSize * 0.025;
+        ctx.lineWidth = logoSize * 0.035;
         ctx.globalAlpha = 1.0;
         ctx.beginPath();
         ctx.arc(0, 0, logoSize / 2 + logoSize * 0.02, 0, Math.PI * 2);
@@ -1084,7 +1108,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
       }
       // Cycle neon border hue every rAF frame (smooth color cycling)
       subNeonHueRef.current = (subNeonHueRef.current + 0.8) % 360;
-      setSubBorderColor(`hsl(${subNeonHueRef.current}, 100%, 60%)`);
+      setSubBorderColor(`hsl(${subNeonHueRef.current}, 100%, 75%)`);
       animFrame = requestAnimationFrame(syncLoop);
     };
     // ╚══ END TWO-FACTOR LOCK: AV-SYNC-8000-SMOOTH-v3 ══╝
@@ -1306,8 +1330,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 <div
                   className={`relative w-full aspect-square ${logo.isCircle ? "rounded-full" : "rounded-none"} overflow-hidden`}
                   style={{
-                    boxShadow: `0 0 15px ${logo.neonColor}, 0 0 30px ${logo.neonColor}`,
-                    border: `2px solid ${logo.neonColor}`
+                    boxShadow: `0 0 20px ${logo.neonColor}, 0 0 40px ${logo.neonColor}, 0 0 60px ${logo.neonColor}55`,
+                    border: `2.5px solid ${logo.neonColor}`
                   }}>
 
                     <img
@@ -1341,8 +1365,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
                   backdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
                   WebkitBackdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
                   // Dynamic neon cycling border (replaces static dashed border)
-                  border: `2px solid ${subBorderColor}`,
-                  boxShadow: `0 0 8px ${subBorderColor}, inset 0 0 6px ${subBorderColor}22`,
+                  border: `2.5px solid ${subBorderColor}`,
+                  boxShadow: `0 0 14px ${subBorderColor}, 0 0 28px ${subBorderColor}66, inset 0 0 8px ${subBorderColor}33`,
                   touchAction: 'none',
                   boxSizing: 'border-box',
                   overflow: 'hidden',
