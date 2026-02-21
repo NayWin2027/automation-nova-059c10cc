@@ -360,6 +360,53 @@ export async function burnSubtitles(
   return new Blob([arrayBuffer], { type: "video/mp4" });
 }
 
+export async function compressVideoFor480p(
+  videoFile: File,
+  onProgress?: ProgressCallback
+): Promise<Blob> {
+  if (!ffmpeg || !ffmpegLoaded) {
+    await loadFFmpeg(onProgress);
+  }
+
+  if (!ffmpeg) {
+    throw new Error("FFMPEG not initialized");
+  }
+
+  onProgress?.(10, "Preparing video for compression...");
+
+  const inputData = await fetchFile(videoFile);
+  await ffmpeg.writeFile("input.mp4", inputData);
+
+  onProgress?.(20, "Compressing video to 480p...");
+
+  await ffmpeg.exec([
+    "-i", "input.mp4",
+    "-vf", "scale=-2:480",
+    "-c:v", "libx264",
+    "-preset", "ultrafast",
+    "-crf", "28",
+    "-c:a", "aac",
+    "-b:a", "96k",
+    "-movflags", "+faststart",
+    "compressed.mp4"
+  ]);
+
+  onProgress?.(90, "Finalizing compressed video...");
+
+  const outputData = await ffmpeg.readFile("compressed.mp4");
+
+  await ffmpeg.deleteFile("input.mp4");
+  await ffmpeg.deleteFile("compressed.mp4");
+
+  onProgress?.(100, "Compression complete!");
+
+  if (typeof outputData === "string") {
+    throw new Error("Unexpected string output from FFMPEG");
+  }
+  const arrayBuffer = outputData.buffer.slice(outputData.byteOffset, outputData.byteOffset + outputData.byteLength) as ArrayBuffer;
+  return new Blob([arrayBuffer], { type: "video/mp4" });
+}
+
 export function isFFmpegSupported(): boolean {
   // Check for SharedArrayBuffer support (required for ffmpeg.wasm)
   return typeof SharedArrayBuffer !== "undefined";
