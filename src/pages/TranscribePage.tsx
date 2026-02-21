@@ -252,8 +252,9 @@ export default function TranscriptionView() {
       const tierCredits = getSelectedTierCredits();
       const ownApiKey = apiType === "own" ? apiKey : undefined;
 
-      const scriptController = new AbortController();
-      const scriptTimeout = setTimeout(() => scriptController.abort(), 300000); // 5-min timeout
+      // Upload phase uses its own abort controller (10-min for large uploads)
+      const uploadController = new AbortController();
+      const uploadTimeout = setTimeout(() => uploadController.abort(), 600000); // 10-min upload timeout
 
       let response: Response;
 
@@ -273,7 +274,7 @@ export default function TranscriptionView() {
             mimeType: selectedFile.type || "video/mp4",
             apiKey: ownApiKey || undefined,
           }),
-          signal: scriptController.signal,
+          signal: uploadController.signal,
         }
       );
       const uploadUrlData = await uploadUrlRes.json();
@@ -310,7 +311,7 @@ export default function TranscriptionView() {
             method: "POST",
             headers: { Authorization: `Bearer ${token}` },
             body: chunkForm,
-            signal: scriptController.signal,
+            signal: uploadController.signal,
           }
         );
 
@@ -328,7 +329,12 @@ export default function TranscriptionView() {
         throw new Error("File URI ရယူ၍မရပါ။");
       }
 
+      clearTimeout(uploadTimeout);
       console.log("[TranscribePage] Step 3: Sending fileUri to script generator...", fileUri);
+
+      // Script generation phase uses its own timeout (5-min)
+      const scriptController = new AbortController();
+      const scriptTimeout = setTimeout(() => scriptController.abort(), 300000); // 5-min script timeout
 
       // Step 3: Send only fileUri to recap-script-generator (no file data = no memory issue)
       response = await fetch(
