@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.promotion-tracking]
 verify_jwt = false
+
+[functions.get-upload-url]
+verify_jwt = false

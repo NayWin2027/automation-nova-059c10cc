@@ -241,30 +241,77 @@ export default function TranscriptionView() {
     setGeneratedScript("");
 
     try {
-      // Send file directly via FormData to the edge function
-      const formData = new FormData();
-      formData.append("file", selectedFile);
-      formData.append("niche", scriptNiche);
-      formData.append("language", selectedLanguage);
-      if (apiType === "own") {
-        formData.append("apiKey", apiKey);
-      }
-      const tierCredits = getSelectedTierCredits();
-      if (tierCredits !== undefined && apiType === "app") {
-        formData.append("customCreditCost", tierCredits.toString());
-      }
-
       const session = await supabase.auth.getSession();
       const token = session.data.session?.access_token;
 
+      // === STEP 1: Get resumable upload URL from backend ===
+      const mimeType = selectedFile.type || "video/mp4";
+      const ownApiKey = apiType === "own" ? apiKey : undefined;
+
+      const urlRes = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-upload-url`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            fileName: selectedFile.name,
+            fileSize: selectedFile.size,
+            mimeType,
+            ...(ownApiKey ? { apiKey: ownApiKey } : {}),
+          }),
+        }
+      );
+
+      if (!urlRes.ok) {
+        const errData = await urlRes.json().catch(() => ({}));
+        throw new Error(errData.error || `Upload URL failed: ${urlRes.status}`);
+      }
+
+      const { uploadUrl } = await urlRes.json();
+
+      // === STEP 2: Upload file DIRECTLY from browser to Google ===
+      console.log("[TranscribePage] Direct uploading to Google...");
+      const arrayBuffer = await selectedFile.arrayBuffer();
+
+      const uploadRes = await fetch(uploadUrl, {
+        method: "POST",
+        headers: {
+          "X-Goog-Upload-Offset": "0",
+          "X-Goog-Upload-Command": "upload, finalize",
+          "Content-Length": selectedFile.size.toString(),
+        },
+        body: arrayBuffer,
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error(`Direct upload failed: ${uploadRes.status}`);
+      }
+
+      const uploadResult = await uploadRes.json();
+      const fileUri = uploadResult.file?.uri || uploadResult.file?.name;
+      console.log("[TranscribePage] File uploaded directly, URI:", fileUri);
+
+      // === STEP 3: Send only fileUri to recap-script-generator (no file transfer!) ===
+      const tierCredits = getSelectedTierCredits();
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recap-script-generator`,
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${token}`
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
           },
-          body: formData
+          body: JSON.stringify({
+            fileUri,
+            fileMimeType: mimeType,
+            niche: scriptNiche,
+            language: selectedLanguage,
+            ...(ownApiKey ? { apiKey: ownApiKey } : {}),
+            ...(tierCredits !== undefined && apiType === "app" ? { customCreditCost: tierCredits } : {}),
+          }),
         }
       );
 
