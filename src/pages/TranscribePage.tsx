@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { compressVideoFor480p, isFFmpegSupported } from "@/services/ffmpegService";
 import { useNavigate } from "react-router-dom";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { Download, ChevronDown, Loader2, Copy, Check, Sparkles, X, Edit3, Save, Home } from "lucide-react";
@@ -252,6 +253,30 @@ export default function TranscriptionView() {
       const tierCredits = getSelectedTierCredits();
       const ownApiKey = apiType === "own" ? apiKey : undefined;
 
+      // Step 0: Compress video to 480p if it's a video file (reduces upload size 4-5x, visual content preserved)
+      let fileToUpload: File | Blob = selectedFile;
+      let uploadFileName = selectedFile.name;
+      let uploadMimeType = selectedFile.type || "video/mp4";
+      let uploadFileSize = selectedFile.size;
+
+      if (selectedFile.type.startsWith("video/") && isFFmpegSupported()) {
+        try {
+          toast.info("Video ကို 480p compress လုပ်နေပါတယ်... Upload ပိုမြန်ပါမယ်");
+          const compressed = await compressVideoFor480p(selectedFile, (progress, stage) => {
+            console.log(`[TranscribePage] Compress: ${progress}% - ${stage}`);
+          });
+          console.log(`[TranscribePage] Compressed: ${selectedFile.size} → ${compressed.size} (${Math.round(compressed.size / selectedFile.size * 100)}%)`);
+          fileToUpload = compressed;
+          uploadFileName = selectedFile.name.replace(/\.[^.]+$/, "_compressed.mp4");
+          uploadMimeType = "video/mp4";
+          uploadFileSize = compressed.size;
+          toast.success(`Compress ပြီးပါပြီ! ${Math.round(selectedFile.size / 1024 / 1024)}MB → ${Math.round(compressed.size / 1024 / 1024)}MB`);
+        } catch (compressErr) {
+          console.warn("[TranscribePage] Compression failed, uploading original:", compressErr);
+          toast.warning("Compress မရလို့ original file နဲ့ upload လုပ်ပါမယ်");
+        }
+      }
+
       // Upload phase uses its own abort controller (10-min for large uploads)
       const uploadController = new AbortController();
       const uploadTimeout = setTimeout(() => uploadController.abort(), 600000); // 10-min upload timeout
@@ -259,7 +284,7 @@ export default function TranscriptionView() {
       let response: Response;
 
       // Step 1: Get resumable upload URL from backend (avoids CORS issues)
-      console.log("[TranscribePage] Step 1: Getting upload URL...", selectedFile.size);
+      console.log("[TranscribePage] Step 1: Getting upload URL...", uploadFileSize);
       const uploadUrlRes = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-upload-url`,
         {
@@ -269,9 +294,9 @@ export default function TranscriptionView() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            fileName: selectedFile.name,
-            fileSize: selectedFile.size,
-            mimeType: selectedFile.type || "video/mp4",
+            fileName: uploadFileName,
+            fileSize: uploadFileSize,
+            mimeType: uploadMimeType,
             apiKey: ownApiKey || undefined,
           }),
           signal: uploadController.signal,
@@ -286,14 +311,14 @@ export default function TranscriptionView() {
       // Step 2: Upload file in 8MB chunks via edge function proxy (avoids CORS + memory issues)
       console.log("[TranscribePage] Step 2: Uploading via chunked proxy...");
       const CHUNK_SIZE = 8 * 1024 * 1024; // 8MB
-      const totalChunks = Math.ceil(selectedFile.size / CHUNK_SIZE);
+      const totalChunks = Math.ceil(uploadFileSize / CHUNK_SIZE);
       let fileUri = "";
-      let fileMimeType = selectedFile.type || "video/mp4";
+      let fileMimeType = uploadMimeType;
 
       for (let i = 0; i < totalChunks; i++) {
         const start = i * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, selectedFile.size);
-        const chunkBlob = selectedFile.slice(start, end);
+        const end = Math.min(start + CHUNK_SIZE, uploadFileSize);
+        const chunkBlob = fileToUpload.slice(start, end);
         const isLast = i === totalChunks - 1;
         const command = isLast ? "upload, finalize" : "upload";
 
