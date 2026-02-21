@@ -76,7 +76,7 @@ interface ResultViewProps {
   voiceMode: 'modern' | 'normal';
   onVoiceModeChange: (mode: 'modern' | 'normal') => void;
   onRecapSaved?: () => void;
-  onVideoReady?: () => void; // Called when rendered video blob is ready ("Recap Video Ready!" shown)
+  onVideoReady?: (outputDurationSecs: number) => void; // Called when rendered video blob is ready ("Recap Video Ready!" shown)
   creditPerMinRate?: number; // Admin-configurable CR/MIN rate for display
   audioUrl?: string;
   videoUrl?: string;
@@ -517,7 +517,18 @@ export const ResultView: React.FC<ResultViewProps> = ({
       document.body.removeChild(a);
 
       setRenderedBlobUrl(url);
-      onVideoReady?.(); // Trigger credit deduction: "Recap Video Ready!" ပေါ်လာပြီ
+
+      // Get OUTPUT video duration for accurate credit deduction
+      const outputDuration: number = await new Promise((resolve) => {
+        const tempVid = document.createElement('video');
+        tempVid.preload = 'metadata';
+        const tempUrl = URL.createObjectURL(blob);
+        tempVid.onloadedmetadata = () => { resolve(tempVid.duration || 0); URL.revokeObjectURL(tempUrl); };
+        tempVid.onerror = () => { resolve(0); URL.revokeObjectURL(tempUrl); };
+        tempVid.src = tempUrl;
+      });
+      console.log('[CREDIT] Output video duration:', outputDuration, 'seconds');
+      onVideoReady?.(outputDuration); // Trigger credit deduction with OUTPUT duration
       setIsRendering(false);
       setIsRecapPlaying(false);
 
@@ -2005,8 +2016,8 @@ const RecapVideoNVPage: React.FC = () => {
   const [showApiKey, setShowApiKey] = useState(false);
 
   // ── CREDIT DEDUCTION: Called via onVideoReady callback when "Recap Video Ready!" appears ──
-  const handleVideoReady = useCallback(async () => {
-    console.log('[CREDIT] handleVideoReady called. didDeduct:', didDeductRef.current, 'apiMode:', apiMode);
+  const handleVideoReady = useCallback(async (outputDurationSecs: number) => {
+    console.log('[CREDIT] handleVideoReady called. outputDuration:', outputDurationSecs, 'didDeduct:', didDeductRef.current, 'apiMode:', apiMode);
     if (didDeductRef.current) return;
     if (apiMode === 'own') return; // Own API key — no credit deduction
 
@@ -2029,11 +2040,12 @@ const RecapVideoNVPage: React.FC = () => {
       console.warn('[CREDIT] Could not check promotion mode, proceeding with deduction');
     }
 
-    const durationSecs = videoDurationRef.current || 0;
+    // Use OUTPUT video duration (passed from rendered blob), not input video duration
+    const durationSecs = outputDurationSecs || 0;
     const durationMins = durationSecs / 60;
     const customCost = Math.max(1, Math.ceil(durationMins) * creditPerMinRate);
 
-    console.log('[CREDIT] Deducting:', customCost, 'credits (duration:', durationSecs, 's, rate:', creditPerMinRate, 'CR/MIN)');
+    console.log('[CREDIT] Deducting:', customCost, 'credits (output duration:', durationSecs, 's, rate:', creditPerMinRate, 'CR/MIN)');
     didDeductRef.current = true; // Mark as deducted before async call (idempotency)
 
     try {
