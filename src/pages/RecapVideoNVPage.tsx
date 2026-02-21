@@ -2026,7 +2026,7 @@ const RecapVideoNVPage: React.FC = () => {
     { value: 'Algieba', label: 'Algieba', gender: 'Male' },
   ];
   const [selectedLanguage, setSelectedLanguage] = useState('my-MM');
-  const [selectedVoice, setSelectedVoice] = useState('Kore');
+  const [selectedVoice, setSelectedVoice] = useState('Charon');
   const [langPopoverOpen, setLangPopoverOpen] = useState(false);
 
   // API Mode
