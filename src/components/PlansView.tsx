@@ -115,7 +115,8 @@ const PlansView: React.FC = () => {
     thaiBankAcc: "6654523725",
     thaiBankHolder: "MR TUN TUN OO",
     messengerLink: "https://m.me/NAYWIN2027",
-    messengerLink2: "https://m.me/koyeswan.tds"
+    messengerLink2: "https://m.me/koyeswan.tds",
+    proEnabled: true,
   };
 
   useEffect(() => {
@@ -651,7 +652,25 @@ const PlansView: React.FC = () => {
         }
       </div>
 
-      {/* 3. Premium Card */}
+      {/* 3. Premium (Pro) Card - Toggleable */}
+      {isEditing && (
+        <div className="flex items-center justify-between p-4 rounded-2xl border border-white/10 bg-slate-900/60">
+          <span className="text-xs font-black text-white uppercase tracking-widest">PRO PLAN VISIBILITY</span>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={editData?.proEnabled ?? true}
+              onChange={(e) => setEditData({ ...editData!, proEnabled: e.target.checked })}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+            <span className="ml-3 text-[10px] font-black uppercase tracking-widest text-slate-400">
+              {editData?.proEnabled ? 'ON' : 'OFF'}
+            </span>
+          </label>
+        </div>
+      )}
+      {(data.proEnabled !== false) && (
       <div className="neon-glass rounded-[48px] p-10 space-y-8 relative overflow-hidden border border-white/5 shadow-[0_0_40px_rgba(0,0,0,0.5)]">
         <div className="absolute top-0 right-0 bg-amber-500 px-10 py-2 rotate-45 translate-x-10 translate-y-2 shadow-lg z-10">
           <span className="text-[10px] font-black text-white uppercase tracking-widest">BEST VALUE</span>
@@ -800,6 +819,7 @@ const PlansView: React.FC = () => {
           </ul>
         }
       </div>
+      )}
 
       {/* 4. Credit Top Up Section */}
       <div className="relative py-12">
