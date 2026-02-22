@@ -442,7 +442,7 @@ export type Database = {
       verify_admin_secret: { Args: { secret_input: string }; Returns: boolean }
     }
     Enums: {
-      app_role: "admin" | "user"
+      app_role: "admin" | "user" | "master_admin"
       subscription_plan: "free" | "pro" | "premium"
     }
     CompositeTypes: {
@@ -571,7 +571,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "user"],
+      app_role: ["admin", "user", "master_admin"],
       subscription_plan: ["free", "pro", "premium"],
     },
   },
