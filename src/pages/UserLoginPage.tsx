@@ -254,7 +254,7 @@ const UserLoginPage: React.FC = () => {
                     setShowGateDialog(false);
                     setGateCode("");
                     setGateAttempts(0);
-                    navigate("/admin/login");
+                    navigate("/x9k2m7");
                   } else {
                     const newAttempts = gateAttempts + 1;
                     setGateAttempts(newAttempts);
@@ -283,7 +283,7 @@ const UserLoginPage: React.FC = () => {
                     setShowGateDialog(false);
                     setGateCode("");
                     setGateAttempts(0);
-                    navigate("/admin/login");
+                    navigate("/x9k2m7");
                   } else {
                     const newAttempts = gateAttempts + 1;
                     setGateAttempts(newAttempts);
