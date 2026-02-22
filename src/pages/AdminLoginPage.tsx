@@ -16,6 +16,10 @@ const loginSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
+const ADMIN_GATE_CODE = "k$@w$@n008060964999777999";
+const GATE_SESSION_KEY = "admin_gate_verified";
+const MAX_GATE_ATTEMPTS = 3;
+
 const AdminLoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -27,10 +31,24 @@ const AdminLoginPage: React.FC = () => {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
    
+  // Gate code state
+  const [gateVerified, setGateVerified] = useState(false);
+  const [gateCode, setGateCode] = useState("");
+  const [gateAttempts, setGateAttempts] = useState(0);
+  const [gateLocked, setGateLocked] = useState(false);
+
   // 2FA state
   const [show2FA, setShow2FA] = useState(false);
   const [totpCode, setTotpCode] = useState("");
   const [pendingSession, setPendingSession] = useState<{ userId: string; token: string } | null>(null);
+
+  // Check gate session on mount
+  useEffect(() => {
+    const verified = sessionStorage.getItem(GATE_SESSION_KEY);
+    if (verified === "true") {
+      setGateVerified(true);
+    }
+  }, []);
 
   useEffect(() => {
     // Check if already logged in as admin - MUST also check 2FA
@@ -114,6 +132,33 @@ const AdminLoginPage: React.FC = () => {
     }
   };
  
+  const verifyGateCode = () => {
+    if (gateLocked) return;
+    if (gateCode === ADMIN_GATE_CODE) {
+      sessionStorage.setItem(GATE_SESSION_KEY, "true");
+      setGateVerified(true);
+      setGateCode("");
+    } else {
+      const newAttempts = gateAttempts + 1;
+      setGateAttempts(newAttempts);
+      setGateCode("");
+      if (newAttempts >= MAX_GATE_ATTEMPTS) {
+        setGateLocked(true);
+        toast({
+          title: "🔒 Access Locked",
+          description: "Too many failed attempts. Please refresh and try again.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "❌ Invalid Code",
+          description: `Incorrect access code. ${MAX_GATE_ATTEMPTS - newAttempts} attempts remaining.`,
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
   const cancelLogin = async () => {
     await supabase.auth.signOut();
     setShow2FA(false);
@@ -220,6 +265,70 @@ const AdminLoginPage: React.FC = () => {
       setLoading(false);
     }
   };
+
+  // Gate code verification UI
+  if (!gateVerified) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-destructive/80 to-destructive mb-4">
+              <Shield className="w-8 h-8 text-destructive-foreground" />
+            </div>
+            <h1 className="text-2xl font-bold text-foreground">Restricted Area</h1>
+            <p className="text-muted-foreground mt-2">This page requires authorized access</p>
+          </div>
+
+          <Card className="border-border/50 bg-card/50 backdrop-blur">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Lock className="w-5 h-5 text-destructive" />
+                Access Code Required
+              </CardTitle>
+              <CardDescription>
+                Enter the security access code to proceed
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {gateLocked ? (
+                <div className="text-center py-4">
+                  <p className="text-destructive font-semibold">🔒 Access Locked</p>
+                  <p className="text-muted-foreground text-sm mt-2">Too many failed attempts. Refresh and try again.</p>
+                </div>
+              ) : (
+                <>
+                  <Input
+                    type="password"
+                    placeholder="Enter access code"
+                    value={gateCode}
+                    onChange={(e) => setGateCode(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && verifyGateCode()}
+                  />
+                  <Button
+                    onClick={verifyGateCode}
+                    className="w-full"
+                    variant="destructive"
+                    disabled={!gateCode}
+                  >
+                    Verify Access
+                  </Button>
+                </>
+              )}
+
+              <Button
+                variant="ghost"
+                className="w-full"
+                onClick={() => navigate("/")}
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Go Back
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   // 2FA Verification UI
   if (show2FA) {
