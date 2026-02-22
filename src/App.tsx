@@ -30,7 +30,7 @@ const StoryCreatorPage = lazyRetry(() => import("./pages/StoryCreatorPage"));
 const NovelTransPage = lazyRetry(() => import("./pages/NovelTransPage"));
 const ThumbnailPage = lazyRetry(() => import("./pages/ThumbnailPage"));
 const SrtSubPage = lazyRetry(() => import("./pages/SrtSubPage"));
-const AdminRegisterPage = lazyRetry(() => import("./pages/AdminRegisterPage"));
+
 const AdminLoginPage = lazyRetry(() => import("./pages/AdminLoginPage"));
 const AdminDashboardPage = lazyRetry(() => import("./pages/AdminDashboardPage"));
 const AdminRoute = lazyRetry(() => import("./components/AdminRoute"));
@@ -64,7 +64,7 @@ const App = () => (
             <Route path="/thumbnail" element={<ThumbnailPage />} />
             <Route path="/srt" element={<SrtSubPage />} />
             {/* Admin Routes */}
-            <Route path="/admin/register" element={<AdminRegisterPage />} />
+            
             <Route path="/admin/login" element={<AdminLoginPage />} />
             <Route path="/admin/dashboard" element={<Suspense fallback={null}><AdminRoute><AdminDashboardPage /></AdminRoute></Suspense>} />
             {/* User Routes */}
