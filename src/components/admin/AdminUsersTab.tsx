@@ -6,9 +6,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useAdmin } from "@/hooks/useAdmin";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import { 
   UserPlus, Trash2, Ban, Key, Coins, Crown, 
-  Smartphone, MoreVertical, Search, ShieldCheck, Sparkles
+  Smartphone, MoreVertical, Search, ShieldCheck, Sparkles, ShieldAlert
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -44,6 +45,10 @@ const AdminUsersTab: React.FC = () => {
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<typeof profiles[0] | null>(null);
   
+  // Master/Sub admin state
+  const [isMasterAdmin, setIsMasterAdmin] = useState(false);
+  const [adminRolesMap, setAdminRolesMap] = useState<Record<string, string>>({});
+
   // Changed from email to userId for ID-based auth
   const [newUser, setNewUser] = useState({
     userId: "",
@@ -56,10 +61,45 @@ const AdminUsersTab: React.FC = () => {
   const [banReason, setBanReason] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Fetch profiles on mount
+  // Fetch profiles and admin roles on mount
   useEffect(() => {
     fetchProfiles();
+    fetchAdminRoles();
   }, []);
+
+  const fetchAdminRoles = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: { action: 'get_admin_roles' }
+      });
+      if (!error && data?.success) {
+        setIsMasterAdmin(data.isMasterAdmin === true);
+        if (data.adminRoles && Array.isArray(data.adminRoles)) {
+          const map: Record<string, string> = {};
+          for (const r of data.adminRoles) {
+            // Keep the highest role per user
+            if (!map[r.user_id] || r.role === 'master_admin') {
+              map[r.user_id] = r.role;
+            }
+          }
+          setAdminRolesMap(map);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch admin roles:', err);
+    }
+  };
+
+  // Check if a user is a master admin (only visible to master admins)
+  const isUserMasterAdmin = (userId: string) => adminRolesMap[userId] === 'master_admin';
+  const isUserAdmin = (userId: string) => adminRolesMap[userId] === 'admin' || adminRolesMap[userId] === 'master_admin';
+
+  // Sub admins cannot perform destructive actions on master admins
+  const canPerformAction = (targetUserId: string) => {
+    if (isMasterAdmin) return true;
+    if (isUserMasterAdmin(targetUserId)) return false;
+    return true;
+  };
 
   const filteredProfiles = profiles.filter(
     (p) =>
@@ -383,9 +423,23 @@ const AdminUsersTab: React.FC = () => {
             filteredProfiles.map((profile) => (
               <div key={profile.id} className="table-luxury-row grid grid-cols-6 gap-2 px-3 py-2 items-center">
                 <div>
-                  <p className="text-xs font-medium text-foreground truncate">
-                    {profile.display_name || getUserDisplayId(profile.email)}
-                  </p>
+                  <div className="flex items-center gap-1">
+                    <p className="text-xs font-medium text-foreground truncate">
+                      {profile.display_name || getUserDisplayId(profile.email)}
+                    </p>
+                    {/* Master/Sub admin badges - only visible to master admins */}
+                    {isMasterAdmin && isUserMasterAdmin(profile.user_id) && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-bold whitespace-nowrap flex items-center gap-0.5">
+                        <ShieldAlert className="w-2.5 h-2.5" />
+                        MASTER
+                      </span>
+                    )}
+                    {isMasterAdmin && !isUserMasterAdmin(profile.user_id) && isUserAdmin(profile.user_id) && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-bold whitespace-nowrap">
+                        SUB
+                      </span>
+                    )}
+                  </div>
                   <p className="text-2xs text-muted-foreground truncate">{getUserDisplayId(profile.email)}</p>
                 </div>
                 <div>
@@ -460,11 +514,15 @@ const AdminUsersTab: React.FC = () => {
                       <DropdownMenuSeparator className="bg-border/30" />
                       <DropdownMenuItem 
                         onClick={() => {
+                          if (!canPerformAction(profile.user_id)) {
+                            toast({ title: "⛔ Access Denied", description: "Cannot modify a Master Admin", variant: "destructive" });
+                            return;
+                          }
                           setSelectedUser(profile.user_id);
                           setSelectedProfile(profile);
                           setBanDialogOpen(true);
                         }}
-                        className={`text-xs ${profile.is_banned ? "text-emerald-400" : "text-orange-400"}`}
+                        className={`text-xs ${!canPerformAction(profile.user_id) ? "opacity-40 cursor-not-allowed" : profile.is_banned ? "text-emerald-400" : "text-orange-400"}`}
                       >
                         {profile.is_banned ? (
                           <>
@@ -479,8 +537,14 @@ const AdminUsersTab: React.FC = () => {
                         )}
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        onClick={() => handleDeleteUser(profile.user_id)}
-                        className="text-xs text-destructive"
+                        onClick={() => {
+                          if (!canPerformAction(profile.user_id)) {
+                            toast({ title: "⛔ Access Denied", description: "Cannot delete a Master Admin", variant: "destructive" });
+                            return;
+                          }
+                          handleDeleteUser(profile.user_id);
+                        }}
+                        className={`text-xs ${!canPerformAction(profile.user_id) ? "opacity-40 cursor-not-allowed text-muted-foreground" : "text-destructive"}`}
                       >
                         <Trash2 className="w-3 h-3 mr-2" />
                         Delete

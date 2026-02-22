@@ -54,7 +54,65 @@ serve(async (req) => {
 
     const { action, ...params } = await req.json();
 
+    // Helper: check if a target user is a master_admin
+    const isTargetMasterAdmin = async (targetUserId: string) => {
+      const { data } = await supabaseAdmin.rpc('has_role', {
+        _user_id: targetUserId,
+        _role: 'master_admin'
+      });
+      return data === true;
+    };
+
+    // Helper: check if the calling user is a master_admin
+    const isCallerMasterAdmin = await (async () => {
+      const { data } = await supabaseAdmin.rpc('has_role', {
+        _user_id: user.id,
+        _role: 'master_admin'
+      });
+      return data === true;
+    })();
+
     switch (action) {
+      case 'check_role': {
+        // Return caller's admin type and target user's roles
+        const { targetUserId } = params;
+        let targetIsMaster = false;
+        let targetIsAdmin = false;
+        if (targetUserId) {
+          targetIsMaster = await isTargetMasterAdmin(targetUserId);
+          const { data: adminCheck } = await supabaseAdmin.rpc('has_role', {
+            _user_id: targetUserId,
+            _role: 'admin'
+          });
+          targetIsAdmin = adminCheck === true;
+        }
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            isMasterAdmin: isCallerMasterAdmin,
+            target: targetUserId ? { isMasterAdmin: targetIsMaster, isAdmin: targetIsAdmin } : undefined
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case 'get_admin_roles': {
+        // Return admin role info for all admin users - only master admins get full info
+        const { data: allAdminRoles } = await supabaseAdmin
+          .from('user_roles')
+          .select('user_id, role')
+          .in('role', ['admin', 'master_admin']);
+
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            isMasterAdmin: isCallerMasterAdmin,
+            adminRoles: isCallerMasterAdmin ? allAdminRoles : [] 
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       case 'create_user': {
         const { email, password, plan, credits } = params;
         const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
@@ -84,6 +142,13 @@ serve(async (req) => {
 
       case 'delete_user': {
         const { userId } = params;
+        // Protect master admins from non-master admins
+        if (!isCallerMasterAdmin && await isTargetMasterAdmin(userId)) {
+          return new Response(
+            JSON.stringify({ error: "Cannot delete a Master Admin" }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
         const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(userId);
         if (deleteError) throw deleteError;
 
@@ -108,6 +173,13 @@ serve(async (req) => {
 
       case 'ban_user': {
         const { userId, banned, reason } = params;
+        // Protect master admins from non-master admins
+        if (!isCallerMasterAdmin && await isTargetMasterAdmin(userId)) {
+          return new Response(
+            JSON.stringify({ error: "Cannot ban a Master Admin" }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
         const { error: banError } = await supabaseAdmin
           .from('profiles')
           .update({ 
