@@ -460,7 +460,7 @@ const AdminUsersTab: React.FC = () => {
               <span className="text-2xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400">Active</span>
               }
                 </div>
-                <div className="text-2xs text-muted-foreground">
+                <div className="text-2xs text-neon-amber">
                   {new Date(profile.created_at).toLocaleDateString()}
                 </div>
                 <div className="text-right">
