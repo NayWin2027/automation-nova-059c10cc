@@ -405,12 +405,12 @@ const AdminUsersTab: React.FC = () => {
       <div className="table-luxury">
         {/* Table Header */}
         <div className="table-luxury-header grid grid-cols-6 gap-2 px-3 py-2">
-          <span className="text-2xs font-medium text-muted-foreground uppercase tracking-wider">User</span>
-          <span className="text-2xs font-medium text-muted-foreground uppercase tracking-wider">Plan</span>
-          <span className="text-2xs font-medium text-muted-foreground uppercase tracking-wider">Credits</span>
-          <span className="text-2xs font-medium text-muted-foreground uppercase tracking-wider">Status</span>
-          <span className="text-2xs font-medium text-muted-foreground uppercase tracking-wider">Joined</span>
-          <span className="text-2xs font-medium text-muted-foreground uppercase tracking-wider text-right">Actions</span>
+          <span className="text-2xs font-medium uppercase tracking-wider text-neon-cyan">User</span>
+          <span className="text-2xs font-medium uppercase tracking-wider text-neon-cyan">Plan</span>
+          <span className="text-2xs font-medium uppercase tracking-wider text-neon-rose">Credits</span>
+          <span className="text-2xs font-medium uppercase tracking-wider text-neon-green">Status</span>
+          <span className="text-2xs font-medium uppercase tracking-wider text-gold-dark">Joined</span>
+          <span className="text-2xs font-medium uppercase tracking-wider text-right text-neon-rose">Actions</span>
         </div>
 
         {/* Table Body */}
@@ -440,7 +440,7 @@ const AdminUsersTab: React.FC = () => {
                       </span>
                 }
                   </div>
-                  <p className="text-muted-foreground truncate text-base">{getUserDisplayId(profile.email)}</p>
+                  <p className="truncate text-base text-yellow-200">{getUserDisplayId(profile.email)}</p>
                 </div>
                 <div>
                   <span className={`inline-flex items-center gap-1 rounded-full ${getPlanBadgeClass(profile.plan)}`}>
