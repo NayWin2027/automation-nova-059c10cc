@@ -229,16 +229,26 @@ serve(async (req) => {
       case 'get_stats': {
         const { data: profiles, error: profilesError } = await supabaseAdmin
           .from('profiles')
-          .select('plan, is_banned');
+          .select('user_id, plan, is_banned');
 
         if (profilesError) throw profilesError;
 
+        // Get all admin user_ids
+        const { data: adminRoles } = await supabaseAdmin
+          .from('user_roles')
+          .select('user_id')
+          .in('role', ['admin', 'master_admin']);
+
+        const adminUserIds = new Set((adminRoles || []).map(r => r.user_id));
+        const nonAdminProfiles = (profiles || []).filter(p => !adminUserIds.has(p.user_id));
+
         const stats = {
-          totalUsers: profiles?.length || 0,
-          freeUsers: profiles?.filter(p => p.plan === 'free').length || 0,
-          proUsers: profiles?.filter(p => p.plan === 'pro').length || 0,
-          premiumUsers: profiles?.filter(p => p.plan === 'premium').length || 0,
-          bannedUsers: profiles?.filter(p => p.is_banned).length || 0,
+          totalUsers: nonAdminProfiles.length,
+          totalAdmins: adminUserIds.size,
+          freeUsers: nonAdminProfiles.filter(p => p.plan === 'free').length,
+          proUsers: nonAdminProfiles.filter(p => p.plan === 'pro').length,
+          premiumUsers: nonAdminProfiles.filter(p => p.plan === 'premium').length,
+          bannedUsers: nonAdminProfiles.filter(p => p.is_banned).length,
         };
 
         return new Response(
