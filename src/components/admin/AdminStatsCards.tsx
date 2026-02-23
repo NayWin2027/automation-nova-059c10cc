@@ -65,7 +65,7 @@ const AdminStatsCards: React.FC<AdminStatsCardsProps> = ({ stats }) => {
             <div className={`w-6 h-6 rounded-lg ${stat.iconBg} flex items-center justify-center`}>
               <stat.icon className="w-3 h-3 text-foreground" />
             </div>
-            <span className="font-medium text-muted-foreground uppercase tracking-wider text-sm">
+            <span className="font-medium uppercase tracking-wider text-sm text-neon-cyan">
               {stat.title}
             </span>
           </div>
