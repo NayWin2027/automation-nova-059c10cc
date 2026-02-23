@@ -19,10 +19,15 @@ interface PromotionRecord {
 }
 
 const AdminActivityTab: React.FC = () => {
-  const { activityLogs, profiles, fetchActivityLogs } = useAdmin();
+  const { activityLogs, profiles, fetchActivityLogs, fetchProfiles } = useAdmin();
   const [search, setSearch] = useState("");
   const [selectedUser, setSelectedUser] = useState<string>("all");
   const [promotionData, setPromotionData] = useState<PromotionRecord[]>([]);
+
+  // Fetch profiles first so we can resolve user info
+  useEffect(() => {
+    fetchProfiles();
+  }, []);
 
   useEffect(() => {
     if (selectedUser === "all") {
