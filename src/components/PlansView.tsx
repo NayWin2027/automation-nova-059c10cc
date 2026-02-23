@@ -539,7 +539,7 @@ const PlansView: React.FC = () => {
           }
           <button
             onClick={() => setShowCheckout(true)}
-            className="bg-indigo-600 px-8 py-3 rounded-2xl font-black text-[10px] shadow-[0_0_25px_rgba(79,70,229,0.5)] text-white uppercase tracking-widest shrink-0 active:scale-95 transition-all hover:scale-105">
+            className="neon-buy-now-btn bg-indigo-600 px-8 py-3 rounded-2xl font-black text-[10px] shadow-[0_0_25px_rgba(79,70,229,0.5)] text-white uppercase tracking-widest shrink-0 active:scale-95 transition-all hover:scale-105">
 
             BUY NOW
           </button>
@@ -710,7 +710,7 @@ const PlansView: React.FC = () => {
           }
           <button
             onClick={() => setShowCheckout(true)}
-            className="bg-indigo-600 px-8 py-3 rounded-2xl font-black text-[10px] shadow-[0_0_25px_rgba(79,70,229,0.5)] text-white uppercase tracking-widest shrink-0 active:scale-95 transition-all hover:scale-105">
+            className="neon-buy-now-btn bg-indigo-600 px-8 py-3 rounded-2xl font-black text-[10px] shadow-[0_0_25px_rgba(79,70,229,0.5)] text-white uppercase tracking-widest shrink-0 active:scale-95 transition-all hover:scale-105">
 
             BUY NOW
           </button>

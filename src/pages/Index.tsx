@@ -178,6 +178,12 @@ const Index = () => {
     return !setting || setting.is_enabled;
   });
   const handleToolClick = (tool: Tool) => {
+    // PLAN MODE: Redirect all tool clicks to Plans tab
+    if (accessControl.planMode && !isAdmin) {
+      setActiveTab("premium");
+      return;
+    }
+
     const userPlan = profile?.plan || "free";
     const isPremium = userPlan === "premium";
     const usageCount = getToolUsageCount(tool.id);
