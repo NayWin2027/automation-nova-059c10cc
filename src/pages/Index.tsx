@@ -386,7 +386,7 @@ const Index = () => {
         {/* Admin Panel - only visible to admins */}
         {isAdmin &&
       <button
-        onClick={() => navigate("/admin/login")}
+        onClick={() => navigate("/x9k2m7")}
         className="w-full p-2.5 rounded-lg border border-gold/20 bg-card/50 text-left hover:bg-card transition-colors">
 
             <h3 className="font-semibold text-gold text-base">Admin Panel</h3>

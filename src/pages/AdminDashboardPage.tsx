@@ -33,14 +33,14 @@ const AdminDashboardPage: React.FC = () => {
 
   useEffect(() => {
     if (!loading && !user) {
-      navigate('/admin/login');
+      navigate('/x9k2m7');
     } else if (!loading && user && !isAdmin) {
       toast({
         title: "Access Denied",
         description: "Admin privileges required",
         variant: "destructive"
       });
-      navigate('/admin/login');
+      navigate('/x9k2m7');
     }
   }, [loading, user, isAdmin, navigate, toast]);
 
@@ -62,7 +62,7 @@ const AdminDashboardPage: React.FC = () => {
             variant: "destructive"
           });
           await signOut();
-          navigate('/admin/login');
+          navigate('/x9k2m7');
           return;
         }
 
@@ -77,7 +77,7 @@ const AdminDashboardPage: React.FC = () => {
               variant: "destructive"
             });
             await signOut();
-            navigate('/admin/login');
+            navigate('/x9k2m7');
             return;
           }
         }
@@ -86,7 +86,7 @@ const AdminDashboardPage: React.FC = () => {
       } catch (err) {
         console.error("2FA check error:", err);
         await signOut();
-        navigate('/admin/login');
+        navigate('/x9k2m7');
       }
     };
 
@@ -119,7 +119,7 @@ const AdminDashboardPage: React.FC = () => {
 
   const handleLogout = async () => {
     await signOut();
-    navigate('/admin/login');
+    navigate('/x9k2m7');
   };
 
   // Show loading while checking auth OR 2FA
