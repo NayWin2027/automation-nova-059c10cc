@@ -715,47 +715,79 @@
   }
 }
 
-/* Neon Buy Now Button Animation */
-@keyframes neon-glow-cycle {
-  0% {
-    box-shadow: 0 0 10px rgba(79, 70, 229, 0.6), 0 0 20px rgba(79, 70, 229, 0.4), 0 0 40px rgba(79, 70, 229, 0.2);
-  }
-  16% {
-    box-shadow: 0 0 10px rgba(236, 72, 153, 0.6), 0 0 20px rgba(236, 72, 153, 0.4), 0 0 40px rgba(236, 72, 153, 0.2);
-  }
-  33% {
-    box-shadow: 0 0 10px rgba(6, 182, 212, 0.6), 0 0 20px rgba(6, 182, 212, 0.4), 0 0 40px rgba(6, 182, 212, 0.2);
-  }
-  50% {
-    box-shadow: 0 0 10px rgba(245, 158, 11, 0.6), 0 0 20px rgba(245, 158, 11, 0.4), 0 0 40px rgba(245, 158, 11, 0.2);
-  }
-  66% {
-    box-shadow: 0 0 10px rgba(16, 185, 129, 0.6), 0 0 20px rgba(16, 185, 129, 0.4), 0 0 40px rgba(16, 185, 129, 0.2);
-  }
-  83% {
-    box-shadow: 0 0 10px rgba(139, 92, 246, 0.6), 0 0 20px rgba(139, 92, 246, 0.4), 0 0 40px rgba(139, 92, 246, 0.2);
-  }
-  100% {
-    box-shadow: 0 0 10px rgba(79, 70, 229, 0.6), 0 0 20px rgba(79, 70, 229, 0.4), 0 0 40px rgba(79, 70, 229, 0.2);
-  }
+/* Disco DJ Neon Buy Now Button Animation */
+@keyframes disco-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(0.97); }
 }
 
-@keyframes neon-bg-cycle {
-  0%   { background-color: rgba(79, 70, 229, 1); }
-  16%  { background-color: rgba(236, 72, 153, 1); }
-  33%  { background-color: rgba(6, 182, 212, 1); }
-  50%  { background-color: rgba(245, 158, 11, 1); }
-  66%  { background-color: rgba(16, 185, 129, 1); }
-  83%  { background-color: rgba(139, 92, 246, 1); }
-  100% { background-color: rgba(79, 70, 229, 1); }
+@keyframes disco-glow-cycle {
+  0%   { box-shadow: 0 0 8px rgba(79,70,229,0.8), 0 0 20px rgba(79,70,229,0.5), 0 0 40px rgba(79,70,229,0.3), 0 0 80px rgba(79,70,229,0.15); }
+  14%  { box-shadow: 0 0 8px rgba(236,72,153,0.8), 0 0 20px rgba(236,72,153,0.5), 0 0 40px rgba(236,72,153,0.3), 0 0 80px rgba(236,72,153,0.15); }
+  28%  { box-shadow: 0 0 8px rgba(6,182,212,0.8), 0 0 20px rgba(6,182,212,0.5), 0 0 40px rgba(6,182,212,0.3), 0 0 80px rgba(6,182,212,0.15); }
+  42%  { box-shadow: 0 0 8px rgba(245,158,11,0.8), 0 0 20px rgba(245,158,11,0.5), 0 0 40px rgba(245,158,11,0.3), 0 0 80px rgba(245,158,11,0.15); }
+  57%  { box-shadow: 0 0 8px rgba(16,185,129,0.8), 0 0 20px rgba(16,185,129,0.5), 0 0 40px rgba(16,185,129,0.3), 0 0 80px rgba(16,185,129,0.15); }
+  71%  { box-shadow: 0 0 8px rgba(139,92,246,0.8), 0 0 20px rgba(139,92,246,0.5), 0 0 40px rgba(139,92,246,0.3), 0 0 80px rgba(139,92,246,0.15); }
+  85%  { box-shadow: 0 0 8px rgba(244,63,94,0.8), 0 0 20px rgba(244,63,94,0.5), 0 0 40px rgba(244,63,94,0.3), 0 0 80px rgba(244,63,94,0.15); }
+  100% { box-shadow: 0 0 8px rgba(79,70,229,0.8), 0 0 20px rgba(79,70,229,0.5), 0 0 40px rgba(79,70,229,0.3), 0 0 80px rgba(79,70,229,0.15); }
+}
+
+@keyframes disco-bg-cycle {
+  0%   { background-color: rgba(79,70,229,1); }
+  14%  { background-color: rgba(236,72,153,1); }
+  28%  { background-color: rgba(6,182,212,1); }
+  42%  { background-color: rgba(245,158,11,1); }
+  57%  { background-color: rgba(16,185,129,1); }
+  71%  { background-color: rgba(139,92,246,1); }
+  85%  { background-color: rgba(244,63,94,1); }
+  100% { background-color: rgba(79,70,229,1); }
+}
+
+@keyframes disco-rays {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes disco-shine {
+  0%   { transform: translateX(-150%) rotate(45deg); opacity: 0; }
+  40%  { opacity: 0.6; }
+  100% { transform: translateX(150%) rotate(45deg); opacity: 0; }
 }
 
 .neon-buy-now-btn {
-  animation: neon-glow-cycle 3s ease-in-out infinite, neon-bg-cycle 3s ease-in-out infinite;
+  animation: disco-glow-cycle 2.5s ease-in-out infinite, disco-bg-cycle 2.5s ease-in-out infinite, disco-pulse 1.2s ease-in-out infinite;
   position: relative;
   overflow: hidden;
+  z-index: 1;
 }
 
+/* Rotating disco rays behind button */
+.neon-buy-now-btn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 300%;
+  height: 300%;
+  transform-origin: center center;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg, rgba(255,255,255,0.08) 10deg, transparent 20deg,
+    transparent 40deg, rgba(236,72,153,0.1) 50deg, transparent 60deg,
+    transparent 90deg, rgba(6,182,212,0.08) 100deg, transparent 110deg,
+    transparent 140deg, rgba(245,158,11,0.1) 150deg, transparent 160deg,
+    transparent 200deg, rgba(139,92,246,0.08) 210deg, transparent 220deg,
+    transparent 260deg, rgba(16,185,129,0.1) 270deg, transparent 280deg,
+    transparent 320deg, rgba(244,63,94,0.08) 330deg, transparent 340deg
+  );
+  animation: disco-rays 4s linear infinite;
+  z-index: -1;
+  margin-left: -150%;
+  margin-top: -150%;
+  pointer-events: none;
+}
+
+/* Sweeping shine highlight */
 .neon-buy-now-btn::after {
   content: '';
   position: absolute;
@@ -765,14 +797,12 @@
   height: 200%;
   background: linear-gradient(
     45deg,
-    transparent 40%,
-    rgba(255, 255, 255, 0.15) 50%,
-    transparent 60%
+    transparent 30%,
+    rgba(255,255,255,0.25) 45%,
+    rgba(255,255,255,0.4) 50%,
+    rgba(255,255,255,0.25) 55%,
+    transparent 70%
   );
-  animation: neon-shine 2s ease-in-out infinite;
-}
-
-@keyframes neon-shine {
-  0% { transform: translateX(-100%) rotate(45deg); }
-  100% { transform: translateX(100%) rotate(45deg); }
+  animation: disco-shine 1.8s ease-in-out infinite;
+  pointer-events: none;
 }
