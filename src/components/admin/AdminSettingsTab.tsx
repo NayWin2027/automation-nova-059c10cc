@@ -48,6 +48,7 @@ interface AccessControl {
   appApiAccess: ApiModeAccess;
   ownApiAccess: ApiModeAccess;
   blockFreeAppApi: boolean;
+  planMode: boolean;
 }
 
 interface ToolSetting {
@@ -87,7 +88,8 @@ function normalizeAccessControl(input?: Partial<AccessControl> | null): AccessCo
     promotionToolCount: input?.promotionToolCount ?? 3,
     appApiAccess: normalizeApiModeAccess(input?.appApiAccess),
     ownApiAccess: normalizeApiModeAccess(input?.ownApiAccess),
-    blockFreeAppApi: input?.blockFreeAppApi ?? true // Default ON
+    blockFreeAppApi: input?.blockFreeAppApi ?? true,
+    planMode: input?.planMode ?? false,
   };
 }
 
@@ -136,7 +138,8 @@ const AdminSettingsTab: React.FC = () => {
     promotionToolCount: 3,
     appApiAccess: { all: true, premium: true, pro: true, free: true },
     ownApiAccess: { all: true, premium: true, pro: true, free: true },
-    blockFreeAppApi: true
+    blockFreeAppApi: true,
+    planMode: false,
   });
 
   const [toolSettings, setToolSettings] = useState<ToolSetting[]>([]);
@@ -436,6 +439,23 @@ const AdminSettingsTab: React.FC = () => {
                   </div>
                 </>
             }
+
+              {/* Plan Mode Toggle */}
+              <div className="flex items-center justify-between pt-2 border-t border-border/30">
+                <div>
+                  <Label className="text-xs flex items-center gap-1">
+                    <Crown className="w-3 h-3 text-purple-500" />
+                    Plan Mode
+                  </Label>
+                  <p className="text-2xs text-muted-foreground">Tool နှိပ်ရင် Plans page ကိုရောက်မယ်</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <OnOffBadge checked={accessControl.planMode} />
+                  <Switch
+                  checked={accessControl.planMode}
+                  onCheckedChange={(checked) => setAccessControl({ ...accessControl, planMode: checked })} />
+                </div>
+              </div>
             </CardContent>
           </Card>
 

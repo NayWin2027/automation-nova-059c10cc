@@ -40,7 +40,8 @@ interface AccessControl {
   promotionToolCount: number;
   appApiAccess?: ApiModeAccess;
   ownApiAccess?: ApiModeAccess;
-  blockFreeAppApi?: boolean; // Hard block App API for Free/Guest users
+  blockFreeAppApi?: boolean;
+  planMode?: boolean;
 }
 
 const defaultTierLimits: TierLimits = {
@@ -59,7 +60,8 @@ export function useToolSettings() {
     promotionToolCount: 3,
     appApiAccess: { all: true, premium: true, pro: true, free: true },
     ownApiAccess: { all: true, premium: true, pro: true, free: true },
-    blockFreeAppApi: true, // Default: Block App API for Free/Guest
+    blockFreeAppApi: true,
+    planMode: false,
   });
   const [loading, setLoading] = useState(true);
 
