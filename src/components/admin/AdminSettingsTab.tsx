@@ -326,14 +326,14 @@ const AdminSettingsTab: React.FC = () => {
               <CardDescription className="text-2xs">Tools အသုံးပြုခွင့် ထိန်းချုပ်ရန်</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <p className="text-3xs text-muted-foreground">
+              <p className="text-3xs text-muted-foreground text-base">
                 <span className="font-medium text-foreground">ON</span> = ခွင့်ပြု (အသုံးပြုလို့ရ) •{" "}
                 <span className="font-medium text-foreground">OFF</span> = ပိတ် (အသုံးမပြုလို့ရ)
               </p>
               <div className="flex items-center justify-between">
                 <div>
                   <Label className="text-xs">Login Required</Label>
-                  <p className="text-2xs text-muted-foreground">Tools သုံးရန် Login လိုအပ်မလား</p>
+                  <p className="text-muted-foreground text-base">Tools သုံးရန် Login လိုအပ်မလား</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <OnOffBadge checked={accessControl.requireLogin} />
@@ -368,7 +368,7 @@ const AdminSettingsTab: React.FC = () => {
                     <Server className="w-3 h-3 text-red-500" />
                     Block Free App API
                   </Label>
-                  <p className="text-2xs text-muted-foreground">Free/Guest များ App API သုံးခွင့်မပေး</p>
+                  <p className="text-muted-foreground text-base">Free/Guest များ App API သုံးခွင့်မပေး</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <OnOffBadge checked={accessControl.blockFreeAppApi} />

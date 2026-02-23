@@ -7,17 +7,17 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { useAdmin } from "@/hooks/useAdmin";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { 
-  UserPlus, Trash2, Ban, Key, Coins, Crown, 
-  Smartphone, MoreVertical, Search, ShieldCheck, Sparkles, ShieldAlert
-} from "lucide-react";
+import {
+  UserPlus, Trash2, Ban, Key, Coins, Crown,
+  Smartphone, MoreVertical, Search, ShieldCheck, Sparkles, ShieldAlert } from
+"lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  DropdownMenuTrigger } from
+"@/components/ui/dropdown-menu";
 
 const AdminUsersTab: React.FC = () => {
   const { toast } = useToast();
@@ -33,7 +33,7 @@ const AdminUsersTab: React.FC = () => {
     banUser,
     updateCredits,
     updatePlan,
-    clearDevices,
+    clearDevices
   } = useAdmin();
 
   const [search, setSearch] = useState("");
@@ -44,7 +44,7 @@ const AdminUsersTab: React.FC = () => {
   const [devicesDialogOpen, setDevicesDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<typeof profiles[0] | null>(null);
-  
+
   // Master/Sub admin state
   const [isMasterAdmin, setIsMasterAdmin] = useState(false);
   const [adminRolesMap, setAdminRolesMap] = useState<Record<string, string>>({});
@@ -54,7 +54,7 @@ const AdminUsersTab: React.FC = () => {
     userId: "",
     password: "",
     plan: "free" as "free" | "pro" | "premium",
-    credits: 100,
+    credits: 100
   });
   const [newCredits, setNewCredits] = useState(0);
   const [newPassword, setNewPassword] = useState("");
@@ -103,8 +103,8 @@ const AdminUsersTab: React.FC = () => {
 
   const filteredProfiles = profiles.filter(
     (p) =>
-      p.email.toLowerCase().includes(search.toLowerCase()) ||
-      (p.display_name?.toLowerCase() || "").includes(search.toLowerCase())
+    p.email.toLowerCase().includes(search.toLowerCase()) ||
+    (p.display_name?.toLowerCase() || "").includes(search.toLowerCase())
   );
 
   const handleCreateUser = async () => {
@@ -112,7 +112,7 @@ const AdminUsersTab: React.FC = () => {
       toast({
         title: "❌ Required Fields",
         description: "User ID and Password are required",
-        variant: "destructive",
+        variant: "destructive"
       });
       return;
     }
@@ -131,12 +131,12 @@ const AdminUsersTab: React.FC = () => {
       toast({
         title: "❌ Failed to create user",
         description: error.message,
-        variant: "destructive",
+        variant: "destructive"
       });
     } else {
       toast({
         title: "✅ User Created",
-        description: `User "${newUser.userId}" has been added`,
+        description: `User "${newUser.userId}" has been added`
       });
       setAddUserOpen(false);
       setNewUser({ userId: "", password: "", plan: "free", credits: 100 });
@@ -148,7 +148,7 @@ const AdminUsersTab: React.FC = () => {
 
   const handleDeleteUser = async (userId: string) => {
     if (!confirm("Are you sure you want to delete this user?")) return;
-    
+
     setLoading(true);
     const { error } = await deleteUser(userId);
 
@@ -156,12 +156,12 @@ const AdminUsersTab: React.FC = () => {
       toast({
         title: "❌ Failed to delete user",
         description: error.message,
-        variant: "destructive",
+        variant: "destructive"
       });
     } else {
       toast({
         title: "✅ User Deleted",
-        description: "User has been removed",
+        description: "User has been removed"
       });
       fetchProfiles();
       fetchStats();
@@ -171,7 +171,7 @@ const AdminUsersTab: React.FC = () => {
 
   const handleUpdateCredits = async () => {
     if (!selectedUser) return;
-    
+
     setLoading(true);
     const { error } = await updateCredits(selectedUser, newCredits);
 
@@ -179,12 +179,12 @@ const AdminUsersTab: React.FC = () => {
       toast({
         title: "❌ Failed to update credits",
         description: error.message,
-        variant: "destructive",
+        variant: "destructive"
       });
     } else {
       toast({
         title: "✅ Credits Updated",
-        description: `Credits set to ${newCredits}`,
+        description: `Credits set to ${newCredits}`
       });
       setCreditDialogOpen(false);
       fetchProfiles();
@@ -194,7 +194,7 @@ const AdminUsersTab: React.FC = () => {
 
   const handleResetPassword = async () => {
     if (!selectedUser) return;
-    
+
     setLoading(true);
     const { error } = await resetPassword(selectedUser, newPassword);
 
@@ -202,12 +202,12 @@ const AdminUsersTab: React.FC = () => {
       toast({
         title: "❌ Failed to reset password",
         description: error.message,
-        variant: "destructive",
+        variant: "destructive"
       });
     } else {
       toast({
         title: "✅ Password Reset",
-        description: "Password has been updated",
+        description: "Password has been updated"
       });
       setPasswordDialogOpen(false);
       setNewPassword("");
@@ -217,7 +217,7 @@ const AdminUsersTab: React.FC = () => {
 
   const handleBanUser = async (banned: boolean) => {
     if (!selectedUser) return;
-    
+
     setLoading(true);
     const { error } = await banUser(selectedUser, banned, banReason);
 
@@ -225,12 +225,12 @@ const AdminUsersTab: React.FC = () => {
       toast({
         title: "❌ Failed to update ban status",
         description: error.message,
-        variant: "destructive",
+        variant: "destructive"
       });
     } else {
       toast({
         title: banned ? "🚫 User Banned" : "✅ User Unbanned",
-        description: banned ? "User has been banned" : "User has been unbanned",
+        description: banned ? "User has been banned" : "User has been unbanned"
       });
       setBanDialogOpen(false);
       setBanReason("");
@@ -248,12 +248,12 @@ const AdminUsersTab: React.FC = () => {
       toast({
         title: "❌ Failed to update plan",
         description: error.message,
-        variant: "destructive",
+        variant: "destructive"
       });
     } else {
       toast({
         title: "✅ Plan Updated",
-        description: `Plan changed to ${plan}`,
+        description: `Plan changed to ${plan}`
       });
       fetchProfiles();
       fetchStats();
@@ -263,7 +263,7 @@ const AdminUsersTab: React.FC = () => {
 
   const handleClearDevices = async (userId: string) => {
     if (!confirm("Clear all devices for this user?")) return;
-    
+
     setLoading(true);
     const { error } = await clearDevices(userId);
 
@@ -271,12 +271,12 @@ const AdminUsersTab: React.FC = () => {
       toast({
         title: "❌ Failed to clear devices",
         description: error.message,
-        variant: "destructive",
+        variant: "destructive"
       });
     } else {
       toast({
         title: "✅ Devices Cleared",
-        description: "All devices have been removed",
+        description: "All devices have been removed"
       });
       fetchProfiles();
     }
@@ -315,7 +315,7 @@ const AdminUsersTab: React.FC = () => {
       <div className="p-4 border-b border-border/30">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-foreground">User Management</h3>
+            <h3 className="font-semibold text-foreground text-lg">User Management</h3>
             <p className="text-2xs text-muted-foreground">Manage users & permissions</p>
           </div>
           <Dialog open={addUserOpen} onOpenChange={setAddUserOpen}>
@@ -337,8 +337,8 @@ const AdminUsersTab: React.FC = () => {
                     placeholder="Enter unique user ID"
                     value={newUser.userId}
                     onChange={(e) => setNewUser({ ...newUser, userId: e.target.value })}
-                    className="h-8 text-xs bg-secondary/30 border-border/30"
-                  />
+                    className="h-8 text-xs bg-secondary/30 border-border/30" />
+
                 </div>
                 <div>
                   <Label className="text-2xs text-muted-foreground">Password</Label>
@@ -347,15 +347,15 @@ const AdminUsersTab: React.FC = () => {
                     placeholder="••••••••"
                     value={newUser.password}
                     onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                    className="h-8 text-xs bg-secondary/30 border-border/30"
-                  />
+                    className="h-8 text-xs bg-secondary/30 border-border/30" />
+
                 </div>
                 <div>
                   <Label className="text-2xs text-muted-foreground">Plan</Label>
                   <Select
                     value={newUser.plan}
-                    onValueChange={(v) => setNewUser({ ...newUser, plan: v as "free" | "pro" | "premium" })}
-                  >
+                    onValueChange={(v) => setNewUser({ ...newUser, plan: v as "free" | "pro" | "premium" })}>
+
                     <SelectTrigger className="h-8 text-xs bg-secondary/30 border-border/30">
                       <SelectValue />
                     </SelectTrigger>
@@ -372,14 +372,14 @@ const AdminUsersTab: React.FC = () => {
                     type="number"
                     value={newUser.credits}
                     onChange={(e) => setNewUser({ ...newUser, credits: parseInt(e.target.value) || 0 })}
-                    className="h-8 text-xs bg-secondary/30 border-border/30"
-                  />
+                    className="h-8 text-xs bg-secondary/30 border-border/30" />
+
                 </div>
-                <button 
-                  onClick={handleCreateUser} 
-                  disabled={loading} 
-                  className="btn-luxury w-full py-2 rounded-lg text-xs"
-                >
+                <button
+                  onClick={handleCreateUser}
+                  disabled={loading}
+                  className="btn-luxury w-full py-2 rounded-lg text-xs">
+
                   {loading ? "Creating..." : "Create User"}
                 </button>
               </div>
@@ -396,8 +396,8 @@ const AdminUsersTab: React.FC = () => {
             placeholder="Search users..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 h-7 text-2xs bg-secondary/20 border-border/20"
-          />
+            className="pl-8 h-7 text-2xs bg-secondary/20 border-border/20" />
+
         </div>
       </div>
 
@@ -415,32 +415,32 @@ const AdminUsersTab: React.FC = () => {
 
         {/* Table Body */}
         <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
-          {filteredProfiles.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground text-xs">
+          {filteredProfiles.length === 0 ?
+          <div className="text-center py-8 text-muted-foreground text-xs">
               No users found
-            </div>
-          ) : (
-            filteredProfiles.map((profile) => (
-              <div key={profile.id} className="table-luxury-row grid grid-cols-6 gap-2 px-3 py-2 items-center">
+            </div> :
+
+          filteredProfiles.map((profile) =>
+          <div key={profile.id} className="table-luxury-row grid grid-cols-6 gap-2 px-3 py-2 items-center">
                 <div>
                   <div className="flex items-center gap-1">
-                    <p className="text-xs font-medium text-foreground truncate">
+                    <p className="font-medium text-foreground truncate text-base">
                       {profile.display_name || getUserDisplayId(profile.email)}
                     </p>
                     {/* Master/Sub admin badges - only visible to master admins */}
-                    {isMasterAdmin && isUserMasterAdmin(profile.user_id) && (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-bold whitespace-nowrap flex items-center gap-0.5">
+                    {isMasterAdmin && isUserMasterAdmin(profile.user_id) &&
+                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-bold whitespace-nowrap flex items-center gap-0.5">
                         <ShieldAlert className="w-2.5 h-2.5" />
                         MASTER
                       </span>
-                    )}
-                    {isMasterAdmin && !isUserMasterAdmin(profile.user_id) && isUserAdmin(profile.user_id) && (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-bold whitespace-nowrap">
+                }
+                    {isMasterAdmin && !isUserMasterAdmin(profile.user_id) && isUserAdmin(profile.user_id) &&
+                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-bold whitespace-nowrap">
                         SUB
                       </span>
-                    )}
+                }
                   </div>
-                  <p className="text-2xs text-muted-foreground truncate">{getUserDisplayId(profile.email)}</p>
+                  <p className="text-muted-foreground truncate text-base">{getUserDisplayId(profile.email)}</p>
                 </div>
                 <div>
                   <span className={`inline-flex items-center gap-1 rounded-full ${getPlanBadgeClass(profile.plan)}`}>
@@ -454,11 +454,11 @@ const AdminUsersTab: React.FC = () => {
                   <span className="text-xs">{profile.credits}</span>
                 </div>
                 <div>
-                  {profile.is_banned ? (
-                    <span className="text-2xs px-2 py-0.5 rounded-full bg-destructive/20 text-destructive">Banned</span>
-                  ) : (
-                    <span className="text-2xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400">Active</span>
-                  )}
+                  {profile.is_banned ?
+              <span className="text-2xs px-2 py-0.5 rounded-full bg-destructive/20 text-destructive">Banned</span> :
+
+              <span className="text-2xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400">Active</span>
+              }
                 </div>
                 <div className="text-2xs text-muted-foreground">
                   {new Date(profile.created_at).toLocaleDateString()}
@@ -471,31 +471,31 @@ const AdminUsersTab: React.FC = () => {
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="luxury-card border-border/30 min-w-[140px]">
-                      <DropdownMenuItem 
-                        onClick={() => {
-                          setSelectedUser(profile.user_id);
-                          setNewCredits(profile.credits);
-                          setCreditDialogOpen(true);
-                        }}
-                        className="text-xs"
-                      >
+                      <DropdownMenuItem
+                    onClick={() => {
+                      setSelectedUser(profile.user_id);
+                      setNewCredits(profile.credits);
+                      setCreditDialogOpen(true);
+                    }}
+                    className="text-xs">
+
                         <Coins className="w-3 h-3 mr-2 text-gold" />
                         Credits
                       </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        onClick={() => {
-                          setSelectedUser(profile.user_id);
-                          setPasswordDialogOpen(true);
-                        }}
-                        className="text-xs"
-                      >
+                      <DropdownMenuItem
+                    onClick={() => {
+                      setSelectedUser(profile.user_id);
+                      setPasswordDialogOpen(true);
+                    }}
+                    className="text-xs">
+
                         <Key className="w-3 h-3 mr-2" />
                         Password
                       </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        onClick={() => openDevicesDialog(profile.user_id, profile)}
-                        className="text-xs"
-                      >
+                      <DropdownMenuItem
+                    onClick={() => openDevicesDialog(profile.user_id, profile)}
+                    className="text-xs">
+
                         <Smartphone className="w-3 h-3 mr-2" />
                         Devices
                       </DropdownMenuItem>
@@ -512,40 +512,40 @@ const AdminUsersTab: React.FC = () => {
                         Set Premium
                       </DropdownMenuItem>
                       <DropdownMenuSeparator className="bg-border/30" />
-                      <DropdownMenuItem 
-                        onClick={() => {
-                          if (!canPerformAction(profile.user_id)) {
-                            toast({ title: "⛔ Access Denied", description: "Cannot modify a Master Admin", variant: "destructive" });
-                            return;
-                          }
-                          setSelectedUser(profile.user_id);
-                          setSelectedProfile(profile);
-                          setBanDialogOpen(true);
-                        }}
-                        className={`text-xs ${!canPerformAction(profile.user_id) ? "opacity-40 cursor-not-allowed" : profile.is_banned ? "text-emerald-400" : "text-orange-400"}`}
-                      >
-                        {profile.is_banned ? (
-                          <>
+                      <DropdownMenuItem
+                    onClick={() => {
+                      if (!canPerformAction(profile.user_id)) {
+                        toast({ title: "⛔ Access Denied", description: "Cannot modify a Master Admin", variant: "destructive" });
+                        return;
+                      }
+                      setSelectedUser(profile.user_id);
+                      setSelectedProfile(profile);
+                      setBanDialogOpen(true);
+                    }}
+                    className={`text-xs ${!canPerformAction(profile.user_id) ? "opacity-40 cursor-not-allowed" : profile.is_banned ? "text-emerald-400" : "text-orange-400"}`}>
+
+                        {profile.is_banned ?
+                    <>
                             <ShieldCheck className="w-3 h-3 mr-2" />
                             Unban
-                          </>
-                        ) : (
-                          <>
+                          </> :
+
+                    <>
                             <Ban className="w-3 h-3 mr-2" />
                             Ban
                           </>
-                        )}
+                    }
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        onClick={() => {
-                          if (!canPerformAction(profile.user_id)) {
-                            toast({ title: "⛔ Access Denied", description: "Cannot delete a Master Admin", variant: "destructive" });
-                            return;
-                          }
-                          handleDeleteUser(profile.user_id);
-                        }}
-                        className={`text-xs ${!canPerformAction(profile.user_id) ? "opacity-40 cursor-not-allowed text-muted-foreground" : "text-destructive"}`}
-                      >
+                    onClick={() => {
+                      if (!canPerformAction(profile.user_id)) {
+                        toast({ title: "⛔ Access Denied", description: "Cannot delete a Master Admin", variant: "destructive" });
+                        return;
+                      }
+                      handleDeleteUser(profile.user_id);
+                    }}
+                    className={`text-xs ${!canPerformAction(profile.user_id) ? "opacity-40 cursor-not-allowed text-muted-foreground" : "text-destructive"}`}>
+
                         <Trash2 className="w-3 h-3 mr-2" />
                         Delete
                       </DropdownMenuItem>
@@ -553,8 +553,8 @@ const AdminUsersTab: React.FC = () => {
                   </DropdownMenu>
                 </div>
               </div>
-            ))
-          )}
+          )
+          }
         </div>
       </div>
 
@@ -572,8 +572,8 @@ const AdminUsersTab: React.FC = () => {
                 type="number"
                 value={newCredits}
                 onChange={(e) => setNewCredits(parseInt(e.target.value) || 0)}
-                className="h-8 text-xs bg-secondary/30 border-border/30"
-              />
+                className="h-8 text-xs bg-secondary/30 border-border/30" />
+
             </div>
             <button onClick={handleUpdateCredits} disabled={loading} className="btn-luxury w-full py-2 rounded-lg text-xs">
               {loading ? "Updating..." : "Update Credits"}
@@ -597,8 +597,8 @@ const AdminUsersTab: React.FC = () => {
                 placeholder="••••••••"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                className="h-8 text-xs bg-secondary/30 border-border/30"
-              />
+                className="h-8 text-xs bg-secondary/30 border-border/30" />
+
             </div>
             <button onClick={handleResetPassword} disabled={loading} className="btn-luxury w-full py-2 rounded-lg text-xs">
               {loading ? "Resetting..." : "Reset Password"}
@@ -615,32 +615,32 @@ const AdminUsersTab: React.FC = () => {
               {selectedProfile?.is_banned ? "Unban User" : "Ban User"}
             </DialogTitle>
             <DialogDescription className="text-2xs">
-              {selectedProfile?.is_banned 
-                ? "This will restore user access" 
-                : "Provide a reason for banning"}
+              {selectedProfile?.is_banned ?
+              "This will restore user access" :
+              "Provide a reason for banning"}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
-            {!selectedProfile?.is_banned && (
-              <div>
+            {!selectedProfile?.is_banned &&
+            <div>
                 <Label className="text-2xs text-muted-foreground">Ban Reason</Label>
                 <Input
-                  placeholder="Enter reason..."
-                  value={banReason}
-                  onChange={(e) => setBanReason(e.target.value)}
-                  className="h-8 text-xs bg-secondary/30 border-border/30"
-                />
+                placeholder="Enter reason..."
+                value={banReason}
+                onChange={(e) => setBanReason(e.target.value)}
+                className="h-8 text-xs bg-secondary/30 border-border/30" />
+
               </div>
-            )}
-            <button 
-              onClick={() => handleBanUser(!selectedProfile?.is_banned)} 
-              disabled={loading} 
+            }
+            <button
+              onClick={() => handleBanUser(!selectedProfile?.is_banned)}
+              disabled={loading}
               className={`w-full py-2 rounded-lg text-xs font-medium ${
-                selectedProfile?.is_banned 
-                  ? "bg-emerald-600 hover:bg-emerald-700 text-white" 
-                  : "bg-destructive hover:bg-destructive/90 text-destructive-foreground"
-              }`}
-            >
+              selectedProfile?.is_banned ?
+              "bg-emerald-600 hover:bg-emerald-700 text-white" :
+              "bg-destructive hover:bg-destructive/90 text-destructive-foreground"}`
+              }>
+
               {loading ? "Processing..." : selectedProfile?.is_banned ? "Unban User" : "Ban User"}
             </button>
           </div>
@@ -657,11 +657,11 @@ const AdminUsersTab: React.FC = () => {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
-            {devices.length === 0 ? (
-              <p className="text-center text-xs text-muted-foreground py-4">No devices found</p>
-            ) : (
-              devices.map((device) => (
-                <div key={device.id} className="p-2 rounded-lg bg-secondary/30 border border-border/20">
+            {devices.length === 0 ?
+            <p className="text-center text-xs text-muted-foreground py-4">No devices found</p> :
+
+            devices.map((device) =>
+            <div key={device.id} className="p-2 rounded-lg bg-secondary/30 border border-border/20">
                   <div className="flex items-center gap-2">
                     <Smartphone className="w-3 h-3 text-muted-foreground" />
                     <span className="text-2xs font-mono text-muted-foreground truncate">
@@ -672,22 +672,22 @@ const AdminUsersTab: React.FC = () => {
                     Last used: {new Date(device.last_used_at).toLocaleString()}
                   </p>
                 </div>
-              ))
-            )}
+            )
+            }
           </div>
-          {devices.length > 0 && selectedUser && (
-            <button 
-              onClick={() => handleClearDevices(selectedUser)} 
-              disabled={loading}
-              className="w-full py-2 rounded-lg text-xs font-medium bg-destructive/20 text-destructive hover:bg-destructive/30"
-            >
+          {devices.length > 0 && selectedUser &&
+          <button
+            onClick={() => handleClearDevices(selectedUser)}
+            disabled={loading}
+            className="w-full py-2 rounded-lg text-xs font-medium bg-destructive/20 text-destructive hover:bg-destructive/30">
+
               {loading ? "Clearing..." : "Clear All Devices"}
             </button>
-          )}
+          }
         </DialogContent>
       </Dialog>
-    </div>
-  );
+    </div>);
+
 };
 
 export default AdminUsersTab;
