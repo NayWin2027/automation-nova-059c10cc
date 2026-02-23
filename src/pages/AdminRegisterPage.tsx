@@ -61,7 +61,7 @@ const AdminRegisterPage: React.FC = () => {
         description: "Admin account created. You can now login.",
       });
 
-      navigate('/admin/login');
+      navigate('/x9k2m7');
     } catch (err) {
       if (err instanceof z.ZodError) {
         const fieldErrors: Record<string, string> = {};
@@ -191,7 +191,7 @@ const AdminRegisterPage: React.FC = () => {
             <div className="mt-6 text-center">
               <p className="text-sm text-muted-foreground">
                 Already have an account?{" "}
-                <Link to="/admin/login" className="text-cyan-500 hover:underline">
+                <Link to="/x9k2m7" className="text-cyan-500 hover:underline">
                   Login here
                 </Link>
               </p>
