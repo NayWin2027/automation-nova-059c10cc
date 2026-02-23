@@ -1,8 +1,9 @@
 import React from "react";
-import { Users, Crown, Ban, Coins, Sparkles } from "lucide-react";
+import { Users, Crown, Ban, Coins, Sparkles, Shield } from "lucide-react";
 
 interface Stats {
   totalUsers: number;
+  totalAdmins: number;
   freeUsers: number;
   proUsers: number;
   premiumUsers: number;
@@ -20,6 +21,12 @@ const AdminStatsCards: React.FC<AdminStatsCardsProps> = ({ stats }) => {
       value: stats?.totalUsers || 0,
       icon: Users,
       iconBg: "icon-gradient-cyan",
+    },
+    {
+      title: "Total Admin",
+      value: stats?.totalAdmins || 0,
+      icon: Shield,
+      iconBg: "bg-gradient-to-br from-amber-500 to-orange-600",
     },
     {
       title: "Free Plan",
@@ -48,7 +55,7 @@ const AdminStatsCards: React.FC<AdminStatsCardsProps> = ({ stats }) => {
   ];
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+    <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
       {statCards.map((stat) => (
         <div
           key={stat.title}

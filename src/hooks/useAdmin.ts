@@ -35,6 +35,7 @@ interface ActivityLog {
 
 interface Stats {
   totalUsers: number;
+  totalAdmins: number;
   freeUsers: number;
   proUsers: number;
   premiumUsers: number;
