@@ -454,8 +454,7 @@ export default function TranscriptionView() {
 
   const s = isEditing ? editSettings : settings;
 
-  if (authLoading) return <div className="min-h-screen bg-[#020617] flex items-center justify-center"><div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full" /></div>;
-  if (!isAllowed) return null;
+  if (!isAllowed && !authLoading) return null;
 
   return (
     <div className="min-h-screen text-slate-200 p-4 space-y-6 animate-in fade-in duration-500 pb-32 bg-primary-foreground">

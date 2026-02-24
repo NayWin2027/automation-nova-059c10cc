@@ -206,8 +206,7 @@ const SrtTranslatorView: React.FC = () => {
 
   const lineCount = fileContent ? fileContent.split("\n").filter((l) => l.trim()).length / 3 : 0;
 
-  if (authLoading) return <div className="min-h-screen bg-[#020617] flex items-center justify-center"><div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full" /></div>;
-  if (!isAllowed) return null;
+  if (!isAllowed && !authLoading) return null;
 
   return (
     <div className="space-y-6 pb-40 animate-in fade-in duration-700 px-1 max-w-2xl mx-auto pt-4">
