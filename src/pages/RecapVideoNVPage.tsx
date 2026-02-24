@@ -2415,15 +2415,43 @@ const RecapVideoNVPage: React.FC = () => {
 
         setProgressMsg(`📤 Uploading... (${i + 1}/${totalChunks})`);
 
-        const { data, error } = await supabase.functions.invoke('video-recap', {
-          body: chunkBuf,
-          headers: chunkHeaders
-        });
-        if (error || data?.error) {
-          throw new Error(data?.error || error?.message || `Chunk ${i + 1} upload failed`);
+        // Retry logic for mobile network instability
+        const MAX_RETRIES = 3;
+        let lastErr: string = '';
+        let chunkSuccess = false;
+        for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+          try {
+            const { data, error } = await supabase.functions.invoke('video-recap', {
+              body: chunkBuf,
+              headers: chunkHeaders
+            });
+            if (error || data?.error) {
+              lastErr = data?.error || error?.message || `Chunk ${i + 1} upload failed`;
+              // If retryable, wait and retry
+              if (attempt < MAX_RETRIES - 1) {
+                setProgressMsg(`📤 Retrying chunk ${i + 1}... (${attempt + 2}/${MAX_RETRIES})`);
+                await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+                continue;
+              }
+              throw new Error(lastErr);
+            }
+            if (isLastChunk && data?.fileUri) {
+              fileUri = data.fileUri;
+            }
+            chunkSuccess = true;
+            break;
+          } catch (fetchErr: any) {
+            lastErr = fetchErr?.message || `Chunk ${i + 1} network error`;
+            if (attempt < MAX_RETRIES - 1) {
+              setProgressMsg(`📤 Retrying chunk ${i + 1}... (${attempt + 2}/${MAX_RETRIES})`);
+              await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+              continue;
+            }
+            throw new Error(lastErr);
+          }
         }
-        if (isLastChunk && data?.fileUri) {
-          fileUri = data.fileUri;
+        if (!chunkSuccess) {
+          throw new Error(lastErr || `Chunk ${i + 1} upload failed after retries`);
         }
       }
 
