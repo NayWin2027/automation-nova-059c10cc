@@ -92,6 +92,8 @@ interface LogoSettings {
   isCircle: boolean;
   spin: boolean;
   neonColor: string;
+  x: number; // Percentage 0-100 (center X)
+  y: number; // Percentage 0-100 (center Y)
 }
 
 interface SubtitleSettings {
@@ -169,7 +171,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
     size: 15, // percent width
     isCircle: true,
     spin: true,
-    neonColor: "#00E5FF" // Cyan default
+    neonColor: "#00E5FF", // Cyan default
+    x: 88,
+    y: 12,
   });
 
   const [subSettings, setSubSettings] = useState<SubtitleSettings>({
@@ -216,6 +220,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
   // Drag States
   const [isDraggingSub, setIsDraggingSub] = useState(false);
   const [isDraggingBlur, setIsDraggingBlur] = useState(false);
+  const [isDraggingLogo, setIsDraggingLogo] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -407,17 +412,20 @@ export const ResultView: React.FC<ResultViewProps> = ({
   };
 
   const handleDragMove = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDraggingSub && !isDraggingBlur) return;
+    if (!isDraggingSub && !isDraggingBlur && !isDraggingLogo) return;
     const activeContainer = containerRef.current;
     if (!activeContainer) return;
-    e.preventDefault();
-
-    const container = activeContainer.getBoundingClientRect();
-    const clientX = "touches" in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
-    const clientY = "touches" in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
-
-    let x = (clientX - container.left) / container.width * 100;
-    let y = (clientY - container.top) / container.height * 100;
+    const rect = activeContainer.getBoundingClientRect();
+    let clientX: number, clientY: number;
+    if ("touches" in e) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    }
+    let x = ((clientX - rect.left) / rect.width) * 100;
+    let y = ((clientY - rect.top) / rect.height) * 100;
     x = Math.max(0, Math.min(100, x));
     y = Math.max(0, Math.min(100, y));
 
@@ -425,12 +433,15 @@ export const ResultView: React.FC<ResultViewProps> = ({
       setSubSettings((prev) => ({ ...prev, x, y }));
     } else if (isDraggingBlur) {
       setBlurSettings((prev) => ({ ...prev, x, y }));
+    } else if (isDraggingLogo) {
+      setLogo((prev) => ({ ...prev, x, y }));
     }
   };
 
   const handleDragEnd = () => {
     setIsDraggingSub(false);
     setIsDraggingBlur(false);
+    setIsDraggingLogo(false);
   };
 
   // Blur drag start
@@ -879,9 +890,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
       // Draw logo with SPIN + NEON GLOW support (rotate around center) — top-right corner
       if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
         const logoSize = canvas.width * (logo.size / 100);
-        const logoPad = 16;
-        const logoCX = canvas.width - logoSize / 2 - logoPad;
-        const logoCY = logoSize / 2 + logoPad;
+        const logoCX = canvas.width * (logo.x / 100);
+        const logoCY = canvas.height * (logo.y / 100);
 
         // Advance spin angle: full 360° rotation every 8 seconds
         if (logo.spin) {
@@ -1386,15 +1396,18 @@ export const ResultView: React.FC<ResultViewProps> = ({
               onTouchMove={handleDragMove}
               onTouchEnd={handleDragEnd}>
 
-              {/* Logo Layer — AppLogo shown by default; custom image if uploaded */}
+              {/* Logo Layer — AppLogo shown by default; custom image if uploaded — DRAGGABLE */}
               <div
-                className="absolute z-20 pointer-events-none"
+                className="absolute z-20 cursor-grab active:cursor-grabbing"
                 style={{
-                  top: "12px",
-                  right: "12px",
+                  left: `${logo.x}%`,
+                  top: `${logo.y}%`,
+                  transform: "translate(-50%, -50%)",
                   width: `${logo.size}%`,
-                  transition: "all 0.3s ease"
-                }}>
+                  transition: isDraggingLogo ? "none" : "all 0.3s ease"
+                }}
+                onMouseDown={(e) => { e.stopPropagation(); setIsDraggingLogo(true); }}
+                onTouchStart={(e) => { e.stopPropagation(); setIsDraggingLogo(true); }}>
 
                 {logo.url ?
                 <div
