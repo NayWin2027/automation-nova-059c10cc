@@ -2521,12 +2521,6 @@ const RecapVideoNVPage: React.FC = () => {
       }
 
       const scriptResult = await scriptResponse.json();
-
-      // Check if the server returned an error (e.g. 429 rate limit wrapped in 200)
-      if (scriptResult.error) {
-        throw new Error(scriptResult.error);
-      }
-
       const scriptText = scriptResult.script || '';
 
       if (!scriptText || scriptText.trim().length < 10) {
