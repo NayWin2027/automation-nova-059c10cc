@@ -814,25 +814,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
           }
           const totalPages = Math.ceil(fittedLines.length / MAX_LINES);
           const elapsed = (performance.now() - subtitlePageStartRef.current) / 1000;
-          // Proportional paging: each page's display time is proportional to its line count
-          // so pages with more lines show longer and pages with fewer lines show shorter
-          const pageLinesArr: number[] = [];
-          for (let p = 0; p < totalPages; p++) {
-            const pStart = p * MAX_LINES;
-            const pEnd = Math.min(pStart + MAX_LINES, fittedLines.length);
-            pageLinesArr.push(pEnd - pStart);
-          }
-          const totalLineUnits = pageLinesArr.reduce((a, b) => a + b, 0);
-          // Total duration for this segment = 2.5s per page on average
-          const totalSegDuration = totalPages * 2.5;
-          // Find current page based on proportional cumulative time
-          let cumTime = 0;
-          let currentPage = totalPages - 1;
-          for (let p = 0; p < totalPages; p++) {
-            const pageDuration = (pageLinesArr[p] / totalLineUnits) * totalSegDuration;
-            cumTime += pageDuration;
-            if (elapsed < cumTime) { currentPage = p; break; }
-          }
+          // Each page shows for 2.5 seconds before cycling to next
+          const currentPage = Math.min(Math.floor(elapsed / 2.5), totalPages - 1);
           const startIdx = currentPage * MAX_LINES;
           displayLines = fittedLines.slice(startIdx, startIdx + MAX_LINES);
         }
@@ -2494,20 +2477,7 @@ const RecapVideoNVPage: React.FC = () => {
 
   const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const originalFile = e.target.files[0];
-
-      // Immediately read file into memory to prevent stale file-handle errors
-      // (mobile browsers can revoke file permissions during async waits)
-      let fileBuffer: ArrayBuffer;
-      try {
-        fileBuffer = await originalFile.arrayBuffer();
-      } catch (readErr) {
-        setProgressMsg('❌ ဖိုင်ဖတ်၍ မရပါ။ ထပ်ရွေးပါ။');
-        setStatus('error');
-        return;
-      }
-      // Create a persistent File from the buffer
-      const file = new File([fileBuffer], originalFile.name, { type: originalFile.type || 'video/mp4' });
+      const file = e.target.files[0];
 
       // Pre-check: only for App API mode (Own API skips credit check)
       if (apiMode === 'app') {
@@ -2524,8 +2494,17 @@ const RecapVideoNVPage: React.FC = () => {
     }
   };
 
-  // Access gate — optimistic: skip loading spinner, show UI immediately
-  // Auth validation runs in background; redirects if unauthorized
+  // Access gate — render before main UI
+  if (isAccessLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-muted-foreground">Checking access...</p>
+        </div>
+      </div>);
+
+  }
 
   if (!isAllowed) {
     return (

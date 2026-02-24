@@ -797,7 +797,8 @@ const ThumbnailView: React.FC = () => {
     }
   };
 
-  if (!isAllowed && !authLoading) return null;
+  if (authLoading) return <div className="min-h-screen bg-[#020617] flex items-center justify-center"><div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full" /></div>;
+  if (!isAllowed) return null;
 
   return (
     <div className="space-y-6 pb-40 animate-in fade-in duration-500 max-w-5xl text-white bg-blue-600 my-px px-[5px] mx-0 sm:mx-auto">

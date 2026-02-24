@@ -428,61 +428,23 @@ serve(async (req) => {
 
     // ===== COMPUTE PER-SEGMENT TIMESTAMPS FROM PCM BYTE COUNT =====
     // PCM duration = byteCount / (sampleRate * channels * bytesPerSample)
-    // Uses WORD COUNT + PUNCTUATION PAUSE MODEL for millisecond-accurate speech-proportional timing.
     let segmentTimestamps: { index: number; start: number; end: number }[] = [];
     if (Array.isArray(segments) && segments.length > 0) {
       try {
-        // Precise base64 → raw byte count (account for padding)
-        const b64 = finalAudio;
-        const padding = b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0;
-        const pcmBytes = Math.floor((b64.length * 3) / 4) - padding;
+        // base64 length → raw byte count (approximation, exact enough for timestamps)
+        const pcmBytes = Math.floor(finalAudio.length * 0.75);
         const pcmDuration = pcmBytes / (pcmSampleRate * 1 * 2); // mono, 16-bit
         if (pcmDuration > 0) {
-          // Speech-accurate weighting: word count + syllable bonus + punctuation pause model
-          // Punctuation at end of text causes TTS to insert natural pauses:
-          //   Period/Question/Exclamation → ~0.25s pause
-          //   Comma/Semicolon/Colon → ~0.12s pause
-          //   Ellipsis → ~0.35s pause
-          const PAUSE_PERIOD = 0.25;
-          const PAUSE_COMMA = 0.12;
-          const PAUSE_ELLIPSIS = 0.35;
-
-          const getSegmentWeight = (text: string): { speechWeight: number; pauseSeconds: number } => {
-            const trimmed = (text || "").trim();
-            const words = trimmed.split(/\s+/).filter(Boolean);
-            // Base weight: each word = 1 unit, long words (≥5 chars) get +0.4 for extra syllables
-            const speechWeight = words.reduce((acc, w) => acc + 1 + (w.length >= 5 ? 0.4 : w.length >= 3 ? 0.15 : 0), 0);
-            
-            // Count punctuation pauses within the text
-            const ellipsisCount = (trimmed.match(/\.{3}|…/g) || []).length;
-            const periodCount = (trimmed.match(/[.!?]+/g) || []).length - ellipsisCount;
-            const commaCount = (trimmed.match(/[,;:—–]/g) || []).length;
-            
-            const pauseSeconds = (periodCount * PAUSE_PERIOD) + (commaCount * PAUSE_COMMA) + (ellipsisCount * PAUSE_ELLIPSIS);
-            
-            return { speechWeight, pauseSeconds };
-          };
-
-          const segAnalysis = (segments as { text: string }[]).map(s => getSegmentWeight(s.text));
-          const totalSpeechWeight = segAnalysis.reduce((a, b) => a + b.speechWeight, 0);
-          const totalPauseSeconds = segAnalysis.reduce((a, b) => a + b.pauseSeconds, 0);
-          
-          // Split duration into speech time and pause time
-          const speechDuration = Math.max(0, pcmDuration - totalPauseSeconds);
-          
+          const totalChars = segments.reduce((sum: number, s: { text: string }) => sum + (s.text?.length || 0), 0);
           let cursor = 0;
           segmentTimestamps = (segments as { text: string }[]).map((seg, idx) => {
-            const analysis = segAnalysis[idx];
-            const speechPct = totalSpeechWeight > 0 ? analysis.speechWeight / totalSpeechWeight : 1 / segments.length;
-            const segDuration = (speechPct * speechDuration) + analysis.pauseSeconds;
-            
-            const start = parseFloat(cursor.toFixed(3));
-            cursor += segDuration;
-            // Last segment always ends exactly at pcmDuration to prevent drift
+            const charPct = totalChars > 0 ? (seg.text?.length || 0) / totalChars : 1 / segments.length;
+            const start = parseFloat((cursor).toFixed(3));
+            cursor += charPct * pcmDuration;
             const end = parseFloat((idx === segments.length - 1 ? pcmDuration : cursor).toFixed(3));
             return { index: idx, start, end };
           });
-          console.log(`[gemini-tts] segmentTimestamps (punctuation-aware): ${segments.length} segs, pcmDuration=${pcmDuration.toFixed(2)}s, totalPause=${totalPauseSeconds.toFixed(2)}s`);
+          console.log(`[gemini-tts] segmentTimestamps: ${segments.length} segs, pcmDuration=${pcmDuration.toFixed(2)}s`);
         }
       } catch (e) {
         console.error("[gemini-tts] Failed to compute segmentTimestamps:", e);

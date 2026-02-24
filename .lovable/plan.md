@@ -1,58 +1,57 @@
 
-# Video Upload System Upgrade - Recap Video NV
 
-## Problem
-The current upload system routes every 8MB chunk through the `video-recap` edge function, which acts as a proxy to Google Files API. This adds unnecessary latency (client -> Edge Function -> Google) for each chunk. There is also no real-time progress bar showing exact percentage.
+# Security Fix Plan for Automation Nova AI
 
-## Solution
-Use the existing `get-upload-url` and `upload-chunk` edge functions to perform direct-to-Google resumable uploads with real-time progress percentage, while keeping all non-upload code in the AUTO-PIPELINE-v2 block completely unchanged.
+## Issues Found (from your screenshot and security scan)
 
-## Scope of Changes
+The Security Advisor is flagging 3 errors. Here's what each one means and how to fix them:
 
-### What WILL be modified (upload section only, lines ~2373-2428 inside AUTO-PIPELINE-v2):
-1. Replace the `video-recap` initUpload call with `get-upload-url` edge function call
-2. Replace the `video-recap` uploadChunkBinary loop with `upload-chunk` edge function calls
-3. Add a percentage-based progress state for the upload progress bar
+### Error 1: `public.logs` - RLS Disabled
+### Error 2: `public.users` - RLS Disabled  
+### Error 3: `public.users` - Sensitive Columns Exposed
 
-### What WILL NOT be modified:
-- All 4 protected block headers/guards remain intact
-- Script generation logic (lines 2434-2482) - untouched
-- Voice generation logic - untouched
-- Recording pipeline - untouched
-- AV-SYNC block - untouched
-- handleVideoUpload function - untouched
-- All UI components outside the upload section - untouched
+These `public.logs` and `public.users` tables are **not part of your app code** - they are internal system tables created by Supabase extensions (like `supabase_functions` schema logging). Your actual application tables (`profiles`, `activity_logs`, `user_roles`, etc.) all have RLS properly enabled already.
+
+However, to silence these warnings and prevent any potential exposure, we will enable RLS on them and add deny-all policies.
+
+### Additional Issues Found by Our Security Scan
+
+| Issue | Severity | Fix |
+|-------|----------|-----|
+| `promotion_usage_tracking` - broken UPDATE policy (`ip_address = ip_address` always true) | Error | Fix the policy to deny updates from non-admins |
+| `promotion_usage_tracking` - public SELECT with `USING(true)` | Error | Restrict to admin-only |
+| Leaked Password Protection disabled | Warning | Enable it via auth settings |
+
+---
+
+## Implementation Steps
+
+### Step 1: Database Migration
+A single SQL migration to fix all database-level security issues:
+
+1. **Enable RLS on `public.logs`** (if it exists as a real table) and add a deny-all SELECT policy
+2. **Fix `promotion_usage_tracking`** broken UPDATE policy - drop the `users_can_update_own_ip_promotion_tracking` policy (which has `ip_address = ip_address` = always true) and replace with admin-only update
+3. **Fix `promotion_usage_tracking`** public SELECT - drop `users_can_select_own_ip_promotion_tracking` policy (which has `USING(true)`) since admin-only SELECT policy already exists
+4. **Enable leaked password protection** via auth configuration
+
+### Step 2: Enable Leaked Password Protection
+Use the auth configuration tool to turn on leaked password protection.
+
+---
+
+## What Will NOT Be Changed
+- No application code files will be modified
+- No existing features, logic, or protected blocks will be touched
+- All existing RLS policies on other tables remain intact
+- The `safe_app_settings` and `safe_tool_settings` views already have `security_invoker=true` so they inherit RLS from their base tables - these are safe
 
 ## Technical Details
 
-### 1. Add upload progress state (near existing state declarations, ~line 2008)
-- Add `const [uploadPercent, setUploadPercent] = useState(0);`
+```sql
+-- Fix promotion_usage_tracking broken policies
+DROP POLICY IF EXISTS "users_can_select_own_ip_promotion_tracking" ON public.promotion_usage_tracking;
+DROP POLICY IF EXISTS "users_can_update_own_ip_promotion_tracking" ON public.promotion_usage_tracking;
 
-### 2. Modify upload section inside startAutoPipeline (lines 2373-2428 only)
+-- Only admins and the insert policy remain (anon_can_insert + admins_can_select + admins_can_delete)
+```
 
-**Before (current):**
-- Calls `supabase.functions.invoke('video-recap', { body: { action: 'initUpload', ... } })` to get upload URL
-- Loops chunks through `supabase.functions.invoke('video-recap', { body: chunkBuf, headers: ... })` (proxied)
-
-**After (upgraded):**
-- Call `supabase.functions.invoke('get-upload-url', { body: { fileName, fileSize, mimeType, apiKey } })` to get resumable upload URL directly
-- Loop 8MB chunks through `supabase.functions.invoke('upload-chunk', { body: formData })` using FormData with `uploadUrl`, `offset`, `command`, and `chunk` fields
-- Update `setUploadPercent(Math.round((i + 1) / totalChunks * 100))` after each successful chunk
-- Last chunk uses command `"upload, finalize"` to complete the upload and get the file metadata/URI
-
-### 3. Add progress bar UI (near line 2718-2728, the existing progressMsg area)
-- When `status === 'processing'` and `uploadPercent > 0 && uploadPercent < 100`, show a progress bar with exact percentage
-- Use the existing `Progress` component from `@/components/ui/progress`
-
-### 4. Reset uploadPercent
-- Set `setUploadPercent(0)` at pipeline start
-- Set `setUploadPercent(100)` when upload completes
-
-## Benefits
-- Faster uploads: `get-upload-url` and `upload-chunk` are lightweight proxy functions, reducing overhead
-- Real-time progress: Exact percentage displayed via progress bar
-- Resume capability: The Tus-based resumable URL persists, so failed chunks can be retried from the last offset
-- Stability: Same 8MB chunk size maintaining Google's protocol requirements
-
-## Files to Edit
-1. `src/pages/RecapVideoNVPage.tsx` - Upload logic inside AUTO-PIPELINE-v2 block (lines 2373-2428) + progress state + progress bar UI

@@ -283,7 +283,8 @@ const TranslateView: React.FC = () => {
 
   const isReady = text.trim() && (apiType === "own" ? apiKey.trim() : selectedTier !== null);
 
-  if (!isAllowed && !authLoading) return null;
+  if (authLoading) return <div className="min-h-screen bg-[#020617] flex items-center justify-center"><div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full" /></div>;
+  if (!isAllowed) return null;
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-40 px-1 max-w-2xl mx-auto bg-blue-700">
