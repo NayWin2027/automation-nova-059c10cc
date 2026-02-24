@@ -435,19 +435,46 @@ serve(async (req) => {
         const pcmBytes = Math.floor(finalAudio.length * 0.75);
         const pcmDuration = pcmBytes / (pcmSampleRate * 1 * 2); // mono, 16-bit
         if (pcmDuration > 0) {
-        // Use word count for proportional estimation — correlates better with speech duration than char count
-        const wordCount = (t: string) => (t || '').split(/\s+/).filter(Boolean).length || 1;
-        const totalWords = segments.reduce((sum: number, s: { text: string }) => sum + wordCount(s.text), 0);
+        // === WEIGHTED SPEECH DURATION ESTIMATION ===
+        // Combines word count, syllable approximation, and punctuation pauses
+        // for accurate proportional timestamp mapping.
+        const estimateSegWeight = (text: string): number => {
+          const words = (text || '').split(/\s+/).filter(Boolean);
+          if (words.length === 0) return 1;
+          
+          // Base: each word = 1 unit, longer words (>=5 chars) get bonus for extra syllables
+          let wordWeight = 0;
+          for (const w of words) {
+            const clean = w.replace(/[^a-zA-Z\u1000-\u109F\u3000-\u9FFF]/g, '');
+            wordWeight += 1;
+            if (clean.length >= 8) wordWeight += 0.5;      // very long word
+            else if (clean.length >= 5) wordWeight += 0.25; // medium-long word
+          }
+          
+          // Punctuation pause weights — TTS adds natural pauses at these
+          const periods = (text.match(/[.!]\s/g) || []).length + (text.match(/[.!]$/g) || []).length;
+          const questions = (text.match(/[?]\s/g) || []).length + (text.match(/[?]$/g) || []).length;
+          const commas = (text.match(/[,;:]\s/g) || []).length;
+          const ellipses = (text.match(/\.{2,}|…/g) || []).length;
+          const dashes = (text.match(/[—–-]{2,}/g) || []).length;
+          
+          // Pause weights in word-equivalent units (calibrated to TTS pause durations)
+          const pauseWeight = periods * 0.6 + questions * 0.65 + commas * 0.3 + ellipses * 0.9 + dashes * 0.4;
+          
+          return wordWeight + pauseWeight;
+        };
+        
+        const segWeights = (segments as { text: string }[]).map(s => estimateSegWeight(s.text));
+        const totalWeight = segWeights.reduce((sum, w) => sum + w, 0);
           let cursor = 0;
           segmentTimestamps = (segments as { text: string }[]).map((seg, idx) => {
-            const segWords = wordCount(seg.text);
-            const charPct = totalWords > 0 ? segWords / totalWords : 1 / segments.length;
+            const pct = totalWeight > 0 ? segWeights[idx] / totalWeight : 1 / segments.length;
             const start = parseFloat((cursor).toFixed(3));
-            cursor += charPct * pcmDuration;
+            cursor += pct * pcmDuration;
             const end = parseFloat((idx === segments.length - 1 ? pcmDuration : cursor).toFixed(3));
             return { index: idx, start, end };
           });
-          console.log(`[gemini-tts] segmentTimestamps: ${segments.length} segs, pcmDuration=${pcmDuration.toFixed(2)}s`);
+          console.log(`[gemini-tts] segmentTimestamps: ${segments.length} segs, pcmDuration=${pcmDuration.toFixed(2)}s, weights=${segWeights.map(w=>w.toFixed(1)).join(',')}`);
         }
       } catch (e) {
         console.error("[gemini-tts] Failed to compute segmentTimestamps:", e);
