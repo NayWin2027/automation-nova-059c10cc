@@ -28,8 +28,9 @@ export function useAuthGuard(toolId?: string): AuthGuardResult {
   const userPlan = profile?.plan || 'free';
 
   // Deterministic: compute isAllowed purely from current state
+  // Optimistic: allow access while loading to avoid blocking spinner
   const isAllowed = useMemo(() => {
-    if (isLoading) return false;
+    if (isLoading) return true;
 
     // Admins always have access
     if (isAdmin) return true;
