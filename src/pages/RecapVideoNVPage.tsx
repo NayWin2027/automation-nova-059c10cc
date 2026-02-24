@@ -2494,7 +2494,20 @@ const RecapVideoNVPage: React.FC = () => {
 
   const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
+      const originalFile = e.target.files[0];
+
+      // Immediately read file into memory to prevent stale file-handle errors
+      // (mobile browsers can revoke file permissions during async waits)
+      let fileBuffer: ArrayBuffer;
+      try {
+        fileBuffer = await originalFile.arrayBuffer();
+      } catch (readErr) {
+        setProgressMsg('❌ ဖိုင်ဖတ်၍ မရပါ။ ထပ်ရွေးပါ။');
+        setStatus('error');
+        return;
+      }
+      // Create a persistent File from the buffer
+      const file = new File([fileBuffer], originalFile.name, { type: originalFile.type || 'video/mp4' });
 
       // Pre-check: only for App API mode (Own API skips credit check)
       if (apiMode === 'app') {
