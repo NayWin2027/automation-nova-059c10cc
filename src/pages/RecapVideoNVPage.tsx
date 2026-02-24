@@ -17,6 +17,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Check, ChevronsUpDown } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 
 // ╔══════════════════════════════════════════════════════════════════════════╗
 // ║   🔐 TWO-FACTOR SECURITY LOCK SYSTEM — RecapVideoNV Engine            ║
@@ -2006,6 +2007,7 @@ const RecapVideoNVPage: React.FC = () => {
   const [videoUrl, setVideoUrl] = useState<string | undefined>(undefined);
   const [status, setStatus] = useState<ProcessingStatus>('idle');
   const [progressMsg, setProgressMsg] = useState('');
+  const [uploadPercent, setUploadPercent] = useState(0);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const videoDurationRef = useRef<number>(0);
   // Exact per-segment timestamps from gemini-tts WAV header — passed into generateVoice
@@ -2370,62 +2372,59 @@ const RecapVideoNVPage: React.FC = () => {
       };
       const mimeType = file.type || mimeMap[ext] || 'video/mp4';
 
-      // === Upload to Google Files API via video-recap chunked upload ===
+      // === Upload to Google Files API via get-upload-url + upload-chunk (Resumable) ===
       setProgressMsg('📤 Google AI ဆီ video upload လုပ်နေပါသည်...');
+      setUploadPercent(0);
 
-      const initBody: Record<string, unknown> = {
-        action: 'initUpload',
+      // Step 1: Get resumable upload URL
+      const uploadUrlBody: Record<string, unknown> = {
         fileName: file.name,
         fileSize: file.size,
         mimeType: mimeType,
-        useOwnApi: resolvedApiMode === 'own'
       };
-      if (resolvedOwnKey) initBody.ownApiKey = resolvedOwnKey;
+      if (resolvedOwnKey) uploadUrlBody.apiKey = resolvedOwnKey;
 
-      const { data: initData, error: initError } = await supabase.functions.invoke('video-recap', {
-        body: initBody
+      const { data: initData, error: initError } = await supabase.functions.invoke('get-upload-url', {
+        body: uploadUrlBody
       });
 
       if (initError || initData?.error || !initData?.uploadUrl) {
         throw new Error(initData?.error || initError?.message || 'Upload URL ရယူ၍ မအောင်မြင်ပါ');
       }
 
-      // Sequential chunked upload: 8MB chunks (Google resumable upload requires multiples of 8,388,608 bytes)
-      const CHUNK_SIZE = 8 * 1024 * 1024; // 8MB — Google Files API chunk granularity requirement
+      // Step 2: Sequential chunked upload via upload-chunk edge function
+      const CHUNK_SIZE = 8 * 1024 * 1024; // 8MB
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
       let fileUri = '';
 
       for (let i = 0; i < totalChunks; i++) {
         const start = i * CHUNK_SIZE;
         const end = Math.min(start + CHUNK_SIZE, file.size);
-        const chunk = file.slice(start, end);
+        const chunkBlob = file.slice(start, end);
         const isLastChunk = i === totalChunks - 1;
-        const chunkBuf = await chunk.arrayBuffer();
-        const chunkHeaders: Record<string, string> = {
-          'x-recap-action': 'uploadChunkBinary',
-          'x-upload-url': initData.uploadUrl,
-          'x-chunk-index': String(i),
-          'x-total-chunks': String(totalChunks),
-          'x-offset': String(start),
-          'x-total-size': String(file.size),
-          'x-mime-type': mimeType,
-          'x-is-last-chunk': String(isLastChunk)
-        };
-        if (resolvedOwnKey) chunkHeaders['x-own-api-key'] = resolvedOwnKey;
+        const command = isLastChunk ? 'upload, finalize' : 'upload';
+
+        const formData = new FormData();
+        formData.append('uploadUrl', initData.uploadUrl);
+        formData.append('offset', String(start));
+        formData.append('command', command);
+        formData.append('chunk', chunkBlob);
 
         setProgressMsg(`📤 Uploading... (${i + 1}/${totalChunks})`);
 
-        const { data, error } = await supabase.functions.invoke('video-recap', {
-          body: chunkBuf,
-          headers: chunkHeaders
+        const { data, error } = await supabase.functions.invoke('upload-chunk', {
+          body: formData
         });
         if (error || data?.error) {
           throw new Error(data?.error || error?.message || `Chunk ${i + 1} upload failed`);
         }
-        if (isLastChunk && data?.fileUri) {
-          fileUri = data.fileUri;
+        setUploadPercent(Math.round(((i + 1) / totalChunks) * 100));
+
+        if (isLastChunk && data?.file) {
+          fileUri = data.file.uri || data.file.name || '';
         }
       }
+      setUploadPercent(100);
 
       if (!fileUri) {
         throw new Error('File URI ရယူ၍ မအောင်မြင်ပါ');
@@ -2724,6 +2723,12 @@ const RecapVideoNVPage: React.FC = () => {
           'bg-secondary/50 text-muted-foreground'}`
           }>
               {progressMsg}
+              {status === 'processing' && uploadPercent > 0 && uploadPercent < 100 && (
+                <div className="mt-2">
+                  <Progress value={uploadPercent} className="h-2" />
+                  <p className="text-xs mt-1 text-center">{uploadPercent}%</p>
+                </div>
+              )}
             </div>
           }
         </div>
