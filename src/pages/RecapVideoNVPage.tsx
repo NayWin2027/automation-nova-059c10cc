@@ -733,8 +733,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
       // Draw subtitles on canvas (burns into recorded output)
       // Sub box = EXACT blur box pixel dimensions (1000% fit)
       // Auto-scales font size to fit all text within the box — no text cut-off
+      // When blur region is OFF, subtitles are completely hidden per user request
       const subText = currentSubtitleRef.current;
-      if (subText) {
+      if (subText && blurSettings.enabled) {
         ctx.save();
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
