@@ -428,6 +428,7 @@ serve(async (req) => {
 
     // ===== COMPUTE PER-SEGMENT TIMESTAMPS FROM PCM BYTE COUNT =====
     // PCM duration = byteCount / (sampleRate * channels * bytesPerSample)
+    // Uses WORD COUNT (with long-word bonus) instead of character count for accurate speech-proportional timing.
     let segmentTimestamps: { index: number; start: number; end: number }[] = [];
     if (Array.isArray(segments) && segments.length > 0) {
       try {
@@ -435,16 +436,23 @@ serve(async (req) => {
         const pcmBytes = Math.floor(finalAudio.length * 0.75);
         const pcmDuration = pcmBytes / (pcmSampleRate * 1 * 2); // mono, 16-bit
         if (pcmDuration > 0) {
-          const totalChars = segments.reduce((sum: number, s: { text: string }) => sum + (s.text?.length || 0), 0);
+          // Word-count proportional: each word ≈ 1 unit, long words (≥4 chars) get +0.3 bonus
+          // This matches actual speech duration far better than character count
+          const getWordWeight = (text: string): number => {
+            const words = (text || "").trim().split(/\s+/).filter(Boolean);
+            return words.reduce((acc, w) => acc + 1 + (w.length >= 4 ? 0.3 : 0), 0);
+          };
+          const segWeights = (segments as { text: string }[]).map(s => getWordWeight(s.text));
+          const totalWeight = segWeights.reduce((a, b) => a + b, 0);
           let cursor = 0;
           segmentTimestamps = (segments as { text: string }[]).map((seg, idx) => {
-            const charPct = totalChars > 0 ? (seg.text?.length || 0) / totalChars : 1 / segments.length;
+            const pct = totalWeight > 0 ? segWeights[idx] / totalWeight : 1 / segments.length;
             const start = parseFloat((cursor).toFixed(3));
-            cursor += charPct * pcmDuration;
+            cursor += pct * pcmDuration;
             const end = parseFloat((idx === segments.length - 1 ? pcmDuration : cursor).toFixed(3));
             return { index: idx, start, end };
           });
-          console.log(`[gemini-tts] segmentTimestamps: ${segments.length} segs, pcmDuration=${pcmDuration.toFixed(2)}s`);
+          console.log(`[gemini-tts] segmentTimestamps (word-weighted): ${segments.length} segs, pcmDuration=${pcmDuration.toFixed(2)}s`);
         }
       } catch (e) {
         console.error("[gemini-tts] Failed to compute segmentTimestamps:", e);
