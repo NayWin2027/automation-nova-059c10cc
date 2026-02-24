@@ -178,8 +178,8 @@ const Index = () => {
     return !setting || setting.is_enabled;
   });
   const handleToolClick = (tool: Tool) => {
-    // PLAN MODE: Redirect non-logged-in tool clicks to Plans tab
-    if (accessControl.planMode && !isAdmin && !isAuthenticated) {
+    // PLAN MODE: Redirect all tool clicks to Plans tab
+    if (accessControl.planMode && !isAdmin) {
       setActiveTab("premium");
       return;
     }

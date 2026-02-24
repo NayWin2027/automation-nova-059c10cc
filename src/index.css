@@ -715,104 +715,47 @@
   }
 }
 
-/* Disco DJ Neon Buy Now Button Animation */
-@keyframes disco-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.85; transform: scale(0.97); }
+/* Neon Buy Now Button Animation */
+@keyframes neon-glow-cycle {
+  0% {
+    box-shadow: 0 0 10px rgba(79, 70, 229, 0.6), 0 0 20px rgba(79, 70, 229, 0.4), 0 0 40px rgba(79, 70, 229, 0.2);
+  }
+  16% {
+    box-shadow: 0 0 10px rgba(236, 72, 153, 0.6), 0 0 20px rgba(236, 72, 153, 0.4), 0 0 40px rgba(236, 72, 153, 0.2);
+  }
+  33% {
+    box-shadow: 0 0 10px rgba(6, 182, 212, 0.6), 0 0 20px rgba(6, 182, 212, 0.4), 0 0 40px rgba(6, 182, 212, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.6), 0 0 20px rgba(245, 158, 11, 0.4), 0 0 40px rgba(245, 158, 11, 0.2);
+  }
+  66% {
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.6), 0 0 20px rgba(16, 185, 129, 0.4), 0 0 40px rgba(16, 185, 129, 0.2);
+  }
+  83% {
+    box-shadow: 0 0 10px rgba(139, 92, 246, 0.6), 0 0 20px rgba(139, 92, 246, 0.4), 0 0 40px rgba(139, 92, 246, 0.2);
+  }
+  100% {
+    box-shadow: 0 0 10px rgba(79, 70, 229, 0.6), 0 0 20px rgba(79, 70, 229, 0.4), 0 0 40px rgba(79, 70, 229, 0.2);
+  }
 }
 
-@keyframes disco-glow-cycle {
-  0%   { box-shadow: 0 0 8px rgba(79,70,229,0.8), 0 0 25px rgba(79,70,229,0.5), 0 0 60px rgba(79,70,229,0.3), 0 0 120px rgba(79,70,229,0.1); }
-  14%  { box-shadow: 0 0 8px rgba(236,72,153,0.8), 0 0 25px rgba(236,72,153,0.5), 0 0 60px rgba(236,72,153,0.3), 0 0 120px rgba(236,72,153,0.1); }
-  28%  { box-shadow: 0 0 8px rgba(6,182,212,0.8), 0 0 25px rgba(6,182,212,0.5), 0 0 60px rgba(6,182,212,0.3), 0 0 120px rgba(6,182,212,0.1); }
-  42%  { box-shadow: 0 0 8px rgba(245,158,11,0.8), 0 0 25px rgba(245,158,11,0.5), 0 0 60px rgba(245,158,11,0.3), 0 0 120px rgba(245,158,11,0.1); }
-  57%  { box-shadow: 0 0 8px rgba(16,185,129,0.8), 0 0 25px rgba(16,185,129,0.5), 0 0 60px rgba(16,185,129,0.3), 0 0 120px rgba(16,185,129,0.1); }
-  71%  { box-shadow: 0 0 8px rgba(139,92,246,0.8), 0 0 25px rgba(139,92,246,0.5), 0 0 60px rgba(139,92,246,0.3), 0 0 120px rgba(139,92,246,0.1); }
-  85%  { box-shadow: 0 0 8px rgba(244,63,94,0.8), 0 0 25px rgba(244,63,94,0.5), 0 0 60px rgba(244,63,94,0.3), 0 0 120px rgba(244,63,94,0.1); }
-  100% { box-shadow: 0 0 8px rgba(79,70,229,0.8), 0 0 25px rgba(79,70,229,0.5), 0 0 60px rgba(79,70,229,0.3), 0 0 120px rgba(79,70,229,0.1); }
-}
-
-@keyframes disco-bg-cycle {
-  0%   { background-color: rgba(79,70,229,1); }
-  14%  { background-color: rgba(236,72,153,1); }
-  28%  { background-color: rgba(6,182,212,1); }
-  42%  { background-color: rgba(245,158,11,1); }
-  57%  { background-color: rgba(16,185,129,1); }
-  71%  { background-color: rgba(139,92,246,1); }
-  85%  { background-color: rgba(244,63,94,1); }
-  100% { background-color: rgba(79,70,229,1); }
-}
-
-@keyframes disco-rays {
-  0%   { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-@keyframes disco-shine {
-  0%   { transform: translateX(-150%) rotate(45deg); opacity: 0; }
-  40%  { opacity: 0.6; }
-  100% { transform: translateX(150%) rotate(45deg); opacity: 0; }
-}
-
-@keyframes firework-burst-1 {
-  0%   { transform: translate(-50%,-50%) scale(0); opacity: 0.9; }
-  50%  { opacity: 0.6; }
-  100% { transform: translate(-50%,-50%) scale(3.5); opacity: 0; }
-}
-
-@keyframes firework-burst-2 {
-  0%   { transform: translate(-50%,-50%) scale(0); opacity: 0.8; }
-  50%  { opacity: 0.5; }
-  100% { transform: translate(-50%,-50%) scale(4); opacity: 0; }
-}
-
-@keyframes firework-sparkle {
-  0%, 100% { opacity: 0; }
-  20% { opacity: 1; }
-  80% { opacity: 0.3; }
+@keyframes neon-bg-cycle {
+  0%   { background-color: rgba(79, 70, 229, 1); }
+  16%  { background-color: rgba(236, 72, 153, 1); }
+  33%  { background-color: rgba(6, 182, 212, 1); }
+  50%  { background-color: rgba(245, 158, 11, 1); }
+  66%  { background-color: rgba(16, 185, 129, 1); }
+  83%  { background-color: rgba(139, 92, 246, 1); }
+  100% { background-color: rgba(79, 70, 229, 1); }
 }
 
 .neon-buy-now-btn {
-  animation: disco-glow-cycle 2.5s ease-in-out infinite, disco-bg-cycle 2.5s ease-in-out infinite, disco-pulse 1.2s ease-in-out infinite;
+  animation: neon-glow-cycle 3s ease-in-out infinite, neon-bg-cycle 3s ease-in-out infinite;
   position: relative;
-  overflow: visible;
-  z-index: 1;
+  overflow: hidden;
 }
 
-/* Rotating disco rays behind button */
-.neon-buy-now-btn::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 350%;
-  height: 350%;
-  transform-origin: center center;
-  background: conic-gradient(
-    from 0deg,
-    transparent 0deg, rgba(79,70,229,0.25) 5deg, transparent 10deg,
-    transparent 25deg, rgba(236,72,153,0.2) 30deg, transparent 35deg,
-    transparent 50deg, rgba(6,182,212,0.25) 55deg, transparent 60deg,
-    transparent 75deg, rgba(245,158,11,0.2) 80deg, transparent 85deg,
-    transparent 100deg, rgba(16,185,129,0.25) 105deg, transparent 110deg,
-    transparent 130deg, rgba(139,92,246,0.2) 135deg, transparent 140deg,
-    transparent 160deg, rgba(244,63,94,0.25) 165deg, transparent 170deg,
-    transparent 190deg, rgba(79,70,229,0.2) 195deg, transparent 200deg,
-    transparent 220deg, rgba(236,72,153,0.25) 225deg, transparent 230deg,
-    transparent 250deg, rgba(6,182,212,0.2) 255deg, transparent 260deg,
-    transparent 280deg, rgba(245,158,11,0.25) 285deg, transparent 290deg,
-    transparent 310deg, rgba(139,92,246,0.2) 315deg, transparent 320deg,
-    transparent 340deg, rgba(244,63,94,0.25) 345deg, transparent 350deg
-  );
-  animation: disco-rays 3s linear infinite;
-  z-index: -1;
-  margin-left: -175%;
-  margin-top: -175%;
-  pointer-events: none;
-  filter: blur(1px);
-}
-
-/* Sweeping shine highlight */
 .neon-buy-now-btn::after {
   content: '';
   position: absolute;
@@ -822,41 +765,14 @@
   height: 200%;
   background: linear-gradient(
     45deg,
-    transparent 30%,
-    rgba(255,255,255,0.3) 45%,
-    rgba(255,255,255,0.5) 50%,
-    rgba(255,255,255,0.3) 55%,
-    transparent 70%
+    transparent 40%,
+    rgba(255, 255, 255, 0.15) 50%,
+    transparent 60%
   );
-  animation: disco-shine 1.8s ease-in-out infinite;
-  pointer-events: none;
+  animation: neon-shine 2s ease-in-out infinite;
 }
 
-/* Firework burst rings radiating outward */
-.neon-buy-now-btn .firework-ring-1,
-.neon-buy-now-btn .firework-ring-2,
-.neon-buy-now-btn .firework-ring-3 {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: -1;
-}
-
-.neon-buy-now-btn .firework-ring-1 {
-  border: 2px solid rgba(79,70,229,0.6);
-  animation: firework-burst-1 2s ease-out infinite;
-}
-
-.neon-buy-now-btn .firework-ring-2 {
-  border: 2px solid rgba(6,182,212,0.5);
-  animation: firework-burst-2 2s ease-out 0.5s infinite;
-}
-
-.neon-buy-now-btn .firework-ring-3 {
-  border: 2px solid rgba(236,72,153,0.5);
-  animation: firework-burst-1 2s ease-out 1s infinite;
+@keyframes neon-shine {
+  0% { transform: translateX(-100%) rotate(45deg); }
+  100% { transform: translateX(100%) rotate(45deg); }
 }
