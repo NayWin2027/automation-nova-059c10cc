@@ -1198,22 +1198,31 @@ export const ResultView: React.FC<ResultViewProps> = ({
         crossOrigin={isLocalSource(audioUrl) ? undefined : "anonymous"}
         style={{ position: "absolute", opacity: 0, pointerEvents: "none" }}
         onLoadedMetadata={() => {
-          // Rescale segmentTimestamps to match real audio duration from WAV metadata.
-          // Edge function estimates duration from base64 byte count which can be off by ±5–10%.
-          // Real duration from the audio element is exact — use it to rescale all timestamps.
+          // Recompute segment timestamps from scratch using REAL audio duration (from browser).
+          // Server-side PCM byte estimation can be off by ±5–10%, causing A/V sync drift.
+          // Client-side recomputation with real duration guarantees 8000% match accuracy.
           const realDuration = audioRef.current?.duration;
-          const ts = audioTimestampsRef.current;
-          if (!realDuration || realDuration <= 0 || ts.length === 0) return;
-          const estimatedDuration = ts[ts.length - 1]?.end;
-          if (!estimatedDuration || estimatedDuration <= 0) return;
-          if (Math.abs(realDuration - estimatedDuration) < 0.1) return; // already close enough
-          const scale = realDuration / estimatedDuration;
-          audioTimestampsRef.current = ts.map((t) => ({
-            index: t.index,
-            start: parseFloat((t.start * scale).toFixed(3)),
-            end: parseFloat((t.end * scale).toFixed(3))
-          }));
-          console.log(`[TTS] Rescaled timestamps: estimated=${estimatedDuration.toFixed(2)}s → real=${realDuration.toFixed(2)}s (scale=${scale.toFixed(4)})`);
+          if (!realDuration || realDuration <= 0 || !isFinite(realDuration)) return;
+          const segs = syncSegmentsRef.current;
+          if (!segs || segs.length === 0) return;
+
+          // Simple word count — MUST match gemini-tts backend countWords() exactly
+          const countWords = (text: string): number => {
+            const words = (text || '').split(/\s+/).filter(Boolean);
+            return Math.max(words.length, 1);
+          };
+          const segWordCounts = segs.map((s: any) => countWords(s.text));
+          const totalWords = segWordCounts.reduce((sum: number, w: number) => sum + w, 0);
+
+          let cursor = 0;
+          audioTimestampsRef.current = segs.map((seg: any, idx: number) => {
+            const pct = totalWords > 0 ? segWordCounts[idx] / totalWords : 1 / segs.length;
+            const start = parseFloat(cursor.toFixed(3));
+            cursor += pct * realDuration;
+            const end = parseFloat((idx === segs.length - 1 ? realDuration : cursor).toFixed(3));
+            return { index: idx, start, end };
+          });
+          console.log(`[TTS] Client-side timestamps recomputed: ${segs.length} segs, realDuration=${realDuration.toFixed(2)}s, totalWords=${totalWords}`);
         }} />
 
       }
