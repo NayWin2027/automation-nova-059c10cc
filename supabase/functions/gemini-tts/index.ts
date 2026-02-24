@@ -435,10 +435,13 @@ serve(async (req) => {
         const pcmBytes = Math.floor(finalAudio.length * 0.75);
         const pcmDuration = pcmBytes / (pcmSampleRate * 1 * 2); // mono, 16-bit
         if (pcmDuration > 0) {
-          const totalChars = segments.reduce((sum: number, s: { text: string }) => sum + (s.text?.length || 0), 0);
+        // Use word count for proportional estimation — correlates better with speech duration than char count
+        const wordCount = (t: string) => (t || '').split(/\s+/).filter(Boolean).length || 1;
+        const totalWords = segments.reduce((sum: number, s: { text: string }) => sum + wordCount(s.text), 0);
           let cursor = 0;
           segmentTimestamps = (segments as { text: string }[]).map((seg, idx) => {
-            const charPct = totalChars > 0 ? (seg.text?.length || 0) / totalChars : 1 / segments.length;
+            const segWords = wordCount(seg.text);
+            const charPct = totalWords > 0 ? segWords / totalWords : 1 / segments.length;
             const start = parseFloat((cursor).toFixed(3));
             cursor += charPct * pcmDuration;
             const end = parseFloat((idx === segments.length - 1 ? pcmDuration : cursor).toFixed(3));

@@ -814,8 +814,22 @@ export const ResultView: React.FC<ResultViewProps> = ({
           }
           const totalPages = Math.ceil(fittedLines.length / MAX_LINES);
           const elapsed = (performance.now() - subtitlePageStartRef.current) / 1000;
-          // Each page shows for 2.5 seconds before cycling to next
-          const currentPage = Math.min(Math.floor(elapsed / 2.5), totalPages - 1);
+          // Proportional timing: calculate per-page duration from current audio segment duration
+          // This ensures subtitle pages cycle in sync with the audio segment, not at a fixed rate
+          const audioTs = audioTimestampsRef.current;
+          const av = audioRef.current;
+          let segDuration = 2.5; // fallback if no timestamp data
+          if (av && audioTs.length > 0) {
+            const ct = av.currentTime;
+            const activeTsEntry = audioTs.find((ts) => ct >= ts.start && ct < ts.end);
+            if (activeTsEntry) {
+              segDuration = activeTsEntry.end - activeTsEntry.start;
+            }
+          }
+          // Each page gets proportional time: (lines in this page / total lines) * segment duration
+          // Simplified: evenly divide segment duration across pages
+          const perPageDuration = Math.max(0.8, segDuration / totalPages);
+          const currentPage = Math.min(Math.floor(elapsed / perPageDuration), totalPages - 1);
           const startIdx = currentPage * MAX_LINES;
           displayLines = fittedLines.slice(startIdx, startIdx + MAX_LINES);
         }
