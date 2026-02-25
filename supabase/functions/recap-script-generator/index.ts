@@ -392,8 +392,10 @@ STRUCTURE:
         }
       }
 
+      const durationHint = sourceDurationSec ? `\nSOURCE VIDEO DURATION: ${Math.floor(sourceDurationSec / 60)} minutes ${Math.round(sourceDurationSec % 60)} seconds` : '';
+
       const userPrompt = `[LANGUAGE: ${lang} — ${langLabel}]
-[NICHE: ${nicheLabel}]
+[NICHE: ${nicheLabel}]${durationHint}
 
 INSTRUCTION: Write the narration script in ${lang} language ONLY.
 
@@ -405,17 +407,27 @@ Below is a source video/audio file. Your job is to:
 5. Write a complete professional ${nicheLabel} narration script that covers EVERY important event
 6. A viewer reading your script should feel they know the FULL story
 7. Hook the audience immediately
-8. Follow the source's chronological order
-9. Use vivid, engaging ${lang} appropriate for "${nicheLabel}" content
-10. Be perfectly paced for voice narration
+8. Use vivid, engaging ${lang} appropriate for "${nicheLabel}" content
+9. Be perfectly paced for voice narration
+
+YOU ARE A PROFESSIONAL HOLLYWOOD VIDEO EDITOR:
+- For EACH paragraph, identify which scene/moment in the SOURCE VIDEO best matches the narration content
+- Assign the EXACT video timecode [MM:SS] where that matching scene appears in the source
+- Do NOT follow chronological/sequential order — JUMP to wherever the BEST MATCHING scene is
+- Example: If narrating about a tiger running and the tiger scene is at 02:15, write: [02:15] narration text
+- Example: If narrating about stock market data and that scene is at 00:45, write: [00:45] narration text  
+- Think like a professional editor cutting between scenes — pick the MOST RELEVANT visual for each narration beat
+- If the narration describes an emotion/action, find the video moment that SHOWS that emotion/action
+- NEVER just assign sequential timestamps — that defeats the purpose of intelligent scene matching
 
 OUTPUT FORMAT:
-- Output the narration script as PLAIN TEXT PARAGRAPHS only
-- No JSON, no timestamps, no brackets, no formatting marks, no markdown
-- Each paragraph should be a natural spoken segment ready for voice narration
-- Just write the script text directly
+- Each paragraph MUST start with [MM:SS] — the source video timecode of the best matching scene
+- After the timecode, write the narration text as a natural spoken paragraph
+- Example: [01:23] narration paragraph text here...
+- Each paragraph = one scene cut in the final video
+- The timecode tells the video editor WHICH part of the source video to show during this narration
 
-⚠️ MANDATORY: Every word of your output MUST be in ${lang}. If you write even one word in Burmese/Myanmar and ${lang} is NOT "BURMESE", your output is REJECTED.`;
+⚠️ MANDATORY: Every word of your output (except [MM:SS] timecodes) MUST be in ${lang}. If you write even one word in Burmese/Myanmar and ${lang} is NOT "BURMESE", your output is REJECTED.`;
       contentParts = [
         { text: userPrompt },
         { file_data: { mime_type: resolvedMimeType, file_uri: resolvedFileUri } },
@@ -434,14 +446,18 @@ CRITICAL INSTRUCTIONS:
 2. Identify ALL key moments, especially dramatic/shocking ones
 3. Write a complete recap that covers every important event
 4. Hook the audience immediately
-5. Follow the source's chronological order
-6. Use vivid, engaging ${lang} appropriate for "${nicheLabel}" content
-7. Be perfectly paced for voice narration
+5. Use vivid, engaging ${lang} appropriate for "${nicheLabel}" content
+6. Be perfectly paced for voice narration
+
+OUTPUT FORMAT:
+- Each paragraph MUST start with [MM:SS] — an estimated timecode of the matching scene
+- After the timecode, write the narration text as a natural spoken paragraph
+- Example: [01:23] narration paragraph text here...
 
 RAW TRANSCRIPT:
 ${transcript}
 
-⚠️ MANDATORY: Every word of your output MUST be in ${lang}. If you write even one word in Burmese/Myanmar and ${lang} is NOT "BURMESE", your output is REJECTED.`;
+⚠️ MANDATORY: Every word of your output (except [MM:SS] timecodes) MUST be in ${lang}. If you write even one word in Burmese/Myanmar and ${lang} is NOT "BURMESE", your output is REJECTED.`;
       contentParts = [{ text: userPrompt }];
     }
 
