@@ -2483,7 +2483,8 @@ const RecapVideoNVPage: React.FC = () => {
         throw new Error(initData?.error || initError?.message || 'Upload URL ရယူ၍ မအောင်မြင်ပါ');
       }
 
-      // Sequential chunked upload: 8MB chunks (Google resumable upload requires multiples of 8,388,608 bytes)
+      // Direct-to-Google chunked upload: skip edge function proxy for maximum speed
+      // Client → Google direct (1 hop) instead of Client → Supabase → Edge Function → Google (3 hops)
       const CHUNK_SIZE = 8 * 1024 * 1024; // 8MB — Google Files API chunk granularity requirement
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
       let fileUri = '';
@@ -2493,30 +2494,62 @@ const RecapVideoNVPage: React.FC = () => {
         const end = Math.min(start + CHUNK_SIZE, file.size);
         const chunk = file.slice(start, end);
         const isLastChunk = i === totalChunks - 1;
-        const chunkBuf = await chunk.arrayBuffer();
-        const chunkHeaders: Record<string, string> = {
-          'x-recap-action': 'uploadChunkBinary',
-          'x-upload-url': initData.uploadUrl,
-          'x-chunk-index': String(i),
-          'x-total-chunks': String(totalChunks),
-          'x-offset': String(start),
-          'x-total-size': String(file.size),
-          'x-mime-type': mimeType,
-          'x-is-last-chunk': String(isLastChunk)
-        };
-        if (resolvedOwnKey) chunkHeaders['x-own-api-key'] = resolvedOwnKey;
+        const uploadCommand = isLastChunk ? 'upload, finalize' : 'upload';
 
         setProgressMsg(`📤 Uploading... (${i + 1}/${totalChunks})`);
 
-        const { data, error } = await supabase.functions.invoke('video-recap', {
-          body: chunkBuf,
-          headers: chunkHeaders
-        });
-        if (error || data?.error) {
-          throw new Error(data?.error || error?.message || `Chunk ${i + 1} upload failed`);
+        let chunkResponse: Response;
+        try {
+          // Try direct upload to Google (fastest path — no proxy)
+          chunkResponse = await fetch(initData.uploadUrl, {
+            method: 'POST',
+            headers: {
+              'X-Goog-Upload-Offset': String(start),
+              'X-Goog-Upload-Command': uploadCommand,
+            },
+            body: chunk,
+          });
+        } catch (directErr) {
+          // CORS or network block → fallback to edge function proxy
+          console.warn('[upload] Direct failed, falling back to proxy:', directErr);
+          const chunkBuf = await chunk.arrayBuffer();
+          const chunkHeaders: Record<string, string> = {
+            'x-recap-action': 'uploadChunkBinary',
+            'x-upload-url': initData.uploadUrl,
+            'x-chunk-index': String(i),
+            'x-total-chunks': String(totalChunks),
+            'x-offset': String(start),
+            'x-total-size': String(file.size),
+            'x-mime-type': mimeType,
+            'x-is-last-chunk': String(isLastChunk)
+          };
+          if (resolvedOwnKey) chunkHeaders['x-own-api-key'] = resolvedOwnKey;
+
+          const { data, error } = await supabase.functions.invoke('video-recap', {
+            body: chunkBuf,
+            headers: chunkHeaders
+          });
+          if (error || data?.error) {
+            throw new Error(data?.error || error?.message || `Chunk ${i + 1} upload failed`);
+          }
+          if (isLastChunk && data?.fileUri) {
+            fileUri = data.fileUri;
+          }
+          continue;
         }
-        if (isLastChunk && data?.fileUri) {
-          fileUri = data.fileUri;
+
+        if (!chunkResponse.ok) {
+          const errText = await chunkResponse.text().catch(() => '');
+          throw new Error(`Chunk ${i + 1} upload failed (${chunkResponse.status}): ${errText}`);
+        }
+
+        if (isLastChunk) {
+          try {
+            const uploadResult = await chunkResponse.json();
+            fileUri = uploadResult.file?.uri || '';
+          } catch (e) {
+            throw new Error('Failed to get file URI after upload');
+          }
         }
       }
 
