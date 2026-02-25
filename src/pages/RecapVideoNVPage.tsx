@@ -2531,6 +2531,12 @@ const RecapVideoNVPage: React.FC = () => {
       }
 
       const scriptResult = await scriptResponse.json();
+
+      // Handle backend error (429 rate limit, processing failure, etc.)
+      if (scriptResult.error) {
+        throw new Error(scriptResult.error);
+      }
+
       const scriptText = scriptResult.script || '';
 
       if (!scriptText || scriptText.trim().length < 10) {
