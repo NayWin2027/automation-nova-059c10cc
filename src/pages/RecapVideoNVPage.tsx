@@ -1015,17 +1015,47 @@ export const ResultView: React.FC<ResultViewProps> = ({
     if (!_nvGuard()) {console.error('[NV-LOCK] AV-SYNC-8000: Unauthorized. Admin unlock required.');return;}
     let animFrame: number;
     let lastTsIdx = 0;
+    let lastSyncComputeMs = 0;
+    let lastRateWriteMs = 0;
+    let lastHueUpdateMs = 0;
+    let lastDrift = 0;
+    let lastRecoverAttemptMs = 0;
+    const navWithMemory = navigator as Navigator & { deviceMemory?: number };
+    const deviceMemory = typeof navWithMemory.deviceMemory === 'number' ? navWithMemory.deviceMemory : 4;
+    const isLowEndDevice = (navigator.hardwareConcurrency ?? 4) <= 4 || deviceMemory <= 4;
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const syncIntervalMs = isLowEndDevice ? 33 : 16;
+    const rateWriteIntervalMs = isLowEndDevice ? 33 : 16;
+    const hueIntervalMs = isLowEndDevice ? 66 : 33;
+    const segmentSnapThreshold = isLowEndDevice ? 0.04 : 0.025;
+    const hardSnapThreshold = isLowEndDevice ? 0.075 : 0.05;
+    const driftDeadband = 0.004;
+    const minRate = isLowEndDevice ? 0.5 : 0.35;
+    const maxRate = isLowEndDevice ? 2.25 : 3.0;
     const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
-    const syncLoop = () => {
+    const syncLoop = (rafTs = performance.now()) => {
+      const nowMs = rafTs;
       const av = audioRef.current;
       const vv = videoRef.current;
       if (!av || !vv) {animFrame = requestAnimationFrame(syncLoop);return;}
 
       // Auto-recover if video stalls while audio is playing
-      if (!av.paused && vv.paused && !vv.ended) {
+      if (!av.paused && vv.paused && !vv.ended && nowMs - lastRecoverAttemptMs > 600) {
+        lastRecoverAttemptMs = nowMs;
         vv.play().catch(() => {});
       }
+
+      if (lastSyncComputeMs && nowMs - lastSyncComputeMs < syncIntervalMs) {
+        if (!prefersReducedMotion && nowMs - lastHueUpdateMs >= hueIntervalMs) {
+          subNeonHueRef.current = (subNeonHueRef.current + (isLowEndDevice ? 0.45 : 0.7)) % 360;
+          containerRef.current?.style.setProperty('--neon-hue', `hsl(${subNeonHueRef.current}, 100%, 75%)`);
+          lastHueUpdateMs = nowMs;
+        }
+        animFrame = requestAnimationFrame(syncLoop);
+        return;
+      }
+      lastSyncComputeMs = nowMs;
 
       if (av.duration > 0 && vv.duration > 0) {
         const currentTime = av.currentTime;
@@ -1067,10 +1097,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
               targetVideoTime = active.vStart + progressInSeg * videoSegDuration;
               baseRate = videoSegDuration > 0 ? videoSegDuration / audioSegDuration : 1;
 
-              // Segment change snap: ultra-tight threshold for millisecond-precision boundary transitions
+              // Segment change snap: adaptive threshold tuned for precision + device stability
               if (activeIndex !== lastIndexRef.current) {
                 const snapDrift = Math.abs(vv.currentTime - active.vStart);
-                if (snapDrift > 0.05) {
+                if (snapDrift > segmentSnapThreshold) {
                   vv.currentTime = active.vStart;
                 }
                 lastIndexRef.current = activeIndex;
@@ -1139,7 +1169,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
             if (activeIndex !== lastIndexRef.current) {
               const snapDrift = Math.abs(vv.currentTime - s.vStart);
-              if (snapDrift > 0.05) {
+              if (snapDrift > segmentSnapThreshold) {
                 vv.currentTime = s.vStart;
               }
               lastIndexRef.current = activeIndex;
@@ -1149,29 +1179,38 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
         if (targetVideoTime !== null) {
           const drift = targetVideoTime - vv.currentTime;
-          const absDrift = Math.abs(drift);
+          const timeSinceRateWrite = lastRateWriteMs ? Math.max((nowMs - lastRateWriteMs) / 1000, 0.001) : 0.016;
+          const driftVelocity = (drift - lastDrift) / timeSinceRateWrite;
+          const predictedDrift = drift + driftVelocity * 0.03; // 30ms lookahead for adaptive/flexible correction
+          const absPredictedDrift = Math.abs(predictedDrift);
           let newRate: number;
-          if (absDrift > 0.08) {
-            // Hard snap for >80ms drift — instant correction
+
+          if (absPredictedDrift > hardSnapThreshold) {
+            // Hard snap only when projected drift is meaningfully large
             vv.currentTime = targetVideoTime;
             newRate = baseRate;
-          } else if (absDrift > 0.03) {
-            // Medium drift (30-80ms): aggressive correction
-            const correction = drift * 6.0;
-            newRate = baseRate + correction;
-          } else if (absDrift > 0.01) {
-            // Fine drift (10-30ms): moderate correction
-            const correction = drift * 4.0;
-            newRate = baseRate + correction;
+          } else if (absPredictedDrift <= driftDeadband) {
+            // Sub-4ms: keep natural speed to avoid jitter
+            newRate = baseRate;
           } else {
-            // Sub-10ms: minimal correction, nearly perfect
-            newRate = baseRate + drift * 2.0;
+            const normalizedDrift = clamp(absPredictedDrift / hardSnapThreshold, 0, 1);
+            const correctionGain = isLowEndDevice
+              ? (normalizedDrift > 0.65 ? 4.8 : normalizedDrift > 0.35 ? 3.4 : 2.2)
+              : (normalizedDrift > 0.65 ? 6.5 : normalizedDrift > 0.35 ? 4.8 : 3.0);
+            const maxRateDelta = isLowEndDevice ? 0.4 : 0.8;
+            const correction = clamp(predictedDrift * correctionGain, -maxRateDelta, maxRateDelta);
+            newRate = baseRate + correction;
           }
-          // Clamp rate to device-safe range (prevents stutter on low-end phones)
-          newRate = Math.min(Math.max(newRate, 0.25), 4.0);
-          // Smooth rate transition: exponential moving average to prevent jarring jumps
-          const prevRate = vv.playbackRate;
-          vv.playbackRate = prevRate + (newRate - prevRate) * 0.35;
+
+          newRate = clamp(newRate, minRate, maxRate);
+          if (!lastRateWriteMs || nowMs - lastRateWriteMs >= rateWriteIntervalMs) {
+            // Device-adaptive smoothing prevents aggressive playbackRate jumps on weak phones
+            const smoothingAlpha = isLowEndDevice ? 0.22 : 0.3;
+            const prevRate = vv.playbackRate;
+            vv.playbackRate = prevRate + (newRate - prevRate) * smoothingAlpha;
+            lastRateWriteMs = nowMs;
+          }
+          lastDrift = drift;
         }
 
         if (activeIndex !== -1 && activeText) {
@@ -1187,9 +1226,12 @@ export const ResultView: React.FC<ResultViewProps> = ({
           }
         }
       }
-      // Cycle neon border hue every rAF frame (smooth color cycling)
-      subNeonHueRef.current = (subNeonHueRef.current + 0.8) % 360;
-      containerRef.current?.style.setProperty('--neon-hue', `hsl(${subNeonHueRef.current}, 100%, 75%)`);
+      if (!prefersReducedMotion && nowMs - lastHueUpdateMs >= hueIntervalMs) {
+        // Throttle neon updates to reduce main-thread pressure on low-end devices
+        subNeonHueRef.current = (subNeonHueRef.current + (isLowEndDevice ? 0.45 : 0.7)) % 360;
+        containerRef.current?.style.setProperty('--neon-hue', `hsl(${subNeonHueRef.current}, 100%, 75%)`);
+        lastHueUpdateMs = nowMs;
+      }
       animFrame = requestAnimationFrame(syncLoop);
     };
     // ╚══ END TWO-FACTOR LOCK: AV-SYNC-8000-SMOOTH-v3 ══╝
