@@ -85,6 +85,41 @@ function getMimeType(file: File): string {
   return mimeMap[ext || ""] || "audio/mpeg";
 }
 
+function enforceScriptCoverage70(script: string, sourceDurationSec?: number | null): string {
+  if (!sourceDurationSec || !Number.isFinite(sourceDurationSec) || sourceDurationSec <= 0) {
+    return script;
+  }
+
+  const targetWords = Math.max(30, Math.floor((sourceDurationSec / 60) * 150 * 0.7));
+  const normalized = script.replace(/\r\n/g, "\n").trim();
+  if (!normalized) return script;
+
+  const words = normalized.split(/\s+/).filter(Boolean);
+  if (words.length <= targetWords) return normalized;
+
+  const paragraphs = normalized.split(/\n+/).map((p) => p.trim()).filter(Boolean);
+  const kept: string[] = [];
+  let used = 0;
+
+  for (const paragraph of paragraphs) {
+    const pWords = paragraph.split(/\s+/).filter(Boolean);
+    if (used + pWords.length <= targetWords) {
+      kept.push(paragraph);
+      used += pWords.length;
+      continue;
+    }
+
+    const remaining = targetWords - used;
+    if (remaining > 0) {
+      kept.push(pWords.slice(0, remaining).join(" "));
+    }
+    break;
+  }
+
+  const trimmed = kept.join("\n\n").trim();
+  return trimmed || words.slice(0, targetWords).join(" ");
+}
+
 // Niche-specific style instructions
 const nicheStyles: Record<string, string> = {
   "MOVIE RECAP": `Write like a top-tier Netflix/Hollywood movie recap narrator. Build suspense, use dramatic pauses, cliffhangers, and emotional peaks. Make viewers feel every twist, betrayal, romance, and revelation as if they're watching the movie.`,
@@ -150,6 +185,7 @@ serve(async (req) => {
     let userApiKey: string | null = null;
     let fileUri: string | null = null;
     let fileMimeType: string | null = null;
+    let sourceDurationSec: number | null = null;
 
     const contentType = req.headers.get("content-type") || "";
     if (contentType.includes("multipart/form-data")) {
@@ -161,6 +197,12 @@ serve(async (req) => {
       if (formCreditCost) customCreditCost = Number(formCreditCost);
       userApiKey = formData.get("apiKey") as string;
       isOwnApi = !!userApiKey;
+
+      const formDurationSec = formData.get("sourceDurationSec") as string;
+      if (formDurationSec) {
+        const parsedDuration = Number(formDurationSec);
+        if (Number.isFinite(parsedDuration) && parsedDuration > 0) sourceDurationSec = parsedDuration;
+      }
     } else {
       const body = await req.json();
       transcript = body.transcript || null;
@@ -172,6 +214,9 @@ serve(async (req) => {
       userApiKey = body.apiKey || body.ownApiKey || null;
       isOwnApi = !!userApiKey;
       skipCreditDeduction = !!body.skipCreditDeduction;
+
+      const parsedDuration = Number(body.sourceDurationSec);
+      if (Number.isFinite(parsedDuration) && parsedDuration > 0) sourceDurationSec = parsedDuration;
     }
 
     if (!fileObj && !transcript && !fileUri) {
@@ -465,9 +510,10 @@ ${transcript}
     }
 
     const data = await response.json();
-    const script = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const rawScript = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const normalizedRawScript = rawScript.trim();
 
-    if (!script || script.trim().length < 10) {
+    if (!normalizedRawScript || normalizedRawScript.length < 10) {
       console.error("[recap-script-generator] Empty or invalid script output");
       return new Response(
         JSON.stringify({ error: "Script generation failed — empty output" }),
@@ -475,7 +521,21 @@ ${transcript}
       );
     }
 
-    console.log(`[recap-script-generator] Script generated successfully, length: ${script.length}`);
+    const rawWordCount = normalizedRawScript.split(/\s+/).filter(Boolean).length;
+    const script = enforceScriptCoverage70(normalizedRawScript, sourceDurationSec);
+    const finalWordCount = script.split(/\s+/).filter(Boolean).length;
+
+    if (!script || script.trim().length < 10) {
+      console.error("[recap-script-generator] Script became invalid after 70% enforcement");
+      return new Response(
+        JSON.stringify({ error: "Script generation failed after length enforcement" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(
+      `[recap-script-generator] Script generated and normalized (chars=${script.length}, words=${rawWordCount}->${finalWordCount}, sourceDurationSec=${sourceDurationSec ?? 0})`
+    );
 
     // ===== CREDIT DEDUCTION — ONLY after successful script output =====
     // skipCreditDeduction: when called from recap-nv, credits are deducted at final video output stage
