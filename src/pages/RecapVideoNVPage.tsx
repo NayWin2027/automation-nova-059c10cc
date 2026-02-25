@@ -92,8 +92,6 @@ interface LogoSettings {
   isCircle: boolean;
   spin: boolean;
   neonColor: string;
-  x: number; // Percentage 0-100
-  y: number; // Percentage 0-100
 }
 
 interface SubtitleSettings {
@@ -171,9 +169,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
     size: 15, // percent width
     isCircle: true,
     spin: true,
-    neonColor: "#00E5FF", // Cyan default
-    x: 88, // percentage from left (top-right default)
-    y: 8,  // percentage from top
+    neonColor: "#00E5FF" // Cyan default
   });
 
   const [subSettings, setSubSettings] = useState<SubtitleSettings>({
@@ -220,7 +216,6 @@ export const ResultView: React.FC<ResultViewProps> = ({
   // Drag States
   const [isDraggingSub, setIsDraggingSub] = useState(false);
   const [isDraggingBlur, setIsDraggingBlur] = useState(false);
-  // isDraggingLogo removed — replaced by LR/LL/UR/UL preset system
   const containerRef = useRef<HTMLDivElement>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -411,7 +406,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
     setIsDraggingSub(true);
   };
 
-   const handleDragMove = (e: React.MouseEvent | React.TouchEvent) => {
+  const handleDragMove = (e: React.MouseEvent | React.TouchEvent) => {
     if (!isDraggingSub && !isDraggingBlur) return;
     const activeContainer = containerRef.current;
     if (!activeContainer) return;
@@ -436,7 +431,6 @@ export const ResultView: React.FC<ResultViewProps> = ({
   const handleDragEnd = () => {
     setIsDraggingSub(false);
     setIsDraggingBlur(false);
-    // isDraggingLogo removed
   };
 
   // Blur drag start
@@ -444,15 +438,6 @@ export const ResultView: React.FC<ResultViewProps> = ({
     e.stopPropagation();
     setIsDraggingBlur(true);
   };
-
-  // Logo position presets (replaces drag to avoid AV sync interference)
-  const LOGO_POSITIONS: Record<string, { x: number; y: number; label: string }> = {
-    UL: { x: 12, y: 10, label: "↖ UL" },
-    UR: { x: 88, y: 10, label: "↗ UR" },
-    LL: { x: 12, y: 90, label: "↙ LL" },
-    LR: { x: 88, y: 90, label: "↘ LR" },
-  };
-  const currentLogoPos = Object.entries(LOGO_POSITIONS).find(([, v]) => v.x === logo.x && v.y === logo.y)?.[0] || "UR";
 
   // startRecapRecording: captures editor video+audio via canvas into a webm blob
   const startRecapRecording = async () => {
@@ -894,8 +879,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
       // Draw logo with SPIN + NEON GLOW support (rotate around center) — top-right corner
       if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
         const logoSize = canvas.width * (logo.size / 100);
-        const logoCX = canvas.width * (logo.x / 100);
-        const logoCY = canvas.height * (logo.y / 100);
+        const logoPad = 16;
+        const logoCX = canvas.width - logoSize / 2 - logoPad;
+        const logoCY = logoSize / 2 + logoPad;
 
         // Advance spin angle: full 360° rotation every 8 seconds
         if (logo.spin) {
@@ -951,6 +937,26 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.drawImage(logoImg, -logoSize / 2, -logoSize / 2, logoSize, logoSize);
         ctx.restore();
 
+        // === Draw logo image with clip — CLEAR shadow first so image is sharp ===
+        ctx.save();
+        ctx.translate(logoCX, logoCY);
+        if (logo.spin) {
+          ctx.rotate(logoAngleRef.current * Math.PI / 180);
+        }
+        // CRITICAL: Reset shadow before drawing the image so it stays sharp (not blurry)
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+        // Clip to circle if needed
+        if (logo.isCircle) {
+          ctx.beginPath();
+          ctx.arc(0, 0, logoSize / 2, 0, Math.PI * 2);
+          ctx.clip();
+        }
+        ctx.globalAlpha = 1.0;
+        ctx.drawImage(logoImg, -logoSize / 2, -logoSize / 2, logoSize, logoSize);
+        ctx.restore();
       }
     };
 
@@ -1163,7 +1169,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
       }
       // Cycle neon border hue every rAF frame (smooth color cycling)
       subNeonHueRef.current = (subNeonHueRef.current + 0.8) % 360;
-      containerRef.current?.style.setProperty('--neon-hue', `hsl(${subNeonHueRef.current}, 100%, 75%)`);
+      setSubBorderColor(`hsl(${subNeonHueRef.current}, 100%, 75%)`);
       animFrame = requestAnimationFrame(syncLoop);
     };
     // ╚══ END TWO-FACTOR LOCK: AV-SYNC-8000-SMOOTH-v3 ══╝
@@ -1380,15 +1386,14 @@ export const ResultView: React.FC<ResultViewProps> = ({
               onTouchMove={handleDragMove}
               onTouchEnd={handleDragEnd}>
 
-              {/* Logo Layer — preset position system (UL/UR/LL/LR) */}
+              {/* Logo Layer — AppLogo shown by default; custom image if uploaded */}
               <div
-                className="absolute z-30 pointer-events-none"
+                className="absolute z-20 pointer-events-none"
                 style={{
-                  left: `${logo.x}%`,
-                  top: `${logo.y}%`,
-                  transform: 'translate(-50%, -50%)',
+                  top: "12px",
+                  right: "12px",
                   width: `${logo.size}%`,
-                  transition: "all 0.4s ease"
+                  transition: "all 0.3s ease"
                 }}>
 
                 {logo.url ?
@@ -1402,8 +1407,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                     <img
                     src={logo.url}
                     className={`w-full h-full object-cover ${logo.spin ? "animate-[spin_8s_linear_infinite]" : ""}`}
-                    alt="Logo"
-                    draggable={false} />
+                    alt="Logo" />
 
                   </div> : (
 
@@ -1431,8 +1435,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
                   backdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
                   WebkitBackdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
                   // Dynamic neon cycling border (replaces static dashed border)
-                  border: `2.5px solid var(--neon-hue, hsl(180,100%,75%))`,
-                  boxShadow: `0 0 14px var(--neon-hue, hsl(180,100%,75%)), 0 0 28px color-mix(in srgb, var(--neon-hue, hsl(180,100%,75%)) 40%, transparent), inset 0 0 8px color-mix(in srgb, var(--neon-hue, hsl(180,100%,75%)) 20%, transparent)`,
+                  border: `2.5px solid ${subBorderColor}`,
+                  boxShadow: `0 0 14px ${subBorderColor}, 0 0 28px ${subBorderColor}66, inset 0 0 8px ${subBorderColor}33`,
                   touchAction: 'none',
                   boxSizing: 'border-box',
                   overflow: 'hidden',
@@ -1457,7 +1461,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                       color: subSettings.textColor,
                       fontSize: `clamp(8px, ${subSettings.fontSize}px, 100%)`,
                       lineHeight: 1.4,
-                      textShadow: `0 0 8px var(--neon-hue, hsl(180,100%,75%)), 0 1px 4px rgba(0,0,0,0.9)`,
+                      textShadow: `0 0 8px ${subBorderColor}, 0 1px 4px rgba(0,0,0,0.9)`,
                       wordBreak: "break-word",
                       overflowWrap: "break-word",
                       overflow: "visible",
@@ -1677,21 +1681,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                       value={logo.size}
                       onChange={(e) => setLogo((l) => ({ ...l, size: Number(e.target.value) }))}
                       className="flex-1 accent-neon-cyan h-1 bg-charcoal-600 rounded-lg" />
-                    </div>
-                    {/* Logo Position Preset Buttons */}
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-500">Position</span>
-                      <div className="flex gap-1">
-                        {Object.entries(LOGO_POSITIONS).map(([key, val]) => (
-                          <button
-                            key={key}
-                            onClick={() => setLogo((l) => ({ ...l, x: val.x, y: val.y }))}
-                            className={`text-[10px] px-2 py-1 rounded border ${currentLogoPos === key ? "bg-charcoal-700 border-neon-cyan text-neon-cyan" : "border-charcoal-600 text-gray-500 hover:text-gray-300"}`}
-                          >
-                            {val.label}
-                          </button>
-                        ))}
-                      </div>
+
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-500">Neon</span>
@@ -2531,12 +2521,6 @@ const RecapVideoNVPage: React.FC = () => {
       }
 
       const scriptResult = await scriptResponse.json();
-
-      // Handle backend error (429 rate limit, processing failure, etc.)
-      if (scriptResult.error) {
-        throw new Error(scriptResult.error);
-      }
-
       const scriptText = scriptResult.script || '';
 
       if (!scriptText || scriptText.trim().length < 10) {
