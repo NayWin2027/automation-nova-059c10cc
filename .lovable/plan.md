@@ -1,68 +1,55 @@
 
 
-## Analysis: A/V Sync Degradation After Logo Feature
+## Problem Analysis
 
-### Root Cause Identified
+The error "AI script generation returned empty result" is caused by a **missing error check** in the client-side pipeline code.
 
-I found **two performance issues** introduced during the logo feature updates that are degrading A/V sync quality:
+### Root Cause
 
----
+1. The user's Own API Key hits Google's **429 rate limit** (quota exceeded)
+2. The `recap-script-generator` edge function correctly returns HTTP **200** with error JSON: `{"error":"API Request limit...","retryable":true,"retryAfterSeconds":30}`
+3. However, the client code at **line 2528** only checks `scriptResponse.ok` (which is `true` for HTTP 200)
+4. It then reads `scriptResult.script` which is `undefined` (the response has `error` field, not `script`)
+5. The check at **line 2536** sees empty script and throws "AI script generation returned empty result"
 
-### Issue 1: `setSubBorderColor()` called 60x/second inside sync loop (CRITICAL)
+This is the **Graceful Failure pattern** (edge functions return 200 for upstream errors) but the client isn't handling the error field in the response.
 
-**Location:** Line 1186 inside the AV-SYNC protected block
+### Fix Plan
+
+**File: `src/pages/RecapVideoNVPage.tsx`** (lines ~2533-2538 only)
+
+Add an error field check **after** parsing `scriptResult` and **before** reading `scriptResult.script`:
 
 ```text
-Line 1184-1186 (inside AV-SYNC-8000-SMOOTH-v3 block):
-  subNeonHueRef.current = (subNeonHueRef.current + 0.8) % 360;
-  setSubBorderColor(`hsl(${subNeonHueRef.current}, 100%, 75%)`);  ← PROBLEM
+Current code (lines 2533-2538):
+  const scriptResult = await scriptResponse.json();
+  const scriptText = scriptResult.script || '';
+  
+  if (!scriptText || scriptText.trim().length < 10) {
+    throw new Error('AI script generation returned empty result');
+  }
+
+Fixed code:
+  const scriptResult = await scriptResponse.json();
+  
+  // Handle backend error (429 rate limit, processing failure, etc.)
+  if (scriptResult.error) {
+    throw new Error(scriptResult.error);
+  }
+  
+  const scriptText = scriptResult.script || '';
+  
+  if (!scriptText || scriptText.trim().length < 10) {
+    throw new Error('AI script generation returned empty result');
+  }
 ```
 
-`setSubBorderColor` is a **React setState call** running on every `requestAnimationFrame` (~60fps). This triggers **60 full React re-renders per second** during playback, which:
-- Causes GC pressure and frame drops
-- Delays the video element's playback rate adjustments
-- Makes the sync loop compete with React's reconciliation for CPU time
+This will show the **actual error message** from the backend (e.g., "API Request limit ဖြစ်နေပါသည်။ ခဏစောင့်ပြီး ပြန်စမ်းပါ။") instead of the misleading "empty result" error.
 
-**However**, this line is **inside the AV-SYNC-8000-SMOOTH-v3 protected block** (lines 1012-1189). I **cannot** modify it without your explicit permission.
+### Scope
 
----
-
-### Issue 2: Duplicated logo drawing in canvas (MODERATE)
-
-**Location:** Lines 933-972 in the recording `drawFrame` function (outside protected blocks)
-
-The logo image is drawn **twice** per frame — two identical blocks of code:
-- Block 1: Lines 933-952 (draws logo with clip)
-- Block 2: Lines 954-972 (exact same code again)
-
-This doubles the canvas GPU work per frame during recording.
-
----
-
-### Proposed Fix
-
-| Fix | Location | Permission Needed? |
-|-----|----------|-------------------|
-| Replace `setSubBorderColor()` with a ref-based CSS variable update (no React re-render) | Line 1186 inside protected block | **YES — needs your unlock** |
-| Remove duplicated logo drawing block | Lines 954-972 outside protected block | No |
-
-**For Issue 1**, the fix would be to change only line 1186 from:
-```
-setSubBorderColor(`hsl(${subNeonHueRef.current}, 100%, 75%)`);
-```
-to updating a CSS variable on the DOM element directly (zero re-renders):
-```
-containerRef.current?.style.setProperty('--neon-hue', `hsl(${subNeonHueRef.current}, 100%, 75%)`);
-```
-Then the subtitle box border would use `var(--neon-hue)` instead of the state variable. The ref update on line 1185 stays untouched.
-
-**For Issue 2**, simply delete the duplicate block (lines 954-972).
-
----
-
-### Permission Request
-
-Issue 1 requires touching **one line** (line 1186) inside the AV-SYNC protected block. The sync logic itself (segment mapping, drift correction, playbackRate) will NOT be changed — only the unrelated `setSubBorderColor` call that was added during the logo feature update.
-
-Do you want to unlock line 1186 for this single-line fix?
+- **Only 1 file modified**: `src/pages/RecapVideoNVPage.tsx`
+- **Only lines ~2533-2538**: Adding error field check
+- **Protected blocks**: NOT touched
+- **No other features affected**
 
