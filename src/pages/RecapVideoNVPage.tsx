@@ -220,7 +220,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
   // Drag States
   const [isDraggingSub, setIsDraggingSub] = useState(false);
   const [isDraggingBlur, setIsDraggingBlur] = useState(false);
-  const [isDraggingLogo, setIsDraggingLogo] = useState(false);
+  // isDraggingLogo removed — replaced by LR/LL/UR/UL preset system
   const containerRef = useRef<HTMLDivElement>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -411,8 +411,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
     setIsDraggingSub(true);
   };
 
-  const handleDragMove = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDraggingSub && !isDraggingBlur && !isDraggingLogo) return;
+   const handleDragMove = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!isDraggingSub && !isDraggingBlur) return;
     const activeContainer = containerRef.current;
     if (!activeContainer) return;
     e.preventDefault();
@@ -430,15 +430,13 @@ export const ResultView: React.FC<ResultViewProps> = ({
       setSubSettings((prev) => ({ ...prev, x, y }));
     } else if (isDraggingBlur) {
       setBlurSettings((prev) => ({ ...prev, x, y }));
-    } else if (isDraggingLogo) {
-      setLogo((prev) => ({ ...prev, x, y }));
     }
   };
 
   const handleDragEnd = () => {
     setIsDraggingSub(false);
     setIsDraggingBlur(false);
-    setIsDraggingLogo(false);
+    // isDraggingLogo removed
   };
 
   // Blur drag start
@@ -447,11 +445,14 @@ export const ResultView: React.FC<ResultViewProps> = ({
     setIsDraggingBlur(true);
   };
 
-  // Logo drag start
-  const handleLogoDragStart = (e: React.MouseEvent | React.TouchEvent) => {
-    e.stopPropagation();
-    setIsDraggingLogo(true);
+  // Logo position presets (replaces drag to avoid AV sync interference)
+  const LOGO_POSITIONS: Record<string, { x: number; y: number; label: string }> = {
+    UL: { x: 12, y: 10, label: "↖ UL" },
+    UR: { x: 88, y: 10, label: "↗ UR" },
+    LL: { x: 12, y: 90, label: "↙ LL" },
+    LR: { x: 88, y: 90, label: "↘ LR" },
   };
+  const currentLogoPos = Object.entries(LOGO_POSITIONS).find(([, v]) => v.x === logo.x && v.y === logo.y)?.[0] || "UR";
 
   // startRecapRecording: captures editor video+audio via canvas into a webm blob
   const startRecapRecording = async () => {
@@ -1399,18 +1400,15 @@ export const ResultView: React.FC<ResultViewProps> = ({
               onTouchMove={handleDragMove}
               onTouchEnd={handleDragEnd}>
 
-              {/* Logo Layer — AppLogo shown by default; custom image if uploaded */}
+              {/* Logo Layer — preset position system (UL/UR/LL/LR) */}
               <div
-                onMouseDown={handleLogoDragStart}
-                onTouchStart={handleLogoDragStart}
-                className="absolute z-30 cursor-move"
+                className="absolute z-30 pointer-events-none"
                 style={{
                   left: `${logo.x}%`,
                   top: `${logo.y}%`,
                   transform: 'translate(-50%, -50%)',
                   width: `${logo.size}%`,
-                  touchAction: 'none',
-                  transition: isDraggingLogo ? "none" : "all 0.3s ease"
+                  transition: "all 0.4s ease"
                 }}>
 
                 {logo.url ?
@@ -1699,7 +1697,21 @@ export const ResultView: React.FC<ResultViewProps> = ({
                       value={logo.size}
                       onChange={(e) => setLogo((l) => ({ ...l, size: Number(e.target.value) }))}
                       className="flex-1 accent-neon-cyan h-1 bg-charcoal-600 rounded-lg" />
-
+                    </div>
+                    {/* Logo Position Preset Buttons */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500">Position</span>
+                      <div className="flex gap-1">
+                        {Object.entries(LOGO_POSITIONS).map(([key, val]) => (
+                          <button
+                            key={key}
+                            onClick={() => setLogo((l) => ({ ...l, x: val.x, y: val.y }))}
+                            className={`text-[10px] px-2 py-1 rounded border ${currentLogoPos === key ? "bg-charcoal-700 border-neon-cyan text-neon-cyan" : "border-charcoal-600 text-gray-500 hover:text-gray-300"}`}
+                          >
+                            {val.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-500">Neon</span>
