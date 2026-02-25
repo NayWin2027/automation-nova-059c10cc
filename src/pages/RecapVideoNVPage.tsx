@@ -951,26 +951,6 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.drawImage(logoImg, -logoSize / 2, -logoSize / 2, logoSize, logoSize);
         ctx.restore();
 
-        // === Draw logo image with clip — CLEAR shadow first so image is sharp ===
-        ctx.save();
-        ctx.translate(logoCX, logoCY);
-        if (logo.spin) {
-          ctx.rotate(logoAngleRef.current * Math.PI / 180);
-        }
-        // CRITICAL: Reset shadow before drawing the image so it stays sharp (not blurry)
-        ctx.shadowColor = "transparent";
-        ctx.shadowBlur = 0;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 0;
-        // Clip to circle if needed
-        if (logo.isCircle) {
-          ctx.beginPath();
-          ctx.arc(0, 0, logoSize / 2, 0, Math.PI * 2);
-          ctx.clip();
-        }
-        ctx.globalAlpha = 1.0;
-        ctx.drawImage(logoImg, -logoSize / 2, -logoSize / 2, logoSize, logoSize);
-        ctx.restore();
       }
     };
 
@@ -1183,7 +1163,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
       }
       // Cycle neon border hue every rAF frame (smooth color cycling)
       subNeonHueRef.current = (subNeonHueRef.current + 0.8) % 360;
-      setSubBorderColor(`hsl(${subNeonHueRef.current}, 100%, 75%)`);
+      containerRef.current?.style.setProperty('--neon-hue', `hsl(${subNeonHueRef.current}, 100%, 75%)`);
       animFrame = requestAnimationFrame(syncLoop);
     };
     // ╚══ END TWO-FACTOR LOCK: AV-SYNC-8000-SMOOTH-v3 ══╝
@@ -1451,8 +1431,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
                   backdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
                   WebkitBackdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
                   // Dynamic neon cycling border (replaces static dashed border)
-                  border: `2.5px solid ${subBorderColor}`,
-                  boxShadow: `0 0 14px ${subBorderColor}, 0 0 28px ${subBorderColor}66, inset 0 0 8px ${subBorderColor}33`,
+                  border: `2.5px solid var(--neon-hue, hsl(180,100%,75%))`,
+                  boxShadow: `0 0 14px var(--neon-hue, hsl(180,100%,75%)), 0 0 28px color-mix(in srgb, var(--neon-hue, hsl(180,100%,75%)) 40%, transparent), inset 0 0 8px color-mix(in srgb, var(--neon-hue, hsl(180,100%,75%)) 20%, transparent)`,
                   touchAction: 'none',
                   boxSizing: 'border-box',
                   overflow: 'hidden',
@@ -1477,7 +1457,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                       color: subSettings.textColor,
                       fontSize: `clamp(8px, ${subSettings.fontSize}px, 100%)`,
                       lineHeight: 1.4,
-                      textShadow: `0 0 8px ${subBorderColor}, 0 1px 4px rgba(0,0,0,0.9)`,
+                      textShadow: `0 0 8px var(--neon-hue, hsl(180,100%,75%)), 0 1px 4px rgba(0,0,0,0.9)`,
                       wordBreak: "break-word",
                       overflowWrap: "break-word",
                       overflow: "visible",
