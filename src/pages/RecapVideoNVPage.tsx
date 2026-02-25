@@ -2242,17 +2242,47 @@ const RecapVideoNVPage: React.FC = () => {
 
   // Convert plain text script into segments with proportional timestamps
   const scriptToSegments = (scriptText: string, videoDuration: number): RecapSegment[] => {
-    const paragraphs = scriptText.split('\n').filter((p) => p.trim().length > 0);
-    if (paragraphs.length === 0) return [];
+    const paragraphBlocks = scriptText
+      .split('\n')
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0);
+    if (paragraphBlocks.length === 0) return [];
 
-    const totalChars = paragraphs.reduce((sum, p) => sum + p.length, 0);
+    // Split long paragraphs into sentence groups for finer sync anchors
+    const sentenceGroups = paragraphBlocks.flatMap((paragraph) => {
+      const sentences =
+        paragraph
+          .match(/[^.!?။…]+[.!?။…]?/g)
+          ?.map((s) => s.trim())
+          .filter(Boolean) || [paragraph];
+
+      const grouped: string[] = [];
+      let bucket: string[] = [];
+
+      for (const sentence of sentences) {
+        bucket.push(sentence);
+        if (bucket.length >= 2) {
+          grouped.push(bucket.join(' ').trim());
+          bucket = [];
+        }
+      }
+
+      if (bucket.length > 0) grouped.push(bucket.join(' ').trim());
+      return grouped;
+    });
+
+    const segments = sentenceGroups.filter((text) => text.length > 0);
+    if (segments.length === 0) return [];
+
+    const countWords = (text: string) => text.split(/\s+/).filter(Boolean).length;
+    const totalWords = segments.reduce((sum, text) => sum + Math.max(1, countWords(text)), 0);
+
     let timeCursor = 0;
-
-    return paragraphs.map((text) => {
-      const proportion = text.length / totalChars;
-      const segDuration = proportion * videoDuration;
-      const startSec = timeCursor;
-      timeCursor += segDuration;
+    return segments.map((text) => {
+      const segWords = Math.max(1, countWords(text));
+      const proportion = segWords / totalWords;
+      const startSec = Math.min(Math.max(0, timeCursor), Math.max(0, videoDuration - 1));
+      timeCursor += proportion * videoDuration;
 
       const mins = Math.floor(startSec / 60);
       const secs = Math.floor(startSec % 60);
