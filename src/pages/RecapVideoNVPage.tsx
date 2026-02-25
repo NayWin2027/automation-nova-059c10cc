@@ -1017,7 +1017,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
       dynamicIntervalMs = Math.min(maxDrawIntervalMs, Math.max(minDrawIntervalMs, smoothedDrawCostMs * (isLowEndCapture ? 1.8 : 1.4)));
       lastDrawTick = now;
       frameInProgress = false;
-    }, 16);
+    }, dynamicIntervalMs);
   };
 
   // Recap playback in editor: play video (muted) + TTS audio with subtitle sync
@@ -1254,14 +1254,18 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
         if (activeIndex !== -1 && activeText) {
           if (activeText !== currentSubtitleRef.current) {
-            setCurrentSubtitle(activeText);
-            setSubtitleKey((k) => k + 1); // trigger pop-in animation on change
             currentSubtitleRef.current = activeText;
+            // Direct DOM update to avoid React re-render during playback
+            const subEl = document.getElementById('nv-subtitle-text');
+            const subWrap = document.getElementById('nv-subtitle-wrap');
+            if (subEl) subEl.textContent = activeText;
+            if (subWrap) subWrap.style.display = '';
           }
         } else {
           if (currentSubtitleRef.current !== "") {
-            setCurrentSubtitle("");
             currentSubtitleRef.current = "";
+            const subWrap = document.getElementById('nv-subtitle-wrap');
+            if (subWrap) subWrap.style.display = 'none';
           }
         }
       }
@@ -1321,7 +1325,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
     transition: "none",
     willChange: lightweightPreview ? "transform" : "auto",
     backfaceVisibility: "hidden" as const,
-    contain: "layout style paint" as any
+    /* contain removed — can conflict with hardware video decoder compositing */
   };
 
   const containerStyles: React.CSSProperties = {
@@ -1528,7 +1532,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                     <div className="w-16 h-16 rounded-xl border border-charcoal-500 bg-charcoal-900/80 text-neon-cyan flex items-center justify-center font-black text-xl">
                         AN
                       </div> :
-                    <AppLogo size={64} />
+                    <AppLogo size={64} paused={isRecapPlaying || isRendering} />
                     }
                   </div>)
                 }
@@ -1559,18 +1563,18 @@ export const ResultView: React.FC<ResultViewProps> = ({
                   contain: 'layout style paint' as any
                 }}>
 
-                  {currentSubtitle &&
-                <div
+                  <div
+                    id="nv-subtitle-wrap"
                   className="absolute inset-0 flex items-center justify-center pointer-events-none"
                   style={{
                     backgroundColor: subSettings.bgColor,
                     borderRadius: "inherit",
-                    padding: "4% 4%"
+                    padding: "4% 4%",
+                    display: currentSubtitle ? '' : 'none'
                   }}>
 
-                      {/* key prop triggers CSS animation on every subtitle change */}
                       <div
-                    key={subtitleKey}
+                    id="nv-subtitle-text"
                     className="w-full text-center font-bold"
                     style={{
                       color: subSettings.textColor,
@@ -1588,7 +1592,6 @@ export const ResultView: React.FC<ResultViewProps> = ({
                         {currentSubtitle}
                       </div>
                     </div>
-                }
                 </div>
               }
 
