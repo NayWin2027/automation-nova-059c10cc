@@ -466,30 +466,27 @@ serve(async (req) => {
         );
       }
 
-      // Read raw bytes
-      let binaryChunk: Uint8Array;
-      try {
-        const buf = await req.arrayBuffer();
-        binaryChunk = new Uint8Array(buf);
-      } catch (e) {
-        console.error('[uploadChunkBinary] Failed to read body:', e);
-        return new Response(
-          JSON.stringify({ error: 'Failed to read chunk body' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      console.log(
-        `Uploading chunk(binary) ${chunkIndex + 1}/${totalChunks || '?'}, offset: ${offset}, bytes: ${binaryChunk.length}`
-      );
-
-      // Guardrail: avoid accidental huge bodies
-      if (binaryChunk.length > 9 * 1024 * 1024) {
+      // Use incoming stream directly to reduce per-chunk buffering overhead
+      // (keeps the same 8MB client chunking protocol and headers)
+      const contentLengthHeader = req.headers.get('content-length');
+      const contentLength = contentLengthHeader ? Number(contentLengthHeader) : 0;
+      if (Number.isFinite(contentLength) && contentLength > 9 * 1024 * 1024) {
         return new Response(
           JSON.stringify({ error: 'Chunk too large. Max 9MB.' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+
+      if (!req.body) {
+        return new Response(
+          JSON.stringify({ error: 'Missing chunk body' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      console.log(
+        `Uploading chunk(binary) ${chunkIndex + 1}/${totalChunks || '?'}, offset: ${offset}, bytes: ${contentLength || 'unknown'}`
+      );
 
       const uploadCommand = isLastChunk ? 'upload, finalize' : 'upload';
       const chunkResponse = await fetch(chunkUploadUrl, {
@@ -499,7 +496,7 @@ serve(async (req) => {
           'X-Goog-Upload-Offset': String(offset),
           'X-Goog-Upload-Command': uploadCommand,
         },
-        body: binaryChunk.buffer as ArrayBuffer,
+        body: req.body,
       });
 
       if (!chunkResponse.ok) {
