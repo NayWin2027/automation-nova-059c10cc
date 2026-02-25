@@ -1,57 +1,68 @@
 
 
-# Security Fix Plan for Automation Nova AI
+## Analysis: A/V Sync Degradation After Logo Feature
 
-## Issues Found (from your screenshot and security scan)
+### Root Cause Identified
 
-The Security Advisor is flagging 3 errors. Here's what each one means and how to fix them:
-
-### Error 1: `public.logs` - RLS Disabled
-### Error 2: `public.users` - RLS Disabled  
-### Error 3: `public.users` - Sensitive Columns Exposed
-
-These `public.logs` and `public.users` tables are **not part of your app code** - they are internal system tables created by Supabase extensions (like `supabase_functions` schema logging). Your actual application tables (`profiles`, `activity_logs`, `user_roles`, etc.) all have RLS properly enabled already.
-
-However, to silence these warnings and prevent any potential exposure, we will enable RLS on them and add deny-all policies.
-
-### Additional Issues Found by Our Security Scan
-
-| Issue | Severity | Fix |
-|-------|----------|-----|
-| `promotion_usage_tracking` - broken UPDATE policy (`ip_address = ip_address` always true) | Error | Fix the policy to deny updates from non-admins |
-| `promotion_usage_tracking` - public SELECT with `USING(true)` | Error | Restrict to admin-only |
-| Leaked Password Protection disabled | Warning | Enable it via auth settings |
+I found **two performance issues** introduced during the logo feature updates that are degrading A/V sync quality:
 
 ---
 
-## Implementation Steps
+### Issue 1: `setSubBorderColor()` called 60x/second inside sync loop (CRITICAL)
 
-### Step 1: Database Migration
-A single SQL migration to fix all database-level security issues:
+**Location:** Line 1186 inside the AV-SYNC protected block
 
-1. **Enable RLS on `public.logs`** (if it exists as a real table) and add a deny-all SELECT policy
-2. **Fix `promotion_usage_tracking`** broken UPDATE policy - drop the `users_can_update_own_ip_promotion_tracking` policy (which has `ip_address = ip_address` = always true) and replace with admin-only update
-3. **Fix `promotion_usage_tracking`** public SELECT - drop `users_can_select_own_ip_promotion_tracking` policy (which has `USING(true)`) since admin-only SELECT policy already exists
-4. **Enable leaked password protection** via auth configuration
-
-### Step 2: Enable Leaked Password Protection
-Use the auth configuration tool to turn on leaked password protection.
-
----
-
-## What Will NOT Be Changed
-- No application code files will be modified
-- No existing features, logic, or protected blocks will be touched
-- All existing RLS policies on other tables remain intact
-- The `safe_app_settings` and `safe_tool_settings` views already have `security_invoker=true` so they inherit RLS from their base tables - these are safe
-
-## Technical Details
-
-```sql
--- Fix promotion_usage_tracking broken policies
-DROP POLICY IF EXISTS "users_can_select_own_ip_promotion_tracking" ON public.promotion_usage_tracking;
-DROP POLICY IF EXISTS "users_can_update_own_ip_promotion_tracking" ON public.promotion_usage_tracking;
-
--- Only admins and the insert policy remain (anon_can_insert + admins_can_select + admins_can_delete)
+```text
+Line 1184-1186 (inside AV-SYNC-8000-SMOOTH-v3 block):
+  subNeonHueRef.current = (subNeonHueRef.current + 0.8) % 360;
+  setSubBorderColor(`hsl(${subNeonHueRef.current}, 100%, 75%)`);  ← PROBLEM
 ```
+
+`setSubBorderColor` is a **React setState call** running on every `requestAnimationFrame` (~60fps). This triggers **60 full React re-renders per second** during playback, which:
+- Causes GC pressure and frame drops
+- Delays the video element's playback rate adjustments
+- Makes the sync loop compete with React's reconciliation for CPU time
+
+**However**, this line is **inside the AV-SYNC-8000-SMOOTH-v3 protected block** (lines 1012-1189). I **cannot** modify it without your explicit permission.
+
+---
+
+### Issue 2: Duplicated logo drawing in canvas (MODERATE)
+
+**Location:** Lines 933-972 in the recording `drawFrame` function (outside protected blocks)
+
+The logo image is drawn **twice** per frame — two identical blocks of code:
+- Block 1: Lines 933-952 (draws logo with clip)
+- Block 2: Lines 954-972 (exact same code again)
+
+This doubles the canvas GPU work per frame during recording.
+
+---
+
+### Proposed Fix
+
+| Fix | Location | Permission Needed? |
+|-----|----------|-------------------|
+| Replace `setSubBorderColor()` with a ref-based CSS variable update (no React re-render) | Line 1186 inside protected block | **YES — needs your unlock** |
+| Remove duplicated logo drawing block | Lines 954-972 outside protected block | No |
+
+**For Issue 1**, the fix would be to change only line 1186 from:
+```
+setSubBorderColor(`hsl(${subNeonHueRef.current}, 100%, 75%)`);
+```
+to updating a CSS variable on the DOM element directly (zero re-renders):
+```
+containerRef.current?.style.setProperty('--neon-hue', `hsl(${subNeonHueRef.current}, 100%, 75%)`);
+```
+Then the subtitle box border would use `var(--neon-hue)` instead of the state variable. The ref update on line 1185 stays untouched.
+
+**For Issue 2**, simply delete the duplicate block (lines 954-972).
+
+---
+
+### Permission Request
+
+Issue 1 requires touching **one line** (line 1186) inside the AV-SYNC protected block. The sync logic itself (segment mapping, drift correction, playbackRate) will NOT be changed — only the unrelated `setSubBorderColor` call that was added during the logo feature update.
+
+Do you want to unlock line 1186 for this single-line fix?
 
