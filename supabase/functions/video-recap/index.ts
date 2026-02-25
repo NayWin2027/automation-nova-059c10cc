@@ -490,9 +490,8 @@ serve(async (req) => {
 
       const uploadCommand = isLastChunk ? 'upload, finalize' : 'upload';
       const chunkResponse = await fetch(chunkUploadUrl, {
-        method: 'PUT',
+        method: 'POST',
         headers: {
-          'Content-Type': mimeTypeHdr,
           'X-Goog-Upload-Offset': String(offset),
           'X-Goog-Upload-Command': uploadCommand,
         },
