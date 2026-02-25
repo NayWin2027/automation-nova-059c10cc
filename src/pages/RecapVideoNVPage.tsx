@@ -1008,9 +1008,6 @@ export const ResultView: React.FC<ResultViewProps> = ({
     // 🔐 2-STEP SECURITY GUARD — AV-SYNC-8000-SMOOTH-v3
     if (!_nvGuard()) {console.error('[NV-LOCK] AV-SYNC-8000: Unauthorized. Admin unlock required.');return;}
     let animFrame: number;
-    let lastTsIdx = 0;
-    const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
-
     const syncLoop = () => {
       const av = audioRef.current;
       const vv = videoRef.current;
@@ -1031,81 +1028,17 @@ export const ResultView: React.FC<ResultViewProps> = ({
         let activeText = "";
         let aStartPct = 0;
         let aEndPct = 0;
-        let targetVideoTime: number | null = null;
-        let baseRate = 1;
 
         if (audioTs.length > 0) {
-          // === AV-SYNC-9000-SMOOTH-v4: timeline-lock mapping (audio is master clock) ===
-          // Keeps video aligned even in silent gaps between subtitle segments.
-          const maxIdx = Math.min(audioTs.length, segs.length) - 1;
-          const getSeg = (idx: number) => segs[idx] as any;
-
-          if (maxIdx >= 0) {
-            lastTsIdx = clamp(lastTsIdx, 0, maxIdx);
-
-            while (lastTsIdx < maxIdx && currentTime >= audioTs[lastTsIdx].end) lastTsIdx += 1;
-            while (lastTsIdx > 0 && currentTime < audioTs[lastTsIdx].start) lastTsIdx -= 1;
-
-            if (currentTime >= audioTs[lastTsIdx].start && currentTime < audioTs[lastTsIdx].end) {
-              activeIndex = lastTsIdx;
-              activeText = getSeg(lastTsIdx)?.text || "";
-            }
-
-            if (activeIndex !== -1) {
-              const ts = audioTs[activeIndex];
-              const active = getSeg(activeIndex);
-              const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
-              const audioSegDuration = Math.max(ts.end - ts.start, 0.001);
-              const videoSegDuration = Math.max(vActualEnd - active.vStart, 0);
-              const progressInSeg = clamp((currentTime - ts.start) / audioSegDuration, 0, 1);
-              targetVideoTime = active.vStart + progressInSeg * videoSegDuration;
-              baseRate = videoSegDuration > 0 ? videoSegDuration / audioSegDuration : 1;
-
-              // Segment change snap: tighter threshold for faster recovery on boundary transitions
-              if (activeIndex !== lastIndexRef.current) {
-                const snapDrift = Math.abs(vv.currentTime - active.vStart);
-                if (snapDrift > 0.22) {
-                  vv.currentTime = active.vStart;
-                }
-                lastIndexRef.current = activeIndex;
-              }
-            } else if (currentTime < audioTs[0].start) {
-              // Pre-roll zone before first speech segment
-              const firstSeg = getSeg(0);
-              const preAudio = Math.max(audioTs[0].start, 0.001);
-              const firstVStart = Math.max(firstSeg?.vStart ?? 0, 0);
-              const preProgress = clamp(currentTime / preAudio, 0, 1);
-              targetVideoTime = firstVStart > 0 ? preProgress * firstVStart : 0;
-              baseRate = firstVStart > 0 ? firstVStart / preAudio : 1;
-            } else if (currentTime >= audioTs[maxIdx].end) {
-              // Tail zone after last speech segment
-              const lastSeg = getSeg(maxIdx);
-              const lastVEnd = lastSeg?.vEnd === -1 ? vv.duration : (lastSeg?.vEnd ?? vv.duration);
-              const tailAudio = Math.max(av.duration - audioTs[maxIdx].end, 0.001);
-              const tailVideo = Math.max(vv.duration - lastVEnd, 0);
-              const tailProgress = clamp((currentTime - audioTs[maxIdx].end) / tailAudio, 0, 1);
-              targetVideoTime = lastVEnd + tailProgress * tailVideo;
-              baseRate = tailVideo > 0 ? tailVideo / tailAudio : 1;
-            } else if (maxIdx >= 1) {
-              // Silent/interstitial gap between two speech segments
-              let prevIdx = lastTsIdx;
-              if (currentTime < audioTs[lastTsIdx].start) prevIdx -= 1;
-              prevIdx = clamp(prevIdx, 0, maxIdx - 1);
-              const nextIdx = prevIdx + 1;
-
-              const prevSeg = getSeg(prevIdx);
-              const nextSeg = getSeg(nextIdx);
-              const prevVEnd = prevSeg?.vEnd === -1 ? vv.duration : (prevSeg?.vEnd ?? vv.currentTime);
-              const nextVStart = nextSeg?.vStart ?? prevVEnd;
-
-              const gapAudio = Math.max(audioTs[nextIdx].start - audioTs[prevIdx].end, 0.001);
-              const gapVideo = Math.max(nextVStart - prevVEnd, 0);
-              const gapProgress = clamp((currentTime - audioTs[prevIdx].end) / gapAudio, 0, 1);
-
-              targetVideoTime = prevVEnd + gapProgress * gapVideo;
-              baseRate = gapVideo > 0 ? gapVideo / gapAudio : 1;
-            }
+          // === 8000% EXACT MODE: Audio currentTime (seconds) directly matched to segmentTimestamps ===
+          // No percentage conversion — pure seconds comparison eliminates all estimation drift.
+          // Subtitle ONLY shows inside active speech window; disappears during silence (cinematic behavior).
+          const tsIdx = audioTs.findIndex((ts) => currentTime >= ts.start && currentTime < ts.end);
+          if (tsIdx !== -1) {
+            activeIndex = tsIdx;
+            activeText = (segs[tsIdx] as any)?.text || "";
           }
+          // When not inside any timestamp range → activeIndex stays -1 → subtitle clears (cinematic silence)
         } else {
           // === FALLBACK MODE: word-count proportional (no timestamps available) ===
           activeIndex = segs.findIndex((s: any) => aPct >= s.aStartPct && aPct <= s.aEndPct);
@@ -1118,43 +1051,64 @@ export const ResultView: React.FC<ResultViewProps> = ({
             activeText = s.text;
             aStartPct = s.aStartPct;
             aEndPct = s.aEndPct;
-
-            const vActualEnd = s.vEnd === -1 ? vv.duration : s.vEnd;
-            const videoSecs = Math.max(vActualEnd - s.vStart, 0);
-            const segmentAudioPct = aEndPct - aStartPct;
-            if (segmentAudioPct > 0.001 && videoSecs > 0) {
-              const audioSecs = segmentAudioPct * av.duration;
-              if (audioSecs > 0) {
-                const progressInSegment = clamp((aPct - aStartPct) / segmentAudioPct, 0, 1);
-                targetVideoTime = s.vStart + progressInSegment * videoSecs;
-                baseRate = videoSecs / audioSecs;
-              }
-            }
-
-            if (activeIndex !== lastIndexRef.current) {
-              const snapDrift = Math.abs(vv.currentTime - s.vStart);
-              if (snapDrift > 0.22) {
-                vv.currentTime = s.vStart;
-              }
-              lastIndexRef.current = activeIndex;
-            }
-          }
-        }
-
-        if (targetVideoTime !== null) {
-          const drift = targetVideoTime - vv.currentTime;
-          if (Math.abs(drift) > 0.22) {
-            vv.currentTime = targetVideoTime;
-            vv.playbackRate = Math.min(Math.max(baseRate, 0.1), 8.0);
-          } else {
-            const correctionGain = Math.abs(drift) > 0.08 ? 5.2 : 3.8;
-            const clampedDrift = Math.max(-0.22, Math.min(0.22, drift));
-            const correction = clampedDrift * correctionGain;
-            vv.playbackRate = Math.min(Math.max(baseRate + correction, 0.1), 8.0);
           }
         }
 
         if (activeIndex !== -1 && activeText) {
+          const active = segs[activeIndex] as any;
+          const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
+          const videoSecs = vActualEnd - active.vStart;
+
+          // On segment CHANGE: hard-snap ONLY if very far off (>0.3s) to avoid stutter/decoder-flush
+          if (activeIndex !== lastIndexRef.current) {
+            const snapDrift = Math.abs(vv.currentTime - active.vStart);
+            if (snapDrift > 0.3) {
+              vv.currentTime = active.vStart;
+            }
+            lastIndexRef.current = activeIndex;
+          }
+
+          if (audioTs.length > 0) {
+            // === 8000% SMOOTH SYNC: Pure second-based, playbackRate-driven — no constant hard-seeks ===
+            const ts = audioTs[activeIndex];
+            const audioSegDuration = ts.end - ts.start; // exact seconds this segment spans in audio
+            if (audioSegDuration > 0.001 && videoSecs > 0) {
+              const baseRate = videoSecs / audioSegDuration; // exact speed to match segment duration
+              const progressInSeg = (currentTime - ts.start) / audioSegDuration; // 0.0 → 1.0
+              const targetVideoTime = active.vStart + progressInSeg * videoSecs;
+              const drift = targetVideoTime - vv.currentTime;
+
+              // Hard seek ONLY for large drift (>0.3s) — prevents stutter from frequent seeks
+              if (Math.abs(drift) > 0.3) {
+                vv.currentTime = targetVideoTime;
+              } else {
+                // Smooth playbackRate correction — no decoder flush, no visual jump
+                // Strong correction factor (3.5) ensures 8000% sync without seeking
+                const clampedDrift = Math.max(-0.3, Math.min(0.3, drift));
+                const correction = clampedDrift * 3.5;
+                vv.playbackRate = Math.min(Math.max(baseRate + correction, 0.1), 8.0);
+              }
+            }
+          } else {
+            // Fallback: percentage-based sync
+            const segmentAudioPct = aEndPct - aStartPct;
+            if (segmentAudioPct > 0.001 && videoSecs > 0) {
+              const audioSecs = segmentAudioPct * av.duration;
+              if (audioSecs > 0) {
+                const baseRate = videoSecs / audioSecs;
+                const progressInSegment = (aPct - aStartPct) / segmentAudioPct;
+                const targetVideoTime = active.vStart + progressInSegment * videoSecs;
+                const drift = targetVideoTime - vv.currentTime;
+                if (Math.abs(drift) > 0.3) {
+                  vv.currentTime = targetVideoTime;
+                } else {
+                  const clampedDrift = Math.max(-0.3, Math.min(0.3, drift));
+                  const correction = clampedDrift * 3.5;
+                  vv.playbackRate = Math.min(Math.max(baseRate + correction, 0.1), 8.0);
+                }
+              }
+            }
+          }
           if (activeText !== currentSubtitleRef.current) {
             setCurrentSubtitle(activeText);
             setSubtitleKey((k) => k + 1); // trigger pop-in animation on change
@@ -2497,7 +2451,6 @@ const RecapVideoNVPage: React.FC = () => {
         fileMimeType: mimeType,
         niche: 'MOVIE RECAP',
         language: selectedLangName,
-        sourceDurationSec: duration,
         skipCreditDeduction: true // Credits deducted at final video output (handleVideoReady)
       };
       if (resolvedOwnKey) scriptBody.ownApiKey = resolvedOwnKey;
