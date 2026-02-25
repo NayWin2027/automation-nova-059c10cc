@@ -1067,10 +1067,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
               targetVideoTime = active.vStart + progressInSeg * videoSegDuration;
               baseRate = videoSegDuration > 0 ? videoSegDuration / audioSegDuration : 1;
 
-              // Segment change snap: tighter threshold for faster recovery on boundary transitions
+              // Segment change snap: ultra-tight threshold for millisecond-precision boundary transitions
               if (activeIndex !== lastIndexRef.current) {
                 const snapDrift = Math.abs(vv.currentTime - active.vStart);
-                if (snapDrift > 0.22) {
+                if (snapDrift > 0.05) {
                   vv.currentTime = active.vStart;
                 }
                 lastIndexRef.current = activeIndex;
@@ -1139,7 +1139,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
             if (activeIndex !== lastIndexRef.current) {
               const snapDrift = Math.abs(vv.currentTime - s.vStart);
-              if (snapDrift > 0.22) {
+              if (snapDrift > 0.05) {
                 vv.currentTime = s.vStart;
               }
               lastIndexRef.current = activeIndex;
@@ -1149,15 +1149,29 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
         if (targetVideoTime !== null) {
           const drift = targetVideoTime - vv.currentTime;
-          if (Math.abs(drift) > 0.22) {
+          const absDrift = Math.abs(drift);
+          let newRate: number;
+          if (absDrift > 0.08) {
+            // Hard snap for >80ms drift — instant correction
             vv.currentTime = targetVideoTime;
-            vv.playbackRate = Math.min(Math.max(baseRate, 0.1), 8.0);
+            newRate = baseRate;
+          } else if (absDrift > 0.03) {
+            // Medium drift (30-80ms): aggressive correction
+            const correction = drift * 6.0;
+            newRate = baseRate + correction;
+          } else if (absDrift > 0.01) {
+            // Fine drift (10-30ms): moderate correction
+            const correction = drift * 4.0;
+            newRate = baseRate + correction;
           } else {
-            const correctionGain = Math.abs(drift) > 0.08 ? 5.2 : 3.8;
-            const clampedDrift = Math.max(-0.22, Math.min(0.22, drift));
-            const correction = clampedDrift * correctionGain;
-            vv.playbackRate = Math.min(Math.max(baseRate + correction, 0.1), 8.0);
+            // Sub-10ms: minimal correction, nearly perfect
+            newRate = baseRate + drift * 2.0;
           }
+          // Clamp rate to device-safe range (prevents stutter on low-end phones)
+          newRate = Math.min(Math.max(newRate, 0.25), 4.0);
+          // Smooth rate transition: exponential moving average to prevent jarring jumps
+          const prevRate = vv.playbackRate;
+          vv.playbackRate = prevRate + (newRate - prevRate) * 0.35;
         }
 
         if (activeIndex !== -1 && activeText) {
