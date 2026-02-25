@@ -239,6 +239,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
   // Subtitle 3-line paging refs — max 3 lines visible, remaining text cycles to next page
   const subtitleLastTextRef = useRef<string>(""); // detect text change to reset page
   const subtitlePageStartRef = useRef<number>(0); // timestamp when current text started
+  const navWithMemory = navigator as Navigator & { deviceMemory?: number };
+  const deviceMemory = typeof navWithMemory.deviceMemory === 'number' ? navWithMemory.deviceMemory : 4;
+  const lowEndDevice = (navigator.hardwareConcurrency ?? 4) <= 4 || deviceMemory <= 4;
+  const lightweightPreview = isRecapPlaying || isRendering || lowEndDevice;
 
   // Request Wake Lock to prevent screen from turning off during recap/recording
   useEffect(() => {
@@ -506,8 +510,15 @@ export const ResultView: React.FC<ResultViewProps> = ({
     canvas.width = outW;
     canvas.height = outH;
     const ctx = canvas.getContext("2d")!;
+    const captureNav = navigator as Navigator & { deviceMemory?: number };
+    const captureDeviceMemory = typeof captureNav.deviceMemory === 'number' ? captureNav.deviceMemory : 4;
+    const isLowEndCapture = (navigator.hardwareConcurrency ?? 4) <= 4 || captureDeviceMemory <= 4;
+    const targetCaptureFps = isLowEndCapture ? 24 : 30;
+    const baseDrawIntervalMs = isLowEndCapture ? 42 : 33;
+    const minDrawIntervalMs = isLowEndCapture ? 38 : 24;
+    const maxDrawIntervalMs = isLowEndCapture ? 84 : 50;
 
-    const canvasStream = canvas.captureStream(30);
+    const canvasStream = canvas.captureStream(targetCaptureFps);
     const chunks: BlobPart[] = [];
 
     let audioCtx: AudioContext | null = null;
@@ -522,7 +533,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
       console.warn("Could not capture audio for recording:", audioErr);
     }
 
-    const recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: 4000000 });
+    const recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: isLowEndCapture ? 2500000 : 4000000 });
     recapRecorderRef.current = recorder;
 
     const recordingStartTime = Date.now(); // Track actual recording elapsed time for accurate credit deduction
@@ -732,7 +743,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.globalAlpha = 1;
         // Progress fill with glow
         ctx.shadowColor = timelineBar.color;
-        ctx.shadowBlur = barH * 2.5;
+        ctx.shadowBlur = isLowEndCapture ? 0 : barH * 2.5;
         ctx.fillStyle = timelineBar.color;
         ctx.fillRect(0, barY, canvas.width * progress, barH);
         ctx.restore();
@@ -746,7 +757,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
         const blurY = canvas.height * (blurSettings.y / 100) - blurH / 2;
         const blurClampedX = Math.max(0, Math.min(canvas.width - blurW, blurX));
         const blurClampedY = Math.max(0, Math.min(canvas.height - blurH, blurY));
-        const blurAmount = Math.round(blurSettings.opacity / 100 * 20);
+        const blurAmount = Math.round(blurSettings.opacity / 100 * (isLowEndCapture ? 10 : 20));
         ctx.save();
         ctx.filter = `blur(${blurAmount}px)`;
         ctx.beginPath();
@@ -922,24 +933,35 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
         ctx.save();
         ctx.translate(logoCX, logoCY);
-        // Layer 1: outer diffuse neon glow — NOT rotated, stays as ring
-        ctx.shadowColor = animatedNeonColor;
-        ctx.shadowBlur = logoSize * 0.35;
-        ctx.strokeStyle = animatedNeonColor;
-        ctx.lineWidth = logoSize * 0.05;
-        ctx.globalAlpha = 0.9;
-        ctx.beginPath();
-        ctx.arc(0, 0, logoSize / 2 + logoSize * 0.05, 0, Math.PI * 2);
-        ctx.stroke();
-        // Layer 2: inner sharp neon ring with second color
-        ctx.shadowColor = animatedNeonColor2;
-        ctx.shadowBlur = logoSize * 0.18;
-        ctx.strokeStyle = animatedNeonColor2;
-        ctx.lineWidth = logoSize * 0.035;
-        ctx.globalAlpha = 1.0;
-        ctx.beginPath();
-        ctx.arc(0, 0, logoSize / 2 + logoSize * 0.02, 0, Math.PI * 2);
-        ctx.stroke();
+        if (isLowEndCapture) {
+          ctx.shadowColor = "transparent";
+          ctx.shadowBlur = 0;
+          ctx.strokeStyle = animatedNeonColor;
+          ctx.lineWidth = logoSize * 0.025;
+          ctx.globalAlpha = 0.85;
+          ctx.beginPath();
+          ctx.arc(0, 0, logoSize / 2 + logoSize * 0.02, 0, Math.PI * 2);
+          ctx.stroke();
+        } else {
+          // Layer 1: outer diffuse neon glow — NOT rotated, stays as ring
+          ctx.shadowColor = animatedNeonColor;
+          ctx.shadowBlur = logoSize * 0.35;
+          ctx.strokeStyle = animatedNeonColor;
+          ctx.lineWidth = logoSize * 0.05;
+          ctx.globalAlpha = 0.9;
+          ctx.beginPath();
+          ctx.arc(0, 0, logoSize / 2 + logoSize * 0.05, 0, Math.PI * 2);
+          ctx.stroke();
+          // Layer 2: inner sharp neon ring with second color
+          ctx.shadowColor = animatedNeonColor2;
+          ctx.shadowBlur = logoSize * 0.18;
+          ctx.strokeStyle = animatedNeonColor2;
+          ctx.lineWidth = logoSize * 0.035;
+          ctx.globalAlpha = 1.0;
+          ctx.beginPath();
+          ctx.arc(0, 0, logoSize / 2 + logoSize * 0.02, 0, Math.PI * 2);
+          ctx.stroke();
+        }
         ctx.restore();
 
         // === Draw logo image with clip — CLEAR shadow first so image is sharp ===
@@ -966,9 +988,13 @@ export const ResultView: React.FC<ResultViewProps> = ({
       }
     };
 
-    // Use stable setInterval at 33ms (~30fps) for smooth recording
+    let frameInProgress = false;
+    let lastDrawTick = performance.now();
+    let dynamicIntervalMs = baseDrawIntervalMs;
+    let smoothedDrawCostMs = baseDrawIntervalMs;
+
+    // Adaptive draw scheduler: prevents CPU saturation/hang on weak devices
     recapIntervalRef.current = setInterval(() => {
-      drawFrame();
       if (audioEl.ended) {
         if (recapIntervalRef.current) clearInterval(recapIntervalRef.current);
         if (recorder.state !== "inactive") {
@@ -977,8 +1003,21 @@ export const ResultView: React.FC<ResultViewProps> = ({
           audioEl.pause();
           videoEl.playbackRate = 1.0;
         }
+        return;
       }
-    }, 33);
+
+      const now = performance.now();
+      if (frameInProgress || now - lastDrawTick < dynamicIntervalMs) return;
+
+      frameInProgress = true;
+      const frameStart = now;
+      drawFrame();
+      const drawCost = performance.now() - frameStart;
+      smoothedDrawCostMs = smoothedDrawCostMs * 0.82 + drawCost * 0.18;
+      dynamicIntervalMs = Math.min(maxDrawIntervalMs, Math.max(minDrawIntervalMs, smoothedDrawCostMs * (isLowEndCapture ? 1.8 : 1.4)));
+      lastDrawTick = now;
+      frameInProgress = false;
+    }, 16);
   };
 
   // Recap playback in editor: play video (muted) + TTS audio with subtitle sync
@@ -1279,7 +1318,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
     objectFit: editorState.ratio === "auto" ? "contain" : "cover",
     width: "100%",
     height: "100%",
-    transition: "all 0.3s ease"
+    transition: lightweightPreview ? "none" : "all 0.3s ease"
   };
 
   const containerStyles: React.CSSProperties = {
@@ -1440,7 +1479,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
             <div
               ref={containerRef}
-              className={`relative overflow-hidden transition-all duration-300 shadow-lg flex items-center justify-center bg-black`}
+              className={`relative overflow-hidden ${lightweightPreview ? "" : "transition-all duration-300"} shadow-lg flex items-center justify-center bg-black`}
               style={containerStyles}
               onMouseMove={handleDragMove}
               onMouseUp={handleDragEnd}
@@ -1456,7 +1495,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                   top: `${logo.y}%`,
                   transform: 'translate(-50%, -50%)',
                   width: `${logo.size}%`,
-                  transition: "all 0.4s ease"
+                  transition: lightweightPreview ? "none" : "transform 0.35s ease"
                 }}>
 
                 {logo.url ?
@@ -1469,7 +1508,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
                     <img
                     src={logo.url}
-                    className={`w-full h-full object-cover ${logo.spin ? "animate-[spin_8s_linear_infinite]" : ""}`}
+                    className={`w-full h-full object-cover ${logo.spin && !lightweightPreview ? "animate-[spin_8s_linear_infinite]" : ""}`}
                     alt="Logo"
                     draggable={false} />
 
@@ -1477,9 +1516,14 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
                 /* Default AppLogo with spin effect when no custom logo uploaded */
                 <div
-                  className={`relative w-full aspect-square flex items-center justify-center ${logo.spin ? "animate-[spin_8s_linear_infinite]" : ""}`}>
+                  className={`relative w-full aspect-square flex items-center justify-center ${logo.spin && !lightweightPreview ? "animate-[spin_8s_linear_infinite]" : ""}`}>
 
+                    {lightweightPreview ?
+                    <div className="w-16 h-16 rounded-xl border border-charcoal-500 bg-charcoal-900/80 text-neon-cyan flex items-center justify-center font-black text-xl">
+                        AN
+                      </div> :
                     <AppLogo size={64} />
+                    }
                   </div>)
                 }
               </div>
@@ -1496,16 +1540,16 @@ export const ResultView: React.FC<ResultViewProps> = ({
                   transform: 'translate(-50%, -50%)',
                   width: `${blurSettings.width}%`,
                   height: `${blurSettings.height}%`,
-                  backdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
-                  WebkitBackdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
+                  backdropFilter: lightweightPreview ? 'none' : `blur(${Math.round(blurSettings.opacity / 5)}px)`,
+                  WebkitBackdropFilter: lightweightPreview ? 'none' : `blur(${Math.round(blurSettings.opacity / 5)}px)`,
                   // Dynamic neon cycling border (replaces static dashed border)
                   border: `2.5px solid var(--neon-hue, hsl(180,100%,75%))`,
-                  boxShadow: `0 0 14px var(--neon-hue, hsl(180,100%,75%)), 0 0 28px color-mix(in srgb, var(--neon-hue, hsl(180,100%,75%)) 40%, transparent), inset 0 0 8px color-mix(in srgb, var(--neon-hue, hsl(180,100%,75%)) 20%, transparent)`,
+                  boxShadow: lightweightPreview ? 'none' : `0 0 14px var(--neon-hue, hsl(180,100%,75%)), 0 0 28px color-mix(in srgb, var(--neon-hue, hsl(180,100%,75%)) 40%, transparent), inset 0 0 8px color-mix(in srgb, var(--neon-hue, hsl(180,100%,75%)) 20%, transparent)`,
                   touchAction: 'none',
                   boxSizing: 'border-box',
                   overflow: 'hidden',
                   borderRadius: '6px',
-                  transition: 'border-color 0.1s, box-shadow 0.1s'
+                  transition: lightweightPreview ? 'none' : 'border-color 0.1s, box-shadow 0.1s'
                 }}>
 
                   {currentSubtitle &&
@@ -1531,7 +1575,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                       overflow: "visible",
                       whiteSpace: "normal",
                       // Cinematic slide-up + fade-in on subtitle change
-                      animation: "subtitlePopin 0.25s cubic-bezier(0.22,1,0.36,1) both"
+                      animation: lightweightPreview ? "none" : "subtitlePopin 0.25s cubic-bezier(0.22,1,0.36,1) both"
                     }}>
 
                         {currentSubtitle}
