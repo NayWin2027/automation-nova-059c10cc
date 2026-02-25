@@ -239,10 +239,6 @@ export const ResultView: React.FC<ResultViewProps> = ({
   // Subtitle 3-line paging refs — max 3 lines visible, remaining text cycles to next page
   const subtitleLastTextRef = useRef<string>(""); // detect text change to reset page
   const subtitlePageStartRef = useRef<number>(0); // timestamp when current text started
-  const navWithMemory = navigator as Navigator & { deviceMemory?: number };
-  const deviceMemory = typeof navWithMemory.deviceMemory === 'number' ? navWithMemory.deviceMemory : 4;
-  const lowEndDevice = (navigator.hardwareConcurrency ?? 4) <= 4 || deviceMemory <= 4;
-  const lightweightPreview = isRecapPlaying || isRendering || lowEndDevice;
 
   // Request Wake Lock to prevent screen from turning off during recap/recording
   useEffect(() => {
@@ -510,15 +506,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
     canvas.width = outW;
     canvas.height = outH;
     const ctx = canvas.getContext("2d")!;
-    const captureNav = navigator as Navigator & { deviceMemory?: number };
-    const captureDeviceMemory = typeof captureNav.deviceMemory === 'number' ? captureNav.deviceMemory : 4;
-    const isLowEndCapture = (navigator.hardwareConcurrency ?? 4) <= 4 || captureDeviceMemory <= 4;
-    const targetCaptureFps = isLowEndCapture ? 24 : 30;
-    const baseDrawIntervalMs = isLowEndCapture ? 42 : 33;
-    const minDrawIntervalMs = isLowEndCapture ? 38 : 24;
-    const maxDrawIntervalMs = isLowEndCapture ? 84 : 50;
 
-    const canvasStream = canvas.captureStream(targetCaptureFps);
+    const canvasStream = canvas.captureStream(30);
     const chunks: BlobPart[] = [];
 
     let audioCtx: AudioContext | null = null;
@@ -533,7 +522,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
       console.warn("Could not capture audio for recording:", audioErr);
     }
 
-    const recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: isLowEndCapture ? 2500000 : 4000000 });
+    const recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: 4000000 });
     recapRecorderRef.current = recorder;
 
     const recordingStartTime = Date.now(); // Track actual recording elapsed time for accurate credit deduction
@@ -743,7 +732,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.globalAlpha = 1;
         // Progress fill with glow
         ctx.shadowColor = timelineBar.color;
-        ctx.shadowBlur = isLowEndCapture ? 0 : barH * 2.5;
+        ctx.shadowBlur = barH * 2.5;
         ctx.fillStyle = timelineBar.color;
         ctx.fillRect(0, barY, canvas.width * progress, barH);
         ctx.restore();
@@ -757,7 +746,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
         const blurY = canvas.height * (blurSettings.y / 100) - blurH / 2;
         const blurClampedX = Math.max(0, Math.min(canvas.width - blurW, blurX));
         const blurClampedY = Math.max(0, Math.min(canvas.height - blurH, blurY));
-        const blurAmount = Math.round(blurSettings.opacity / 100 * (isLowEndCapture ? 10 : 20));
+        const blurAmount = Math.round(blurSettings.opacity / 100 * 20);
         ctx.save();
         ctx.filter = `blur(${blurAmount}px)`;
         ctx.beginPath();
@@ -933,35 +922,24 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
         ctx.save();
         ctx.translate(logoCX, logoCY);
-        if (isLowEndCapture) {
-          ctx.shadowColor = "transparent";
-          ctx.shadowBlur = 0;
-          ctx.strokeStyle = animatedNeonColor;
-          ctx.lineWidth = logoSize * 0.025;
-          ctx.globalAlpha = 0.85;
-          ctx.beginPath();
-          ctx.arc(0, 0, logoSize / 2 + logoSize * 0.02, 0, Math.PI * 2);
-          ctx.stroke();
-        } else {
-          // Layer 1: outer diffuse neon glow — NOT rotated, stays as ring
-          ctx.shadowColor = animatedNeonColor;
-          ctx.shadowBlur = logoSize * 0.35;
-          ctx.strokeStyle = animatedNeonColor;
-          ctx.lineWidth = logoSize * 0.05;
-          ctx.globalAlpha = 0.9;
-          ctx.beginPath();
-          ctx.arc(0, 0, logoSize / 2 + logoSize * 0.05, 0, Math.PI * 2);
-          ctx.stroke();
-          // Layer 2: inner sharp neon ring with second color
-          ctx.shadowColor = animatedNeonColor2;
-          ctx.shadowBlur = logoSize * 0.18;
-          ctx.strokeStyle = animatedNeonColor2;
-          ctx.lineWidth = logoSize * 0.035;
-          ctx.globalAlpha = 1.0;
-          ctx.beginPath();
-          ctx.arc(0, 0, logoSize / 2 + logoSize * 0.02, 0, Math.PI * 2);
-          ctx.stroke();
-        }
+        // Layer 1: outer diffuse neon glow — NOT rotated, stays as ring
+        ctx.shadowColor = animatedNeonColor;
+        ctx.shadowBlur = logoSize * 0.35;
+        ctx.strokeStyle = animatedNeonColor;
+        ctx.lineWidth = logoSize * 0.05;
+        ctx.globalAlpha = 0.9;
+        ctx.beginPath();
+        ctx.arc(0, 0, logoSize / 2 + logoSize * 0.05, 0, Math.PI * 2);
+        ctx.stroke();
+        // Layer 2: inner sharp neon ring with second color
+        ctx.shadowColor = animatedNeonColor2;
+        ctx.shadowBlur = logoSize * 0.18;
+        ctx.strokeStyle = animatedNeonColor2;
+        ctx.lineWidth = logoSize * 0.035;
+        ctx.globalAlpha = 1.0;
+        ctx.beginPath();
+        ctx.arc(0, 0, logoSize / 2 + logoSize * 0.02, 0, Math.PI * 2);
+        ctx.stroke();
         ctx.restore();
 
         // === Draw logo image with clip — CLEAR shadow first so image is sharp ===
@@ -988,13 +966,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
       }
     };
 
-    let frameInProgress = false;
-    let lastDrawTick = performance.now();
-    let dynamicIntervalMs = baseDrawIntervalMs;
-    let smoothedDrawCostMs = baseDrawIntervalMs;
-
-    // Adaptive draw scheduler: prevents CPU saturation/hang on weak devices
+    // Use stable setInterval at 33ms (~30fps) for smooth recording
     recapIntervalRef.current = setInterval(() => {
+      drawFrame();
       if (audioEl.ended) {
         if (recapIntervalRef.current) clearInterval(recapIntervalRef.current);
         if (recorder.state !== "inactive") {
@@ -1003,21 +977,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
           audioEl.pause();
           videoEl.playbackRate = 1.0;
         }
-        return;
       }
-
-      const now = performance.now();
-      if (frameInProgress || now - lastDrawTick < dynamicIntervalMs) return;
-
-      frameInProgress = true;
-      const frameStart = now;
-      drawFrame();
-      const drawCost = performance.now() - frameStart;
-      smoothedDrawCostMs = smoothedDrawCostMs * 0.82 + drawCost * 0.18;
-      dynamicIntervalMs = Math.min(maxDrawIntervalMs, Math.max(minDrawIntervalMs, smoothedDrawCostMs * (isLowEndCapture ? 1.8 : 1.4)));
-      lastDrawTick = now;
-      frameInProgress = false;
-    }, dynamicIntervalMs);
+    }, 33);
   };
 
   // Recap playback in editor: play video (muted) + TTS audio with subtitle sync
@@ -1054,47 +1015,17 @@ export const ResultView: React.FC<ResultViewProps> = ({
     if (!_nvGuard()) {console.error('[NV-LOCK] AV-SYNC-8000: Unauthorized. Admin unlock required.');return;}
     let animFrame: number;
     let lastTsIdx = 0;
-    let lastSyncComputeMs = 0;
-    let lastRateWriteMs = 0;
-    let lastHueUpdateMs = 0;
-    let lastDrift = 0;
-    let lastRecoverAttemptMs = 0;
-    const navWithMemory = navigator as Navigator & { deviceMemory?: number };
-    const deviceMemory = typeof navWithMemory.deviceMemory === 'number' ? navWithMemory.deviceMemory : 4;
-    const isLowEndDevice = (navigator.hardwareConcurrency ?? 4) <= 4 || deviceMemory <= 4;
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const syncIntervalMs = isLowEndDevice ? 33 : 16;
-    const rateWriteIntervalMs = isLowEndDevice ? 33 : 16;
-    const hueIntervalMs = isLowEndDevice ? 66 : 33;
-    const segmentSnapThreshold = isLowEndDevice ? 0.04 : 0.025;
-    const hardSnapThreshold = isLowEndDevice ? 0.075 : 0.05;
-    const driftDeadband = 0.004;
-    const minRate = isLowEndDevice ? 0.5 : 0.35;
-    const maxRate = isLowEndDevice ? 2.25 : 3.0;
     const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
-    const syncLoop = (rafTs = performance.now()) => {
-      const nowMs = rafTs;
+    const syncLoop = () => {
       const av = audioRef.current;
       const vv = videoRef.current;
       if (!av || !vv) {animFrame = requestAnimationFrame(syncLoop);return;}
 
       // Auto-recover if video stalls while audio is playing
-      if (!av.paused && vv.paused && !vv.ended && nowMs - lastRecoverAttemptMs > 600) {
-        lastRecoverAttemptMs = nowMs;
+      if (!av.paused && vv.paused && !vv.ended) {
         vv.play().catch(() => {});
       }
-
-      if (lastSyncComputeMs && nowMs - lastSyncComputeMs < syncIntervalMs) {
-        if (!prefersReducedMotion && nowMs - lastHueUpdateMs >= hueIntervalMs) {
-          subNeonHueRef.current = (subNeonHueRef.current + (isLowEndDevice ? 0.45 : 0.7)) % 360;
-          containerRef.current?.style.setProperty('--neon-hue', `hsl(${subNeonHueRef.current}, 100%, 75%)`);
-          lastHueUpdateMs = nowMs;
-        }
-        animFrame = requestAnimationFrame(syncLoop);
-        return;
-      }
-      lastSyncComputeMs = nowMs;
 
       if (av.duration > 0 && vv.duration > 0) {
         const currentTime = av.currentTime;
@@ -1136,10 +1067,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
               targetVideoTime = active.vStart + progressInSeg * videoSegDuration;
               baseRate = videoSegDuration > 0 ? videoSegDuration / audioSegDuration : 1;
 
-              // Segment change snap: adaptive threshold tuned for precision + device stability
+              // Segment change snap: tighter threshold for faster recovery on boundary transitions
               if (activeIndex !== lastIndexRef.current) {
                 const snapDrift = Math.abs(vv.currentTime - active.vStart);
-                if (snapDrift > segmentSnapThreshold) {
+                if (snapDrift > 0.22) {
                   vv.currentTime = active.vStart;
                 }
                 lastIndexRef.current = activeIndex;
@@ -1208,7 +1139,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
             if (activeIndex !== lastIndexRef.current) {
               const snapDrift = Math.abs(vv.currentTime - s.vStart);
-              if (snapDrift > segmentSnapThreshold) {
+              if (snapDrift > 0.22) {
                 vv.currentTime = s.vStart;
               }
               lastIndexRef.current = activeIndex;
@@ -1218,63 +1149,33 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
         if (targetVideoTime !== null) {
           const drift = targetVideoTime - vv.currentTime;
-          const timeSinceRateWrite = lastRateWriteMs ? Math.max((nowMs - lastRateWriteMs) / 1000, 0.001) : 0.016;
-          const driftVelocity = (drift - lastDrift) / timeSinceRateWrite;
-          const predictedDrift = drift + driftVelocity * 0.03; // 30ms lookahead for adaptive/flexible correction
-          const absPredictedDrift = Math.abs(predictedDrift);
-          let newRate: number;
-
-          if (absPredictedDrift > hardSnapThreshold) {
-            // Hard snap only when projected drift is meaningfully large
+          if (Math.abs(drift) > 0.22) {
             vv.currentTime = targetVideoTime;
-            newRate = baseRate;
-          } else if (absPredictedDrift <= driftDeadband) {
-            // Sub-4ms: keep natural speed to avoid jitter
-            newRate = baseRate;
+            vv.playbackRate = Math.min(Math.max(baseRate, 0.1), 8.0);
           } else {
-            const normalizedDrift = clamp(absPredictedDrift / hardSnapThreshold, 0, 1);
-            const correctionGain = isLowEndDevice
-              ? (normalizedDrift > 0.65 ? 4.8 : normalizedDrift > 0.35 ? 3.4 : 2.2)
-              : (normalizedDrift > 0.65 ? 6.5 : normalizedDrift > 0.35 ? 4.8 : 3.0);
-            const maxRateDelta = isLowEndDevice ? 0.4 : 0.8;
-            const correction = clamp(predictedDrift * correctionGain, -maxRateDelta, maxRateDelta);
-            newRate = baseRate + correction;
+            const correctionGain = Math.abs(drift) > 0.08 ? 5.2 : 3.8;
+            const clampedDrift = Math.max(-0.22, Math.min(0.22, drift));
+            const correction = clampedDrift * correctionGain;
+            vv.playbackRate = Math.min(Math.max(baseRate + correction, 0.1), 8.0);
           }
-
-          newRate = clamp(newRate, minRate, maxRate);
-          if (!lastRateWriteMs || nowMs - lastRateWriteMs >= rateWriteIntervalMs) {
-            // Device-adaptive smoothing prevents aggressive playbackRate jumps on weak phones
-            const smoothingAlpha = isLowEndDevice ? 0.22 : 0.3;
-            const prevRate = vv.playbackRate;
-            vv.playbackRate = prevRate + (newRate - prevRate) * smoothingAlpha;
-            lastRateWriteMs = nowMs;
-          }
-          lastDrift = drift;
         }
 
         if (activeIndex !== -1 && activeText) {
           if (activeText !== currentSubtitleRef.current) {
+            setCurrentSubtitle(activeText);
+            setSubtitleKey((k) => k + 1); // trigger pop-in animation on change
             currentSubtitleRef.current = activeText;
-            // Direct DOM update to avoid React re-render during playback
-            const subEl = document.getElementById('nv-subtitle-text');
-            const subWrap = document.getElementById('nv-subtitle-wrap');
-            if (subEl) subEl.textContent = activeText;
-            if (subWrap) subWrap.style.display = '';
           }
         } else {
           if (currentSubtitleRef.current !== "") {
+            setCurrentSubtitle("");
             currentSubtitleRef.current = "";
-            const subWrap = document.getElementById('nv-subtitle-wrap');
-            if (subWrap) subWrap.style.display = 'none';
           }
         }
       }
-      if (!prefersReducedMotion && nowMs - lastHueUpdateMs >= hueIntervalMs) {
-        // Throttle neon updates to reduce main-thread pressure on low-end devices
-        subNeonHueRef.current = (subNeonHueRef.current + (isLowEndDevice ? 0.45 : 0.7)) % 360;
-        containerRef.current?.style.setProperty('--neon-hue', `hsl(${subNeonHueRef.current}, 100%, 75%)`);
-        lastHueUpdateMs = nowMs;
-      }
+      // Cycle neon border hue every rAF frame (smooth color cycling)
+      subNeonHueRef.current = (subNeonHueRef.current + 0.8) % 360;
+      containerRef.current?.style.setProperty('--neon-hue', `hsl(${subNeonHueRef.current}, 100%, 75%)`);
       animFrame = requestAnimationFrame(syncLoop);
     };
     // ╚══ END TWO-FACTOR LOCK: AV-SYNC-8000-SMOOTH-v3 ══╝
@@ -1317,15 +1218,12 @@ export const ResultView: React.FC<ResultViewProps> = ({
   const activeGrade = COLOR_GRADE_PRESETS[editorState.colorGrade] || COLOR_GRADE_PRESETS["OFF"];
   const bypassBoostCSS = editorState.bypass ? { contrast: 15, brightness: 5, saturate: 15, hue: 5 } : { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
   const videoStyles: React.CSSProperties = {
-    filter: lightweightPreview ? "none" : `contrast(${activeGrade.contrast + bypassBoostCSS.contrast}%) brightness(${activeGrade.brightness + bypassBoostCSS.brightness}%) saturate(${activeGrade.saturate + bypassBoostCSS.saturate}%) hue-rotate(${activeGrade.hue + bypassBoostCSS.hue}deg) sepia(${activeGrade.sepia || 0}%)`,
-    transform: `${editorState.flip ? "scaleX(-1)" : "scaleX(1)"} ${editorState.bypass ? "scale(1.03)" : "scale(1)"} translateZ(0)`,
+    filter: `contrast(${activeGrade.contrast + bypassBoostCSS.contrast}%) brightness(${activeGrade.brightness + bypassBoostCSS.brightness}%) saturate(${activeGrade.saturate + bypassBoostCSS.saturate}%) hue-rotate(${activeGrade.hue + bypassBoostCSS.hue}deg) sepia(${activeGrade.sepia || 0}%)`,
+    transform: `${editorState.flip ? "scaleX(-1)" : "scaleX(1)"} ${editorState.bypass ? "scale(1.03)" : "scale(1)"}`,
     objectFit: editorState.ratio === "auto" ? "contain" : "cover",
     width: "100%",
     height: "100%",
-    transition: "none",
-    willChange: lightweightPreview ? "transform" : "auto",
-    backfaceVisibility: "hidden" as const,
-    /* contain removed — can conflict with hardware video decoder compositing */
+    transition: "all 0.3s ease"
   };
 
   const containerStyles: React.CSSProperties = {
@@ -1340,9 +1238,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
     justifyContent: "center",
     backgroundColor: "#000",
     position: "relative",
-    userSelect: "none",
-    contain: "layout style" as any,
-    willChange: lightweightPreview ? "contents" : "auto"
+    userSelect: "none"
   };
 
   return (
@@ -1474,13 +1370,13 @@ export const ResultView: React.FC<ResultViewProps> = ({
           <div className="flex flex-col items-center justify-center w-full bg-black rounded-xl border border-charcoal-600 overflow-hidden shadow-2xl relative p-2 md:p-4">
             {/* Recap Active / Recording Indicator */}
             {isRecapPlaying && !isRendering &&
-            <div className="absolute top-4 left-4 z-50 flex items-center gap-2 bg-neon-cyan/20 px-3 py-1.5 rounded-full border border-neon-cyan/60">
+            <div className="absolute top-4 left-4 z-50 flex items-center gap-2 bg-neon-cyan/20 backdrop-blur-md px-3 py-1.5 rounded-full border border-neon-cyan/60">
                 <div className="w-3 h-3 bg-neon-cyan rounded-full animate-pulse"></div>
                 <span className="text-neon-cyan font-bold text-xs tracking-wider">RECAP ACTIVE</span>
               </div>
             }
             {isRendering &&
-            <div className="absolute top-4 right-4 z-50 flex items-center gap-2 bg-black/60 px-3 py-1.5 rounded-full border border-red-500/50">
+            <div className="absolute top-4 right-4 z-50 flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-red-500/50">
                 <div className="w-3 h-3 bg-red-600 rounded-full animate-pulse shadow-[0_0_10px_rgba(220,38,38,0.8)]"></div>
                 <span className="text-red-400 font-bold text-xs tracking-wider">REC</span>
               </div>
@@ -1488,7 +1384,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
             <div
               ref={containerRef}
-              className={`relative overflow-hidden shadow-lg flex items-center justify-center bg-black`}
+              className={`relative overflow-hidden transition-all duration-300 shadow-lg flex items-center justify-center bg-black`}
               style={containerStyles}
               onMouseMove={handleDragMove}
               onMouseUp={handleDragEnd}
@@ -1504,21 +1400,20 @@ export const ResultView: React.FC<ResultViewProps> = ({
                   top: `${logo.y}%`,
                   transform: 'translate(-50%, -50%)',
                   width: `${logo.size}%`,
-                  transition: lightweightPreview ? "none" : "transform 0.35s ease"
+                  transition: "all 0.4s ease"
                 }}>
 
                 {logo.url ?
                 <div
                   className={`relative w-full aspect-square ${logo.isCircle ? "rounded-full" : "rounded-none"} overflow-hidden`}
                   style={{
-                    boxShadow: lightweightPreview ? 'none' : `0 0 20px ${logo.neonColor}, 0 0 40px ${logo.neonColor}, 0 0 60px ${logo.neonColor}55`,
-                    border: `2.5px solid ${logo.neonColor}`,
-                    contain: 'layout style paint' as any
+                    boxShadow: `0 0 20px ${logo.neonColor}, 0 0 40px ${logo.neonColor}, 0 0 60px ${logo.neonColor}55`,
+                    border: `2.5px solid ${logo.neonColor}`
                   }}>
 
                     <img
                     src={logo.url}
-                    className={`w-full h-full object-cover ${logo.spin && !lightweightPreview ? "animate-[spin_8s_linear_infinite]" : ""}`}
+                    className={`w-full h-full object-cover ${logo.spin ? "animate-[spin_8s_linear_infinite]" : ""}`}
                     alt="Logo"
                     draggable={false} />
 
@@ -1526,14 +1421,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
                 /* Default AppLogo with spin effect when no custom logo uploaded */
                 <div
-                  className={`relative w-full aspect-square flex items-center justify-center ${logo.spin && !lightweightPreview ? "animate-[spin_8s_linear_infinite]" : ""}`}>
+                  className={`relative w-full aspect-square flex items-center justify-center ${logo.spin ? "animate-[spin_8s_linear_infinite]" : ""}`}>
 
-                    {lightweightPreview ?
-                    <div className="w-16 h-16 rounded-xl border border-charcoal-500 bg-charcoal-900/80 text-neon-cyan flex items-center justify-center font-black text-xl">
-                        AN
-                      </div> :
-                    <AppLogo size={64} paused={isRecapPlaying || isRendering} />
-                    }
+                    <AppLogo size={64} />
                   </div>)
                 }
               </div>
@@ -1547,51 +1437,51 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 style={{
                   left: `${blurSettings.x}%`,
                   top: `${blurSettings.y}%`,
-                  transform: 'translate(-50%, -50%) translateZ(0)',
+                  transform: 'translate(-50%, -50%)',
                   width: `${blurSettings.width}%`,
                   height: `${blurSettings.height}%`,
-                  backdropFilter: lightweightPreview ? 'none' : `blur(${Math.round(blurSettings.opacity / 5)}px)`,
-                  WebkitBackdropFilter: lightweightPreview ? 'none' : `blur(${Math.round(blurSettings.opacity / 5)}px)`,
-                  border: lightweightPreview ? '2px solid rgba(0,229,255,0.6)' : `2.5px solid var(--neon-hue, hsl(180,100%,75%))`,
-                  boxShadow: lightweightPreview ? 'none' : `0 0 14px var(--neon-hue, hsl(180,100%,75%)), 0 0 28px color-mix(in srgb, var(--neon-hue, hsl(180,100%,75%)) 40%, transparent), inset 0 0 8px color-mix(in srgb, var(--neon-hue, hsl(180,100%,75%)) 20%, transparent)`,
+                  backdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
+                  WebkitBackdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
+                  // Dynamic neon cycling border (replaces static dashed border)
+                  border: `2.5px solid var(--neon-hue, hsl(180,100%,75%))`,
+                  boxShadow: `0 0 14px var(--neon-hue, hsl(180,100%,75%)), 0 0 28px color-mix(in srgb, var(--neon-hue, hsl(180,100%,75%)) 40%, transparent), inset 0 0 8px color-mix(in srgb, var(--neon-hue, hsl(180,100%,75%)) 20%, transparent)`,
                   touchAction: 'none',
                   boxSizing: 'border-box',
                   overflow: 'hidden',
                   borderRadius: '6px',
-                  transition: 'none',
-                  willChange: lightweightPreview ? 'transform' : 'auto',
-                  contain: 'layout style paint' as any
+                  transition: 'border-color 0.1s, box-shadow 0.1s'
                 }}>
 
-                  <div
-                    id="nv-subtitle-wrap"
+                  {currentSubtitle &&
+                <div
                   className="absolute inset-0 flex items-center justify-center pointer-events-none"
                   style={{
                     backgroundColor: subSettings.bgColor,
                     borderRadius: "inherit",
-                    padding: "4% 4%",
-                    display: currentSubtitle ? '' : 'none'
+                    padding: "4% 4%"
                   }}>
 
+                      {/* key prop triggers CSS animation on every subtitle change */}
                       <div
-                    id="nv-subtitle-text"
+                    key={subtitleKey}
                     className="w-full text-center font-bold"
                     style={{
                       color: subSettings.textColor,
                       fontSize: `clamp(8px, ${subSettings.fontSize}px, 100%)`,
                       lineHeight: 1.4,
-                      textShadow: lightweightPreview ? `0 1px 3px rgba(0,0,0,0.9)` : `0 0 8px var(--neon-hue, hsl(180,100%,75%)), 0 1px 4px rgba(0,0,0,0.9)`,
+                      textShadow: `0 0 8px var(--neon-hue, hsl(180,100%,75%)), 0 1px 4px rgba(0,0,0,0.9)`,
                       wordBreak: "break-word",
                       overflowWrap: "break-word",
                       overflow: "visible",
                       whiteSpace: "normal",
-                      animation: "none",
-                      contain: "layout style" as any
+                      // Cinematic slide-up + fade-in on subtitle change
+                      animation: "subtitlePopin 0.25s cubic-bezier(0.22,1,0.36,1) both"
                     }}>
 
                         {currentSubtitle}
                       </div>
                     </div>
+                }
                 </div>
               }
 
@@ -1630,13 +1520,12 @@ export const ResultView: React.FC<ResultViewProps> = ({
               }
 
               {/* ── DOM: Video Border overlay ─────────────────────── */}
-              {videoBorder.enabled && !lightweightPreview &&
+              {videoBorder.enabled &&
               <div
                 className="absolute inset-0 pointer-events-none z-30"
                 style={{
                   boxShadow: `inset 0 0 0 ${videoBorder.width}px ${videoBorder.color}, inset 0 0 ${videoBorder.width * 2}px ${videoBorder.color}55`,
-                  borderRadius: "inherit",
-                  contain: "strict" as any
+                  borderRadius: "inherit"
                 }} />
 
               }

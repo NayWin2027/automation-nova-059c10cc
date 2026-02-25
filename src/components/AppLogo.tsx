@@ -1,20 +1,14 @@
 import { useEffect, useRef } from "react";
 
-export function AppLogo({ size = 64, paused = false }: { size?: number; paused?: boolean }) {
+export function AppLogo({ size = 64 }: { size?: number }) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const animIdRef = useRef<number>(0);
 
   useEffect(() => {
     const svg = svgRef.current;
     if (!svg) return;
-    if (paused) {
-      // Cancel any running animation when paused
-      if (animIdRef.current) cancelAnimationFrame(animIdRef.current);
-      animIdRef.current = 0;
-      return;
-    }
 
     let frame = 0;
+    let animId: number;
 
     const animate = () => {
       frame += 0.5;
@@ -35,14 +29,12 @@ export function AppLogo({ size = 64, paused = false }: { size?: number; paused?:
         (s as SVGElement).style.opacity = String(opacity);
       });
 
-      animIdRef.current = requestAnimationFrame(animate);
+      animId = requestAnimationFrame(animate);
     };
 
-    animIdRef.current = requestAnimationFrame(animate);
-    return () => {
-      if (animIdRef.current) cancelAnimationFrame(animIdRef.current);
-    };
-  }, [paused]);
+    animId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animId);
+  }, []);
 
   return (
     <svg
