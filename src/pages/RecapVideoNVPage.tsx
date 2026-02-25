@@ -359,7 +359,19 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
       const vStart = parseTime(seg.timestamp);
       const nextSeg = scriptData.segments[i + 1];
-      const vEnd = nextSeg ? parseTime(nextSeg.timestamp) : -1;
+      let vEnd: number;
+      if (!nextSeg) {
+        vEnd = -1; // Last segment: play to end of video
+      } else {
+        const nextVStart = parseTime(nextSeg.timestamp);
+        if (nextVStart > vStart) {
+          vEnd = nextVStart; // Sequential: use next segment start (existing behavior)
+        } else {
+          // Non-sequential (semantic scene jump): estimate clip duration from word count (~150 wpm)
+          const estimatedClipSec = Math.max((segWords / 150) * 60, 3);
+          vEnd = vStart + estimatedClipSec;
+        }
+      }
 
       return {
         vStart,
@@ -2240,11 +2252,30 @@ const RecapVideoNVPage: React.FC = () => {
     }
   };
 
-  // Convert plain text script into segments with proportional timestamps
+  // Convert plain text script into segments with scene-matched timestamps
   const scriptToSegments = (scriptText: string, videoDuration: number): RecapSegment[] => {
     const paragraphs = scriptText.split('\n').filter((p) => p.trim().length > 0);
     if (paragraphs.length === 0) return [];
 
+    const timecodeRegex = /^\[(\d{1,2}):(\d{2})\]\s*/;
+    const hasTimecodes = paragraphs.some(p => timecodeRegex.test(p.trim()));
+
+    if (hasTimecodes) {
+      // AI semantic scene timestamps — each paragraph has [MM:SS] prefix (Hollywood editor mode)
+      return paragraphs.map((rawText) => {
+        const trimmed = rawText.trim();
+        const match = trimmed.match(timecodeRegex);
+        let timestamp = '00:00';
+        let text = trimmed;
+        if (match) {
+          timestamp = `${match[1].padStart(2, '0')}:${match[2]}`;
+          text = trimmed.replace(timecodeRegex, '').trim();
+        }
+        return { timestamp, text };
+      });
+    }
+
+    // Fallback: proportional timestamps (legacy — no [MM:SS] from AI)
     const totalChars = paragraphs.reduce((sum, p) => sum + p.length, 0);
     let timeCursor = 0;
 
@@ -2553,8 +2584,11 @@ const RecapVideoNVPage: React.FC = () => {
 
       setProgressMsg('📝 Script generated! Now generating AI voice...');
 
+      // Strip [MM:SS] scene timecodes from script text before TTS (TTS should not read timecodes aloud)
+      const scriptTextForTTS = scriptText.replace(/^\[\d{1,2}:\d{2}\]\s*/gm, '');
+
       // Auto-generate voice — pass segments so gemini-tts returns exact WAV timestamps
-      await generateVoice(scriptText, resolvedOwnKey || undefined, segments.map((s) => ({ text: s.text })));
+      await generateVoice(scriptTextForTTS, resolvedOwnKey || undefined, segments.map((s) => ({ text: s.text })));
     } catch (err: any) {
       console.error('Pipeline error:', err);
       setStatus('error');
