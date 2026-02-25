@@ -1313,12 +1313,15 @@ export const ResultView: React.FC<ResultViewProps> = ({
   const activeGrade = COLOR_GRADE_PRESETS[editorState.colorGrade] || COLOR_GRADE_PRESETS["OFF"];
   const bypassBoostCSS = editorState.bypass ? { contrast: 15, brightness: 5, saturate: 15, hue: 5 } : { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
   const videoStyles: React.CSSProperties = {
-    filter: `contrast(${activeGrade.contrast + bypassBoostCSS.contrast}%) brightness(${activeGrade.brightness + bypassBoostCSS.brightness}%) saturate(${activeGrade.saturate + bypassBoostCSS.saturate}%) hue-rotate(${activeGrade.hue + bypassBoostCSS.hue}deg) sepia(${activeGrade.sepia || 0}%)`,
-    transform: `${editorState.flip ? "scaleX(-1)" : "scaleX(1)"} ${editorState.bypass ? "scale(1.03)" : "scale(1)"}`,
+    filter: lightweightPreview ? "none" : `contrast(${activeGrade.contrast + bypassBoostCSS.contrast}%) brightness(${activeGrade.brightness + bypassBoostCSS.brightness}%) saturate(${activeGrade.saturate + bypassBoostCSS.saturate}%) hue-rotate(${activeGrade.hue + bypassBoostCSS.hue}deg) sepia(${activeGrade.sepia || 0}%)`,
+    transform: `${editorState.flip ? "scaleX(-1)" : "scaleX(1)"} ${editorState.bypass ? "scale(1.03)" : "scale(1)"} translateZ(0)`,
     objectFit: editorState.ratio === "auto" ? "contain" : "cover",
     width: "100%",
     height: "100%",
-    transition: lightweightPreview ? "none" : "all 0.3s ease"
+    transition: "none",
+    willChange: lightweightPreview ? "transform" : "auto",
+    backfaceVisibility: "hidden" as const,
+    contain: "layout style paint" as any
   };
 
   const containerStyles: React.CSSProperties = {
@@ -1333,7 +1336,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
     justifyContent: "center",
     backgroundColor: "#000",
     position: "relative",
-    userSelect: "none"
+    userSelect: "none",
+    contain: "layout style" as any,
+    willChange: lightweightPreview ? "contents" : "auto"
   };
 
   return (
@@ -1465,13 +1470,13 @@ export const ResultView: React.FC<ResultViewProps> = ({
           <div className="flex flex-col items-center justify-center w-full bg-black rounded-xl border border-charcoal-600 overflow-hidden shadow-2xl relative p-2 md:p-4">
             {/* Recap Active / Recording Indicator */}
             {isRecapPlaying && !isRendering &&
-            <div className="absolute top-4 left-4 z-50 flex items-center gap-2 bg-neon-cyan/20 backdrop-blur-md px-3 py-1.5 rounded-full border border-neon-cyan/60">
+            <div className="absolute top-4 left-4 z-50 flex items-center gap-2 bg-neon-cyan/20 px-3 py-1.5 rounded-full border border-neon-cyan/60">
                 <div className="w-3 h-3 bg-neon-cyan rounded-full animate-pulse"></div>
                 <span className="text-neon-cyan font-bold text-xs tracking-wider">RECAP ACTIVE</span>
               </div>
             }
             {isRendering &&
-            <div className="absolute top-4 right-4 z-50 flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-red-500/50">
+            <div className="absolute top-4 right-4 z-50 flex items-center gap-2 bg-black/60 px-3 py-1.5 rounded-full border border-red-500/50">
                 <div className="w-3 h-3 bg-red-600 rounded-full animate-pulse shadow-[0_0_10px_rgba(220,38,38,0.8)]"></div>
                 <span className="text-red-400 font-bold text-xs tracking-wider">REC</span>
               </div>
@@ -1479,7 +1484,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
             <div
               ref={containerRef}
-              className={`relative overflow-hidden ${lightweightPreview ? "" : "transition-all duration-300"} shadow-lg flex items-center justify-center bg-black`}
+              className={`relative overflow-hidden shadow-lg flex items-center justify-center bg-black`}
               style={containerStyles}
               onMouseMove={handleDragMove}
               onMouseUp={handleDragEnd}
@@ -1502,8 +1507,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 <div
                   className={`relative w-full aspect-square ${logo.isCircle ? "rounded-full" : "rounded-none"} overflow-hidden`}
                   style={{
-                    boxShadow: `0 0 20px ${logo.neonColor}, 0 0 40px ${logo.neonColor}, 0 0 60px ${logo.neonColor}55`,
-                    border: `2.5px solid ${logo.neonColor}`
+                    boxShadow: lightweightPreview ? 'none' : `0 0 20px ${logo.neonColor}, 0 0 40px ${logo.neonColor}, 0 0 60px ${logo.neonColor}55`,
+                    border: `2.5px solid ${logo.neonColor}`,
+                    contain: 'layout style paint' as any
                   }}>
 
                     <img
@@ -1537,19 +1543,20 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 style={{
                   left: `${blurSettings.x}%`,
                   top: `${blurSettings.y}%`,
-                  transform: 'translate(-50%, -50%)',
+                  transform: 'translate(-50%, -50%) translateZ(0)',
                   width: `${blurSettings.width}%`,
                   height: `${blurSettings.height}%`,
                   backdropFilter: lightweightPreview ? 'none' : `blur(${Math.round(blurSettings.opacity / 5)}px)`,
                   WebkitBackdropFilter: lightweightPreview ? 'none' : `blur(${Math.round(blurSettings.opacity / 5)}px)`,
-                  // Dynamic neon cycling border (replaces static dashed border)
-                  border: `2.5px solid var(--neon-hue, hsl(180,100%,75%))`,
+                  border: lightweightPreview ? '2px solid rgba(0,229,255,0.6)' : `2.5px solid var(--neon-hue, hsl(180,100%,75%))`,
                   boxShadow: lightweightPreview ? 'none' : `0 0 14px var(--neon-hue, hsl(180,100%,75%)), 0 0 28px color-mix(in srgb, var(--neon-hue, hsl(180,100%,75%)) 40%, transparent), inset 0 0 8px color-mix(in srgb, var(--neon-hue, hsl(180,100%,75%)) 20%, transparent)`,
                   touchAction: 'none',
                   boxSizing: 'border-box',
                   overflow: 'hidden',
                   borderRadius: '6px',
-                  transition: lightweightPreview ? 'none' : 'border-color 0.1s, box-shadow 0.1s'
+                  transition: 'none',
+                  willChange: lightweightPreview ? 'transform' : 'auto',
+                  contain: 'layout style paint' as any
                 }}>
 
                   {currentSubtitle &&
@@ -1569,13 +1576,13 @@ export const ResultView: React.FC<ResultViewProps> = ({
                       color: subSettings.textColor,
                       fontSize: `clamp(8px, ${subSettings.fontSize}px, 100%)`,
                       lineHeight: 1.4,
-                      textShadow: `0 0 8px var(--neon-hue, hsl(180,100%,75%)), 0 1px 4px rgba(0,0,0,0.9)`,
+                      textShadow: lightweightPreview ? `0 1px 3px rgba(0,0,0,0.9)` : `0 0 8px var(--neon-hue, hsl(180,100%,75%)), 0 1px 4px rgba(0,0,0,0.9)`,
                       wordBreak: "break-word",
                       overflowWrap: "break-word",
                       overflow: "visible",
                       whiteSpace: "normal",
-                      // Cinematic slide-up + fade-in on subtitle change
-                      animation: lightweightPreview ? "none" : "subtitlePopin 0.25s cubic-bezier(0.22,1,0.36,1) both"
+                      animation: "none",
+                      contain: "layout style" as any
                     }}>
 
                         {currentSubtitle}
@@ -1620,12 +1627,13 @@ export const ResultView: React.FC<ResultViewProps> = ({
               }
 
               {/* ── DOM: Video Border overlay ─────────────────────── */}
-              {videoBorder.enabled &&
+              {videoBorder.enabled && !lightweightPreview &&
               <div
                 className="absolute inset-0 pointer-events-none z-30"
                 style={{
                   boxShadow: `inset 0 0 0 ${videoBorder.width}px ${videoBorder.color}, inset 0 0 ${videoBorder.width * 2}px ${videoBorder.color}55`,
-                  borderRadius: "inherit"
+                  borderRadius: "inherit",
+                  contain: "strict" as any
                 }} />
 
               }
