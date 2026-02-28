@@ -157,6 +157,27 @@ export const ResultView: React.FC<ResultViewProps> = ({
     "GOLDEN": { contrast: 115, brightness: 112, saturate: 135, hue: 22, label: "Golden Hour", emoji: "🌅" }
   };
 
+  // Export Quality Options — resolution cap, fps, bitrate per quality level
+  const EXPORT_QUALITY_OPTIONS: Record<string, {maxW: number; maxH: number; fps: number; bitrate: number; label: string}> = {
+    '480p':  { maxW: 854,  maxH: 480,  fps: 20, bitrate: 1_200_000, label: '480p (Low — 854×480 · 20fps · 1.2Mbps)' },
+    '720p':  { maxW: 1280, maxH: 720,  fps: 24, bitrate: 2_500_000, label: '720p (Mid — 1280×720 · 24fps · 2.5Mbps)' },
+    '1080p': { maxW: 1920, maxH: 1080, fps: 30, bitrate: 4_000_000, label: '1080p (High — 1920×1080 · 30fps · 4Mbps)' },
+  };
+  const [exportQuality, setExportQuality] = useState<string>('720p');
+
+  // CPU auto-detection: set default export quality based on device capability
+  useEffect(() => {
+    const cores = navigator.hardwareConcurrency || 4;
+    const mem = (navigator as any).deviceMemory || 4;
+    if (cores <= 4 || mem <= 2) {
+      setExportQuality('480p');
+    } else if (cores <= 6 || mem <= 4) {
+      setExportQuality('720p');
+    } else {
+      setExportQuality('1080p');
+    }
+  }, []);
+
   // Editor States
   const [editorState, setEditorState] = useState({
     ratio: "1/1" as "auto" | "16/9" | "9/16" | "1/1" | "4/3",
@@ -502,12 +523,18 @@ export const ResultView: React.FC<ResultViewProps> = ({
         outW = Math.round(rawH * targetRatio);
       }
     }
+    // Apply export quality resolution cap
+    const quality = EXPORT_QUALITY_OPTIONS[exportQuality] || EXPORT_QUALITY_OPTIONS['720p'];
+    const qualityScale = Math.min(1, quality.maxW / outW, quality.maxH / outH);
+    outW = Math.round(outW * qualityScale);
+    outH = Math.round(outH * qualityScale);
+
     const canvas = document.createElement("canvas");
     canvas.width = outW;
     canvas.height = outH;
     const ctx = canvas.getContext("2d")!;
 
-    const canvasStream = canvas.captureStream(30);
+    const canvasStream = canvas.captureStream(quality.fps);
     const chunks: BlobPart[] = [];
 
     let audioCtx: AudioContext | null = null;
@@ -522,7 +549,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
       console.warn("Could not capture audio for recording:", audioErr);
     }
 
-    const recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: 4000000 });
+    const recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: quality.bitrate });
     recapRecorderRef.current = recorder;
 
     const recordingStartTime = Date.now(); // Track actual recording elapsed time for accurate credit deduction
@@ -966,7 +993,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
       }
     };
 
-    // Use stable setInterval at 33ms (~30fps) for smooth recording
+    // Use stable setInterval at dynamic fps for smooth recording
     recapIntervalRef.current = setInterval(() => {
       drawFrame();
       if (audioEl.ended) {
@@ -978,7 +1005,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
           videoEl.playbackRate = 1.0;
         }
       }
-    }, 33);
+    }, Math.round(1000 / quality.fps));
   };
 
   // Recap playback in editor: play video (muted) + TTS audio with subtitle sync
@@ -1611,6 +1638,22 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
                     </svg>
                   </button>
+                </div>
+
+                {/* 🎬 Export Quality Selector */}
+                <div className="mb-4 p-3 rounded-lg border border-neon-cyan/30 bg-card/50">
+                  <p className="text-xs font-semibold text-neon-cyan mb-2">🎬 Export Quality</p>
+                  <Select value={exportQuality} onValueChange={setExportQuality}>
+                    <SelectTrigger className="w-full bg-background border-border text-foreground text-xs h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(EXPORT_QUALITY_OPTIONS).map(([key, opt]) => (
+                        <SelectItem key={key} value={key} className="text-xs">{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-2xs text-muted-foreground mt-1.5">⚡ Device ပေါ်မူတည်ပြီး resolution ကို ရွေးပါ။ Low-end phone ဆိုရင် 480p/720p ရွေးပါ။</p>
                 </div>
 
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4">
