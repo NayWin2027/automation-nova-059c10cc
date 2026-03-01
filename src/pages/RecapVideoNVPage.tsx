@@ -693,6 +693,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
     // Low-end GPU optimization flag: reduces shadowBlur & skips expensive glow layers for 480p/720p
     const isLowEndRender = quality.fps < 30;
 
+    // Offscreen blur canvas — keeps blur effect ON while reducing per-frame cost (half-res for low-end)
+    const blurFxCanvas = document.createElement("canvas");
+    const blurFxCtx = blurFxCanvas.getContext("2d")!;
+
     const drawFrame = () => {
       if (!videoEl || !audioEl) return;
       if (audioEl.ended) return;
@@ -725,18 +729,17 @@ export const ResultView: React.FC<ResultViewProps> = ({
       // Apply color grading filter from preset — always read from ref to avoid stale closure
       // When bypass is ON, ADD extra offsets on top of the selected color grade (not replace)
       const gradePreset = COLOR_GRADE_PRESETS[curEditorState.colorGrade] || COLOR_GRADE_PRESETS["OFF"];
-      const bypassBoost = curEditorState.bypass ? { contrast: 15, brightness: 5, saturate: 15, hue: 5 } : { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
-      const contrast = gradePreset.contrast + bypassBoost.contrast;
-      const brightness = gradePreset.brightness + bypassBoost.brightness;
-      const saturate = gradePreset.saturate + bypassBoost.saturate;
-      const hue = gradePreset.hue + bypassBoost.hue;
-      const sepia = gradePreset.sepia || 0;
-
-      // Low-end: skip expensive 5-filter CSS chain when color grade is default (OFF + no bypass)
-      const isDefaultGrade = contrast === 100 && brightness === 100 && saturate === 100 && hue === 0 && sepia === 0;
-      if (!(isLowEndRender && isDefaultGrade)) {
-        ctx.filter = `contrast(${contrast}%) brightness(${brightness}%) saturate(${saturate}%) hue-rotate(${hue}deg) sepia(${sepia}%)`;
-      }
+      // Low-end: graduated reduction (0.72x) instead of hard kill — keeps color vibe at lower GPU cost
+      const smoothGradeScale = isLowEndRender ? 0.72 : 1;
+      const bypassBoost = curEditorState.bypass
+        ? { contrast: 15 * smoothGradeScale, brightness: 5 * smoothGradeScale, saturate: 15 * smoothGradeScale, hue: 5 * smoothGradeScale }
+        : { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
+      const contrast = 100 + (gradePreset.contrast - 100) * smoothGradeScale + bypassBoost.contrast;
+      const brightness = 100 + (gradePreset.brightness - 100) * smoothGradeScale + bypassBoost.brightness;
+      const saturate = 100 + (gradePreset.saturate - 100) * smoothGradeScale + bypassBoost.saturate;
+      const hue = gradePreset.hue * smoothGradeScale + bypassBoost.hue;
+      const sepia = (gradePreset.sepia || 0) * (isLowEndRender ? 0.7 : 1);
+      ctx.filter = `contrast(${contrast}%) brightness(${brightness}%) saturate(${saturate}%) hue-rotate(${hue}deg) sepia(${sepia}%)`;
 
       if (curEditorState.flip) {
         ctx.save();
@@ -753,10 +756,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
       if (videoBorder.enabled && videoBorder.width > 0) {
         ctx.save();
         ctx.strokeStyle = videoBorder.color;
-        ctx.lineWidth = videoBorder.width * 2;
-        ctx.shadowColor = isLowEndRender ? 'transparent' : videoBorder.color;
-        ctx.shadowBlur = isLowEndRender ? 0 : videoBorder.width * 1.5;
-        ctx.globalAlpha = 0.92;
+        ctx.lineWidth = isLowEndRender ? Math.max(1.5, videoBorder.width * 1.2) : videoBorder.width * 2;
+        ctx.shadowColor = videoBorder.color;
+        ctx.shadowBlur = isLowEndRender ? videoBorder.width * 0.55 : videoBorder.width * 1.5;
+        ctx.globalAlpha = isLowEndRender ? 0.82 : 0.92;
         ctx.strokeRect(0, 0, canvas.width, canvas.height);
         ctx.restore();
       }
@@ -772,9 +775,11 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.fillStyle = "#000000";
         ctx.fillRect(0, barY, canvas.width, barH);
         ctx.globalAlpha = 1;
-        // Progress fill with glow
-        ctx.shadowColor = isLowEndRender ? 'transparent' : timelineBar.color;
-        ctx.shadowBlur = isLowEndRender ? 0 : barH * 2.5;
+        // Progress fill with glow (low-end: reduced glow, not disabled)
+        if (!isLowEndRender) {
+          ctx.shadowColor = timelineBar.color;
+          ctx.shadowBlur = barH * 2.5;
+        }
         ctx.fillStyle = timelineBar.color;
         ctx.fillRect(0, barY, canvas.width * progress, barH);
         ctx.restore();
@@ -788,21 +793,28 @@ export const ResultView: React.FC<ResultViewProps> = ({
         const blurY = canvas.height * (blurSettings.y / 100) - blurH / 2;
         const blurClampedX = Math.max(0, Math.min(canvas.width - blurW, blurX));
         const blurClampedY = Math.max(0, Math.min(canvas.height - blurH, blurY));
-        ctx.save();
-        if (isLowEndRender) {
-          // Low-end: dark semi-transparent overlay instead of expensive blur+redraw
-          ctx.fillStyle = 'rgba(0,0,0,0.55)';
-          ctx.beginPath();
-          ctx.rect(blurClampedX, blurClampedY, blurW, blurH);
-          ctx.fill();
-        } else {
-          const blurAmount = Math.round(blurSettings.opacity / 100 * 20);
-          ctx.filter = `blur(${blurAmount}px)`;
-          ctx.beginPath();
-          ctx.rect(blurClampedX, blurClampedY, blurW, blurH);
-          ctx.clip();
-          ctx.drawImage(videoEl, srcCropX, srcCropY, srcCropW, srcCropH, 0, 0, canvas.width, canvas.height);
+        const blurAmount = Math.round(blurSettings.opacity / 100 * 20);
+
+        // Offscreen half-res blur: draw blur region to smaller canvas then scale back up
+        // Low-end: 0.5x resolution = 4x fewer pixels to blur; 1080p: full resolution
+        const blurScale = isLowEndRender ? 0.5 : 1;
+        const fxW = Math.max(2, Math.round(blurW * blurScale));
+        const fxH = Math.max(2, Math.round(blurH * blurScale));
+        if (blurFxCanvas.width !== fxW || blurFxCanvas.height !== fxH) {
+          blurFxCanvas.width = fxW;
+          blurFxCanvas.height = fxH;
         }
+
+        blurFxCtx.save();
+        blurFxCtx.clearRect(0, 0, fxW, fxH);
+        blurFxCtx.filter = `blur(${Math.max(1, blurAmount * (isLowEndRender ? 0.6 : 1))}px)`;
+        blurFxCtx.drawImage(canvas, blurClampedX, blurClampedY, blurW, blurH, 0, 0, fxW, fxH);
+        blurFxCtx.restore();
+
+        ctx.save();
+        ctx.drawImage(blurFxCanvas, 0, 0, fxW, fxH, blurClampedX, blurClampedY, blurW, blurH);
+        ctx.fillStyle = `rgba(0,0,0,${isLowEndRender ? 0.2 : 0.14})`;
+        ctx.fillRect(blurClampedX, blurClampedY, blurW, blurH);
         ctx.restore();
       }
 
@@ -961,7 +973,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
         // Advance spin angle: full 360° rotation every 8 seconds
         if (logo.spin) {
-          logoAngleRef.current = (logoAngleRef.current + 360 / 8 * dt) % 360;
+          const spinScale = isLowEndRender ? 0.62 : 1;
+          logoAngleRef.current = (logoAngleRef.current + 360 / 8 * dt * spinScale) % 360;
         }
 
         // === Draw multi-layer animated neon glow ring (NOT rotated — matches CSS preview) ===
@@ -974,12 +987,22 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.translate(logoCX, logoCY);
 
         if (isLowEndRender) {
-          // Low-end: single thin ring, NO shadowBlur (saves ~40% GPU per frame)
+          // Low-end: graduated neon glow — lighter shadowBlur (not disabled) for professional look
+          ctx.shadowColor = animatedNeonColor;
+          ctx.shadowBlur = logoSize * 0.18;
           ctx.strokeStyle = animatedNeonColor;
-          ctx.lineWidth = logoSize * 0.04;
+          ctx.lineWidth = logoSize * 0.032;
+          ctx.globalAlpha = 0.78;
+          ctx.beginPath();
+          ctx.arc(0, 0, logoSize / 2 + logoSize * 0.05, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.shadowColor = animatedNeonColor2;
+          ctx.shadowBlur = logoSize * 0.1;
+          ctx.strokeStyle = animatedNeonColor2;
+          ctx.lineWidth = logoSize * 0.022;
           ctx.globalAlpha = 1.0;
           ctx.beginPath();
-          ctx.arc(0, 0, logoSize / 2 + logoSize * 0.03, 0, Math.PI * 2);
+          ctx.arc(0, 0, logoSize / 2 + logoSize * 0.02, 0, Math.PI * 2);
           ctx.stroke();
         } else {
           // 1080p: full multi-layer neon glow (unchanged)
@@ -1047,13 +1070,14 @@ export const ResultView: React.FC<ResultViewProps> = ({
     };
 
     if (isLowEnd) {
-      // setTimeout loop: CPU only wakes up at target fps (20 or 24 times/sec)
-      const timerLoop = () => {
-        if (checkEnded()) return;
+      // setInterval: strict FPS timing — more consistent than setTimeout chaining
+      const frameIntervalMs = Math.max(16, Math.round(1000 / quality.fps));
+      recapIntervalRef.current = setInterval(() => {
         drawFrame();
-        recapAnimFrameRef.current = window.setTimeout(timerLoop, frameInterval) as unknown as number;
-      };
-      recapAnimFrameRef.current = window.setTimeout(timerLoop, frameInterval) as unknown as number;
+        if (checkEnded()) {
+          if (recapIntervalRef.current) clearInterval(recapIntervalRef.current);
+        }
+      }, frameIntervalMs);
     } else {
       // 1080p: requestAnimationFrame every vsync (unchanged behavior)
       const rafLoop = () => {
