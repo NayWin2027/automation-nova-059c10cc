@@ -690,6 +690,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
     let lastFrameTime = performance.now();
 
 
+    // Low-end GPU optimization flag: reduces shadowBlur & skips expensive glow layers for 480p/720p
+    const isLowEndRender = quality.fps < 30;
+
     const drawFrame = () => {
       if (!videoEl || !audioEl) return;
       if (audioEl.ended) return;
@@ -697,6 +700,11 @@ export const ResultView: React.FC<ResultViewProps> = ({
       const now = performance.now();
       const dt = (now - lastFrameTime) / 1000; // seconds since last frame
       lastFrameTime = now;
+
+      // Low-end: disable expensive anti-aliasing interpolation
+      if (isLowEndRender) {
+        ctx.imageSmoothingQuality = 'low';
+      }
 
       // Draw video frame — crop source to match output ratio
       const srcW = videoEl.videoWidth || rawW;
@@ -740,9 +748,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
       if (videoBorder.enabled && videoBorder.width > 0) {
         ctx.save();
         ctx.strokeStyle = videoBorder.color;
-        ctx.lineWidth = videoBorder.width * 2; // strokeRect draws half inside, half outside; double to get full inner border
-        ctx.shadowColor = videoBorder.color;
-        ctx.shadowBlur = videoBorder.width * 1.5;
+        ctx.lineWidth = videoBorder.width * 2;
+        ctx.shadowColor = isLowEndRender ? 'transparent' : videoBorder.color;
+        ctx.shadowBlur = isLowEndRender ? 0 : videoBorder.width * 1.5;
         ctx.globalAlpha = 0.92;
         ctx.strokeRect(0, 0, canvas.width, canvas.height);
         ctx.restore();
@@ -775,7 +783,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
         const blurY = canvas.height * (blurSettings.y / 100) - blurH / 2;
         const blurClampedX = Math.max(0, Math.min(canvas.width - blurW, blurX));
         const blurClampedY = Math.max(0, Math.min(canvas.height - blurH, blurY));
-        const blurAmount = Math.round(blurSettings.opacity / 100 * 20);
+        const blurAmount = isLowEndRender
+          ? Math.round(blurSettings.opacity / 100 * 8)   // Low-end: lighter blur = much less GPU work
+          : Math.round(blurSettings.opacity / 100 * 20);
         ctx.save();
         ctx.filter = `blur(${blurAmount}px)`;
         ctx.beginPath();
@@ -951,24 +961,36 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
         ctx.save();
         ctx.translate(logoCX, logoCY);
-        // Layer 1: outer diffuse neon glow — NOT rotated, stays as ring
-        ctx.shadowColor = animatedNeonColor;
-        ctx.shadowBlur = logoSize * 0.35;
-        ctx.strokeStyle = animatedNeonColor;
-        ctx.lineWidth = logoSize * 0.05;
-        ctx.globalAlpha = 0.9;
-        ctx.beginPath();
-        ctx.arc(0, 0, logoSize / 2 + logoSize * 0.05, 0, Math.PI * 2);
-        ctx.stroke();
-        // Layer 2: inner sharp neon ring with second color
-        ctx.shadowColor = animatedNeonColor2;
-        ctx.shadowBlur = logoSize * 0.18;
-        ctx.strokeStyle = animatedNeonColor2;
-        ctx.lineWidth = logoSize * 0.035;
-        ctx.globalAlpha = 1.0;
-        ctx.beginPath();
-        ctx.arc(0, 0, logoSize / 2 + logoSize * 0.02, 0, Math.PI * 2);
-        ctx.stroke();
+
+        if (isLowEndRender) {
+          // Low-end: single thin ring, NO shadowBlur (saves ~40% GPU per frame)
+          ctx.strokeStyle = animatedNeonColor;
+          ctx.lineWidth = logoSize * 0.04;
+          ctx.globalAlpha = 1.0;
+          ctx.beginPath();
+          ctx.arc(0, 0, logoSize / 2 + logoSize * 0.03, 0, Math.PI * 2);
+          ctx.stroke();
+        } else {
+          // 1080p: full multi-layer neon glow (unchanged)
+          // Layer 1: outer diffuse neon glow — NOT rotated, stays as ring
+          ctx.shadowColor = animatedNeonColor;
+          ctx.shadowBlur = logoSize * 0.35;
+          ctx.strokeStyle = animatedNeonColor;
+          ctx.lineWidth = logoSize * 0.05;
+          ctx.globalAlpha = 0.9;
+          ctx.beginPath();
+          ctx.arc(0, 0, logoSize / 2 + logoSize * 0.05, 0, Math.PI * 2);
+          ctx.stroke();
+          // Layer 2: inner sharp neon ring with second color
+          ctx.shadowColor = animatedNeonColor2;
+          ctx.shadowBlur = logoSize * 0.18;
+          ctx.strokeStyle = animatedNeonColor2;
+          ctx.lineWidth = logoSize * 0.035;
+          ctx.globalAlpha = 1.0;
+          ctx.beginPath();
+          ctx.arc(0, 0, logoSize / 2 + logoSize * 0.02, 0, Math.PI * 2);
+          ctx.stroke();
+        }
         ctx.restore();
 
         // === Draw logo image with clip — CLEAR shadow first so image is sharp ===
