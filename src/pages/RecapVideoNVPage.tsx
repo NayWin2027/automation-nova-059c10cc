@@ -1534,7 +1534,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
 
               {/* Subtitles are rendered exclusively on canvas during recording.
-                                                    DOM subtitle is intentionally removed to prevent double-rendering. */}
+                                                     DOM subtitle is intentionally removed to prevent double-rendering. */}
 
               {isYouTube && youtubeId ?
               <iframe
@@ -1673,7 +1673,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                     )}
                     </SelectContent>
                   </Select>
-                  <p className="mt-1.5 text-destructive text-base">⚡ Device ပေါ်မူတည်ပြီး resolution ကို ရွေးပါ။ Low-end phone ဆိုရင် 480p/720p ရွေးပါ။</p>
+                  <p className="mt-1.5 text-base text-neon-rose">⚡ Device ပေါ်မူတည်ပြီး resolution ကို ရွေးပါ။ Low-end phone ဆိုရင် 480p/720p ရွေးပါ။</p>
                 </div>
 
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4">
