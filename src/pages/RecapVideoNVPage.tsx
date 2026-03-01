@@ -222,7 +222,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
   const [timelineBar, setTimelineBar] = useState({
     enabled: true,
     color: "#4B0082",
-    thickness: 8, // px (1–15)
+    thickness: 6, // px (1–15)
     openPanel: false
   });
 
@@ -1660,8 +1660,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
                   </button>
                 </div>
 
-                {/* 🎬 Export Quality Selector — Neon highlight border */}
-                <div className="mb-4 p-3 rounded-lg border-2 border-neon-cyan/60 bg-card/50 shadow-[0_0_12px_hsl(var(--neon-cyan)/0.25),inset_0_0_12px_hsl(var(--neon-cyan)/0.08)]">
+                {/* 🎬 Export Quality Selector */}
+                <div className="mb-4 p-3 rounded-lg border border-neon-cyan/30 bg-card/50">
                   <p className="text-xs font-semibold text-neon-cyan mb-2">🎬 Export Quality</p>
                   <Select value={exportQuality} onValueChange={setExportQuality}>
                     <SelectTrigger className="w-full bg-background border-border text-foreground text-xs h-9">
