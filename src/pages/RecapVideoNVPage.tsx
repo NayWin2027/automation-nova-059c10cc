@@ -560,9 +560,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
     recorder.onstop = async () => {
       const recordingElapsedSecs = (Date.now() - recordingStartTime) / 1000; // Reliable elapsed time
       if (audioCtx) try {audioCtx.close();} catch (_) {}
-      // Cleanup both interval and rAF just in case
+      // Cleanup both interval, rAF, and setTimeout just in case
       if (recapIntervalRef.current) {clearInterval(recapIntervalRef.current);recapIntervalRef.current = null;}
       cancelAnimationFrame(recapAnimFrameRef.current);
+      clearTimeout(recapAnimFrameRef.current);
 
       if (chunks.length === 0) {setIsRendering(false);return;}
 
@@ -994,22 +995,12 @@ export const ResultView: React.FC<ResultViewProps> = ({
       }
     };
 
-    // Throttle drawFrame to quality.fps for low/mid devices; 1080p draws every vsync
-    const frameDuration = quality.fps < 30 ? 1000 / quality.fps : 0;
-    let lastDrawTime = 0;
+    // Low-end (480p/720p): use setTimeout to reduce CPU wake-ups to target fps only
+    // High-end (1080p): use requestAnimationFrame for max smoothness (unchanged)
+    const isLowEnd = quality.fps < 30;
+    const frameInterval = isLowEnd ? 1000 / quality.fps : 0;
 
-    const rafLoop = (timestamp: number) => {
-      if (frameDuration > 0) {
-        // 480p/720p: only draw at target fps to reduce CPU load
-        if (timestamp - lastDrawTime >= frameDuration - 2) {
-          lastDrawTime = timestamp;
-          drawFrame();
-        }
-      } else {
-        // 1080p: draw every vsync (unchanged behavior)
-        drawFrame();
-      }
-
+    const checkEnded = (): boolean => {
       if (audioEl.ended) {
         if (recorder.state !== "inactive") {
           recorder.stop();
@@ -1017,11 +1008,28 @@ export const ResultView: React.FC<ResultViewProps> = ({
           audioEl.pause();
           videoEl.playbackRate = 1.0;
         }
-        return;
+        return true;
       }
-      recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
+      return false;
     };
-    recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
+
+    if (isLowEnd) {
+      // setTimeout loop: CPU only wakes up at target fps (20 or 24 times/sec)
+      const timerLoop = () => {
+        if (checkEnded()) return;
+        drawFrame();
+        recapAnimFrameRef.current = window.setTimeout(timerLoop, frameInterval) as unknown as number;
+      };
+      recapAnimFrameRef.current = window.setTimeout(timerLoop, frameInterval) as unknown as number;
+    } else {
+      // 1080p: requestAnimationFrame every vsync (unchanged behavior)
+      const rafLoop = () => {
+        drawFrame();
+        if (checkEnded()) return;
+        recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
+      };
+      recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
+    }
   };
 
   // Recap playback in editor: play video (muted) + TTS audio with subtitle sync
