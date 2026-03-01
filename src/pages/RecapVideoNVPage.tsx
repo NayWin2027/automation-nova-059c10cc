@@ -532,9 +532,11 @@ export const ResultView: React.FC<ResultViewProps> = ({
     const canvas = document.createElement("canvas");
     canvas.width = outW;
     canvas.height = outH;
-    const ctx = canvas.getContext("2d")!;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
 
-    const canvasStream = canvas.captureStream(quality.fps);
+    // captureStream(0) = manual frame capture: only captures when requestFrame() is called
+    // This eliminates drift/stutter from timer-based capture
+    const canvasStream = canvas.captureStream(0);
     const chunks: BlobPart[] = [];
 
     let audioCtx: AudioContext | null = null;
@@ -993,19 +995,37 @@ export const ResultView: React.FC<ResultViewProps> = ({
       }
     };
 
-    // Use stable setInterval at dynamic fps for smooth recording
-    recapIntervalRef.current = setInterval(() => {
-      drawFrame();
+    // Use requestAnimationFrame for smooth recording — syncs with browser vsync
+    // Frame-rate limited to selected quality fps, with manual captureStream(0) requestFrame()
+    const frameDuration = 1000 / quality.fps;
+    let rafLastTime = 0;
+    const videoTrack = canvasStream.getVideoTracks()[0];
+
+    const rafLoop = (timestamp: number) => {
+      if (!rafLastTime) rafLastTime = timestamp;
+      const elapsed = timestamp - rafLastTime;
+
+      if (elapsed >= frameDuration - 2) { // 2ms tolerance for vsync alignment
+        rafLastTime = timestamp - (elapsed % frameDuration); // prevent drift accumulation
+        drawFrame();
+        // Manually request frame capture — ensures exact 1:1 draw-to-encode
+        if (videoTrack && typeof (videoTrack as any).requestFrame === 'function') {
+          (videoTrack as any).requestFrame();
+        }
+      }
+
       if (audioEl.ended) {
-        if (recapIntervalRef.current) clearInterval(recapIntervalRef.current);
         if (recorder.state !== "inactive") {
           recorder.stop();
           videoEl.pause();
           audioEl.pause();
           videoEl.playbackRate = 1.0;
         }
+        return; // Stop rAF loop
       }
-    }, Math.round(1000 / quality.fps));
+      recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
+    };
+    recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
   };
 
   // Recap playback in editor: play video (muted) + TTS audio with subtitle sync
