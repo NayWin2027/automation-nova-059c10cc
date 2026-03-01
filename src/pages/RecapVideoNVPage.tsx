@@ -994,9 +994,21 @@ export const ResultView: React.FC<ResultViewProps> = ({
       }
     };
 
-    // requestAnimationFrame loop — draw every vsync, browser captureStream handles fps natively
-    const rafLoop = () => {
-      drawFrame();
+    // Throttle drawFrame to quality.fps for low/mid devices; 1080p draws every vsync
+    const frameDuration = quality.fps < 30 ? 1000 / quality.fps : 0;
+    let lastDrawTime = 0;
+
+    const rafLoop = (timestamp: number) => {
+      if (frameDuration > 0) {
+        // 480p/720p: only draw at target fps to reduce CPU load
+        if (timestamp - lastDrawTime >= frameDuration - 2) {
+          lastDrawTime = timestamp;
+          drawFrame();
+        }
+      } else {
+        // 1080p: draw every vsync (unchanged behavior)
+        drawFrame();
+      }
 
       if (audioEl.ended) {
         if (recorder.state !== "inactive") {
@@ -1005,7 +1017,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
           audioEl.pause();
           videoEl.playbackRate = 1.0;
         }
-        return; // Stop rAF loop
+        return;
       }
       recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
     };
