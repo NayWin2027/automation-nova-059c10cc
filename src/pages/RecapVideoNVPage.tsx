@@ -159,8 +159,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
   // Export Quality Options — resolution cap, fps, bitrate per quality level
   const EXPORT_QUALITY_OPTIONS: Record<string, {maxW: number;maxH: number;fps: number;bitrate: number;label: string;}> = {
-    '480p': { maxW: 854, maxH: 480, fps: 20, bitrate: 1_200_000, label: '480p (Low — 854×480 · 20fps · 1.2Mbps)' },
-    '720p': { maxW: 1280, maxH: 720, fps: 24, bitrate: 2_500_000, label: '720p (Mid — 1280×720 · 24fps · 2.5Mbps)' },
+    '480p': { maxW: 854, maxH: 480, fps: 20, bitrate: 800_000, label: '480p (Low — 854×480 · 20fps · 0.8Mbps)' },
+    '720p': { maxW: 1280, maxH: 720, fps: 24, bitrate: 1_800_000, label: '720p (Mid — 1280×720 · 24fps · 1.8Mbps)' },
     '1080p': { maxW: 1920, maxH: 1080, fps: 30, bitrate: 4_000_000, label: '1080p (High — 1920×1080 · 30fps · 4Mbps)' }
   };
   const [exportQuality, setExportQuality] = useState<string>('720p');
@@ -729,8 +729,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
       // Apply color grading filter from preset — always read from ref to avoid stale closure
       // When bypass is ON, ADD extra offsets on top of the selected color grade (not replace)
       const gradePreset = COLOR_GRADE_PRESETS[curEditorState.colorGrade] || COLOR_GRADE_PRESETS["OFF"];
-      // Low-end: graduated reduction (0.72x) instead of hard kill — keeps color vibe at lower GPU cost
-      const smoothGradeScale = isLowEndRender ? 0.72 : 1;
+      // Color grading via ctx.filter is GPU-accelerated — no CPU penalty, so use FULL intensity for color match
+      const smoothGradeScale = 1;
       const bypassBoost = curEditorState.bypass
         ? { contrast: 15 * smoothGradeScale, brightness: 5 * smoothGradeScale, saturate: 15 * smoothGradeScale, hue: 5 * smoothGradeScale }
         : { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
@@ -738,7 +738,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
       const brightness = 100 + (gradePreset.brightness - 100) * smoothGradeScale + bypassBoost.brightness;
       const saturate = 100 + (gradePreset.saturate - 100) * smoothGradeScale + bypassBoost.saturate;
       const hue = gradePreset.hue * smoothGradeScale + bypassBoost.hue;
-      const sepia = (gradePreset.sepia || 0) * (isLowEndRender ? 0.7 : 1);
+      const sepia = (gradePreset.sepia || 0);
       ctx.filter = `contrast(${contrast}%) brightness(${brightness}%) saturate(${saturate}%) hue-rotate(${hue}deg) sepia(${sepia}%)`;
 
       if (curEditorState.flip) {
@@ -1070,14 +1070,19 @@ export const ResultView: React.FC<ResultViewProps> = ({
     };
 
     if (isLowEnd) {
-      // setInterval: strict FPS timing — more consistent than setTimeout chaining
-      const frameIntervalMs = Math.max(16, Math.round(1000 / quality.fps));
-      recapIntervalRef.current = setInterval(() => {
-        drawFrame();
-        if (checkEnded()) {
-          if (recapIntervalRef.current) clearInterval(recapIntervalRef.current);
+      // rAF with timestamp-based frame skipping — smoother than setInterval because
+      // rAF is compositor-synced and avoids GC-induced jitter from timer callbacks
+      const targetInterval = 1000 / quality.fps;
+      let lastDrawTs = 0;
+      const rafThrottled = (timestamp: number) => {
+        if (checkEnded()) return;
+        if (timestamp - lastDrawTs >= targetInterval - 2) {
+          lastDrawTs = timestamp;
+          drawFrame();
         }
-      }, frameIntervalMs);
+        recapAnimFrameRef.current = requestAnimationFrame(rafThrottled);
+      };
+      recapAnimFrameRef.current = requestAnimationFrame(rafThrottled);
     } else {
       // 1080p: requestAnimationFrame every vsync (unchanged behavior)
       const rafLoop = () => {
