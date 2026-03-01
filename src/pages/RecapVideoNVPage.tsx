@@ -12,8 +12,8 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  SelectValue } from
+"@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Check, ChevronsUpDown } from "lucide-react";
@@ -158,10 +158,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
   };
 
   // Export Quality Options — resolution cap, fps, bitrate per quality level
-  const EXPORT_QUALITY_OPTIONS: Record<string, {maxW: number; maxH: number; fps: number; bitrate: number; label: string}> = {
-    '480p':  { maxW: 854,  maxH: 480,  fps: 20, bitrate: 1_200_000, label: '480p (Low — 854×480 · 20fps · 1.2Mbps)' },
-    '720p':  { maxW: 1280, maxH: 720,  fps: 24, bitrate: 2_500_000, label: '720p (Mid — 1280×720 · 24fps · 2.5Mbps)' },
-    '1080p': { maxW: 1920, maxH: 1080, fps: 30, bitrate: 4_000_000, label: '1080p (High — 1920×1080 · 30fps · 4Mbps)' },
+  const EXPORT_QUALITY_OPTIONS: Record<string, {maxW: number;maxH: number;fps: number;bitrate: number;label: string;}> = {
+    '480p': { maxW: 854, maxH: 480, fps: 20, bitrate: 1_200_000, label: '480p (Low — 854×480 · 20fps · 1.2Mbps)' },
+    '720p': { maxW: 1280, maxH: 720, fps: 24, bitrate: 2_500_000, label: '720p (Mid — 1280×720 · 24fps · 2.5Mbps)' },
+    '1080p': { maxW: 1920, maxH: 1080, fps: 30, bitrate: 4_000_000, label: '1080p (High — 1920×1080 · 30fps · 4Mbps)' }
   };
   const [exportQuality, setExportQuality] = useState<string>('720p');
 
@@ -194,7 +194,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
     spin: true,
     neonColor: "#00E5FF", // Cyan default
     x: 88, // percentage from left (top-right default)
-    y: 8,  // percentage from top
+    y: 8 // percentage from top
   });
 
   const [subSettings, setSubSettings] = useState<SubtitleSettings>({
@@ -299,8 +299,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
   }, [isRecapPlaying, isRendering]);
 
   // Keep refs in sync so canvas draw loop always has latest state (fixes stale closure color grading)
-  useEffect(() => { editorStateRef.current = editorState; }, [editorState]);
-  useEffect(() => { blurSettingsRef.current = blurSettings; }, [blurSettings]);
+  useEffect(() => {editorStateRef.current = editorState;}, [editorState]);
+  useEffect(() => {blurSettingsRef.current = blurSettings;}, [blurSettings]);
 
   // Auto-start recording when parent signals pipeline is complete
   useEffect(() => {
@@ -389,7 +389,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
           vEnd = nextVStart; // Sequential: use next segment start (existing behavior)
         } else {
           // Non-sequential (semantic scene jump): estimate clip duration from word count (~150 wpm)
-          const estimatedClipSec = Math.max((segWords / 150) * 60, 3);
+          const estimatedClipSec = Math.max(segWords / 150 * 60, 3);
           vEnd = vStart + estimatedClipSec;
         }
       }
@@ -444,7 +444,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
     setIsDraggingSub(true);
   };
 
-   const handleDragMove = (e: React.MouseEvent | React.TouchEvent) => {
+  const handleDragMove = (e: React.MouseEvent | React.TouchEvent) => {
     if (!isDraggingSub && !isDraggingBlur) return;
     const activeContainer = containerRef.current;
     if (!activeContainer) return;
@@ -479,11 +479,11 @@ export const ResultView: React.FC<ResultViewProps> = ({
   };
 
   // Logo position presets (replaces drag to avoid AV sync interference)
-  const LOGO_POSITIONS: Record<string, { x: number; y: number; label: string }> = {
+  const LOGO_POSITIONS: Record<string, {x: number;y: number;label: string;}> = {
     UL: { x: 12, y: 10, label: "↖ UL" },
     UR: { x: 88, y: 10, label: "↗ UR" },
     LL: { x: 12, y: 90, label: "↙ LL" },
-    LR: { x: 88, y: 90, label: "↘ LR" },
+    LR: { x: 88, y: 90, label: "↘ LR" }
   };
   const currentLogoPos = Object.entries(LOGO_POSITIONS).find(([, v]) => v.x === logo.x && v.y === logo.y)?.[0] || "UR";
 
@@ -1005,8 +1005,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
       if (!rafLastTime) rafLastTime = timestamp;
       const elapsed = timestamp - rafLastTime;
 
-      if (elapsed >= frameDuration - 2) { // 2ms tolerance for vsync alignment
-        rafLastTime = timestamp - (elapsed % frameDuration); // prevent drift accumulation
+      if (elapsed >= frameDuration - 2) {// 2ms tolerance for vsync alignment
+        rafLastTime = timestamp - elapsed % frameDuration; // prevent drift accumulation
         drawFrame();
         // Manually request frame capture — ensures exact 1:1 draw-to-encode
         if (videoTrack && typeof (videoTrack as any).requestFrame === 'function') {
@@ -1133,7 +1133,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
             } else if (currentTime >= audioTs[maxIdx].end) {
               // Tail zone after last speech segment
               const lastSeg = getSeg(maxIdx);
-              const lastVEnd = lastSeg?.vEnd === -1 ? vv.duration : (lastSeg?.vEnd ?? vv.duration);
+              const lastVEnd = lastSeg?.vEnd === -1 ? vv.duration : lastSeg?.vEnd ?? vv.duration;
               const tailAudio = Math.max(av.duration - audioTs[maxIdx].end, 0.001);
               const tailVideo = Math.max(vv.duration - lastVEnd, 0);
               const tailProgress = clamp((currentTime - audioTs[maxIdx].end) / tailAudio, 0, 1);
@@ -1148,7 +1148,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
               const prevSeg = getSeg(prevIdx);
               const nextSeg = getSeg(nextIdx);
-              const prevVEnd = prevSeg?.vEnd === -1 ? vv.duration : (prevSeg?.vEnd ?? vv.currentTime);
+              const prevVEnd = prevSeg?.vEnd === -1 ? vv.duration : prevSeg?.vEnd ?? vv.currentTime;
               const nextVStart = nextSeg?.vStart ?? prevVEnd;
 
               const gapAudio = Math.max(audioTs[nextIdx].start - audioTs[prevIdx].end, 0.001);
@@ -1534,7 +1534,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
 
               {/* Subtitles are rendered exclusively on canvas during recording.
-                                   DOM subtitle is intentionally removed to prevent double-rendering. */}
+                                                    DOM subtitle is intentionally removed to prevent double-rendering. */}
 
               {isYouTube && youtubeId ?
               <iframe
@@ -1661,19 +1661,19 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 </div>
 
                 {/* 🎬 Export Quality Selector */}
-                <div className="mb-4 p-3 rounded-lg border border-neon-cyan/30 bg-card/50">
-                  <p className="text-xs font-semibold text-neon-cyan mb-2">🎬 Export Quality</p>
+                <div className="mb-4 p-3 rounded-lg border border-neon-cyan/30 bg-[sidebar-accent-foreground] bg-blue-950">
+                  <p className="font-semibold text-neon-cyan mb-2 text-base">🎬 Export Quality</p>
                   <Select value={exportQuality} onValueChange={setExportQuality}>
                     <SelectTrigger className="w-full bg-background border-border text-foreground text-xs h-9">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {Object.entries(EXPORT_QUALITY_OPTIONS).map(([key, opt]) => (
-                        <SelectItem key={key} value={key} className="text-xs">{opt.label}</SelectItem>
-                      ))}
+                      {Object.entries(EXPORT_QUALITY_OPTIONS).map(([key, opt]) =>
+                    <SelectItem key={key} value={key} className="text-xs">{opt.label}</SelectItem>
+                    )}
                     </SelectContent>
                   </Select>
-                  <p className="text-2xs text-muted-foreground mt-1.5">⚡ Device ပေါ်မူတည်ပြီး resolution ကို ရွေးပါ။ Low-end phone ဆိုရင် 480p/720p ရွေးပါ။</p>
+                  <p className="mt-1.5 text-destructive text-base">⚡ Device ပေါ်မူတည်ပြီး resolution ကို ရွေးပါ။ Low-end phone ဆိုရင် 480p/720p ရွေးပါ။</p>
                 </div>
 
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4">
@@ -1757,15 +1757,15 @@ export const ResultView: React.FC<ResultViewProps> = ({
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-500">Position</span>
                       <div className="flex gap-1">
-                        {Object.entries(LOGO_POSITIONS).map(([key, val]) => (
-                          <button
-                            key={key}
-                            onClick={() => setLogo((l) => ({ ...l, x: val.x, y: val.y }))}
-                            className={`text-[10px] px-2 py-1 rounded border ${currentLogoPos === key ? "bg-charcoal-700 border-neon-cyan text-neon-cyan" : "border-charcoal-600 text-gray-500 hover:text-gray-300"}`}
-                          >
+                        {Object.entries(LOGO_POSITIONS).map(([key, val]) =>
+                      <button
+                        key={key}
+                        onClick={() => setLogo((l) => ({ ...l, x: val.x, y: val.y }))}
+                        className={`text-[10px] px-2 py-1 rounded border ${currentLogoPos === key ? "bg-charcoal-700 border-neon-cyan text-neon-cyan" : "border-charcoal-600 text-gray-500 hover:text-gray-300"}`}>
+
                             {val.label}
                           </button>
-                        ))}
+                      )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -2081,8 +2081,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
             {!audioUrl ?
             <button onClick={onGenerateVoice} className="w-full py-3 bg-charcoal-700 text-white font-bold rounded-xl">
                 Generate Voiceover
-              </button>
-            :
+              </button> :
+
             <button onClick={onGenerateVoice} className="w-full py-2.5 bg-charcoal-700 hover:bg-charcoal-600 text-gray-300 text-xs font-bold rounded-xl border border-charcoal-500 transition-colors">
                 🔄 Regenerate Voice ({voiceMode === 'modern' ? 'Modern' : 'Normal'})
               </button>
@@ -2122,11 +2122,11 @@ const RecapVideoNVPage: React.FC = () => {
   // Fetch CR/MIN rate from tool_settings on mount
   useEffect(() => {
     const fetchRate = async () => {
-      const { data } = await supabase
-        .from('tool_settings')
-        .select('credit_cost')
-        .eq('tool_id', 'recap-nv')
-        .maybeSingle();
+      const { data } = await supabase.
+      from('tool_settings').
+      select('credit_cost').
+      eq('tool_id', 'recap-nv').
+      maybeSingle();
       if (data?.credit_cost) {
         setCreditPerMinRate(data.credit_cost);
       }
@@ -2156,30 +2156,30 @@ const RecapVideoNVPage: React.FC = () => {
 
   // Language & Voice selection
   const VOICE_OPTIONS = [
-    { value: 'Kore', label: 'Kore', gender: 'Female' },
-    { value: 'Aoede', label: 'Aoede', gender: 'Female' },
-    { value: 'Leda', label: 'Leda', gender: 'Female' },
-    { value: 'Zephyr', label: 'Zephyr', gender: 'Female' },
-    { value: 'Puck', label: 'Puck', gender: 'Male' },
-    { value: 'Charon', label: 'Charon', gender: 'Male' },
-    { value: 'Fenrir', label: 'Fenrir', gender: 'Male' },
-    { value: 'Orus', label: 'Orus', gender: 'Male' },
-    { value: 'en-US-Standard-A', label: 'US Standard A', gender: 'Female' },
-    { value: 'en-US-Standard-B', label: 'US Standard B', gender: 'Male' },
-    { value: 'en-US-Standard-C', label: 'US Standard C', gender: 'Female' },
-    { value: 'en-US-Standard-D', label: 'US Standard D', gender: 'Male' },
-    { value: 'en-GB-Standard-A', label: 'UK Standard A', gender: 'Female' },
-    { value: 'en-GB-Standard-B', label: 'UK Standard B', gender: 'Male' },
-    { value: 'en-GB-Standard-C', label: 'UK Standard C', gender: 'Female' },
-    { value: 'en-GB-Standard-D', label: 'UK Standard D', gender: 'Male' },
-    { value: 'Achernar', label: 'Achernar', gender: 'Female' },
-    { value: 'Gacrux', label: 'Gacrux', gender: 'Male' },
-    { value: 'Sulafat', label: 'Sulafat', gender: 'Female' },
-    { value: 'Alnilam', label: 'Alnilam', gender: 'Male' },
-    { value: 'Schedar', label: 'Schedar', gender: 'Female' },
-    { value: 'Umbriel', label: 'Umbriel', gender: 'Male' },
-    { value: 'Algieba', label: 'Algieba', gender: 'Male' },
-  ];
+  { value: 'Kore', label: 'Kore', gender: 'Female' },
+  { value: 'Aoede', label: 'Aoede', gender: 'Female' },
+  { value: 'Leda', label: 'Leda', gender: 'Female' },
+  { value: 'Zephyr', label: 'Zephyr', gender: 'Female' },
+  { value: 'Puck', label: 'Puck', gender: 'Male' },
+  { value: 'Charon', label: 'Charon', gender: 'Male' },
+  { value: 'Fenrir', label: 'Fenrir', gender: 'Male' },
+  { value: 'Orus', label: 'Orus', gender: 'Male' },
+  { value: 'en-US-Standard-A', label: 'US Standard A', gender: 'Female' },
+  { value: 'en-US-Standard-B', label: 'US Standard B', gender: 'Male' },
+  { value: 'en-US-Standard-C', label: 'US Standard C', gender: 'Female' },
+  { value: 'en-US-Standard-D', label: 'US Standard D', gender: 'Male' },
+  { value: 'en-GB-Standard-A', label: 'UK Standard A', gender: 'Female' },
+  { value: 'en-GB-Standard-B', label: 'UK Standard B', gender: 'Male' },
+  { value: 'en-GB-Standard-C', label: 'UK Standard C', gender: 'Female' },
+  { value: 'en-GB-Standard-D', label: 'UK Standard D', gender: 'Male' },
+  { value: 'Achernar', label: 'Achernar', gender: 'Female' },
+  { value: 'Gacrux', label: 'Gacrux', gender: 'Male' },
+  { value: 'Sulafat', label: 'Sulafat', gender: 'Female' },
+  { value: 'Alnilam', label: 'Alnilam', gender: 'Male' },
+  { value: 'Schedar', label: 'Schedar', gender: 'Female' },
+  { value: 'Umbriel', label: 'Umbriel', gender: 'Male' },
+  { value: 'Algieba', label: 'Algieba', gender: 'Male' }];
+
   const [selectedLanguage, setSelectedLanguage] = useState('my-MM');
   const [selectedVoice, setSelectedVoice] = useState('Charon');
   const [langPopoverOpen, setLangPopoverOpen] = useState(false);
@@ -2197,11 +2197,11 @@ const RecapVideoNVPage: React.FC = () => {
 
     // Check if Promotion Mode is active — skip credit deduction entirely
     try {
-      const { data: appSettings } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'access_control')
-        .maybeSingle();
+      const { data: appSettings } = await supabase.
+      from('app_settings').
+      select('value').
+      eq('key', 'access_control').
+      maybeSingle();
       if (appSettings?.value) {
         const ac = appSettings.value as any;
         if (ac.promotionMode) {
@@ -2321,7 +2321,7 @@ const RecapVideoNVPage: React.FC = () => {
     if (paragraphs.length === 0) return [];
 
     const timecodeRegex = /^\[(\d{1,2}):(\d{2})\]\s*/;
-    const hasTimecodes = paragraphs.some(p => timecodeRegex.test(p.trim()));
+    const hasTimecodes = paragraphs.some((p) => timecodeRegex.test(p.trim()));
 
     if (hasTimecodes) {
       // AI semantic scene timestamps — each paragraph has [MM:SS] prefix (Hollywood editor mode)
@@ -2595,7 +2595,7 @@ const RecapVideoNVPage: React.FC = () => {
       const { data: { session: currentSession } } = await supabase.auth.getSession();
       const userToken = currentSession?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-      const selectedLangName = languages.find(l => l.code === selectedLanguage)?.name || 'BURMESE';
+      const selectedLangName = languages.find((l) => l.code === selectedLanguage)?.name || 'BURMESE';
       const scriptBody: Record<string, unknown> = {
         fileUri: fileUri,
         fileMimeType: mimeType,
@@ -2795,10 +2795,10 @@ const RecapVideoNVPage: React.FC = () => {
                 <button
                   className="flex h-10 w-full items-center justify-between rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                   role="combobox"
-                  aria-expanded={langPopoverOpen}
-                >
+                  aria-expanded={langPopoverOpen}>
+
                   {(() => {
-                    const lang = languages.find(l => l.code === selectedLanguage);
+                    const lang = languages.find((l) => l.code === selectedLanguage);
                     return lang ? `${lang.nativeName} — ${lang.name}` : 'ဘာသာစကား ရွေးပါ';
                   })()}
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -2813,19 +2813,19 @@ const RecapVideoNVPage: React.FC = () => {
                   <CommandList className="max-h-[250px]">
                     <CommandEmpty>No language found.</CommandEmpty>
                     <CommandGroup>
-                      {languages.map((lang) => (
-                        <CommandItem
-                          key={lang.code}
-                          value={`${lang.name} ${lang.nativeName}`}
-                          onSelect={() => {
-                            setSelectedLanguage(lang.code);
-                            setLangPopoverOpen(false);
-                          }}
-                        >
+                      {languages.map((lang) =>
+                      <CommandItem
+                        key={lang.code}
+                        value={`${lang.name} ${lang.nativeName}`}
+                        onSelect={() => {
+                          setSelectedLanguage(lang.code);
+                          setLangPopoverOpen(false);
+                        }}>
+
                           <Check className={`mr-2 h-4 w-4 ${selectedLanguage === lang.code ? 'opacity-100' : 'opacity-0'}`} />
                           {lang.nativeName} — {lang.name}
                         </CommandItem>
-                      ))}
+                      )}
                     </CommandGroup>
                   </CommandList>
                 </Command>
@@ -2841,11 +2841,11 @@ const RecapVideoNVPage: React.FC = () => {
                 <SelectValue placeholder="အသံ ရွေးပါ" />
               </SelectTrigger>
                 <SelectContent className="max-h-[250px] z-50 overflow-y-auto scroll-smooth" position="popper" sideOffset={4}>
-                {VOICE_OPTIONS.map((v) => (
-                  <SelectItem key={v.value} value={v.value}>
+                {VOICE_OPTIONS.map((v) =>
+                <SelectItem key={v.value} value={v.value}>
                     {v.label} ({v.gender})
                   </SelectItem>
-                ))}
+                )}
               </SelectContent>
             </Select>
           </div>
