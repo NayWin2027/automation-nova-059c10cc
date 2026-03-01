@@ -1,95 +1,53 @@
 
 
-## Plan: Export Quality Selector (Resolution + FPS + Bitrate)
+## Plan: Low-end device smooth recording fix
 
-Reference image ကို အတိအကျ လိုက်ပြီး KineMaster-style Export Quality dropdown ထည့်မယ်။
+### Problem
+Current `rafLoop` calls `drawFrame()` every vsync (~60fps), but low-end devices cannot draw 60 frames per second. The browser's `captureStream(quality.fps)` only captures at 20-24fps anyway, so 60-70% of draws are wasted CPU cycles causing stutter.
 
-### What changes and where
+### Fix: Throttle draw calls for 480p/720p only
+**File: `src/pages/RecapVideoNVPage.tsx` — 1 surgical edit at lines 997-1012**
 
-**File: `src/pages/RecapVideoNVPage.tsx` ONLY — Surgical edits at specific locations**
-
-#### Edit 1: Add `exportQuality` state to ResultView (~line 137 area)
-- Add new state: `exportQuality` with options: `480p`, `720p`, `1080p`
-- Each option maps to: `{ maxW, maxH, fps, bitrate, label }`
+Replace the current simple rAF loop with a throttled version that skips unnecessary draws on low/mid quality, while keeping 1080p untouched (drawing every vsync):
 
 ```typescript
-const EXPORT_QUALITY_OPTIONS = {
-  '480p':  { maxW: 854,  maxH: 480,  fps: 20, bitrate: 1_200_000, label: '480p (Low — 854×480 · 20fps · 1.2Mbps)' },
-  '720p':  { maxW: 1280, maxH: 720,  fps: 24, bitrate: 2_500_000, label: '720p (Mid — 1280×720 · 24fps · 2.5Mbps)' },
-  '1080p': { maxW: 1920, maxH: 1080, fps: 30, bitrate: 4_000_000, label: '1080p (High — 1920×1080 · 30fps · 4Mbps)' },
+// Throttle drawFrame to quality.fps for low/mid devices; 1080p draws every vsync
+const frameDuration = quality.fps < 30 ? 1000 / quality.fps : 0;
+let lastDrawTime = 0;
+
+const rafLoop = (timestamp: number) => {
+  if (frameDuration > 0) {
+    // 480p/720p: only draw at target fps to reduce CPU load
+    if (timestamp - lastDrawTime >= frameDuration - 2) {
+      lastDrawTime = timestamp;
+      drawFrame();
+    }
+  } else {
+    // 1080p: draw every vsync (unchanged behavior)
+    drawFrame();
+  }
+
+  if (audioEl.ended) {
+    if (recorder.state !== "inactive") {
+      recorder.stop();
+      videoEl.pause();
+      audioEl.pause();
+      videoEl.playbackRate = 1.0;
+    }
+    return;
+  }
+  recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
 };
-const [exportQuality, setExportQuality] = useState<string>('720p');
+recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
 ```
 
-#### Edit 2: CPU auto-detection to set default (~after the state declaration)
-- `useEffect` runs once on mount
-- Reads `navigator.hardwareConcurrency` and `navigator.deviceMemory`
-- Low-end (≤4 cores or ≤2GB): default `480p`
-- Mid-range (≤6 cores or ≤4GB): default `720p`  
-- High-end (>6 cores and >4GB): default `1080p`
-
-#### Edit 3: Apply resolution cap in `startRecapRecording` (~lines 486-510)
-- After computing `outW`/`outH` from ratio crop, **scale down** if exceeding selected quality's max dimensions
-- Replace hardcoded `captureStream(30)` with `captureStream(selectedFps)`
-- Replace hardcoded `videoBitsPerSecond: 4000000` with selected bitrate
-- Replace `setInterval` 33ms with `1000/selectedFps` ms
-
-**Current code (line 505-510):**
-```js
-const canvas = document.createElement("canvas");
-canvas.width = outW;
-canvas.height = outH;
-const ctx = canvas.getContext("2d")!;
-const canvasStream = canvas.captureStream(30);
-```
-
-**After edit:**
-```js
-// Apply export quality resolution cap
-const quality = EXPORT_QUALITY_OPTIONS[exportQuality] || EXPORT_QUALITY_OPTIONS['720p'];
-const scale = Math.min(1, quality.maxW / outW, quality.maxH / outH);
-outW = Math.round(outW * scale);
-outH = Math.round(outH * scale);
-
-const canvas = document.createElement("canvas");
-canvas.width = outW;
-canvas.height = outH;
-const ctx = canvas.getContext("2d")!;
-const canvasStream = canvas.captureStream(quality.fps);
-```
-
-**Line 525:** `videoBitsPerSecond: quality.bitrate`
-
-**Line 969-970:** `setInterval` interval → `Math.round(1000 / quality.fps)`
-
-#### Edit 4: UI — Export Quality dropdown (inside ResultView JSX)
-- Add **above** the existing editor controls
-- Uses existing `<Select>` component (already imported)
-- Styled per reference image: cyan label, dark dropdown, device warning message
-
-```text
-┌─────────────────────────────────────────────────────────────┐
-│ 🎬 Export Quality  [ 480p (Low — 854×480 · 20fps · 1.2Mbps) ▼ ] │
-│ ⚡ Device ပေါ်မူတည်ပြီး resolution ကို ရွေးပါ။              │
-│    Low-end phone ဆိုရင် 480p/720p ရွေးပါ။                   │
-└─────────────────────────────────────────────────────────────┘
-```
+### Why this works
+- **480p (20fps)**: Draws only 20 times/sec instead of 60 — 3x less CPU work
+- **720p (24fps)**: Draws only 24 times/sec instead of 60 — 2.5x less CPU work  
+- **1080p (30fps)**: `frameDuration = 0`, so it draws every vsync — zero change from current behavior
 
 ### What is NOT touched
-- ❌ Protected blocks (AV-SYNC-9000-SMOOTH-v4, RECORD-PIPELINE-AUTO-v1, VOICE-GEN-PIPELINE-v2, AUTO-PIPELINE-v2)
-- ❌ Upload logic (get-upload-url, upload-chunk, chunking)
-- ❌ Subtitle/sync logic
-- ❌ Credit deduction logic
-- ❌ Any other page or component
-- ❌ Backend / edge functions
-- ❌ No files deleted or rewritten
-
-### Summary of surgical edits
-1. Add `EXPORT_QUALITY_OPTIONS` constant + `exportQuality` state (~3 lines)
-2. Add CPU auto-detect `useEffect` (~10 lines)
-3. Modify 3 specific values in `startRecapRecording`: canvas size cap, captureStream fps, videoBitsPerSecond (~6 lines changed)
-4. Modify setInterval timing (~1 line changed)
-5. Add Export Quality `<Select>` UI block in JSX (~20 lines)
-
-Total: ~40 lines added/changed in a 2924-line file. All other code untouched.
+- Protected blocks (AV-SYNC-9000-SMOOTH-v4, RECORD-PIPELINE-AUTO-v1, VOICE-GEN-PIPELINE-v2, AUTO-PIPELINE-v2)
+- Upload logic, subtitle logic, credit logic, all other features
+- 1080p recording path — completely unchanged
 
