@@ -731,7 +731,12 @@ export const ResultView: React.FC<ResultViewProps> = ({
       const saturate = gradePreset.saturate + bypassBoost.saturate;
       const hue = gradePreset.hue + bypassBoost.hue;
       const sepia = gradePreset.sepia || 0;
-      ctx.filter = `contrast(${contrast}%) brightness(${brightness}%) saturate(${saturate}%) hue-rotate(${hue}deg) sepia(${sepia}%)`;
+
+      // Low-end: skip expensive 5-filter CSS chain when color grade is default (OFF + no bypass)
+      const isDefaultGrade = contrast === 100 && brightness === 100 && saturate === 100 && hue === 0 && sepia === 0;
+      if (!(isLowEndRender && isDefaultGrade)) {
+        ctx.filter = `contrast(${contrast}%) brightness(${brightness}%) saturate(${saturate}%) hue-rotate(${hue}deg) sepia(${sepia}%)`;
+      }
 
       if (curEditorState.flip) {
         ctx.save();
@@ -768,8 +773,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.fillRect(0, barY, canvas.width, barH);
         ctx.globalAlpha = 1;
         // Progress fill with glow
-        ctx.shadowColor = timelineBar.color;
-        ctx.shadowBlur = barH * 2.5;
+        ctx.shadowColor = isLowEndRender ? 'transparent' : timelineBar.color;
+        ctx.shadowBlur = isLowEndRender ? 0 : barH * 2.5;
         ctx.fillStyle = timelineBar.color;
         ctx.fillRect(0, barY, canvas.width * progress, barH);
         ctx.restore();
@@ -783,15 +788,21 @@ export const ResultView: React.FC<ResultViewProps> = ({
         const blurY = canvas.height * (blurSettings.y / 100) - blurH / 2;
         const blurClampedX = Math.max(0, Math.min(canvas.width - blurW, blurX));
         const blurClampedY = Math.max(0, Math.min(canvas.height - blurH, blurY));
-        const blurAmount = isLowEndRender
-          ? Math.round(blurSettings.opacity / 100 * 8)   // Low-end: lighter blur = much less GPU work
-          : Math.round(blurSettings.opacity / 100 * 20);
         ctx.save();
-        ctx.filter = `blur(${blurAmount}px)`;
-        ctx.beginPath();
-        ctx.rect(blurClampedX, blurClampedY, blurW, blurH);
-        ctx.clip();
-        ctx.drawImage(videoEl, srcCropX, srcCropY, srcCropW, srcCropH, 0, 0, canvas.width, canvas.height);
+        if (isLowEndRender) {
+          // Low-end: dark semi-transparent overlay instead of expensive blur+redraw
+          ctx.fillStyle = 'rgba(0,0,0,0.55)';
+          ctx.beginPath();
+          ctx.rect(blurClampedX, blurClampedY, blurW, blurH);
+          ctx.fill();
+        } else {
+          const blurAmount = Math.round(blurSettings.opacity / 100 * 20);
+          ctx.filter = `blur(${blurAmount}px)`;
+          ctx.beginPath();
+          ctx.rect(blurClampedX, blurClampedY, blurW, blurH);
+          ctx.clip();
+          ctx.drawImage(videoEl, srcCropX, srcCropY, srcCropW, srcCropH, 0, 0, canvas.width, canvas.height);
+        }
         ctx.restore();
       }
 
