@@ -1026,10 +1026,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
       }
     };
 
-    // Low-end (480p/720p): use setTimeout to reduce CPU wake-ups to target fps only
-    // High-end (1080p): use requestAnimationFrame for max smoothness (unchanged)
-    const isLowEnd = quality.fps < 30;
-    const frameInterval = isLowEnd ? 1000 / quality.fps : 0;
+    // All resolutions: setInterval at target FPS — matches clone project timing
+    // setInterval only wakes CPU at target FPS, unlike rAF which fires 60x/sec
+    const frameIntervalMs = Math.max(16, Math.round(1000 / quality.fps));
 
     const checkEnded = (): boolean => {
       if (audioEl.ended) {
@@ -1044,27 +1043,13 @@ export const ResultView: React.FC<ResultViewProps> = ({
       return false;
     };
 
-    if (isLowEnd) {
-      // setInterval for low-end: only wakes CPU at target FPS (20-24x/sec)
-      // Unlike throttled rAF which fires 60x/sec and skips draws, setInterval
-      // keeps CPU idle between frames — giving MediaRecorder breathing room
-      const frameIntervalMs = 1000 / quality.fps;
-      recapIntervalRef.current = setInterval(() => {
-        if (checkEnded()) {
-          if (recapIntervalRef.current) { clearInterval(recapIntervalRef.current); recapIntervalRef.current = null; }
-          return;
-        }
-        drawFrame();
-      }, frameIntervalMs);
-    } else {
-      // 1080p: requestAnimationFrame every vsync (unchanged behavior)
-      const rafLoop = () => {
-        drawFrame();
-        if (checkEnded()) return;
-        recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
-      };
-      recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
-    }
+    recapIntervalRef.current = setInterval(() => {
+      if (checkEnded()) {
+        if (recapIntervalRef.current) { clearInterval(recapIntervalRef.current); recapIntervalRef.current = null; }
+        return;
+      }
+      drawFrame();
+    }, frameIntervalMs);
   };
 
   // Recap playback in editor: play video (muted) + TTS audio with subtitle sync
