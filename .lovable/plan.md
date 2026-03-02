@@ -1,53 +1,34 @@
 
 
-## Plan: Low-end device smooth recording fix
+## Analysis: Why It Still Stutters on Low-End
 
-### Problem
-Current `rafLoop` calls `drawFrame()` every vsync (~60fps), but low-end devices cannot draw 60 frames per second. The browser's `captureStream(quality.fps)` only captures at 20-24fps anyway, so 60-70% of draws are wasted CPU cycles causing stutter.
+I compared the current code with the reference project (Testing Automation Nova AI) line-by-line. The reference draws ALL effects at full quality and runs smoothly on low-end devices. Here's what's different:
 
-### Fix: Throttle draw calls for 480p/720p only
-**File: `src/pages/RecapVideoNVPage.tsx` — 1 surgical edit at lines 997-1012**
+### Root Causes Found
 
-Replace the current simple rAF loop with a throttled version that skips unnecessary draws on low/mid quality, while keeping 1080p untouched (drawing every vsync):
+**1. Throttled rAF vs setInterval (biggest impact)**
+Current code uses `requestAnimationFrame` with timestamp-based skipping. Even though we skip draws, the rAF callback still fires **60 times/sec** — that's 60 CPU wake-ups per second even when only 20 draws happen. The reference uses `setInterval(drawFrame, 50ms)` which only wakes the CPU **20 times/sec**. That's 3x fewer wake-ups.
 
-```typescript
-// Throttle drawFrame to quality.fps for low/mid devices; 1080p draws every vsync
-const frameDuration = quality.fps < 30 ? 1000 / quality.fps : 0;
-let lastDrawTime = 0;
+**2. Offscreen blur canvas is SLOWER than direct approach**
+The current code creates an offscreen canvas, resizes it, draws video→offscreen with filter, then draws offscreen→main canvas. That's **2 drawImage calls + 1 canvas resize** per frame. The reference just uses `ctx.filter = blur() + clip + drawImage` — **1 drawImage call, no extra canvas**. The offscreen approach actually added overhead.
 
-const rafLoop = (timestamp: number) => {
-  if (frameDuration > 0) {
-    // 480p/720p: only draw at target fps to reduce CPU load
-    if (timestamp - lastDrawTime >= frameDuration - 2) {
-      lastDrawTime = timestamp;
-      drawFrame();
-    }
-  } else {
-    // 1080p: draw every vsync (unchanged behavior)
-    drawFrame();
-  }
+**3. Subtitle neon border shadowBlur has no low-end reduction**
+Lines 942-948: `ctx.shadowBlur = Math.max(8, fontSize * 0.5)` runs at full intensity on ALL resolutions. On low-end GPUs, shadowBlur on stroke operations is very expensive.
 
-  if (audioEl.ended) {
-    if (recorder.state !== "inactive") {
-      recorder.stop();
-      videoEl.pause();
-      audioEl.pause();
-      videoEl.playbackRate = 1.0;
-    }
-    return;
-  }
-  recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
-};
-recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
-```
+### Plan: 3 Surgical Edits (480p/720p only, 1080p untouched)
 
-### Why this works
-- **480p (20fps)**: Draws only 20 times/sec instead of 60 — 3x less CPU work
-- **720p (24fps)**: Draws only 24 times/sec instead of 60 — 2.5x less CPU work  
-- **1080p (30fps)**: `frameDuration = 0`, so it draws every vsync — zero change from current behavior
+**Edit 1 — Lines 1072-1085: Switch to setInterval for low-end**
+Replace throttled rAF with simple `setInterval` like the reference project. Reduces CPU wake-ups from 60/sec to 20/sec.
+
+**Edit 2 — Lines 796-818: Replace offscreen blur canvas with direct clip+blur**
+For low-end only, use the reference project's simpler approach: `ctx.filter = blur() → clip → drawImage(videoEl)`. Eliminates the offscreen canvas overhead entirely. Reduce blur amount to `Math.max(1, blurAmount * 0.4)` for faster GPU processing.
+
+**Edit 3 — Lines 942-948: Reduce subtitle neon border shadowBlur for low-end**
+Add `isLowEndRender` check to reduce `shadowBlur` from `fontSize * 0.5` to `fontSize * 0.15` for low-end.
 
 ### What is NOT touched
-- Protected blocks (AV-SYNC-9000-SMOOTH-v4, RECORD-PIPELINE-AUTO-v1, VOICE-GEN-PIPELINE-v2, AUTO-PIPELINE-v2)
-- Upload logic, subtitle logic, credit logic, all other features
-- 1080p recording path — completely unchanged
+- Protected blocks (AV-SYNC, RECORD-PIPELINE, VOICE-GEN, AUTO-PIPELINE)
+- 1080p rendering path — completely unchanged
+- Subtitle text/logic, upload logic, audio sync
+- All other features and stable components
 
