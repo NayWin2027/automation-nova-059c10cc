@@ -1,68 +1,59 @@
 
 
-## Analysis: Why Clone Project is Smooth but Current Project Still Stutters
+## Analysis: Clone vs Current — Why Clone is Smooth
 
-### Root Cause
-The clone project and current project use fundamentally different strategies for low-end devices:
+### Critical Finding
 
-| Aspect | Clone (Smooth) | Current (Still Stutters) |
-|--------|---------------|------------------------|
-| Color Grading | **SKIPPED entirely** (`if (!isSmooth)`) | Still applied every frame (full `ctx.filter` chain) |
-| Video Border | **SKIPPED** | Still drawn (reduced glow only) |
-| Timeline Bar | **SKIPPED** | Still drawn (reduced glow only) |
-| Blur Region | **Simple dark overlay** (`rgba(0,0,0,0.5)` fillRect) | **Offscreen canvas blur** (still expensive even at 0.5x) |
-| Logo Neon Glow | **SKIPPED** | Still drawn (reduced shadowBlur) |
-| Logo Spin | **SKIPPED** | Still animating |
-| Subtitle Neon Border | **Simple border** (no shadow) | Still drawing neon glow |
-| Subtitle Text | **Cached** (avoids per-frame measureText) | Recalculated every frame |
-| Auto-Fallback | **Yes** — monitors frame times, auto-enables smooth | **No** — no runtime detection |
-| Timing | `setInterval(drawFrame, frameIntervalMs)` | Throttled rAF |
+After reading both codebases line-by-line, here is the real situation:
 
-### Summary of What Clone Does Differently
+**The clone project does NOT have an `isSmooth` system.** It draws ALL effects (color grading, blur, neon glow, logo spin, border shadows) on every single frame, regardless of resolution. There are zero performance guards.
 
-The clone project defines a clear `isSmooth` boolean:
-```typescript
-const isSmooth = performanceModeRef.current === 'smooth' || autoFallbackRef.current;
+**The current project already HAS `isSmooth` guards** that skip color grading, border glow, timeline glow, neon ring, logo spin, and replace blur with a dark overlay. It should be LIGHTER than the clone.
+
+### So Why is the Clone Smooth and Current Still Stutters?
+
+The only meaningful difference is the **draw loop timing mechanism**:
+
+| | Clone | Current |
+|---|---|---|
+| Loop | `setInterval(drawFrame, frameIntervalMs)` | Throttled `requestAnimationFrame` with timestamp gating |
+| Frame skip | None — `setInterval` fires at fixed intervals | rAF fires every vsync (~16ms), then code checks if enough time passed before drawing |
+
+**The problem:** Throttled rAF fires the callback ~60 times per second regardless. Even when the code skips drawing (because target interval hasn't elapsed), the rAF callback itself still runs, creating CPU overhead from:
+- Function call overhead 60x/sec
+- `performance.now()` calculations
+- Timestamp comparisons
+- `requestAnimationFrame` re-scheduling
+
+On low-end devices, this 60fps callback loop competes with the MediaRecorder, GC, and browser compositor — causing jitter even though actual draws happen at 20-24fps.
+
+**`setInterval`** at 50ms (20fps) only wakes the CPU 20 times/sec. Between intervals, the CPU is completely idle — giving MediaRecorder and the browser more breathing room.
+
+### Recommended Fix
+
+**Switch low-end (480p/720p) from throttled rAF to `setInterval`** — matching the clone exactly.
+
+```text
+Current (stutters):
+  rAF → rAF → rAF → rAF → rAF → rAF  (60 wake-ups/sec, draws only 20)
+  
+Clone (smooth):
+  setInterval ─────── setInterval ─────── setInterval  (20 wake-ups/sec, draws 20)
 ```
 
-When `isSmooth` is true, it **completely skips** 6 expensive canvas operations per frame:
-1. `ctx.filter = ...` (color grading) — **skipped**
-2. `strokeRect` + `shadowBlur` (video border) — **skipped**
-3. `fillRect` + `shadowBlur` (timeline bar glow) — **skipped**
-4. `ctx.filter = blur(...)` + clip + redraw (blur region) → **replaced with simple dark overlay**
-5. `arc` + `shadowBlur` (logo neon ring) — **skipped**
-6. `rotate` (logo spin) — **skipped**
+This is a **1-line structural change** in the draw loop setup (lines 1087-1100 of RecapVideoNVPage.tsx):
+- Replace the throttled rAF block with `setInterval(drawFrame, frameIntervalMs)` 
+- Keep rAF for 1080p (unchanged)
+- Keep all existing `isSmooth` guards (they still help reduce per-frame GPU work)
 
-Plus it caches subtitle text measurements to avoid per-frame `measureText` calls.
+### Why This Won't Cause Copyright Issues
 
-### What Needs to Happen in Current Project
+The `isSmooth` effect-skipping (color grading, border glow, neon ring, logo spin) is separate from the draw loop change. The user mentioned "feature ပိတ်မှတော့ copyright ထိပြီ" — but the `setInterval` change is purely about **timing**, not visual effects. All effects remain available; they're just drawn with a more efficient scheduler.
 
-To match the clone's smoothness, the current project needs **3 surgical changes**:
+### What to Do
 
-#### Change 1: Add `isSmooth` mode detection (like clone)
-- Add `performanceMode` state (`'quality' | 'smooth'`)
-- Auto-set `smooth` for 480p, `quality` for 1080p
-- Add auto-fallback detection (rolling 30-frame window, activate if 60%+ over budget)
-
-#### Change 2: Hard-skip expensive effects when `isSmooth` is true
-Inside `drawFrame()`, wrap these in `if (!isSmooth)` guards:
-- Color grading (`ctx.filter`)
-- Video border glow
-- Timeline bar glow
-- Logo neon ring + spin
-- Subtitle neon border
-- Replace offscreen blur canvas with simple dark overlay
-
-#### Change 3: Cache subtitle text measurements
-- Store computed `lines`, `displayLines`, `totalTextH`, `startY` in variables
-- Only recompute when `currentSubtitleRef.current` text changes
-
-### Impact
-- **480p/720p**: ~80% reduction in per-frame GPU/CPU work (matching clone behavior)
-- **1080p**: Zero change — `isSmooth = false`, all effects remain
-- **Protected blocks**: Not touched
-- **Subtitles, upload, AV sync**: Not touched
+Change **only** the low-end draw loop (lines ~1087-1100) from throttled rAF to `setInterval`, matching the clone's approach. Everything else stays exactly as-is.
 
 ### Files to Edit
-- `src/pages/RecapVideoNVPage.tsx` only — surgical edits to `drawFrame()` and state initialization
+- `src/pages/RecapVideoNVPage.tsx` — ~10 lines in the draw loop setup section only
 
