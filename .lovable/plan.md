@@ -1,53 +1,68 @@
 
 
-## Plan: Low-end device smooth recording fix
+## Analysis: Why Clone Project is Smooth but Current Project Still Stutters
 
-### Problem
-Current `rafLoop` calls `drawFrame()` every vsync (~60fps), but low-end devices cannot draw 60 frames per second. The browser's `captureStream(quality.fps)` only captures at 20-24fps anyway, so 60-70% of draws are wasted CPU cycles causing stutter.
+### Root Cause
+The clone project and current project use fundamentally different strategies for low-end devices:
 
-### Fix: Throttle draw calls for 480p/720p only
-**File: `src/pages/RecapVideoNVPage.tsx` — 1 surgical edit at lines 997-1012**
+| Aspect | Clone (Smooth) | Current (Still Stutters) |
+|--------|---------------|------------------------|
+| Color Grading | **SKIPPED entirely** (`if (!isSmooth)`) | Still applied every frame (full `ctx.filter` chain) |
+| Video Border | **SKIPPED** | Still drawn (reduced glow only) |
+| Timeline Bar | **SKIPPED** | Still drawn (reduced glow only) |
+| Blur Region | **Simple dark overlay** (`rgba(0,0,0,0.5)` fillRect) | **Offscreen canvas blur** (still expensive even at 0.5x) |
+| Logo Neon Glow | **SKIPPED** | Still drawn (reduced shadowBlur) |
+| Logo Spin | **SKIPPED** | Still animating |
+| Subtitle Neon Border | **Simple border** (no shadow) | Still drawing neon glow |
+| Subtitle Text | **Cached** (avoids per-frame measureText) | Recalculated every frame |
+| Auto-Fallback | **Yes** — monitors frame times, auto-enables smooth | **No** — no runtime detection |
+| Timing | `setInterval(drawFrame, frameIntervalMs)` | Throttled rAF |
 
-Replace the current simple rAF loop with a throttled version that skips unnecessary draws on low/mid quality, while keeping 1080p untouched (drawing every vsync):
+### Summary of What Clone Does Differently
 
+The clone project defines a clear `isSmooth` boolean:
 ```typescript
-// Throttle drawFrame to quality.fps for low/mid devices; 1080p draws every vsync
-const frameDuration = quality.fps < 30 ? 1000 / quality.fps : 0;
-let lastDrawTime = 0;
-
-const rafLoop = (timestamp: number) => {
-  if (frameDuration > 0) {
-    // 480p/720p: only draw at target fps to reduce CPU load
-    if (timestamp - lastDrawTime >= frameDuration - 2) {
-      lastDrawTime = timestamp;
-      drawFrame();
-    }
-  } else {
-    // 1080p: draw every vsync (unchanged behavior)
-    drawFrame();
-  }
-
-  if (audioEl.ended) {
-    if (recorder.state !== "inactive") {
-      recorder.stop();
-      videoEl.pause();
-      audioEl.pause();
-      videoEl.playbackRate = 1.0;
-    }
-    return;
-  }
-  recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
-};
-recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
+const isSmooth = performanceModeRef.current === 'smooth' || autoFallbackRef.current;
 ```
 
-### Why this works
-- **480p (20fps)**: Draws only 20 times/sec instead of 60 — 3x less CPU work
-- **720p (24fps)**: Draws only 24 times/sec instead of 60 — 2.5x less CPU work  
-- **1080p (30fps)**: `frameDuration = 0`, so it draws every vsync — zero change from current behavior
+When `isSmooth` is true, it **completely skips** 6 expensive canvas operations per frame:
+1. `ctx.filter = ...` (color grading) — **skipped**
+2. `strokeRect` + `shadowBlur` (video border) — **skipped**
+3. `fillRect` + `shadowBlur` (timeline bar glow) — **skipped**
+4. `ctx.filter = blur(...)` + clip + redraw (blur region) → **replaced with simple dark overlay**
+5. `arc` + `shadowBlur` (logo neon ring) — **skipped**
+6. `rotate` (logo spin) — **skipped**
 
-### What is NOT touched
-- Protected blocks (AV-SYNC-9000-SMOOTH-v4, RECORD-PIPELINE-AUTO-v1, VOICE-GEN-PIPELINE-v2, AUTO-PIPELINE-v2)
-- Upload logic, subtitle logic, credit logic, all other features
-- 1080p recording path — completely unchanged
+Plus it caches subtitle text measurements to avoid per-frame `measureText` calls.
+
+### What Needs to Happen in Current Project
+
+To match the clone's smoothness, the current project needs **3 surgical changes**:
+
+#### Change 1: Add `isSmooth` mode detection (like clone)
+- Add `performanceMode` state (`'quality' | 'smooth'`)
+- Auto-set `smooth` for 480p, `quality` for 1080p
+- Add auto-fallback detection (rolling 30-frame window, activate if 60%+ over budget)
+
+#### Change 2: Hard-skip expensive effects when `isSmooth` is true
+Inside `drawFrame()`, wrap these in `if (!isSmooth)` guards:
+- Color grading (`ctx.filter`)
+- Video border glow
+- Timeline bar glow
+- Logo neon ring + spin
+- Subtitle neon border
+- Replace offscreen blur canvas with simple dark overlay
+
+#### Change 3: Cache subtitle text measurements
+- Store computed `lines`, `displayLines`, `totalTextH`, `startY` in variables
+- Only recompute when `currentSubtitleRef.current` text changes
+
+### Impact
+- **480p/720p**: ~80% reduction in per-frame GPU/CPU work (matching clone behavior)
+- **1080p**: Zero change — `isSmooth = false`, all effects remain
+- **Protected blocks**: Not touched
+- **Subtitles, upload, AV sync**: Not touched
+
+### Files to Edit
+- `src/pages/RecapVideoNVPage.tsx` only — surgical edits to `drawFrame()` and state initialization
 
