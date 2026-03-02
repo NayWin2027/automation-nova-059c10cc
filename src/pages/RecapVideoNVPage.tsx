@@ -171,10 +171,18 @@ export const ResultView: React.FC<ResultViewProps> = ({
     const mem = (navigator as any).deviceMemory || 4;
     if (cores <= 4 || mem <= 2) {
       setExportQuality('480p');
+      // 480p defaults: Golden Hour color, Spin Off logo
+      setEditorState(prev => ({ ...prev, colorGrade: "GOLDEN" }));
+      setLogo(prev => ({ ...prev, spin: false }));
     } else if (cores <= 6 || mem <= 4) {
       setExportQuality('720p');
+      // 720p defaults: Golden Hour color, Spin Off logo
+      setEditorState(prev => ({ ...prev, colorGrade: "GOLDEN" }));
+      setLogo(prev => ({ ...prev, spin: false }));
     } else {
       setExportQuality('1080p');
+      // 1080p default: Timeline bar 9px
+      setTimelineBar(prev => ({ ...prev, thickness: 9 }));
     }
   }, []);
 
