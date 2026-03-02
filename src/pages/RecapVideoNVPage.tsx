@@ -159,8 +159,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
   // Export Quality Options — resolution cap, fps, bitrate per quality level
   const EXPORT_QUALITY_OPTIONS: Record<string, {maxW: number;maxH: number;fps: number;bitrate: number;label: string;}> = {
-    '480p': { maxW: 854, maxH: 480, fps: 20, bitrate: 800_000, label: '480p (Low — 854×480 · 20fps · 0.8Mbps)' },
-    '720p': { maxW: 1280, maxH: 720, fps: 24, bitrate: 1_800_000, label: '720p (Mid — 1280×720 · 24fps · 1.8Mbps)' },
+    '480p': { maxW: 854, maxH: 480, fps: 20, bitrate: 2_000_000, label: '480p (Low — 854×480 · 20fps · 2Mbps)' },
+    '720p': { maxW: 1280, maxH: 720, fps: 24, bitrate: 3_000_000, label: '720p (Mid — 1280×720 · 24fps · 3Mbps)' },
     '1080p': { maxW: 1920, maxH: 1080, fps: 30, bitrate: 4_000_000, label: '1080p (High — 1920×1080 · 30fps · 4Mbps)' }
   };
   const [exportQuality, setExportQuality] = useState<string>('720p');
@@ -739,7 +739,12 @@ export const ResultView: React.FC<ResultViewProps> = ({
       const saturate = 100 + (gradePreset.saturate - 100) * smoothGradeScale + bypassBoost.saturate;
       const hue = gradePreset.hue * smoothGradeScale + bypassBoost.hue;
       const sepia = (gradePreset.sepia || 0);
-      ctx.filter = `contrast(${contrast}%) brightness(${brightness}%) saturate(${saturate}%) hue-rotate(${hue}deg) sepia(${sepia}%)`;
+      // Low-end: only contrast+brightness (skip saturate/hue-rotate/sepia to reduce GPU shader cost by ~60%)
+      if (isLowEndRender) {
+        ctx.filter = `contrast(${contrast}%) brightness(${brightness}%)`;
+      } else {
+        ctx.filter = `contrast(${contrast}%) brightness(${brightness}%) saturate(${saturate}%) hue-rotate(${hue}deg) sepia(${sepia}%)`;
+      }
 
       if (curEditorState.flip) {
         ctx.save();
@@ -996,22 +1001,12 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.translate(logoCX, logoCY);
 
         if (isLowEndRender) {
-          // Low-end: graduated neon glow — lighter shadowBlur (not disabled) for professional look
-          ctx.shadowColor = animatedNeonColor;
-          ctx.shadowBlur = logoSize * 0.18;
+          // Low-end: single solid neon ring — NO shadowBlur (zero GPU shadow cost)
           ctx.strokeStyle = animatedNeonColor;
-          ctx.lineWidth = logoSize * 0.032;
-          ctx.globalAlpha = 0.78;
+          ctx.lineWidth = logoSize * 0.04;
+          ctx.globalAlpha = 0.85;
           ctx.beginPath();
-          ctx.arc(0, 0, logoSize / 2 + logoSize * 0.05, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.shadowColor = animatedNeonColor2;
-          ctx.shadowBlur = logoSize * 0.1;
-          ctx.strokeStyle = animatedNeonColor2;
-          ctx.lineWidth = logoSize * 0.022;
-          ctx.globalAlpha = 1.0;
-          ctx.beginPath();
-          ctx.arc(0, 0, logoSize / 2 + logoSize * 0.02, 0, Math.PI * 2);
+          ctx.arc(0, 0, logoSize / 2 + logoSize * 0.03, 0, Math.PI * 2);
           ctx.stroke();
         } else {
           // 1080p: full multi-layer neon glow (unchanged)
