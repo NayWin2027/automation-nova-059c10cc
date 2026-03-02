@@ -2659,7 +2659,7 @@ const RecapVideoNVPage: React.FC = () => {
 
       // Client-side retry loop for 429 rate limits from recap-script-generator
       let scriptResult: any = null;
-      const SCRIPT_MAX_RETRIES = 3;
+      const SCRIPT_MAX_RETRIES = 5;
       for (let scriptAttempt = 0; scriptAttempt <= SCRIPT_MAX_RETRIES; scriptAttempt++) {
         const scriptResponse = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recap-script-generator`,
