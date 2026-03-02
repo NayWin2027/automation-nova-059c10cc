@@ -1085,19 +1085,17 @@ export const ResultView: React.FC<ResultViewProps> = ({
     };
 
     if (isLowEnd) {
-      // rAF with timestamp-based frame skipping — smoother than setInterval because
-      // rAF is compositor-synced and avoids GC-induced jitter from timer callbacks
-      const targetInterval = 1000 / quality.fps;
-      let lastDrawTs = 0;
-      const rafThrottled = (timestamp: number) => {
-        if (checkEnded()) return;
-        if (timestamp - lastDrawTs >= targetInterval - 2) {
-          lastDrawTs = timestamp;
-          drawFrame();
+      // setInterval for low-end: only wakes CPU at target FPS (20-24x/sec)
+      // Unlike throttled rAF which fires 60x/sec and skips draws, setInterval
+      // keeps CPU idle between frames — giving MediaRecorder breathing room
+      const frameIntervalMs = 1000 / quality.fps;
+      recapIntervalRef.current = setInterval(() => {
+        if (checkEnded()) {
+          if (recapIntervalRef.current) { clearInterval(recapIntervalRef.current); recapIntervalRef.current = null; }
+          return;
         }
-        recapAnimFrameRef.current = requestAnimationFrame(rafThrottled);
-      };
-      recapAnimFrameRef.current = requestAnimationFrame(rafThrottled);
+        drawFrame();
+      }, frameIntervalMs);
     } else {
       // 1080p: requestAnimationFrame every vsync (unchanged behavior)
       const rafLoop = () => {
