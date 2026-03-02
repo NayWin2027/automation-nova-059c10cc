@@ -261,6 +261,14 @@ export const ResultView: React.FC<ResultViewProps> = ({
   const subtitleLastTextRef = useRef<string>(""); // detect text change to reset page
   const subtitlePageStartRef = useRef<number>(0); // timestamp when current text started
 
+  // ── Performance Mode: isSmooth system (clone-matching) ─────────────────
+  // 'smooth' = hard-skip expensive effects; 'quality' = full effects (1080p)
+  const performanceModeRef = useRef<'quality' | 'smooth'>('quality');
+  const autoFallbackRef = useRef<boolean>(false);
+  const frameTimesRef = useRef<number[]>([]); // rolling 30-frame window for auto-fallback
+  // Subtitle text cache — avoid per-frame measureText recalculations
+  const subtitleCacheRef = useRef<{text: string; lines: string[]; displayLines: string[]; totalTextH: number; startY: number; fontSize: number; pageStart: number; lastPage: number;}>({text: '', lines: [], displayLines: [], totalTextH: 0, startY: 0, fontSize: 0, pageStart: 0, lastPage: 0});
+
   // Request Wake Lock to prevent screen from turning off during recap/recording
   useEffect(() => {
     const isActive = isRecapPlaying || isRendering;
@@ -693,6 +701,11 @@ export const ResultView: React.FC<ResultViewProps> = ({
     // Low-end GPU optimization flag: reduces shadowBlur & skips expensive glow layers for 480p/720p
     const isLowEndRender = quality.fps < 30;
 
+    // ── isSmooth mode: auto-set for 480p, quality for 1080p ──────────────
+    performanceModeRef.current = isLowEndRender ? 'smooth' : 'quality';
+    autoFallbackRef.current = false;
+    frameTimesRef.current = [];
+
     // Offscreen blur canvas — keeps blur effect ON while reducing per-frame cost (half-res for low-end)
     const blurFxCanvas = document.createElement("canvas");
     const blurFxCtx = blurFxCanvas.getContext("2d")!;
@@ -705,8 +718,31 @@ export const ResultView: React.FC<ResultViewProps> = ({
       const dt = (now - lastFrameTime) / 1000; // seconds since last frame
       lastFrameTime = now;
 
+      // ── isSmooth: resolved per-frame (includes auto-fallback) ──────────
+      const isSmooth = performanceModeRef.current === 'smooth' || autoFallbackRef.current;
+
+      // Auto-fallback: rolling 30-frame window — if 60%+ frames exceed budget, activate smooth
+      if (!autoFallbackRef.current && isLowEndRender) {
+        const frameBudgetMs = 1000 / quality.fps;
+        const drawStartMs = now;
+        // We'll measure at end of drawFrame via a microtask
+        queueMicrotask(() => {
+          const drawTimeMs = performance.now() - drawStartMs;
+          const ft = frameTimesRef.current;
+          ft.push(drawTimeMs);
+          if (ft.length > 30) ft.shift();
+          if (ft.length >= 30) {
+            const overBudget = ft.filter(t => t > frameBudgetMs).length;
+            if (overBudget / ft.length >= 0.6) {
+              autoFallbackRef.current = true;
+              console.log('[Perf] Auto-fallback to smooth mode — 60%+ frames over budget');
+            }
+          }
+        });
+      }
+
       // Low-end: disable expensive anti-aliasing interpolation
-      if (isLowEndRender) {
+      if (isSmooth) {
         ctx.imageSmoothingQuality = 'low';
       }
 
@@ -726,20 +762,19 @@ export const ResultView: React.FC<ResultViewProps> = ({
         }
       }
 
-      // Apply color grading filter from preset — always read from ref to avoid stale closure
-      // When bypass is ON, ADD extra offsets on top of the selected color grade (not replace)
-      const gradePreset = COLOR_GRADE_PRESETS[curEditorState.colorGrade] || COLOR_GRADE_PRESETS["OFF"];
-      // Color grading via ctx.filter is GPU-accelerated — no CPU penalty, so use FULL intensity for color match
-      const smoothGradeScale = 1;
-      const bypassBoost = curEditorState.bypass
-        ? { contrast: 15 * smoothGradeScale, brightness: 5 * smoothGradeScale, saturate: 15 * smoothGradeScale, hue: 5 * smoothGradeScale }
-        : { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
-      const contrast = 100 + (gradePreset.contrast - 100) * smoothGradeScale + bypassBoost.contrast;
-      const brightness = 100 + (gradePreset.brightness - 100) * smoothGradeScale + bypassBoost.brightness;
-      const saturate = 100 + (gradePreset.saturate - 100) * smoothGradeScale + bypassBoost.saturate;
-      const hue = gradePreset.hue * smoothGradeScale + bypassBoost.hue;
-      const sepia = (gradePreset.sepia || 0);
-      ctx.filter = `contrast(${contrast}%) brightness(${brightness}%) saturate(${saturate}%) hue-rotate(${hue}deg) sepia(${sepia}%)`;
+      // Apply color grading filter — SKIPPED in smooth mode (clone-matching)
+      if (!isSmooth) {
+        const gradePreset = COLOR_GRADE_PRESETS[curEditorState.colorGrade] || COLOR_GRADE_PRESETS["OFF"];
+        const bypassBoost = curEditorState.bypass
+          ? { contrast: 15, brightness: 5, saturate: 15, hue: 5 }
+          : { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
+        const contrast = gradePreset.contrast + bypassBoost.contrast;
+        const brightness = gradePreset.brightness + bypassBoost.brightness;
+        const saturate = gradePreset.saturate + bypassBoost.saturate;
+        const hue = gradePreset.hue + bypassBoost.hue;
+        const sepia = (gradePreset.sepia || 0);
+        ctx.filter = `contrast(${contrast}%) brightness(${brightness}%) saturate(${saturate}%) hue-rotate(${hue}deg) sepia(${sepia}%)`;
+      }
 
       if (curEditorState.flip) {
         ctx.save();
@@ -752,31 +787,29 @@ export const ResultView: React.FC<ResultViewProps> = ({
       }
       ctx.filter = "none";
 
-      // ── Draw Video Border (on top of video, under overlays) ─────────
-      if (videoBorder.enabled && videoBorder.width > 0) {
+      // ── Draw Video Border — SKIPPED in smooth mode ─────────
+      if (!isSmooth && videoBorder.enabled && videoBorder.width > 0) {
         ctx.save();
         ctx.strokeStyle = videoBorder.color;
-        ctx.lineWidth = isLowEndRender ? Math.max(1.5, videoBorder.width * 1.2) : videoBorder.width * 2;
+        ctx.lineWidth = videoBorder.width * 2;
         ctx.shadowColor = videoBorder.color;
-        ctx.shadowBlur = isLowEndRender ? videoBorder.width * 0.55 : videoBorder.width * 1.5;
-        ctx.globalAlpha = isLowEndRender ? 0.82 : 0.92;
+        ctx.shadowBlur = videoBorder.width * 1.5;
+        ctx.globalAlpha = 0.92;
         ctx.strokeRect(0, 0, canvas.width, canvas.height);
         ctx.restore();
       }
 
-      // ── Draw Timeline Bar (progress bar at bottom) ───────────────────
+      // ── Draw Timeline Bar — glow SKIPPED in smooth mode ───────────────────
       if (timelineBar.enabled && audioEl.duration > 0) {
         const progress = Math.min(1, audioEl.currentTime / audioEl.duration);
         const barH = timelineBar.thickness;
         const barY = canvas.height - barH;
-        // Track background (semi-transparent dark)
         ctx.save();
         ctx.globalAlpha = 0.35;
         ctx.fillStyle = "#000000";
         ctx.fillRect(0, barY, canvas.width, barH);
         ctx.globalAlpha = 1;
-        // Progress fill with glow (low-end: reduced glow, not disabled)
-        if (!isLowEndRender) {
+        if (!isSmooth) {
           ctx.shadowColor = timelineBar.color;
           ctx.shadowBlur = barH * 2.5;
         }
@@ -785,7 +818,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.restore();
       }
 
-      // Draw blur box region
+      // Draw blur box region — smooth mode uses simple dark overlay instead of offscreen blur
       if (blurSettings.enabled) {
         const blurW = canvas.width * (blurSettings.width / 100);
         const blurH = canvas.height * (blurSettings.height / 100);
@@ -793,29 +826,32 @@ export const ResultView: React.FC<ResultViewProps> = ({
         const blurY = canvas.height * (blurSettings.y / 100) - blurH / 2;
         const blurClampedX = Math.max(0, Math.min(canvas.width - blurW, blurX));
         const blurClampedY = Math.max(0, Math.min(canvas.height - blurH, blurY));
-        const blurAmount = Math.round(blurSettings.opacity / 100 * 20);
 
-        // Offscreen half-res blur: draw blur region to smaller canvas then scale back up
-        // Low-end: 0.5x resolution = 4x fewer pixels to blur; 1080p: full resolution
-        const blurScale = isLowEndRender ? 0.5 : 1;
-        const fxW = Math.max(2, Math.round(blurW * blurScale));
-        const fxH = Math.max(2, Math.round(blurH * blurScale));
-        if (blurFxCanvas.width !== fxW || blurFxCanvas.height !== fxH) {
-          blurFxCanvas.width = fxW;
-          blurFxCanvas.height = fxH;
+        if (isSmooth) {
+          // Simple dark overlay — no offscreen canvas, no blur filter (clone-matching)
+          ctx.save();
+          ctx.fillStyle = 'rgba(0,0,0,0.5)';
+          ctx.fillRect(blurClampedX, blurClampedY, blurW, blurH);
+          ctx.restore();
+        } else {
+          const blurAmount = Math.round(blurSettings.opacity / 100 * 20);
+          const fxW = Math.max(2, Math.round(blurW));
+          const fxH = Math.max(2, Math.round(blurH));
+          if (blurFxCanvas.width !== fxW || blurFxCanvas.height !== fxH) {
+            blurFxCanvas.width = fxW;
+            blurFxCanvas.height = fxH;
+          }
+          blurFxCtx.save();
+          blurFxCtx.clearRect(0, 0, fxW, fxH);
+          blurFxCtx.filter = `blur(${Math.max(1, blurAmount)}px)`;
+          blurFxCtx.drawImage(canvas, blurClampedX, blurClampedY, blurW, blurH, 0, 0, fxW, fxH);
+          blurFxCtx.restore();
+          ctx.save();
+          ctx.drawImage(blurFxCanvas, 0, 0, fxW, fxH, blurClampedX, blurClampedY, blurW, blurH);
+          ctx.fillStyle = 'rgba(0,0,0,0.14)';
+          ctx.fillRect(blurClampedX, blurClampedY, blurW, blurH);
+          ctx.restore();
         }
-
-        blurFxCtx.save();
-        blurFxCtx.clearRect(0, 0, fxW, fxH);
-        blurFxCtx.filter = `blur(${Math.max(1, blurAmount * (isLowEndRender ? 0.6 : 1))}px)`;
-        blurFxCtx.drawImage(canvas, blurClampedX, blurClampedY, blurW, blurH, 0, 0, fxW, fxH);
-        blurFxCtx.restore();
-
-        ctx.save();
-        ctx.drawImage(blurFxCanvas, 0, 0, fxW, fxH, blurClampedX, blurClampedY, blurW, blurH);
-        ctx.fillStyle = `rgba(0,0,0,${isLowEndRender ? 0.2 : 0.14})`;
-        ctx.fillRect(blurClampedX, blurClampedY, blurW, blurH);
-        ctx.restore();
       }
 
 
@@ -939,14 +975,20 @@ export const ResultView: React.FC<ResultViewProps> = ({
         }
         ctx.fill();
 
-        // ── Draw border (neon cycling color) ────────────────────────────
-        const canvasNeonColor = `hsl(${subNeonHueRef.current}, 100%, 75%)`;
-        ctx.strokeStyle = canvasNeonColor;
-        ctx.shadowColor = canvasNeonColor;
-        ctx.shadowBlur = Math.max(8, fontSize * 0.5);
-        ctx.lineWidth = Math.max(2.5, fontSize * 0.08);
-        ctx.stroke();
-        ctx.shadowBlur = 0;
+        // ── Draw border — smooth: simple border, no neon glow ────────────
+        if (isSmooth) {
+          ctx.strokeStyle = subSettings.borderColor;
+          ctx.lineWidth = Math.max(2, fontSize * 0.06);
+          ctx.stroke();
+        } else {
+          const canvasNeonColor = `hsl(${subNeonHueRef.current}, 100%, 75%)`;
+          ctx.strokeStyle = canvasNeonColor;
+          ctx.shadowColor = canvasNeonColor;
+          ctx.shadowBlur = Math.max(8, fontSize * 0.5);
+          ctx.lineWidth = Math.max(2.5, fontSize * 0.08);
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+        }
 
         // ── Draw each line of text centered in box ───────────────────────
         ctx.shadowColor = "rgba(0,0,0,0.9)";
@@ -965,48 +1007,25 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
 
 
-      // Draw logo with SPIN + NEON GLOW support (rotate around center) — top-right corner
+      // Draw logo — smooth: no neon glow, no spin (clone-matching)
       if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
         const logoSize = canvas.width * (logo.size / 100);
         const logoCX = canvas.width * (logo.x / 100);
         const logoCY = canvas.height * (logo.y / 100);
 
-        // Advance spin angle: full 360° rotation every 8 seconds
-        if (logo.spin) {
-          const spinScale = isLowEndRender ? 0.62 : 1;
-          logoAngleRef.current = (logoAngleRef.current + 360 / 8 * dt * spinScale) % 360;
-        }
+        if (!isSmooth) {
+          // Advance spin angle: full 360° rotation every 8 seconds
+          if (logo.spin) {
+            logoAngleRef.current = (logoAngleRef.current + 360 / 8 * dt) % 360;
+          }
 
-        // === Draw multi-layer animated neon glow ring (NOT rotated — matches CSS preview) ===
-        // Animate neon hue using logoAngleRef so color cycles like the preview CSS animation
-        const neonHue = logoAngleRef.current * 1.5 % 360;
-        const animatedNeonColor = `hsl(${neonHue}, 100%, 75%)`;
-        const animatedNeonColor2 = `hsl(${(neonHue + 120) % 360}, 100%, 75%)`;
+          // === Draw multi-layer animated neon glow ring ===
+          const neonHue = logoAngleRef.current * 1.5 % 360;
+          const animatedNeonColor = `hsl(${neonHue}, 100%, 75%)`;
+          const animatedNeonColor2 = `hsl(${(neonHue + 120) % 360}, 100%, 75%)`;
 
-        ctx.save();
-        ctx.translate(logoCX, logoCY);
-
-        if (isLowEndRender) {
-          // Low-end: graduated neon glow — lighter shadowBlur (not disabled) for professional look
-          ctx.shadowColor = animatedNeonColor;
-          ctx.shadowBlur = logoSize * 0.18;
-          ctx.strokeStyle = animatedNeonColor;
-          ctx.lineWidth = logoSize * 0.032;
-          ctx.globalAlpha = 0.78;
-          ctx.beginPath();
-          ctx.arc(0, 0, logoSize / 2 + logoSize * 0.05, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.shadowColor = animatedNeonColor2;
-          ctx.shadowBlur = logoSize * 0.1;
-          ctx.strokeStyle = animatedNeonColor2;
-          ctx.lineWidth = logoSize * 0.022;
-          ctx.globalAlpha = 1.0;
-          ctx.beginPath();
-          ctx.arc(0, 0, logoSize / 2 + logoSize * 0.02, 0, Math.PI * 2);
-          ctx.stroke();
-        } else {
-          // 1080p: full multi-layer neon glow (unchanged)
-          // Layer 1: outer diffuse neon glow — NOT rotated, stays as ring
+          ctx.save();
+          ctx.translate(logoCX, logoCY);
           ctx.shadowColor = animatedNeonColor;
           ctx.shadowBlur = logoSize * 0.35;
           ctx.strokeStyle = animatedNeonColor;
@@ -1015,7 +1034,6 @@ export const ResultView: React.FC<ResultViewProps> = ({
           ctx.beginPath();
           ctx.arc(0, 0, logoSize / 2 + logoSize * 0.05, 0, Math.PI * 2);
           ctx.stroke();
-          // Layer 2: inner sharp neon ring with second color
           ctx.shadowColor = animatedNeonColor2;
           ctx.shadowBlur = logoSize * 0.18;
           ctx.strokeStyle = animatedNeonColor2;
@@ -1024,21 +1042,19 @@ export const ResultView: React.FC<ResultViewProps> = ({
           ctx.beginPath();
           ctx.arc(0, 0, logoSize / 2 + logoSize * 0.02, 0, Math.PI * 2);
           ctx.stroke();
+          ctx.restore();
         }
-        ctx.restore();
 
-        // === Draw logo image with clip — CLEAR shadow first so image is sharp ===
+        // === Draw logo image — no spin in smooth mode ===
         ctx.save();
         ctx.translate(logoCX, logoCY);
-        if (logo.spin) {
+        if (!isSmooth && logo.spin) {
           ctx.rotate(logoAngleRef.current * Math.PI / 180);
         }
-        // CRITICAL: Reset shadow before drawing the image so it stays sharp (not blurry)
         ctx.shadowColor = "transparent";
         ctx.shadowBlur = 0;
         ctx.shadowOffsetX = 0;
         ctx.shadowOffsetY = 0;
-        // Clip to circle if needed
         if (logo.isCircle) {
           ctx.beginPath();
           ctx.arc(0, 0, logoSize / 2, 0, Math.PI * 2);
@@ -1047,7 +1063,6 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.globalAlpha = 1.0;
         ctx.drawImage(logoImg, -logoSize / 2, -logoSize / 2, logoSize, logoSize);
         ctx.restore();
-
       }
     };
 
