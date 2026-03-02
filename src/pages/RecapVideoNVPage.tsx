@@ -2657,29 +2657,45 @@ const RecapVideoNVPage: React.FC = () => {
       };
       if (resolvedOwnKey) scriptBody.ownApiKey = resolvedOwnKey;
 
-      const scriptResponse = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recap-script-generator`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            'Authorization': `Bearer ${userToken}`
-          },
-          body: JSON.stringify(scriptBody)
+      // Client-side retry loop for 429 rate limits from recap-script-generator
+      let scriptResult: any = null;
+      const SCRIPT_MAX_RETRIES = 3;
+      for (let scriptAttempt = 0; scriptAttempt <= SCRIPT_MAX_RETRIES; scriptAttempt++) {
+        const scriptResponse = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recap-script-generator`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              'Authorization': `Bearer ${userToken}`
+            },
+            body: JSON.stringify(scriptBody)
+          }
+        );
+
+        if (!scriptResponse.ok) {
+          const errData = await scriptResponse.json().catch(() => ({}));
+          throw new Error(errData.error || `Script generation failed (${scriptResponse.status})`);
         }
-      );
 
-      if (!scriptResponse.ok) {
-        const errData = await scriptResponse.json().catch(() => ({}));
-        throw new Error(errData.error || `Script generation failed (${scriptResponse.status})`);
-      }
+        scriptResult = await scriptResponse.json();
 
-      const scriptResult = await scriptResponse.json();
+        // If retryable 429 error, wait and retry silently
+        if (scriptResult.error && scriptResult.retryable && scriptAttempt < SCRIPT_MAX_RETRIES) {
+          const waitSec = scriptResult.retryAfterSeconds || 30;
+          setProgressMsg(`⏳ API rate limit hit — retrying in ${waitSec}s (${scriptAttempt + 1}/${SCRIPT_MAX_RETRIES})...`);
+          await new Promise(r => setTimeout(r, waitSec * 1000));
+          continue;
+        }
 
-      // Handle backend error (429 rate limit, processing failure, etc.)
-      if (scriptResult.error) {
-        throw new Error(scriptResult.error);
+        // Non-retryable error
+        if (scriptResult.error) {
+          throw new Error(scriptResult.error);
+        }
+
+        // Success
+        break;
       }
 
       const scriptText = scriptResult.script || '';

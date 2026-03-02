@@ -464,7 +464,7 @@ ${transcript}
     console.log(`[recap-script-generator] Sending to Gemini (${fileObj ? 'file mode' : 'transcript mode'})...`);
 
     // Retry logic for Gemini API (handles 429 rate limits & 503 overloaded)
-    const MAX_RETRIES = 4;
+    const MAX_RETRIES = 6;
     let response: Response | null = null;
     let lastError = "";
 
@@ -495,7 +495,7 @@ ${transcript}
       if (response.status === 429 || response.status === 503) {
         if (attempt < MAX_RETRIES) {
           // Parse retryDelay from Google's error if available, otherwise exponential backoff
-          let waitMs = Math.min(2000 * Math.pow(2, attempt), 30000);
+          let waitMs = Math.min(3000 * Math.pow(2, attempt), 60000);
           try {
             const errJson = JSON.parse(errorText);
             const retryDelay = errJson?.error?.details?.find((d: any) => d.retryDelay)?.retryDelay;
