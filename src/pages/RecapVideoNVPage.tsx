@@ -718,33 +718,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
       const dt = (now - lastFrameTime) / 1000; // seconds since last frame
       lastFrameTime = now;
 
-      // ── isSmooth: resolved per-frame (includes auto-fallback) ──────────
-      const isSmooth = performanceModeRef.current === 'smooth' || autoFallbackRef.current;
-
-      // Auto-fallback: rolling 30-frame window — if 60%+ frames exceed budget, activate smooth
-      if (!autoFallbackRef.current && isLowEndRender) {
-        const frameBudgetMs = 1000 / quality.fps;
-        const drawStartMs = now;
-        // We'll measure at end of drawFrame via a microtask
-        queueMicrotask(() => {
-          const drawTimeMs = performance.now() - drawStartMs;
-          const ft = frameTimesRef.current;
-          ft.push(drawTimeMs);
-          if (ft.length > 30) ft.shift();
-          if (ft.length >= 30) {
-            const overBudget = ft.filter(t => t > frameBudgetMs).length;
-            if (overBudget / ft.length >= 0.6) {
-              autoFallbackRef.current = true;
-              console.log('[Perf] Auto-fallback to smooth mode — 60%+ frames over budget');
-            }
-          }
-        });
-      }
-
-      // Low-end: disable expensive anti-aliasing interpolation
-      if (isSmooth) {
-        ctx.imageSmoothingQuality = 'low';
-      }
+      // Full quality rendering on all resolutions — setInterval timing handles CPU scheduling
 
       // Draw video frame — crop source to match output ratio
       const srcW = videoEl.videoWidth || rawW;
@@ -762,19 +736,17 @@ export const ResultView: React.FC<ResultViewProps> = ({
         }
       }
 
-      // Apply color grading filter — SKIPPED in smooth mode (clone-matching)
-      if (!isSmooth) {
-        const gradePreset = COLOR_GRADE_PRESETS[curEditorState.colorGrade] || COLOR_GRADE_PRESETS["OFF"];
-        const bypassBoost = curEditorState.bypass
-          ? { contrast: 15, brightness: 5, saturate: 15, hue: 5 }
-          : { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
-        const contrast = gradePreset.contrast + bypassBoost.contrast;
-        const brightness = gradePreset.brightness + bypassBoost.brightness;
-        const saturate = gradePreset.saturate + bypassBoost.saturate;
-        const hue = gradePreset.hue + bypassBoost.hue;
-        const sepia = (gradePreset.sepia || 0);
-        ctx.filter = `contrast(${contrast}%) brightness(${brightness}%) saturate(${saturate}%) hue-rotate(${hue}deg) sepia(${sepia}%)`;
-      }
+      // Apply color grading filter — always applied for consistent preview/output
+      const gradePreset = COLOR_GRADE_PRESETS[curEditorState.colorGrade] || COLOR_GRADE_PRESETS["OFF"];
+      const bypassBoost = curEditorState.bypass
+        ? { contrast: 15, brightness: 5, saturate: 15, hue: 5 }
+        : { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
+      const contrast = gradePreset.contrast + bypassBoost.contrast;
+      const brightness = gradePreset.brightness + bypassBoost.brightness;
+      const saturate = gradePreset.saturate + bypassBoost.saturate;
+      const hue = gradePreset.hue + bypassBoost.hue;
+      const sepia = (gradePreset.sepia || 0);
+      ctx.filter = `contrast(${contrast}%) brightness(${brightness}%) saturate(${saturate}%) hue-rotate(${hue}deg) sepia(${sepia}%)`;
 
       if (curEditorState.flip) {
         ctx.save();
@@ -787,8 +759,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
       }
       ctx.filter = "none";
 
-      // ── Draw Video Border — SKIPPED in smooth mode ─────────
-      if (!isSmooth && videoBorder.enabled && videoBorder.width > 0) {
+      // ── Draw Video Border ─────────
+      if (videoBorder.enabled && videoBorder.width > 0) {
         ctx.save();
         ctx.strokeStyle = videoBorder.color;
         ctx.lineWidth = videoBorder.width * 2;
@@ -799,7 +771,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.restore();
       }
 
-      // ── Draw Timeline Bar — glow SKIPPED in smooth mode ───────────────────
+      // ── Draw Timeline Bar ───────────────────
       if (timelineBar.enabled && audioEl.duration > 0) {
         const progress = Math.min(1, audioEl.currentTime / audioEl.duration);
         const barH = timelineBar.thickness;
@@ -809,16 +781,14 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.fillStyle = "#000000";
         ctx.fillRect(0, barY, canvas.width, barH);
         ctx.globalAlpha = 1;
-        if (!isSmooth) {
-          ctx.shadowColor = timelineBar.color;
-          ctx.shadowBlur = barH * 2.5;
-        }
+        ctx.shadowColor = timelineBar.color;
+        ctx.shadowBlur = barH * 2.5;
         ctx.fillStyle = timelineBar.color;
         ctx.fillRect(0, barY, canvas.width * progress, barH);
         ctx.restore();
       }
 
-      // Draw blur box region — smooth mode uses simple dark overlay instead of offscreen blur
+      // Draw blur box region
       if (blurSettings.enabled) {
         const blurW = canvas.width * (blurSettings.width / 100);
         const blurH = canvas.height * (blurSettings.height / 100);
@@ -827,13 +797,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
         const blurClampedX = Math.max(0, Math.min(canvas.width - blurW, blurX));
         const blurClampedY = Math.max(0, Math.min(canvas.height - blurH, blurY));
 
-        if (isSmooth) {
-          // Simple dark overlay — no offscreen canvas, no blur filter (clone-matching)
-          ctx.save();
-          ctx.fillStyle = 'rgba(0,0,0,0.5)';
-          ctx.fillRect(blurClampedX, blurClampedY, blurW, blurH);
-          ctx.restore();
-        } else {
+        {
           const blurAmount = Math.round(blurSettings.opacity / 100 * 20);
           const fxW = Math.max(2, Math.round(blurW));
           const fxH = Math.max(2, Math.round(blurH));
@@ -975,12 +939,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
         }
         ctx.fill();
 
-        // ── Draw border — smooth: simple border, no neon glow ────────────
-        if (isSmooth) {
-          ctx.strokeStyle = subSettings.borderColor;
-          ctx.lineWidth = Math.max(2, fontSize * 0.06);
-          ctx.stroke();
-        } else {
+        // ── Draw neon border ────────────
+        {
           const canvasNeonColor = `hsl(${subNeonHueRef.current}, 100%, 75%)`;
           ctx.strokeStyle = canvasNeonColor;
           ctx.shadowColor = canvasNeonColor;
@@ -1007,13 +967,13 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
 
 
-      // Draw logo — smooth: no neon glow, no spin (clone-matching)
+      // Draw logo with full effects
       if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
         const logoSize = canvas.width * (logo.size / 100);
         const logoCX = canvas.width * (logo.x / 100);
         const logoCY = canvas.height * (logo.y / 100);
 
-        if (!isSmooth) {
+        {
           // Advance spin angle: full 360° rotation every 8 seconds
           if (logo.spin) {
             logoAngleRef.current = (logoAngleRef.current + 360 / 8 * dt) % 360;
@@ -1045,10 +1005,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
           ctx.restore();
         }
 
-        // === Draw logo image — no spin in smooth mode ===
+        // === Draw logo image ===
         ctx.save();
         ctx.translate(logoCX, logoCY);
-        if (!isSmooth && logo.spin) {
+        if (logo.spin) {
           ctx.rotate(logoAngleRef.current * Math.PI / 180);
         }
         ctx.shadowColor = "transparent";
