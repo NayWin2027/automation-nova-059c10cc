@@ -31,10 +31,10 @@ const QUOTA_ERROR_PATTERNS = [
 ];
 
 // Non-retryable billing patterns (retry won't help)
+// IMPORTANT: Only truly permanent errors go here. Standard Google 429 messages
+// like "exceeded your current quota, check your plan" are TEMPORARY rate limits
+// and MUST be retried. Only "limit: 0" indicates a truly disabled/unpaid API key.
 const BILLING_REQUIRED_PATTERNS = [
-  "check your plan and billing",
-  "billing details",
-  "exceeded your current quota",
   "limit: 0",
 ];
 
