@@ -1741,7 +1741,17 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 {/* 🎬 Export Quality Selector */}
                 <div className="mb-4 p-3 rounded-lg border border-neon-cyan/30 bg-[sidebar-accent-foreground] bg-blue-950">
                   <p className="font-semibold text-neon-cyan mb-2 text-base">🎬 Export Quality</p>
-                  <Select value={exportQuality} onValueChange={setExportQuality}>
+                  <Select value={exportQuality} onValueChange={(val) => {
+                      setExportQuality(val);
+                      if (val === '480p' || val === '720p') {
+                        setEditorState(prev => ({ ...prev, colorGrade: "GOLDEN" }));
+                        setLogo(prev => ({ ...prev, spin: false }));
+                      } else if (val === '1080p') {
+                        setEditorState(prev => ({ ...prev, colorGrade: "PINK" }));
+                        setLogo(prev => ({ ...prev, spin: true }));
+                        setTimelineBar(prev => ({ ...prev, thickness: 9 }));
+                      }
+                    }}>
                     <SelectTrigger className="w-full bg-background border-border text-foreground text-xs h-9">
                       <SelectValue />
                     </SelectTrigger>
