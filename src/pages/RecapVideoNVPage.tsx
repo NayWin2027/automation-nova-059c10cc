@@ -1026,9 +1026,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
       }
     };
 
-    // All resolutions: setInterval at target FPS — matches clone project timing
-    // setInterval only wakes CPU at target FPS, unlike rAF which fires 60x/sec
-    const frameIntervalMs = Math.max(16, Math.round(1000 / quality.fps));
+    // Low-end (480p/720p): setInterval with adaptive frame-skipping for buttery smooth output
+    // High-end (1080p): requestAnimationFrame for max smoothness
+    const isLowEnd = quality.fps < 30;
 
     const checkEnded = (): boolean => {
       if (audioEl.ended) {
@@ -1043,13 +1043,40 @@ export const ResultView: React.FC<ResultViewProps> = ({
       return false;
     };
 
-    recapIntervalRef.current = setInterval(() => {
-      if (checkEnded()) {
-        if (recapIntervalRef.current) { clearInterval(recapIntervalRef.current); recapIntervalRef.current = null; }
-        return;
-      }
-      drawFrame();
-    }, frameIntervalMs);
+    if (isLowEnd) {
+      // setInterval for low-end: only wakes CPU at target FPS
+      // Adaptive frame-skipping: if drawFrame took too long, skip next frame to let CPU recover
+      const frameIntervalMs = Math.round(1000 / quality.fps);
+      let lastDrawTime = 0;
+      let skipNext = false;
+      recapIntervalRef.current = setInterval(() => {
+        if (checkEnded()) {
+          if (recapIntervalRef.current) { clearInterval(recapIntervalRef.current); recapIntervalRef.current = null; }
+          return;
+        }
+        const now = performance.now();
+        // If previous frame took longer than interval, skip this one to let CPU breathe
+        if (skipNext) {
+          skipNext = false;
+          return;
+        }
+        drawFrame();
+        const elapsed = performance.now() - now;
+        // If draw took >80% of budget, skip next frame to prevent jank accumulation
+        if (elapsed > frameIntervalMs * 0.8) {
+          skipNext = true;
+        }
+        lastDrawTime = now;
+      }, frameIntervalMs);
+    } else {
+      // 1080p: requestAnimationFrame for smooth vsync-aligned rendering
+      const rafLoop = () => {
+        drawFrame();
+        if (checkEnded()) return;
+        recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
+      };
+      recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
+    }
   };
 
   // Recap playback in editor: play video (muted) + TTS audio with subtitle sync
