@@ -795,27 +795,39 @@ export const ResultView: React.FC<ResultViewProps> = ({
         const blurClampedY = Math.max(0, Math.min(canvas.height - blurH, blurY));
         const blurAmount = Math.round(blurSettings.opacity / 100 * 20);
 
-        // Offscreen half-res blur: draw blur region to smaller canvas then scale back up
-        // Low-end: 0.5x resolution = 4x fewer pixels to blur; 1080p: full resolution
-        const blurScale = isLowEndRender ? 0.5 : 1;
-        const fxW = Math.max(2, Math.round(blurW * blurScale));
-        const fxH = Math.max(2, Math.round(blurH * blurScale));
-        if (blurFxCanvas.width !== fxW || blurFxCanvas.height !== fxH) {
-          blurFxCanvas.width = fxW;
-          blurFxCanvas.height = fxH;
+        if (isLowEndRender) {
+          // LOW-END: Direct clip+blur — single drawImage, no offscreen canvas overhead
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(blurClampedX, blurClampedY, blurW, blurH);
+          ctx.clip();
+          ctx.filter = `blur(${Math.max(1, blurAmount * 0.4)}px)`;
+          ctx.drawImage(videoEl, 0, 0, videoEl.videoWidth, videoEl.videoHeight, 0, 0, canvas.width, canvas.height);
+          ctx.filter = "none";
+          ctx.fillStyle = "rgba(0,0,0,0.2)";
+          ctx.fillRect(blurClampedX, blurClampedY, blurW, blurH);
+          ctx.restore();
+        } else {
+          // 1080p: Offscreen blur canvas (full quality, unchanged)
+          const fxW = Math.max(2, Math.round(blurW));
+          const fxH = Math.max(2, Math.round(blurH));
+          if (blurFxCanvas.width !== fxW || blurFxCanvas.height !== fxH) {
+            blurFxCanvas.width = fxW;
+            blurFxCanvas.height = fxH;
+          }
+
+          blurFxCtx.save();
+          blurFxCtx.clearRect(0, 0, fxW, fxH);
+          blurFxCtx.filter = `blur(${Math.max(1, blurAmount)}px)`;
+          blurFxCtx.drawImage(canvas, blurClampedX, blurClampedY, blurW, blurH, 0, 0, fxW, fxH);
+          blurFxCtx.restore();
+
+          ctx.save();
+          ctx.drawImage(blurFxCanvas, 0, 0, fxW, fxH, blurClampedX, blurClampedY, blurW, blurH);
+          ctx.fillStyle = "rgba(0,0,0,0.14)";
+          ctx.fillRect(blurClampedX, blurClampedY, blurW, blurH);
+          ctx.restore();
         }
-
-        blurFxCtx.save();
-        blurFxCtx.clearRect(0, 0, fxW, fxH);
-        blurFxCtx.filter = `blur(${Math.max(1, blurAmount * (isLowEndRender ? 0.6 : 1))}px)`;
-        blurFxCtx.drawImage(canvas, blurClampedX, blurClampedY, blurW, blurH, 0, 0, fxW, fxH);
-        blurFxCtx.restore();
-
-        ctx.save();
-        ctx.drawImage(blurFxCanvas, 0, 0, fxW, fxH, blurClampedX, blurClampedY, blurW, blurH);
-        ctx.fillStyle = `rgba(0,0,0,${isLowEndRender ? 0.2 : 0.14})`;
-        ctx.fillRect(blurClampedX, blurClampedY, blurW, blurH);
-        ctx.restore();
       }
 
 
@@ -943,7 +955,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
         const canvasNeonColor = `hsl(${subNeonHueRef.current}, 100%, 75%)`;
         ctx.strokeStyle = canvasNeonColor;
         ctx.shadowColor = canvasNeonColor;
-        ctx.shadowBlur = Math.max(8, fontSize * 0.5);
+        ctx.shadowBlur = isLowEndRender ? Math.max(3, fontSize * 0.15) : Math.max(8, fontSize * 0.5);
         ctx.lineWidth = Math.max(2.5, fontSize * 0.08);
         ctx.stroke();
         ctx.shadowBlur = 0;
@@ -1070,19 +1082,16 @@ export const ResultView: React.FC<ResultViewProps> = ({
     };
 
     if (isLowEnd) {
-      // rAF with timestamp-based frame skipping — smoother than setInterval because
-      // rAF is compositor-synced and avoids GC-induced jitter from timer callbacks
-      const targetInterval = 1000 / quality.fps;
-      let lastDrawTs = 0;
-      const rafThrottled = (timestamp: number) => {
-        if (checkEnded()) return;
-        if (timestamp - lastDrawTs >= targetInterval - 2) {
-          lastDrawTs = timestamp;
-          drawFrame();
+      // setInterval for low-end: only wakes CPU at target FPS (20-24x/sec)
+      // vs rAF which fires 60x/sec even when frames are skipped
+      const frameIntervalMs = Math.round(1000 / quality.fps);
+      recapIntervalRef.current = setInterval(() => {
+        drawFrame();
+        if (checkEnded()) {
+          clearInterval(recapIntervalRef.current!);
+          recapIntervalRef.current = null;
         }
-        recapAnimFrameRef.current = requestAnimationFrame(rafThrottled);
-      };
-      recapAnimFrameRef.current = requestAnimationFrame(rafThrottled);
+      }, frameIntervalMs);
     } else {
       // 1080p: requestAnimationFrame every vsync (unchanged behavior)
       const rafLoop = () => {
