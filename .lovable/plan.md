@@ -1,59 +1,42 @@
 
 
-## Analysis: Clone vs Current — Why Clone is Smooth
+## Problem Analysis
 
-### Critical Finding
+The 1080p rAF loop (lines 1059-1067) calls `drawFrame()` on **every vsync** — that's ~60fps with ALL effects (color grading, blur, glow, neon). This is the cause of 1080p stuttering.
 
-After reading both codebases line-by-line, here is the real situation:
+The clone project uses `setInterval` for **ALL resolutions** — including 1080p at 30fps. It never uses rAF for the draw loop.
 
-**The clone project does NOT have an `isSmooth` system.** It draws ALL effects (color grading, blur, neon glow, logo spin, border shadows) on every single frame, regardless of resolution. There are zero performance guards.
+Current project only uses `setInterval` for 480p/720p (`isLowEnd = quality.fps < 30`), but 1080p still hammers the CPU at 60fps via unthrottled rAF.
 
-**The current project already HAS `isSmooth` guards** that skip color grading, border glow, timeline glow, neon ring, logo spin, and replace blur with a dark overlay. It should be LIGHTER than the clone.
+## Fix
 
-### So Why is the Clone Smooth and Current Still Stutters?
+**Replace the 1080p rAF branch with `setInterval` too** — matching the clone exactly. All resolutions will use `setInterval(drawFrame, 1000/fps)`.
 
-The only meaningful difference is the **draw loop timing mechanism**:
+### Surgical edit in `RecapVideoNVPage.tsx`
 
-| | Clone | Current |
-|---|---|---|
-| Loop | `setInterval(drawFrame, frameIntervalMs)` | Throttled `requestAnimationFrame` with timestamp gating |
-| Frame skip | None — `setInterval` fires at fixed intervals | rAF fires every vsync (~16ms), then code checks if enough time passed before drawing |
+**Lines 1047-1067** — Remove the `if (isLowEnd)` / `else` split. Replace with a single `setInterval` block for all resolutions:
 
-**The problem:** Throttled rAF fires the callback ~60 times per second regardless. Even when the code skips drawing (because target interval hasn't elapsed), the rAF callback itself still runs, creating CPU overhead from:
-- Function call overhead 60x/sec
-- `performance.now()` calculations
-- Timestamp comparisons
-- `requestAnimationFrame` re-scheduling
-
-On low-end devices, this 60fps callback loop competes with the MediaRecorder, GC, and browser compositor — causing jitter even though actual draws happen at 20-24fps.
-
-**`setInterval`** at 50ms (20fps) only wakes the CPU 20 times/sec. Between intervals, the CPU is completely idle — giving MediaRecorder and the browser more breathing room.
-
-### Recommended Fix
-
-**Switch low-end (480p/720p) from throttled rAF to `setInterval`** — matching the clone exactly.
-
-```text
-Current (stutters):
-  rAF → rAF → rAF → rAF → rAF → rAF  (60 wake-ups/sec, draws only 20)
-  
-Clone (smooth):
-  setInterval ─────── setInterval ─────── setInterval  (20 wake-ups/sec, draws 20)
+```typescript
+// All resolutions: setInterval at target FPS — matches clone project timing
+const frameIntervalMs = Math.max(16, Math.round(1000 / quality.fps));
+recapIntervalRef.current = setInterval(() => {
+  if (checkEnded()) {
+    if (recapIntervalRef.current) { clearInterval(recapIntervalRef.current); recapIntervalRef.current = null; }
+    return;
+  }
+  drawFrame();
+}, frameIntervalMs);
 ```
 
-This is a **1-line structural change** in the draw loop setup (lines 1087-1100 of RecapVideoNVPage.tsx):
-- Replace the throttled rAF block with `setInterval(drawFrame, frameIntervalMs)` 
-- Keep rAF for 1080p (unchanged)
-- Keep all existing `isSmooth` guards (they still help reduce per-frame GPU work)
+Also remove the now-unused `isLowEnd` and `frameInterval` variables (lines 1031-1032).
 
-### Why This Won't Cause Copyright Issues
+### What this changes
+- 1080p: 60 draws/sec → 30 draws/sec (CPU load cut in half)
+- 480p/720p: No change (already using setInterval)
+- Effects: Zero change — all effects remain at full quality
+- Protected blocks: Not touched
+- Subtitles, upload, AV sync: Not touched
 
-The `isSmooth` effect-skipping (color grading, border glow, neon ring, logo spin) is separate from the draw loop change. The user mentioned "feature ပိတ်မှတော့ copyright ထိပြီ" — but the `setInterval` change is purely about **timing**, not visual effects. All effects remain available; they're just drawn with a more efficient scheduler.
-
-### What to Do
-
-Change **only** the low-end draw loop (lines ~1087-1100) from throttled rAF to `setInterval`, matching the clone's approach. Everything else stays exactly as-is.
-
-### Files to Edit
-- `src/pages/RecapVideoNVPage.tsx` — ~10 lines in the draw loop setup section only
+### Files
+- `src/pages/RecapVideoNVPage.tsx` — lines 1029-1067 only
 
