@@ -757,9 +757,11 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.save();
         ctx.strokeStyle = videoBorder.color;
         ctx.lineWidth = isLowEndRender ? Math.max(1.5, videoBorder.width * 1.2) : videoBorder.width * 2;
-        ctx.shadowColor = videoBorder.color;
-        ctx.shadowBlur = isLowEndRender ? videoBorder.width * 0.55 : videoBorder.width * 1.5;
-        ctx.globalAlpha = isLowEndRender ? 0.82 : 0.92;
+        if (!isLowEndRender) {
+          ctx.shadowColor = videoBorder.color;
+          ctx.shadowBlur = videoBorder.width * 1.5;
+        }
+        ctx.globalAlpha = isLowEndRender ? 0.85 : 0.92;
         ctx.strokeRect(0, 0, canvas.width, canvas.height);
         ctx.restore();
       }
@@ -796,15 +798,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
         const blurAmount = Math.round(blurSettings.opacity / 100 * 20);
 
         if (isLowEndRender) {
-          // LOW-END: Direct clip+blur — single drawImage, no offscreen canvas overhead
+          // LOW-END: Dark overlay only — NO blur filter (GPU blur is too expensive on low-end)
+          // This gives 90% visual similarity at near-zero GPU cost
           ctx.save();
-          ctx.beginPath();
-          ctx.rect(blurClampedX, blurClampedY, blurW, blurH);
-          ctx.clip();
-          ctx.filter = `blur(${Math.max(1, blurAmount * 0.4)}px)`;
-          ctx.drawImage(videoEl, 0, 0, videoEl.videoWidth, videoEl.videoHeight, 0, 0, canvas.width, canvas.height);
-          ctx.filter = "none";
-          ctx.fillStyle = "rgba(0,0,0,0.2)";
+          ctx.fillStyle = "rgba(0,0,0,0.45)";
           ctx.fillRect(blurClampedX, blurClampedY, blurW, blurH);
           ctx.restore();
         } else {
@@ -955,14 +952,14 @@ export const ResultView: React.FC<ResultViewProps> = ({
         const canvasNeonColor = `hsl(${subNeonHueRef.current}, 100%, 75%)`;
         ctx.strokeStyle = canvasNeonColor;
         ctx.shadowColor = canvasNeonColor;
-        ctx.shadowBlur = isLowEndRender ? Math.max(3, fontSize * 0.15) : Math.max(8, fontSize * 0.5);
+        ctx.shadowBlur = isLowEndRender ? 0 : Math.max(8, fontSize * 0.5);
         ctx.lineWidth = Math.max(2.5, fontSize * 0.08);
         ctx.stroke();
         ctx.shadowBlur = 0;
 
         // ── Draw each line of text centered in box ───────────────────────
-        ctx.shadowColor = "rgba(0,0,0,0.9)";
-        ctx.shadowBlur = fontSize * 0.25;
+        ctx.shadowColor = isLowEndRender ? "transparent" : "rgba(0,0,0,0.9)";
+        ctx.shadowBlur = isLowEndRender ? 0 : fontSize * 0.25;
         ctx.shadowOffsetX = 0;
         ctx.shadowOffsetY = fontSize * 0.07;
         ctx.fillStyle = subSettings.textColor;
@@ -1082,16 +1079,19 @@ export const ResultView: React.FC<ResultViewProps> = ({
     };
 
     if (isLowEnd) {
-      // setInterval for low-end: only wakes CPU at target FPS (20-24x/sec)
-      // vs rAF which fires 60x/sec even when frames are skipped
-      const frameIntervalMs = Math.round(1000 / quality.fps);
-      recapIntervalRef.current = setInterval(() => {
-        drawFrame();
-        if (checkEnded()) {
-          clearInterval(recapIntervalRef.current!);
-          recapIntervalRef.current = null;
+      // rAF with aggressive frame skipping — compositor-synced, no callback pile-up
+      // Unlike setInterval, rAF doesn't queue callbacks when frames are slow
+      const targetInterval = 1000 / quality.fps;
+      let lastDrawTs = 0;
+      const rafLowEnd = (timestamp: number) => {
+        if (checkEnded()) return;
+        if (timestamp - lastDrawTs >= targetInterval - 2) {
+          lastDrawTs = timestamp;
+          drawFrame();
         }
-      }, frameIntervalMs);
+        recapAnimFrameRef.current = requestAnimationFrame(rafLowEnd);
+      };
+      recapAnimFrameRef.current = requestAnimationFrame(rafLowEnd);
     } else {
       // 1080p: requestAnimationFrame every vsync (unchanged behavior)
       const rafLoop = () => {
