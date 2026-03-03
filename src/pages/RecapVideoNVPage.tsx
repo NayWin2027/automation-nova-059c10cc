@@ -7,13 +7,7 @@ import { useApiAccess } from "@/hooks/useApiAccess";
 import { preCheckCredits } from "@/utils/creditPreCheck";
 import { useCreditDeduction } from "@/hooks/useCreditDeduction";
 import { languages } from "@/data/languages";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue } from
-"@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Check, ChevronsUpDown } from "lucide-react";
@@ -29,21 +23,23 @@ import { Check, ChevronsUpDown } from "lucide-react";
 // Security hash — do NOT expose or log this value
 // Code chars: NV-SEC-2FA-k9#mX7$pQ2nL!jR4
 const _NV_LOCK_H = (() => {
-  const _s = [78, 86, 45, 83, 69, 67, 45, 50, 70, 65, 45, 107, 57, 35, 109, 88, 55, 36, 112, 81, 50, 110, 76, 33, 106, 82, 52];
-  return _s.map((c) => String.fromCharCode(c)).join('');
+  const _s = [
+    78, 86, 45, 83, 69, 67, 45, 50, 70, 65, 45, 107, 57, 35, 109, 88, 55, 36, 112, 81, 50, 110, 76, 33, 106, 82, 52,
+  ];
+  return _s.map((c) => String.fromCharCode(c)).join("");
 })();
-const _NV_SK = 'nv_2fa_lock_verified';
+const _NV_SK = "nv_2fa_lock_verified";
 
 /** Admin-only: call from browser console to unlock protected NV blocks for this session.
  *  Usage: unlockNVBlocks("NV-SEC-2FA-k9#mX7$pQ2nL!jR4")
  *  Returns true on success. Session clears on tab close. */
 export const unlockNVBlocks = (code: string): boolean => {
   if (code === _NV_LOCK_H) {
-    sessionStorage.setItem(_NV_SK, '1');
-    console.info('[NV-LOCK] ✅ Blocks unlocked for this session.');
+    sessionStorage.setItem(_NV_SK, "1");
+    console.info("[NV-LOCK] ✅ Blocks unlocked for this session.");
     return true;
   }
-  console.warn('[NV-LOCK] ❌ Invalid code.');
+  console.warn("[NV-LOCK] ❌ Invalid code.");
   return false;
 };
 
@@ -52,7 +48,7 @@ export const unlockNVBlocks = (code: string): boolean => {
 const _nvGuard = (): boolean => {
   // If admin has explicitly LOCKED this session (lock=2 means admin revoked), block execution
   const lockState = sessionStorage.getItem(_NV_SK);
-  if (lockState === '0') return false; // Admin explicitly revoked
+  if (lockState === "0") return false; // Admin explicitly revoked
   return true; // Default: allow normal execution (production users unaffected)
 };
 
@@ -73,15 +69,15 @@ interface ResultViewProps {
   scriptData: RecapScript;
   onUpdateScript: (newScript: string) => void;
   onGenerateVoice: () => void;
-  voiceMode: 'modern' | 'normal';
-  onVoiceModeChange: (mode: 'modern' | 'normal') => void;
+  voiceMode: "modern" | "normal";
+  onVoiceModeChange: (mode: "modern" | "normal") => void;
   onRecapSaved?: () => void;
   onVideoReady?: (outputDurationSecs: number) => void; // Called when rendered video blob is ready ("Recap Video Ready!" shown)
   creditPerMinRate?: number; // Admin-configurable CR/MIN rate for display
   audioUrl?: string;
   videoUrl?: string;
   status: ProcessingStatus;
-  audioTimestampsRef: React.MutableRefObject<{index: number;start: number;end: number;}[]>;
+  audioTimestampsRef: React.MutableRefObject<{ index: number; start: number; end: number }[]>;
   autoStartRecap?: boolean; // When true, auto-start recording immediately
   onAutoStartConsumed?: () => void; // Called after auto-start is triggered to reset flag
 }
@@ -131,7 +127,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
   status,
   audioTimestampsRef,
   autoStartRecap,
-  onAutoStartConsumed
+  onAutoStartConsumed,
 }) => {
   const [activeTab, setActiveTab] = useState<"script" | "segments">("script");
   const [isRecapPlaying, setIsRecapPlaying] = useState(false);
@@ -144,45 +140,59 @@ export const ResultView: React.FC<ResultViewProps> = ({
   const [subBorderColor, setSubBorderColor] = useState("hsl(180,100%,75%)"); // cyan start — bright neon
 
   // Color Grading Presets — industry-standard subtle values for realistic, non-artificial look
-  const COLOR_GRADE_PRESETS: Record<string, {contrast: number;brightness: number;saturate: number;hue: number;sepia?: number;label: string;emoji: string;}> = {
-    "OFF": { contrast: 100, brightness: 100, saturate: 100, hue: 0, label: "Off", emoji: "⚫" },
-    "CINEMATIC": { contrast: 120, brightness: 90, saturate: 65, hue: 5, label: "Cinematic", emoji: "🎬" },
-    "VINTAGE": { contrast: 108, brightness: 95, saturate: 60, hue: 12, sepia: 30, label: "Vintage", emoji: "📷" },
-    "COOL": { contrast: 110, brightness: 97, saturate: 90, hue: -25, label: "Cool", emoji: "🧊" },
-    "WARM": { contrast: 112, brightness: 108, saturate: 120, hue: 18, label: "Warm", emoji: "🔥" },
-    "TEAL": { contrast: 118, brightness: 93, saturate: 125, hue: -35, label: "Teal & Orange", emoji: "🌊" },
-    "PINK": { contrast: 108, brightness: 105, saturate: 130, hue: 330, label: "Pink", emoji: "🌸" },
-    "NEON": { contrast: 125, brightness: 108, saturate: 160, hue: 8, label: "Neon", emoji: "⚡" },
-    "NOIR": { contrast: 130, brightness: 82, saturate: 15, hue: 0, label: "Noir", emoji: "🎭" },
-    "GOLDEN": { contrast: 115, brightness: 112, saturate: 135, hue: 22, label: "Golden Hour", emoji: "🌅" }
+  const COLOR_GRADE_PRESETS: Record<
+    string,
+    {
+      contrast: number;
+      brightness: number;
+      saturate: number;
+      hue: number;
+      sepia?: number;
+      label: string;
+      emoji: string;
+    }
+  > = {
+    OFF: { contrast: 100, brightness: 100, saturate: 100, hue: 0, label: "Off", emoji: "⚫" },
+    CINEMATIC: { contrast: 120, brightness: 90, saturate: 65, hue: 5, label: "Cinematic", emoji: "🎬" },
+    VINTAGE: { contrast: 108, brightness: 95, saturate: 60, hue: 12, sepia: 30, label: "Vintage", emoji: "📷" },
+    COOL: { contrast: 110, brightness: 97, saturate: 90, hue: -25, label: "Cool", emoji: "🧊" },
+    WARM: { contrast: 112, brightness: 108, saturate: 120, hue: 18, label: "Warm", emoji: "🔥" },
+    TEAL: { contrast: 118, brightness: 93, saturate: 125, hue: -35, label: "Teal & Orange", emoji: "🌊" },
+    PINK: { contrast: 108, brightness: 105, saturate: 130, hue: 330, label: "Pink", emoji: "🌸" },
+    NEON: { contrast: 125, brightness: 108, saturate: 160, hue: 8, label: "Neon", emoji: "⚡" },
+    NOIR: { contrast: 130, brightness: 82, saturate: 15, hue: 0, label: "Noir", emoji: "🎭" },
+    GOLDEN: { contrast: 115, brightness: 112, saturate: 135, hue: 22, label: "Golden Hour", emoji: "🌅" },
   };
 
   // Export Quality Options — resolution cap, fps, bitrate per quality level
-  const EXPORT_QUALITY_OPTIONS: Record<string, {maxW: number;maxH: number;fps: number;bitrate: number;label: string;}> = {
-    '480p': { maxW: 854, maxH: 480, fps: 20, bitrate: 2_000_000, label: '480p (Low — 854×480 · 20fps · 2Mbps)' },
-    '720p': { maxW: 1280, maxH: 720, fps: 24, bitrate: 3_000_000, label: '720p (Mid — 1280×720 · 24fps · 3Mbps)' },
-    '1080p': { maxW: 1920, maxH: 1080, fps: 30, bitrate: 4_000_000, label: '1080p (High — 1920×1080 · 30fps · 4Mbps)' }
+  const EXPORT_QUALITY_OPTIONS: Record<
+    string,
+    { maxW: number; maxH: number; fps: number; bitrate: number; label: string }
+  > = {
+    "480p": { maxW: 854, maxH: 480, fps: 20, bitrate: 2_000_000, label: "480p (Low — 854×480 · 20fps · 2Mbps)" },
+    "720p": { maxW: 1280, maxH: 720, fps: 24, bitrate: 3_000_000, label: "720p (Mid — 1280×720 · 24fps · 3Mbps)" },
+    "1080p": { maxW: 1920, maxH: 1080, fps: 30, bitrate: 4_000_000, label: "1080p (High — 1920×1080 · 30fps · 4Mbps)" },
   };
-  const [exportQuality, setExportQuality] = useState<string>('720p');
+  const [exportQuality, setExportQuality] = useState<string>("720p");
 
   // CPU auto-detection: set default export quality based on device capability
   useEffect(() => {
     const cores = navigator.hardwareConcurrency || 4;
     const mem = (navigator as any).deviceMemory || 4;
     if (cores <= 4 || mem <= 2) {
-      setExportQuality('480p');
+      setExportQuality("480p");
       // 480p defaults: Golden Hour color, Spin Off logo
-      setEditorState(prev => ({ ...prev, colorGrade: "GOLDEN" }));
-      setLogo(prev => ({ ...prev, spin: false }));
+      setEditorState((prev) => ({ ...prev, colorGrade: "GOLDEN" }));
+      setLogo((prev) => ({ ...prev, spin: false }));
     } else if (cores <= 6 || mem <= 4) {
-      setExportQuality('720p');
+      setExportQuality("720p");
       // 720p defaults: Golden Hour color, Spin Off logo
-      setEditorState(prev => ({ ...prev, colorGrade: "GOLDEN" }));
-      setLogo(prev => ({ ...prev, spin: false }));
+      setEditorState((prev) => ({ ...prev, colorGrade: "GOLDEN" }));
+      setLogo((prev) => ({ ...prev, spin: false }));
     } else {
-      setExportQuality('1080p');
+      setExportQuality("1080p");
       // 1080p default: Timeline bar 9px
-      setTimelineBar(prev => ({ ...prev, thickness: 9 }));
+      setTimelineBar((prev) => ({ ...prev, thickness: 9 }));
     }
   }, []);
 
@@ -191,7 +201,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
     ratio: "1/1" as "auto" | "16/9" | "9/16" | "1/1" | "4/3",
     flip: true,
     bypass: true,
-    colorGrade: "PINK" as string
+    colorGrade: "PINK" as string,
   });
 
   // Logo & Subtitle States
@@ -202,7 +212,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
     spin: true,
     neonColor: "#00E5FF", // Cyan default
     x: 88, // percentage from left (top-right default)
-    y: 8 // percentage from top
+    y: 8, // percentage from top
   });
 
   const [subSettings, setSubSettings] = useState<SubtitleSettings>({
@@ -213,7 +223,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
     borderColor: "#00E5FF",
     fontSize: 15,
     scale: 1,
-    maxWidth: 80
+    maxWidth: 80,
   });
 
   const [blurSettings, setBlurSettings] = useState<BlurSettings>({
@@ -223,7 +233,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
     width: 100,
     height: 20,
     opacity: 15,
-    isDragging: false
+    isDragging: false,
   });
 
   // Timeline Bar state
@@ -231,7 +241,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
     enabled: true,
     color: "#4B0082",
     thickness: 6, // px (1–15)
-    openPanel: false
+    openPanel: false,
   });
 
   // Video Border state
@@ -239,12 +249,21 @@ export const ResultView: React.FC<ResultViewProps> = ({
     enabled: true,
     color: "#FFFFFF",
     width: 11, // px (1–50)
-    openPanel: false
+    openPanel: false,
   });
 
   // Preset color swatches
-  const COLOR_SWATCHES = ["#00E5FF", "#F43F5E", "#FACC15", "#10B981", "#A855F7", "#3B82F6", "#F97316", "#EC4899", "#6B7280"];
-
+  const COLOR_SWATCHES = [
+    "#00E5FF",
+    "#F43F5E",
+    "#FACC15",
+    "#10B981",
+    "#A855F7",
+    "#3B82F6",
+    "#F97316",
+    "#EC4899",
+    "#6B7280",
+  ];
 
   // Drag States
   const [isDraggingSub, setIsDraggingSub] = useState(false);
@@ -274,12 +293,12 @@ export const ResultView: React.FC<ResultViewProps> = ({
     const isActive = isRecapPlaying || isRendering;
 
     const requestWakeLock = async () => {
-      if (!('wakeLock' in navigator)) return;
+      if (!("wakeLock" in navigator)) return;
       try {
-        wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
-        console.log('[WakeLock] Screen wake lock acquired');
+        wakeLockRef.current = await (navigator as any).wakeLock.request("screen");
+        console.log("[WakeLock] Screen wake lock acquired");
       } catch (err) {
-        console.log('[WakeLock] Could not acquire wake lock:', err);
+        console.log("[WakeLock] Could not acquire wake lock:", err);
       }
     };
 
@@ -288,9 +307,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
         try {
           await wakeLockRef.current.release();
           wakeLockRef.current = null;
-          console.log('[WakeLock] Screen wake lock released');
+          console.log("[WakeLock] Screen wake lock released");
         } catch (err) {
-          console.log('[WakeLock] Could not release wake lock:', err);
+          console.log("[WakeLock] Could not release wake lock:", err);
         }
       }
     };
@@ -307,8 +326,12 @@ export const ResultView: React.FC<ResultViewProps> = ({
   }, [isRecapPlaying, isRendering]);
 
   // Keep refs in sync so canvas draw loop always has latest state (fixes stale closure color grading)
-  useEffect(() => {editorStateRef.current = editorState;}, [editorState]);
-  useEffect(() => {blurSettingsRef.current = blurSettings;}, [blurSettings]);
+  useEffect(() => {
+    editorStateRef.current = editorState;
+  }, [editorState]);
+  useEffect(() => {
+    blurSettingsRef.current = blurSettings;
+  }, [blurSettings]);
 
   // Auto-start recording when parent signals pipeline is complete
   useEffect(() => {
@@ -328,7 +351,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
       const audioReady = a && a.src && (a.readyState >= 1 || a.duration > 0);
       const videoReady = v && v.src && (v.readyState >= 1 || v.duration > 0);
 
-      if (audioReady && videoReady || attempts >= maxAttempts) {
+      if ((audioReady && videoReady) || attempts >= maxAttempts) {
         clearInterval(poll);
         // Consume flag first, then start — avoids double-trigger on re-render
         onAutoStartConsumed?.();
@@ -397,7 +420,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
           vEnd = nextVStart; // Sequential: use next segment start (existing behavior)
         } else {
           // Non-sequential (semantic scene jump): estimate clip duration from word count (~150 wpm)
-          const estimatedClipSec = Math.max(segWords / 150 * 60, 3);
+          const estimatedClipSec = Math.max((segWords / 150) * 60, 3);
           vEnd = vStart + estimatedClipSec;
         }
       }
@@ -408,7 +431,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
         // Audio time percentages based on word count — accurate proportional speech pacing
         aStartPct: totalWords > 0 ? startWords / totalWords : 0,
         aEndPct: totalWords > 0 ? wordCursor / totalWords : 1,
-        text: seg.text
+        text: seg.text,
       };
     });
   }, [scriptData]);
@@ -462,8 +485,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
     const clientX = "touches" in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
     const clientY = "touches" in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
 
-    let x = (clientX - container.left) / container.width * 100;
-    let y = (clientY - container.top) / container.height * 100;
+    let x = ((clientX - container.left) / container.width) * 100;
+    let y = ((clientY - container.top) / container.height) * 100;
     x = Math.max(0, Math.min(100, x));
     y = Math.max(0, Math.min(100, y));
 
@@ -487,11 +510,11 @@ export const ResultView: React.FC<ResultViewProps> = ({
   };
 
   // Logo position presets (replaces drag to avoid AV sync interference)
-  const LOGO_POSITIONS: Record<string, {x: number;y: number;label: string;}> = {
+  const LOGO_POSITIONS: Record<string, { x: number; y: number; label: string }> = {
     UL: { x: 12, y: 10, label: "↖ UL" },
     UR: { x: 88, y: 10, label: "↗ UR" },
     LL: { x: 12, y: 90, label: "↙ LL" },
-    LR: { x: 88, y: 90, label: "↘ LR" }
+    LR: { x: 88, y: 90, label: "↘ LR" },
   };
   const currentLogoPos = Object.entries(LOGO_POSITIONS).find(([, v]) => v.x === logo.x && v.y === logo.y)?.[0] || "UR";
 
@@ -503,14 +526,23 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
     if (!videoEl.videoWidth) {
       await new Promise<void>((resolve) => {
-        videoEl.addEventListener('loadedmetadata', () => resolve(), { once: true });
+        videoEl.addEventListener("loadedmetadata", () => resolve(), { once: true });
       });
     }
 
     // Prefer MP4 for universal phone/social media compatibility, fallback to webm
-    const mimeTypes = ["video/mp4;codecs=avc1,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"];
+    const mimeTypes = [
+      "video/mp4;codecs=avc1,mp4a.40.2",
+      "video/mp4",
+      "video/webm;codecs=vp9,opus",
+      "video/webm;codecs=vp8,opus",
+      "video/webm",
+    ];
     const mimeType = mimeTypes.find((type) => MediaRecorder.isTypeSupported(type));
-    if (!mimeType) {console.warn("No supported recording mime type");return;}
+    if (!mimeType) {
+      console.warn("No supported recording mime type");
+      return;
+    }
 
     // Apply ratio crop to canvas output dimensions
     const rawW = videoEl.videoWidth || 1280;
@@ -532,7 +564,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
       }
     }
     // Apply export quality resolution cap
-    const quality = EXPORT_QUALITY_OPTIONS[exportQuality] || EXPORT_QUALITY_OPTIONS['720p'];
+    const quality = EXPORT_QUALITY_OPTIONS[exportQuality] || EXPORT_QUALITY_OPTIONS["720p"];
     const qualityScale = Math.min(1, quality.maxW / outW, quality.maxH / outH);
     outW = Math.round(outW * qualityScale);
     outH = Math.round(outH * qualityScale);
@@ -563,17 +595,28 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
     const recordingStartTime = Date.now(); // Track actual recording elapsed time for accurate credit deduction
 
-    recorder.ondataavailable = (e) => {if (e.data && e.data.size > 0) chunks.push(e.data);};
+    recorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) chunks.push(e.data);
+    };
 
     recorder.onstop = async () => {
       const recordingElapsedSecs = (Date.now() - recordingStartTime) / 1000; // Reliable elapsed time
-      if (audioCtx) try {audioCtx.close();} catch (_) {}
+      if (audioCtx)
+        try {
+          audioCtx.close();
+        } catch (_) {}
       // Cleanup both interval, rAF, and setTimeout just in case
-      if (recapIntervalRef.current) {clearInterval(recapIntervalRef.current);recapIntervalRef.current = null;}
+      if (recapIntervalRef.current) {
+        clearInterval(recapIntervalRef.current);
+        recapIntervalRef.current = null;
+      }
       cancelAnimationFrame(recapAnimFrameRef.current);
       clearTimeout(recapAnimFrameRef.current);
 
-      if (chunks.length === 0) {setIsRendering(false);return;}
+      if (chunks.length === 0) {
+        setIsRendering(false);
+        return;
+      }
 
       const blob = new Blob(chunks, { type: mimeType });
       const url = URL.createObjectURL(blob);
@@ -589,30 +632,32 @@ export const ResultView: React.FC<ResultViewProps> = ({
       setRenderedBlobUrl(url);
 
       // Use actual recording elapsed time (reliable) instead of blob metadata (unreliable for MediaRecorder blobs)
-      console.log('[CREDIT] Output video duration (elapsed timer):', recordingElapsedSecs, 'seconds');
+      console.log("[CREDIT] Output video duration (elapsed timer):", recordingElapsedSecs, "seconds");
       onVideoReady?.(recordingElapsedSecs); // Trigger credit deduction with accurate OUTPUT duration
       setIsRendering(false);
       setIsRecapPlaying(false);
 
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
         if (user) {
           const fileName = `${user.id}/${Date.now()}_recap.${ext}`;
-          const { error: uploadErr } = await supabase.storage.
-          from('recap-videos').
-          upload(fileName, blob, { contentType: mimeType });
+          const { error: uploadErr } = await supabase.storage
+            .from("recap-videos")
+            .upload(fileName, blob, { contentType: mimeType });
           if (!uploadErr) {
-            await supabase.from('recap_history').insert({
+            await supabase.from("recap_history").insert({
               user_id: user.id,
-              title: scriptData.title || 'Untitled Recap',
+              title: scriptData.title || "Untitled Recap",
               storage_path: fileName,
-              file_size_bytes: blob.size
+              file_size_bytes: blob.size,
             } as any);
             onRecapSaved?.();
           }
         }
       } catch (saveErr) {
-        console.error('Failed to save recap to history:', saveErr);
+        console.error("Failed to save recap to history:", saveErr);
       }
     };
 
@@ -627,7 +672,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
       logoImg.crossOrigin = "anonymous";
       logoImg.src = logo.url;
       await new Promise<void>((res) => {
-        if (logoImg!.complete) {res();return;}
+        if (logoImg!.complete) {
+          res();
+          return;
+        }
         logoImg!.onload = () => res();
         logoImg!.onerror = () => res();
       });
@@ -636,17 +684,22 @@ export const ResultView: React.FC<ResultViewProps> = ({
       try {
         const svgSize = 256;
         const svgStr = `<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" width="${svgSize}" height="${svgSize}"><defs><radialGradient id="bg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#1a0b2e"/><stop offset="100%" stop-color="#050505"/></radialGradient><linearGradient id="ch" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#ffffff"/><stop offset="40%" stop-color="#e8eff5"/><stop offset="100%" stop-color="#556270"/></linearGradient><filter id="gl" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="8" result="blur"/><feComposite in="SourceGraphic" in2="blur" operator="over"/></filter></defs><rect width="512" height="512" rx="80" fill="url(#bg)"/><g transform="translate(40,40) skewX(-10)"><path d="M60 320 C60 320 120 100 180 120 C240 140 150 350 280 320 C350 300 380 180 420 180 M280 320 C320 320 400 250 440 100" stroke="#00ffff" stroke-width="28" fill="none" stroke-linecap="round" filter="url(#gl)" opacity="0.35"/><path d="M60 320 C60 320 120 100 180 120 C240 140 150 350 280 320 C350 300 380 180 420 180 M280 320 C320 320 400 250 440 100" stroke="url(#ch)" stroke-width="24" fill="none" stroke-linecap="round"/></g></svg>`;
-        const blobUrl = URL.createObjectURL(new Blob([svgStr], { type: 'image/svg+xml' }));
+        const blobUrl = URL.createObjectURL(new Blob([svgStr], { type: "image/svg+xml" }));
         const tmpImg = new Image();
         tmpImg.src = blobUrl;
         await new Promise<void>((res) => {
-          if (tmpImg.complete && tmpImg.naturalWidth > 0) {res();return;}
+          if (tmpImg.complete && tmpImg.naturalWidth > 0) {
+            res();
+            return;
+          }
           tmpImg.onload = () => res();
           tmpImg.onerror = () => res();
         });
         URL.revokeObjectURL(blobUrl);
         if (tmpImg.naturalWidth > 0) logoImg = tmpImg;
-      } catch (_) {logoImg = null;}
+      } catch (_) {
+        logoImg = null;
+      }
     }
 
     // ── Pre-compute a single fixed canvas font size for ALL subtitle segments ────────────────────
@@ -662,8 +715,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
         const maxTH = bH - padY * 2;
 
         // With 3-line max paging, font size is computed for max 3 lines fitting in the box
-        const longestText = scriptData.segments.reduce((best, seg) =>
-        seg.text.length > best.length ? seg.text : best, "");
+        const longestText = scriptData.segments.reduce(
+          (best, seg) => (seg.text.length > best.length ? seg.text : best),
+          "",
+        );
 
         const tc = document.createElement("canvas").getContext("2d")!;
         let fs = Math.round(bH * 0.35);
@@ -676,8 +731,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
           let cur = "";
           for (const w of words) {
             const tl = cur ? `${cur} ${w}` : w;
-            if (tc.measureText(tl).width > maxTW && cur) {lines.push(cur);cur = w;} else
-            cur = tl;
+            if (tc.measureText(tl).width > maxTW && cur) {
+              lines.push(cur);
+              cur = w;
+            } else cur = tl;
           }
           if (cur) lines.push(cur);
           // Only need to fit max 3 lines (paging handles the rest)
@@ -697,7 +754,6 @@ export const ResultView: React.FC<ResultViewProps> = ({
     logoAngleRef.current = 0;
     let lastFrameTime = performance.now();
 
-
     // Low-end GPU optimization flag: reduces shadowBlur & skips expensive glow layers for 480p/720p
     const isLowEndRender = quality.fps < 30;
 
@@ -715,13 +771,16 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
       // Low-end: disable expensive anti-aliasing interpolation
       if (isLowEndRender) {
-        ctx.imageSmoothingQuality = 'low';
+        ctx.imageSmoothingQuality = "low";
       }
 
       // Draw video frame — crop source to match output ratio
       const srcW = videoEl.videoWidth || rawW;
       const srcH = videoEl.videoHeight || rawH;
-      let srcCropX = 0,srcCropY = 0,srcCropW = srcW,srcCropH = srcH;
+      let srcCropX = 0,
+        srcCropY = 0,
+        srcCropW = srcW,
+        srcCropH = srcH;
       const curEditorState = editorStateRef.current;
       if (curEditorState.ratio !== "auto") {
         const targetAR = outW / outH;
@@ -740,13 +799,18 @@ export const ResultView: React.FC<ResultViewProps> = ({
       // Color grading via ctx.filter is GPU-accelerated — no CPU penalty, so use FULL intensity for color match
       const smoothGradeScale = 1;
       const bypassBoost = curEditorState.bypass
-        ? { contrast: 15 * smoothGradeScale, brightness: 5 * smoothGradeScale, saturate: 15 * smoothGradeScale, hue: 5 * smoothGradeScale }
+        ? {
+            contrast: 15 * smoothGradeScale,
+            brightness: 5 * smoothGradeScale,
+            saturate: 15 * smoothGradeScale,
+            hue: 5 * smoothGradeScale,
+          }
         : { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
       const contrast = 100 + (gradePreset.contrast - 100) * smoothGradeScale + bypassBoost.contrast;
       const brightness = 100 + (gradePreset.brightness - 100) * smoothGradeScale + bypassBoost.brightness;
       const saturate = 100 + (gradePreset.saturate - 100) * smoothGradeScale + bypassBoost.saturate;
       const hue = gradePreset.hue * smoothGradeScale + bypassBoost.hue;
-      const sepia = (gradePreset.sepia || 0);
+      const sepia = gradePreset.sepia || 0;
       // Low-end: only contrast+brightness (skip saturate/hue-rotate/sepia to reduce GPU shader cost by ~60%)
       if (isLowEndRender) {
         ctx.filter = `contrast(${contrast}%) brightness(${brightness}%)`;
@@ -808,7 +872,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
         const blurY = canvas.height * (blurSettings.y / 100) - blurH / 2;
         const blurClampedX = Math.max(0, Math.min(canvas.width - blurW, blurX));
         const blurClampedY = Math.max(0, Math.min(canvas.height - blurH, blurY));
-        const blurAmount = Math.round(blurSettings.opacity / 100 * 20);
+        const blurAmount = Math.round((blurSettings.opacity / 100) * 20);
 
         if (isLowEndRender) {
           // LOW-END: Dark overlay only — NO blur filter (GPU blur is too expensive on low-end)
@@ -839,7 +903,6 @@ export const ResultView: React.FC<ResultViewProps> = ({
           ctx.restore();
         }
       }
-
 
       // Draw subtitles on canvas (burns into recorded output)
       // Sub box = EXACT blur box pixel dimensions (1000% fit)
@@ -879,8 +942,11 @@ export const ResultView: React.FC<ResultViewProps> = ({
           for (const w of words2) {
             const tl = cl2 ? `${cl2} ${w}` : w;
             if (ctx.measureText(tl).width > maxTextW - baseFontSize * 0.6 && cl2) {
-              lines2.push(cl2);cl2 = w;
-            } else {cl2 = tl;}
+              lines2.push(cl2);
+              cl2 = w;
+            } else {
+              cl2 = tl;
+            }
           }
           if (cl2) lines2.push(cl2);
           const lineH2 = baseFontSize * 1.45;
@@ -945,9 +1011,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
           for (let p = 0; p < totalPages; p++) {
             pages.push(fittedLines.slice(p * MAX_LINES, (p + 1) * MAX_LINES));
           }
-          const pageCharCounts = pages.map(lines =>
-            Math.max(lines.join('').replace(/\s+/g, '').length, 1)
-          );
+          const pageCharCounts = pages.map((lines) => Math.max(lines.join("").replace(/\s+/g, "").length, 1));
           const totalChars = pageCharCounts.reduce((s, c) => s + c, 0);
           // Build cumulative thresholds: page N starts after sum of previous pages' durations
           let cumulative = 0;
@@ -1004,8 +1068,6 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.restore();
       }
 
-
-
       // Draw logo with SPIN + NEON GLOW support (rotate around center) — top-right corner
       if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
         const logoSize = canvas.width * (logo.size / 100);
@@ -1015,12 +1077,12 @@ export const ResultView: React.FC<ResultViewProps> = ({
         // Advance spin angle: full 360° rotation every 8 seconds
         if (logo.spin) {
           const spinScale = isLowEndRender ? 0.62 : 1;
-          logoAngleRef.current = (logoAngleRef.current + 360 / 8 * dt * spinScale) % 360;
+          logoAngleRef.current = (logoAngleRef.current + (360 / 8) * dt * spinScale) % 360;
         }
 
         // === Draw multi-layer animated neon glow ring (NOT rotated — matches CSS preview) ===
         // Animate neon hue using logoAngleRef so color cycles like the preview CSS animation
-        const neonHue = logoAngleRef.current * 1.5 % 360;
+        const neonHue = (logoAngleRef.current * 1.5) % 360;
         const animatedNeonColor = `hsl(${neonHue}, 100%, 75%)`;
         const animatedNeonColor2 = `hsl(${(neonHue + 120) % 360}, 100%, 75%)`;
 
@@ -1062,7 +1124,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.save();
         ctx.translate(logoCX, logoCY);
         if (logo.spin) {
-          ctx.rotate(logoAngleRef.current * Math.PI / 180);
+          ctx.rotate((logoAngleRef.current * Math.PI) / 180);
         }
         // CRITICAL: Reset shadow before drawing the image so it stays sharp (not blurry)
         ctx.shadowColor = "transparent";
@@ -1078,7 +1140,6 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.globalAlpha = 1.0;
         ctx.drawImage(logoImg, -logoSize / 2, -logoSize / 2, logoSize, logoSize);
         ctx.restore();
-
       }
     };
 
@@ -1156,7 +1217,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
     // ║  LOCK ID: AV-SYNC-8000-SMOOTH-v3                                   ║
     // ╚══════════════════════════════════════════════════════════════════════╝
     // 🔐 2-STEP SECURITY GUARD — AV-SYNC-8000-SMOOTH-v3
-    if (!_nvGuard()) {console.error('[NV-LOCK] AV-SYNC-8000: Unauthorized. Admin unlock required.');return;}
+    if (!_nvGuard()) {
+      console.error("[NV-LOCK] AV-SYNC-8000: Unauthorized. Admin unlock required.");
+      return;
+    }
     let animFrame: number;
     let lastTsIdx = 0;
     const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
@@ -1164,7 +1228,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
     const syncLoop = () => {
       const av = audioRef.current;
       const vv = videoRef.current;
-      if (!av || !vv) {animFrame = requestAnimationFrame(syncLoop);return;}
+      if (!av || !vv) {
+        animFrame = requestAnimationFrame(syncLoop);
+        return;
+      }
 
       // Auto-recover if video stalls while audio is playing
       if (!av.paused && vv.paused && !vv.ended) {
@@ -1230,7 +1297,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
             } else if (currentTime >= audioTs[maxIdx].end) {
               // Tail zone after last speech segment
               const lastSeg = getSeg(maxIdx);
-              const lastVEnd = lastSeg?.vEnd === -1 ? vv.duration : lastSeg?.vEnd ?? vv.duration;
+              const lastVEnd = lastSeg?.vEnd === -1 ? vv.duration : (lastSeg?.vEnd ?? vv.duration);
               const tailAudio = Math.max(av.duration - audioTs[maxIdx].end, 0.001);
               const tailVideo = Math.max(vv.duration - lastVEnd, 0);
               const tailProgress = clamp((currentTime - audioTs[maxIdx].end) / tailAudio, 0, 1);
@@ -1245,7 +1312,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
               const prevSeg = getSeg(prevIdx);
               const nextSeg = getSeg(nextIdx);
-              const prevVEnd = prevSeg?.vEnd === -1 ? vv.duration : prevSeg?.vEnd ?? vv.currentTime;
+              const prevVEnd = prevSeg?.vEnd === -1 ? vv.duration : (prevSeg?.vEnd ?? vv.currentTime);
               const nextVStart = nextSeg?.vStart ?? prevVEnd;
 
               const gapAudio = Math.max(audioTs[nextIdx].start - audioTs[prevIdx].end, 0.001);
@@ -1319,7 +1386,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
       }
       // Cycle neon border hue every rAF frame (smooth color cycling)
       subNeonHueRef.current = (subNeonHueRef.current + 0.8) % 360;
-      containerRef.current?.style.setProperty('--neon-hue', `hsl(${subNeonHueRef.current}, 100%, 75%)`);
+      containerRef.current?.style.setProperty("--neon-hue", `hsl(${subNeonHueRef.current}, 100%, 75%)`);
       animFrame = requestAnimationFrame(syncLoop);
     };
     // ╚══ END TWO-FACTOR LOCK: AV-SYNC-8000-SMOOTH-v3 ══╝
@@ -1339,7 +1406,11 @@ export const ResultView: React.FC<ResultViewProps> = ({
     // ║  LOCK ID: RECORD-PIPELINE-AUTO-v1                                  ║
     // ╚══════════════════════════════════════════════════════════════════════╝
     // 🔐 2-STEP SECURITY GUARD — RECORD-PIPELINE-AUTO-v1
-    if (_nvGuard()) {setTimeout(() => startRecapRecording(), 400);} else {console.error('[NV-LOCK] RECORD-PIPELINE: Unauthorized. Admin unlock required.');}
+    if (_nvGuard()) {
+      setTimeout(() => startRecapRecording(), 400);
+    } else {
+      console.error("[NV-LOCK] RECORD-PIPELINE: Unauthorized. Admin unlock required.");
+    }
 
     return () => {
       cancelAnimationFrame(animFrame);
@@ -1360,14 +1431,16 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
   // Construct video styles based on editor state
   const activeGrade = COLOR_GRADE_PRESETS[editorState.colorGrade] || COLOR_GRADE_PRESETS["OFF"];
-  const bypassBoostCSS = editorState.bypass ? { contrast: 15, brightness: 5, saturate: 15, hue: 5 } : { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
+  const bypassBoostCSS = editorState.bypass
+    ? { contrast: 15, brightness: 5, saturate: 15, hue: 5 }
+    : { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
   const videoStyles: React.CSSProperties = {
     filter: `contrast(${activeGrade.contrast + bypassBoostCSS.contrast}%) brightness(${activeGrade.brightness + bypassBoostCSS.brightness}%) saturate(${activeGrade.saturate + bypassBoostCSS.saturate}%) hue-rotate(${activeGrade.hue + bypassBoostCSS.hue}deg) sepia(${activeGrade.sepia || 0}%)`,
     transform: `${editorState.flip ? "scaleX(-1)" : "scaleX(1)"} ${editorState.bypass ? "scale(1.03)" : "scale(1)"}`,
     objectFit: editorState.ratio === "auto" ? "contain" : "cover",
     width: "100%",
     height: "100%",
-    transition: "all 0.3s ease"
+    transition: "all 0.3s ease",
   };
 
   const containerStyles: React.CSSProperties = {
@@ -1382,86 +1455,91 @@ export const ResultView: React.FC<ResultViewProps> = ({
     justifyContent: "center",
     backgroundColor: "#000",
     position: "relative",
-    userSelect: "none"
+    userSelect: "none",
   };
 
   return (
     <>
       {/* Hidden Audio Element for Recording Purpose, but rendered in DOM */}
-      {audioUrl &&
-      <audio
-        ref={audioRef}
-        src={audioUrl}
-        crossOrigin={isLocalSource(audioUrl) ? undefined : "anonymous"}
-        style={{ position: "absolute", opacity: 0, pointerEvents: "none" }}
-        onLoadedMetadata={() => {
-          // Recompute segment timestamps from scratch using REAL audio duration (from browser).
-          // Server-side PCM byte estimation can be off by ±5–10%, causing A/V sync drift.
-          // Client-side recomputation with real duration guarantees 8000% match accuracy.
-          const realDuration = audioRef.current?.duration;
-          if (!realDuration || realDuration <= 0 || !isFinite(realDuration)) return;
-          const segs = syncSegmentsRef.current;
-          if (!segs || segs.length === 0) return;
+      {audioUrl && (
+        <audio
+          ref={audioRef}
+          src={audioUrl}
+          crossOrigin={isLocalSource(audioUrl) ? undefined : "anonymous"}
+          style={{ position: "absolute", opacity: 0, pointerEvents: "none" }}
+          onLoadedMetadata={() => {
+            // Recompute segment timestamps from scratch using REAL audio duration (from browser).
+            // Server-side PCM byte estimation can be off by ±5–10%, causing A/V sync drift.
+            // Client-side recomputation with real duration guarantees 8000% match accuracy.
+            const realDuration = audioRef.current?.duration;
+            if (!realDuration || realDuration <= 0 || !isFinite(realDuration)) return;
+            const segs = syncSegmentsRef.current;
+            if (!segs || segs.length === 0) return;
 
-          // Check if exact timestamps already exist from TTS response
-          if (audioTimestampsRef.current.length > 0) {
-            // Exact timestamps from TTS exist — scale proportionally to real browser duration
-            const lastEnd = audioTimestampsRef.current[audioTimestampsRef.current.length - 1]?.end;
-            if (lastEnd && lastEnd > 0) {
-              const scale = realDuration / lastEnd;
-              audioTimestampsRef.current = audioTimestampsRef.current.map(t => ({
-                ...t,
-                start: parseFloat((t.start * scale).toFixed(3)),
-                end: parseFloat((t.end * scale).toFixed(3))
-              }));
-              console.log(`[TTS] Exact timestamps scaled: ${audioTimestampsRef.current.length} segs, scale=${scale.toFixed(4)}, realDuration=${realDuration.toFixed(2)}s`);
+            // Check if exact timestamps already exist from TTS response
+            if (audioTimestampsRef.current.length > 0) {
+              // Exact timestamps from TTS exist — scale proportionally to real browser duration
+              const lastEnd = audioTimestampsRef.current[audioTimestampsRef.current.length - 1]?.end;
+              if (lastEnd && lastEnd > 0) {
+                const scale = realDuration / lastEnd;
+                audioTimestampsRef.current = audioTimestampsRef.current.map((t) => ({
+                  ...t,
+                  start: parseFloat((t.start * scale).toFixed(3)),
+                  end: parseFloat((t.end * scale).toFixed(3)),
+                }));
+                console.log(
+                  `[TTS] Exact timestamps scaled: ${audioTimestampsRef.current.length} segs, scale=${scale.toFixed(4)}, realDuration=${realDuration.toFixed(2)}s`,
+                );
+              }
+            } else {
+              // No exact timestamps — fall back to character-count proportional estimation
+              // Character count (excluding spaces) correlates better with TTS speech duration
+              // MUST match gemini-tts backend countChars() exactly
+              const countChars = (text: string): number => {
+                return Math.max((text || "").replace(/\s+/g, "").length, 1);
+              };
+              const segCharCounts = segs.map((s: any) => countChars(s.text));
+              const totalChars = segCharCounts.reduce((sum: number, w: number) => sum + w, 0);
+
+              let cursor = 0;
+              audioTimestampsRef.current = segs.map((seg: any, idx: number) => {
+                const pct = totalChars > 0 ? segCharCounts[idx] / totalChars : 1 / segs.length;
+                const start = parseFloat(cursor.toFixed(3));
+                cursor += pct * realDuration;
+                const end = parseFloat((idx === segs.length - 1 ? realDuration : cursor).toFixed(3));
+                return { index: idx, start, end };
+              });
+              console.log(
+                `[TTS] Char-count fallback timestamps: ${segs.length} segs, realDuration=${realDuration.toFixed(2)}s, totalChars=${totalChars}`,
+              );
             }
-          } else {
-            // No exact timestamps — fall back to character-count proportional estimation
-            // Character count (excluding spaces) correlates better with TTS speech duration
-            // MUST match gemini-tts backend countChars() exactly
-            const countChars = (text: string): number => {
-              return Math.max((text || '').replace(/\s+/g, '').length, 1);
-            };
-            const segCharCounts = segs.map((s: any) => countChars(s.text));
-            const totalChars = segCharCounts.reduce((sum: number, w: number) => sum + w, 0);
 
-            let cursor = 0;
-            audioTimestampsRef.current = segs.map((seg: any, idx: number) => {
-              const pct = totalChars > 0 ? segCharCounts[idx] / totalChars : 1 / segs.length;
-              const start = parseFloat(cursor.toFixed(3));
-              cursor += pct * realDuration;
-              const end = parseFloat((idx === segs.length - 1 ? realDuration : cursor).toFixed(3));
-              return { index: idx, start, end };
-            });
-            console.log(`[TTS] Char-count fallback timestamps: ${segs.length} segs, realDuration=${realDuration.toFixed(2)}s, totalChars=${totalChars}`);
-          }
-
-          // === DYNAMIC SILENCE GAP INJECTION ===
-          // Shrink each segment's end to create inter-segment gaps where subtitles hide.
-          // This mimics natural speech: subtitle appears during speech, disappears during pauses.
-          // Gap size is proportional to segment duration with punctuation awareness.
-          if (audioTimestampsRef.current.length > 1) {
-            const ts = audioTimestampsRef.current;
-            audioTimestampsRef.current = ts.map((t, idx) => {
-              if (idx === ts.length - 1) return t; // last segment: no trailing gap needed
-              const segDur = t.end - t.start;
-              const nextStart = ts[idx + 1].start;
-              // Determine gap based on segment text ending punctuation
-              const segText = ((segs[idx] as any)?.text || '').trim();
-              const lastChar = segText.slice(-1);
-              let gapRatio = 0.12; // default 12% gap
-              if ('.!?။'.includes(lastChar)) gapRatio = 0.18; // sentence end: larger pause
-              else if (',;:'.includes(lastChar)) gapRatio = 0.08; // comma: smaller pause
-              const gap = Math.min(segDur * gapRatio, 0.5); // cap at 500ms
-              const newEnd = parseFloat(Math.max(t.start + 0.15, nextStart - gap).toFixed(3));
-              return { ...t, end: newEnd };
-            });
-            console.log(`[TTS] Silence gaps injected: ${ts.length} segs — subtitles will hide during pauses`);
-          }
-        }} />
-
-      }
+            // === DYNAMIC SILENCE GAP INJECTION ===
+            // Shrink each segment's end to create inter-segment gaps where subtitles hide.
+            // This mimics natural speech: subtitle appears during speech, disappears during pauses.
+            // Gap size is proportional to segment duration with punctuation awareness.
+            if (audioTimestampsRef.current.length > 1) {
+              const ts = audioTimestampsRef.current;
+              audioTimestampsRef.current = ts.map((t, idx) => {
+                if (idx === ts.length - 1) return t; // last segment: no trailing gap needed
+                const segDur = t.end - t.start;
+                const nextStart = ts[idx + 1].start;
+                // Determine gap based on segment text ending punctuation
+                const segText = ((segs[idx] as any)?.text || "").trim();
+                const lastChar = segText.slice(-1);
+                let gapRatio = 0.12; // default 12% gap
+                if (".!?။".includes(lastChar))
+                  gapRatio = 0.18; // sentence end: larger pause
+                else if (",;:".includes(lastChar)) gapRatio = 0.08; // comma: smaller pause
+                const gap = Math.min(segDur * gapRatio, 0.5); // cap at 500ms
+                const newEnd = parseFloat(Math.max(t.start + 0.15, nextStart - gap).toFixed(3));
+                return { ...t, end: newEnd };
+              });
+              console.log(`[TTS] Silence gaps injected: ${ts.length} segs — subtitles will hide during pauses`);
+            }
+          }}
+        />
+      )}
 
       <div className="flex flex-col lg:grid lg:grid-cols-2 gap-6 h-full overflow-y-auto lg:overflow-hidden pb-20 lg:pb-0">
         <div className="order-2 lg:order-1 flex flex-col bg-charcoal-800 rounded-xl border border-charcoal-600 overflow-hidden shadow-lg h-[500px] lg:h-auto">
@@ -1469,49 +1547,49 @@ export const ResultView: React.FC<ResultViewProps> = ({
             <div className="flex space-x-1">
               <button
                 onClick={() => setActiveTab("script")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${activeTab === "script" ? "bg-charcoal-700 text-neon-cyan" : "text-gray-400"}`}>
-
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${activeTab === "script" ? "bg-charcoal-700 text-neon-cyan" : "text-gray-400"}`}
+              >
                 Full Script
               </button>
               <button
                 onClick={() => setActiveTab("segments")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${activeTab === "segments" ? "bg-charcoal-700 text-neon-cyan" : "text-gray-400"}`}>
-
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${activeTab === "segments" ? "bg-charcoal-700 text-neon-cyan" : "text-gray-400"}`}
+              >
                 Segments
               </button>
             </div>
             <div className="flex gap-2">
               <button
                 onClick={downloadSRT}
-                className="text-xs text-neon-cyan border border-neon-cyan px-2 py-1 rounded hover:bg-neon-cyan/10">
-
+                className="text-xs text-neon-cyan border border-neon-cyan px-2 py-1 rounded hover:bg-neon-cyan/10"
+              >
                 Export SRT
               </button>
             </div>
           </div>
           <div className="flex-1 overflow-hidden">
-            {activeTab === "script" ?
-            <textarea
-              className="w-full h-full p-4 bg-charcoal-800 text-gray-200 text-sm leading-relaxed focus:outline-none resize-none"
-              value={scriptData.full_script}
-              onChange={(e) => onUpdateScript(e.target.value)} /> :
-
-
-            <div className="h-full overflow-y-auto p-3 space-y-2">
-                {scriptData.segments.map((seg, idx) =>
-              <div
-                key={idx}
-                className="flex gap-3 p-2.5 rounded-lg bg-charcoal-700/30 border border-charcoal-700 hover:bg-charcoal-700 cursor-pointer"
-                onClick={() => {
-                  if (videoRef.current && !isYouTube) videoRef.current.currentTime = parseTime(seg.timestamp);
-                }}>
-
+            {activeTab === "script" ? (
+              <textarea
+                className="w-full h-full p-4 bg-charcoal-800 text-gray-200 text-sm leading-relaxed focus:outline-none resize-none"
+                value={scriptData.full_script}
+                onChange={(e) => onUpdateScript(e.target.value)}
+              />
+            ) : (
+              <div className="h-full overflow-y-auto p-3 space-y-2">
+                {scriptData.segments.map((seg, idx) => (
+                  <div
+                    key={idx}
+                    className="flex gap-3 p-2.5 rounded-lg bg-charcoal-700/30 border border-charcoal-700 hover:bg-charcoal-700 cursor-pointer"
+                    onClick={() => {
+                      if (videoRef.current && !isYouTube) videoRef.current.currentTime = parseTime(seg.timestamp);
+                    }}
+                  >
                     <span className="text-neon-cyan font-mono font-semibold text-xs shrink-0">{seg.timestamp}</span>
                     <p className="text-gray-300 text-xs leading-relaxed">{seg.text}</p>
                   </div>
-              )}
+                ))}
               </div>
-            }
+            )}
           </div>
         </div>
 
@@ -1523,26 +1601,26 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 <span className="px-2 py-0.5 bg-charcoal-700 rounded text-neon-cyan border border-neon-cyan/30 text-xs">
                   Premium Script
                 </span>
-                {editorState.bypass &&
-                <span className="px-2 py-0.5 bg-green-900/50 text-green-400 rounded border border-green-500/30 text-xs">
+                {editorState.bypass && (
+                  <span className="px-2 py-0.5 bg-green-900/50 text-green-400 rounded border border-green-500/30 text-xs">
                     Safe Mode
                   </span>
-                }
+                )}
               </div>
             </div>
             {/* Studio Header Controls */}
             <div className="flex gap-2 shrink-0">
               <button
                 onClick={() => setEditorState((s) => ({ ...s, bypass: !s.bypass }))}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${editorState.bypass ? "bg-green-500 text-black shadow-[0_0_10px_rgba(74,222,128,0.5)]" : "bg-charcoal-700 text-gray-400"}`}>
-
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${editorState.bypass ? "bg-green-500 text-black shadow-[0_0_10px_rgba(74,222,128,0.5)]" : "bg-charcoal-700 text-gray-400"}`}
+              >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth={2}
-                    d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-
+                    d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+                  />
                 </svg>
                 <span>Copyright Safe</span>
               </button>
@@ -1552,18 +1630,18 @@ export const ResultView: React.FC<ResultViewProps> = ({
           {/* Video Player & Studio Canvas */}
           <div className="flex flex-col items-center justify-center w-full bg-black rounded-xl border border-charcoal-600 overflow-hidden shadow-2xl relative p-2 md:p-4">
             {/* Recap Active / Recording Indicator */}
-            {isRecapPlaying && !isRendering &&
-            <div className="absolute top-4 left-4 z-50 flex items-center gap-2 bg-neon-cyan/20 backdrop-blur-md px-3 py-1.5 rounded-full border border-neon-cyan/60">
+            {isRecapPlaying && !isRendering && (
+              <div className="absolute top-4 left-4 z-50 flex items-center gap-2 bg-neon-cyan/20 backdrop-blur-md px-3 py-1.5 rounded-full border border-neon-cyan/60">
                 <div className="w-3 h-3 bg-neon-cyan rounded-full animate-pulse"></div>
                 <span className="text-neon-cyan font-bold text-xs tracking-wider">RECAP ACTIVE</span>
               </div>
-            }
-            {isRendering &&
-            <div className="absolute top-4 right-4 z-50 flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-red-500/50">
+            )}
+            {isRendering && (
+              <div className="absolute top-4 right-4 z-50 flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-red-500/50">
                 <div className="w-3 h-3 bg-red-600 rounded-full animate-pulse shadow-[0_0_10px_rgba(220,38,38,0.8)]"></div>
                 <span className="text-red-400 font-bold text-xs tracking-wider">REC</span>
               </div>
-            }
+            )}
 
             <div
               ref={containerRef}
@@ -1573,225 +1651,233 @@ export const ResultView: React.FC<ResultViewProps> = ({
               onMouseUp={handleDragEnd}
               onMouseLeave={handleDragEnd}
               onTouchMove={handleDragMove}
-              onTouchEnd={handleDragEnd}>
-
+              onTouchEnd={handleDragEnd}
+            >
               {/* Logo Layer — preset position system (UL/UR/LL/LR) */}
               <div
                 className="absolute z-30 pointer-events-none"
                 style={{
                   left: `${logo.x}%`,
                   top: `${logo.y}%`,
-                  transform: 'translate(-50%, -50%)',
+                  transform: "translate(-50%, -50%)",
                   width: `${logo.size}%`,
-                  transition: "all 0.4s ease"
-                }}>
-
-                {logo.url ?
-                <div
-                  className={`relative w-full aspect-square ${logo.isCircle ? "rounded-full" : "rounded-none"} overflow-hidden`}
-                  style={{
-                    boxShadow: `0 0 20px ${logo.neonColor}, 0 0 40px ${logo.neonColor}, 0 0 60px ${logo.neonColor}55`,
-                    border: `2.5px solid ${logo.neonColor}`
-                  }}>
-
+                  transition: "all 0.4s ease",
+                }}
+              >
+                {logo.url ? (
+                  <div
+                    className={`relative w-full aspect-square ${logo.isCircle ? "rounded-full" : "rounded-none"} overflow-hidden`}
+                    style={{
+                      boxShadow: `0 0 20px ${logo.neonColor}, 0 0 40px ${logo.neonColor}, 0 0 60px ${logo.neonColor}55`,
+                      border: `2.5px solid ${logo.neonColor}`,
+                    }}
+                  >
                     <img
-                    src={logo.url}
-                    className={`w-full h-full object-cover ${logo.spin ? "animate-[spin_8s_linear_infinite]" : ""}`}
-                    alt="Logo"
-                    draggable={false} />
-
-                  </div> : (
-
-                /* Default AppLogo with spin effect when no custom logo uploaded */
-                <div
-                  className={`relative w-full aspect-square flex items-center justify-center ${logo.spin ? "animate-[spin_8s_linear_infinite]" : ""}`}>
-
+                      src={logo.url}
+                      className={`w-full h-full object-cover ${logo.spin ? "animate-[spin_8s_linear_infinite]" : ""}`}
+                      alt="Logo"
+                      draggable={false}
+                    />
+                  </div>
+                ) : (
+                  /* Default AppLogo with spin effect when no custom logo uploaded */
+                  <div
+                    className={`relative w-full aspect-square flex items-center justify-center ${logo.spin ? "animate-[spin_8s_linear_infinite]" : ""}`}
+                  >
                     <AppLogo size={64} />
-                  </div>)
-                }
+                  </div>
+                )}
               </div>
 
               {/* Blur Box Layer — subtitle with cinematic pop-in + neon border cycling */}
-              {blurSettings.enabled &&
-              <div
-                onMouseDown={handleBlurDragStart}
-                onTouchStart={handleBlurDragStart}
-                className="absolute z-20 cursor-move flex items-center justify-center"
-                style={{
-                  left: `${blurSettings.x}%`,
-                  top: `${blurSettings.y}%`,
-                  transform: 'translate(-50%, -50%)',
-                  width: `${blurSettings.width}%`,
-                  height: `${blurSettings.height}%`,
-                  backdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
-                  WebkitBackdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
-                  // Dynamic neon cycling border (replaces static dashed border)
-                  border: `2.5px solid var(--neon-hue, hsl(180,100%,75%))`,
-                  boxShadow: `0 0 14px var(--neon-hue, hsl(180,100%,75%)), 0 0 28px color-mix(in srgb, var(--neon-hue, hsl(180,100%,75%)) 40%, transparent), inset 0 0 8px color-mix(in srgb, var(--neon-hue, hsl(180,100%,75%)) 20%, transparent)`,
-                  touchAction: 'none',
-                  boxSizing: 'border-box',
-                  overflow: 'hidden',
-                  borderRadius: '6px',
-                  transition: 'border-color 0.1s, box-shadow 0.1s'
-                }}>
-
-                  {currentSubtitle &&
+              {blurSettings.enabled && (
                 <div
-                  className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                  onMouseDown={handleBlurDragStart}
+                  onTouchStart={handleBlurDragStart}
+                  className="absolute z-20 cursor-move flex items-center justify-center"
                   style={{
-                    backgroundColor: subSettings.bgColor,
-                    borderRadius: "inherit",
-                    padding: "4% 4%"
-                  }}>
-
+                    left: `${blurSettings.x}%`,
+                    top: `${blurSettings.y}%`,
+                    transform: "translate(-50%, -50%)",
+                    width: `${blurSettings.width}%`,
+                    height: `${blurSettings.height}%`,
+                    backdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
+                    WebkitBackdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
+                    // Dynamic neon cycling border (replaces static dashed border)
+                    border: `2.5px solid var(--neon-hue, hsl(180,100%,75%))`,
+                    boxShadow: `0 0 14px var(--neon-hue, hsl(180,100%,75%)), 0 0 28px color-mix(in srgb, var(--neon-hue, hsl(180,100%,75%)) 40%, transparent), inset 0 0 8px color-mix(in srgb, var(--neon-hue, hsl(180,100%,75%)) 20%, transparent)`,
+                    touchAction: "none",
+                    boxSizing: "border-box",
+                    overflow: "hidden",
+                    borderRadius: "6px",
+                    transition: "border-color 0.1s, box-shadow 0.1s",
+                  }}
+                >
+                  {currentSubtitle && (
+                    <div
+                      className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                      style={{
+                        backgroundColor: subSettings.bgColor,
+                        borderRadius: "inherit",
+                        padding: "4% 4%",
+                      }}
+                    >
                       {/* key prop triggers CSS animation on every subtitle change */}
                       <div
-                    key={subtitleKey}
-                    className="w-full text-center font-bold"
-                    style={{
-                      color: subSettings.textColor,
-                      fontSize: `clamp(8px, ${subSettings.fontSize}px, 100%)`,
-                      lineHeight: 1.4,
-                      textShadow: `0 0 8px var(--neon-hue, hsl(180,100%,75%)), 0 1px 4px rgba(0,0,0,0.9)`,
-                      wordBreak: "break-word",
-                      overflowWrap: "break-word",
-                      overflow: "visible",
-                      whiteSpace: "normal",
-                      // Cinematic slide-up + fade-in on subtitle change
-                      animation: "subtitlePopin 0.25s cubic-bezier(0.22,1,0.36,1) both"
-                    }}>
-
+                        key={subtitleKey}
+                        className="w-full text-center font-bold"
+                        style={{
+                          color: subSettings.textColor,
+                          fontSize: `clamp(8px, ${subSettings.fontSize}px, 100%)`,
+                          lineHeight: 1.4,
+                          textShadow: `0 0 8px var(--neon-hue, hsl(180,100%,75%)), 0 1px 4px rgba(0,0,0,0.9)`,
+                          wordBreak: "break-word",
+                          overflowWrap: "break-word",
+                          overflow: "visible",
+                          whiteSpace: "normal",
+                          // Cinematic slide-up + fade-in on subtitle change
+                          animation: "subtitlePopin 0.25s cubic-bezier(0.22,1,0.36,1) both",
+                        }}
+                      >
                         {currentSubtitle}
                       </div>
                     </div>
-                }
+                  )}
                 </div>
-              }
-
+              )}
 
               {/* Subtitles are rendered exclusively on canvas during recording.
                                                      DOM subtitle is intentionally removed to prevent double-rendering. */}
 
-              {isYouTube && youtubeId ?
-              <iframe
-                className="w-full h-full"
-                style={{
-                  filter: videoStyles.filter,
-                  transform: videoStyles.transform
-                }}
-                src={`https://www.youtube.com/embed/${youtubeId}`}
-                title="YouTube"
-                allow="autoplay; encrypted-media"
-                allowFullScreen /> :
-
-              videoUrl ?
-              <video
-                ref={videoRef}
-                key={videoUrl}
-                src={videoUrl}
-                className="w-full h-full"
-                style={videoStyles}
-                muted={isRecapPlaying}
-                controls={!isRendering && !isRecapPlaying}
-                playsInline
-                autoPlay
-                loop={!isRecapPlaying}
-                crossOrigin={isLocalSource(videoUrl) ? undefined : "anonymous"} /> :
-
-
-              <div className="text-gray-500 py-20">Video Not Available</div>
-              }
+              {isYouTube && youtubeId ? (
+                <iframe
+                  className="w-full h-full"
+                  style={{
+                    filter: videoStyles.filter,
+                    transform: videoStyles.transform,
+                  }}
+                  src={`https://www.youtube.com/embed/${youtubeId}`}
+                  title="YouTube"
+                  allow="autoplay; encrypted-media"
+                  allowFullScreen
+                />
+              ) : videoUrl ? (
+                <video
+                  ref={videoRef}
+                  key={videoUrl}
+                  src={videoUrl}
+                  className="w-full h-full"
+                  style={videoStyles}
+                  muted={isRecapPlaying}
+                  controls={!isRendering && !isRecapPlaying}
+                  playsInline
+                  autoPlay
+                  loop={!isRecapPlaying}
+                  crossOrigin={isLocalSource(videoUrl) ? undefined : "anonymous"}
+                />
+              ) : (
+                <div className="text-gray-500 py-20">Video Not Available</div>
+              )}
 
               {/* ── DOM: Video Border overlay ─────────────────────── */}
-              {videoBorder.enabled &&
-              <div
-                className="absolute inset-0 pointer-events-none z-30"
-                style={{
-                  boxShadow: `inset 0 0 0 ${videoBorder.width}px ${videoBorder.color}, inset 0 0 ${videoBorder.width * 2}px ${videoBorder.color}55`,
-                  borderRadius: "inherit"
-                }} />
-
-              }
+              {videoBorder.enabled && (
+                <div
+                  className="absolute inset-0 pointer-events-none z-30"
+                  style={{
+                    boxShadow: `inset 0 0 0 ${videoBorder.width}px ${videoBorder.color}, inset 0 0 ${videoBorder.width * 2}px ${videoBorder.color}55`,
+                    borderRadius: "inherit",
+                  }}
+                />
+              )}
 
               {/* ── DOM: Timeline Bar (bottom progress bar) ─────────── */}
-              {timelineBar.enabled && audioRef.current &&
-              <div
-                className="absolute bottom-0 left-0 right-0 z-30 pointer-events-none"
-                style={{ height: `${timelineBar.thickness}px` }}>
-
+              {timelineBar.enabled && audioRef.current && (
+                <div
+                  className="absolute bottom-0 left-0 right-0 z-30 pointer-events-none"
+                  style={{ height: `${timelineBar.thickness}px` }}
+                >
                   {/* Track */}
                   <div className="absolute inset-0 bg-black/30" />
                   {/* Fill — driven by audio currentTime via CSS custom property */}
                   <div
-                  className="absolute inset-y-0 left-0 transition-none"
-                  style={{
-                    width: audioRef.current?.duration ?
-                    `${Math.min(100, audioRef.current.currentTime / audioRef.current.duration * 100)}%` :
-                    "0%",
-                    backgroundColor: timelineBar.color,
-                    boxShadow: `0 0 ${timelineBar.thickness * 2}px ${timelineBar.color}`
-                  }} />
-
+                    className="absolute inset-y-0 left-0 transition-none"
+                    style={{
+                      width: audioRef.current?.duration
+                        ? `${Math.min(100, (audioRef.current.currentTime / audioRef.current.duration) * 100)}%`
+                        : "0%",
+                      backgroundColor: timelineBar.color,
+                      boxShadow: `0 0 ${timelineBar.thickness * 2}px ${timelineBar.color}`,
+                    }}
+                  />
                 </div>
-              }
+              )}
             </div>
           </div>
 
           {/* Rendered Output Video + Download - OUTSIDE constrained container */}
-          {renderedBlobUrl &&
-          <div className="w-full flex flex-col items-center gap-4 p-4 bg-charcoal-800 rounded-xl border border-neon-cyan/50 shadow-[0_0_20px_rgba(0,229,255,0.2)]">
+          {renderedBlobUrl && (
+            <div className="w-full flex flex-col items-center gap-4 p-4 bg-charcoal-800 rounded-xl border border-neon-cyan/50 shadow-[0_0_20px_rgba(0,229,255,0.2)]">
               <div className="text-center">
-                <h3 className="text-lg font-bold text-neon-cyan mb-1">✅ Recap Video Ready! <span className="text-amber-400 text-sm font-semibold">({creditPerMinRate}CR/MIN)</span></h3>
+                <h3 className="text-lg font-bold text-neon-cyan mb-1">
+                  ✅ Recap Video Ready!{" "}
+                  <span className="text-amber-400 text-sm font-semibold">({creditPerMinRate}CR/MIN)</span>
+                </h3>
                 <p className="text-xs text-gray-400"> သင့်ရဲ့ recap video အဆင်သင့်ဖြစ်ပါပြီ</p>
               </div>
               <video
-              src={renderedBlobUrl}
-              className="w-full max-h-[70vh] rounded-lg bg-black"
-              controls
-              playsInline
-              autoPlay />
+                src={renderedBlobUrl}
+                className="w-full max-h-[70vh] rounded-lg bg-black"
+                controls
+                playsInline
+                autoPlay
+              />
 
               <a
-              href={renderedBlobUrl}
-              download={`recap_${scriptData.title.replace(/\s+/g, "_")}.mp4`}
-              className="flex items-center justify-center gap-2 px-8 py-4 bg-neon-cyan hover:bg-neon-hover text-charcoal-900 font-black rounded-xl transition-colors shadow-[0_0_25px_rgba(0,229,255,0.5)] text-lg w-full max-w-lg">
-
+                href={renderedBlobUrl}
+                download={`recap_${scriptData.title.replace(/\s+/g, "_")}.mp4`}
+                className="flex items-center justify-center gap-2 px-8 py-4 bg-neon-cyan hover:bg-neon-hover text-charcoal-900 font-black rounded-xl transition-colors shadow-[0_0_25px_rgba(0,229,255,0.5)] text-lg w-full max-w-lg"
+              >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                  />
                 </svg>
                 Download Recap Video
               </a>
               <button
-              onClick={() => setRenderedBlobUrl(null)}
-              className="flex items-center justify-center gap-2 px-6 py-3 bg-charcoal-700 hover:bg-charcoal-600 text-gray-300 font-bold rounded-xl transition-colors w-full max-w-lg border border-charcoal-500">
-
+                onClick={() => setRenderedBlobUrl(null)}
+                className="flex items-center justify-center gap-2 px-6 py-3 bg-charcoal-700 hover:bg-charcoal-600 text-gray-300 font-bold rounded-xl transition-colors w-full max-w-lg border border-charcoal-500"
+              >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" />
                 </svg>
                 Back to Editor
               </button>
             </div>
-          }
+          )}
 
           {/* Editor Toolbar */}
-          {!renderedBlobUrl &&
-          <div className="bg-charcoal-800 rounded-xl border border-charcoal-600 p-4 space-y-5">
+          {!renderedBlobUrl && (
+            <div className="bg-charcoal-800 rounded-xl border border-charcoal-600 p-4 space-y-5">
               {/* Visual Settings */}
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Visuals & Filters</h4>
                   <button
-                  onClick={() => setEditorState((s) => ({ ...s, flip: !s.flip }))}
-                  className={`p-2 rounded hover:bg-charcoal-700 ${editorState.flip ? "text-neon-cyan bg-charcoal-700" : "text-gray-400"}`}
-                  title="Flip Horizontal">
-
+                    onClick={() => setEditorState((s) => ({ ...s, flip: !s.flip }))}
+                    className={`p-2 rounded hover:bg-charcoal-700 ${editorState.flip ? "text-neon-cyan bg-charcoal-700" : "text-gray-400"}`}
+                    title="Flip Horizontal"
+                  >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                      />
                     </svg>
                   </button>
                 </div>
@@ -1799,59 +1885,66 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 {/* 🎬 Export Quality Selector */}
                 <div className="mb-4 p-3 rounded-lg border border-neon-cyan/30 bg-[sidebar-accent-foreground] bg-blue-950">
                   <p className="font-semibold text-neon-cyan mb-2 text-base">🎬 Export Quality</p>
-                  <Select value={exportQuality} onValueChange={(val) => {
+                  <Select
+                    value={exportQuality}
+                    onValueChange={(val) => {
                       setExportQuality(val);
-                      if (val === '480p' || val === '720p') {
-                        setEditorState(prev => ({ ...prev, colorGrade: "GOLDEN" }));
-                        setLogo(prev => ({ ...prev, spin: false }));
-                      } else if (val === '1080p') {
-                        setEditorState(prev => ({ ...prev, colorGrade: "PINK" }));
-                        setLogo(prev => ({ ...prev, spin: true }));
-                        setTimelineBar(prev => ({ ...prev, thickness: 9 }));
+                      if (val === "480p" || val === "720p") {
+                        setEditorState((prev) => ({ ...prev, colorGrade: "GOLDEN" }));
+                        setLogo((prev) => ({ ...prev, spin: false }));
+                      } else if (val === "1080p") {
+                        setEditorState((prev) => ({ ...prev, colorGrade: "PINK" }));
+                        setLogo((prev) => ({ ...prev, spin: true }));
+                        setTimelineBar((prev) => ({ ...prev, thickness: 9 }));
                       }
-                    }}>
+                    }}
+                  >
                     <SelectTrigger className="w-full bg-background border-border text-foreground text-xs h-9">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {Object.entries(EXPORT_QUALITY_OPTIONS).map(([key, opt]) =>
-                    <SelectItem key={key} value={key} className="text-xs">{opt.label}</SelectItem>
-                    )}
+                      {Object.entries(EXPORT_QUALITY_OPTIONS).map(([key, opt]) => (
+                        <SelectItem key={key} value={key} className="text-xs">
+                          {opt.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
-                  <p className="mt-1.5 text-base text-neon-rose">⚡ Device ပေါ်မူတည်ပြီး resolution ကို ရွေးပါ။ Low-end phone ဆိုရင် 480p/720p ရွေးပါ။</p>
+                  <p className="mt-1.5 text-base text-neon-rose">
+                    ⚡ Device ပေါ်မူတည်ပြီး resolution ကို ရွေးပါ။ Low-end phone ဆိုရင် 480p/720p ရွေးပါ။
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4">
-                  {["auto", "16/9", "9/16", "1/1"].map((r) =>
-                <button
-                  key={r}
-                  onClick={() => setEditorState((s) => ({ ...s, ratio: r as any }))}
-                  className={`px-3 py-2 rounded text-xs font-semibold border ${editorState.ratio === r ? "bg-neon-cyan text-charcoal-900 border-neon-cyan" : "bg-charcoal-900 text-gray-400 border-charcoal-700 hover:border-gray-500"}`}>
-
+                  {["auto", "16/9", "9/16", "1/1"].map((r) => (
+                    <button
+                      key={r}
+                      onClick={() => setEditorState((s) => ({ ...s, ratio: r as any }))}
+                      className={`px-3 py-2 rounded text-xs font-semibold border ${editorState.ratio === r ? "bg-neon-cyan text-charcoal-900 border-neon-cyan" : "bg-charcoal-900 text-gray-400 border-charcoal-700 hover:border-gray-500"}`}
+                    >
                       {r === "auto" ? "Original" : r}
                     </button>
-                )}
+                  ))}
                 </div>
 
                 {/* Auto Color Grading Presets */}
                 <div className="mt-3">
                   <p className="text-xs text-gray-500 mb-2">🎨 Auto Color Grade</p>
                   <div className="grid grid-cols-2 gap-1.5">
-                    {Object.entries(COLOR_GRADE_PRESETS).map(([key, preset]) =>
-                  <button
-                    key={key}
-                    onClick={() => setEditorState((s) => ({ ...s, colorGrade: key }))}
-                    className={`flex items-center gap-1.5 px-2 py-1.5 rounded text-xs font-semibold border transition-all ${
-                    editorState.colorGrade === key ?
-                    "bg-neon-cyan text-charcoal-900 border-neon-cyan shadow-[0_0_8px_rgba(0,229,255,0.5)]" :
-                    "bg-charcoal-900 text-gray-400 border-charcoal-700 hover:border-gray-500"}`
-                    }>
-
+                    {Object.entries(COLOR_GRADE_PRESETS).map(([key, preset]) => (
+                      <button
+                        key={key}
+                        onClick={() => setEditorState((s) => ({ ...s, colorGrade: key }))}
+                        className={`flex items-center gap-1.5 px-2 py-1.5 rounded text-xs font-semibold border transition-all ${
+                          editorState.colorGrade === key
+                            ? "bg-neon-cyan text-charcoal-900 border-neon-cyan shadow-[0_0_8px_rgba(0,229,255,0.5)]"
+                            : "bg-charcoal-900 text-gray-400 border-charcoal-700 hover:border-gray-500"
+                        }`}
+                      >
                         <span>{preset.emoji}</span>
                         <span>{preset.label}</span>
                       </button>
-                  )}
+                    ))}
                   </div>
                 </div>
               </div>
@@ -1861,70 +1954,71 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider mb-3">Logo Overlay</h4>
                 <div className="flex gap-4 items-start">
                   <div className="w-20 h-20 bg-charcoal-900 border border-charcoal-600 rounded-lg flex items-center justify-center overflow-hidden relative cursor-pointer hover:border-neon-cyan group">
-                    {logo.url ?
-                  <img src={logo.url} className="w-full h-full object-contain" /> :
-
-                  <span className="text-xs text-gray-500 text-center px-1">Upload Logo</span>
-                  }
+                    {logo.url ? (
+                      <img src={logo.url} className="w-full h-full object-contain" />
+                    ) : (
+                      <span className="text-xs text-gray-500 text-center px-1">Upload Logo</span>
+                    )}
                     <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleLogoUpload}
-                    className="absolute inset-0 opacity-0 cursor-pointer" />
-
+                      type="file"
+                      accept="image/*"
+                      onChange={handleLogoUpload}
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                    />
                   </div>
 
                   <div className="flex-1 space-y-2">
                     <div className="flex gap-2">
                       <button
-                      onClick={() => setLogo((l) => ({ ...l, isCircle: !l.isCircle }))}
-                      className={`flex-1 text-xs py-1.5 rounded border ${logo.isCircle ? "bg-charcoal-700 border-neon-cyan text-neon-cyan" : "border-charcoal-600 text-gray-500"}`}>
-
+                        onClick={() => setLogo((l) => ({ ...l, isCircle: !l.isCircle }))}
+                        className={`flex-1 text-xs py-1.5 rounded border ${logo.isCircle ? "bg-charcoal-700 border-neon-cyan text-neon-cyan" : "border-charcoal-600 text-gray-500"}`}
+                      >
                         {logo.isCircle ? "Circle" : "Square"}
                       </button>
                       <button
-                      onClick={() => setLogo((l) => ({ ...l, spin: !l.spin }))}
-                      className={`flex-1 text-xs py-1.5 rounded border ${logo.spin ? "bg-charcoal-700 border-neon-cyan text-neon-cyan" : "border-charcoal-600 text-gray-500"}`}>
-
+                        onClick={() => setLogo((l) => ({ ...l, spin: !l.spin }))}
+                        className={`flex-1 text-xs py-1.5 rounded border ${logo.spin ? "bg-charcoal-700 border-neon-cyan text-neon-cyan" : "border-charcoal-600 text-gray-500"}`}
+                      >
                         Spin: {logo.spin ? "ON" : "OFF"}
                       </button>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-500">Size</span>
                       <input
-                      type="range"
-                      min="5"
-                      max="30"
-                      value={logo.size}
-                      onChange={(e) => setLogo((l) => ({ ...l, size: Number(e.target.value) }))}
-                      className="flex-1 accent-neon-cyan h-1 bg-charcoal-600 rounded-lg" />
+                        type="range"
+                        min="5"
+                        max="30"
+                        value={logo.size}
+                        onChange={(e) => setLogo((l) => ({ ...l, size: Number(e.target.value) }))}
+                        className="flex-1 accent-neon-cyan h-1 bg-charcoal-600 rounded-lg"
+                      />
                     </div>
                     {/* Logo Position Preset Buttons */}
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-500">Position</span>
                       <div className="flex gap-1">
-                        {Object.entries(LOGO_POSITIONS).map(([key, val]) =>
-                      <button
-                        key={key}
-                        onClick={() => setLogo((l) => ({ ...l, x: val.x, y: val.y }))}
-                        className={`text-[10px] px-2 py-1 rounded border ${currentLogoPos === key ? "bg-charcoal-700 border-neon-cyan text-neon-cyan" : "border-charcoal-600 text-gray-500 hover:text-gray-300"}`}>
-
+                        {Object.entries(LOGO_POSITIONS).map(([key, val]) => (
+                          <button
+                            key={key}
+                            onClick={() => setLogo((l) => ({ ...l, x: val.x, y: val.y }))}
+                            className={`text-[10px] px-2 py-1 rounded border ${currentLogoPos === key ? "bg-charcoal-700 border-neon-cyan text-neon-cyan" : "border-charcoal-600 text-gray-500 hover:text-gray-300"}`}
+                          >
                             {val.label}
                           </button>
-                      )}
+                        ))}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-500">Neon</span>
                       <div className="flex gap-1">
-                        {["#00E5FF", "#F43F5E", "#10B981", "#FACC15", "#A855F7", "#ffffff"].map((c) =>
-                      <button
-                        key={c}
-                        onClick={() => setLogo((l) => ({ ...l, neonColor: c }))}
-                        className={`w-4 h-4 rounded-full border border-gray-600 ${logo.neonColor === c ? "ring-2 ring-white scale-110" : ""}`}
-                        style={{ backgroundColor: c }} />
-
-                      )}
+                        {["#00E5FF", "#F43F5E", "#10B981", "#FACC15", "#A855F7", "#ffffff"].map((c) => (
+                          <button
+                            key={c}
+                            onClick={() => setLogo((l) => ({ ...l, neonColor: c }))}
+                            className={`w-4 h-4 rounded-full border border-gray-600 ${logo.neonColor === c ? "ring-2 ring-white scale-110" : ""}`}
+                            style={{ backgroundColor: c }}
+                          />
+                        ))}
                       </div>
                     </div>
                   </div>
@@ -1941,25 +2035,25 @@ export const ResultView: React.FC<ResultViewProps> = ({
                       <span className="text-xs text-neon-cyan">{subSettings.fontSize}px</span>
                     </div>
                     <input
-                    type="range"
-                    min="12"
-                    max="60"
-                    value={subSettings.fontSize}
-                    onChange={(e) => setSubSettings((s) => ({ ...s, fontSize: Number(e.target.value) }))}
-                    className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full" />
-
+                      type="range"
+                      min="12"
+                      max="60"
+                      value={subSettings.fontSize}
+                      onChange={(e) => setSubSettings((s) => ({ ...s, fontSize: Number(e.target.value) }))}
+                      className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full"
+                    />
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-xs text-gray-500 shrink-0">Text Color</span>
                     <div className="flex gap-1.5 flex-wrap">
-                      {["#FFFFFF", "#FACC15", "#00E5FF", "#F43F5E", "#10B981"].map((c) =>
-                    <button
-                      key={c}
-                      onClick={() => setSubSettings((s) => ({ ...s, textColor: c }))}
-                      className={`w-4 h-4 rounded-full border border-gray-600 ${subSettings.textColor === c ? "ring-2 ring-white scale-110" : ""}`}
-                      style={{ backgroundColor: c }} />
-
-                    )}
+                      {["#FFFFFF", "#FACC15", "#00E5FF", "#F43F5E", "#10B981"].map((c) => (
+                        <button
+                          key={c}
+                          onClick={() => setSubSettings((s) => ({ ...s, textColor: c }))}
+                          className={`w-4 h-4 rounded-full border border-gray-600 ${subSettings.textColor === c ? "ring-2 ring-white scale-110" : ""}`}
+                          style={{ backgroundColor: c }}
+                        />
+                      ))}
                     </div>
                   </div>
                   <p className="text-xs text-gray-500 italic">
@@ -1973,25 +2067,28 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Blur Region</h4>
                   <button
-                  onClick={() => setBlurSettings((b) => ({ ...b, enabled: !b.enabled }))}
-                  className={`px-2.5 py-1 rounded text-xs font-semibold transition-all ${blurSettings.enabled ? "bg-neon-cyan text-charcoal-900" : "bg-charcoal-700 text-gray-400"}`}>
-
+                    onClick={() => setBlurSettings((b) => ({ ...b, enabled: !b.enabled }))}
+                    className={`px-2.5 py-1 rounded text-xs font-semibold transition-all ${blurSettings.enabled ? "bg-neon-cyan text-charcoal-900" : "bg-charcoal-700 text-gray-400"}`}
+                  >
                     {blurSettings.enabled ? "ON" : "OFF"}
                   </button>
                 </div>
-                {blurSettings.enabled &&
-              <div className="space-y-3">
+                {blurSettings.enabled && (
+                  <div className="space-y-3">
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-gray-500">Blur Intensity</span>
                         <span className="text-xs text-neon-cyan">{blurSettings.opacity}%</span>
                       </div>
                       <input
-                    type="range" min="1" max="100" step="1"
-                    value={blurSettings.opacity}
-                    onChange={(e) => setBlurSettings((b) => ({ ...b, opacity: Number(e.target.value) }))}
-                    className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full" />
-
+                        type="range"
+                        min="1"
+                        max="100"
+                        step="1"
+                        value={blurSettings.opacity}
+                        onChange={(e) => setBlurSettings((b) => ({ ...b, opacity: Number(e.target.value) }))}
+                        className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full"
+                      />
                     </div>
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center justify-between">
@@ -1999,11 +2096,14 @@ export const ResultView: React.FC<ResultViewProps> = ({
                         <span className="text-xs text-neon-cyan">{blurSettings.width}%</span>
                       </div>
                       <input
-                    type="range" min="1" max="100" step="1"
-                    value={blurSettings.width}
-                    onChange={(e) => setBlurSettings((b) => ({ ...b, width: Number(e.target.value) }))}
-                    className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full" />
-
+                        type="range"
+                        min="1"
+                        max="100"
+                        step="1"
+                        value={blurSettings.width}
+                        onChange={(e) => setBlurSettings((b) => ({ ...b, width: Number(e.target.value) }))}
+                        className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full"
+                      />
                     </div>
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center justify-between">
@@ -2011,47 +2111,56 @@ export const ResultView: React.FC<ResultViewProps> = ({
                         <span className="text-xs text-neon-cyan">{blurSettings.height}%</span>
                       </div>
                       <input
-                    type="range" min="1" max="100" step="1"
-                    value={blurSettings.height}
-                    onChange={(e) => setBlurSettings((b) => ({ ...b, height: Number(e.target.value) }))}
-                    className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full" />
-
+                        type="range"
+                        min="1"
+                        max="100"
+                        step="1"
+                        value={blurSettings.height}
+                        onChange={(e) => setBlurSettings((b) => ({ ...b, height: Number(e.target.value) }))}
+                        className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full"
+                      />
                     </div>
-                    <p className="text-xs text-gray-500 italic">
-                      Tip: Drag the blur box on the video to position it.
-                    </p>
+                    <p className="text-xs text-gray-500 italic">Tip: Drag the blur box on the video to position it.</p>
                   </div>
-              }
+                )}
               </div>
 
               {/* ── Timeline Bar Drop Box ──────────────────────────────── */}
               <div className="border-t border-charcoal-700 pt-4">
                 <button
-                onClick={() => setTimelineBar((t) => ({ ...t, openPanel: !t.openPanel }))}
-                className="w-full flex items-center justify-between group">
-
+                  onClick={() => setTimelineBar((t) => ({ ...t, openPanel: !t.openPanel }))}
+                  className="w-full flex items-center justify-between group"
+                >
                   <div className="flex items-center gap-2">
                     <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Timeline Bar</h4>
                     <div
-                    className="w-4 h-4 rounded border border-gray-600"
-                    style={{ backgroundColor: timelineBar.color }} />
-
+                      className="w-4 h-4 rounded border border-gray-600"
+                      style={{ backgroundColor: timelineBar.color }}
+                    />
                   </div>
                   <div className="flex items-center gap-2">
                     <span
-                    className={`px-2 py-0.5 rounded text-xs font-semibold transition-all ${timelineBar.enabled ? "bg-neon-cyan text-charcoal-900" : "bg-charcoal-700 text-gray-400"}`}
-                    onClick={(e) => {e.stopPropagation();setTimelineBar((t) => ({ ...t, enabled: !t.enabled }));}}>
-
+                      className={`px-2 py-0.5 rounded text-xs font-semibold transition-all ${timelineBar.enabled ? "bg-neon-cyan text-charcoal-900" : "bg-charcoal-700 text-gray-400"}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setTimelineBar((t) => ({ ...t, enabled: !t.enabled }));
+                      }}
+                    >
                       {timelineBar.enabled ? "ON" : "OFF"}
                     </span>
-                    <svg className={`w-4 h-4 text-gray-400 transition-transform ${timelineBar.openPanel ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg
+                      className={`w-4 h-4 text-gray-400 transition-transform ${timelineBar.openPanel ? "rotate-180" : ""}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
                   </div>
                 </button>
 
-                {timelineBar.openPanel &&
-              <div className="mt-3 space-y-3 bg-charcoal-900/60 rounded-xl p-3 border border-charcoal-700">
+                {timelineBar.openPanel && (
+                  <div className="mt-3 space-y-3 bg-charcoal-900/60 rounded-xl p-3 border border-charcoal-700">
                     {/* Thickness */}
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center justify-between">
@@ -2059,68 +2168,82 @@ export const ResultView: React.FC<ResultViewProps> = ({
                         <span className="text-xs text-neon-cyan">{timelineBar.thickness}px</span>
                       </div>
                       <input
-                    type="range" min="1" max="15" step="1"
-                    value={timelineBar.thickness}
-                    onChange={(e) => setTimelineBar((t) => ({ ...t, thickness: Number(e.target.value) }))}
-                    className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full" />
-
+                        type="range"
+                        min="1"
+                        max="15"
+                        step="1"
+                        value={timelineBar.thickness}
+                        onChange={(e) => setTimelineBar((t) => ({ ...t, thickness: Number(e.target.value) }))}
+                        className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full"
+                      />
                     </div>
                     {/* Color Swatches */}
                     <div>
                       <p className="text-xs text-gray-500 mb-2">Color</p>
                       <div className="flex flex-wrap gap-1.5 items-center">
-                        {COLOR_SWATCHES.map((c) =>
-                    <button
-                      key={c}
-                      onClick={() => setTimelineBar((t) => ({ ...t, color: c }))}
-                      className={`w-6 h-6 rounded-full border-2 transition-transform ${timelineBar.color === c ? "ring-2 ring-white scale-110 border-white" : "border-gray-600"}`}
-                      style={{ backgroundColor: c }} />
-
-                    )}
+                        {COLOR_SWATCHES.map((c) => (
+                          <button
+                            key={c}
+                            onClick={() => setTimelineBar((t) => ({ ...t, color: c }))}
+                            className={`w-6 h-6 rounded-full border-2 transition-transform ${timelineBar.color === c ? "ring-2 ring-white scale-110 border-white" : "border-gray-600"}`}
+                            style={{ backgroundColor: c }}
+                          />
+                        ))}
                         {/* Custom color picker */}
-                        <label className="w-6 h-6 rounded-full border-2 border-dashed border-gray-500 flex items-center justify-center cursor-pointer hover:border-gray-300 relative overflow-hidden" title="Custom color">
+                        <label
+                          className="w-6 h-6 rounded-full border-2 border-dashed border-gray-500 flex items-center justify-center cursor-pointer hover:border-gray-300 relative overflow-hidden"
+                          title="Custom color"
+                        >
                           <span className="text-gray-400 text-xs">+</span>
                           <input
-                        type="color"
-                        value={timelineBar.color}
-                        onChange={(e) => setTimelineBar((t) => ({ ...t, color: e.target.value }))}
-                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
-
+                            type="color"
+                            value={timelineBar.color}
+                            onChange={(e) => setTimelineBar((t) => ({ ...t, color: e.target.value }))}
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                          />
                         </label>
                       </div>
                     </div>
                   </div>
-              }
+                )}
               </div>
 
               {/* ── Video Border Drop Box ──────────────────────────────── */}
               <div className="border-t border-charcoal-700 pt-4">
                 <button
-                onClick={() => setVideoBorder((v) => ({ ...v, openPanel: !v.openPanel }))}
-                className="w-full flex items-center justify-between group">
-
+                  onClick={() => setVideoBorder((v) => ({ ...v, openPanel: !v.openPanel }))}
+                  className="w-full flex items-center justify-between group"
+                >
                   <div className="flex items-center gap-2">
                     <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Video Border</h4>
                     <div
-                    className="w-4 h-4 rounded border border-gray-600"
-                    style={{ backgroundColor: videoBorder.color }} />
-
+                      className="w-4 h-4 rounded border border-gray-600"
+                      style={{ backgroundColor: videoBorder.color }}
+                    />
                   </div>
                   <div className="flex items-center gap-2">
                     <span
-                    className={`px-2 py-0.5 rounded text-xs font-semibold transition-all ${videoBorder.enabled ? "bg-neon-cyan text-charcoal-900" : "bg-charcoal-700 text-gray-400"}`}
-                    onClick={(e) => {e.stopPropagation();setVideoBorder((v) => ({ ...v, enabled: !v.enabled }));}}>
-
+                      className={`px-2 py-0.5 rounded text-xs font-semibold transition-all ${videoBorder.enabled ? "bg-neon-cyan text-charcoal-900" : "bg-charcoal-700 text-gray-400"}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setVideoBorder((v) => ({ ...v, enabled: !v.enabled }));
+                      }}
+                    >
                       {videoBorder.enabled ? "ON" : "OFF"}
                     </span>
-                    <svg className={`w-4 h-4 text-gray-400 transition-transform ${videoBorder.openPanel ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg
+                      className={`w-4 h-4 text-gray-400 transition-transform ${videoBorder.openPanel ? "rotate-180" : ""}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
                   </div>
                 </button>
 
-                {videoBorder.openPanel &&
-              <div className="mt-3 space-y-3 bg-charcoal-900/60 rounded-xl p-3 border border-charcoal-700">
+                {videoBorder.openPanel && (
+                  <div className="mt-3 space-y-3 bg-charcoal-900/60 rounded-xl p-3 border border-charcoal-700">
                     {/* Width */}
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center justify-between">
@@ -2128,117 +2251,124 @@ export const ResultView: React.FC<ResultViewProps> = ({
                         <span className="text-xs text-neon-cyan">{videoBorder.width}px</span>
                       </div>
                       <input
-                    type="range" min="1" max="50" step="1"
-                    value={videoBorder.width}
-                    onChange={(e) => setVideoBorder((v) => ({ ...v, width: Number(e.target.value) }))}
-                    className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full" />
-
+                        type="range"
+                        min="1"
+                        max="50"
+                        step="1"
+                        value={videoBorder.width}
+                        onChange={(e) => setVideoBorder((v) => ({ ...v, width: Number(e.target.value) }))}
+                        className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full"
+                      />
                     </div>
                     {/* Color Swatches */}
                     <div>
                       <p className="text-xs text-gray-500 mb-2">Color</p>
                       <div className="flex flex-wrap gap-1.5 items-center">
-                        {COLOR_SWATCHES.map((c) =>
-                    <button
-                      key={c}
-                      onClick={() => setVideoBorder((v) => ({ ...v, color: c }))}
-                      className={`w-6 h-6 rounded-full border-2 transition-transform ${videoBorder.color === c ? "ring-2 ring-white scale-110 border-white" : "border-gray-600"}`}
-                      style={{ backgroundColor: c }} />
-
-                    )}
+                        {COLOR_SWATCHES.map((c) => (
+                          <button
+                            key={c}
+                            onClick={() => setVideoBorder((v) => ({ ...v, color: c }))}
+                            className={`w-6 h-6 rounded-full border-2 transition-transform ${videoBorder.color === c ? "ring-2 ring-white scale-110 border-white" : "border-gray-600"}`}
+                            style={{ backgroundColor: c }}
+                          />
+                        ))}
                         {/* Custom color picker */}
-                        <label className="w-6 h-6 rounded-full border-2 border-dashed border-gray-500 flex items-center justify-center cursor-pointer hover:border-gray-300 relative overflow-hidden" title="Custom color">
+                        <label
+                          className="w-6 h-6 rounded-full border-2 border-dashed border-gray-500 flex items-center justify-center cursor-pointer hover:border-gray-300 relative overflow-hidden"
+                          title="Custom color"
+                        >
                           <span className="text-gray-400 text-xs">+</span>
                           <input
-                        type="color"
-                        value={videoBorder.color}
-                        onChange={(e) => setVideoBorder((v) => ({ ...v, color: e.target.value }))}
-                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
-
+                            type="color"
+                            value={videoBorder.color}
+                            onChange={(e) => setVideoBorder((v) => ({ ...v, color: e.target.value }))}
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                          />
                         </label>
                       </div>
                     </div>
                   </div>
-              }
+                )}
               </div>
-
             </div>
-          }
-
-
+          )}
 
           <div className="p-4 bg-charcoal-800 rounded-xl border border-charcoal-600 shadow-lg flex flex-col space-y-3">
             <h3 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Download & Export</h3>
             <div className="flex flex-col gap-2">
-              {renderedBlobUrl ?
-              <div className="space-y-3">
+              {renderedBlobUrl ? (
+                <div className="space-y-3">
                   <div className="p-3 bg-green-900/30 border border-green-500/50 rounded-lg text-green-400 text-sm text-center">
                     ✅ Recap Video Generated Successfully!
                   </div>
                   <a
-                  href={renderedBlobUrl}
-                  download={`recap_${scriptData.title.replace(/\s+/g, "_")}.webm`}
-                  className="flex items-center justify-center px-4 py-3 bg-neon-cyan hover:bg-neon-hover text-charcoal-900 font-bold rounded-lg transition-colors shadow-lg w-full">
-
+                    href={renderedBlobUrl}
+                    download={`recap_${scriptData.title.replace(/\s+/g, "_")}.webm`}
+                    className="flex items-center justify-center px-4 py-3 bg-neon-cyan hover:bg-neon-hover text-charcoal-900 font-bold rounded-lg transition-colors shadow-lg w-full"
+                  >
                     Download Again
                   </a>
                   <button
-                  onClick={() => {
-                    setRenderedBlobUrl(null);
-                  }}
-                  className="flex items-center justify-center px-4 py-3 bg-charcoal-700 hover:bg-charcoal-600 text-gray-300 font-bold rounded-lg transition-colors w-full">
-
+                    onClick={() => {
+                      setRenderedBlobUrl(null);
+                    }}
+                    className="flex items-center justify-center px-4 py-3 bg-charcoal-700 hover:bg-charcoal-600 text-gray-300 font-bold rounded-lg transition-colors w-full"
+                  >
                     Back to Editor
                   </button>
-                </div> :
-              null}
+                </div>
+              ) : null}
 
-              {audioUrl &&
-              <a
-                href={audioUrl}
-                download="recap_audio.wav"
-                className="flex items-center justify-center px-4 py-3 bg-charcoal-700 hover:bg-charcoal-600 text-white rounded-lg border border-charcoal-500 transition-colors">
-
+              {audioUrl && (
+                <a
+                  href={audioUrl}
+                  download="recap_audio.wav"
+                  className="flex items-center justify-center px-4 py-3 bg-charcoal-700 hover:bg-charcoal-600 text-white rounded-lg border border-charcoal-500 transition-colors"
+                >
                   <svg className="w-5 h-5 mr-2 text-neon-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+                    />
                   </svg>
                   Download Generated Voice (.wav)
                 </a>
-              }
+              )}
             </div>
             {/* Voice Mode Toggle */}
             <div className="flex items-center gap-2 bg-charcoal-900/50 rounded-xl p-1.5">
               <button
-                onClick={() => onVoiceModeChange('modern')}
-                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${voiceMode === 'modern' ? 'bg-neon-cyan text-black shadow-[0_0_10px_rgba(0,229,255,0.4)]' : 'text-gray-400 hover:text-gray-200'}`}>
+                onClick={() => onVoiceModeChange("modern")}
+                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${voiceMode === "modern" ? "bg-neon-cyan text-black shadow-[0_0_10px_rgba(0,229,255,0.4)]" : "text-gray-400 hover:text-gray-200"}`}
+              >
                 Modern Version
               </button>
               <button
-                onClick={() => onVoiceModeChange('normal')}
-                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${voiceMode === 'normal' ? 'bg-charcoal-600 text-white shadow-md' : 'text-gray-400 hover:text-gray-200'}`}>
+                onClick={() => onVoiceModeChange("normal")}
+                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${voiceMode === "normal" ? "bg-charcoal-600 text-white shadow-md" : "text-gray-400 hover:text-gray-200"}`}
+              >
                 Normal Version
               </button>
             </div>
-            {!audioUrl ?
-            <button onClick={onGenerateVoice} className="w-full py-3 bg-charcoal-700 text-white font-bold rounded-xl">
+            {!audioUrl ? (
+              <button onClick={onGenerateVoice} className="w-full py-3 bg-charcoal-700 text-white font-bold rounded-xl">
                 Generate Voiceover
-              </button> :
-
-            <button onClick={onGenerateVoice} className="w-full py-2.5 bg-charcoal-700 hover:bg-charcoal-600 text-gray-300 text-xs font-bold rounded-xl border border-charcoal-500 transition-colors">
-                🔄 Regenerate Voice ({voiceMode === 'modern' ? 'Modern' : 'Normal'})
               </button>
-            }
+            ) : (
+              <button
+                onClick={onGenerateVoice}
+                className="w-full py-2.5 bg-charcoal-700 hover:bg-charcoal-600 text-gray-300 text-xs font-bold rounded-xl border border-charcoal-500 transition-colors"
+              >
+                🔄 Regenerate Voice ({voiceMode === "modern" ? "Modern" : "Normal"})
+              </button>
+            )}
           </div>
         </div>
       </div>
-
-    </>);
-
+    </>
+  );
 };
 
 interface RecapHistoryItem {
@@ -2255,7 +2385,7 @@ const RecapVideoNVPage: React.FC = () => {
   const navigate = useNavigate();
 
   // ── ACCESS CONTROL via useAuthGuard + useApiAccess (same pattern as Transcribe/VideoRecap/NovelTrans) ──
-  const { isAllowed, isLoading: authLoading } = useAuthGuard('recap-nv');
+  const { isAllowed, isLoading: authLoading } = useAuthGuard("recap-nv");
   const { appApiAllowed, ownApiAllowed, defaultApiMode, isLoading: accessLoading } = useApiAccess();
   const isAccessLoading = authLoading || accessLoading;
   // ── END ACCESS CONTROL ────────────────────────────────────────────────────
@@ -2268,11 +2398,11 @@ const RecapVideoNVPage: React.FC = () => {
   // Fetch CR/MIN rate from tool_settings on mount
   useEffect(() => {
     const fetchRate = async () => {
-      const { data } = await supabase.
-      from('tool_settings').
-      select('credit_cost').
-      eq('tool_id', 'recap-nv').
-      maybeSingle();
+      const { data } = await supabase
+        .from("tool_settings")
+        .select("credit_cost")
+        .eq("tool_id", "recap-nv")
+        .maybeSingle();
       if (data?.credit_cost) {
         setCreditPerMinRate(data.credit_cost);
       }
@@ -2282,108 +2412,127 @@ const RecapVideoNVPage: React.FC = () => {
   // ── END CREDIT ────────────────────────────────────────────────────────────
 
   const [scriptData, setScriptData] = useState<RecapScript>({
-    title: 'Recap Video NV',
-    full_script: '',
-    segments: []
+    title: "Recap Video NV",
+    full_script: "",
+    segments: [],
   });
   const [audioUrl, setAudioUrl] = useState<string | undefined>(undefined);
   const [videoUrl, setVideoUrl] = useState<string | undefined>(undefined);
-  const [status, setStatus] = useState<ProcessingStatus>('idle');
-  const [progressMsg, setProgressMsg] = useState('');
+  const [status, setStatus] = useState<ProcessingStatus>("idle");
+  const [progressMsg, setProgressMsg] = useState("");
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const videoDurationRef = useRef<number>(0);
   // Exact per-segment timestamps from gemini-tts WAV header — passed into generateVoice
-  const pageAudioTimestampsRef = useRef<{index: number;start: number;end: number;}[]>([]);
+  const pageAudioTimestampsRef = useRef<{ index: number; start: number; end: number }[]>([]);
   // Flag: auto-start recap recording when pipeline completes (state so ResultView re-renders)
   const [autoStartRecap, setAutoStartRecap] = useState(false);
-  const [voiceMode, setVoiceMode] = useState<'modern' | 'normal'>('normal');
+  const [voiceMode, setVoiceMode] = useState<"modern" | "normal">("normal");
   const [recapHistory, setRecapHistory] = useState<RecapHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
   // Language & Voice selection
   const VOICE_OPTIONS = [
-  { value: 'Kore', label: 'Kore', gender: 'Female' },
-  { value: 'Aoede', label: 'Aoede', gender: 'Female' },
-  { value: 'Leda', label: 'Leda', gender: 'Female' },
-  { value: 'Zephyr', label: 'Zephyr', gender: 'Female' },
-  { value: 'Puck', label: 'Puck', gender: 'Male' },
-  { value: 'Charon', label: 'Charon', gender: 'Male' },
-  { value: 'Fenrir', label: 'Fenrir', gender: 'Male' },
-  { value: 'Orus', label: 'Orus', gender: 'Male' },
-  { value: 'en-US-Standard-A', label: 'US Standard A', gender: 'Female' },
-  { value: 'en-US-Standard-B', label: 'US Standard B', gender: 'Male' },
-  { value: 'en-US-Standard-C', label: 'US Standard C', gender: 'Female' },
-  { value: 'en-US-Standard-D', label: 'US Standard D', gender: 'Male' },
-  { value: 'en-GB-Standard-A', label: 'UK Standard A', gender: 'Female' },
-  { value: 'en-GB-Standard-B', label: 'UK Standard B', gender: 'Male' },
-  { value: 'en-GB-Standard-C', label: 'UK Standard C', gender: 'Female' },
-  { value: 'en-GB-Standard-D', label: 'UK Standard D', gender: 'Male' },
-  { value: 'Achernar', label: 'Achernar', gender: 'Female' },
-  { value: 'Gacrux', label: 'Gacrux', gender: 'Male' },
-  { value: 'Sulafat', label: 'Sulafat', gender: 'Female' },
-  { value: 'Alnilam', label: 'Alnilam', gender: 'Male' },
-  { value: 'Schedar', label: 'Schedar', gender: 'Female' },
-  { value: 'Umbriel', label: 'Umbriel', gender: 'Male' },
-  { value: 'Algieba', label: 'Algieba', gender: 'Male' }];
+    { value: "Kore", label: "Kore", gender: "Female" },
+    { value: "Aoede", label: "Aoede", gender: "Female" },
+    { value: "Leda", label: "Leda", gender: "Female" },
+    { value: "Zephyr", label: "Zephyr", gender: "Female" },
+    { value: "Puck", label: "Puck", gender: "Male" },
+    { value: "Charon", label: "Charon", gender: "Male" },
+    { value: "Fenrir", label: "Fenrir", gender: "Male" },
+    { value: "Orus", label: "Orus", gender: "Male" },
+    { value: "en-US-Standard-A", label: "US Standard A", gender: "Female" },
+    { value: "en-US-Standard-B", label: "US Standard B", gender: "Male" },
+    { value: "en-US-Standard-C", label: "US Standard C", gender: "Female" },
+    { value: "en-US-Standard-D", label: "US Standard D", gender: "Male" },
+    { value: "en-GB-Standard-A", label: "UK Standard A", gender: "Female" },
+    { value: "en-GB-Standard-B", label: "UK Standard B", gender: "Male" },
+    { value: "en-GB-Standard-C", label: "UK Standard C", gender: "Female" },
+    { value: "en-GB-Standard-D", label: "UK Standard D", gender: "Male" },
+    { value: "Achernar", label: "Achernar", gender: "Female" },
+    { value: "Gacrux", label: "Gacrux", gender: "Male" },
+    { value: "Sulafat", label: "Sulafat", gender: "Female" },
+    { value: "Alnilam", label: "Alnilam", gender: "Male" },
+    { value: "Schedar", label: "Schedar", gender: "Female" },
+    { value: "Umbriel", label: "Umbriel", gender: "Male" },
+    { value: "Algieba", label: "Algieba", gender: "Male" },
+  ];
 
-  const [selectedLanguage, setSelectedLanguage] = useState('my-MM');
-  const [selectedVoice, setSelectedVoice] = useState('Charon');
+  const [selectedLanguage, setSelectedLanguage] = useState("my-MM");
+  const [selectedVoice, setSelectedVoice] = useState("Charon");
   const [langPopoverOpen, setLangPopoverOpen] = useState(false);
 
   // API Mode
-  const [apiMode, setApiMode] = useState<'app' | 'own'>('app');
-  const [ownApiKey, setOwnApiKey] = useState('');
+  const [apiMode, setApiMode] = useState<"app" | "own">("app");
+  const [ownApiKey, setOwnApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
 
   // ── CREDIT DEDUCTION: Called via onVideoReady callback when "Recap Video Ready!" appears ──
-  const handleVideoReady = useCallback(async (outputDurationSecs: number) => {
-    console.log('[CREDIT] handleVideoReady called. outputDuration:', outputDurationSecs, 'didDeduct:', didDeductRef.current, 'apiMode:', apiMode);
-    if (didDeductRef.current) return;
-    if (apiMode === 'own') return; // Own API key — no credit deduction
+  const handleVideoReady = useCallback(
+    async (outputDurationSecs: number) => {
+      console.log(
+        "[CREDIT] handleVideoReady called. outputDuration:",
+        outputDurationSecs,
+        "didDeduct:",
+        didDeductRef.current,
+        "apiMode:",
+        apiMode,
+      );
+      if (didDeductRef.current) return;
+      if (apiMode === "own") return; // Own API key — no credit deduction
 
-    // Check if Promotion Mode is active — skip credit deduction entirely
-    try {
-      const { data: appSettings } = await supabase.
-      from('app_settings').
-      select('value').
-      eq('key', 'access_control').
-      maybeSingle();
-      if (appSettings?.value) {
-        const ac = appSettings.value as any;
-        if (ac.promotionMode) {
-          console.log('[CREDIT] Promotion Mode active — skipping credit deduction');
-          didDeductRef.current = true;
-          return;
+      // Check if Promotion Mode is active — skip credit deduction entirely
+      try {
+        const { data: appSettings } = await supabase
+          .from("app_settings")
+          .select("value")
+          .eq("key", "access_control")
+          .maybeSingle();
+        if (appSettings?.value) {
+          const ac = appSettings.value as any;
+          if (ac.promotionMode) {
+            console.log("[CREDIT] Promotion Mode active — skipping credit deduction");
+            didDeductRef.current = true;
+            return;
+          }
         }
+      } catch (e) {
+        console.warn("[CREDIT] Could not check promotion mode, proceeding with deduction");
       }
-    } catch (e) {
-      console.warn('[CREDIT] Could not check promotion mode, proceeding with deduction');
-    }
 
-    // Use OUTPUT video duration (passed from rendered blob), not input video duration
-    const durationSecs = outputDurationSecs || 0;
-    const totalMinutes = Math.floor(durationSecs / 60);
-    const remainingSeconds = durationSecs % 60;
-    // Round: ≤30s stays at current minute, >30s rounds up to next minute
-    const billedMinutes = remainingSeconds > 30 ? totalMinutes + 1 : totalMinutes;
-    const customCost = Math.max(1, Math.max(1, billedMinutes) * creditPerMinRate);
+      // Use OUTPUT video duration (passed from rendered blob), not input video duration
+      const durationSecs = outputDurationSecs || 0;
+      const totalMinutes = Math.floor(durationSecs / 60);
+      const remainingSeconds = durationSecs % 60;
+      // Round: ≤30s stays at current minute, >30s rounds up to next minute
+      const billedMinutes = remainingSeconds > 30 ? totalMinutes + 1 : totalMinutes;
+      const customCost = Math.max(1, Math.max(1, billedMinutes) * creditPerMinRate);
 
-    console.log('[CREDIT] Deducting:', customCost, 'credits (output duration:', durationSecs, 's, rate:', creditPerMinRate, 'CR/MIN)');
-    didDeductRef.current = true; // Mark as deducted before async call (idempotency)
+      console.log(
+        "[CREDIT] Deducting:",
+        customCost,
+        "credits (output duration:",
+        durationSecs,
+        "s, rate:",
+        creditPerMinRate,
+        "CR/MIN)",
+      );
+      didDeductRef.current = true; // Mark as deducted before async call (idempotency)
 
-    try {
-      const result = await deductCredits('recap-nv', false, customCost);
-      if (result.success) {
-        console.log('[CREDIT] ✅ Deduction SUCCESS. New balance:', result.newBalance);
-      } else {
-        console.error('[CREDIT] ❌ Deduction FAILED:', result.error);
+      try {
+        const result = await deductCredits("recap-nv", false, customCost);
+        if (result.success) {
+          console.log("[CREDIT] ✅ Deduction SUCCESS. New balance:", result.newBalance);
+        } else {
+          console.error("[CREDIT] ❌ Deduction FAILED:", result.error);
+          didDeductRef.current = false; // Allow retry on failure
+        }
+      } catch (err) {
+        console.error("[CREDIT] ❌ Deduction ERROR:", err);
         didDeductRef.current = false; // Allow retry on failure
       }
-    } catch (err) {
-      console.error('[CREDIT] ❌ Deduction ERROR:', err);
-      didDeductRef.current = false; // Allow retry on failure
-    }
-  }, [apiMode, deductCredits, creditPerMinRate]);
+    },
+    [apiMode, deductCredits, creditPerMinRate],
+  );
   // ── END CREDIT DEDUCTION ──────────────────────────────────────────────────
 
   // Load recap history on mount
@@ -2394,58 +2543,64 @@ const RecapVideoNVPage: React.FC = () => {
   const loadRecapHistory = async () => {
     setHistoryLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {setHistoryLoading(false);return;}
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        setHistoryLoading(false);
+        return;
+      }
 
       // Clean up expired recaps first
-      const { data: expiredItems } = await supabase.
-      from('recap_history').
-      select('id, storage_path').
-      lt('expires_at', new Date().toISOString());
+      const { data: expiredItems } = await supabase
+        .from("recap_history")
+        .select("id, storage_path")
+        .lt("expires_at", new Date().toISOString());
 
       if (expiredItems && expiredItems.length > 0) {
         for (const item of expiredItems) {
-          await supabase.storage.from('recap-videos').remove([item.storage_path]);
-          await supabase.from('recap_history').delete().eq('id', item.id);
+          await supabase.storage.from("recap-videos").remove([item.storage_path]);
+          await supabase.from("recap_history").delete().eq("id", item.id);
         }
       }
 
       // Fetch active recaps
-      const { data, error } = await supabase.
-      from('recap_history').
-      select('*').
-      gte('expires_at', new Date().toISOString()).
-      order('created_at', { ascending: false });
+      const { data, error } = await supabase
+        .from("recap_history")
+        .select("*")
+        .gte("expires_at", new Date().toISOString())
+        .order("created_at", { ascending: false });
 
-      if (error) {console.error('History load error:', error);} else
-      {
+      if (error) {
+        console.error("History load error:", error);
+      } else {
         // Get signed URLs for each
         const itemsWithUrls: RecapHistoryItem[] = [];
         for (const item of data || []) {
-          const { data: signedData } = await supabase.storage.
-          from('recap-videos').
-          createSignedUrl(item.storage_path, 3600); // 1 hour signed URL
+          const { data: signedData } = await supabase.storage
+            .from("recap-videos")
+            .createSignedUrl(item.storage_path, 3600); // 1 hour signed URL
           itemsWithUrls.push({
             ...item,
-            video_url: signedData?.signedUrl || undefined
+            video_url: signedData?.signedUrl || undefined,
           });
         }
         setRecapHistory(itemsWithUrls);
       }
     } catch (err) {
-      console.error('Failed to load history:', err);
+      console.error("Failed to load history:", err);
     }
     setHistoryLoading(false);
   };
 
   const deleteRecapItem = async (item: RecapHistoryItem) => {
-    if (!confirm('ဒီ recap video ကို ဖျက်မှာ သေချာပါသလား?')) return;
+    if (!confirm("ဒီ recap video ကို ဖျက်မှာ သေချာပါသလား?")) return;
     try {
-      await supabase.storage.from('recap-videos').remove([item.storage_path]);
-      await supabase.from('recap_history').delete().eq('id', item.id);
+      await supabase.storage.from("recap-videos").remove([item.storage_path]);
+      await supabase.from("recap_history").delete().eq("id", item.id);
       setRecapHistory((prev) => prev.filter((h) => h.id !== item.id));
     } catch (err) {
-      console.error('Delete failed:', err);
+      console.error("Delete failed:", err);
     }
   };
 
@@ -2456,14 +2611,14 @@ const RecapVideoNVPage: React.FC = () => {
   const handleGenerateVoice = () => {
     // Manual re-generate voice from edited script
     if (scriptData.full_script) {
-      const resolvedOwnKey = apiMode === 'own' ? ownApiKey.trim() : '';
+      const resolvedOwnKey = apiMode === "own" ? ownApiKey.trim() : "";
       generateVoice(scriptData.full_script, resolvedOwnKey || undefined);
     }
   };
 
   // Convert plain text script into segments with scene-matched timestamps
   const scriptToSegments = (scriptText: string, videoDuration: number): RecapSegment[] => {
-    const paragraphs = scriptText.split('\n').filter((p) => p.trim().length > 0);
+    const paragraphs = scriptText.split("\n").filter((p) => p.trim().length > 0);
     if (paragraphs.length === 0) return [];
 
     const timecodeRegex = /^\[(\d{1,2}):(\d{2})\]\s*/;
@@ -2474,11 +2629,11 @@ const RecapVideoNVPage: React.FC = () => {
       return paragraphs.map((rawText) => {
         const trimmed = rawText.trim();
         const match = trimmed.match(timecodeRegex);
-        let timestamp = '00:00';
+        let timestamp = "00:00";
         let text = trimmed;
         if (match) {
-          timestamp = `${match[1].padStart(2, '0')}:${match[2]}`;
-          text = trimmed.replace(timecodeRegex, '').trim();
+          timestamp = `${match[1].padStart(2, "0")}:${match[2]}`;
+          text = trimmed.replace(timecodeRegex, "").trim();
         }
         return { timestamp, text };
       });
@@ -2496,7 +2651,7 @@ const RecapVideoNVPage: React.FC = () => {
 
       const mins = Math.floor(startSec / 60);
       const secs = Math.floor(startSec % 60);
-      const timestamp = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+      const timestamp = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 
       return { timestamp, text: text.trim() };
     });
@@ -2513,20 +2668,26 @@ const RecapVideoNVPage: React.FC = () => {
   // ║  LOCK ID: VOICE-GEN-PIPELINE-v2                                    ║
   // ╚══════════════════════════════════════════════════════════════════════╝
   // Step 2: Generate AI Voice
-  const generateVoice = async (scriptText: string, useOwnKey?: string, segsForSync?: {text: string;}[]) => {
+  const generateVoice = async (scriptText: string, useOwnKey?: string, segsForSync?: { text: string }[]) => {
     // 🔐 2-STEP SECURITY GUARD — VOICE-GEN-PIPELINE-v2
-    if (!_nvGuard()) {console.error('[NV-LOCK] VOICE-GEN: Unauthorized. Admin unlock required.');setProgressMsg('🔒 Locked. Admin authorization required.');return;}
-    setProgressMsg('🎙️ AI Voice ဖန်တီးနေပါသည်...');
+    if (!_nvGuard()) {
+      console.error("[NV-LOCK] VOICE-GEN: Unauthorized. Admin unlock required.");
+      setProgressMsg("🔒 Locked. Admin authorization required.");
+      return;
+    }
+    setProgressMsg("🎙️ AI Voice ဖန်တီးနေပါသည်...");
     try {
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      const {
+        data: { session: currentSession },
+      } = await supabase.auth.getSession();
       const userToken = currentSession?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
       const bodyPayload: Record<string, unknown> = {
         text: scriptText,
         voiceName: selectedVoice,
-        languageCode: selectedLanguage.split('-')[0],
+        languageCode: selectedLanguage.split("-")[0],
         skipCreditDeduction: true, // Credits deducted at final video output (handleVideoReady)
-        speedMode: voiceMode // 'modern' = fast & continuous, 'normal' = standard pacing
+        speedMode: voiceMode, // 'modern' = fast & continuous, 'normal' = standard pacing
       };
       if (useOwnKey) bodyPayload.ownApiKey = useOwnKey;
       // Send segments so gemini-tts can return exact per-segment timestamps from WAV header
@@ -2534,39 +2695,36 @@ const RecapVideoNVPage: React.FC = () => {
         bodyPayload.segments = segsForSync;
       }
 
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gemini-tts`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            'Authorization': `Bearer ${userToken}`
-          },
-          body: JSON.stringify(bodyPayload)
-        }
-      );
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gemini-tts`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${userToken}`,
+        },
+        body: JSON.stringify(bodyPayload),
+      });
 
       const data = await response.json();
 
       if (data.useClientTTS || !data.audio) {
-        throw new Error(data.message || data.error || 'TTS generation failed');
+        throw new Error(data.message || data.error || "TTS generation failed");
       }
 
       // Store exact segment timestamps for syncLoop (replaces word-count estimate)
       if (Array.isArray(data.segmentTimestamps) && data.segmentTimestamps.length > 0) {
         pageAudioTimestampsRef.current = data.segmentTimestamps;
-        console.log('[TTS] Using exact WAV segmentTimestamps:', data.segmentTimestamps.length, 'segments');
+        console.log("[TTS] Using exact WAV segmentTimestamps:", data.segmentTimestamps.length, "segments");
       } else {
         pageAudioTimestampsRef.current = [];
-        console.log('[TTS] No segmentTimestamps — falling back to word-count sync');
+        console.log("[TTS] No segmentTimestamps — falling back to word-count sync");
       }
 
       // Convert audio to blob URL.
       // If edge function returned raw PCM (audio/pcm), convert to WAV in browser
       // to avoid edge function memory limits with large audio files.
       let audioBlob: Blob;
-      if (data.mimeType === 'audio/pcm') {
+      if (data.mimeType === "audio/pcm") {
         const sampleRate = data.sampleRate || 24000;
         const numChannels = 1;
         const bitsPerSample = 16;
@@ -2592,9 +2750,9 @@ const RecapVideoNVPage: React.FC = () => {
         wav.set([0x64, 0x61, 0x74, 0x61], 36); // "data"
         view.setUint32(40, dataLength, true);
         wav.set(pcmBytes, headerSize);
-        audioBlob = new Blob([wav], { type: 'audio/wav' });
+        audioBlob = new Blob([wav], { type: "audio/wav" });
       } else {
-        const mimeForAudio = data.mimeType || 'audio/mpeg';
+        const mimeForAudio = data.mimeType || "audio/mpeg";
         const dataUri = `data:${mimeForAudio};base64,${data.audio}`;
         const audioFetchResp = await fetch(dataUri);
         audioBlob = await audioFetchResp.blob();
@@ -2602,14 +2760,14 @@ const RecapVideoNVPage: React.FC = () => {
       const url = URL.createObjectURL(audioBlob);
       setAudioUrl(url);
 
-      setStatus('done');
-      setProgressMsg('✅ Recording အလိုအလျောက် စတင်မည်...');
+      setStatus("done");
+      setProgressMsg("✅ Video Editing အလိုအလျောက်စတင်ပါမည်...");
 
       // Auto-start recap recording after a short delay for audio element to mount
       setAutoStartRecap(true);
     } catch (err: any) {
-      console.error('TTS error:', err);
-      setStatus('error');
+      console.error("TTS error:", err);
+      setStatus("error");
       setProgressMsg(`❌ Voice generation failed: ${err.message}`);
     }
   };
@@ -2629,25 +2787,29 @@ const RecapVideoNVPage: React.FC = () => {
   // Step 1: Upload video → AI Analysis → Script Generation → Auto TTS
   const startAutoPipeline = async (file: File) => {
     // 🔐 2-STEP SECURITY GUARD — AUTO-PIPELINE-v2
-    if (!_nvGuard()) {console.error('[NV-LOCK] AUTO-PIPELINE: Unauthorized. Admin unlock required.');setProgressMsg('🔒 Locked. Admin authorization required.');return;}
+    if (!_nvGuard()) {
+      console.error("[NV-LOCK] AUTO-PIPELINE: Unauthorized. Admin unlock required.");
+      setProgressMsg("🔒 Locked. Admin authorization required.");
+      return;
+    }
     // Validate own API key if own mode selected
     const resolvedApiMode = apiMode;
-    const resolvedOwnKey = apiMode === 'own' ? ownApiKey.trim() : '';
-    if (resolvedApiMode === 'own' && !resolvedOwnKey) {
-      setProgressMsg('❌ Own API mode ရွေးထားပါသည်။ Google API Key ထည့်ပေးပါ။');
-      setStatus('error');
+    const resolvedOwnKey = apiMode === "own" ? ownApiKey.trim() : "";
+    if (resolvedApiMode === "own" && !resolvedOwnKey) {
+      setProgressMsg("❌ Own API mode ရွေးထားပါသည်။ Google API Key ထည့်ပေးပါ။");
+      setStatus("error");
       return;
     }
 
-    setStatus('processing');
-    setProgressMsg('🎬 Video ကို upload လုပ်နေပါသည်...');
+    setStatus("processing");
+    setProgressMsg("🎬 Video ကို upload လုပ်နေပါသည်...");
 
     try {
       // Get video duration
       const tempUrl = URL.createObjectURL(file);
       const duration = await new Promise<number>((resolve) => {
-        const v = document.createElement('video');
-        v.preload = 'metadata';
+        const v = document.createElement("video");
+        v.preload = "metadata";
         v.onloadedmetadata = () => {
           resolve(v.duration || 120);
           URL.revokeObjectURL(tempUrl);
@@ -2665,38 +2827,45 @@ const RecapVideoNVPage: React.FC = () => {
       setVideoUrl(videoBlob);
 
       // Determine mime type
-      const ext = file.name.split('.').pop()?.toLowerCase() || '';
+      const ext = file.name.split(".").pop()?.toLowerCase() || "";
       const mimeMap: Record<string, string> = {
-        mp4: 'video/mp4', webm: 'video/webm', mkv: 'video/x-matroska',
-        avi: 'video/x-msvideo', mov: 'video/quicktime', '3gp': 'video/3gpp',
-        mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', ogg: 'audio/ogg'
+        mp4: "video/mp4",
+        webm: "video/webm",
+        mkv: "video/x-matroska",
+        avi: "video/x-msvideo",
+        mov: "video/quicktime",
+        "3gp": "video/3gpp",
+        mp3: "audio/mpeg",
+        wav: "audio/wav",
+        m4a: "audio/mp4",
+        ogg: "audio/ogg",
       };
-      const mimeType = file.type || mimeMap[ext] || 'video/mp4';
+      const mimeType = file.type || mimeMap[ext] || "video/mp4";
 
       // === Upload to Google Files API via video-recap chunked upload ===
-      setProgressMsg('📤 Google AI ဆီ video upload လုပ်နေပါသည်...');
+      setProgressMsg("📤 Google AI ဆီ video upload လုပ်နေပါသည်...");
 
       const initBody: Record<string, unknown> = {
-        action: 'initUpload',
+        action: "initUpload",
         fileName: file.name,
         fileSize: file.size,
         mimeType: mimeType,
-        useOwnApi: resolvedApiMode === 'own'
+        useOwnApi: resolvedApiMode === "own",
       };
       if (resolvedOwnKey) initBody.ownApiKey = resolvedOwnKey;
 
-      const { data: initData, error: initError } = await supabase.functions.invoke('video-recap', {
-        body: initBody
+      const { data: initData, error: initError } = await supabase.functions.invoke("video-recap", {
+        body: initBody,
       });
 
       if (initError || initData?.error || !initData?.uploadUrl) {
-        throw new Error(initData?.error || initError?.message || 'Upload URL ရယူ၍ မအောင်မြင်ပါ');
+        throw new Error(initData?.error || initError?.message || "Upload URL ရယူ၍ မအောင်မြင်ပါ");
       }
 
       // Sequential chunked upload: 8MB chunks (Google resumable upload requires multiples of 8,388,608 bytes)
       const CHUNK_SIZE = 8 * 1024 * 1024; // 8MB — Google Files API chunk granularity requirement
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-      let fileUri = '';
+      let fileUri = "";
 
       for (let i = 0; i < totalChunks; i++) {
         const start = i * CHUNK_SIZE;
@@ -2705,22 +2874,22 @@ const RecapVideoNVPage: React.FC = () => {
         const isLastChunk = i === totalChunks - 1;
         const chunkBuf = await chunk.arrayBuffer();
         const chunkHeaders: Record<string, string> = {
-          'x-recap-action': 'uploadChunkBinary',
-          'x-upload-url': initData.uploadUrl,
-          'x-chunk-index': String(i),
-          'x-total-chunks': String(totalChunks),
-          'x-offset': String(start),
-          'x-total-size': String(file.size),
-          'x-mime-type': mimeType,
-          'x-is-last-chunk': String(isLastChunk)
+          "x-recap-action": "uploadChunkBinary",
+          "x-upload-url": initData.uploadUrl,
+          "x-chunk-index": String(i),
+          "x-total-chunks": String(totalChunks),
+          "x-offset": String(start),
+          "x-total-size": String(file.size),
+          "x-mime-type": mimeType,
+          "x-is-last-chunk": String(isLastChunk),
         };
-        if (resolvedOwnKey) chunkHeaders['x-own-api-key'] = resolvedOwnKey;
+        if (resolvedOwnKey) chunkHeaders["x-own-api-key"] = resolvedOwnKey;
 
         setProgressMsg(`📤 Uploading... (${i + 1}/${totalChunks})`);
 
-        const { data, error } = await supabase.functions.invoke('video-recap', {
+        const { data, error } = await supabase.functions.invoke("video-recap", {
           body: chunkBuf,
-          headers: chunkHeaders
+          headers: chunkHeaders,
         });
         if (error || data?.error) {
           throw new Error(data?.error || error?.message || `Chunk ${i + 1} upload failed`);
@@ -2731,39 +2900,38 @@ const RecapVideoNVPage: React.FC = () => {
       }
 
       if (!fileUri) {
-        throw new Error('File URI ရယူ၍ မအောင်မြင်ပါ');
+        throw new Error("File URI ရယူ၍ မအောင်မြင်ပါ");
       }
 
       // === Call recap-script-generator with fileUri ===
-      setProgressMsg('🧠 AI is watching the video and writing script...');
+      setProgressMsg("🧠 AI is watching the video and writing script...");
 
       // Get user session token for authenticated call
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      const {
+        data: { session: currentSession },
+      } = await supabase.auth.getSession();
       const userToken = currentSession?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-      const selectedLangName = languages.find((l) => l.code === selectedLanguage)?.name || 'BURMESE';
+      const selectedLangName = languages.find((l) => l.code === selectedLanguage)?.name || "BURMESE";
       const scriptBody: Record<string, unknown> = {
         fileUri: fileUri,
         fileMimeType: mimeType,
-        niche: 'MOVIE RECAP',
+        niche: "MOVIE RECAP",
         language: selectedLangName,
         sourceDurationSec: duration,
-        skipCreditDeduction: true // Credits deducted at final video output (handleVideoReady)
+        skipCreditDeduction: true, // Credits deducted at final video output (handleVideoReady)
       };
       if (resolvedOwnKey) scriptBody.ownApiKey = resolvedOwnKey;
 
-      const scriptResponse = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recap-script-generator`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            'Authorization': `Bearer ${userToken}`
-          },
-          body: JSON.stringify(scriptBody)
-        }
-      );
+      const scriptResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recap-script-generator`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${userToken}`,
+        },
+        body: JSON.stringify(scriptBody),
+      });
 
       if (!scriptResponse.ok) {
         const errData = await scriptResponse.json().catch(() => ({}));
@@ -2777,30 +2945,34 @@ const RecapVideoNVPage: React.FC = () => {
         throw new Error(scriptResult.error);
       }
 
-      const scriptText = scriptResult.script || '';
+      const scriptText = scriptResult.script || "";
 
       if (!scriptText || scriptText.trim().length < 10) {
-        throw new Error('AI script generation returned empty result');
+        throw new Error("AI script generation returned empty result");
       }
 
       // Parse script into segments
       const segments = scriptToSegments(scriptText, duration);
       setScriptData({
-        title: file.name.replace(/\.[^.]+$/, ''),
+        title: file.name.replace(/\.[^.]+$/, ""),
         full_script: scriptText,
-        segments
+        segments,
       });
 
-      setProgressMsg('📝 Script generated! Now generating AI voice...');
+      setProgressMsg("📝 Script generated! Now generating AI voice...");
 
       // Strip [MM:SS] scene timecodes from script text before TTS (TTS should not read timecodes aloud)
-      const scriptTextForTTS = scriptText.replace(/^\[\d{1,2}:\d{2}\]\s*/gm, '');
+      const scriptTextForTTS = scriptText.replace(/^\[\d{1,2}:\d{2}\]\s*/gm, "");
 
       // Auto-generate voice — pass segments so gemini-tts returns exact WAV timestamps
-      await generateVoice(scriptTextForTTS, resolvedOwnKey || undefined, segments.map((s) => ({ text: s.text })));
+      await generateVoice(
+        scriptTextForTTS,
+        resolvedOwnKey || undefined,
+        segments.map((s) => ({ text: s.text })),
+      );
     } catch (err: any) {
-      console.error('Pipeline error:', err);
-      setStatus('error');
+      console.error("Pipeline error:", err);
+      setStatus("error");
       setProgressMsg(`❌ Error: ${err.message}`);
     }
   };
@@ -2810,8 +2982,8 @@ const RecapVideoNVPage: React.FC = () => {
       const file = e.target.files[0];
 
       // Pre-check: only for App API mode (Own API skips credit check)
-      if (apiMode === 'app') {
-        const hasCredits = await preCheckCredits('recap-nv');
+      if (apiMode === "app") {
+        const hasCredits = await preCheckCredits("recap-nv");
         if (!hasCredits) return;
       }
 
@@ -2832,8 +3004,8 @@ const RecapVideoNVPage: React.FC = () => {
           <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
           <p className="text-sm text-muted-foreground">Checking access...</p>
         </div>
-      </div>);
-
+      </div>
+    );
   }
 
   if (!isAllowed) {
@@ -2843,34 +3015,35 @@ const RecapVideoNVPage: React.FC = () => {
           <div className="text-5xl">🔒</div>
           <h1 className="text-xl font-bold text-foreground">Access Denied</h1>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            Video Recap NV သည် <span className="text-primary font-semibold">Pro / Premium</span> users များနှင့် Admin များသာ အသုံးပြုနိုင်ပါသည်။
+            Video Recap NV သည် <span className="text-primary font-semibold">Pro / Premium</span> users များနှင့် Admin
+            များသာ အသုံးပြုနိုင်ပါသည်။
           </p>
           <div className="flex flex-col gap-2">
             <button
-              onClick={() => navigate('/plans')}
-              className="w-full py-2.5 px-4 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-
+              onClick={() => navigate("/plans")}
+              className="w-full py-2.5 px-4 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+            >
               Upgrade to Pro / Premium
             </button>
             <button
-              onClick={() => navigate('/')}
-              className="w-full py-2.5 px-4 border border-border text-foreground rounded-lg text-sm font-medium hover:bg-muted transition-colors">
-
+              onClick={() => navigate("/")}
+              className="w-full py-2.5 px-4 border border-border text-foreground rounded-lg text-sm font-medium hover:bg-muted transition-colors"
+            >
               Back to Home
             </button>
           </div>
         </div>
-      </div>);
-
+      </div>
+    );
   }
 
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="p-4">
         <button
-          onClick={() => navigate('/')}
-          className="mb-4 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:opacity-90 transition-opacity">
-
+          onClick={() => navigate("/")}
+          className="mb-4 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:opacity-90 transition-opacity"
+        >
           ← Home
         </button>
 
@@ -2878,7 +3051,8 @@ const RecapVideoNVPage: React.FC = () => {
         <div className="mb-6 p-4 bg-secondary/30 rounded-xl border border-border space-y-4">
           <h3 className="font-semibold text-purple-600 text-4xl">🎬 Nova Auto Recap</h3>
           <p className="text-neon-cyan text-lg">
-            Video တစ်ခုကို upload လုပ်လိုက်ရုံပဲ — AI က အလိုအလျောက် analyze လုပ်ပြီး script ရေးပေးပြီး voice over ထည့်ပေးပါမယ်။
+            Video တစ်ခုကို upload လုပ်လိုက်ရုံပဲ — AI က အလိုအလျောက် analyze လုပ်ပြီး script ရေးပေးပြီး voice over
+            ထည့်ပေးပါမယ်။
           </p>
 
           {/* API Mode Selector */}
@@ -2886,51 +3060,52 @@ const RecapVideoNVPage: React.FC = () => {
             <label className="text-sm font-medium text-neon-cyan">🔑 API Mode</label>
             <div className="flex gap-2">
               <button
-                onClick={() => setApiMode('app')}
+                onClick={() => setApiMode("app")}
                 className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${
-                apiMode === 'app' ?
-                'bg-primary text-primary-foreground border-primary' :
-                'bg-secondary text-secondary-foreground border-border hover:opacity-80'}`
-                }>
-
+                  apiMode === "app"
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-secondary text-secondary-foreground border-border hover:opacity-80"
+                }`}
+              >
                 🖥️ App API
                 <span className="block text-xs font-normal opacity-70">Admin · Premium · Pro</span>
               </button>
               <button
-                onClick={() => setApiMode('own')}
+                onClick={() => setApiMode("own")}
                 className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${
-                apiMode === 'own' ?
-                'bg-primary text-primary-foreground border-primary' :
-                'bg-secondary text-secondary-foreground border-border hover:opacity-80'}`
-                }>
-
+                  apiMode === "own"
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-secondary text-secondary-foreground border-border hover:opacity-80"
+                }`}
+              >
                 🔑 Own API Key
                 <span className="block text-xs font-normal opacity-70">သင့်ကိုယ်ပိုင် Key</span>
               </button>
             </div>
 
             {/* Own API Key Input */}
-            {apiMode === 'own' &&
-            <div className="space-y-1">
+            {apiMode === "own" && (
+              <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">Google AI API Key (billing enabled)</label>
                 <div className="flex gap-2">
                   <input
-                  type={showApiKey ? 'text' : 'password'}
-                  value={ownApiKey}
-                  onChange={(e) => setOwnApiKey(e.target.value)}
-                  placeholder="AIza..."
-                  className="flex-1 px-3 py-2 text-sm bg-background border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+                    type={showApiKey ? "text" : "password"}
+                    value={ownApiKey}
+                    onChange={(e) => setOwnApiKey(e.target.value)}
+                    placeholder="AIza..."
+                    className="flex-1 px-3 py-2 text-sm bg-background border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
 
                   <button
-                  onClick={() => setShowApiKey((prev) => !prev)}
-                  className="px-3 py-2 text-xs bg-secondary text-secondary-foreground rounded-lg border border-border hover:opacity-80">
-
-                    {showApiKey ? '🙈' : '👁️'}
+                    onClick={() => setShowApiKey((prev) => !prev)}
+                    className="px-3 py-2 text-xs bg-secondary text-secondary-foreground rounded-lg border border-border hover:opacity-80"
+                  >
+                    {showApiKey ? "🙈" : "👁️"}
                   </button>
                 </div>
                 <p className="text-xs text-muted-foreground">⚠️ Session ပိတ်ရင် key ပျောက်သွားမည်</p>
               </div>
-            }
+            )}
           </div>
 
           {/* Language Selection - Searchable */}
@@ -2941,37 +3116,41 @@ const RecapVideoNVPage: React.FC = () => {
                 <button
                   className="flex h-10 w-full items-center justify-between rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                   role="combobox"
-                  aria-expanded={langPopoverOpen}>
-
+                  aria-expanded={langPopoverOpen}
+                >
                   {(() => {
                     const lang = languages.find((l) => l.code === selectedLanguage);
-                    return lang ? `${lang.nativeName} — ${lang.name}` : 'ဘာသာစကား ရွေးပါ';
+                    return lang ? `${lang.nativeName} — ${lang.name}` : "ဘာသာစကား ရွေးပါ";
                   })()}
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </button>
               </PopoverTrigger>
               <PopoverContent className="w-[--radix-popover-trigger-width] p-0 z-50" align="start">
-                <Command filter={(value, search) => {
-                  if (value.toLowerCase().includes(search.toLowerCase())) return 1;
-                  return 0;
-                }}>
+                <Command
+                  filter={(value, search) => {
+                    if (value.toLowerCase().includes(search.toLowerCase())) return 1;
+                    return 0;
+                  }}
+                >
                   <CommandInput placeholder="Search language..." />
                   <CommandList className="max-h-[250px]">
                     <CommandEmpty>No language found.</CommandEmpty>
                     <CommandGroup>
-                      {languages.map((lang) =>
-                      <CommandItem
-                        key={lang.code}
-                        value={`${lang.name} ${lang.nativeName}`}
-                        onSelect={() => {
-                          setSelectedLanguage(lang.code);
-                          setLangPopoverOpen(false);
-                        }}>
-
-                          <Check className={`mr-2 h-4 w-4 ${selectedLanguage === lang.code ? 'opacity-100' : 'opacity-0'}`} />
+                      {languages.map((lang) => (
+                        <CommandItem
+                          key={lang.code}
+                          value={`${lang.name} ${lang.nativeName}`}
+                          onSelect={() => {
+                            setSelectedLanguage(lang.code);
+                            setLangPopoverOpen(false);
+                          }}
+                        >
+                          <Check
+                            className={`mr-2 h-4 w-4 ${selectedLanguage === lang.code ? "opacity-100" : "opacity-0"}`}
+                          />
                           {lang.nativeName} — {lang.name}
                         </CommandItem>
-                      )}
+                      ))}
                     </CommandGroup>
                   </CommandList>
                 </Command>
@@ -2986,12 +3165,16 @@ const RecapVideoNVPage: React.FC = () => {
               <SelectTrigger className="w-full bg-background border-border text-foreground">
                 <SelectValue placeholder="အသံ ရွေးပါ" />
               </SelectTrigger>
-                <SelectContent className="max-h-[250px] z-50 overflow-y-auto scroll-smooth" position="popper" sideOffset={4}>
-                {VOICE_OPTIONS.map((v) =>
-                <SelectItem key={v.value} value={v.value}>
+              <SelectContent
+                className="max-h-[250px] z-50 overflow-y-auto scroll-smooth"
+                position="popper"
+                sideOffset={4}
+              >
+                {VOICE_OPTIONS.map((v) => (
+                  <SelectItem key={v.value} value={v.value}>
                     {v.label} ({v.gender})
                   </SelectItem>
-                )}
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -3001,13 +3184,15 @@ const RecapVideoNVPage: React.FC = () => {
             <label className="text-sm font-medium text-neon-cyan">🎚️ Voice Speed</label>
             <div className="flex items-center gap-2 bg-charcoal-900/50 rounded-xl p-1.5">
               <button
-                onClick={() => setVoiceMode('modern')}
-                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${voiceMode === 'modern' ? 'bg-neon-cyan text-black shadow-[0_0_10px_rgba(0,229,255,0.4)] ring-2 ring-neon-cyan' : 'bg-charcoal-700 text-gray-400 hover:text-gray-200'}`}>
+                onClick={() => setVoiceMode("modern")}
+                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${voiceMode === "modern" ? "bg-neon-cyan text-black shadow-[0_0_10px_rgba(0,229,255,0.4)] ring-2 ring-neon-cyan" : "bg-charcoal-700 text-gray-400 hover:text-gray-200"}`}
+              >
                 ⚡ Modern Version
               </button>
               <button
-                onClick={() => setVoiceMode('normal')}
-                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${voiceMode === 'normal' ? 'bg-charcoal-600 text-white shadow-md ring-2 ring-white' : 'bg-charcoal-700 text-gray-400 hover:text-gray-200'}`}>
+                onClick={() => setVoiceMode("normal")}
+                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${voiceMode === "normal" ? "bg-charcoal-600 text-white shadow-md ring-2 ring-white" : "bg-charcoal-700 text-gray-400 hover:text-gray-200"}`}
+              >
                 🎙️ Normal Version
               </button>
             </div>
@@ -3019,43 +3204,48 @@ const RecapVideoNVPage: React.FC = () => {
               type="file"
               accept="video/*"
               onChange={handleVideoUpload}
-              disabled={status === 'processing'}
-              className="w-full text-sm text-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-primary file:text-primary-foreground file:font-semibold file:cursor-pointer hover:file:opacity-90 disabled:opacity-50" />
-
+              disabled={status === "processing"}
+              className="w-full text-sm text-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-primary file:text-primary-foreground file:font-semibold file:cursor-pointer hover:file:opacity-90 disabled:opacity-50"
+            />
           </div>
 
           {/* Progress indicator */}
-          {progressMsg &&
-          <div className={`p-3 rounded-lg text-sm font-medium ${
-          status === 'processing' ? 'bg-blue-500/10 text-blue-400 animate-pulse' :
-          status === 'error' ? 'bg-red-500/10 text-red-400' :
-          status === 'done' ? 'bg-green-500/10 text-green-400' :
-          'bg-secondary/50 text-muted-foreground'}`
-          }>
+          {progressMsg && (
+            <div
+              className={`p-3 rounded-lg text-sm font-medium ${
+                status === "processing"
+                  ? "bg-blue-500/10 text-blue-400 animate-pulse"
+                  : status === "error"
+                    ? "bg-red-500/10 text-red-400"
+                    : status === "done"
+                      ? "bg-green-500/10 text-green-400"
+                      : "bg-secondary/50 text-muted-foreground"
+              }`}
+            >
               {progressMsg}
             </div>
-          }
+          )}
         </div>
 
         {/* Show ResultView when we have data */}
-        {(scriptData.segments.length > 0 || videoUrl) &&
-        <ResultView
-          scriptData={scriptData}
-          onUpdateScript={handleUpdateScript}
-          onGenerateVoice={handleGenerateVoice}
-          onRecapSaved={loadRecapHistory}
-          onVideoReady={handleVideoReady}
-          creditPerMinRate={creditPerMinRate}
-          audioUrl={audioUrl}
-          videoUrl={videoUrl}
-          status={status}
-          audioTimestampsRef={pageAudioTimestampsRef}
-          autoStartRecap={autoStartRecap}
-          onAutoStartConsumed={() => setAutoStartRecap(false)}
-          voiceMode={voiceMode}
-          onVoiceModeChange={setVoiceMode} />
-
-        }
+        {(scriptData.segments.length > 0 || videoUrl) && (
+          <ResultView
+            scriptData={scriptData}
+            onUpdateScript={handleUpdateScript}
+            onGenerateVoice={handleGenerateVoice}
+            onRecapSaved={loadRecapHistory}
+            onVideoReady={handleVideoReady}
+            creditPerMinRate={creditPerMinRate}
+            audioUrl={audioUrl}
+            videoUrl={videoUrl}
+            status={status}
+            audioTimestampsRef={pageAudioTimestampsRef}
+            autoStartRecap={autoStartRecap}
+            onAutoStartConsumed={() => setAutoStartRecap(false)}
+            voiceMode={voiceMode}
+            onVoiceModeChange={setVoiceMode}
+          />
+        )}
 
         {/* Recap History Section */}
         <div className="mt-6 p-4 bg-secondary/30 rounded-xl border border-border space-y-4">
@@ -3064,27 +3254,23 @@ const RecapVideoNVPage: React.FC = () => {
             <button
               onClick={loadRecapHistory}
               disabled={historyLoading}
-              className="text-xs px-3 py-1 bg-secondary text-secondary-foreground rounded hover:opacity-80">
-
-              {historyLoading ? '...' : 'Refresh'}
+              className="text-xs px-3 py-1 bg-secondary text-secondary-foreground rounded hover:opacity-80"
+            >
+              {historyLoading ? "..." : "Refresh"}
             </button>
           </div>
 
-          {historyLoading &&
-          <p className="text-sm text-muted-foreground animate-pulse">Loading history...</p>
-          }
+          {historyLoading && <p className="text-sm text-muted-foreground animate-pulse">Loading history...</p>}
 
-          {!historyLoading && recapHistory.length === 0 &&
-          <p className="text-sm text-muted-foreground">Recap video history မရှိသေးပါ။</p>
-          }
+          {!historyLoading && recapHistory.length === 0 && (
+            <p className="text-sm text-muted-foreground">Recap video history မရှိသေးပါ။</p>
+          )}
 
           {recapHistory.map((item) => {
             const createdDate = new Date(item.created_at);
             const expiresDate = new Date(item.expires_at);
             const daysLeft = Math.max(0, Math.ceil((expiresDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
-            const sizeStr = item.file_size_bytes ?
-            `${(item.file_size_bytes / (1024 * 1024)).toFixed(1)} MB` :
-            '';
+            const sizeStr = item.file_size_bytes ? `${(item.file_size_bytes / (1024 * 1024)).toFixed(1)} MB` : "";
 
             return (
               <div key={item.id} className="p-3 bg-secondary/50 rounded-lg border border-border space-y-2">
@@ -3095,39 +3281,36 @@ const RecapVideoNVPage: React.FC = () => {
                       {createdDate.toLocaleDateString()} · {sizeStr} · {daysLeft} days left
                     </p>
                   </div>
-                  <button
-                    onClick={() => deleteRecapItem(item)}
-                    className="text-xs text-destructive hover:underline">
-
+                  <button onClick={() => deleteRecapItem(item)} className="text-xs text-destructive hover:underline">
                     Delete
                   </button>
                 </div>
 
-                {item.video_url &&
-                <video
-                  src={item.video_url}
-                  controls
-                  playsInline
-                  className="w-full max-h-[300px] rounded-lg bg-black" />
+                {item.video_url && (
+                  <video
+                    src={item.video_url}
+                    controls
+                    playsInline
+                    className="w-full max-h-[300px] rounded-lg bg-black"
+                  />
+                )}
 
-                }
-
-                {item.video_url &&
-                <a
-                  href={item.video_url}
-                  download={`${item.title.replace(/\s+/g, '_')}.webm`}
-                  className="inline-block text-xs px-3 py-1.5 bg-primary text-primary-foreground rounded hover:opacity-90">
-
+                {item.video_url && (
+                  <a
+                    href={item.video_url}
+                    download={`${item.title.replace(/\s+/g, "_")}.webm`}
+                    className="inline-block text-xs px-3 py-1.5 bg-primary text-primary-foreground rounded hover:opacity-90"
+                  >
                     Download
                   </a>
-                }
-              </div>);
-
+                )}
+              </div>
+            );
           })}
         </div>
       </div>
-    </div>);
-
+    </div>
+  );
 };
 
 export default RecapVideoNVPage;
