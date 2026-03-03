@@ -1398,24 +1398,24 @@ export const ResultView: React.FC<ResultViewProps> = ({
               console.log(`[TTS] Exact timestamps scaled: ${audioTimestampsRef.current.length} segs, scale=${scale.toFixed(4)}, realDuration=${realDuration.toFixed(2)}s`);
             }
           } else {
-            // No exact timestamps — fall back to word-count proportional estimation
-            // Simple word count — MUST match gemini-tts backend countWords() exactly
-            const countWords = (text: string): number => {
-              const words = (text || '').split(/\s+/).filter(Boolean);
-              return Math.max(words.length, 1);
+            // No exact timestamps — fall back to character-count proportional estimation
+            // Character count (excluding spaces) correlates better with TTS speech duration
+            // MUST match gemini-tts backend countChars() exactly
+            const countChars = (text: string): number => {
+              return Math.max((text || '').replace(/\s+/g, '').length, 1);
             };
-            const segWordCounts = segs.map((s: any) => countWords(s.text));
-            const totalWords = segWordCounts.reduce((sum: number, w: number) => sum + w, 0);
+            const segCharCounts = segs.map((s: any) => countChars(s.text));
+            const totalChars = segCharCounts.reduce((sum: number, w: number) => sum + w, 0);
 
             let cursor = 0;
             audioTimestampsRef.current = segs.map((seg: any, idx: number) => {
-              const pct = totalWords > 0 ? segWordCounts[idx] / totalWords : 1 / segs.length;
+              const pct = totalChars > 0 ? segCharCounts[idx] / totalChars : 1 / segs.length;
               const start = parseFloat(cursor.toFixed(3));
               cursor += pct * realDuration;
               const end = parseFloat((idx === segs.length - 1 ? realDuration : cursor).toFixed(3));
               return { index: idx, start, end };
             });
-            console.log(`[TTS] Word-count fallback timestamps: ${segs.length} segs, realDuration=${realDuration.toFixed(2)}s, totalWords=${totalWords}`);
+            console.log(`[TTS] Char-count fallback timestamps: ${segs.length} segs, realDuration=${realDuration.toFixed(2)}s, totalChars=${totalChars}`);
           }
         }} />
 
