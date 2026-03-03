@@ -1354,7 +1354,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
   const containerStyles: React.CSSProperties = {
     aspectRatio: editorState.ratio === "auto" ? undefined : editorState.ratio,
     height: editorState.ratio === "auto" ? "450px" : "auto",
-    width: editorState.ratio === "auto" ? "100%" : "auto",
+    width: "100%",
     maxHeight: "60vh",
     maxWidth: "100%",
     alignSelf: "center",
@@ -1384,23 +1384,39 @@ export const ResultView: React.FC<ResultViewProps> = ({
           const segs = syncSegmentsRef.current;
           if (!segs || segs.length === 0) return;
 
-          // Simple word count — MUST match gemini-tts backend countWords() exactly
-          const countWords = (text: string): number => {
-            const words = (text || '').split(/\s+/).filter(Boolean);
-            return Math.max(words.length, 1);
-          };
-          const segWordCounts = segs.map((s: any) => countWords(s.text));
-          const totalWords = segWordCounts.reduce((sum: number, w: number) => sum + w, 0);
+          // Check if exact timestamps already exist from TTS response
+          if (audioTimestampsRef.current.length > 0) {
+            // Exact timestamps from TTS exist — scale proportionally to real browser duration
+            const lastEnd = audioTimestampsRef.current[audioTimestampsRef.current.length - 1]?.end;
+            if (lastEnd && lastEnd > 0) {
+              const scale = realDuration / lastEnd;
+              audioTimestampsRef.current = audioTimestampsRef.current.map(t => ({
+                ...t,
+                start: parseFloat((t.start * scale).toFixed(3)),
+                end: parseFloat((t.end * scale).toFixed(3))
+              }));
+              console.log(`[TTS] Exact timestamps scaled: ${audioTimestampsRef.current.length} segs, scale=${scale.toFixed(4)}, realDuration=${realDuration.toFixed(2)}s`);
+            }
+          } else {
+            // No exact timestamps — fall back to word-count proportional estimation
+            // Simple word count — MUST match gemini-tts backend countWords() exactly
+            const countWords = (text: string): number => {
+              const words = (text || '').split(/\s+/).filter(Boolean);
+              return Math.max(words.length, 1);
+            };
+            const segWordCounts = segs.map((s: any) => countWords(s.text));
+            const totalWords = segWordCounts.reduce((sum: number, w: number) => sum + w, 0);
 
-          let cursor = 0;
-          audioTimestampsRef.current = segs.map((seg: any, idx: number) => {
-            const pct = totalWords > 0 ? segWordCounts[idx] / totalWords : 1 / segs.length;
-            const start = parseFloat(cursor.toFixed(3));
-            cursor += pct * realDuration;
-            const end = parseFloat((idx === segs.length - 1 ? realDuration : cursor).toFixed(3));
-            return { index: idx, start, end };
-          });
-          console.log(`[TTS] Client-side timestamps recomputed: ${segs.length} segs, realDuration=${realDuration.toFixed(2)}s, totalWords=${totalWords}`);
+            let cursor = 0;
+            audioTimestampsRef.current = segs.map((seg: any, idx: number) => {
+              const pct = totalWords > 0 ? segWordCounts[idx] / totalWords : 1 / segs.length;
+              const start = parseFloat(cursor.toFixed(3));
+              cursor += pct * realDuration;
+              const end = parseFloat((idx === segs.length - 1 ? realDuration : cursor).toFixed(3));
+              return { index: idx, start, end };
+            });
+            console.log(`[TTS] Word-count fallback timestamps: ${segs.length} segs, realDuration=${realDuration.toFixed(2)}s, totalWords=${totalWords}`);
+          }
         }} />
 
       }
