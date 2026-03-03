@@ -435,15 +435,14 @@ serve(async (req) => {
         const pcmBytes = Math.floor(finalAudio.length * 0.75);
         const pcmDuration = pcmBytes / (pcmSampleRate * 1 * 2); // mono, 16-bit
         if (pcmDuration > 0) {
-        // === SIMPLE WORD-COUNT PROPORTIONAL ESTIMATION ===
-        // Pure word count gives the most reliable proportion mapping to TTS speech duration.
-        // Complex weighting (punctuation, syllables) skews proportions and causes A/V drift.
-        const countWords = (text: string): number => {
-          const words = (text || '').split(/\s+/).filter(Boolean);
-          return Math.max(words.length, 1);
+        // === CHARACTER-COUNT PROPORTIONAL ESTIMATION ===
+        // Character count (excluding spaces) correlates more closely with TTS speech duration
+        // than word count, because longer words take longer to pronounce.
+        const countChars = (text: string): number => {
+          return Math.max((text || '').replace(/\s+/g, '').length, 1);
         };
         
-        const segWeights = (segments as { text: string }[]).map(s => countWords(s.text));
+        const segWeights = (segments as { text: string }[]).map(s => countChars(s.text));
         const totalWeight = segWeights.reduce((sum, w) => sum + w, 0);
           let cursor = 0;
           segmentTimestamps = (segments as { text: string }[]).map((seg, idx) => {
@@ -453,7 +452,7 @@ serve(async (req) => {
             const end = parseFloat((idx === segments.length - 1 ? pcmDuration : cursor).toFixed(3));
             return { index: idx, start, end };
           });
-          console.log(`[gemini-tts] segmentTimestamps: ${segments.length} segs, pcmDuration=${pcmDuration.toFixed(2)}s, weights=${segWeights.map(w=>w.toFixed(1)).join(',')}`);
+          console.log(`[gemini-tts] segmentTimestamps: ${segments.length} segs, pcmDuration=${pcmDuration.toFixed(2)}s, charWeights=${segWeights.join(',')}`);
         }
       } catch (e) {
         console.error("[gemini-tts] Failed to compute segmentTimestamps:", e);
