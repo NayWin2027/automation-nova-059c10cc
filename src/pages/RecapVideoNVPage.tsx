@@ -287,6 +287,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
   // Subtitle 3-line paging refs — max 3 lines visible, remaining text cycles to next page
   const subtitleLastTextRef = useRef<string>(""); // detect text change to reset page
   const subtitlePageStartRef = useRef<number>(0); // timestamp when current text started
+  // 1080p perf cache: avoid per-frame measureText/string ops — only recompute when subText changes
+  const subtitleWrapCacheRef = useRef<{ text: string; font: string; maxW: number; fittedLines: string[]; pageCharCounts: number[]; totalChars: number } | null>(null);
 
   // Request Wake Lock to prevent screen from turning off during recap/recording
   useEffect(() => {
@@ -970,20 +972,45 @@ export const ResultView: React.FC<ResultViewProps> = ({
         ctx.font = `bold ${fontSize}px sans-serif`;
         const lineHeight = fontSize * 1.4;
 
-        // Word-wrap at fixed font size
-        const words = subText.split(" ");
-        const fittedLines: string[] = [];
-        let currentLine = "";
-        for (const word of words) {
-          const testLine = currentLine ? `${currentLine} ${word}` : word;
-          if (ctx.measureText(testLine).width > maxTextWidth && currentLine) {
-            fittedLines.push(currentLine);
-            currentLine = word;
-          } else {
-            currentLine = testLine;
+        // Word-wrap at fixed font size — CACHED to avoid per-frame measureText (1080p perf)
+        const fontKey = `bold ${fontSize}px sans-serif`;
+        let fittedLines: string[];
+        let cachedPageCharCounts: number[];
+        let cachedTotalChars: number;
+        const cache = subtitleWrapCacheRef.current;
+        if (cache && cache.text === subText && cache.font === fontKey && Math.abs(cache.maxW - maxTextWidth) < 1) {
+          // Cache hit — skip expensive measureText + string ops
+          fittedLines = cache.fittedLines;
+          cachedPageCharCounts = cache.pageCharCounts;
+          cachedTotalChars = cache.totalChars;
+        } else {
+          // Cache miss — compute word-wrap and char counts once
+          const words = subText.split(" ");
+          fittedLines = [];
+          let currentLine = "";
+          for (const word of words) {
+            const testLine = currentLine ? `${currentLine} ${word}` : word;
+            if (ctx.measureText(testLine).width > maxTextWidth && currentLine) {
+              fittedLines.push(currentLine);
+              currentLine = word;
+            } else {
+              currentLine = testLine;
+            }
           }
+          if (currentLine) fittedLines.push(currentLine);
+          // Pre-compute page char counts
+          const MAX_L = 3;
+          const tPages = Math.ceil(fittedLines.length / MAX_L);
+          cachedPageCharCounts = [];
+          cachedTotalChars = 0;
+          for (let p = 0; p < tPages; p++) {
+            const pageLines = fittedLines.slice(p * MAX_L, (p + 1) * MAX_L);
+            const cc = Math.max(pageLines.join("").replace(/\s+/g, "").length, 1);
+            cachedPageCharCounts.push(cc);
+            cachedTotalChars += cc;
+          }
+          subtitleWrapCacheRef.current = { text: subText, font: fontKey, maxW: maxTextWidth, fittedLines, pageCharCounts: cachedPageCharCounts, totalChars: cachedTotalChars };
         }
-        if (currentLine) fittedLines.push(currentLine);
 
         // ── 3-line max paging: show max 3 lines, cycle remaining text pages ──
         const MAX_LINES = 3;
@@ -997,10 +1024,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
           const totalPages = Math.ceil(fittedLines.length / MAX_LINES);
           const elapsed = (performance.now() - subtitlePageStartRef.current) / 1000;
           // Proportional timing: calculate per-page duration from current audio segment duration
-          // This ensures subtitle pages cycle in sync with the audio segment, not at a fixed rate
           const audioTs = audioTimestampsRef.current;
           const av = audioRef.current;
-          let segDuration = 2.5; // fallback if no timestamp data
+          let segDuration = 2.5;
           if (av && audioTs.length > 0) {
             const ct = av.currentTime;
             const activeTsEntry = audioTs.find((ts) => ct >= ts.start && ct < ts.end);
@@ -1008,21 +1034,12 @@ export const ResultView: React.FC<ResultViewProps> = ({
               segDuration = activeTsEntry.end - activeTsEntry.start;
             }
           }
-          // Character-weighted page durations: main page (more chars) stays longer,
-          // continuation pages only appear AFTER main page's audio portion is done.
-          // This cross-checks with audio segment timing for 100% accuracy.
-          const pages: string[][] = [];
-          for (let p = 0; p < totalPages; p++) {
-            pages.push(fittedLines.slice(p * MAX_LINES, (p + 1) * MAX_LINES));
-          }
-          const pageCharCounts = pages.map((lines) => Math.max(lines.join("").replace(/\s+/g, "").length, 1));
-          const totalChars = pageCharCounts.reduce((s, c) => s + c, 0);
           // Strict sequential paging: each sub box gets its proportional duration.
           // A sub box MUST fully finish (audio cross-checked) before the next one appears.
           let cumulative = 0;
           let currentPage = 0;
           for (let p = 0; p < totalPages; p++) {
-            const pageDur = Math.max(0.4, (pageCharCounts[p] / totalChars) * segDuration);
+            const pageDur = Math.max(0.4, (cachedPageCharCounts[p] / cachedTotalChars) * segDuration);
             if (elapsed < cumulative + pageDur) {
               currentPage = p;
               break;
