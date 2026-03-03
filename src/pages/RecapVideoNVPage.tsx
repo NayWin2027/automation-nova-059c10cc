@@ -806,9 +806,13 @@ export const ResultView: React.FC<ResultViewProps> = ({
             hue: 5 * smoothGradeScale,
           }
         : { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
-      const contrast = 100 + (gradePreset.contrast - 100) * smoothGradeScale + bypassBoost.contrast;
+      // Canvas 2D filter pipeline renders slightly less vivid than CSS filter pipeline.
+      // Add +3% contrast and +5% saturate compensation to match CSS preview exactly.
+      const canvasContrastBoost = 3;
+      const canvasSaturateBoost = 5;
+      const contrast = 100 + (gradePreset.contrast - 100) * smoothGradeScale + bypassBoost.contrast + canvasContrastBoost;
       const brightness = 100 + (gradePreset.brightness - 100) * smoothGradeScale + bypassBoost.brightness;
-      const saturate = 100 + (gradePreset.saturate - 100) * smoothGradeScale + bypassBoost.saturate;
+      const saturate = 100 + (gradePreset.saturate - 100) * smoothGradeScale + bypassBoost.saturate + canvasSaturateBoost;
       const hue = gradePreset.hue * smoothGradeScale + bypassBoost.hue;
       const sepia = gradePreset.sepia || 0;
       // Low-end: only contrast+brightness (skip saturate/hue-rotate/sepia to reduce GPU shader cost by ~60%)
@@ -1013,11 +1017,16 @@ export const ResultView: React.FC<ResultViewProps> = ({
           }
           const pageCharCounts = pages.map((lines) => Math.max(lines.join("").replace(/\s+/g, "").length, 1));
           const totalChars = pageCharCounts.reduce((s, c) => s + c, 0);
-          // Build cumulative thresholds: page N starts after sum of previous pages' durations
+          // Build cumulative thresholds with main-page priority boost:
+          // Main page (page 0) gets 1.35x weight so it holds longer before showing continuation.
+          // Continuation pages only appear AFTER main page audio portion is fully exhausted.
+          const MAIN_PAGE_BOOST = 1.35;
+          const weightedCharCounts = pageCharCounts.map((c, i) => i === 0 ? c * MAIN_PAGE_BOOST : c);
+          const totalWeightedChars = weightedCharCounts.reduce((s, c) => s + c, 0);
           let cumulative = 0;
           let currentPage = 0;
           for (let p = 0; p < totalPages; p++) {
-            const pageDur = Math.max(0.4, (pageCharCounts[p] / totalChars) * segDuration);
+            const pageDur = Math.max(0.4, (weightedCharCounts[p] / totalWeightedChars) * segDuration);
             if (elapsed < cumulative + pageDur) {
               currentPage = p;
               break;
