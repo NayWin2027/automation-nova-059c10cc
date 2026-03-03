@@ -1417,6 +1417,29 @@ export const ResultView: React.FC<ResultViewProps> = ({
             });
             console.log(`[TTS] Char-count fallback timestamps: ${segs.length} segs, realDuration=${realDuration.toFixed(2)}s, totalChars=${totalChars}`);
           }
+
+          // === DYNAMIC SILENCE GAP INJECTION ===
+          // Shrink each segment's end to create inter-segment gaps where subtitles hide.
+          // This mimics natural speech: subtitle appears during speech, disappears during pauses.
+          // Gap size is proportional to segment duration with punctuation awareness.
+          if (audioTimestampsRef.current.length > 1) {
+            const ts = audioTimestampsRef.current;
+            audioTimestampsRef.current = ts.map((t, idx) => {
+              if (idx === ts.length - 1) return t; // last segment: no trailing gap needed
+              const segDur = t.end - t.start;
+              const nextStart = ts[idx + 1].start;
+              // Determine gap based on segment text ending punctuation
+              const segText = ((segs[idx] as any)?.text || '').trim();
+              const lastChar = segText.slice(-1);
+              let gapRatio = 0.12; // default 12% gap
+              if ('.!?။'.includes(lastChar)) gapRatio = 0.18; // sentence end: larger pause
+              else if (',;:'.includes(lastChar)) gapRatio = 0.08; // comma: smaller pause
+              const gap = Math.min(segDur * gapRatio, 0.5); // cap at 500ms
+              const newEnd = parseFloat(Math.max(t.start + 0.15, nextStart - gap).toFixed(3));
+              return { ...t, end: newEnd };
+            });
+            console.log(`[TTS] Silence gaps injected: ${ts.length} segs — subtitles will hide during pauses`);
+          }
         }} />
 
       }
