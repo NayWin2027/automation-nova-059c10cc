@@ -1017,36 +1017,18 @@ export const ResultView: React.FC<ResultViewProps> = ({
           }
           const pageCharCounts = pages.map((lines) => Math.max(lines.join("").replace(/\s+/g, "").length, 1));
           const totalChars = pageCharCounts.reduce((s, c) => s + c, 0);
-          // Main page MUST hold until its audio portion is fully exhausted.
-          // Continuation pages only appear AFTER main page is completely done.
-          // Main page gets minimum 65% of segment duration OR character-weighted proportion (whichever is larger).
-          const MAIN_PAGE_MIN_RATIO = 0.65;
-          const charRatio = pageCharCounts[0] / totalChars;
-          const mainPageRatio = Math.max(MAIN_PAGE_MIN_RATIO, charRatio);
-          const mainPageDur = Math.max(0.5, mainPageRatio * segDuration);
-          const remainingDur = Math.max(0.3, segDuration - mainPageDur);
+          // Strict sequential paging: each sub box gets its proportional duration.
+          // A sub box MUST fully finish (audio cross-checked) before the next one appears.
           let cumulative = 0;
           let currentPage = 0;
-          if (elapsed < mainPageDur) {
-            // Still within main page duration — do NOT show continuation
-            currentPage = 0;
-          } else {
-            // Main page done — distribute remaining time across continuation pages
-            const contPages = totalPages - 1;
-            if (contPages > 0) {
-              const contElapsed = elapsed - mainPageDur;
-              const contCharTotal = pageCharCounts.slice(1).reduce((s, c) => s + c, 0);
-              cumulative = 0;
-              currentPage = totalPages - 1; // default to last
-              for (let p = 1; p < totalPages; p++) {
-                const pDur = Math.max(0.3, (pageCharCounts[p] / contCharTotal) * remainingDur);
-                if (contElapsed < cumulative + pDur) {
-                  currentPage = p;
-                  break;
-                }
-                cumulative += pDur;
-              }
+          for (let p = 0; p < totalPages; p++) {
+            const pageDur = Math.max(0.4, (pageCharCounts[p] / totalChars) * segDuration);
+            if (elapsed < cumulative + pageDur) {
+              currentPage = p;
+              break;
             }
+            cumulative += pageDur;
+            if (p === totalPages - 1) currentPage = p;
           }
           const startIdx = currentPage * MAX_LINES;
           displayLines = fittedLines.slice(startIdx, startIdx + MAX_LINES);
