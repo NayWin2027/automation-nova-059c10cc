@@ -1,34 +1,35 @@
 
 
-## Analysis: Why It Still Stutters on Low-End
+## Analysis Complete — Two Issues Found
 
-I compared the current code with the reference project (Testing Automation Nova AI) line-by-line. The reference draws ALL effects at full quality and runs smoothly on low-end devices. Here's what's different:
+### Issue 1: Subtitle Timing Accuracy (50% → 100%)
 
-### Root Causes Found
+**Root Cause**: The `onLoadedMetadata` handler on line 1378-1404 ALWAYS overwrites `audioTimestampsRef.current` with word-count proportional estimates, even when the TTS edge function already returned exact `segmentTimestamps`. Since `audioTimestampsRef` IS `pageAudioTimestampsRef` (passed as prop on line 2994), the exact timestamps from TTS get destroyed and replaced with inaccurate word-count guesses every time the audio element loads.
 
-**1. Throttled rAF vs setInterval (biggest impact)**
-Current code uses `requestAnimationFrame` with timestamp-based skipping. Even though we skip draws, the rAF callback still fires **60 times/sec** — that's 60 CPU wake-ups per second even when only 20 draws happen. The reference uses `setInterval(drawFrame, 50ms)` which only wakes the CPU **20 times/sec**. That's 3x fewer wake-ups.
+**Fix (lines 1378-1404)**: Before running word-count estimation, check if `audioTimestampsRef.current` already has exact timestamps (from TTS response). If exact timestamps exist, scale them proportionally to match the browser's real `audio.duration` (to correct any ±5-10% PCM estimation drift) instead of replacing them with word-count estimates. Only fall back to word-count if no exact timestamps exist.
 
-**2. Offscreen blur canvas is SLOWER than direct approach**
-The current code creates an offscreen canvas, resizes it, draws video→offscreen with filter, then draws offscreen→main canvas. That's **2 drawImage calls + 1 canvas resize** per frame. The reference just uses `ctx.filter = blur() + clip + drawImage` — **1 drawImage call, no extra canvas**. The offscreen approach actually added overhead.
+```text
+onLoadedMetadata:
+  IF audioTimestampsRef already has entries (exact from TTS):
+    → Scale existing start/end values proportionally to real browser duration
+    → Preserves per-segment accuracy from TTS
+  ELSE (no timestamps from TTS):
+    → Use word-count proportional estimation (current fallback)
+```
 
-**3. Subtitle neon border shadowBlur has no low-end reduction**
-Lines 942-948: `ctx.shadowBlur = Math.max(8, fontSize * 0.5)` runs at full intensity on ALL resolutions. On low-end GPUs, shadowBlur on stroke operations is very expensive.
+### Issue 2: Video Screen Fit
 
-### Plan: 3 Surgical Edits (480p/720p only, 1080p untouched)
+**Root Cause**: `containerStyles` (lines 1354-1367) sets `width: "auto"` for non-auto ratios. Combined with `aspectRatio` and `maxHeight: 60vh`, the container width is determined by the height constraint, which can leave unused horizontal space on some screen sizes. Some videos end up not filling the available preview area.
 
-**Edit 1 — Lines 1072-1085: Switch to setInterval for low-end**
-Replace throttled rAF with simple `setInterval` like the reference project. Reduces CPU wake-ups from 60/sec to 20/sec.
-
-**Edit 2 — Lines 796-818: Replace offscreen blur canvas with direct clip+blur**
-For low-end only, use the reference project's simpler approach: `ctx.filter = blur() → clip → drawImage(videoEl)`. Eliminates the offscreen canvas overhead entirely. Reduce blur amount to `Math.max(1, blurAmount * 0.4)` for faster GPU processing.
-
-**Edit 3 — Lines 942-948: Reduce subtitle neon border shadowBlur for low-end**
-Add `isLowEndRender` check to reduce `shadowBlur` from `fontSize * 0.5` to `fontSize * 0.15` for low-end.
+**Fix (line 1357)**: Change `width` from `"auto"` to `"100%"` for non-auto ratios. This ensures the container always fills the parent width, and `maxHeight: 60vh` + `aspectRatio` will properly constrain the height. The video element already uses `objectFit: "cover"` for non-auto ratios, so it will fill the container.
 
 ### What is NOT touched
 - Protected blocks (AV-SYNC, RECORD-PIPELINE, VOICE-GEN, AUTO-PIPELINE)
-- 1080p rendering path — completely unchanged
-- Subtitle text/logic, upload logic, audio sync
+- Video/audio sync logic (syncLoop, playbackRate correction)
+- Upload logic, subtitle rendering/drawing, canvas recording pipeline
 - All other features and stable components
+
+### Surgical Edits Summary
+1. **Edit 1** — Lines 1378-1404: Add check for existing exact timestamps before word-count fallback
+2. **Edit 2** — Line 1357: Change container `width` from `"auto"` to `"100%"` for non-auto ratios
 
