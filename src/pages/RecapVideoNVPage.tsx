@@ -198,7 +198,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
 
   // Editor States
   const [editorState, setEditorState] = useState({
-    ratio: "1/1" as "auto" | "16/9" | "9/16" | "1/1" | "4/3",
+    ratio: "1/1" as "auto" | "16/9" | "9/16" | "1/1" | "4/3" | "3/4",
     flip: true,
     bypass: true,
     colorGrade: "PINK" as string,
@@ -1452,12 +1452,16 @@ export const ResultView: React.FC<ResultViewProps> = ({
     transition: "all 0.3s ease",
   };
 
+  // For portrait/square ratios, use max-width instead of width:100% so aspect-ratio
+  // actually constrains the container shape instead of forcing full-width (which makes all ratios look 16:9).
+  const isWideRatio = editorState.ratio === "auto" || editorState.ratio === "16/9";
   const containerStyles: React.CSSProperties = {
     aspectRatio: editorState.ratio === "auto" ? undefined : editorState.ratio,
     height: editorState.ratio === "auto" ? "450px" : "auto",
-    width: "100%",
-    maxHeight: "60vh",
+    width: isWideRatio ? "100%" : "auto",
     maxWidth: "100%",
+    maxHeight: "60vh",
+    margin: isWideRatio ? undefined : "0 auto",
     alignSelf: "center",
     display: "flex",
     alignItems: "center",
@@ -1924,8 +1928,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
                   </p>
                 </div>
 
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4">
-                  {["auto", "16/9", "9/16", "1/1"].map((r) => (
+                <div className="grid grid-cols-3 lg:grid-cols-5 gap-2 mb-4">
+                  {["auto", "16/9", "9/16", "1/1", "3/4"].map((r) => (
                     <button
                       key={r}
                       onClick={() => setEditorState((s) => ({ ...s, ratio: r as any }))}
