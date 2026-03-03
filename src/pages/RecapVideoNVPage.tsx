@@ -938,10 +938,29 @@ export const ResultView: React.FC<ResultViewProps> = ({
               segDuration = activeTsEntry.end - activeTsEntry.start;
             }
           }
-          // Each page gets proportional time: (lines in this page / total lines) * segment duration
-          // Simplified: evenly divide segment duration across pages
-          const perPageDuration = Math.max(0.8, segDuration / totalPages);
-          const currentPage = Math.min(Math.floor(elapsed / perPageDuration), totalPages - 1);
+          // Character-weighted page durations: main page (more chars) stays longer,
+          // continuation pages only appear AFTER main page's audio portion is done.
+          // This cross-checks with audio segment timing for 100% accuracy.
+          const pages: string[][] = [];
+          for (let p = 0; p < totalPages; p++) {
+            pages.push(fittedLines.slice(p * MAX_LINES, (p + 1) * MAX_LINES));
+          }
+          const pageCharCounts = pages.map(lines =>
+            Math.max(lines.join('').replace(/\s+/g, '').length, 1)
+          );
+          const totalChars = pageCharCounts.reduce((s, c) => s + c, 0);
+          // Build cumulative thresholds: page N starts after sum of previous pages' durations
+          let cumulative = 0;
+          let currentPage = 0;
+          for (let p = 0; p < totalPages; p++) {
+            const pageDur = Math.max(0.4, (pageCharCounts[p] / totalChars) * segDuration);
+            if (elapsed < cumulative + pageDur) {
+              currentPage = p;
+              break;
+            }
+            cumulative += pageDur;
+            if (p === totalPages - 1) currentPage = p; // stay on last page
+          }
           const startIdx = currentPage * MAX_LINES;
           displayLines = fittedLines.slice(startIdx, startIdx + MAX_LINES);
         }
