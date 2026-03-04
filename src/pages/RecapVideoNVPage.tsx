@@ -288,7 +288,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
   const subtitleLastTextRef = useRef<string>(""); // detect text change to reset page
   const subtitlePageStartRef = useRef<number>(0); // timestamp when current text started
   // 1080p perf cache: avoid per-frame measureText/string ops — only recompute when subText changes
-  const subtitleWrapCacheRef = useRef<{ text: string; font: string; maxW: number; fittedLines: string[]; pageCharCounts: number[]; totalChars: number } | null>(null);
+  const subtitleWrapCacheRef = useRef<{ text: string; font: string; maxW: number; fittedLines: string[]; pageCharCounts: number[]; totalChars: number; lastPage: number; lastDisplayLines: string[] } | null>(null);
 
   // Request Wake Lock to prevent screen from turning off during recap/recording
   useEffect(() => {
@@ -1009,7 +1009,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
             cachedPageCharCounts.push(cc);
             cachedTotalChars += cc;
           }
-          subtitleWrapCacheRef.current = { text: subText, font: fontKey, maxW: maxTextWidth, fittedLines, pageCharCounts: cachedPageCharCounts, totalChars: cachedTotalChars };
+          subtitleWrapCacheRef.current = { text: subText, font: fontKey, maxW: maxTextWidth, fittedLines, pageCharCounts: cachedPageCharCounts, totalChars: cachedTotalChars, lastPage: -1, lastDisplayLines: [] };
         }
 
         // ── 3-line max paging: show max 3 lines, cycle remaining text pages ──
@@ -1029,9 +1029,12 @@ export const ResultView: React.FC<ResultViewProps> = ({
           let segDuration = 2.5;
           if (av && audioTs.length > 0) {
             const ct = av.currentTime;
-            const activeTsEntry = audioTs.find((ts) => ct >= ts.start && ct < ts.end);
-            if (activeTsEntry) {
-              segDuration = activeTsEntry.end - activeTsEntry.start;
+            // Use indexed loop instead of .find() to avoid closure allocation per frame
+            for (let ti = 0; ti < audioTs.length; ti++) {
+              if (ct >= audioTs[ti].start && ct < audioTs[ti].end) {
+                segDuration = audioTs[ti].end - audioTs[ti].start;
+                break;
+              }
             }
           }
           // Strict sequential paging: each sub box gets its proportional duration.
@@ -1047,8 +1050,18 @@ export const ResultView: React.FC<ResultViewProps> = ({
             cumulative += pageDur;
             if (p === totalPages - 1) currentPage = p;
           }
-          const startIdx = currentPage * MAX_LINES;
-          displayLines = fittedLines.slice(startIdx, startIdx + MAX_LINES);
+          // Cache displayLines per page — avoid .slice() allocation every frame
+          const wrapCache = subtitleWrapCacheRef.current;
+          if (wrapCache && wrapCache.lastPage === currentPage) {
+            displayLines = wrapCache.lastDisplayLines;
+          } else {
+            const startIdx = currentPage * MAX_LINES;
+            displayLines = fittedLines.slice(startIdx, startIdx + MAX_LINES);
+            if (wrapCache) {
+              wrapCache.lastPage = currentPage;
+              wrapCache.lastDisplayLines = displayLines;
+            }
+          }
         }
 
         const totalTextH = displayLines.length * lineHeight;
