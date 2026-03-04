@@ -1,6 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
+// Module-level in-memory cache — survives across component mounts/unmounts
+let _cachedToolSettings: any[] | null = null;
+let _cachedAccessControl: any | null = null;
+let _cacheTimestamp = 0;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 export interface TierApiLimit {
   app: number | null; // null = unlimited, number = daily limit
   own: number | null;
@@ -66,26 +72,31 @@ export function useToolSettings() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const now = Date.now();
+    if (_cachedToolSettings && _cachedAccessControl && (now - _cacheTimestamp) < CACHE_TTL) {
+      setToolSettings(_cachedToolSettings as ToolSetting[]);
+      setAccessControl(_cachedAccessControl as AccessControl);
+      setLoading(false);
+      return;
+    }
     fetchSettings();
   }, []);
 
   const fetchSettings = async () => {
-    // Fetch tool settings
     const { data: tools } = await supabase
       .from('tool_settings')
       .select('*')
       .order('tool_id');
 
     if (tools) {
-      // Normalize tier_limits for each tool
       const normalizedTools = tools.map(tool => ({
         ...tool,
         tier_limits: tool.tier_limits ? (tool.tier_limits as unknown as TierLimits) : defaultTierLimits,
       }));
       setToolSettings(normalizedTools as ToolSetting[]);
+      _cachedToolSettings = normalizedTools;
     }
 
-    // Fetch access control settings
     const { data: appSettings } = await supabase
       .from('app_settings')
       .select('*')
@@ -94,8 +105,10 @@ export function useToolSettings() {
 
     if (appSettings?.value) {
       setAccessControl(appSettings.value as unknown as AccessControl);
+      _cachedAccessControl = appSettings.value;
     }
 
+    _cacheTimestamp = Date.now();
     setLoading(false);
   };
 
