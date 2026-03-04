@@ -574,7 +574,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
     const canvas = document.createElement("canvas");
     canvas.width = outW;
     canvas.height = outH;
-    const ctx = canvas.getContext("2d")!;
+    const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true })!;
 
     // Native captureStream with quality fps — browser handles frame capture internally via GPU
     const canvasStream = canvas.captureStream(quality.fps);
@@ -761,7 +761,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
 
     // Offscreen blur canvas — keeps blur effect ON while reducing per-frame cost (half-res for low-end)
     const blurFxCanvas = document.createElement("canvas");
-    const blurFxCtx = blurFxCanvas.getContext("2d")!;
+    const blurFxCtx = blurFxCanvas.getContext("2d", { alpha: false })!;
 
     const drawFrame = () => {
       if (!videoEl || !audioEl) return;
@@ -1211,10 +1211,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
       };
       recapAnimFrameRef.current = requestAnimationFrame(rafLowEnd);
     } else {
-      // 1080p: requestAnimationFrame every vsync (unchanged behavior)
-      const rafLoop = () => {
-        drawFrame();
+      // 1080p: rAF with 30fps frame skipping — draws only at target fps, not every vsync (60fps)
+      // This halves GPU/CPU draw calls while captureStream still captures at quality.fps
+      const targetInterval1080 = 1000 / quality.fps;
+      let lastDrawTs1080 = 0;
+      const rafLoop = (timestamp: number) => {
         if (checkEnded()) return;
+        if (timestamp - lastDrawTs1080 >= targetInterval1080 - 2) {
+          lastDrawTs1080 = timestamp;
+          drawFrame();
+        }
         recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
       };
       recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
