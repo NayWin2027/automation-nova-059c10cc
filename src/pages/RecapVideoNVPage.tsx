@@ -113,7 +113,7 @@ interface BlurSettings {
   isDragging: boolean;
 }
 
-export const ResultView: React.FC<ResultViewProps> = ({
+export const ResultView: React.FC<ResultViewProps> = React.memo(({
   scriptData,
   onUpdateScript,
   onGenerateVoice,
@@ -175,25 +175,25 @@ export const ResultView: React.FC<ResultViewProps> = ({
   };
   const [exportQuality, setExportQuality] = useState<string>("720p");
 
-  // CPU auto-detection: set default export quality based on device capability
+  // CPU auto-detection: deferred to avoid blocking initial render
   useEffect(() => {
-    const cores = navigator.hardwareConcurrency || 4;
-    const mem = (navigator as any).deviceMemory || 4;
-    if (cores <= 4 || mem <= 2) {
-      setExportQuality("480p");
-      // 480p defaults: Golden Hour color, Spin Off logo
-      setEditorState((prev) => ({ ...prev, colorGrade: "GOLDEN" }));
-      setLogo((prev) => ({ ...prev, spin: false }));
-    } else if (cores <= 6 || mem <= 4) {
-      setExportQuality("720p");
-      // 720p defaults: Golden Hour color, Spin Off logo
-      setEditorState((prev) => ({ ...prev, colorGrade: "GOLDEN" }));
-      setLogo((prev) => ({ ...prev, spin: false }));
-    } else {
-      setExportQuality("1080p");
-      // 1080p default: Timeline bar 9px
-      setTimelineBar((prev) => ({ ...prev, thickness: 9 }));
-    }
+    const timer = setTimeout(() => {
+      const cores = navigator.hardwareConcurrency || 4;
+      const mem = (navigator as any).deviceMemory || 4;
+      if (cores <= 4 || mem <= 2) {
+        setExportQuality("480p");
+        setEditorState((prev) => ({ ...prev, colorGrade: "GOLDEN" }));
+        setLogo((prev) => ({ ...prev, spin: false }));
+      } else if (cores <= 6 || mem <= 4) {
+        setExportQuality("720p");
+        setEditorState((prev) => ({ ...prev, colorGrade: "GOLDEN" }));
+        setLogo((prev) => ({ ...prev, spin: false }));
+      } else {
+        setExportQuality("1080p");
+        setTimelineBar((prev) => ({ ...prev, thickness: 9 }));
+      }
+    }, 100);
+    return () => clearTimeout(timer);
   }, []);
 
   // Editor States
@@ -2408,7 +2408,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
       </div>
     </>
   );
-};
+});
 
 interface RecapHistoryItem {
   id: string;
@@ -2461,9 +2461,9 @@ const RecapVideoNVPage: React.FC = () => {
   const didDeductRef = useRef(false); // Idempotency: deduct only once per pipeline run
   const [creditPerMinRate, setCreditPerMinRate] = useState<number>(6); // Default 6 CR/MIN, admin-configurable
 
-  // Fetch CR/MIN rate from tool_settings on mount
+  // Fetch CR/MIN rate from tool_settings on mount (deferred — non-critical)
   useEffect(() => {
-    const fetchRate = async () => {
+    const timer = setTimeout(async () => {
       const { data } = await supabase
         .from("tool_settings")
         .select("credit_cost")
@@ -2472,8 +2472,8 @@ const RecapVideoNVPage: React.FC = () => {
       if (data?.credit_cost) {
         setCreditPerMinRate(data.credit_cost);
       }
-    };
-    fetchRate();
+    }, 500);
+    return () => clearTimeout(timer);
   }, []);
   // ── END CREDIT ────────────────────────────────────────────────────────────
 
@@ -2576,9 +2576,9 @@ const RecapVideoNVPage: React.FC = () => {
   );
   // ── END CREDIT DEDUCTION ──────────────────────────────────────────────────
 
-  // Cleanup expired history on mount (lightweight — just deletes, doesn't load full history UI)
+  // Cleanup expired history on mount (deferred 1s — non-critical, best-effort)
   useEffect(() => {
-    const cleanupExpired = async () => {
+    const timer = setTimeout(async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
@@ -2596,8 +2596,8 @@ const RecapVideoNVPage: React.FC = () => {
       } catch (err) {
         // Silent — cleanup is best-effort
       }
-    };
-    cleanupExpired();
+    }, 1000);
+    return () => clearTimeout(timer);
   }, []);
 
   const loadRecapHistory = async () => {
