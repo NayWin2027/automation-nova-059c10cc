@@ -2574,10 +2574,8 @@ const RecapVideoNVPage: React.FC = () => {
   );
   // ── END CREDIT DEDUCTION ──────────────────────────────────────────────────
 
-  // Load recap history on mount
-  useEffect(() => {
-    loadRecapHistory();
-  }, []);
+   // History loads on-demand (user clicks Refresh) — not on mount, to reduce initial page weight
+   // useEffect(() => { loadRecapHistory(); }, []);
 
   const loadRecapHistory = async () => {
     setHistoryLoading(true);
@@ -3289,7 +3287,7 @@ const RecapVideoNVPage: React.FC = () => {
         {/* Recap History Section */}
         <div className="mt-6 p-4 bg-secondary/30 rounded-xl border border-border space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-neon-rose">📁 Recap History (7 Days)</h3>
+            <h3 className="text-lg font-semibold text-neon-rose">📁 Recap History (1 Hour)</h3>
             <button
               onClick={loadRecapHistory}
               disabled={historyLoading}
@@ -3308,7 +3306,7 @@ const RecapVideoNVPage: React.FC = () => {
           {recapHistory.map((item) => {
             const createdDate = new Date(item.created_at);
             const expiresDate = new Date(item.expires_at);
-            const daysLeft = Math.max(0, Math.ceil((expiresDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+            const minsLeft = Math.max(0, Math.ceil((expiresDate.getTime() - Date.now()) / (1000 * 60)));
             const sizeStr = item.file_size_bytes ? `${(item.file_size_bytes / (1024 * 1024)).toFixed(1)} MB` : "";
 
             return (
@@ -3317,7 +3315,7 @@ const RecapVideoNVPage: React.FC = () => {
                   <div>
                     <p className="font-medium text-foreground text-sm truncate max-w-[200px]">{item.title}</p>
                     <p className="text-xs text-muted-foreground">
-                      {createdDate.toLocaleDateString()} · {sizeStr} · {daysLeft} days left
+                      {createdDate.toLocaleTimeString()} · {sizeStr} · {minsLeft} min left
                     </p>
                   </div>
                   <button onClick={() => deleteRecapItem(item)} className="text-xs text-destructive hover:underline">
@@ -3330,6 +3328,7 @@ const RecapVideoNVPage: React.FC = () => {
                     src={item.video_url}
                     controls
                     playsInline
+                    preload="none"
                     className="w-full max-h-[300px] rounded-lg bg-black"
                   />
                 )}

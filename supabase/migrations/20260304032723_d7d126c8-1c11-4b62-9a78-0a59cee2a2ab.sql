@@ -1,0 +1,1 @@
+ALTER TABLE public.recap_history ALTER COLUMN expires_at SET DEFAULT (now() + INTERVAL '1 hour');
