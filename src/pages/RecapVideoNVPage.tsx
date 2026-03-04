@@ -287,6 +287,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
   // Subtitle 3-line paging refs — max 3 lines visible, remaining text cycles to next page
   const subtitleLastTextRef = useRef<string>(""); // detect text change to reset page
   const subtitlePageStartRef = useRef<number>(0); // timestamp when current text started
+  // Buffered subtitle gate: prevents new subtitle box from appearing until current box finishes ALL pages
+  const displayedSubtitleRef = useRef<string>(""); // what's actually shown on canvas (gated)
+  const pendingSubtitleRef = useRef<string>(""); // queued next subtitle from sync loop
+  const subtitlePagesFinishedRef = useRef<boolean>(true); // true = safe to accept new subtitle
   // 1080p perf cache: avoid per-frame measureText/string ops — only recompute when subText changes
   const subtitleWrapCacheRef = useRef<{ text: string; font: string; maxW: number; fittedLines: string[]; pageCharCounts: number[]; totalChars: number; lastPage: number; lastDisplayLines: string[] } | null>(null);
 
@@ -914,7 +918,25 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
       // Sub box = EXACT blur box pixel dimensions (1000% fit)
       // Auto-scales font size to fit all text within the box — no text cut-off
       // When blur region is OFF, subtitles are completely hidden per user request
-      const subText = currentSubtitleRef.current;
+      // ── Subtitle Gate: only advance to next subtitle when current box's ALL pages are done ──
+      const rawSubText = currentSubtitleRef.current;
+      if (rawSubText !== displayedSubtitleRef.current) {
+        if (!rawSubText) {
+          // Empty text (silence gap) — always accept immediately to clear box
+          displayedSubtitleRef.current = "";
+          pendingSubtitleRef.current = "";
+          subtitlePagesFinishedRef.current = true;
+        } else if (subtitlePagesFinishedRef.current || !displayedSubtitleRef.current) {
+          // Safe to advance: previous box finished all pages (or no previous box)
+          displayedSubtitleRef.current = rawSubText;
+          pendingSubtitleRef.current = "";
+          subtitlePagesFinishedRef.current = false; // reset gate for new text
+        } else {
+          // NOT safe yet — queue it, keep showing current box
+          pendingSubtitleRef.current = rawSubText;
+        }
+      }
+      const subText = displayedSubtitleRef.current;
       if (subText && blurSettings.enabled) {
         ctx.save();
         ctx.textAlign = "center";
@@ -1050,6 +1072,24 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
             cumulative += pageDur;
             if (p === totalPages - 1) currentPage = p;
           }
+
+          // ── Gate check: mark pages finished when last page has been reached AND its duration elapsed ──
+          if (currentPage === totalPages - 1) {
+            // On last page — check if its duration has also elapsed
+            const lastPageStart = cumulative; // cumulative at this point = sum of all previous pages
+            const lastPageDur = Math.max(0.4, (cachedPageCharCounts[totalPages - 1] / cachedTotalChars) * segDuration);
+            if (elapsed >= lastPageStart + lastPageDur) {
+              subtitlePagesFinishedRef.current = true;
+              // If there's a pending subtitle queued, accept it now
+              if (pendingSubtitleRef.current) {
+                displayedSubtitleRef.current = pendingSubtitleRef.current;
+                pendingSubtitleRef.current = "";
+                subtitlePagesFinishedRef.current = false;
+                subtitleLastTextRef.current = ""; // force page reset on next frame
+              }
+            }
+          }
+
           // Cache displayLines per page — avoid .slice() allocation every frame
           const wrapCache = subtitleWrapCacheRef.current;
           if (wrapCache && wrapCache.lastPage === currentPage) {
@@ -1061,6 +1101,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
               wrapCache.lastPage = currentPage;
               wrapCache.lastDisplayLines = displayLines;
             }
+          }
+        } else {
+          // Single-page subtitle (3 lines or fewer) — always mark as finished immediately
+          subtitlePagesFinishedRef.current = true;
+          if (pendingSubtitleRef.current) {
+            displayedSubtitleRef.current = pendingSubtitleRef.current;
+            pendingSubtitleRef.current = "";
+            subtitlePagesFinishedRef.current = false;
+            subtitleLastTextRef.current = "";
           }
         }
 
