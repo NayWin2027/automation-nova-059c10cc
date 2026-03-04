@@ -169,9 +169,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
     string,
     { maxW: number; maxH: number; fps: number; bitrate: number; label: string }
   > = {
-    "480p": { maxW: 854, maxH: 480, fps: 20, bitrate: 1_000_000, label: "480p (Low — 854×480 · 20fps · 1Mbps)" },
-    "720p": { maxW: 1280, maxH: 720, fps: 24, bitrate: 2_000_000, label: "720p (Mid — 1280×720 · 24fps · 2Mbps)" },
-    "1080p": { maxW: 1920, maxH: 1080, fps: 30, bitrate: 3_000_000, label: "1080p (High — 1920×1080 · 30fps · 3Mbps)" },
+    "480p": { maxW: 854, maxH: 480, fps: 20, bitrate: 2_000_000, label: "480p (Low — 854×480 · 20fps · 2Mbps)" },
+    "720p": { maxW: 1280, maxH: 720, fps: 24, bitrate: 3_000_000, label: "720p (Mid — 1280×720 · 24fps · 3Mbps)" },
+    "1080p": { maxW: 1920, maxH: 1080, fps: 30, bitrate: 4_000_000, label: "1080p (High — 1920×1080 · 30fps · 4Mbps)" },
   };
   const [exportQuality, setExportQuality] = useState<string>("720p");
 
@@ -1103,70 +1103,27 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
         ctx.restore();
       }
 
-      // Draw logo with SPIN + NEON GLOW support (rotate around center) — top-right corner
+      // Draw logo — simple circle clip, NO spin, NO neon glow (GPU-friendly)
       if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
         const logoSize = canvas.width * (logo.size / 100);
         const logoCX = canvas.width * (logo.x / 100);
         const logoCY = canvas.height * (logo.y / 100);
 
-        // Advance spin angle: full 360° rotation every 8 seconds
-        if (logo.spin) {
-          const spinScale = isLowEndRender ? 0.62 : 1;
-          logoAngleRef.current = (logoAngleRef.current + (360 / 8) * dt * spinScale) % 360;
-        }
-
-        // === Draw multi-layer animated neon glow ring (NOT rotated — matches CSS preview) ===
-        // Animate neon hue using logoAngleRef so color cycles like the preview CSS animation
-        const neonHue = (logoAngleRef.current * 1.5) % 360;
-        const animatedNeonColor = `hsl(${neonHue}, 100%, 75%)`;
-        const animatedNeonColor2 = `hsl(${(neonHue + 120) % 360}, 100%, 75%)`;
-
+        // Simple thin border ring (no shadowBlur, no neon, no color cycling)
         ctx.save();
         ctx.translate(logoCX, logoCY);
-
-        if (isLowEndRender) {
-          // Low-end: single solid neon ring — NO shadowBlur (zero GPU shadow cost)
-          ctx.strokeStyle = animatedNeonColor;
-          ctx.lineWidth = logoSize * 0.04;
-          ctx.globalAlpha = 0.85;
-          ctx.beginPath();
-          ctx.arc(0, 0, logoSize / 2 + logoSize * 0.03, 0, Math.PI * 2);
-          ctx.stroke();
-        } else {
-          // 1080p: full multi-layer neon glow (unchanged)
-          // Layer 1: outer diffuse neon glow — NOT rotated, stays as ring
-          ctx.shadowColor = animatedNeonColor;
-          ctx.shadowBlur = logoSize * 0.35;
-          ctx.strokeStyle = animatedNeonColor;
-          ctx.lineWidth = logoSize * 0.05;
-          ctx.globalAlpha = 0.9;
-          ctx.beginPath();
-          ctx.arc(0, 0, logoSize / 2 + logoSize * 0.05, 0, Math.PI * 2);
-          ctx.stroke();
-          // Layer 2: inner sharp neon ring with second color
-          ctx.shadowColor = animatedNeonColor2;
-          ctx.shadowBlur = logoSize * 0.18;
-          ctx.strokeStyle = animatedNeonColor2;
-          ctx.lineWidth = logoSize * 0.035;
-          ctx.globalAlpha = 1.0;
-          ctx.beginPath();
-          ctx.arc(0, 0, logoSize / 2 + logoSize * 0.02, 0, Math.PI * 2);
-          ctx.stroke();
-        }
+        ctx.strokeStyle = "rgba(255,255,255,0.5)";
+        ctx.lineWidth = logoSize * 0.025;
+        ctx.beginPath();
+        ctx.arc(0, 0, logoSize / 2 + logoSize * 0.02, 0, Math.PI * 2);
+        ctx.stroke();
         ctx.restore();
 
-        // === Draw logo image with clip — CLEAR shadow first so image is sharp ===
+        // Draw logo image clipped to circle — no rotation
         ctx.save();
         ctx.translate(logoCX, logoCY);
-        if (logo.spin) {
-          ctx.rotate((logoAngleRef.current * Math.PI) / 180);
-        }
-        // CRITICAL: Reset shadow before drawing the image so it stays sharp (not blurry)
         ctx.shadowColor = "transparent";
         ctx.shadowBlur = 0;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 0;
-        // Clip to circle if needed
         if (logo.isCircle) {
           ctx.beginPath();
           ctx.arc(0, 0, logoSize / 2, 0, Math.PI * 2);
