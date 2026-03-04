@@ -287,10 +287,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
   // Subtitle 3-line paging refs — max 3 lines visible, remaining text cycles to next page
   const subtitleLastTextRef = useRef<string>(""); // detect text change to reset page
   const subtitlePageStartRef = useRef<number>(0); // timestamp when current text started
-  // Buffered subtitle gate: prevents new subtitle box from appearing until current box finishes ALL pages
-  const displayedSubtitleRef = useRef<string>(""); // what's actually shown on canvas (gated)
-  const pendingSubtitleRef = useRef<string>(""); // queued next subtitle from sync loop
-  const subtitlePagesFinishedRef = useRef<boolean>(true); // true = safe to accept new subtitle
+  // Audio-locked subtitle: always trust sync loop's currentSubtitleRef (no gate delay)
   // 1080p perf cache: avoid per-frame measureText/string ops — only recompute when subText changes
   const subtitleWrapCacheRef = useRef<{ text: string; font: string; maxW: number; fittedLines: string[]; pageCharCounts: number[]; totalChars: number; lastPage: number; lastDisplayLines: string[] } | null>(null);
 
@@ -918,25 +915,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
       // Sub box = EXACT blur box pixel dimensions (1000% fit)
       // Auto-scales font size to fit all text within the box — no text cut-off
       // When blur region is OFF, subtitles are completely hidden per user request
-      // ── Subtitle Gate: only advance to next subtitle when current box's ALL pages are done ──
-      const rawSubText = currentSubtitleRef.current;
-      if (rawSubText !== displayedSubtitleRef.current) {
-        if (!rawSubText) {
-          // Empty text (silence gap) — always accept immediately to clear box
-          displayedSubtitleRef.current = "";
-          pendingSubtitleRef.current = "";
-          subtitlePagesFinishedRef.current = true;
-        } else if (subtitlePagesFinishedRef.current || !displayedSubtitleRef.current) {
-          // Safe to advance: previous box finished all pages (or no previous box)
-          displayedSubtitleRef.current = rawSubText;
-          pendingSubtitleRef.current = "";
-          subtitlePagesFinishedRef.current = false; // reset gate for new text
-        } else {
-          // NOT safe yet — queue it, keep showing current box
-          pendingSubtitleRef.current = rawSubText;
-        }
-      }
-      const subText = displayedSubtitleRef.current;
+      // ── Audio-locked subtitle: always show what sync loop dictates (no gate delay) ──
+      const subText = currentSubtitleRef.current;
       if (subText && blurSettings.enabled) {
         ctx.save();
         ctx.textAlign = "center";
@@ -1038,56 +1018,35 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
         const MAX_LINES = 3;
         let displayLines = fittedLines;
         if (fittedLines.length > MAX_LINES) {
-          // Detect subtitle text change → reset page timer
-          if (subText !== subtitleLastTextRef.current) {
-            subtitleLastTextRef.current = subText;
-            subtitlePageStartRef.current = performance.now();
-          }
+          // ── DYNAMIC AUDIO-LOCKED PAGING: use audio currentTime for 100% accuracy ──
+          // Instead of performance.now() which drifts over long videos,
+          // calculate page position directly from audio's position within the current segment
           const totalPages = Math.ceil(fittedLines.length / MAX_LINES);
-          const elapsed = (performance.now() - subtitlePageStartRef.current) / 1000;
-          // Proportional timing: calculate per-page duration from current audio segment duration
           const audioTs = audioTimestampsRef.current;
           const av = audioRef.current;
           let segDuration = 2.5;
+          let segElapsed = 0; // how far into current segment (audio-locked)
           if (av && audioTs.length > 0) {
             const ct = av.currentTime;
-            // Use indexed loop instead of .find() to avoid closure allocation per frame
             for (let ti = 0; ti < audioTs.length; ti++) {
               if (ct >= audioTs[ti].start && ct < audioTs[ti].end) {
                 segDuration = audioTs[ti].end - audioTs[ti].start;
+                segElapsed = ct - audioTs[ti].start; // audio-locked elapsed
                 break;
               }
             }
           }
-          // Strict sequential paging: each sub box gets its proportional duration.
-          // A sub box MUST fully finish (audio cross-checked) before the next one appears.
+          // Proportional page timing based on audio elapsed (not wall clock)
           let cumulative = 0;
           let currentPage = 0;
           for (let p = 0; p < totalPages; p++) {
             const pageDur = Math.max(0.4, (cachedPageCharCounts[p] / cachedTotalChars) * segDuration);
-            if (elapsed < cumulative + pageDur) {
+            if (segElapsed < cumulative + pageDur) {
               currentPage = p;
               break;
             }
             cumulative += pageDur;
             if (p === totalPages - 1) currentPage = p;
-          }
-
-          // ── Gate check: mark pages finished when last page has been reached AND its duration elapsed ──
-          if (currentPage === totalPages - 1) {
-            // On last page — check if its duration has also elapsed
-            const lastPageStart = cumulative; // cumulative at this point = sum of all previous pages
-            const lastPageDur = Math.max(0.4, (cachedPageCharCounts[totalPages - 1] / cachedTotalChars) * segDuration);
-            if (elapsed >= lastPageStart + lastPageDur) {
-              subtitlePagesFinishedRef.current = true;
-              // If there's a pending subtitle queued, accept it now
-              if (pendingSubtitleRef.current) {
-                displayedSubtitleRef.current = pendingSubtitleRef.current;
-                pendingSubtitleRef.current = "";
-                subtitlePagesFinishedRef.current = false;
-                subtitleLastTextRef.current = ""; // force page reset on next frame
-              }
-            }
           }
 
           // Cache displayLines per page — avoid .slice() allocation every frame
@@ -1101,15 +1060,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
               wrapCache.lastPage = currentPage;
               wrapCache.lastDisplayLines = displayLines;
             }
-          }
-        } else {
-          // Single-page subtitle (3 lines or fewer) — always mark as finished immediately
-          subtitlePagesFinishedRef.current = true;
-          if (pendingSubtitleRef.current) {
-            displayedSubtitleRef.current = pendingSubtitleRef.current;
-            pendingSubtitleRef.current = "";
-            subtitlePagesFinishedRef.current = false;
-            subtitleLastTextRef.current = "";
           }
         }
 
