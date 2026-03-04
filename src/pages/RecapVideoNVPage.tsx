@@ -574,7 +574,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
     const canvas = document.createElement("canvas");
     canvas.width = outW;
     canvas.height = outH;
-    const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true })!;
+    const ctx = canvas.getContext("2d", { alpha: false })!;
 
     // Native captureStream with quality fps — browser handles frame capture internally via GPU
     const canvasStream = canvas.captureStream(quality.fps);
