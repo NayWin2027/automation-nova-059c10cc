@@ -1153,15 +1153,27 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
       return false;
     };
 
-    // Smooth rAF loop — draw every vsync frame for maximum smoothness
-    // captureStream(quality.fps) handles frame rate limiting for the output video
-    // AV sync is driven by audio master clock (protected block), not by draw frequency
-    const rafLoop = (timestamp: number) => {
-      if (checkEnded()) return;
-      drawFrame();
+    if (isLowEnd) {
+      // Low-end (480p/720p): setTimeout loop at exact target fps
+      // This reduces CPU/GPU draw calls to only what's needed (20-24 per sec instead of 60)
+      // setTimeout gives consistent intervals without the jitter of rAF frame-skipping
+      // captureStream(quality.fps) still captures at the correct output rate
+      const drawAndSchedule = () => {
+        if (checkEnded()) return;
+        drawFrame();
+        recapAnimFrameRef.current = window.setTimeout(drawAndSchedule, frameInterval) as unknown as number;
+      };
+      recapAnimFrameRef.current = window.setTimeout(drawAndSchedule, 0) as unknown as number;
+    } else {
+      // 1080p (high-end): rAF for maximum smoothness — draw every vsync
+      // AV sync is driven by audio master clock (protected block), not by draw frequency
+      const rafLoop = (timestamp: number) => {
+        if (checkEnded()) return;
+        drawFrame();
+        recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
+      };
       recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
-    };
-    recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
+    }
   };
 
   // Recap playback in editor: play video (muted) + TTS audio with subtitle sync
