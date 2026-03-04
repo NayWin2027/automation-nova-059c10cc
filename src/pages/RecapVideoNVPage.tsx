@@ -2420,6 +2420,33 @@ interface RecapHistoryItem {
   video_url?: string;
 }
 
+// Static constant — outside component to avoid re-creation on every render
+const VOICE_OPTIONS = [
+  { value: "Kore", label: "Kore", gender: "Female" },
+  { value: "Aoede", label: "Aoede", gender: "Female" },
+  { value: "Leda", label: "Leda", gender: "Female" },
+  { value: "Zephyr", label: "Zephyr", gender: "Female" },
+  { value: "Puck", label: "Puck", gender: "Male" },
+  { value: "Charon", label: "Charon", gender: "Male" },
+  { value: "Fenrir", label: "Fenrir", gender: "Male" },
+  { value: "Orus", label: "Orus", gender: "Male" },
+  { value: "en-US-Standard-A", label: "US Standard A", gender: "Female" },
+  { value: "en-US-Standard-B", label: "US Standard B", gender: "Male" },
+  { value: "en-US-Standard-C", label: "US Standard C", gender: "Female" },
+  { value: "en-US-Standard-D", label: "US Standard D", gender: "Male" },
+  { value: "en-GB-Standard-A", label: "UK Standard A", gender: "Female" },
+  { value: "en-GB-Standard-B", label: "UK Standard B", gender: "Male" },
+  { value: "en-GB-Standard-C", label: "UK Standard C", gender: "Female" },
+  { value: "en-GB-Standard-D", label: "UK Standard D", gender: "Male" },
+  { value: "Achernar", label: "Achernar", gender: "Female" },
+  { value: "Gacrux", label: "Gacrux", gender: "Male" },
+  { value: "Sulafat", label: "Sulafat", gender: "Female" },
+  { value: "Alnilam", label: "Alnilam", gender: "Male" },
+  { value: "Schedar", label: "Schedar", gender: "Female" },
+  { value: "Umbriel", label: "Umbriel", gender: "Male" },
+  { value: "Algieba", label: "Algieba", gender: "Male" },
+];
+
 const RecapVideoNVPage: React.FC = () => {
   const navigate = useNavigate();
 
@@ -2469,32 +2496,7 @@ const RecapVideoNVPage: React.FC = () => {
   const [recapHistory, setRecapHistory] = useState<RecapHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  // Language & Voice selection
-  const VOICE_OPTIONS = [
-    { value: "Kore", label: "Kore", gender: "Female" },
-    { value: "Aoede", label: "Aoede", gender: "Female" },
-    { value: "Leda", label: "Leda", gender: "Female" },
-    { value: "Zephyr", label: "Zephyr", gender: "Female" },
-    { value: "Puck", label: "Puck", gender: "Male" },
-    { value: "Charon", label: "Charon", gender: "Male" },
-    { value: "Fenrir", label: "Fenrir", gender: "Male" },
-    { value: "Orus", label: "Orus", gender: "Male" },
-    { value: "en-US-Standard-A", label: "US Standard A", gender: "Female" },
-    { value: "en-US-Standard-B", label: "US Standard B", gender: "Male" },
-    { value: "en-US-Standard-C", label: "US Standard C", gender: "Female" },
-    { value: "en-US-Standard-D", label: "US Standard D", gender: "Male" },
-    { value: "en-GB-Standard-A", label: "UK Standard A", gender: "Female" },
-    { value: "en-GB-Standard-B", label: "UK Standard B", gender: "Male" },
-    { value: "en-GB-Standard-C", label: "UK Standard C", gender: "Female" },
-    { value: "en-GB-Standard-D", label: "UK Standard D", gender: "Male" },
-    { value: "Achernar", label: "Achernar", gender: "Female" },
-    { value: "Gacrux", label: "Gacrux", gender: "Male" },
-    { value: "Sulafat", label: "Sulafat", gender: "Female" },
-    { value: "Alnilam", label: "Alnilam", gender: "Male" },
-    { value: "Schedar", label: "Schedar", gender: "Female" },
-    { value: "Umbriel", label: "Umbriel", gender: "Male" },
-    { value: "Algieba", label: "Algieba", gender: "Male" },
-  ];
+  // Language & Voice selection (VOICE_OPTIONS moved outside component to avoid re-creation)
 
   const [selectedLanguage, setSelectedLanguage] = useState("my-MM");
   const [selectedVoice, setSelectedVoice] = useState("Charon");
@@ -2574,8 +2576,29 @@ const RecapVideoNVPage: React.FC = () => {
   );
   // ── END CREDIT DEDUCTION ──────────────────────────────────────────────────
 
-   // History loads on-demand (user clicks Refresh) — not on mount, to reduce initial page weight
-   // useEffect(() => { loadRecapHistory(); }, []);
+  // Cleanup expired history on mount (lightweight — just deletes, doesn't load full history UI)
+  useEffect(() => {
+    const cleanupExpired = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data: expiredItems } = await supabase
+          .from("recap_history")
+          .select("id, storage_path")
+          .lt("expires_at", new Date().toISOString());
+        if (expiredItems && expiredItems.length > 0) {
+          for (const item of expiredItems) {
+            await supabase.storage.from("recap-videos").remove([item.storage_path]);
+            await supabase.from("recap_history").delete().eq("id", item.id);
+          }
+          console.log(`[History] Cleaned up ${expiredItems.length} expired recap(s)`);
+        }
+      } catch (err) {
+        // Silent — cleanup is best-effort
+      }
+    };
+    cleanupExpired();
+  }, []);
 
   const loadRecapHistory = async () => {
     setHistoryLoading(true);
