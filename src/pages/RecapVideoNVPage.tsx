@@ -1153,35 +1153,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
       return false;
     };
 
-    if (isLowEnd) {
-      // rAF with aggressive frame skipping — compositor-synced, no callback pile-up
-      // Unlike setInterval, rAF doesn't queue callbacks when frames are slow
-      const targetInterval = 1000 / quality.fps;
-      let lastDrawTs = 0;
-      const rafLowEnd = (timestamp: number) => {
-        if (checkEnded()) return;
-        if (timestamp - lastDrawTs >= targetInterval - 2) {
-          lastDrawTs = timestamp;
-          drawFrame();
-        }
-        recapAnimFrameRef.current = requestAnimationFrame(rafLowEnd);
-      };
-      recapAnimFrameRef.current = requestAnimationFrame(rafLowEnd);
-    } else {
-      // 1080p: rAF with 30fps frame skipping — draws only at target fps, not every vsync (60fps)
-      // This halves GPU/CPU draw calls while captureStream still captures at quality.fps
-      const targetInterval1080 = 1000 / quality.fps;
-      let lastDrawTs1080 = 0;
-      const rafLoop = (timestamp: number) => {
-        if (checkEnded()) return;
-        if (timestamp - lastDrawTs1080 >= targetInterval1080 - 2) {
-          lastDrawTs1080 = timestamp;
-          drawFrame();
-        }
-        recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
-      };
+    // Smooth rAF loop — draw every vsync frame for maximum smoothness
+    // captureStream(quality.fps) handles frame rate limiting for the output video
+    // AV sync is driven by audio master clock (protected block), not by draw frequency
+    const rafLoop = (timestamp: number) => {
+      if (checkEnded()) return;
+      drawFrame();
       recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
-    }
+    };
+    recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
   };
 
   // Recap playback in editor: play video (muted) + TTS audio with subtitle sync
