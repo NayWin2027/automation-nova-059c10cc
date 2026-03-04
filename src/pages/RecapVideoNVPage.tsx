@@ -169,9 +169,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
     string,
     { maxW: number; maxH: number; fps: number; bitrate: number; label: string }
   > = {
-    "480p": { maxW: 854, maxH: 480, fps: 20, bitrate: 2_000_000, label: "480p (Low — 854×480 · 20fps · 2Mbps)" },
-    "720p": { maxW: 1280, maxH: 720, fps: 24, bitrate: 3_000_000, label: "720p (Mid — 1280×720 · 24fps · 3Mbps)" },
-    "1080p": { maxW: 1920, maxH: 1080, fps: 30, bitrate: 4_000_000, label: "1080p (High — 1920×1080 · 30fps · 4Mbps)" },
+    "480p": { maxW: 854, maxH: 480, fps: 20, bitrate: 1_000_000, label: "480p (Low — 854×480 · 20fps · 1Mbps)" },
+    "720p": { maxW: 1280, maxH: 720, fps: 24, bitrate: 2_000_000, label: "720p (Mid — 1280×720 · 24fps · 2Mbps)" },
+    "1080p": { maxW: 1920, maxH: 1080, fps: 30, bitrate: 3_000_000, label: "1080p (High — 1920×1080 · 30fps · 3Mbps)" },
   };
   const [exportQuality, setExportQuality] = useState<string>("720p");
 
