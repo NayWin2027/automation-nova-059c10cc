@@ -1870,9 +1870,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
             </div>
           )}
 
-          {/* Editor Toolbar — unmounted during recording to eliminate React reconciliation cost.
+          {/* Editor Toolbar — hidden via CSS during recording to avoid massive DOM teardown.
                Canvas reads from editorStateRef/blurSettingsRef, not from DOM toolbar controls. */}
-          {!renderedBlobUrl && !isRendering && (
+          {!renderedBlobUrl && (
+            <div style={isRendering ? { display: 'none' } : undefined}>
             <div className="bg-charcoal-800 rounded-xl border border-charcoal-600 p-4 space-y-5">
               {/* Visual Settings */}
               <div>
