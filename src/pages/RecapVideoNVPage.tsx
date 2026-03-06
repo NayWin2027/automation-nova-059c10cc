@@ -1658,7 +1658,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
             <div
               ref={containerRef}
               className={`relative overflow-hidden transition-all duration-300 shadow-lg flex items-center justify-center bg-black`}
-              style={containerStyles}
+              style={{ ...containerStyles, contain: 'layout style paint', willChange: isRendering ? 'auto' : undefined }}
               onMouseMove={handleDragMove}
               onMouseUp={handleDragEnd}
               onMouseLeave={handleDragEnd}
