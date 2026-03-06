@@ -1050,17 +1050,18 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
               }
             }
           }
-          // Proportional page timing based on audio elapsed (not wall clock)
+          // ── STRICT PROPORTIONAL PAGING: durations sum EXACTLY to segDuration ──
+          // Cross-check: each page's duration = (pageChars / totalChars) * segDuration
+          // No Math.max inflation — ensures pages never spill into the next segment
           let cumulative = 0;
-          let currentPage = 0;
+          let currentPage = totalPages - 1; // default to last page (safety)
           for (let p = 0; p < totalPages; p++) {
-            const pageDur = Math.max(0.4, (cachedPageCharCounts[p] / cachedTotalChars) * segDuration);
+            const pageDur = (cachedPageCharCounts[p] / cachedTotalChars) * segDuration;
             if (segElapsed < cumulative + pageDur) {
               currentPage = p;
               break;
             }
             cumulative += pageDur;
-            if (p === totalPages - 1) currentPage = p;
           }
 
           // Cache displayLines per page — avoid .slice() allocation every frame
