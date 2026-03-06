@@ -280,6 +280,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
   const recapIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recapRecorderRef = useRef<MediaRecorder | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  const isRenderingRef = useRef(false); // ref mirror of isRendering — avoids re-render reads in hot paths
   const logoAngleRef = useRef<number>(0); // for logo spin in canvas
   // audioTimestampsRef is passed in as a prop from RecapVideoNVPage
   const currentSubtitleRef = useRef<string>(""); // for canvas subtitle drawing during recording
@@ -627,6 +628,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
 
       if (chunks.length === 0) {
         setIsRendering(false);
+        isRenderingRef.current = false;
         return;
       }
 
@@ -647,6 +649,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
       console.log("[CREDIT] Output video duration (elapsed timer):", recordingElapsedSecs, "seconds");
       onVideoReady?.(recordingElapsedSecs); // Trigger credit deduction with accurate OUTPUT duration
       setIsRendering(false);
+      isRenderingRef.current = false;
       setIsRecapPlaying(false);
 
       try {
@@ -674,6 +677,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
     };
 
     setIsRendering(true);
+    isRenderingRef.current = true;
     recorder.start(1000);
 
     // Pre-load logo image for canvas drawing
@@ -1717,7 +1721,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
                     transition: "border-color 0.1s, box-shadow 0.1s",
                   }}
                 >
-                  {currentSubtitle && (
+                  {currentSubtitle && !isRenderingRef.current && (
                     <div
                       className="absolute inset-0 flex items-center justify-center pointer-events-none"
                       style={{
