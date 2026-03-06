@@ -2304,6 +2304,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
                 )}
               </div>
             </div>
+            </div>
           )}
 
           <div className="p-4 bg-charcoal-800 rounded-xl border border-charcoal-600 shadow-lg flex flex-col space-y-3">
