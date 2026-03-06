@@ -281,6 +281,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
   const recapRecorderRef = useRef<MediaRecorder | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const isRenderingRef = useRef(false); // ref mirror of isRendering — avoids re-render reads in hot paths
+  const timelineBarRef = useRef<HTMLDivElement>(null); // direct DOM ref for timeline bar fill — avoids React re-render for progress updates
   const logoAngleRef = useRef<number>(0); // for logo spin in canvas
   // audioTimestampsRef is passed in as a prop from RecapVideoNVPage
   const currentSubtitleRef = useRef<string>(""); // for canvas subtitle drawing during recording
@@ -770,6 +771,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
     logoAngleRef.current = 0;
     let lastFrameTime = performance.now();
 
+    // Pre-compute bypassBoost object ONCE before the draw loop — eliminates per-frame object allocation
+    const initEditorState = editorStateRef.current;
+    const precomputedBypassBoost = initEditorState.bypass
+      ? { contrast: 15, brightness: 5, saturate: 15, hue: 5 }
+      : { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
+
     // Low-end GPU optimization flag: reduces shadowBlur & skips expensive glow layers for 480p/720p
     const isLowEndRender = quality.fps < 30;
 
@@ -815,14 +822,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
       const gradePreset = COLOR_GRADE_PRESETS[curEditorState.colorGrade] || COLOR_GRADE_PRESETS["OFF"];
       // Color grading via ctx.filter is GPU-accelerated — no CPU penalty, so use FULL intensity for color match
       const smoothGradeScale = 1;
-      const bypassBoost = curEditorState.bypass
-        ? {
-            contrast: 15 * smoothGradeScale,
-            brightness: 5 * smoothGradeScale,
-            saturate: 15 * smoothGradeScale,
-            hue: 5 * smoothGradeScale,
-          }
-        : { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
+      const bypassBoost = precomputedBypassBoost;
       // Canvas 2D filter pipeline renders slightly less vivid than CSS filter pipeline.
       // Add +3% contrast and +5% saturate compensation to match CSS preview exactly.
       const canvasContrastBoost = 3;
@@ -1391,6 +1391,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
       // Cycle neon border hue every rAF frame (smooth color cycling)
       subNeonHueRef.current = (subNeonHueRef.current + 0.8) % 360;
       containerRef.current?.style.setProperty("--neon-hue", `hsl(${subNeonHueRef.current}, 100%, 75%)`);
+      // Direct DOM timeline bar update — bypasses React reconciliation entirely
+      if (timelineBarRef.current && a.duration) {
+        timelineBarRef.current.style.width = `${Math.min(100, (a.currentTime / a.duration) * 100)}%`;
+      }
       animFrame = requestAnimationFrame(syncLoop);
     };
     // ╚══ END TWO-FACTOR LOCK: AV-SYNC-8000-SMOOTH-v3 ══╝
@@ -1732,7 +1736,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
                     >
                       {/* key prop triggers CSS animation on every subtitle change */}
                       <div
-                        key={subtitleKey}
+                        key={isRenderingRef.current ? "stable-sub" : subtitleKey}
                         className="w-full text-center font-bold"
                         style={{
                           color: subSettings.textColor,
@@ -1808,11 +1812,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
                   <div className="absolute inset-0 bg-black/30" />
                   {/* Fill — driven by audio currentTime via CSS custom property */}
                   <div
+                    ref={timelineBarRef}
                     className="absolute inset-y-0 left-0 transition-none"
                     style={{
-                      width: audioRef.current?.duration
-                        ? `${Math.min(100, (audioRef.current.currentTime / audioRef.current.duration) * 100)}%`
-                        : "0%",
+                      width: "0%",
                       backgroundColor: timelineBar.color,
                       boxShadow: `0 0 ${timelineBar.thickness * 2}px ${timelineBar.color}`,
                     }}
@@ -1867,8 +1870,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
             </div>
           )}
 
-          {/* Editor Toolbar */}
-          {!renderedBlobUrl && (
+          {/* Editor Toolbar — unmounted during recording to eliminate React reconciliation cost.
+               Canvas reads from editorStateRef/blurSettingsRef, not from DOM toolbar controls. */}
+          {!renderedBlobUrl && !isRendering && (
             <div className="bg-charcoal-800 rounded-xl border border-charcoal-600 p-4 space-y-5">
               {/* Visual Settings */}
               <div>
