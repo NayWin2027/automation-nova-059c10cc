@@ -822,7 +822,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
       const gradePreset = COLOR_GRADE_PRESETS[curEditorState.colorGrade] || COLOR_GRADE_PRESETS["OFF"];
       // Color grading via ctx.filter is GPU-accelerated — no CPU penalty, so use FULL intensity for color match
       const smoothGradeScale = 1;
-      const bypassBoost = precomputedBypassBoost;
+      const bypassBoost = curEditorState.bypass ? BYPASS_ON : BYPASS_OFF;
       // Canvas 2D filter pipeline renders slightly less vivid than CSS filter pipeline.
       // Add +3% contrast and +5% saturate compensation to match CSS preview exactly.
       const canvasContrastBoost = 3;
