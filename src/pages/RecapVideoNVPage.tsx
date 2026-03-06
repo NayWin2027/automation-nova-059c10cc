@@ -771,11 +771,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
     logoAngleRef.current = 0;
     let lastFrameTime = performance.now();
 
-    // Pre-compute bypassBoost object ONCE before the draw loop — eliminates per-frame object allocation
-    const initEditorState = editorStateRef.current;
-    const precomputedBypassBoost = initEditorState.bypass
-      ? { contrast: 15, brightness: 5, saturate: 15, hue: 5 }
-      : { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
+    // Pre-allocated bypass boost objects — reused every frame to eliminate per-frame object creation
+    const BYPASS_BOOST_ON = { contrast: 15, brightness: 5, saturate: 15, hue: 5 };
+    const BYPASS_BOOST_OFF = { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
 
     // Low-end GPU optimization flag: reduces shadowBlur & skips expensive glow layers for 480p/720p
     const isLowEndRender = quality.fps < 30;
@@ -822,7 +820,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
       const gradePreset = COLOR_GRADE_PRESETS[curEditorState.colorGrade] || COLOR_GRADE_PRESETS["OFF"];
       // Color grading via ctx.filter is GPU-accelerated — no CPU penalty, so use FULL intensity for color match
       const smoothGradeScale = 1;
-      const bypassBoost = precomputedBypassBoost;
+      const bypassBoost = curEditorState.bypass ? BYPASS_BOOST_ON : BYPASS_BOOST_OFF;
       // Canvas 2D filter pipeline renders slightly less vivid than CSS filter pipeline.
       // Add +3% contrast and +5% saturate compensation to match CSS preview exactly.
       const canvasContrastBoost = 3;
@@ -1658,7 +1656,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
             <div
               ref={containerRef}
               className={`relative overflow-hidden transition-all duration-300 shadow-lg flex items-center justify-center bg-black`}
-              style={containerStyles}
+              style={{ ...containerStyles, contain: 'layout style paint', willChange: isRendering ? 'auto' : undefined }}
               onMouseMove={handleDragMove}
               onMouseUp={handleDragEnd}
               onMouseLeave={handleDragEnd}
@@ -1870,9 +1868,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
             </div>
           )}
 
-          {/* Editor Toolbar — unmounted during recording to eliminate React reconciliation cost.
+          {/* Editor Toolbar — hidden via CSS during recording to avoid massive DOM teardown.
                Canvas reads from editorStateRef/blurSettingsRef, not from DOM toolbar controls. */}
-          {!renderedBlobUrl && !isRendering && (
+          {!renderedBlobUrl && (
+            <div style={isRendering ? { display: 'none' } : undefined}>
             <div className="bg-charcoal-800 rounded-xl border border-charcoal-600 p-4 space-y-5">
               {/* Visual Settings */}
               <div>
@@ -2302,6 +2301,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
                   </div>
                 )}
               </div>
+            </div>
             </div>
           )}
 
