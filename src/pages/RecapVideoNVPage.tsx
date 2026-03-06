@@ -113,6 +113,41 @@ interface BlurSettings {
   isDragging: boolean;
 }
 
+// Color Grading Presets — moved outside component to prevent re-allocation on every render
+const COLOR_GRADE_PRESETS: Record<
+  string,
+  {
+    contrast: number;
+    brightness: number;
+    saturate: number;
+    hue: number;
+    sepia?: number;
+    label: string;
+    emoji: string;
+  }
+> = {
+  OFF: { contrast: 100, brightness: 100, saturate: 100, hue: 0, label: "Off", emoji: "⚫" },
+  CINEMATIC: { contrast: 120, brightness: 90, saturate: 65, hue: 5, label: "Cinematic", emoji: "🎬" },
+  VINTAGE: { contrast: 108, brightness: 95, saturate: 60, hue: 12, sepia: 30, label: "Vintage", emoji: "📷" },
+  COOL: { contrast: 110, brightness: 97, saturate: 90, hue: -25, label: "Cool", emoji: "🧊" },
+  WARM: { contrast: 112, brightness: 108, saturate: 120, hue: 18, label: "Warm", emoji: "🔥" },
+  TEAL: { contrast: 118, brightness: 93, saturate: 125, hue: -35, label: "Teal & Orange", emoji: "🌊" },
+  PINK: { contrast: 108, brightness: 105, saturate: 130, hue: 330, label: "Pink", emoji: "🌸" },
+  NEON: { contrast: 125, brightness: 108, saturate: 160, hue: 8, label: "Neon", emoji: "⚡" },
+  NOIR: { contrast: 130, brightness: 82, saturate: 15, hue: 0, label: "Noir", emoji: "🎭" },
+  GOLDEN: { contrast: 115, brightness: 112, saturate: 135, hue: 22, label: "Golden Hour", emoji: "🌅" },
+};
+
+// Export Quality Options — moved outside component to prevent re-allocation on every render
+const EXPORT_QUALITY_OPTIONS: Record<
+  string,
+  { maxW: number; maxH: number; fps: number; bitrate: number; label: string }
+> = {
+  "480p": { maxW: 854, maxH: 480, fps: 20, bitrate: 2_000_000, label: "480p (Low — 854×480 · 20fps · 2Mbps)" },
+  "720p": { maxW: 1280, maxH: 720, fps: 24, bitrate: 3_000_000, label: "720p (Mid — 1280×720 · 24fps · 3Mbps)" },
+  "1080p": { maxW: 1920, maxH: 1080, fps: 30, bitrate: 4_000_000, label: "1080p (High — 1920×1080 · 30fps · 4Mbps)" },
+};
+
 export const ResultView: React.FC<ResultViewProps> = React.memo(({
   scriptData,
   onUpdateScript,
@@ -137,42 +172,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
   const [renderedBlobUrl, setRenderedBlobUrl] = useState<string | null>(null);
   // Neon hue for subtitle box border cycling (DOM preview)
   const subNeonHueRef = useRef(0);
-  const [subBorderColor, setSubBorderColor] = useState("hsl(180,100%,75%)"); // cyan start — bright neon
-
-  // Color Grading Presets — industry-standard subtle values for realistic, non-artificial look
-  const COLOR_GRADE_PRESETS: Record<
-    string,
-    {
-      contrast: number;
-      brightness: number;
-      saturate: number;
-      hue: number;
-      sepia?: number;
-      label: string;
-      emoji: string;
-    }
-  > = {
-    OFF: { contrast: 100, brightness: 100, saturate: 100, hue: 0, label: "Off", emoji: "⚫" },
-    CINEMATIC: { contrast: 120, brightness: 90, saturate: 65, hue: 5, label: "Cinematic", emoji: "🎬" },
-    VINTAGE: { contrast: 108, brightness: 95, saturate: 60, hue: 12, sepia: 30, label: "Vintage", emoji: "📷" },
-    COOL: { contrast: 110, brightness: 97, saturate: 90, hue: -25, label: "Cool", emoji: "🧊" },
-    WARM: { contrast: 112, brightness: 108, saturate: 120, hue: 18, label: "Warm", emoji: "🔥" },
-    TEAL: { contrast: 118, brightness: 93, saturate: 125, hue: -35, label: "Teal & Orange", emoji: "🌊" },
-    PINK: { contrast: 108, brightness: 105, saturate: 130, hue: 330, label: "Pink", emoji: "🌸" },
-    NEON: { contrast: 125, brightness: 108, saturate: 160, hue: 8, label: "Neon", emoji: "⚡" },
-    NOIR: { contrast: 130, brightness: 82, saturate: 15, hue: 0, label: "Noir", emoji: "🎭" },
-    GOLDEN: { contrast: 115, brightness: 112, saturate: 135, hue: 22, label: "Golden Hour", emoji: "🌅" },
-  };
-
-  // Export Quality Options — resolution cap, fps, bitrate per quality level
-  const EXPORT_QUALITY_OPTIONS: Record<
-    string,
-    { maxW: number; maxH: number; fps: number; bitrate: number; label: string }
-  > = {
-    "480p": { maxW: 854, maxH: 480, fps: 20, bitrate: 2_000_000, label: "480p (Low — 854×480 · 20fps · 2Mbps)" },
-    "720p": { maxW: 1280, maxH: 720, fps: 24, bitrate: 3_000_000, label: "720p (Mid — 1280×720 · 24fps · 3Mbps)" },
-    "1080p": { maxW: 1920, maxH: 1080, fps: 30, bitrate: 4_000_000, label: "1080p (High — 1920×1080 · 30fps · 4Mbps)" },
-  };
+  // subBorderColor removed — was unused dead code
   const [exportQuality, setExportQuality] = useState<string>("720p");
 
   // CPU auto-detection: deferred to avoid blocking initial render
@@ -527,6 +527,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
     const audioEl = audioRef.current;
     if (!videoEl || !audioEl) return;
 
+    // Mutable ref for offscreen blur canvas — used in onstop cleanup
+    let _blurFxCanvas: HTMLCanvasElement | null = null;
+
     if (!videoEl.videoWidth) {
       await new Promise<void>((resolve) => {
         videoEl.addEventListener("loadedmetadata", () => resolve(), { once: true });
@@ -616,6 +619,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
       cancelAnimationFrame(recapAnimFrameRef.current);
       clearTimeout(recapAnimFrameRef.current);
 
+      // Cleanup offscreen blur canvas to prevent memory leak
+      if (_blurFxCanvas) {
+        _blurFxCanvas.width = 0;
+        _blurFxCanvas.height = 0;
+      }
+
       if (chunks.length === 0) {
         setIsRendering(false);
         return;
@@ -665,7 +674,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
     };
 
     setIsRendering(true);
-    recorder.start(100);
+    recorder.start(1000);
 
     // Pre-load logo image for canvas drawing
     // If no custom logo, rasterize the AppLogo SVG into an Image via Blob URL
@@ -762,6 +771,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
 
     // Offscreen blur canvas — keeps blur effect ON while reducing per-frame cost (half-res for low-end)
     const blurFxCanvas = document.createElement("canvas");
+    _blurFxCanvas = blurFxCanvas; // Store reference for cleanup in recorder.onstop
     const blurFxCtx = blurFxCanvas.getContext("2d", { alpha: false })!;
 
     const drawFrame = () => {
@@ -1152,27 +1162,28 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
       return false;
     };
 
-    if (isLowEnd) {
-      // Low-end (480p/720p): setTimeout loop at exact target fps
-      // This reduces CPU/GPU draw calls to only what's needed (20-24 per sec instead of 60)
-      // setTimeout gives consistent intervals without the jitter of rAF frame-skipping
-      // captureStream(quality.fps) still captures at the correct output rate
-      const drawAndSchedule = () => {
-        if (checkEnded()) return;
-        drawFrame();
-        recapAnimFrameRef.current = window.setTimeout(drawAndSchedule, frameInterval) as unknown as number;
-      };
-      recapAnimFrameRef.current = window.setTimeout(drawAndSchedule, 0) as unknown as number;
-    } else {
-      // 1080p (high-end): rAF for maximum smoothness — draw every vsync
-      // AV sync is driven by audio master clock (protected block), not by draw frequency
-      const rafLoop = (timestamp: number) => {
-        if (checkEnded()) return;
-        drawFrame();
-        recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
-      };
+    // Unified rAF-throttled loop for ALL quality levels
+    // rAF runs at vsync priority (won't be deprioritized like setTimeout)
+    // Manual throttle ensures low-end devices only draw at target FPS
+    // AV sync is driven by audio master clock (protected block), not by draw frequency
+    // captureStream(quality.fps) still controls actual output frame rate
+    const minFrameInterval = isLowEnd ? frameInterval : 0; // 0 = draw every vsync for 1080p
+    let lastDrawTime = 0;
+
+    const rafLoop = (timestamp: number) => {
+      if (checkEnded()) return;
+      if (minFrameInterval > 0) {
+        const elapsed = timestamp - lastDrawTime;
+        if (elapsed >= minFrameInterval) {
+          lastDrawTime = timestamp - (elapsed % minFrameInterval); // drift correction
+          drawFrame();
+        }
+      } else {
+        drawFrame(); // 1080p: draw every vsync for maximum smoothness
+      }
       recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
-    }
+    };
+    recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
   };
 
   // Recap playback in editor: play video (muted) + TTS audio with subtitle sync
