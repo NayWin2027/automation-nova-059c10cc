@@ -771,11 +771,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(({
     logoAngleRef.current = 0;
     let lastFrameTime = performance.now();
 
-    // Pre-compute bypassBoost object ONCE before the draw loop — eliminates per-frame object allocation
-    const initEditorState = editorStateRef.current;
-    const precomputedBypassBoost = initEditorState.bypass
-      ? { contrast: 15, brightness: 5, saturate: 15, hue: 5 }
-      : { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
+    // Pre-allocated bypass boost objects — reused every frame to eliminate per-frame object creation
+    const BYPASS_BOOST_ON = { contrast: 15, brightness: 5, saturate: 15, hue: 5 };
+    const BYPASS_BOOST_OFF = { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
 
     // Low-end GPU optimization flag: reduces shadowBlur & skips expensive glow layers for 480p/720p
     const isLowEndRender = quality.fps < 30;
