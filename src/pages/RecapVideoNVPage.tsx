@@ -440,6 +440,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         dragSubPosRef.current = { x, y };
       } else if (isDraggingBlur) {
         dragBlurPosRef.current = { x, y };
+        // ── FIX: Direct DOM update for smooth blur box dragging ──
+        if (blurBoxRef.current) {
+          blurBoxRef.current.style.left = `${x}%`;
+          blurBoxRef.current.style.top = `${y}%`;
+        }
       }
     };
 
