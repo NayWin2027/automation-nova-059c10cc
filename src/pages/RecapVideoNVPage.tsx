@@ -1528,6 +1528,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 {/* Blur Box Layer */}
                 {blurSettings.enabled && (
                   <div
+                    ref={blurBoxRef}
                     onMouseDown={handleBlurDragStart}
                     onTouchStart={handleBlurDragStart}
                     className="absolute z-20 cursor-move flex items-center justify-center"
