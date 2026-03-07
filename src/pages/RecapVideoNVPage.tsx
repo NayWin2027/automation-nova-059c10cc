@@ -181,7 +181,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       y: 85,
       textColor: "#FACC15",
       bgColor: "rgba(0,0,0,0.6)",
-      borderColor: "#00E5FF",
+      borderColor: "#FF69B4",
       fontSize: 15,
       scale: 1,
       maxWidth: 80,
@@ -191,9 +191,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       enabled: true,
       x: 50,
       y: 88,
-      width: 100,
-      height: 20,
-      opacity: 15,
+      width: 80,
+      height: 15,
+      opacity: 70,
       isDragging: false,
     });
 
@@ -226,6 +226,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const [isDraggingSub, setIsDraggingSub] = useState(false);
     const [isDraggingBlur, setIsDraggingBlur] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
+    const blurBoxRef = useRef<HTMLDivElement>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
     const audioRef = useRef<HTMLAudioElement>(null);
     const editorStateRef = useRef(editorState);
@@ -439,6 +440,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         dragSubPosRef.current = { x, y };
       } else if (isDraggingBlur) {
         dragBlurPosRef.current = { x, y };
+        // ── FIX: Direct DOM update for smooth blur box dragging ──
+        if (blurBoxRef.current) {
+          blurBoxRef.current.style.left = `${x}%`;
+          blurBoxRef.current.style.top = `${y}%`;
+        }
       }
     };
 
@@ -1522,6 +1528,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 {/* Blur Box Layer */}
                 {blurSettings.enabled && (
                   <div
+                    ref={blurBoxRef}
                     onMouseDown={handleBlurDragStart}
                     onTouchStart={handleBlurDragStart}
                     className="absolute z-20 cursor-move flex items-center justify-center"
