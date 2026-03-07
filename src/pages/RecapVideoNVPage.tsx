@@ -226,6 +226,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const [isDraggingSub, setIsDraggingSub] = useState(false);
     const [isDraggingBlur, setIsDraggingBlur] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
+    const blurBoxRef = useRef<HTMLDivElement>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
     const audioRef = useRef<HTMLAudioElement>(null);
     const editorStateRef = useRef(editorState);
