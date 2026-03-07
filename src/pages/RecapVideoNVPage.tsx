@@ -191,9 +191,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       enabled: true,
       x: 50,
       y: 88,
-      width: 100,
-      height: 20,
-      opacity: 15,
+      width: 80,
+      height: 15,
+      opacity: 70,
       isDragging: false,
     });
 
