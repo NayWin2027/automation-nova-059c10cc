@@ -206,7 +206,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
     const [videoBorder, setVideoBorder] = useState({
       enabled: true,
-      color: "#F43F5E",
+      color: "#EC4899"
       width: 11,
       openPanel: false,
     });
