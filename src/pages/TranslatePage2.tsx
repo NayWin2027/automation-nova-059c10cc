@@ -273,8 +273,10 @@ const TranslateView: React.FC = () => {
       }
 
       setResult(response || "");
+      if (response) recordToolOutcome('translate', 'success');
     } catch (error: any) {
       console.error(error);
+      recordToolOutcome('translate', 'error');
       const errorMsg = getOwnApiErrorMessage(error);
       toast.error(errorMsg);
     } finally {

@@ -510,9 +510,11 @@ const StoryView: React.FC = () => {
         setCurrentSegmentIndex((prev) => prev + 1);
 
         if (storyPhase === "INTRO") setStoryPhase("RISING");
+        recordToolOutcome('story-creator', 'success');
       }
       setTimeout(() => document.getElementById("story-result")?.scrollIntoView({ behavior: "smooth" }), 100);
     } catch (e) {
+      recordToolOutcome('story-creator', 'error');
       // App API mode: show error alert
       if (apiType === "app") {
         alert("Error occurred. Please try again later.");

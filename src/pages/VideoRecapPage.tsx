@@ -561,6 +561,7 @@ export default function VideoRecapView() {
       console.error(err);
       alert("Error: " + (err.message || "Process Failed."));
       setAnalyzing(false);
+      recordToolOutcome('video-recap', 'error');
     }
   };
 

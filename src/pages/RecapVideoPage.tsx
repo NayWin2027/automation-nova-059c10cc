@@ -1034,10 +1034,12 @@ export default function VideoRecapView() {
       didConfirmSuccessRef.current = false;
       saveToHistory(text, url, mappedSegments);
       toast.success("✨ Premium Recap ပြီးပါပြီ! (Export အောင်မြင်မှ credits ဖြတ်ပါမယ်)");
+      recordToolOutcome('video-recap', 'success');
 
       setTimeout(() => togglePlay(), 1500);
     } catch (err: any) {
       console.error("Per-segment TTS error:", err);
+      recordToolOutcome('video-recap', 'error');
       // If quota/rate-limit, show message and stop (no retry loop)
       const msg = err.message || "Audio generation failed";
       if (msg.includes("429") || msg.includes("quota") || msg.includes("rate")) {

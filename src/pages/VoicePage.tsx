@@ -463,9 +463,11 @@ const VoicePage: React.FC = () => {
           setResultSubtitles(srtMock);
           startLiveSubtitles(text, duration);
         }
+        recordToolOutcome('voice', 'success');
       }
     } catch (error) {
       console.error(error);
+      recordToolOutcome('voice', 'error');
       alert('Generation failed. Please check your API key or Quota.');
     } finally {
       setLoading(false);

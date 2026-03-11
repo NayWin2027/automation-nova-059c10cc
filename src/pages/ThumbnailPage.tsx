@@ -787,13 +787,16 @@ const ThumbnailView: React.FC = () => {
           drawThumbnail();
           setLoading(false);
         };
+        recordToolOutcome('thumbnail', 'success');
       } else {
         alert("AI Generation Error.");
         setLoading(false);
+        recordToolOutcome('thumbnail', 'error');
       }
     } catch (error: any) {
       alert(error.message);
       setLoading(false);
+      recordToolOutcome('thumbnail', 'error');
     }
   };
 

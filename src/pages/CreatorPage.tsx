@@ -240,8 +240,10 @@ const CreatorPage: React.FC = () => {
           setGeneratedImg(imgResult);
         }
       }
+      recordToolOutcome('creator', 'success');
     } catch (e) {
       console.error(e);
+      recordToolOutcome('creator', 'error');
       const errorMsg = getOwnApiErrorMessage(e);
       toast.error(errorMsg);
     } finally {

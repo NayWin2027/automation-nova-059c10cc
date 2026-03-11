@@ -842,12 +842,14 @@ export default function TransformativeVideoPage() {
           prev ? { ...prev, status: "completed", videoProgress: 100 } : null
         );
         toast.success("ပြောင်းလဲမှု အောင်မြင်ပါပြီ!");
+        recordToolOutcome('transformative-video', 'success');
       } else {
         // URL-based video (would require video download API)
         toast.error("URL video အတွက် video download API လိုအပ်ပါသည်။ File upload သုံးပါ။");
         setProcessingJob((prev) =>
           prev ? { ...prev, status: "failed" } : null
         );
+        recordToolOutcome('transformative-video', 'error');
       }
     } catch (error) {
       console.error("Processing error:", error);
@@ -855,6 +857,7 @@ export default function TransformativeVideoPage() {
       setProcessingJob((prev) =>
         prev ? { ...prev, status: "failed" } : null
       );
+      recordToolOutcome('transformative-video', 'error');
     } finally {
       setIsProcessing(false);
       setProcessingStage("");

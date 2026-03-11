@@ -565,6 +565,7 @@ TRANSLATION QUALITY (CRITICAL):
 
       if (result) {
         setTranslated(result);
+        recordToolOutcome('novel-translate', 'success');
 
         // Show credit deduction info toast (App API mode only)
         if (apiType === 'app' && translateResult.creditsDeducted && translateResult.creditsDeducted > 0) {

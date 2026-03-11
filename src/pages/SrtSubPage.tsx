@@ -195,10 +195,12 @@ const SrtTranslatorView: React.FC = () => {
       }
 
       setTranslated(result || "");
+      if (result) recordToolOutcome('srt-translate', 'success');
     } catch (e: any) {
       const errMsg = getOwnApiErrorMessage(e);
       setErrorMessage(errMsg);
       toast.error(errMsg);
+      recordToolOutcome('srt-translate', 'error');
     } finally {
       setLoading(false);
     }

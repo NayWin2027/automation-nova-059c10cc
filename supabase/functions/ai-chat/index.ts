@@ -168,6 +168,7 @@ serve(async (req) => {
     }
 
     console.log("Gemini response successful, streaming...");
+    logToolActivity(user.id, "chat", "success", { messageCount: messages.length });
 
     // Transform Google SSE format to OpenAI-compatible SSE format
     const transformStream = new TransformStream({
