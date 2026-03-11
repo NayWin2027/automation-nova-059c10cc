@@ -564,6 +564,7 @@ serve(async (req) => {
       );
     }
 
+    logToolActivity(user.id, "transcribe", "success", { length: transcription.length, mode: "own" });
     return new Response(
       JSON.stringify({ text: transcription }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
