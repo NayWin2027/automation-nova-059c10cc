@@ -17,6 +17,7 @@ import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { usePageStability } from '@/hooks/usePageStability';
 import { supabase } from '@/integrations/supabase/client';
 import { preCheckCredits } from '@/utils/creditPreCheck';
+import { recordToolOutcome } from '@/utils/toolOutcome';
 
 type SubStyle = 'GOLD' | 'BLUE' | 'RUBY' | 'DIAMOND' | 'EMERALD';
 
