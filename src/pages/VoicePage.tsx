@@ -17,6 +17,7 @@ import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { usePageStability } from '@/hooks/usePageStability';
 import { supabase } from '@/integrations/supabase/client';
 import { preCheckCredits } from '@/utils/creditPreCheck';
+import { recordToolOutcome } from '@/utils/toolOutcome';
 
 type SubStyle = 'GOLD' | 'BLUE' | 'RUBY' | 'DIAMOND' | 'EMERALD';
 
@@ -462,9 +463,11 @@ const VoicePage: React.FC = () => {
           setResultSubtitles(srtMock);
           startLiveSubtitles(text, duration);
         }
+        recordToolOutcome('voice', 'success');
       }
     } catch (error) {
       console.error(error);
+      recordToolOutcome('voice', 'error');
       alert('Generation failed. Please check your API key or Quota.');
     } finally {
       setLoading(false);

@@ -9,6 +9,7 @@ import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useApiAccess } from "@/hooks/useApiAccess";
 import { toast } from "sonner";
 import { preCheckCredits } from "@/utils/creditPreCheck";
+import { recordToolOutcome } from "@/utils/toolOutcome";
 
 const LANGUAGES = [
   "BURMESE",
@@ -240,8 +241,10 @@ const CreatorPage: React.FC = () => {
           setGeneratedImg(imgResult);
         }
       }
+      recordToolOutcome('creator', 'success');
     } catch (e) {
       console.error(e);
+      recordToolOutcome('creator', 'error');
       const errorMsg = getOwnApiErrorMessage(e);
       toast.error(errorMsg);
     } finally {

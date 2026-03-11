@@ -8,6 +8,7 @@ import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useApiAccess } from "@/hooks/useApiAccess";
 import { useToast } from "@/hooks/use-toast";
 import { preCheckCredits } from "@/utils/creditPreCheck";
+import { recordToolOutcome } from "@/utils/toolOutcome";
 
 // Silent retry configuration for Own API mode
 const MAX_SILENT_RETRIES = 3;
@@ -510,9 +511,11 @@ const StoryView: React.FC = () => {
         setCurrentSegmentIndex((prev) => prev + 1);
 
         if (storyPhase === "INTRO") setStoryPhase("RISING");
+        recordToolOutcome('story-creator', 'success');
       }
       setTimeout(() => document.getElementById("story-result")?.scrollIntoView({ behavior: "smooth" }), 100);
     } catch (e) {
+      recordToolOutcome('story-creator', 'error');
       // App API mode: show error alert
       if (apiType === "app") {
         alert("Error occurred. Please try again later.");

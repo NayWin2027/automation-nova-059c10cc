@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logToolActivity } from "../_shared/activityLog.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -581,14 +582,17 @@ ${transcript}
       console.log("[recap-script-generator] Skipping credit deduction (recap-nv pipeline handles it)");
     }
 
+    logToolActivity(user.id, "recap-script", "success", { scriptLength: script.length, niche: nicheLabel, language: lang });
     return new Response(
       JSON.stringify({ script }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
     console.error("Script generation error:", error);
+    const errMsg = error instanceof Error ? error.message : "Unknown error";
+    logToolActivity(user.id, "recap-script", "error", { error: errMsg });
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ error: errMsg }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

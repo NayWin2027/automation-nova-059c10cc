@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logToolActivity } from "../_shared/activityLog.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -361,6 +362,7 @@ TRANSLATION QUALITY:
       }
     }
 
+    if (user) logToolActivity(user.id, "novel-translate", "success", { outputCharCount, creditsDeducted });
     return new Response(
       JSON.stringify({ text: translatedText, creditsDeducted, outputCharCount }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -368,8 +370,10 @@ TRANSLATION QUALITY:
 
   } catch (error) {
     console.error('[Novel Translate] Error:', error);
+    const errMsg = error instanceof Error ? error.message : 'Translation failed';
+    if (user) logToolActivity(user.id, "novel-translate", "error", { error: errMsg });
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Translation failed' }),
+      JSON.stringify({ error: errMsg }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

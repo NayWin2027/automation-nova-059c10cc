@@ -7,6 +7,7 @@ import { generateOwnApiText, getOwnApiErrorMessage } from "../services/ownApiSer
 import { useSecureApiKey } from "../hooks/useSecureApiKey";
 import { toast } from "sonner";
 import { preCheckCredits } from "@/utils/creditPreCheck";
+import { recordToolOutcome } from "@/utils/toolOutcome";
 import {
   Lock,
   ChevronDown,
@@ -272,8 +273,10 @@ const TranslateView: React.FC = () => {
       }
 
       setResult(response || "");
+      if (response) recordToolOutcome('translate', 'success');
     } catch (error: any) {
       console.error(error);
+      recordToolOutcome('translate', 'error');
       const errorMsg = getOwnApiErrorMessage(error);
       toast.error(errorMsg);
     } finally {

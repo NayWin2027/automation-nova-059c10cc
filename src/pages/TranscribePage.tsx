@@ -7,6 +7,7 @@ import { useSecureApiKey } from "../hooks/useSecureApiKey";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { preCheckCredits } from "@/utils/creditPreCheck";
+import { recordToolOutcome } from "@/utils/toolOutcome";
 
 // ============ ADMIN CMS TYPES ============
 interface TranscribeSettings {
@@ -390,11 +391,14 @@ export default function TranscriptionView() {
       if (data?.script) {
         setGeneratedScript(data.script);
         toast.success("Script အောင်မြင်စွာ ထွက်လာပါပြီ!");
+        recordToolOutcome('transcribe', 'success');
       } else {
         toast.error("Script generation failed.");
+        recordToolOutcome('transcribe', 'error');
       }
     } catch (err: any) {
       console.error(err);
+      recordToolOutcome('transcribe', 'error');
       if (err?.name === "AbortError") {
         toast.error("Request timeout ဖြစ်သွားပါပြီ။ ဖိုင် သေးသေးနဲ့ ပြန်စမ်းပါ။");
       } else {

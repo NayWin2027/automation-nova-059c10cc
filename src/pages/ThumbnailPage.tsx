@@ -5,6 +5,7 @@ import { generateThumbnail } from "../services/geminiService";
 import { useNavigate } from "react-router-dom";
 import { useSecureApiKey } from "../hooks/useSecureApiKey";
 import { toast } from "sonner";
+import { recordToolOutcome } from "@/utils/toolOutcome";
 type Position = "UPON LEFT" | "UPON RIGHT" | "BUTTON LEFT" | "BUTTON RIGHT" | "CENTER";
 type AspectRatio = "1:1" | "16:9" | "9:16" | "4:3" | "3:4";
 type FontEffect =
@@ -787,13 +788,16 @@ const ThumbnailView: React.FC = () => {
           drawThumbnail();
           setLoading(false);
         };
+        recordToolOutcome('thumbnail', 'success');
       } else {
         alert("AI Generation Error.");
         setLoading(false);
+        recordToolOutcome('thumbnail', 'error');
       }
     } catch (error: any) {
       alert(error.message);
       setLoading(false);
+      recordToolOutcome('thumbnail', 'error');
     }
   };
 

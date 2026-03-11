@@ -8,6 +8,7 @@ import { generateOwnApiText, getOwnApiErrorMessage } from "@/services/ownApiServ
 import { translateText } from "../services/geminiService";
 import { toast } from "sonner";
 import { preCheckCredits } from "@/utils/creditPreCheck";
+import { recordToolOutcome } from "@/utils/toolOutcome";
 const LANGUAGES = [
 "BURMESE",
 "ENGLISH",
@@ -195,10 +196,12 @@ const SrtTranslatorView: React.FC = () => {
       }
 
       setTranslated(result || "");
+      if (result) recordToolOutcome('srt-translate', 'success');
     } catch (e: any) {
       const errMsg = getOwnApiErrorMessage(e);
       setErrorMessage(errMsg);
       toast.error(errMsg);
+      recordToolOutcome('srt-translate', 'error');
     } finally {
       setLoading(false);
     }

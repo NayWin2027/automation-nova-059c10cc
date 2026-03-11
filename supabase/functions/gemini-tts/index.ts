@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logToolActivity } from "../_shared/activityLog.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -459,6 +460,8 @@ serve(async (req) => {
       }
     }
 
+    if (userId) logToolActivity(userId, "voice", "success", { voice: usedVoice, textLength: text.length });
+
     return new Response(
       JSON.stringify({
         audio: finalAudio,
@@ -473,6 +476,8 @@ serve(async (req) => {
   } catch (error: unknown) {
     console.error("[gemini-tts] Error:", error);
     const errorMessage = error instanceof Error ? error.message : "Internal server error";
+
+    if (userId) logToolActivity(userId, "voice", "error", { error: errorMessage });
 
     // IMPORTANT: Return 200 so the frontend doesn't crash on FunctionsHttpError.
     return new Response(

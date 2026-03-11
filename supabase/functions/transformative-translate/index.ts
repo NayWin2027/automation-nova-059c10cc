@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logToolActivity } from "../_shared/activityLog.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -192,14 +193,17 @@ Follow Myanmar Sar Dictionary (မြန်မာစာသတ်ပုံကျ�
           .join("\n")
       : `1\n00:00:00,000 --> 00:00:10,000\n${translatedText}\n`;
 
+    logToolActivity(user.id, "transformative-translate", "success", { segmentCount: translatedSegments.length });
     return new Response(
       JSON.stringify({ translatedText, translatedSrt, segments: translatedSegments }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
     console.error("Translation error:", error);
+    const errMsg = error instanceof Error ? error.message : "Unknown error";
+    logToolActivity(user.id, "transformative-translate", "error", { error: errMsg });
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ error: errMsg }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

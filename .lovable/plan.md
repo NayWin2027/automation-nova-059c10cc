@@ -1,84 +1,97 @@
 
 
-# Admin Panel - Real Tool Usage & Error Tracking Fix
+# Performance Optimization Plan for Recap Video NV — Stuttering Fix
 
 ## Problem Analysis
 
-The admin panel shows fake/incomplete data because:
+The exported video stutters/drops frames. After reviewing the full rendering pipeline, I identified these specific performance issues — **none of which involve the AV-SYNC, subtitle accuracy, or protected blocks**:
 
-1. **`activity_logs` table** only receives inserts from the `deduct_user_credits` DB function - and ONLY on successful credit deductions. Errors, failures, and non-credit tools are never logged here.
-2. **`recordToolOutcome()` utility exists but is NEVER called** from any tool page or edge function.
-3. **`user_tool_usage` table** has `error_count` column but it's only incremented when `deduct_user_credits` encounters insufficient credits - not when actual tool processing fails (e.g., voice generation fails, transcription errors).
-4. Edge functions return errors to the client but never log them to the database.
+### Root Causes Found
 
-## Solution
+1. **`setCurrentSubtitle()` and `setSubtitleKey()` called inside the sync loop (line 1365-1366) trigger React re-renders every time the subtitle text changes** — during recording, this causes the entire `ResultView` component tree to re-render, competing with the canvas draw loop for CPU time. The canvas already reads from `currentSubtitleRef.current` directly, so these React state updates serve only the DOM preview — which is invisible/irrelevant during recording.
 
-Two-part fix: (A) Make edge functions log real outcomes to `activity_logs`, and (B) Call `recordToolOutcome` from tool pages on success/error.
+2. **`setTimeout` loop for 480p/720p (line 1155-1165)** — `setTimeout` has minimum ~4ms clamping in browsers and is deprioritized when the tab is busy. This causes inconsistent frame intervals and visible jitter. `requestAnimationFrame` with manual throttling is more reliable.
 
-### Part 1: Add activity logging to ALL edge functions (server-side)
+3. **`EXPORT_QUALITY_OPTIONS` and `COLOR_GRADE_PRESETS` are declared inside the component** (lines 143-175) — they are constant objects that get re-allocated on every render cycle.
 
-Add `activity_logs` INSERT in each edge function for both success AND error outcomes. This captures the real tool_name, action (success/error), and metadata (error message, device info from headers).
+4. **Unused `subBorderColor` state** (line 140) — declared but never used; dead code.
 
-**Edge functions to update** (surgical - only add logging, don't touch existing logic):
-- `gemini-tts/index.ts` → tool: "voice"
-- `transcribe-google/index.ts` → tool: "transcribe"  
-- `transcribe/index.ts` → tool: "transcribe"
-- `video-recap/index.ts` → tool: "video-recap"
-- `transformative-transcribe/index.ts` → tool: "transformative-transcribe"
-- `transformative-translate/index.ts` → tool: "transformative-translate"
-- `novel-translate/index.ts` → tool: "novel-translate"
-- `creator-ai/index.ts` → tool: "creator"
-- `ai-chat/index.ts` → tool: "chat"
-- `recap-script-generator/index.ts` → tool: "recap-script"
+5. **`blurFxCanvas` created but never cleaned up** (line 764) — minor memory leak per recording session.
 
-For each: after successful response OR in catch block, insert into `activity_logs` with:
-```sql
-INSERT INTO activity_logs (user_id, tool_name, action, metadata)
-VALUES (userId, 'voice', 'success', '{"device": "...", "ip": "..."}')
--- or on error:
-VALUES (userId, 'voice', 'error', '{"error": "API timeout", "device": "...", "ip": "..."}')
+---
+
+## Surgical Edits (5 changes, all outside protected blocks)
+
+### Edit 1: Suppress React re-renders during recording
+**Location**: Lines 1363-1374 (inside sync loop, but OUTSIDE the protected AV-SYNC block boundary)
+
+Wait — lines 1363-1374 are inside the protected AV-SYNC block (1198-1381). **I cannot touch this.**
+
+**Revised approach**: Since the `setCurrentSubtitle` / `setSubtitleKey` calls are inside the protected block, I will NOT modify them. Instead, I will optimize the rendering loop itself.
+
+### Edit 1: Replace setTimeout with throttled rAF for 480p/720p
+**Location**: Lines 1155-1175 (rendering loop — outside protected blocks)
+
+Replace the `setTimeout` loop with a `requestAnimationFrame` loop that manually throttles to target FPS using timestamp delta. This gives smoother, more consistent frame pacing because rAF is synchronized to the display's vsync signal.
+
+```typescript
+// Replace setTimeout with throttled rAF for ALL quality levels
+let lastDrawTime = 0;
+const minFrameInterval = 1000 / quality.fps; // e.g., 50ms for 20fps
+
+const rafLoop = (timestamp: number) => {
+  if (checkEnded()) return;
+  const elapsed = timestamp - lastDrawTime;
+  if (elapsed >= minFrameInterval) {
+    lastDrawTime = timestamp - (elapsed % minFrameInterval); // drift correction
+    drawFrame();
+  }
+  recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
+};
+recapAnimFrameRef.current = requestAnimationFrame(rafLoop);
 ```
 
-### Part 2: Call `recordToolOutcome` from tool pages (client-side)
+**Why this helps**: rAF runs at vsync priority and won't be deprioritized like setTimeout. The throttle ensures low-end devices still only draw at target FPS (20-24) while maintaining smooth timing.
 
-Add `recordToolOutcome(toolId, 'success')` and `recordToolOutcome(toolId, 'error')` calls in each tool page's processing flow. This updates `user_tool_usage.success_count` and `error_count` accurately.
+**AV-SYNC impact**: Zero. The draw frequency does not affect audio-video synchronization (which is driven by audio master clock in the protected block). `captureStream(quality.fps)` still controls output frame rate.
 
-**Pages to update:**
-- `VoicePage.tsx` - after voice generation success/fail
-- `TranscribePage.tsx` - after transcription success/fail
-- `TranslatePage2.tsx` - after translation success/fail
-- `TransformativeVideoPage.tsx` - after processing success/fail
-- `CreatorPage.tsx` - after creation success/fail
-- `StoryCreatorPage.tsx` - after story creation success/fail
-- `NovelTransPage.tsx` - after translation success/fail
-- `ThumbnailPage.tsx` - after thumbnail generation success/fail
-- `SrtSubPage.tsx` - after SRT processing success/fail
-- `VideoRecapPage.tsx` - after recap success/fail
-- `RecapVideoPage.tsx` - after recap success/fail
-- `RecapVideoNVPage.tsx` - after final video output success/fail (surgical, outside protected blocks only)
+### Edit 2: Move constant objects outside component
+**Location**: Lines 143-175 (COLOR_GRADE_PRESETS, EXPORT_QUALITY_OPTIONS)
 
-### Part 3: Improve Admin Activity Tab display
+Move these constant objects outside the `ResultView` component to prevent re-allocation on every render. This is a pure memory/GC optimization.
 
-Update `AdminActivityTab.tsx` to:
-- Show action column with color-coded badges: green "success", red "error"
-- Show error details from metadata when action is "error"
-- Show all tool names properly (not just credit_deduction actions)
+### Edit 3: Remove unused `subBorderColor` state
+**Location**: Line 140
 
-### Part 4: Improve Admin Daily Usage Tab
+Remove the unused `useState` for `subBorderColor` — it's declared but never read or set anywhere.
 
-Already shows success/error counts from `user_tool_usage` - will work correctly once Part 2 is implemented.
+### Edit 4: Clean up blurFxCanvas on recording stop
+**Location**: Lines 611-617 (inside `recorder.onstop`)
 
-### What will NOT be touched
-- Protected blocks in RecapVideoNVPage.tsx (AV-SYNC, RECORD-PIPELINE, VOICE-GEN, AUTO-PIPELINE)
-- Upload logic, subtitle sync, audio-video sync
-- Admin auth, 2FA, RLS policies
-- Credit deduction logic
-- supabase/config.toml, client.ts, types.ts
+Add cleanup for the offscreen blur canvas to prevent memory leaks:
+```typescript
+blurFxCanvas.width = 0;
+blurFxCanvas.height = 0;
+```
 
-### Expected Result
-After implementation, admin panel will show:
-- Every tool usage (voice, transcribe, translate, etc.) - not just recap-nv
-- Real error events with error messages
-- Accurate success/error counts per user per tool per day
-- Device info and IP from request headers
+### Edit 5: Increase MediaRecorder timeslice for less overhead
+**Location**: Line 668
+
+Change `recorder.start(100)` to `recorder.start(1000)`. Collecting data every 100ms creates excessive overhead (10 ondataavailable events/sec). 1000ms reduces this to 1 event/sec with no quality impact.
+
+---
+
+## What is NOT touched (absolute guarantee)
+- 4 protected blocks (AV-SYNC-9000-SMOOTH-v4, RECORD-PIPELINE-AUTO-v1, VOICE-GEN-PIPELINE-v2, AUTO-PIPELINE-v2)
+- Subtitle accuracy / audio-locked paging logic
+- Upload logic (chunked upload proxy)
+- Audio-video sync engine
+- Silence gap injection
+- All RLS policies and auth flows
+
+## Expected Impact
+- **Smoother frames**: rAF-throttled loop eliminates setTimeout jitter
+- **Less CPU contention**: Reduced MediaRecorder overhead (10x fewer data events)
+- **Less GC pressure**: Constants moved outside component, unused state removed
+- **No memory leaks**: Offscreen canvas properly cleaned up
 

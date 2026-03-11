@@ -5,6 +5,7 @@ import { useAuthGuard } from "../hooks/useAuthGuard";
 import { useApiAccess } from "@/hooks/useApiAccess";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { recordToolOutcome } from "@/utils/toolOutcome";
 import { Home, Lock } from "lucide-react";
 
 // --- DATA SETS ---
@@ -561,6 +562,7 @@ export default function VideoRecapView() {
       console.error(err);
       alert("Error: " + (err.message || "Process Failed."));
       setAnalyzing(false);
+      recordToolOutcome('video-recap', 'error');
     }
   };
 

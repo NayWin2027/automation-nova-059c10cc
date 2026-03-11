@@ -9,6 +9,7 @@ import { useSecureApiKey } from '@/hooks/useSecureApiKey';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { useApiAccess } from '@/hooks/useApiAccess';
 import { preCheckCredits } from '@/utils/creditPreCheck';
+import { recordToolOutcome } from '@/utils/toolOutcome';
 
 type InputMode = 'UPLOAD' | 'PASTE';
 type NovelTone = 'WUXIA' | 'ROMANTIC' | 'CLASSIC' | 'MODERN' | 'FANTASY';
@@ -565,6 +566,7 @@ TRANSLATION QUALITY (CRITICAL):
 
       if (result) {
         setTranslated(result);
+        recordToolOutcome('novel-translate', 'success');
 
         // Show credit deduction info toast (App API mode only)
         if (apiType === 'app' && translateResult.creditsDeducted && translateResult.creditsDeducted > 0) {

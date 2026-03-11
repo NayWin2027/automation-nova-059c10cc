@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logToolActivity } from "../_shared/activityLog.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -167,6 +168,7 @@ serve(async (req) => {
     }
 
     console.log("Gemini response successful, streaming...");
+    logToolActivity(user.id, "chat", "success", { messageCount: messages.length });
 
     // Transform Google SSE format to OpenAI-compatible SSE format
     const transformStream = new TransformStream({
@@ -212,8 +214,10 @@ serve(async (req) => {
     });
   } catch (error) {
     console.error("Chat error:", error);
+    const errMsg = error instanceof Error ? error.message : "Unknown error";
+    if (user) logToolActivity(user.id, "chat", "error", { error: errMsg });
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ error: errMsg }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
