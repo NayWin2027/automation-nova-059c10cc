@@ -8,6 +8,7 @@ import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useApiAccess } from "@/hooks/useApiAccess";
 import { useToast } from "@/hooks/use-toast";
 import { preCheckCredits } from "@/utils/creditPreCheck";
+import { recordToolOutcome } from "@/utils/toolOutcome";
 
 // Silent retry configuration for Own API mode
 const MAX_SILENT_RETRIES = 3;

@@ -8,6 +8,7 @@ import { generateOwnApiText, getOwnApiErrorMessage } from "@/services/ownApiServ
 import { translateText } from "../services/geminiService";
 import { toast } from "sonner";
 import { preCheckCredits } from "@/utils/creditPreCheck";
+import { recordToolOutcome } from "@/utils/toolOutcome";
 const LANGUAGES = [
 "BURMESE",
 "ENGLISH",
