@@ -460,6 +460,8 @@ serve(async (req) => {
       }
     }
 
+    if (userId) logToolActivity(userId, "voice", "success", { voice: usedVoice, textLength: text.length });
+
     return new Response(
       JSON.stringify({
         audio: finalAudio,
