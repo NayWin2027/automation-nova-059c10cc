@@ -582,6 +582,7 @@ ${transcript}
       console.log("[recap-script-generator] Skipping credit deduction (recap-nv pipeline handles it)");
     }
 
+    logToolActivity(user.id, "recap-script", "success", { scriptLength: script.length, niche: nicheLabel, language: lang });
     return new Response(
       JSON.stringify({ script }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
