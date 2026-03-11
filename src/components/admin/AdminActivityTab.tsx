@@ -226,8 +226,29 @@ const AdminActivityTab: React.FC = () => {
                           {log.tool_name}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-muted-foreground text-xs">
-                        {log.action || "—"}
+                      <TableCell>
+                        {log.action === 'success' ? (
+                          <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20">
+                            ✓ Success
+                          </Badge>
+                        ) : log.action === 'error' ? (
+                          <div className="space-y-1">
+                            <Badge className="bg-red-500/15 text-red-400 border-red-500/30 hover:bg-red-500/20">
+                              ✗ Error
+                            </Badge>
+                            {(log.metadata as Record<string, any>)?.error && (
+                              <p className="text-[10px] text-red-400/80 max-w-[180px] truncate" title={String((log.metadata as Record<string, any>).error)}>
+                                {String((log.metadata as Record<string, any>).error).slice(0, 60)}
+                              </p>
+                            )}
+                          </div>
+                        ) : log.action === 'credit_deduction' ? (
+                          <Badge className="bg-amber-500/15 text-amber-400 border-amber-500/30 hover:bg-amber-500/20">
+                            💰 Credit
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">{log.action || "—"}</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
