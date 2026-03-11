@@ -7,6 +7,7 @@ import { useSecureApiKey } from "../hooks/useSecureApiKey";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { preCheckCredits } from "@/utils/creditPreCheck";
+import { recordToolOutcome } from "@/utils/toolOutcome";
 
 // ============ ADMIN CMS TYPES ============
 interface TranscribeSettings {
