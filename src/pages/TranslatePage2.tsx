@@ -7,6 +7,7 @@ import { generateOwnApiText, getOwnApiErrorMessage } from "../services/ownApiSer
 import { useSecureApiKey } from "../hooks/useSecureApiKey";
 import { toast } from "sonner";
 import { preCheckCredits } from "@/utils/creditPreCheck";
+import { recordToolOutcome } from "@/utils/toolOutcome";
 import {
   Lock,
   ChevronDown,
