@@ -415,6 +415,7 @@ serve(async (req) => {
       }
 
       console.log("[transcribe-google] App API transcription success, length:", text.length);
+      logToolActivity(user.id, "transcribe", "success", { length: text.length, mode: "app" });
 
       return new Response(
         JSON.stringify({ text }),
