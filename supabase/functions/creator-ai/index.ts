@@ -522,8 +522,11 @@ CRITICAL: Today's date is ${today}. Always provide the most current, up-to-date 
     }
   } catch (error) {
     console.error("[creator-ai] Error:", error);
+    const errMsg = error instanceof Error ? error.message : "Unknown error";
+    const uid = (req as any)?._userId;
+    if (uid) logToolActivity(uid, "creator", "error", { error: errMsg });
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ error: errMsg }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

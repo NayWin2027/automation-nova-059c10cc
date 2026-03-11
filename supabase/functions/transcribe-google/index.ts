@@ -571,6 +571,8 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("Unexpected transcription error:", error);
+    const errMsg = error instanceof Error ? error.message : "Unknown error";
+    logToolActivity(user.id, "transcribe", "error", { error: errMsg });
     
     return new Response(
       JSON.stringify({ 

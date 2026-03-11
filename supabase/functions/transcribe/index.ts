@@ -175,6 +175,7 @@ Transcribe exactly what is spoken - do not translate or summarize.`;
     const transcription = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
     console.log("Transcription successful, length:", transcription.length);
+    logToolActivity(user.id, "transcribe", "success", { length: transcription.length });
 
     return new Response(
       JSON.stringify({ text: transcription }),
@@ -182,8 +183,10 @@ Transcribe exactly what is spoken - do not translate or summarize.`;
     );
   } catch (error) {
     console.error("Transcription error:", error);
+    const errMsg = error instanceof Error ? error.message : "Unknown error";
+    logToolActivity(user.id, "transcribe", "error", { error: errMsg });
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ error: errMsg }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

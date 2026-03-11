@@ -477,6 +477,8 @@ serve(async (req) => {
     console.error("[gemini-tts] Error:", error);
     const errorMessage = error instanceof Error ? error.message : "Internal server error";
 
+    if (userId) logToolActivity(userId, "voice", "error", { error: errorMessage });
+
     // IMPORTANT: Return 200 so the frontend doesn't crash on FunctionsHttpError.
     return new Response(
       JSON.stringify({ error: errorMessage }),

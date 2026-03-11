@@ -181,14 +181,17 @@ Rules:
       })
       .join("\n");
 
+    logToolActivity(user.id, "transformative-transcribe", "success", { segmentCount: segments.length });
     return new Response(
       JSON.stringify({ text, srt, segments }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
     console.error("Transcription error:", error);
+    const errMsg = error instanceof Error ? error.message : "Unknown error";
+    logToolActivity(user.id, "transformative-transcribe", "error", { error: errMsg });
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ error: errMsg }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
