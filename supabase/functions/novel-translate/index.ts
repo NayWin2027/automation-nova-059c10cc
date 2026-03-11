@@ -362,6 +362,7 @@ TRANSLATION QUALITY:
       }
     }
 
+    if (user) logToolActivity(user.id, "novel-translate", "success", { outputCharCount, creditsDeducted });
     return new Response(
       JSON.stringify({ text: translatedText, creditsDeducted, outputCharCount }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
