@@ -221,12 +221,17 @@ serve(async (req) => {
       console.log("[gemini-tts] Using own API key - skipping auth & credit check");
     }
 
-    // ===== API KEY SELECTION =====
+    // ===== API KEY SELECTION (Multi-Key Rotation) =====
     const userKey = userApiKey?.trim();
-    const backendKey = Deno.env.get("GEMINI_API_KEY");
-    const effectiveApiKey = userKey || backendKey;
+    const backendKeys = [
+      Deno.env.get("GEMINI_API_KEY"),
+      Deno.env.get("GEMINI_API_KEY_2"),
+      Deno.env.get("GEMINI_API_KEY_3"),
+    ].filter(Boolean) as string[];
 
-    if (!effectiveApiKey) {
+    const effectiveKeys = userKey ? [userKey] : backendKeys;
+
+    if (effectiveKeys.length === 0) {
       console.log(`[gemini-tts] No API key available`);
       return new Response(
         JSON.stringify({ 
@@ -240,11 +245,8 @@ serve(async (req) => {
       );
     }
 
-    const keySource = userKey ? "user" : "backend";
-    console.log(`[gemini-tts] Using ${keySource} API key - voice: ${sanitizedVoiceName}, text length: ${text.length}`);
-
-    // ===== GENERATE TTS =====
-    const apiUrl = `${GEMINI_TTS_API}?key=${effectiveApiKey}`;
+    const keySource = userKey ? "user" : `backend(${backendKeys.length} keys)`;
+    console.log(`[gemini-tts] Using ${keySource} - voice: ${sanitizedVoiceName}, text length: ${text.length}`);
 
     const isModernSpeed = speedMode === 'modern';
     const buildRequestBody = (voice: string) => {
