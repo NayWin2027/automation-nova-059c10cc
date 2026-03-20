@@ -292,8 +292,8 @@ serve(async (req) => {
       };
     };
 
-    const callGeminiTts = async (voice: string) => {
-      const resp = await fetch(apiUrl, {
+    const callGeminiTts = async (voice: string, callApiUrl: string) => {
+      const resp = await fetch(callApiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(buildRequestBody(voice)),
@@ -309,7 +309,6 @@ serve(async (req) => {
       try {
         json = JSON.parse(bodyText);
       } catch {
-        // Some upstream errors can still return non-JSON with 200.
         json = null;
       }
 
@@ -321,20 +320,32 @@ serve(async (req) => {
         ok: true as const,
         audio,
         mimeType: mime,
-        // Keep logs small to avoid edge log spam
         jsonPreview: json ? JSON.stringify(json).substring(0, 600) : bodyText.substring(0, 600),
       };
     };
 
-    // Attempt 1: requested voice
+    // ===== MULTI-KEY ROTATION WITH 429 RETRY =====
     let usedVoice = sanitizedVoiceName;
-    let result = await callGeminiTts(usedVoice);
+    let result: Awaited<ReturnType<typeof callGeminiTts>> | null = null;
+    let lastKeyIndex = -1;
 
-    // Attempt 2: fallback voice (Puck) if we got a 200 but no audio
-    if (result.ok && !result.audio && usedVoice !== "Puck") {
+    for (let ki = 0; ki < effectiveKeys.length; ki++) {
+      const tryApiUrl = `${GEMINI_TTS_API}?key=${effectiveKeys[ki]}`;
+      result = await callGeminiTts(usedVoice, tryApiUrl);
+      lastKeyIndex = ki;
+
+      // If success or non-429 error, stop rotating
+      if (result.ok || result.status !== 429) break;
+
+      console.warn(`[gemini-tts] Key #${ki + 1} rate-limited (429), trying next key...`);
+    }
+
+    // Fallback voice (Puck) if we got a 200 but no audio
+    if (result!.ok && !result!.audio && usedVoice !== "Puck") {
       console.warn(`[gemini-tts] No audio with voice=${usedVoice}. Retrying with Puck.`);
       usedVoice = "Puck";
-      result = await callGeminiTts(usedVoice);
+      const fallbackUrl = `${GEMINI_TTS_API}?key=${effectiveKeys[lastKeyIndex]}`;
+      result = await callGeminiTts(usedVoice, fallbackUrl);
     }
 
     // Handle non-OK responses from upstream
