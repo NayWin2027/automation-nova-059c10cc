@@ -221,12 +221,17 @@ serve(async (req) => {
       console.log("[gemini-tts] Using own API key - skipping auth & credit check");
     }
 
-    // ===== API KEY SELECTION =====
+    // ===== API KEY SELECTION (Multi-Key Rotation) =====
     const userKey = userApiKey?.trim();
-    const backendKey = Deno.env.get("GEMINI_API_KEY");
-    const effectiveApiKey = userKey || backendKey;
+    const backendKeys = [
+      Deno.env.get("GEMINI_API_KEY"),
+      Deno.env.get("GEMINI_API_KEY_2"),
+      Deno.env.get("GEMINI_API_KEY_3"),
+    ].filter(Boolean) as string[];
 
-    if (!effectiveApiKey) {
+    const effectiveKeys = userKey ? [userKey] : backendKeys;
+
+    if (effectiveKeys.length === 0) {
       console.log(`[gemini-tts] No API key available`);
       return new Response(
         JSON.stringify({ 
@@ -240,11 +245,8 @@ serve(async (req) => {
       );
     }
 
-    const keySource = userKey ? "user" : "backend";
-    console.log(`[gemini-tts] Using ${keySource} API key - voice: ${sanitizedVoiceName}, text length: ${text.length}`);
-
-    // ===== GENERATE TTS =====
-    const apiUrl = `${GEMINI_TTS_API}?key=${effectiveApiKey}`;
+    const keySource = userKey ? "user" : `backend(${backendKeys.length} keys)`;
+    console.log(`[gemini-tts] Using ${keySource} - voice: ${sanitizedVoiceName}, text length: ${text.length}`);
 
     const isModernSpeed = speedMode === 'modern';
     const buildRequestBody = (voice: string) => {
@@ -290,8 +292,8 @@ serve(async (req) => {
       };
     };
 
-    const callGeminiTts = async (voice: string) => {
-      const resp = await fetch(apiUrl, {
+    const callGeminiTts = async (voice: string, callApiUrl: string) => {
+      const resp = await fetch(callApiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(buildRequestBody(voice)),
@@ -307,7 +309,6 @@ serve(async (req) => {
       try {
         json = JSON.parse(bodyText);
       } catch {
-        // Some upstream errors can still return non-JSON with 200.
         json = null;
       }
 
@@ -319,20 +320,32 @@ serve(async (req) => {
         ok: true as const,
         audio,
         mimeType: mime,
-        // Keep logs small to avoid edge log spam
         jsonPreview: json ? JSON.stringify(json).substring(0, 600) : bodyText.substring(0, 600),
       };
     };
 
-    // Attempt 1: requested voice
+    // ===== MULTI-KEY ROTATION WITH 429 RETRY =====
     let usedVoice = sanitizedVoiceName;
-    let result = await callGeminiTts(usedVoice);
+    let result: Awaited<ReturnType<typeof callGeminiTts>> | null = null;
+    let lastKeyIndex = -1;
 
-    // Attempt 2: fallback voice (Puck) if we got a 200 but no audio
-    if (result.ok && !result.audio && usedVoice !== "Puck") {
+    for (let ki = 0; ki < effectiveKeys.length; ki++) {
+      const tryApiUrl = `${GEMINI_TTS_API}?key=${effectiveKeys[ki]}`;
+      result = await callGeminiTts(usedVoice, tryApiUrl);
+      lastKeyIndex = ki;
+
+      // If success or non-429 error, stop rotating
+      if (result.ok || result.status !== 429) break;
+
+      console.warn(`[gemini-tts] Key #${ki + 1} rate-limited (429), trying next key...`);
+    }
+
+    // Fallback voice (Puck) if we got a 200 but no audio
+    if (result!.ok && !result!.audio && usedVoice !== "Puck") {
       console.warn(`[gemini-tts] No audio with voice=${usedVoice}. Retrying with Puck.`);
       usedVoice = "Puck";
-      result = await callGeminiTts(usedVoice);
+      const fallbackUrl = `${GEMINI_TTS_API}?key=${effectiveKeys[lastKeyIndex]}`;
+      result = await callGeminiTts(usedVoice, fallbackUrl);
     }
 
     // Handle non-OK responses from upstream
