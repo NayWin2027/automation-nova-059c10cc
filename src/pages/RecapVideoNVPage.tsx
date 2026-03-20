@@ -160,7 +160,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     }, []);
 
     const [editorState, setEditorState] = useState({
-      ratio: "1/1" as "auto" | "16/9" | "9/16" | "1/1" | "4/3" | "3/4",
+      ratio: "3/4" as "auto" | "16/9" | "9/16" | "1/1" | "4/3" | "3/4",
       flip: true,
       bypass: true,
       colorGrade: "PINK" as string,
