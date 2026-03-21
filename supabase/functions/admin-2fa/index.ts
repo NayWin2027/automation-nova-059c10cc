@@ -52,8 +52,8 @@ function normalizeBase32Secret(input: string): string {
       );
     }
  
-     const userId = claims.user.id;
-     const userEmail = claims.user.email || "admin";
+      const userId = claimsData.claims.sub as string;
+      const userEmail = (claimsData.claims.email as string) || "admin";
  
      // Service role client for database operations
      const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
