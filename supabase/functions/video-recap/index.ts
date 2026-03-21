@@ -303,7 +303,7 @@ serve(async (req) => {
 
       if (!initResponse.ok) {
         const errText = await initResponse.text();
-        console.error("Upload init failed:", errText);
+        console.error("Upload init failed:", initResponse.status, errText);
         
         if (initResponse.status === 429 || errText.includes('RESOURCE_EXHAUSTED')) {
           return new Response(
@@ -315,9 +315,10 @@ serve(async (req) => {
             { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
-        
+
+        // Include Google's status code so the user sees the real reason
         return new Response(
-          JSON.stringify({ error: `Upload init failed` }),
+          JSON.stringify({ error: `Upload init failed (${initResponse.status}): ${errText.substring(0, 200)}` }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
