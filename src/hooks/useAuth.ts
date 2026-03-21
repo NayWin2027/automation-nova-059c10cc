@@ -48,7 +48,9 @@ export function useAuth() {
             supabase.rpc('register_active_session', {
               _user_id: session.user.id,
               _session_id: session.access_token,
-            }).catch((err) => console.error('Session re-register on token refresh failed:', err));
+            }).then(({ error }) => {
+              if (error) console.error('Session re-register on token refresh failed:', error);
+            });
           }
         } else {
           setProfile(null);
