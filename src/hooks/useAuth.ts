@@ -42,6 +42,16 @@ export function useAuth() {
             fetchProfile(session.user.id);
             fetchTodayUsage(session.user.id);
           }, 0);
+
+          // Fix: Re-register session on token refresh to prevent mismatch auto-logout
+          if (event === 'TOKEN_REFRESHED' && session.access_token) {
+            supabase.rpc('register_active_session', {
+              _user_id: session.user.id,
+              _session_id: session.access_token,
+            }).then(({ error }) => {
+              if (error) console.error('Session re-register on token refresh failed:', error);
+            });
+          }
         } else {
           setProfile(null);
           setTodayUsage([]);
