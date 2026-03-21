@@ -41,19 +41,19 @@ function normalizeBase32Secret(input: string): string {
        global: { headers: { Authorization: authHeader } },
      });
  
-     // Verify the user
-     const token = authHeader.replace("Bearer ", "");
-     const { data: claims, error: claimsError } = await userClient.auth.getUser(token);
-     
-     if (claimsError || !claims.user) {
-       return new Response(
-         JSON.stringify({ error: "Invalid token" }),
-         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-       );
-     }
+    // Verify the user via JWT claims (does not require a live server session)
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
+    
+    if (claimsError || !claimsData?.claims) {
+      return new Response(
+        JSON.stringify({ error: "Invalid token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
  
-     const userId = claims.user.id;
-     const userEmail = claims.user.email || "admin";
+      const userId = claimsData.claims.sub as string;
+      const userEmail = (claimsData.claims.email as string) || "admin";
  
      // Service role client for database operations
      const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
