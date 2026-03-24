@@ -98,11 +98,15 @@ const AdminMessageDialog: React.FC<AdminMessageDialogProps> = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md border-border/50 bg-card">
         <DialogHeader>
-          <DialogTitle className="text-sm font-bold tracking-wide">
-            Send Message
+          <DialogTitle className="text-sm font-bold tracking-wide flex items-center gap-1.5">
+            {broadcastMode && <Users className="w-3.5 h-3.5 text-primary" />}
+            {broadcastMode ? "Broadcast to All Users" : "Send Message"}
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            To: <span className="text-foreground font-medium">{targetUser?.display_name || targetUser?.email}</span>
+            {broadcastMode
+              ? "This message will be sent to all registered users."
+              : <>To: <span className="text-foreground font-medium">{targetUser?.display_name || targetUser?.email}</span></>
+            }
           </DialogDescription>
         </DialogHeader>
 
