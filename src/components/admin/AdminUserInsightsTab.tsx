@@ -132,6 +132,18 @@ const AdminUserInsightsTab: React.FC = () => {
 
   return (
     <div className="space-y-4">
+      {/* Broadcast Button */}
+      <div className="flex justify-end">
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1.5 text-xs border-primary/30 hover:bg-primary/10"
+          onClick={() => setBroadcastOpen(true)}
+        >
+          <Megaphone className="w-3.5 h-3.5" />
+          Broadcast to All Users
+        </Button>
+      </div>
       {/* Active Users */}
       <Card className="border-border/30 bg-card/80">
         <CardHeader className="pb-2 pt-4 px-4">
