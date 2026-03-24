@@ -273,6 +273,13 @@ const AdminUserInsightsTab: React.FC = () => {
         onOpenChange={setMessageOpen}
         targetUser={messageTarget}
       />
+
+      <AdminMessageDialog
+        open={broadcastOpen}
+        onOpenChange={setBroadcastOpen}
+        targetUser={null}
+        broadcastMode
+      />
     </div>
   );
 };
