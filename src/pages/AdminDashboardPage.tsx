@@ -212,6 +212,10 @@ const AdminDashboardPage: React.FC = () => {
             <AdminUsersTab />
           </TabsContent>
 
+          <TabsContent value="insights">
+            <AdminUserInsightsTab />
+          </TabsContent>
+
           <TabsContent value="daily">
             <AdminDailyUsageTab />
           </TabsContent>
