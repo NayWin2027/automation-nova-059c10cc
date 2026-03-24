@@ -19,6 +19,7 @@ interface AdminMessageDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   targetUser: { user_id: string; email: string; display_name?: string | null } | null;
+  broadcastMode?: boolean;
 }
 
 const MESSAGE_TYPES = [
