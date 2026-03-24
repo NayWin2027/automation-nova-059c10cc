@@ -23,6 +23,7 @@ const AdminUserInsightsTab: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [messageTarget, setMessageTarget] = useState<{ user_id: string; email: string; display_name?: string | null } | null>(null);
   const [messageOpen, setMessageOpen] = useState(false);
+  const [broadcastOpen, setBroadcastOpen] = useState(false);
 
   const fetchInsights = async () => {
     setLoading(true);
