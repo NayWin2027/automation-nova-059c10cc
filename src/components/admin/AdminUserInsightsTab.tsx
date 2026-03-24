@@ -4,7 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
-import { TrendingUp, TrendingDown, MessageSquare, RefreshCw, Crown } from "lucide-react";
+import { TrendingUp, TrendingDown, MessageSquare, RefreshCw, Crown, Megaphone } from "lucide-react";
 import AdminMessageDialog from "./AdminMessageDialog";
 
 interface UserInsight {
