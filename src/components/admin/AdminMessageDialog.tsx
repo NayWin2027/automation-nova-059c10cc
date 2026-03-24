@@ -41,24 +41,48 @@ const AdminMessageDialog: React.FC<AdminMessageDialogProps> = ({
   const [sending, setSending] = useState(false);
 
   const handleSend = async () => {
-    if (!targetUser || !title.trim() || !message.trim()) return;
+    if (!title.trim() || !message.trim()) return;
+    if (!broadcastMode && !targetUser) return;
 
     setSending(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      const { error } = await supabase.from("admin_notifications").insert({
-        user_id: targetUser.user_id,
-        sender_id: user.id,
-        type,
-        title: title.trim(),
-        message: message.trim(),
-      });
+      if (broadcastMode) {
+        // Fetch all user profiles and send to each
+        const { data: profiles, error: pErr } = await supabase
+          .from("profiles")
+          .select("user_id");
+        if (pErr) throw pErr;
 
-      if (error) throw error;
+        const rows = (profiles || []).map((p) => ({
+          user_id: p.user_id,
+          sender_id: user.id,
+          type,
+          title: title.trim(),
+          message: message.trim(),
+        }));
 
-      toast({ title: "✅ Message Sent", description: `Sent to ${targetUser.display_name || targetUser.email}` });
+        if (rows.length === 0) throw new Error("No users found");
+
+        const { error } = await supabase.from("admin_notifications").insert(rows);
+        if (error) throw error;
+
+        toast({ title: "✅ Broadcast Sent", description: `Sent to ${rows.length} users` });
+      } else {
+        const { error } = await supabase.from("admin_notifications").insert({
+          user_id: targetUser!.user_id,
+          sender_id: user.id,
+          type,
+          title: title.trim(),
+          message: message.trim(),
+        });
+        if (error) throw error;
+
+        toast({ title: "✅ Message Sent", description: `Sent to ${targetUser!.display_name || targetUser!.email}` });
+      }
+
       setTitle("");
       setMessage("");
       setType("reminder");
