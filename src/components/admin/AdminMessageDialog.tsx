@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Send, Bell, BookOpen, Newspaper } from "lucide-react";
+import { Send, Bell, BookOpen, Newspaper, Users } from "lucide-react";
 
 interface AdminMessageDialogProps {
   open: boolean;
