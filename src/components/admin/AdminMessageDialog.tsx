@@ -32,6 +32,7 @@ const AdminMessageDialog: React.FC<AdminMessageDialogProps> = ({
   open,
   onOpenChange,
   targetUser,
+  broadcastMode = false,
 }) => {
   const { toast } = useToast();
   const [type, setType] = useState<string>("reminder");
