@@ -13,6 +13,7 @@ import AdminActivityTab from "@/components/admin/AdminActivityTab";
 import AdminSettingsTab from "@/components/admin/AdminSettingsTab";
 import AdminStatsCards from "@/components/admin/AdminStatsCards";
 import AdminDailyUsageTab from "@/components/admin/AdminDailyUsageTab";
+import AdminUserInsightsTab from "@/components/admin/AdminUserInsightsTab";
 
 const AdminDashboardPage: React.FC = () => {
   const navigate = useNavigate();
