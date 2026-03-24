@@ -6,13 +6,14 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Shield, Users, Activity, Settings, LogOut,
-  RefreshCw, Home, Sparkles, BarChart3 } from
+  RefreshCw, Home, Sparkles, BarChart3, TrendingUp } from
 "lucide-react";
 import AdminUsersTab from "@/components/admin/AdminUsersTab";
 import AdminActivityTab from "@/components/admin/AdminActivityTab";
 import AdminSettingsTab from "@/components/admin/AdminSettingsTab";
 import AdminStatsCards from "@/components/admin/AdminStatsCards";
 import AdminDailyUsageTab from "@/components/admin/AdminDailyUsageTab";
+import AdminUserInsightsTab from "@/components/admin/AdminUserInsightsTab";
 
 const AdminDashboardPage: React.FC = () => {
   const navigate = useNavigate();
@@ -184,10 +185,14 @@ const AdminDashboardPage: React.FC = () => {
 
         {/* Main Tabs */}
         <Tabs defaultValue="users" className="mt-4">
-          <TabsList className="grid w-full max-w-md grid-cols-4 mb-4 bg-secondary/30 p-0.5 h-8">
+          <TabsList className="grid w-full max-w-lg grid-cols-5 mb-4 bg-secondary/30 p-0.5 h-8">
             <TabsTrigger value="users" className="flex items-center gap-1.5 text-2xs data-[state=active]:bg-card">
               <Users className="w-3 h-3" />
               Users
+            </TabsTrigger>
+            <TabsTrigger value="insights" className="flex items-center gap-1.5 text-2xs data-[state=active]:bg-card">
+              <TrendingUp className="w-3 h-3" />
+              Insights
             </TabsTrigger>
             <TabsTrigger value="daily" className="flex items-center gap-1.5 text-2xs data-[state=active]:bg-card">
               <BarChart3 className="w-3 h-3" />
@@ -205,6 +210,10 @@ const AdminDashboardPage: React.FC = () => {
 
           <TabsContent value="users">
             <AdminUsersTab />
+          </TabsContent>
+
+          <TabsContent value="insights">
+            <AdminUserInsightsTab />
           </TabsContent>
 
           <TabsContent value="daily">
