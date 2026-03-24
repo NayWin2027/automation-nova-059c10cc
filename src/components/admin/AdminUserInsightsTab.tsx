@@ -4,7 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
-import { TrendingUp, TrendingDown, MessageSquare, RefreshCw, Crown } from "lucide-react";
+import { TrendingUp, TrendingDown, MessageSquare, RefreshCw, Crown, Megaphone } from "lucide-react";
 import AdminMessageDialog from "./AdminMessageDialog";
 
 interface UserInsight {
@@ -23,6 +23,7 @@ const AdminUserInsightsTab: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [messageTarget, setMessageTarget] = useState<{ user_id: string; email: string; display_name?: string | null } | null>(null);
   const [messageOpen, setMessageOpen] = useState(false);
+  const [broadcastOpen, setBroadcastOpen] = useState(false);
 
   const fetchInsights = async () => {
     setLoading(true);
@@ -131,6 +132,18 @@ const AdminUserInsightsTab: React.FC = () => {
 
   return (
     <div className="space-y-4">
+      {/* Broadcast Button */}
+      <div className="flex justify-end">
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1.5 text-xs border-primary/30 hover:bg-primary/10"
+          onClick={() => setBroadcastOpen(true)}
+        >
+          <Megaphone className="w-3.5 h-3.5" />
+          Broadcast to All Users
+        </Button>
+      </div>
       {/* Active Users */}
       <Card className="border-border/30 bg-card/80">
         <CardHeader className="pb-2 pt-4 px-4">
@@ -259,6 +272,13 @@ const AdminUserInsightsTab: React.FC = () => {
         open={messageOpen}
         onOpenChange={setMessageOpen}
         targetUser={messageTarget}
+      />
+
+      <AdminMessageDialog
+        open={broadcastOpen}
+        onOpenChange={setBroadcastOpen}
+        targetUser={null}
+        broadcastMode
       />
     </div>
   );

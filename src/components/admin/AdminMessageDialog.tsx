@@ -13,12 +13,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Send, Bell, BookOpen, Newspaper } from "lucide-react";
+import { Send, Bell, BookOpen, Newspaper, Users } from "lucide-react";
 
 interface AdminMessageDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   targetUser: { user_id: string; email: string; display_name?: string | null } | null;
+  broadcastMode?: boolean;
 }
 
 const MESSAGE_TYPES = [
@@ -31,6 +32,7 @@ const AdminMessageDialog: React.FC<AdminMessageDialogProps> = ({
   open,
   onOpenChange,
   targetUser,
+  broadcastMode = false,
 }) => {
   const { toast } = useToast();
   const [type, setType] = useState<string>("reminder");
@@ -39,24 +41,48 @@ const AdminMessageDialog: React.FC<AdminMessageDialogProps> = ({
   const [sending, setSending] = useState(false);
 
   const handleSend = async () => {
-    if (!targetUser || !title.trim() || !message.trim()) return;
+    if (!title.trim() || !message.trim()) return;
+    if (!broadcastMode && !targetUser) return;
 
     setSending(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      const { error } = await supabase.from("admin_notifications").insert({
-        user_id: targetUser.user_id,
-        sender_id: user.id,
-        type,
-        title: title.trim(),
-        message: message.trim(),
-      });
+      if (broadcastMode) {
+        // Fetch all user profiles and send to each
+        const { data: profiles, error: pErr } = await supabase
+          .from("profiles")
+          .select("user_id");
+        if (pErr) throw pErr;
 
-      if (error) throw error;
+        const rows = (profiles || []).map((p) => ({
+          user_id: p.user_id,
+          sender_id: user.id,
+          type,
+          title: title.trim(),
+          message: message.trim(),
+        }));
 
-      toast({ title: "✅ Message Sent", description: `Sent to ${targetUser.display_name || targetUser.email}` });
+        if (rows.length === 0) throw new Error("No users found");
+
+        const { error } = await supabase.from("admin_notifications").insert(rows);
+        if (error) throw error;
+
+        toast({ title: "✅ Broadcast Sent", description: `Sent to ${rows.length} users` });
+      } else {
+        const { error } = await supabase.from("admin_notifications").insert({
+          user_id: targetUser!.user_id,
+          sender_id: user.id,
+          type,
+          title: title.trim(),
+          message: message.trim(),
+        });
+        if (error) throw error;
+
+        toast({ title: "✅ Message Sent", description: `Sent to ${targetUser!.display_name || targetUser!.email}` });
+      }
+
       setTitle("");
       setMessage("");
       setType("reminder");
@@ -72,11 +98,15 @@ const AdminMessageDialog: React.FC<AdminMessageDialogProps> = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md border-border/50 bg-card">
         <DialogHeader>
-          <DialogTitle className="text-sm font-bold tracking-wide">
-            Send Message
+          <DialogTitle className="text-sm font-bold tracking-wide flex items-center gap-1.5">
+            {broadcastMode && <Users className="w-3.5 h-3.5 text-primary" />}
+            {broadcastMode ? "Broadcast to All Users" : "Send Message"}
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            To: <span className="text-foreground font-medium">{targetUser?.display_name || targetUser?.email}</span>
+            {broadcastMode
+              ? "This message will be sent to all registered users."
+              : <>To: <span className="text-foreground font-medium">{targetUser?.display_name || targetUser?.email}</span></>
+            }
           </DialogDescription>
         </DialogHeader>
 
