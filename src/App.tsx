@@ -30,6 +30,7 @@ const StoryCreatorPage = lazyRetry(() => import("./pages/StoryCreatorPage"));
 const NovelTransPage = lazyRetry(() => import("./pages/NovelTransPage"));
 const ThumbnailPage = lazyRetry(() => import("./pages/ThumbnailPage"));
 const SrtSubPage = lazyRetry(() => import("./pages/SrtSubPage"));
+const TutorialVideosPage = lazyRetry(() => import("./pages/TutorialVideosPage"));
 
 
 const AdminDashboardPage = lazyRetry(() => import("./pages/AdminDashboardPage"));
