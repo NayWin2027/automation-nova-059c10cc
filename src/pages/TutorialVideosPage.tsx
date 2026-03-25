@@ -99,6 +99,7 @@ const TutorialVideosPage: React.FC = () => {
     }
 
     setUploading(true);
+    setUploadProgress(0);
     let videoUrl: string | null = null;
     let storagePath: string | null = null;
 
@@ -106,11 +107,44 @@ const TutorialVideosPage: React.FC = () => {
       if (videoFile) {
         const ext = videoFile.name.split(".").pop();
         const path = `tutorials/${Date.now()}.${ext}`;
-        const { error: uploadError } = await supabase.storage
-          .from("tutorial-videos")
-          .upload(path, videoFile);
 
-        if (uploadError) throw uploadError;
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error("Not authenticated");
+
+        // Use TUS resumable upload for large files
+        await new Promise<void>((resolve, reject) => {
+          const upload = new tus.Upload(videoFile, {
+            endpoint: `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/upload/resumable`,
+            retryDelays: [0, 3000, 5000, 10000, 20000],
+            headers: {
+              authorization: `Bearer ${session.access_token}`,
+              "x-upsert": "false",
+            },
+            uploadDataDuringCreation: true,
+            removeFingerprintOnSuccess: true,
+            metadata: {
+              bucketName: "tutorial-videos",
+              objectName: path,
+              contentType: videoFile.type,
+            },
+            chunkSize: 6 * 1024 * 1024, // 6MB chunks
+            onError: (error) => {
+              console.error("[tutorial-upload] TUS error:", error);
+              reject(error);
+            },
+            onProgress: (bytesUploaded, bytesTotal) => {
+              const pct = Math.round((bytesUploaded / bytesTotal) * 100);
+              setUploadProgress(pct);
+            },
+            onSuccess: () => {
+              resolve();
+            },
+          });
+          upload.findPreviousUploads().then((prev) => {
+            if (prev.length) upload.resumeFrom(prev[0]);
+            upload.start();
+          });
+        });
 
         const { data: urlData } = supabase.storage
           .from("tutorial-videos")
@@ -122,7 +156,7 @@ const TutorialVideosPage: React.FC = () => {
 
       const { data: userData } = await supabase.auth.getUser();
 
-      const { error } = await supabase.from("tutorials" as any).insert({
+      const { error } = await supabase.from("tutorials").insert({
         title: title.trim(),
         description: description.trim() || null,
         video_url: videoUrl,
@@ -131,7 +165,7 @@ const TutorialVideosPage: React.FC = () => {
         order_index: tutorials.length,
         is_published: false,
         created_by: userData.user!.id,
-      } as any);
+      });
 
       if (error) throw error;
 
@@ -140,6 +174,7 @@ const TutorialVideosPage: React.FC = () => {
       setDescription("");
       setCategory("general");
       setVideoFile(null);
+      setUploadProgress(0);
       setShowForm(false);
       fetchTutorials();
     } catch (err: any) {
