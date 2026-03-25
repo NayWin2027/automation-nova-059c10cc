@@ -188,7 +188,9 @@ const Index = () => {
     // CREDIT EXPIRATION CHECK: Block expired users from using tools
     if (profile?.credits_started_at && !isAdmin) {
       const startDate = new Date(profile.credits_started_at);
-      const expiryDate = new Date(startDate.getTime() + 30 * 24 * 60 * 60 * 1000 + 7 * 24 * 60 * 60 * 1000);
+      const expiryDate = new Date(startDate);
+      expiryDate.setMonth(expiryDate.getMonth() + 1);
+      expiryDate.setDate(expiryDate.getDate() + 7);
       if (new Date() > expiryDate) {
         toast({
           title: "⛔ Credit သက်တမ်းကုန်ဆုံးပါပြီ",

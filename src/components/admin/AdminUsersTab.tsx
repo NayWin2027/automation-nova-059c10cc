@@ -421,14 +421,20 @@ const AdminUsersTab: React.FC = () => {
             </div> :
 
           filteredProfiles.map((profile) => {
+            const getCalendarMonthExpiry = (startStr: string) => {
+              const s = new Date(startStr);
+              const exp = new Date(s);
+              exp.setMonth(exp.getMonth() + 1);
+              return exp;
+            };
             const isCreditsExpired = profile.credits_started_at
-              ? new Date(profile.credits_started_at).getTime() + (30 * 24 * 60 * 60 * 1000) + (7 * 24 * 60 * 60 * 1000) < Date.now()
+              ? (() => { const exp = getCalendarMonthExpiry(profile.credits_started_at); exp.setDate(exp.getDate() + 7); return exp.getTime() < Date.now(); })()
               : false;
             const startDate = profile.credits_started_at
               ? new Date(profile.credits_started_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
               : '—';
             const expiredDate = profile.credits_started_at
-              ? new Date(new Date(profile.credits_started_at).getTime() + (30 * 24 * 60 * 60 * 1000) + (7 * 24 * 60 * 60 * 1000)).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
+              ? getCalendarMonthExpiry(profile.credits_started_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
               : '—';
             return (
           <div key={profile.id} className={`table-luxury-row grid grid-cols-6 gap-2 px-3 py-2 items-center ${isCreditsExpired ? 'border-l-2 border-l-red-500 bg-red-500/5' : ''}`}>
