@@ -243,31 +243,45 @@ const TutorialVideosPage: React.FC = () => {
       </header>
 
       <main className="container mx-auto px-4 py-6 max-w-4xl">
-        {/* Admin Add Form */}
+        {/* Admin CMS Panel */}
         {isAdmin && showForm && (
-          <Card className="mb-6 border-violet-500/30 bg-card/80 backdrop-blur-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-violet-400" />
-                New Tutorial
+          <Card className="mb-6 border border-primary/20 bg-gradient-to-br from-card/90 via-card/80 to-card/70 backdrop-blur-xl shadow-2xl shadow-primary/5">
+            <CardHeader className="pb-2 border-b border-border/30">
+              <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center shadow-lg shadow-violet-500/20">
+                  <Sparkles className="w-4 h-4 text-white" />
+                </div>
+                New Tutorial / Guideline
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <Input
-                placeholder="Tutorial Title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="h-9 text-sm"
-              />
-              <Textarea
-                placeholder="Guideline / Description text ရေးပါ..."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="min-h-[100px] text-sm"
-              />
-              <div className="flex gap-3">
+            <CardContent className="pt-4 space-y-4">
+              {/* Title */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground tracking-wide uppercase">Title</label>
+                <Input
+                  placeholder="Tutorial / Guideline ခေါင်းစဉ် ရိုက်ထည့်ပါ..."
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="h-10 text-sm border-border/40 bg-background/60 focus:border-primary/50 focus:ring-primary/20"
+                />
+              </div>
+
+              {/* Guideline Text Box */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground tracking-wide uppercase">Guideline / Description</label>
+                <Textarea
+                  placeholder="လမ်းညွှန်ချက် / Description text ကို ဒီမှာ ရေးပါ...&#10;&#10;• အဆင့်တွေကို အစဉ်လိုက် ရေးနိုင်ပါသည်&#10;• Markdown format ကိုလည်း သုံးနိုင်ပါသည်"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="min-h-[140px] text-sm leading-relaxed border-border/40 bg-background/60 focus:border-primary/50 focus:ring-primary/20 resize-y"
+                />
+              </div>
+
+              {/* Category Select */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground tracking-wide uppercase">Category</label>
                 <Select value={category} onValueChange={setCategory}>
-                  <SelectTrigger className="w-[160px] h-9 text-xs">
+                  <SelectTrigger className="w-full sm:w-[200px] h-10 text-sm border-border/40 bg-background/60">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -278,7 +292,11 @@ const TutorialVideosPage: React.FC = () => {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
 
+              {/* Video Upload Drop Zone */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground tracking-wide uppercase">Upload Video</label>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -286,33 +304,53 @@ const TutorialVideosPage: React.FC = () => {
                   className="hidden"
                   onChange={(e) => setVideoFile(e.target.files?.[0] || null)}
                 />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-9 text-xs"
+                <button
+                  type="button"
                   onClick={() => fileInputRef.current?.click()}
+                  className="w-full rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-all duration-200 p-6 flex flex-col items-center gap-2 group cursor-pointer"
                 >
-                  <Upload className="w-3.5 h-3.5 mr-1" />
-                  {videoFile ? videoFile.name.slice(0, 20) : "Upload Video"}
-                </Button>
+                  {videoFile ? (
+                    <>
+                      <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                        <Video className="w-6 h-6 text-emerald-400" />
+                      </div>
+                      <p className="text-sm font-medium text-foreground">{videoFile.name}</p>
+                      <p className="text-2xs text-muted-foreground">
+                        {(videoFile.size / (1024 * 1024)).toFixed(1)} MB • Click to change
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                        <Upload className="w-6 h-6 text-primary" />
+                      </div>
+                      <p className="text-sm font-medium text-foreground">Video ဖိုင်ကို ရွေးပါ</p>
+                      <p className="text-2xs text-muted-foreground">MP4, WebM, MOV supported</p>
+                    </>
+                  )}
+                </button>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              {/* Actions */}
+              <div className="flex items-center justify-between pt-3 border-t border-border/30">
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setShowForm(false)}
-                  className="text-xs"
+                  onClick={() => { setShowForm(false); setTitle(""); setDescription(""); setVideoFile(null); }}
+                  className="text-xs text-muted-foreground hover:text-foreground"
                 >
                   Cancel
                 </Button>
                 <Button
-                  size="sm"
                   onClick={handleUpload}
                   disabled={uploading || !title.trim()}
-                  className="bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white text-xs"
+                  className="px-6 h-10 bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-600 hover:from-violet-700 hover:via-purple-700 hover:to-fuchsia-700 text-white font-semibold text-sm shadow-lg shadow-violet-500/20"
                 >
-                  {uploading ? "Uploading..." : "Save Tutorial"}
+                  {uploading ? (
+                    <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Uploading...</>
+                  ) : (
+                    <><Plus className="w-4 h-4 mr-2" /> Save Tutorial</>
+                  )}
                 </Button>
               </div>
             </CardContent>
@@ -330,27 +368,29 @@ const TutorialVideosPage: React.FC = () => {
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {visible.map((t, idx) => (
+          <div className="space-y-3">
+            {visible.map((t) => (
               <Card
                 key={t.id}
-                className="group border-border/50 bg-card/60 backdrop-blur-sm hover:border-violet-500/30 transition-all"
+                className={`group border bg-card/60 backdrop-blur-sm hover:shadow-lg hover:shadow-primary/5 transition-all duration-200 ${
+                  !t.is_published && isAdmin ? "border-amber-500/30 bg-amber-500/5" : "border-border/40 hover:border-primary/30"
+                }`}
               >
-                <CardContent className="p-4">
-                  <div className="flex gap-4">
+                <CardContent className="p-4 sm:p-5">
+                  <div className="flex flex-col sm:flex-row gap-4">
                     {/* Video thumbnail / player */}
                     {t.video_url ? (
-                      <div className="w-48 min-w-[12rem] aspect-video rounded-lg overflow-hidden bg-black/20 flex-shrink-0">
+                      <div className="w-full sm:w-56 sm:min-w-[14rem] aspect-video rounded-xl overflow-hidden bg-secondary/30 flex-shrink-0 shadow-md">
                         <video
                           src={t.video_url}
                           controls
                           preload="metadata"
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-cover rounded-xl"
                         />
                       </div>
                     ) : (
-                      <div className="w-48 min-w-[12rem] aspect-video rounded-lg bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 flex items-center justify-center flex-shrink-0">
-                        <FileText className="w-8 h-8 text-violet-400/50" />
+                      <div className="w-full sm:w-56 sm:min-w-[14rem] aspect-video rounded-xl bg-gradient-to-br from-primary/10 via-violet-500/10 to-fuchsia-500/10 flex items-center justify-center flex-shrink-0 border border-border/20">
+                        <FileText className="w-10 h-10 text-primary/30" />
                       </div>
                     )}
 
@@ -358,20 +398,20 @@ const TutorialVideosPage: React.FC = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <h3 className="font-semibold text-sm text-foreground">
+                          <h3 className="font-bold text-sm text-foreground leading-tight">
                             {t.title}
                           </h3>
-                          <span className="inline-block mt-1 text-2xs px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400 font-medium">
+                          <span className="inline-block mt-1.5 text-2xs px-2.5 py-0.5 rounded-full bg-primary/10 text-primary font-semibold tracking-wide">
                             {CATEGORIES.find((c) => c.value === t.category)?.label || t.category}
                           </span>
                         </div>
 
                         {isAdmin && (
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1.5">
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-7 w-7"
+                              className="h-8 w-8 rounded-lg hover:bg-primary/10"
                               onClick={() => togglePublish(t)}
                               title={t.is_published ? "Unpublish" : "Publish"}
                             >
@@ -384,25 +424,26 @@ const TutorialVideosPage: React.FC = () => {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-7 w-7 hover:bg-destructive/10"
+                              className="h-8 w-8 rounded-lg hover:bg-destructive/10"
                               onClick={() => handleDelete(t)}
+                              title="Delete Tutorial"
                             >
-                              <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                              <Trash2 className="w-4 h-4 text-destructive" />
                             </Button>
                           </div>
                         )}
                       </div>
 
                       {t.description && (
-                        <p className="mt-2 text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                        <p className="mt-2.5 text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap bg-secondary/20 rounded-lg p-3 border border-border/20">
                           {t.description}
                         </p>
                       )}
 
-                      <p className="mt-2 text-2xs text-muted-foreground/60">
+                      <p className="mt-3 text-2xs text-muted-foreground/60">
                         {new Date(t.created_at).toLocaleDateString()}
                         {isAdmin && (
-                          <span className={`ml-2 ${t.is_published ? "text-emerald-400" : "text-amber-400"}`}>
+                          <span className={`ml-2 font-semibold ${t.is_published ? "text-emerald-400" : "text-amber-400"}`}>
                             • {t.is_published ? "Published" : "Draft"}
                           </span>
                         )}
