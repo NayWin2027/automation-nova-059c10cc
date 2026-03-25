@@ -65,6 +65,7 @@ const App = () => (
             <Route path="/novel" element={<NovelTransPage />} />
             <Route path="/thumbnail" element={<ThumbnailPage />} />
             <Route path="/srt" element={<SrtSubPage />} />
+            <Route path="/tutorials" element={<TutorialVideosPage />} />
             {/* Admin Routes */}
             <Route path="/x9k2m7" element={<AdminLoginPage />} />
             <Route path="/admin/dashboard" element={<Suspense fallback={null}><AdminRoute><AdminDashboardPage /></AdminRoute></Suspense>} />
