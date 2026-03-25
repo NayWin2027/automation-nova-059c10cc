@@ -42,8 +42,8 @@ const CATEGORIES = [
 const TutorialVideosPage: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { isAdmin } = useAdmin();
-  const { profile, isAuthenticated } = useAuth();
+  const { isAdmin, loading: adminLoading } = useAdmin();
+  const { profile, loading: authLoading } = useAuth();
 
   const [tutorials, setTutorials] = useState<Tutorial[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,9 +62,10 @@ const TutorialVideosPage: React.FC = () => {
 
   const isPremium = profile?.plan === "premium";
   const canView = isAdmin || isPremium;
+  const accessLoading = adminLoading || authLoading;
 
   useEffect(() => {
-    if (!loading && !canView) {
+    if (!loading && !accessLoading && !canView) {
       toast({
         title: "🔒 Access Denied",
         description: "Premium Plan လိုအပ်ပါသည်",
@@ -72,7 +73,7 @@ const TutorialVideosPage: React.FC = () => {
       });
       navigate("/", { replace: true });
     }
-  }, [loading, canView]);
+  }, [loading, accessLoading, canView, navigate, toast]);
 
   useEffect(() => {
     fetchTutorials();
@@ -173,7 +174,7 @@ const TutorialVideosPage: React.FC = () => {
   // Non-admin premium users only see published
   const visible = isAdmin ? filtered : filtered.filter((t) => t.is_published);
 
-  if (loading) {
+  if (loading || accessLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="animate-pulse flex flex-col items-center gap-3">

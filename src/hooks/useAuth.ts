@@ -32,6 +32,11 @@ export function useAuth() {
     user?.id ?? null,
     session?.access_token ?? null
   );
+
+  useEffect(() => {
+    void registerSession();
+  }, [registerSession]);
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
