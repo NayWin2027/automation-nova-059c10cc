@@ -55,6 +55,7 @@ const TutorialVideosPage: React.FC = () => {
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("general");
   const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Filter
