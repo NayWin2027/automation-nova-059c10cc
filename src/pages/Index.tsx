@@ -50,6 +50,7 @@ const defaultTools = [
 {
   id: "transcribe",
   icon: Mic,
+  icon: Mic,
   title: "Transcribe",
   description: "အသံဖိုင်မှ စာသားပြောင်းလဲခြင်း။",
   gradient: "blue" as const,
@@ -62,6 +63,14 @@ const defaultTools = [
   description: "ဗီဒီယို Recap နှင့် အကျဉ်းချုပ်ထုတ်ယူခြင်း။",
   gradient: "cyan" as const,
   route: "/recap"
+},
+{
+  id: "tutorials",
+  icon: BookOpen,
+  title: "Tutorial Videos",
+  description: "လမ်းညွှန်ချက်များနှင့် Tutorials",
+  gradient: "violet" as const,
+  route: "/tutorials"
 },
 {
   id: "story",
