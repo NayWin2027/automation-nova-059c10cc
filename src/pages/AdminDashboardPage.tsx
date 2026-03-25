@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Shield, Users, Activity, Settings, LogOut,
-  RefreshCw, Home, Sparkles, BarChart3, TrendingUp } from
+  RefreshCw, Home, Sparkles, BarChart3, TrendingUp, BookOpen } from
 "lucide-react";
 import AdminUsersTab from "@/components/admin/AdminUsersTab";
 import AdminActivityTab from "@/components/admin/AdminActivityTab";
@@ -156,6 +156,13 @@ const AdminDashboardPage: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => navigate("/tutorials")}
+              className="px-2.5 h-9 rounded-lg bg-card/60 border border-primary/20 hover:bg-card transition-colors flex items-center gap-1.5"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-primary" />
+              <span className="text-2xs font-medium text-foreground">Tutorials</span>
+            </button>
             <button
               onClick={() => navigate("/")}
               className="p-2 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors">

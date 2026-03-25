@@ -299,6 +299,20 @@ const Index = () => {
         </div>
       }
       <GatewayBanner />
+      {(isAdmin || profile?.plan === "premium") &&
+      <button
+        onClick={() => navigate("/tutorials")}
+        className="mb-3 w-full p-2.5 rounded-lg border border-primary/20 bg-card/50 text-left hover:bg-card transition-colors">
+
+          <div className="flex items-center gap-2">
+            <BookOpen className="w-4 h-4 text-primary" />
+            <div>
+              <h3 className="font-semibold text-foreground text-base">Tutorial Videos</h3>
+              <p className="text-3xs text-muted-foreground text-base">Home page ကနေ တိုက်ရိုက်ဝင်နိုင်ပါပြီ</p>
+            </div>
+          </div>
+        </button>
+      }
       <div className="mb-3 flex items-start justify-between">
         <button
         onClick={() => setIsLightMode(!isLightMode)}
