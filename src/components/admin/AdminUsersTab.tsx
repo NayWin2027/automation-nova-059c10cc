@@ -565,7 +565,8 @@ const AdminUsersTab: React.FC = () => {
                   </DropdownMenu>
                 </div>
               </div>
-          )
+            );
+            })
           }
         </div>
       </div>
