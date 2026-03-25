@@ -1,86 +1,37 @@
 
 
-## Plan: Admin Dashboard — Active/Non-Active User Lists + Message Box
+## Plan: Fix Expired Date Calculation (Calendar Month)
 
-### Summary
-Admin Dashboard ထဲမှာ feature ၃ ခု ထပ်ထည့်မယ်:
-1. **Most Active Users** — `user_tool_usage` data အရ usage အများဆုံး user list (top-down)
-2. **Non-Active Users** — usage record မရှိတဲ့ / usage နည်းဆုံး users list
-3. **Message Box** — admin က user တစ်ယောက်ချင်းစီကို reminder/guideline/news message ပို့လို့ရတဲ့ notification system
+### Problem
+Expired date ကို `30 days + 7 days = 37 days` နဲ့ တွက်ထားလို့ မှားနေတယ်။ 25/3/2026 start ဆိုရင် 1 May 2026 ပြနေတယ်။ 25/4/2026 ဖြစ်ရမှာ။
 
-### Database Changes
+### Root Cause
+JavaScript code မှာ `30 * 24 * 60 * 60 * 1000` (fixed 30 days) သုံးထားတာ calendar month မဟုတ်ဘူး။ DB function (`deduct_user_credits`) မှာတော့ `INTERVAL '1 month'` သုံးထားလို့ မှန်ပြီးသား။
 
-**New table: `admin_notifications`**
-```sql
-CREATE TABLE public.admin_notifications (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL,
-  sender_id uuid NOT NULL,
-  type text NOT NULL DEFAULT 'general',  -- 'reminder', 'guideline', 'news'
-  title text NOT NULL,
-  message text NOT NULL,
-  is_read boolean NOT NULL DEFAULT false,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
+### Fix — 2 files only (surgical)
 
-ALTER TABLE public.admin_notifications ENABLE ROW LEVEL SECURITY;
+**1. `src/components/admin/AdminUsersTab.tsx`** (Admin user list display)
+- Expired date display: `start + 1 calendar month` (JavaScript `setMonth(getMonth()+1)`)
+- Expired check: `start + 1 month + 7 days grace`
+- Line ~425-432 only
 
--- Admins can do everything
-CREATE POLICY "Admins can manage notifications"
-  ON public.admin_notifications FOR ALL
-  TO authenticated
-  USING (public.has_role(auth.uid(), 'admin'));
+**2. `src/pages/Index.tsx`** (Tool click expiration block)
+- Same fix: use calendar month + 7 day grace for blocking logic
+- Line ~190-191 only
 
--- Users can view their own notifications
-CREATE POLICY "Users can view own notifications"
-  ON public.admin_notifications FOR SELECT
-  TO authenticated
-  USING (auth.uid() = user_id);
+### Technical Detail
+```typescript
+// Before (wrong - fixed 30 days)
+new Date(start.getTime() + 30 * 24 * 60 * 60 * 1000)
 
--- Users can update their own (mark as read)
-CREATE POLICY "Users can update own notifications"
-  ON public.admin_notifications FOR UPDATE
-  TO authenticated
-  USING (auth.uid() = user_id)
-  WITH CHECK (auth.uid() = user_id);
+// After (correct - calendar month)
+const expDate = new Date(start);
+expDate.setMonth(expDate.getMonth() + 1); // 25 Mar → 25 Apr
 ```
 
-### Frontend Changes
-
-**New file: `src/components/admin/AdminUserInsightsTab.tsx`**
-- Two sections side by side (or stacked on mobile):
-  - **Most Active Users** — query `user_tool_usage` grouped by `user_id`, sum `usage_count` across all dates, sorted descending. Show rank, user name, total usage count, last active date
-  - **Non-Active Users** — profiles that have NO records in `user_tool_usage`, or lowest usage. Show user name, plan, joined date
-- Each user row has a "Send Message" button that opens a message dialog
-
-**New file: `src/components/admin/AdminMessageDialog.tsx`**
-- Dialog with:
-  - Message type selector (Reminder / Guideline / News)
-  - Title input
-  - Message textarea
-  - Send button
-- Inserts into `admin_notifications` table
-- Premium luxury styling matching existing admin UI
-
-**Modified: `src/pages/AdminDashboardPage.tsx`** (surgical — only add new tab)
-- Add a 5th tab "Insights" with a `TrendingUp` icon
-- TabsList grid changes from `grid-cols-4` to `grid-cols-5`
-- Add `<TabsContent value="insights"><AdminUserInsightsTab /></TabsContent>`
-
-**Optional (user-side notification display):**
-- A small notification bell on the main app that queries `admin_notifications` for unread messages and shows them in a popover
-
 ### Files NOT touched
-- RecapVideoNVPage.tsx (protected blocks)
-- Video/audio sync code
-- Upload/subtitle sync
-- Edge functions (gemini-tts, etc.)
+- All protected blocks (video/audio sync, upload, subtitle)
+- Edge functions, DB functions, triggers
+- Admin panel logic, other features
 - config.toml, client.ts, types.ts
-- Existing AdminUsersTab.tsx (no modifications)
-- Existing AdminDailyUsageTab.tsx (no modifications)
-
-### Technical Details
-- Active users data: `SELECT user_id, SUM(usage_count) as total FROM user_tool_usage GROUP BY user_id ORDER BY total DESC`
-- Non-active: LEFT JOIN profiles with user_tool_usage, WHERE usage is NULL or minimal
-- Message insertion: direct `supabase.from('admin_notifications').insert(...)` with admin's `auth.uid()` as sender_id
 
