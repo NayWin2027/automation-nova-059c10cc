@@ -367,11 +367,28 @@ const TutorialVideosPage: React.FC = () => {
               </div>
 
               {/* Actions */}
+              {/* Upload Progress */}
+              {uploading && uploadProgress > 0 && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground font-medium">Uploading...</span>
+                    <span className="text-primary font-bold">{uploadProgress}%</span>
+                  </div>
+                  <div className="w-full h-2.5 rounded-full bg-secondary/50 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 transition-all duration-300"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
               <div className="flex items-center justify-between pt-3 border-t border-border/30">
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => { setShowForm(false); setTitle(""); setDescription(""); setVideoFile(null); }}
+                  onClick={() => { setShowForm(false); setTitle(""); setDescription(""); setVideoFile(null); setUploadProgress(0); }}
                   className="text-xs text-muted-foreground hover:text-foreground"
                 >
                   Cancel
@@ -382,7 +399,7 @@ const TutorialVideosPage: React.FC = () => {
                   className="px-6 h-10 bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-600 hover:from-violet-700 hover:via-purple-700 hover:to-fuchsia-700 text-white font-semibold text-sm shadow-lg shadow-violet-500/20"
                 >
                   {uploading ? (
-                    <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Uploading...</>
+                    <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> {uploadProgress > 0 ? `${uploadProgress}%` : "Preparing..."}</>
                   ) : (
                     <><Plus className="w-4 h-4 mr-2" /> Save Tutorial</>
                   )}
