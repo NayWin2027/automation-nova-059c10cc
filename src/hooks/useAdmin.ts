@@ -13,6 +13,7 @@ interface Profile {
   ban_reason: string | null;
   created_at: string;
   updated_at: string;
+  credits_started_at: string | null;
 }
 
 interface UserDevice {
