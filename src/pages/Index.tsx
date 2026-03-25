@@ -188,7 +188,7 @@ const Index = () => {
   }).
   filter((tool) => {
     if (tool.id === "tutorials") {
-      return isAdmin || profile?.plan === "premium";
+      return isAdmin;
     }
     return true;
   });

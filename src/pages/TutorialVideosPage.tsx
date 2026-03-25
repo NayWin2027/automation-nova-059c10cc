@@ -50,7 +50,7 @@ const TutorialVideosPage: React.FC = () => {
   const [uploading, setUploading] = useState(false);
 
   // Form state
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(true);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("general");
@@ -60,15 +60,14 @@ const TutorialVideosPage: React.FC = () => {
   // Filter
   const [filterCategory, setFilterCategory] = useState("all");
 
-  const isPremium = profile?.plan === "premium";
-  const canView = isAdmin || isPremium;
+  const canView = isAdmin;
   const accessLoading = adminLoading || authLoading;
 
   useEffect(() => {
     if (!loading && !accessLoading && !canView) {
       toast({
         title: "🔒 Access Denied",
-        description: "Premium Plan လိုအပ်ပါသည်",
+        description: "Admin access လိုအပ်ပါသည်",
         variant: "destructive",
       });
       navigate("/", { replace: true });
@@ -171,8 +170,7 @@ const TutorialVideosPage: React.FC = () => {
     (t) => filterCategory === "all" || t.category === filterCategory
   );
 
-  // Non-admin premium users only see published
-  const visible = isAdmin ? filtered : filtered.filter((t) => t.is_published);
+  const visible = filtered;
 
   if (loading || accessLoading) {
     return (
@@ -235,7 +233,7 @@ const TutorialVideosPage: React.FC = () => {
                 className="h-8 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white text-xs"
               >
                 <Plus className="w-3.5 h-3.5 mr-1" />
-                Add Tutorial
+                {showForm ? "Hide CMS" : "Add Tutorial"}
               </Button>
             )}
           </div>
