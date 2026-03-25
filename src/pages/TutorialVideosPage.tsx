@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  ArrowLeft, Plus, Trash2, Video, FileText, Upload,
+  ArrowLeft, Plus, Trash2, Video, FileText, Upload, RefreshCw,
   Eye, EyeOff, GripVertical, Play, BookOpen, Sparkles,
 } from "lucide-react";
 
