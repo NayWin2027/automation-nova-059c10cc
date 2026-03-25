@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import * as tus from "tus-js-client";
 import { supabase } from "@/integrations/supabase/client";
 import { useAdmin } from "@/hooks/useAdmin";
 import { useAuth } from "@/hooks/useAuth";
@@ -55,6 +56,7 @@ const TutorialVideosPage: React.FC = () => {
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("general");
   const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Filter
@@ -80,12 +82,12 @@ const TutorialVideosPage: React.FC = () => {
 
   const fetchTutorials = async () => {
     const { data, error } = await supabase
-      .from("tutorials" as any)
+      .from("tutorials")
       .select("*")
       .order("order_index", { ascending: true });
 
     if (!error && data) {
-      setTutorials(data as any as Tutorial[]);
+      setTutorials(data as Tutorial[]);
     }
     setLoading(false);
   };
@@ -97,6 +99,7 @@ const TutorialVideosPage: React.FC = () => {
     }
 
     setUploading(true);
+    setUploadProgress(0);
     let videoUrl: string | null = null;
     let storagePath: string | null = null;
 
@@ -104,11 +107,44 @@ const TutorialVideosPage: React.FC = () => {
       if (videoFile) {
         const ext = videoFile.name.split(".").pop();
         const path = `tutorials/${Date.now()}.${ext}`;
-        const { error: uploadError } = await supabase.storage
-          .from("tutorial-videos")
-          .upload(path, videoFile);
 
-        if (uploadError) throw uploadError;
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error("Not authenticated");
+
+        // Use TUS resumable upload for large files
+        await new Promise<void>((resolve, reject) => {
+          const upload = new tus.Upload(videoFile, {
+            endpoint: `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/upload/resumable`,
+            retryDelays: [0, 3000, 5000, 10000, 20000],
+            headers: {
+              authorization: `Bearer ${session.access_token}`,
+              "x-upsert": "false",
+            },
+            uploadDataDuringCreation: true,
+            removeFingerprintOnSuccess: true,
+            metadata: {
+              bucketName: "tutorial-videos",
+              objectName: path,
+              contentType: videoFile.type,
+            },
+            chunkSize: 6 * 1024 * 1024, // 6MB chunks
+            onError: (error) => {
+              console.error("[tutorial-upload] TUS error:", error);
+              reject(error);
+            },
+            onProgress: (bytesUploaded, bytesTotal) => {
+              const pct = Math.round((bytesUploaded / bytesTotal) * 100);
+              setUploadProgress(pct);
+            },
+            onSuccess: () => {
+              resolve();
+            },
+          });
+          upload.findPreviousUploads().then((prev) => {
+            if (prev.length) (upload as any).resumeFrom(prev[0]);
+            upload.start();
+          });
+        });
 
         const { data: urlData } = supabase.storage
           .from("tutorial-videos")
@@ -120,7 +156,7 @@ const TutorialVideosPage: React.FC = () => {
 
       const { data: userData } = await supabase.auth.getUser();
 
-      const { error } = await supabase.from("tutorials" as any).insert({
+      const { error } = await supabase.from("tutorials").insert({
         title: title.trim(),
         description: description.trim() || null,
         video_url: videoUrl,
@@ -129,7 +165,7 @@ const TutorialVideosPage: React.FC = () => {
         order_index: tutorials.length,
         is_published: false,
         created_by: userData.user!.id,
-      } as any);
+      });
 
       if (error) throw error;
 
@@ -138,6 +174,7 @@ const TutorialVideosPage: React.FC = () => {
       setDescription("");
       setCategory("general");
       setVideoFile(null);
+      setUploadProgress(0);
       setShowForm(false);
       fetchTutorials();
     } catch (err: any) {
@@ -153,15 +190,15 @@ const TutorialVideosPage: React.FC = () => {
     if (tutorial.storage_path) {
       await supabase.storage.from("tutorial-videos").remove([tutorial.storage_path]);
     }
-    await supabase.from("tutorials" as any).delete().eq("id", tutorial.id);
+    await supabase.from("tutorials").delete().eq("id", tutorial.id);
     toast({ title: "🗑️ ဖျက်ပြီးပါပြီ" });
     fetchTutorials();
   };
 
   const togglePublish = async (tutorial: Tutorial) => {
     await supabase
-      .from("tutorials" as any)
-      .update({ is_published: !tutorial.is_published } as any)
+      .from("tutorials")
+      .update({ is_published: !tutorial.is_published })
       .eq("id", tutorial.id);
     fetchTutorials();
   };
@@ -330,11 +367,28 @@ const TutorialVideosPage: React.FC = () => {
               </div>
 
               {/* Actions */}
+              {/* Upload Progress */}
+              {uploading && uploadProgress > 0 && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground font-medium">Uploading...</span>
+                    <span className="text-primary font-bold">{uploadProgress}%</span>
+                  </div>
+                  <div className="w-full h-2.5 rounded-full bg-secondary/50 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 transition-all duration-300"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
               <div className="flex items-center justify-between pt-3 border-t border-border/30">
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => { setShowForm(false); setTitle(""); setDescription(""); setVideoFile(null); }}
+                  onClick={() => { setShowForm(false); setTitle(""); setDescription(""); setVideoFile(null); setUploadProgress(0); }}
                   className="text-xs text-muted-foreground hover:text-foreground"
                 >
                   Cancel
@@ -345,7 +399,7 @@ const TutorialVideosPage: React.FC = () => {
                   className="px-6 h-10 bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-600 hover:from-violet-700 hover:via-purple-700 hover:to-fuchsia-700 text-white font-semibold text-sm shadow-lg shadow-violet-500/20"
                 >
                   {uploading ? (
-                    <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Uploading...</>
+                    <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> {uploadProgress > 0 ? `${uploadProgress}%` : "Preparing..."}</>
                   ) : (
                     <><Plus className="w-4 h-4 mr-2" /> Save Tutorial</>
                   )}
