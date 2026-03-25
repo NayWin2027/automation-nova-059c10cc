@@ -37,6 +37,7 @@ import { useAdmin } from "@/hooks/useAdmin";
 import { usePromotionTracking } from "@/hooks/usePromotionTracking";
 import ToolLimitsBadge from "@/components/ToolLimitsBadge";
 import AccountInfoCard from "@/components/AccountInfoCard";
+import NotificationBell from "@/components/NotificationBell";
 const defaultTools = [
 {
   id: "recap-nv",
@@ -426,7 +427,9 @@ const Index = () => {
       {/* Light rays overlay */}
       <div className="premium-rays" />
 
-      <header className="px-3 py-1 relative z-10" />
+      <header className="px-3 py-1 relative z-10 flex items-center justify-end">
+        {isAuthenticated && <NotificationBell />}
+      </header>
 
       <main className="px-3 relative z-10 text-primary-foreground rounded-none border-none border-0 bg-sidebar">
         {activeTab === "home" && renderHomeContent()}
