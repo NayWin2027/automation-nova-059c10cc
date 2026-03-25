@@ -190,7 +190,7 @@ const TutorialVideosPage: React.FC = () => {
     if (tutorial.storage_path) {
       await supabase.storage.from("tutorial-videos").remove([tutorial.storage_path]);
     }
-    await supabase.from("tutorials" as any).delete().eq("id", tutorial.id);
+    await supabase.from("tutorials").delete().eq("id", tutorial.id);
     toast({ title: "🗑️ ဖျက်ပြီးပါပြီ" });
     fetchTutorials();
   };
