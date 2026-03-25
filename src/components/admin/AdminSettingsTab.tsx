@@ -4,12 +4,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { useNavigate } from "react-router-dom";
 import { useAdmin } from "@/hooks/useAdmin";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Settings, Palette, Save, RefreshCw, Lock, Unlock, Crown,
-  Zap, Edit3, Gift, Key, Server, Shield } from
+  Zap, Edit3, Gift, Key, Server, Shield, BookOpen } from
 "lucide-react";
 import TierLimitsEditor from "./TierLimitsEditor";
 import type { TierLimits } from "@/hooks/useToolSettings";
@@ -107,6 +108,7 @@ const OnOffBadge = ({ checked }: {checked: boolean;}) =>
 
 
 const AdminSettingsTab: React.FC = () => {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const { getAppSettings, updateAppSettings } = useAdmin();
   const { user } = useAuth();
@@ -639,6 +641,22 @@ const AdminSettingsTab: React.FC = () => {
       {/* Tool Settings Section */}
       {activeSection === 'tools' &&
       <div className="space-y-2">
+          <Card className="border-primary/20 bg-card/50">
+            <CardContent className="p-3">
+              <button
+                onClick={() => navigate('/tutorials')}
+                className="w-full text-left rounded-lg border border-primary/20 bg-background/40 p-3 hover:bg-background/60 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-primary" />
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">Tutorial Videos</h3>
+                    <p className="text-2xs text-muted-foreground">Tool Settings ထဲကနေ Tutorial page ကို တိုက်ရိုက်ဖွင့်နိုင်ပါပြီ</p>
+                  </div>
+                </div>
+              </button>
+            </CardContent>
+          </Card>
           {toolSettings.map((tool) =>
         <Card key={tool.id} className="border-border/50 bg-card/50">
               <CardContent className="p-3">
