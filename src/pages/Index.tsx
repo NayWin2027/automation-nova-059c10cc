@@ -432,6 +432,21 @@ const Index = () => {
           </div>
         </button>
 
+        {(isAdmin || profile?.plan === "premium") &&
+        <button
+        onClick={() => navigate("/tutorials")}
+        className="w-full p-2.5 rounded-lg border border-border/30 bg-card/50 text-left hover:bg-card transition-colors">
+
+            <div className="flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-primary" />
+              <div>
+                <h3 className="font-semibold text-foreground text-base">Tutorial Videos</h3>
+                <p className="text-3xs text-muted-foreground text-base">အသုံးပြုနည်း လမ်းညွှန် videos</p>
+              </div>
+            </div>
+          </button>
+        }
+
         {/* Admin Panel - only visible to admins */}
         {isAdmin &&
       <button
