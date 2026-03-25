@@ -414,20 +414,29 @@ const AdminUsersTab: React.FC = () => {
         </div>
 
         {/* Table Body */}
-        <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
+          <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
           {filteredProfiles.length === 0 ?
           <div className="text-center py-8 text-muted-foreground text-xs">
               No users found
             </div> :
 
-          filteredProfiles.map((profile) =>
-          <div key={profile.id} className="table-luxury-row grid grid-cols-6 gap-2 px-3 py-2 items-center">
+          filteredProfiles.map((profile) => {
+            const isCreditsExpired = profile.credits_started_at
+              ? new Date(profile.credits_started_at).getTime() + (30 * 24 * 60 * 60 * 1000) + (7 * 24 * 60 * 60 * 1000) < Date.now()
+              : false;
+            const startDate = profile.credits_started_at
+              ? new Date(profile.credits_started_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
+              : '—';
+            const expiredDate = profile.credits_started_at
+              ? new Date(new Date(profile.credits_started_at).getTime() + (30 * 24 * 60 * 60 * 1000) + (7 * 24 * 60 * 60 * 1000)).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
+              : '—';
+            return (
+          <div key={profile.id} className={`table-luxury-row grid grid-cols-6 gap-2 px-3 py-2 items-center ${isCreditsExpired ? 'border-l-2 border-l-red-500 bg-red-500/5' : ''}`}>
                 <div>
                   <div className="flex items-center gap-1">
-                    <p className="font-medium text-foreground truncate text-base">
+                    <p className={`font-medium truncate text-base ${isCreditsExpired ? 'text-red-400' : 'text-foreground'}`}>
                       {profile.display_name || getUserDisplayId(profile.email)}
                     </p>
-                    {/* Master/Sub admin badges - only visible to master admins */}
                     {isMasterAdmin && isUserMasterAdmin(profile.user_id) &&
                 <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-bold whitespace-nowrap flex items-center gap-0.5">
                         <ShieldAlert className="w-2.5 h-2.5" />
@@ -451,17 +460,20 @@ const AdminUsersTab: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-1">
                   <Coins className="w-3 h-3 text-gold" />
-                  <span className="text-xs">{profile.credits}</span>
+                  <span className={`text-xs ${isCreditsExpired ? 'text-red-400 line-through' : ''}`}>{profile.credits}</span>
+                  {isCreditsExpired && <span className="text-[9px] px-1 py-0.5 rounded bg-red-500/20 text-red-400 font-bold">EXP</span>}
                 </div>
                 <div>
                   {profile.is_banned ?
               <span className="text-2xs px-2 py-0.5 rounded-full bg-destructive/20 text-destructive">Banned</span> :
-
+              isCreditsExpired ?
+              <span className="text-2xs px-2 py-0.5 rounded-full bg-red-500/15 text-red-400">Expired</span> :
               <span className="text-2xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400">Active</span>
               }
                 </div>
-                <div className="text-2xs text-neon-amber">
-                  {new Date(profile.created_at).toLocaleDateString()}
+                <div className="text-2xs">
+                  <div className="text-neon-amber">{startDate}</div>
+                  <div className={isCreditsExpired ? 'text-red-400 font-semibold' : 'text-muted-foreground'}>{expiredDate}</div>
                 </div>
                 <div className="text-right">
                   <DropdownMenu>
