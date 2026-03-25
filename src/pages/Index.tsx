@@ -256,6 +256,31 @@ const Index = () => {
   };
   const renderHomeContent = () =>
   <>
+      {/* Low Credit Neon Notice */}
+      {isAuthenticated && !isAdmin && profile && profile.credits <= 50 && profile.credits > 0 &&
+        <div className="mb-3 px-3 py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 backdrop-blur-sm animate-pulse-slow relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-r from-amber-500/5 via-orange-500/10 to-amber-500/5" />
+          <div className="relative flex items-center gap-2">
+            <span className="text-lg">⚠️</span>
+            <div>
+              <p className="text-xs font-bold text-amber-400">Credit ကုန်ခါနီးပါပြီ!</p>
+              <p className="text-2xs text-amber-300/80">သင့်တွင် <span className="font-bold text-amber-200">{profile.credits}</span> credits သာကျန်ပါတော့သည်။ Credit ထပ်ဖြည့်ပါ။</p>
+            </div>
+          </div>
+        </div>
+      }
+      {isAuthenticated && !isAdmin && profile && profile.credits === 0 &&
+        <div className="mb-3 px-3 py-2.5 rounded-xl border border-red-500/40 bg-red-500/15 backdrop-blur-sm relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-r from-red-500/5 via-rose-500/10 to-red-500/5" />
+          <div className="relative flex items-center gap-2">
+            <span className="text-lg">🔴</span>
+            <div>
+              <p className="text-xs font-bold text-red-400">Credit ကုန်သွားပါပြီ!</p>
+              <p className="text-2xs text-red-300/80">Credit ဖြည့်မှသာ App API ကို ဆက်သုံးနိုင်ပါမည်။</p>
+            </div>
+          </div>
+        </div>
+      }
       <GatewayBanner />
       <div className="mb-3 flex items-start justify-between">
         <button
