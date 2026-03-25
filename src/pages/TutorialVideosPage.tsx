@@ -197,8 +197,8 @@ const TutorialVideosPage: React.FC = () => {
 
   const togglePublish = async (tutorial: Tutorial) => {
     await supabase
-      .from("tutorials" as any)
-      .update({ is_published: !tutorial.is_published } as any)
+      .from("tutorials")
+      .update({ is_published: !tutorial.is_published })
       .eq("id", tutorial.id);
     fetchTutorials();
   };
