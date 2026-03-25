@@ -185,6 +185,21 @@ const Index = () => {
       return;
     }
 
+    // CREDIT EXPIRATION CHECK: Block expired users from using tools
+    if (profile?.credits_started_at && !isAdmin) {
+      const startDate = new Date(profile.credits_started_at);
+      const expiryDate = new Date(startDate.getTime() + 30 * 24 * 60 * 60 * 1000 + 7 * 24 * 60 * 60 * 1000);
+      if (new Date() > expiryDate) {
+        toast({
+          title: "⛔ Credit သက်တမ်းကုန်ဆုံးပါပြီ",
+          description: "သင့် Credit သက်တမ်းကုန်ဆုံးသွားပါပြီ။ Credit ထပ်ဖြည့်ပြီးမှ ဆက်သုံးပါ။",
+          variant: "destructive"
+        });
+        setActiveTab("premium");
+        return;
+      }
+    }
+
     const userPlan = profile?.plan || "free";
     const isPremium = userPlan === "premium";
     const usageCount = getToolUsageCount(tool.id);

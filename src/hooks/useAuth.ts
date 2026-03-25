@@ -12,6 +12,7 @@ interface UserProfile {
   plan: 'free' | 'pro' | 'premium';
   is_banned: boolean;
   ban_reason: string | null;
+  credits_started_at: string | null;
 }
 
 interface ToolUsage {
