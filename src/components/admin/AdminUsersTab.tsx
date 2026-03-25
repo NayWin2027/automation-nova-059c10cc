@@ -409,7 +409,7 @@ const AdminUsersTab: React.FC = () => {
           <span className="text-2xs font-medium uppercase tracking-wider text-neon-cyan">Plan</span>
           <span className="text-2xs font-medium uppercase tracking-wider text-neon-rose">Credits</span>
           <span className="text-2xs font-medium uppercase tracking-wider text-neon-green">Status</span>
-          <span className="text-2xs font-medium uppercase tracking-wider text-gold-dark">Joined</span>
+          <span className="text-2xs font-medium uppercase tracking-wider text-gold-dark">Start / Exp</span>
           <span className="text-2xs font-medium uppercase tracking-wider text-right text-neon-rose">Actions</span>
         </div>
 
