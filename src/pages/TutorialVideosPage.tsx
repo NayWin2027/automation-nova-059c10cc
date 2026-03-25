@@ -82,12 +82,12 @@ const TutorialVideosPage: React.FC = () => {
 
   const fetchTutorials = async () => {
     const { data, error } = await supabase
-      .from("tutorials" as any)
+      .from("tutorials")
       .select("*")
       .order("order_index", { ascending: true });
 
     if (!error && data) {
-      setTutorials(data as any as Tutorial[]);
+      setTutorials(data as Tutorial[]);
     }
     setLoading(false);
   };
