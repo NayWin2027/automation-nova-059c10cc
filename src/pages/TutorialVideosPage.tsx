@@ -525,17 +525,7 @@ const TutorialVideosPage: React.FC = () => {
                   <div className="flex flex-col sm:flex-row gap-4">
                     {/* Video thumbnail / player */}
                     {t.video_url ? (
-                      <div className="w-full sm:w-56 sm:min-w-[14rem] aspect-video rounded-xl overflow-hidden bg-secondary/30 flex-shrink-0 shadow-md">
-                        <video
-                          src={t.video_url}
-                          controls
-                          controlsList="nodownload"
-                          disablePictureInPicture
-                          onContextMenu={(e) => e.preventDefault()}
-                          preload="metadata"
-                          className="w-full h-full object-cover rounded-xl"
-                        />
-                      </div>
+                      <VideoPlayer tutorial={t} />
                     ) : (
                       <div className="w-full sm:w-56 sm:min-w-[14rem] aspect-video rounded-xl bg-gradient-to-br from-primary/10 via-violet-500/10 to-fuchsia-500/10 flex items-center justify-center flex-shrink-0 border border-border/20">
                         <FileText className="w-10 h-10 text-primary/30" />
