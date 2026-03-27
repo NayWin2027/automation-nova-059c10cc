@@ -126,7 +126,7 @@ const VideoPlayer: React.FC<{ tutorial: Tutorial }> = ({ tutorial }) => {
   );
 };
 
-
+const TutorialVideosPage: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { isAdmin, loading: adminLoading } = useAdmin();
