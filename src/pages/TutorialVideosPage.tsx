@@ -51,7 +51,7 @@ const TutorialVideosPage: React.FC = () => {
   const [uploading, setUploading] = useState(false);
 
   // Form state
-  const [showForm, setShowForm] = useState(true);
+  const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("general");
@@ -62,7 +62,7 @@ const TutorialVideosPage: React.FC = () => {
   // Filter
   const [filterCategory, setFilterCategory] = useState("all");
 
-  const canView = isAdmin;
+  const canView = isAdmin || (profile?.plan === "premium");
   const accessLoading = adminLoading || authLoading;
 
   useEffect(() => {
