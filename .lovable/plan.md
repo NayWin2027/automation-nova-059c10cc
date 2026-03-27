@@ -1,37 +1,51 @@
 
 
-## Plan: Fix Expired Date Calculation (Calendar Month)
+## Plan: Tutorial Page Access & Navigation Updates
 
-### Problem
-Expired date ကို `30 days + 7 days = 37 days` နဲ့ တွက်ထားလို့ မှားနေတယ်။ 25/3/2026 start ဆိုရင် 1 May 2026 ပြနေတယ်။ 25/4/2026 ဖြစ်ရမှာ။
+### What to do
 
-### Root Cause
-JavaScript code မှာ `30 * 24 * 60 * 60 * 1000` (fixed 30 days) သုံးထားတာ calendar month မဟုတ်ဘူး။ DB function (`deduct_user_credits`) မှာတော့ `INTERVAL '1 month'` သုံးထားလို့ မှန်ပြီးသား။
+**2 surgical edits across 3 files. Zero changes to protected blocks.**
 
-### Fix — 2 files only (surgical)
+### 1. RecapVideoNVPage.tsx — "သုံးစွဲနည်း" button → navigate to `/tutorials`
+Already navigates to `/tutorial-videos`. Need to verify the route matches. Looking at the code, it already does `navigate("/tutorial-videos")` — but the App route might be `/tutorials`. Need to check.
 
-**1. `src/components/admin/AdminUsersTab.tsx`** (Admin user list display)
-- Expired date display: `start + 1 calendar month` (JavaScript `setMonth(getMonth()+1)`)
-- Expired check: `start + 1 month + 7 days grace`
-- Line ~425-432 only
+Actually line 2987 shows `navigate("/tutorial-videos")` — I need to check what the actual route is in App.tsx.
 
-**2. `src/pages/Index.tsx`** (Tool click expiration block)
-- Same fix: use calendar month + 7 day grace for blocking logic
-- Line ~190-191 only
-
-### Technical Detail
+### 2. Index.tsx (line 190-191) — Open tutorials to Admin + Premium + authenticated
+Change:
 ```typescript
-// Before (wrong - fixed 30 days)
-new Date(start.getTime() + 30 * 24 * 60 * 60 * 1000)
-
-// After (correct - calendar month)
-const expDate = new Date(start);
-expDate.setMonth(expDate.getMonth() + 1); // 25 Mar → 25 Apr
+if (tool.id === "tutorials") {
+  return isAdmin;
+}
+```
+To:
+```typescript
+if (tool.id === "tutorials") {
+  return isAdmin || (isAuthenticated && profile?.plan === "premium");
+}
 ```
 
-### Files NOT touched
-- All protected blocks (video/audio sync, upload, subtitle)
-- Edge functions, DB functions, triggers
-- Admin panel logic, other features
-- config.toml, client.ts, types.ts
+### 3. TutorialVideosPage.tsx (line 65) — Open access to Premium users
+Change:
+```typescript
+const canView = isAdmin;
+```
+To:
+```typescript
+const canView = isAdmin || profile?.plan === "premium";
+```
+And show CMS form only to admins (line 54 area — `showForm` default should depend on `isAdmin`). Non-admin premium users see tutorials list only, not the management form.
+
+### 4. Verify route path
+Need to check App.tsx to confirm the tutorial route path matches what RecapVideoNVPage navigates to.
+
+### Files touched
+- `src/pages/Index.tsx` — line 190-191 only
+- `src/pages/TutorialVideosPage.tsx` — line 65 only + line 54 (showForm default)
+- Possibly `src/pages/RecapVideoNVPage.tsx` line 2987 if route path doesn't match
+
+### NOT touched
+- Protected blocks (AV-SYNC, RECORD-PIPELINE, VOICE-GEN, AUTO-PIPELINE)
+- Upload logic, subtitle sync, audio/video sync
+- Admin panel, other tools, config files
 
