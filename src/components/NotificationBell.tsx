@@ -100,74 +100,108 @@ const NotificationBell: React.FC = () => {
         align="end"
         sideOffset={8}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-3 py-2 border-b border-border/30">
-          <h3 className="text-xs font-bold tracking-wide text-foreground">Notifications</h3>
-          {unreadCount > 0 && (
-            <button
-              onClick={markAllRead}
-              className="text-3xs text-primary hover:underline"
-            >
-              Mark all read
-            </button>
-          )}
-        </div>
-
-        {/* List */}
-        <ScrollArea className="max-h-[320px]">
-          {notifications.length === 0 ? (
-            <div className="py-8 text-center text-3xs text-muted-foreground">
-              No notifications yet
+        {selectedNotif ? (
+          <>
+            {/* Detail View */}
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-border/30">
+              <button
+                onClick={() => setSelectedNotif(null)}
+                className="text-xs text-primary hover:underline flex items-center gap-0.5"
+              >
+                ← Back
+              </button>
             </div>
-          ) : (
-            notifications.map((n) => {
-              const cfg = typeConfig[n.type] || typeConfig.reminder;
-              const Icon = cfg.icon;
-              return (
-                <div
-                  key={n.id}
-                  className={`px-3 py-2.5 border-b border-border/20 transition-colors ${
-                    !n.is_read ? "bg-primary/5" : ""
-                  }`}
+            <div className="px-3 py-3 space-y-2">
+              <div className="flex items-center gap-1.5">
+                {(() => {
+                  const cfg = typeConfig[selectedNotif.type] || typeConfig.reminder;
+                  const Icon = cfg.icon;
+                  return <Icon className={`w-4 h-4 shrink-0 ${cfg.color}`} />;
+                })()}
+                <Badge
+                  variant="outline"
+                  className={`text-3xs px-1.5 py-0 ${(typeConfig[selectedNotif.type] || typeConfig.reminder).color} border-current/30`}
                 >
-                  <div className="flex items-start gap-2">
-                    <Icon className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${cfg.color}`} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-semibold text-foreground truncate">
-                          {n.title}
-                        </span>
-                        <Badge
-                          variant="outline"
-                          className={`text-3xs px-1 py-0 shrink-0 ${cfg.color} border-current/30`}
-                        >
-                          {cfg.label}
-                        </Badge>
-                      </div>
-                      <p className="text-3xs text-muted-foreground mt-0.5 line-clamp-2">
-                        {n.message}
-                      </p>
-                      <div className="flex items-center justify-between mt-1">
-                        <span className="text-3xs text-muted-foreground/60">
-                          {formatTime(n.created_at)}
-                        </span>
+                  {(typeConfig[selectedNotif.type] || typeConfig.reminder).label}
+                </Badge>
+              </div>
+              <h4 className="text-sm font-bold text-foreground">{selectedNotif.title}</h4>
+              <p className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                {selectedNotif.message}
+              </p>
+              <span className="block text-3xs text-muted-foreground/60 pt-1">
+                {new Date(selectedNotif.created_at).toLocaleString()}
+              </span>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Header */}
+            <div className="flex items-center justify-between px-3 py-2 border-b border-border/30">
+              <h3 className="text-xs font-bold tracking-wide text-foreground">Notifications</h3>
+              {unreadCount > 0 && (
+                <button
+                  onClick={markAllRead}
+                  className="text-3xs text-primary hover:underline"
+                >
+                  Mark all read
+                </button>
+              )}
+            </div>
+
+            {/* List */}
+            <ScrollArea className="max-h-[320px]">
+              {notifications.length === 0 ? (
+                <div className="py-8 text-center text-3xs text-muted-foreground">
+                  No notifications yet
+                </div>
+              ) : (
+                notifications.map((n) => {
+                  const cfg = typeConfig[n.type] || typeConfig.reminder;
+                  const Icon = cfg.icon;
+                  return (
+                    <button
+                      key={n.id}
+                      onClick={() => {
+                        setSelectedNotif(n);
+                        if (!n.is_read) markAsRead(n.id);
+                      }}
+                      className={`w-full text-left px-3 py-2.5 border-b border-border/20 transition-colors hover:bg-secondary/40 ${
+                        !n.is_read ? "bg-primary/5" : ""
+                      }`}
+                    >
+                      <div className="flex items-start gap-2">
+                        <Icon className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${cfg.color}`} />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-semibold text-foreground truncate">
+                              {n.title}
+                            </span>
+                            <Badge
+                              variant="outline"
+                              className={`text-3xs px-1 py-0 shrink-0 ${cfg.color} border-current/30`}
+                            >
+                              {cfg.label}
+                            </Badge>
+                          </div>
+                          <p className="text-3xs text-muted-foreground mt-0.5 line-clamp-2">
+                            {n.message}
+                          </p>
+                          <span className="block text-3xs text-muted-foreground/60 mt-1">
+                            {formatTime(n.created_at)}
+                          </span>
+                        </div>
                         {!n.is_read && (
-                          <button
-                            onClick={() => markAsRead(n.id)}
-                            className="text-3xs text-primary hover:underline flex items-center gap-0.5"
-                          >
-                            <Check className="w-2.5 h-2.5" />
-                            Read
-                          </button>
+                          <span className="w-2 h-2 rounded-full bg-primary shrink-0 mt-1" />
                         )}
                       </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </ScrollArea>
+                    </button>
+                  );
+                })
+              )}
+            </ScrollArea>
+          </>
+        )}
       </PopoverContent>
     </Popover>
   );
