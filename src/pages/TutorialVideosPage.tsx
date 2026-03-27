@@ -77,8 +77,10 @@ const TutorialVideosPage: React.FC = () => {
   }, [loading, accessLoading, canView, navigate, toast]);
 
   useEffect(() => {
-    fetchTutorials();
-  }, []);
+    if (!accessLoading) {
+      fetchTutorials();
+    }
+  }, [accessLoading]);
 
   const fetchTutorials = async () => {
     const { data, error } = await supabase
