@@ -53,20 +53,41 @@ const CATEGORIES = [
 const VideoPlayer: React.FC<{ tutorial: Tutorial }> = ({ tutorial }) => {
   const [selectedQuality, setSelectedQuality] = useState<string>("auto");
   const [aspectRatio, setAspectRatio] = useState<string>("video");
+  const videoRef = React.useRef<HTMLVideoElement>(null);
 
   const qualities = tutorial.video_qualities || {};
-  const availableQualities = QUALITY_OPTIONS.filter(q => qualities[q]);
+  const hasRealQualities = QUALITY_OPTIONS.some(q => qualities[q]);
 
-  const videoSrc = selectedQuality === "auto" || !qualities[selectedQuality]
-    ? tutorial.video_url
-    : qualities[selectedQuality];
+  // Determine video src based on selection
+  const getVideoSrc = () => {
+    if (selectedQuality === "auto") return tutorial.video_url;
+    if (qualities[selectedQuality]) return qualities[selectedQuality];
+    return tutorial.video_url; // fallback to original
+  };
 
+  const videoSrc = getVideoSrc();
   const arObj = ASPECT_RATIOS.find(a => a.value === aspectRatio) || ASPECT_RATIOS[0];
+
+  // When quality changes, preserve playback position
+  const handleQualityChange = (q: string) => {
+    const video = videoRef.current;
+    const currentTime = video?.currentTime || 0;
+    const wasPlaying = video ? !video.paused : false;
+    setSelectedQuality(q);
+    setTimeout(() => {
+      const v = videoRef.current;
+      if (v) {
+        v.currentTime = currentTime;
+        if (wasPlaying) v.play().catch(() => {});
+      }
+    }, 100);
+  };
 
   return (
     <div className="w-full sm:w-64 sm:min-w-[16rem] flex-shrink-0 space-y-2">
       <div className={`${arObj.cls} w-full rounded-xl overflow-hidden bg-secondary/30 shadow-md`}>
         <video
+          ref={videoRef}
           src={videoSrc || ""}
           controls
           controlsList="nodownload"
@@ -92,35 +113,37 @@ const VideoPlayer: React.FC<{ tutorial: Tutorial }> = ({ tutorial }) => {
             {ar.label}
           </button>
         ))}
-        {/* Quality buttons */}
-        {availableQualities.length > 0 && (
-          <>
-            <span className="text-muted-foreground/40 text-2xs">|</span>
+        {/* Quality buttons - always visible */}
+        <span className="text-muted-foreground/40 text-2xs">|</span>
+        <button
+          onClick={() => handleQualityChange("auto")}
+          className={`px-2 py-0.5 rounded text-2xs font-semibold transition-all ${
+            selectedQuality === "auto"
+              ? "bg-emerald-500/20 text-emerald-400 shadow-sm"
+              : "bg-secondary/50 text-muted-foreground hover:bg-secondary"
+          }`}
+        >
+          Auto
+        </button>
+        {QUALITY_OPTIONS.map(q => {
+          const hasFile = !!qualities[q];
+          return (
             <button
-              onClick={() => setSelectedQuality("auto")}
+              key={q}
+              onClick={() => handleQualityChange(q)}
               className={`px-2 py-0.5 rounded text-2xs font-semibold transition-all ${
-                selectedQuality === "auto"
+                selectedQuality === q
                   ? "bg-emerald-500/20 text-emerald-400 shadow-sm"
-                  : "bg-secondary/50 text-muted-foreground hover:bg-secondary"
+                  : hasFile
+                    ? "bg-secondary/50 text-muted-foreground hover:bg-secondary"
+                    : "bg-secondary/30 text-muted-foreground/60 hover:bg-secondary/50"
               }`}
             >
-              Auto
+              {q}
+              {!hasFile && selectedQuality === q && <span className="ml-0.5 text-amber-400">●</span>}
             </button>
-            {availableQualities.map(q => (
-              <button
-                key={q}
-                onClick={() => setSelectedQuality(q)}
-                className={`px-2 py-0.5 rounded text-2xs font-semibold transition-all ${
-                  selectedQuality === q
-                    ? "bg-emerald-500/20 text-emerald-400 shadow-sm"
-                    : "bg-secondary/50 text-muted-foreground hover:bg-secondary"
-                }`}
-              >
-                {q}
-              </button>
-            ))}
-          </>
-        )}
+          );
+        })}
       </div>
     </div>
   );
