@@ -438,6 +438,9 @@ const TutorialVideosPage: React.FC = () => {
                         <video
                           src={t.video_url}
                           controls
+                          controlsList="nodownload"
+                          disablePictureInPicture
+                          onContextMenu={(e) => e.preventDefault()}
                           preload="metadata"
                           className="w-full h-full object-cover rounded-xl"
                         />
