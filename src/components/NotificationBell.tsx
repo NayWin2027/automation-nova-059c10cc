@@ -84,7 +84,7 @@ const NotificationBell: React.FC = () => {
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={(v) => { setOpen(v); if (!v) setSelectedNotif(null); }}>
       <PopoverTrigger asChild>
         <button className="relative p-2 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors">
           <Bell className="w-4 h-4 text-muted-foreground" />
