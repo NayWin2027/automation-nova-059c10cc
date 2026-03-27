@@ -426,7 +426,40 @@ const TutorialVideosPage: React.FC = () => {
                 </button>
               </div>
 
-              {/* Actions */}
+              {/* Quality Variants Upload */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-foreground tracking-wide uppercase">Quality Variants (Optional)</label>
+                <p className="text-2xs text-muted-foreground">Quality တစ်ခုချင်းစီအတွက် video file သီးသန့် upload လုပ်ပါ</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {QUALITY_OPTIONS.map((q) => (
+                    <div key={q}>
+                      <input
+                        type="file"
+                        accept="video/*"
+                        className="hidden"
+                        ref={(el) => { qualityInputRefs.current[q] = el; }}
+                        onChange={(e) => setQualityFiles(prev => ({ ...prev, [q]: e.target.files?.[0] || null }))}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => qualityInputRefs.current[q]?.click()}
+                        className={`w-full rounded-lg border border-dashed p-3 text-center transition-all text-xs font-medium ${
+                          qualityFiles[q]
+                            ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-400"
+                            : "border-border/40 bg-background/40 text-muted-foreground hover:border-primary/40 hover:bg-primary/5"
+                        }`}
+                      >
+                        {qualityFiles[q] ? (
+                          <span>✅ {q} — {(qualityFiles[q]!.size / (1024 * 1024)).toFixed(1)}MB</span>
+                        ) : (
+                          <span>📹 {q}</span>
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {/* Upload Progress */}
               {uploading && uploadProgress > 0 && (
                 <div className="space-y-1.5">
