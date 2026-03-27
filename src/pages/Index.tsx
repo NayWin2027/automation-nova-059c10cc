@@ -141,9 +141,9 @@ function hasSystemPrompt(tool: Tool): tool is ToolWithSystemPrompt {
 const Index = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user, profile, isAuthenticated, signOut, getToolUsageCount, recordToolUsage } = useAuth();
+  const { user, profile, loading: authLoading, isAuthenticated, signOut, getToolUsageCount, recordToolUsage } = useAuth();
   const { toolSettings, accessControl, canAccessTool, loading: settingsLoading } = useToolSettings();
-  const { isAdmin } = useAdmin();
+  const { isAdmin, loading: adminLoading } = useAdmin();
   const { checkPromotionAccess, recordPromotionUsage } = usePromotionTracking();
   const [activeTab, setActiveTab] = useState<"home" | "premium" | "settings">("home");
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
@@ -159,6 +159,7 @@ const Index = () => {
     setShowSplash(false);
     sessionStorage.setItem('splash-shown', '1');
   }, []);
+  const isAccessChecking = authLoading || settingsLoading || adminLoading;
 
   useEffect(() => {
     if (isLightMode) {
@@ -193,6 +194,10 @@ const Index = () => {
     return true;
   });
   const handleToolClick = (tool: Tool) => {
+    if (isAccessChecking) {
+      return;
+    }
+
     // PLAN MODE: Redirect all tool clicks to Plans tab
     if (accessControl.planMode && !isAdmin) {
       setActiveTab("premium");
