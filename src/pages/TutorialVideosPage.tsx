@@ -62,7 +62,7 @@ const TutorialVideosPage: React.FC = () => {
   // Filter
   const [filterCategory, setFilterCategory] = useState("all");
 
-  const canView = isAdmin;
+  const canView = isAdmin || (profile?.plan === "premium");
   const accessLoading = adminLoading || authLoading;
 
   useEffect(() => {

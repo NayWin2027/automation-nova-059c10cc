@@ -2984,7 +2984,7 @@ const RecapVideoNVPage: React.FC = () => {
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-purple-600 text-4xl">🎬 Nova Auto Recap</h3>
             <button
-              onClick={() => navigate("/tutorial-videos")}
+              onClick={() => navigate("/tutorials")}
               className="group flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl shadow-[0_0_15px_rgba(236,72,153,0.5)] hover:shadow-[0_0_25px_rgba(236,72,153,0.8)] hover:-translate-y-0.5 transition-all duration-300 border border-pink-500/50"
             >
               <span className="text-xl group-hover:scale-110 transition-transform">📺</span>
