@@ -26,6 +26,7 @@ interface Tutorial {
   title: string;
   description: string | null;
   video_url: string | null;
+  video_qualities: Record<string, string> | null;
   storage_path: string | null;
   category: string;
   order_index: number;
@@ -33,12 +34,97 @@ interface Tutorial {
   created_at: string;
 }
 
+const QUALITY_OPTIONS = ["360p", "720p", "1080p"] as const;
+const ASPECT_RATIOS = [
+  { value: "video", label: "16:9", cls: "aspect-video" },
+  { value: "9/16", label: "9:16", cls: "aspect-[9/16]" },
+  { value: "4/3", label: "4:3", cls: "aspect-[4/3]" },
+  { value: "1/1", label: "1:1", cls: "aspect-square" },
+  { value: "3/4", label: "3:4", cls: "aspect-[3/4]" },
+] as const;
+
 const CATEGORIES = [
   { value: "general", label: "General" },
   { value: "getting-started", label: "Getting Started" },
   { value: "advanced", label: "Advanced" },
   { value: "tips", label: "Tips & Tricks" },
 ];
+// Video player with quality + aspect ratio selectors
+const VideoPlayer: React.FC<{ tutorial: Tutorial }> = ({ tutorial }) => {
+  const [selectedQuality, setSelectedQuality] = useState<string>("auto");
+  const [aspectRatio, setAspectRatio] = useState<string>("video");
+
+  const qualities = tutorial.video_qualities || {};
+  const availableQualities = QUALITY_OPTIONS.filter(q => qualities[q]);
+
+  const videoSrc = selectedQuality === "auto" || !qualities[selectedQuality]
+    ? tutorial.video_url
+    : qualities[selectedQuality];
+
+  const arObj = ASPECT_RATIOS.find(a => a.value === aspectRatio) || ASPECT_RATIOS[0];
+
+  return (
+    <div className="w-full sm:w-64 sm:min-w-[16rem] flex-shrink-0 space-y-2">
+      <div className={`${arObj.cls} w-full rounded-xl overflow-hidden bg-secondary/30 shadow-md`}>
+        <video
+          src={videoSrc || ""}
+          controls
+          controlsList="nodownload"
+          disablePictureInPicture
+          onContextMenu={(e) => e.preventDefault()}
+          preload="metadata"
+          className="w-full h-full object-contain rounded-xl bg-black"
+        />
+      </div>
+      {/* Controls row */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {/* Aspect ratio buttons */}
+        {ASPECT_RATIOS.map(ar => (
+          <button
+            key={ar.value}
+            onClick={() => setAspectRatio(ar.value)}
+            className={`px-2 py-0.5 rounded text-2xs font-semibold transition-all ${
+              aspectRatio === ar.value
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "bg-secondary/50 text-muted-foreground hover:bg-secondary"
+            }`}
+          >
+            {ar.label}
+          </button>
+        ))}
+        {/* Quality buttons */}
+        {availableQualities.length > 0 && (
+          <>
+            <span className="text-muted-foreground/40 text-2xs">|</span>
+            <button
+              onClick={() => setSelectedQuality("auto")}
+              className={`px-2 py-0.5 rounded text-2xs font-semibold transition-all ${
+                selectedQuality === "auto"
+                  ? "bg-emerald-500/20 text-emerald-400 shadow-sm"
+                  : "bg-secondary/50 text-muted-foreground hover:bg-secondary"
+              }`}
+            >
+              Auto
+            </button>
+            {availableQualities.map(q => (
+              <button
+                key={q}
+                onClick={() => setSelectedQuality(q)}
+                className={`px-2 py-0.5 rounded text-2xs font-semibold transition-all ${
+                  selectedQuality === q
+                    ? "bg-emerald-500/20 text-emerald-400 shadow-sm"
+                    : "bg-secondary/50 text-muted-foreground hover:bg-secondary"
+                }`}
+              >
+                {q}
+              </button>
+            ))}
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const TutorialVideosPage: React.FC = () => {
   const navigate = useNavigate();
@@ -56,8 +142,10 @@ const TutorialVideosPage: React.FC = () => {
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("general");
   const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [qualityFiles, setQualityFiles] = useState<Record<string, File | null>>({ "360p": null, "720p": null, "1080p": null });
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const qualityInputRefs = useRef<Record<string, HTMLInputElement | null>>({ "360p": null, "720p": null, "1080p": null });
 
   // Filter
   const [filterCategory, setFilterCategory] = useState("all");
@@ -94,6 +182,42 @@ const TutorialVideosPage: React.FC = () => {
     setLoading(false);
   };
 
+  const uploadSingleFile = async (file: File, pathPrefix: string, session: any): Promise<string> => {
+    const ext = file.name.split(".").pop();
+    const path = `${pathPrefix}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+
+    await new Promise<void>((resolve, reject) => {
+      const upload = new tus.Upload(file, {
+        endpoint: `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/upload/resumable`,
+        retryDelays: [0, 3000, 5000, 10000, 20000],
+        headers: {
+          authorization: `Bearer ${session.access_token}`,
+          "x-upsert": "false",
+        },
+        uploadDataDuringCreation: true,
+        removeFingerprintOnSuccess: true,
+        metadata: {
+          bucketName: "tutorial-videos",
+          objectName: path,
+          contentType: file.type,
+        },
+        chunkSize: 6 * 1024 * 1024,
+        onError: (error) => reject(error),
+        onProgress: (bytesUploaded, bytesTotal) => {
+          setUploadProgress(Math.round((bytesUploaded / bytesTotal) * 100));
+        },
+        onSuccess: () => resolve(),
+      });
+      upload.findPreviousUploads().then((prev) => {
+        if (prev.length) (upload as any).resumeFrom(prev[0]);
+        upload.start();
+      });
+    });
+
+    const { data: urlData } = supabase.storage.from("tutorial-videos").getPublicUrl(path);
+    return urlData.publicUrl;
+  };
+
   const handleUpload = async () => {
     if (!title.trim()) {
       toast({ title: "Title လိုအပ်ပါသည်", variant: "destructive" });
@@ -104,16 +228,17 @@ const TutorialVideosPage: React.FC = () => {
     setUploadProgress(0);
     let videoUrl: string | null = null;
     let storagePath: string | null = null;
+    const qualities: Record<string, string> = {};
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
+
+      // Upload main video (backward compat)
       if (videoFile) {
         const ext = videoFile.name.split(".").pop();
         const path = `tutorials/${Date.now()}.${ext}`;
 
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error("Not authenticated");
-
-        // Use TUS resumable upload for large files
         await new Promise<void>((resolve, reject) => {
           const upload = new tus.Upload(videoFile, {
             endpoint: `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/upload/resumable`,
@@ -129,18 +254,12 @@ const TutorialVideosPage: React.FC = () => {
               objectName: path,
               contentType: videoFile.type,
             },
-            chunkSize: 6 * 1024 * 1024, // 6MB chunks
-            onError: (error) => {
-              console.error("[tutorial-upload] TUS error:", error);
-              reject(error);
-            },
+            chunkSize: 6 * 1024 * 1024,
+            onError: (error) => reject(error),
             onProgress: (bytesUploaded, bytesTotal) => {
-              const pct = Math.round((bytesUploaded / bytesTotal) * 100);
-              setUploadProgress(pct);
+              setUploadProgress(Math.round((bytesUploaded / bytesTotal) * 100));
             },
-            onSuccess: () => {
-              resolve();
-            },
+            onSuccess: () => resolve(),
           });
           upload.findPreviousUploads().then((prev) => {
             if (prev.length) (upload as any).resumeFrom(prev[0]);
@@ -148,12 +267,25 @@ const TutorialVideosPage: React.FC = () => {
           });
         });
 
-        const { data: urlData } = supabase.storage
-          .from("tutorial-videos")
-          .getPublicUrl(path);
-
+        const { data: urlData } = supabase.storage.from("tutorial-videos").getPublicUrl(path);
         videoUrl = urlData.publicUrl;
         storagePath = path;
+      }
+
+      // Upload quality variants
+      for (const q of QUALITY_OPTIONS) {
+        const qFile = qualityFiles[q];
+        if (qFile) {
+          toast({ title: `⬆️ ${q} uploading...` });
+          const url = await uploadSingleFile(qFile, `tutorials/${q}`, session);
+          qualities[q] = url;
+        }
+      }
+
+      // If no main video but has quality files, use highest as main
+      if (!videoUrl && Object.keys(qualities).length > 0) {
+        const highest = (["1080p", "720p", "360p"] as const).find(q => qualities[q]);
+        if (highest) videoUrl = qualities[highest];
       }
 
       const { data: userData } = await supabase.auth.getUser();
@@ -162,12 +294,13 @@ const TutorialVideosPage: React.FC = () => {
         title: title.trim(),
         description: description.trim() || null,
         video_url: videoUrl,
+        video_qualities: Object.keys(qualities).length > 0 ? qualities : null,
         storage_path: storagePath,
         category,
         order_index: tutorials.length,
         is_published: false,
         created_by: userData.user!.id,
-      });
+      } as any);
 
       if (error) throw error;
 
@@ -176,6 +309,7 @@ const TutorialVideosPage: React.FC = () => {
       setDescription("");
       setCategory("general");
       setVideoFile(null);
+      setQualityFiles({ "360p": null, "720p": null, "1080p": null });
       setUploadProgress(0);
       setShowForm(false);
       fetchTutorials();
@@ -368,7 +502,40 @@ const TutorialVideosPage: React.FC = () => {
                 </button>
               </div>
 
-              {/* Actions */}
+              {/* Quality Variants Upload */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-foreground tracking-wide uppercase">Quality Variants (Optional)</label>
+                <p className="text-2xs text-muted-foreground">Quality တစ်ခုချင်းစီအတွက် video file သီးသန့် upload လုပ်ပါ</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {QUALITY_OPTIONS.map((q) => (
+                    <div key={q}>
+                      <input
+                        type="file"
+                        accept="video/*"
+                        className="hidden"
+                        ref={(el) => { qualityInputRefs.current[q] = el; }}
+                        onChange={(e) => setQualityFiles(prev => ({ ...prev, [q]: e.target.files?.[0] || null }))}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => qualityInputRefs.current[q]?.click()}
+                        className={`w-full rounded-lg border border-dashed p-3 text-center transition-all text-xs font-medium ${
+                          qualityFiles[q]
+                            ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-400"
+                            : "border-border/40 bg-background/40 text-muted-foreground hover:border-primary/40 hover:bg-primary/5"
+                        }`}
+                      >
+                        {qualityFiles[q] ? (
+                          <span>✅ {q} — {(qualityFiles[q]!.size / (1024 * 1024)).toFixed(1)}MB</span>
+                        ) : (
+                          <span>📹 {q}</span>
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {/* Upload Progress */}
               {uploading && uploadProgress > 0 && (
                 <div className="space-y-1.5">
@@ -434,17 +601,7 @@ const TutorialVideosPage: React.FC = () => {
                   <div className="flex flex-col sm:flex-row gap-4">
                     {/* Video thumbnail / player */}
                     {t.video_url ? (
-                      <div className="w-full sm:w-56 sm:min-w-[14rem] aspect-video rounded-xl overflow-hidden bg-secondary/30 flex-shrink-0 shadow-md">
-                        <video
-                          src={t.video_url}
-                          controls
-                          controlsList="nodownload"
-                          disablePictureInPicture
-                          onContextMenu={(e) => e.preventDefault()}
-                          preload="metadata"
-                          className="w-full h-full object-cover rounded-xl"
-                        />
-                      </div>
+                      <VideoPlayer tutorial={t} />
                     ) : (
                       <div className="w-full sm:w-56 sm:min-w-[14rem] aspect-video rounded-xl bg-gradient-to-br from-primary/10 via-violet-500/10 to-fuchsia-500/10 flex items-center justify-center flex-shrink-0 border border-border/20">
                         <FileText className="w-10 h-10 text-primary/30" />
