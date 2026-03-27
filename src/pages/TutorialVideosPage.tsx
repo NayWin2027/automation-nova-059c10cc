@@ -49,8 +49,84 @@ const CATEGORIES = [
   { value: "advanced", label: "Advanced" },
   { value: "tips", label: "Tips & Tricks" },
 ];
+// Video player with quality + aspect ratio selectors
+const VideoPlayer: React.FC<{ tutorial: Tutorial }> = ({ tutorial }) => {
+  const [selectedQuality, setSelectedQuality] = useState<string>("auto");
+  const [aspectRatio, setAspectRatio] = useState<string>("video");
 
-const TutorialVideosPage: React.FC = () => {
+  const qualities = tutorial.video_qualities || {};
+  const availableQualities = QUALITY_OPTIONS.filter(q => qualities[q]);
+
+  const videoSrc = selectedQuality === "auto" || !qualities[selectedQuality]
+    ? tutorial.video_url
+    : qualities[selectedQuality];
+
+  const arObj = ASPECT_RATIOS.find(a => a.value === aspectRatio) || ASPECT_RATIOS[0];
+
+  return (
+    <div className="w-full sm:w-64 sm:min-w-[16rem] flex-shrink-0 space-y-2">
+      <div className={`${arObj.cls} w-full rounded-xl overflow-hidden bg-secondary/30 shadow-md`}>
+        <video
+          src={videoSrc || ""}
+          controls
+          controlsList="nodownload"
+          disablePictureInPicture
+          onContextMenu={(e) => e.preventDefault()}
+          preload="metadata"
+          className="w-full h-full object-contain rounded-xl bg-black"
+        />
+      </div>
+      {/* Controls row */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {/* Aspect ratio buttons */}
+        {ASPECT_RATIOS.map(ar => (
+          <button
+            key={ar.value}
+            onClick={() => setAspectRatio(ar.value)}
+            className={`px-2 py-0.5 rounded text-2xs font-semibold transition-all ${
+              aspectRatio === ar.value
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "bg-secondary/50 text-muted-foreground hover:bg-secondary"
+            }`}
+          >
+            {ar.label}
+          </button>
+        ))}
+        {/* Quality buttons */}
+        {availableQualities.length > 0 && (
+          <>
+            <span className="text-muted-foreground/40 text-2xs">|</span>
+            <button
+              onClick={() => setSelectedQuality("auto")}
+              className={`px-2 py-0.5 rounded text-2xs font-semibold transition-all ${
+                selectedQuality === "auto"
+                  ? "bg-emerald-500/20 text-emerald-400 shadow-sm"
+                  : "bg-secondary/50 text-muted-foreground hover:bg-secondary"
+              }`}
+            >
+              Auto
+            </button>
+            {availableQualities.map(q => (
+              <button
+                key={q}
+                onClick={() => setSelectedQuality(q)}
+                className={`px-2 py-0.5 rounded text-2xs font-semibold transition-all ${
+                  selectedQuality === q
+                    ? "bg-emerald-500/20 text-emerald-400 shadow-sm"
+                    : "bg-secondary/50 text-muted-foreground hover:bg-secondary"
+                }`}
+              >
+                {q}
+              </button>
+            ))}
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+
   const navigate = useNavigate();
   const { toast } = useToast();
   const { isAdmin, loading: adminLoading } = useAdmin();
