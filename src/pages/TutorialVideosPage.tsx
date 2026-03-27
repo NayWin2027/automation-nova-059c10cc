@@ -51,7 +51,7 @@ const TutorialVideosPage: React.FC = () => {
   const [uploading, setUploading] = useState(false);
 
   // Form state
-  const [showForm, setShowForm] = useState(true);
+  const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("general");
