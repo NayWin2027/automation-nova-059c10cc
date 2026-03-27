@@ -1,51 +1,41 @@
 
 
-## Plan: Tutorial Page Access & Navigation Updates
+## Problem Analysis
 
-### What to do
+The bug is in `src/hooks/useApiAccess.ts`. The hook computes access restrictions **before auth data finishes loading**, causing Premium users to be temporarily treated as Free users.
 
-**2 surgical edits across 3 files. Zero changes to protected blocks.**
+### Root Cause
 
-### 1. RecapVideoNVPage.tsx — "သုံးစွဲနည်း" button → navigate to `/tutorials`
-Already navigates to `/tutorial-videos`. Need to verify the route matches. Looking at the code, it already does `navigate("/tutorial-videos")` — but the App route might be `/tutorials`. Need to check.
+1. `useApiAccess` line 44: `const userPlan = profile?.plan || 'free'` — when `profile` is still `null` (loading), it defaults to `'free'`
+2. The hook computes `appApiAllowed: false` based on this incorrect 'free' plan **even while `isLoading` is true**
+3. DB has `appApiAccess.free: false`, so it correctly blocks free users — but Premium users get caught during the loading window
+4. Some tool pages (like TranslatePage2) don't have a `useEffect` to re-set `apiType` after loading finishes, so the initial wrong state sticks
 
-Actually line 2987 shows `navigate("/tutorial-videos")` — I need to check what the actual route is in App.tsx.
+### Fix (Surgical — 1 file only)
 
-### 2. Index.tsx (line 190-191) — Open tutorials to Admin + Premium + authenticated
-Change:
+**File: `src/hooks/useApiAccess.ts`**
+
+Add an early return when `isLoading` is true — return permissive defaults so no access decisions are made based on incomplete data:
+
 ```typescript
-if (tool.id === "tutorials") {
-  return isAdmin;
+// After line 28-29 (const isLoading, const isFreeMode)
+// ADD: Don't compute access restrictions while still loading
+if (isLoading) {
+  return {
+    appApiAllowed: true,
+    ownApiAllowed: true,
+    anyApiAvailable: true,
+    defaultApiMode: 'app',
+    isLoading: true,
+    isFreeMode,
+  };
 }
 ```
-To:
-```typescript
-if (tool.id === "tutorials") {
-  return isAdmin || (isAuthenticated && profile?.plan === "premium");
-}
-```
 
-### 3. TutorialVideosPage.tsx (line 65) — Open access to Premium users
-Change:
-```typescript
-const canView = isAdmin;
-```
-To:
-```typescript
-const canView = isAdmin || profile?.plan === "premium";
-```
-And show CMS form only to admins (line 54 area — `showForm` default should depend on `isAdmin`). Non-admin premium users see tutorials list only, not the management form.
+This ensures that while auth/settings are loading, no "Access Denied" decisions are made. Tool pages already show loading states when `isLoading` is true, so the permissive defaults won't cause unauthorized access.
 
-### 4. Verify route path
-Need to check App.tsx to confirm the tutorial route path matches what RecapVideoNVPage navigates to.
-
-### Files touched
-- `src/pages/Index.tsx` — line 190-191 only
-- `src/pages/TutorialVideosPage.tsx` — line 65 only + line 54 (showForm default)
-- Possibly `src/pages/RecapVideoNVPage.tsx` line 2987 if route path doesn't match
-
-### NOT touched
-- Protected blocks (AV-SYNC, RECORD-PIPELINE, VOICE-GEN, AUTO-PIPELINE)
-- Upload logic, subtitle sync, audio/video sync
-- Admin panel, other tools, config files
+### What will NOT be touched
+- No changes to useToolSettings, useAuthGuard, useAuth, or any tool pages
+- No changes to protected blocks, upload logic, admin logic, or any other stable features
+- Single surgical edit in one hook file only
 
