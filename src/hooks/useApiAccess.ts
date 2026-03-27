@@ -27,6 +27,18 @@ export function useApiAccess(): ApiAccessResult {
 
   const isLoading = settingsLoading || authLoading;
   const isFreeMode = accessControl.freeMode;
+
+  // Don't compute access restrictions while still loading — avoid blocking Premium users with stale 'free' default
+  if (isLoading) {
+    return {
+      appApiAllowed: true,
+      ownApiAllowed: true,
+      anyApiAvailable: true,
+      defaultApiMode: 'app',
+      isLoading: true,
+      isFreeMode,
+    };
+  }
   
   // PROMOTION MODE: Both API modes available for ANY user
   if (accessControl.promotionMode) {
