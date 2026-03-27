@@ -26,12 +26,22 @@ interface Tutorial {
   title: string;
   description: string | null;
   video_url: string | null;
+  video_qualities: Record<string, string> | null;
   storage_path: string | null;
   category: string;
   order_index: number;
   is_published: boolean;
   created_at: string;
 }
+
+const QUALITY_OPTIONS = ["360p", "720p", "1080p"] as const;
+const ASPECT_RATIOS = [
+  { value: "video", label: "16:9", cls: "aspect-video" },
+  { value: "9/16", label: "9:16", cls: "aspect-[9/16]" },
+  { value: "4/3", label: "4:3", cls: "aspect-[4/3]" },
+  { value: "1/1", label: "1:1", cls: "aspect-square" },
+  { value: "3/4", label: "3:4", cls: "aspect-[3/4]" },
+] as const;
 
 const CATEGORIES = [
   { value: "general", label: "General" },
