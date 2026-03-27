@@ -106,6 +106,42 @@ const TutorialVideosPage: React.FC = () => {
     setLoading(false);
   };
 
+  const uploadSingleFile = async (file: File, pathPrefix: string, session: any): Promise<string> => {
+    const ext = file.name.split(".").pop();
+    const path = `${pathPrefix}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+
+    await new Promise<void>((resolve, reject) => {
+      const upload = new tus.Upload(file, {
+        endpoint: `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/upload/resumable`,
+        retryDelays: [0, 3000, 5000, 10000, 20000],
+        headers: {
+          authorization: `Bearer ${session.access_token}`,
+          "x-upsert": "false",
+        },
+        uploadDataDuringCreation: true,
+        removeFingerprintOnSuccess: true,
+        metadata: {
+          bucketName: "tutorial-videos",
+          objectName: path,
+          contentType: file.type,
+        },
+        chunkSize: 6 * 1024 * 1024,
+        onError: (error) => reject(error),
+        onProgress: (bytesUploaded, bytesTotal) => {
+          setUploadProgress(Math.round((bytesUploaded / bytesTotal) * 100));
+        },
+        onSuccess: () => resolve(),
+      });
+      upload.findPreviousUploads().then((prev) => {
+        if (prev.length) (upload as any).resumeFrom(prev[0]);
+        upload.start();
+      });
+    });
+
+    const { data: urlData } = supabase.storage.from("tutorial-videos").getPublicUrl(path);
+    return urlData.publicUrl;
+  };
+
   const handleUpload = async () => {
     if (!title.trim()) {
       toast({ title: "Title လိုအပ်ပါသည်", variant: "destructive" });
@@ -116,16 +152,17 @@ const TutorialVideosPage: React.FC = () => {
     setUploadProgress(0);
     let videoUrl: string | null = null;
     let storagePath: string | null = null;
+    const qualities: Record<string, string> = {};
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
+
+      // Upload main video (backward compat)
       if (videoFile) {
         const ext = videoFile.name.split(".").pop();
         const path = `tutorials/${Date.now()}.${ext}`;
 
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error("Not authenticated");
-
-        // Use TUS resumable upload for large files
         await new Promise<void>((resolve, reject) => {
           const upload = new tus.Upload(videoFile, {
             endpoint: `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/upload/resumable`,
@@ -141,18 +178,12 @@ const TutorialVideosPage: React.FC = () => {
               objectName: path,
               contentType: videoFile.type,
             },
-            chunkSize: 6 * 1024 * 1024, // 6MB chunks
-            onError: (error) => {
-              console.error("[tutorial-upload] TUS error:", error);
-              reject(error);
-            },
+            chunkSize: 6 * 1024 * 1024,
+            onError: (error) => reject(error),
             onProgress: (bytesUploaded, bytesTotal) => {
-              const pct = Math.round((bytesUploaded / bytesTotal) * 100);
-              setUploadProgress(pct);
+              setUploadProgress(Math.round((bytesUploaded / bytesTotal) * 100));
             },
-            onSuccess: () => {
-              resolve();
-            },
+            onSuccess: () => resolve(),
           });
           upload.findPreviousUploads().then((prev) => {
             if (prev.length) (upload as any).resumeFrom(prev[0]);
@@ -160,12 +191,25 @@ const TutorialVideosPage: React.FC = () => {
           });
         });
 
-        const { data: urlData } = supabase.storage
-          .from("tutorial-videos")
-          .getPublicUrl(path);
-
+        const { data: urlData } = supabase.storage.from("tutorial-videos").getPublicUrl(path);
         videoUrl = urlData.publicUrl;
         storagePath = path;
+      }
+
+      // Upload quality variants
+      for (const q of QUALITY_OPTIONS) {
+        const qFile = qualityFiles[q];
+        if (qFile) {
+          toast({ title: `⬆️ ${q} uploading...` });
+          const url = await uploadSingleFile(qFile, `tutorials/${q}`, session);
+          qualities[q] = url;
+        }
+      }
+
+      // If no main video but has quality files, use highest as main
+      if (!videoUrl && Object.keys(qualities).length > 0) {
+        const highest = (["1080p", "720p", "360p"] as const).find(q => qualities[q]);
+        if (highest) videoUrl = qualities[highest];
       }
 
       const { data: userData } = await supabase.auth.getUser();
@@ -174,12 +218,13 @@ const TutorialVideosPage: React.FC = () => {
         title: title.trim(),
         description: description.trim() || null,
         video_url: videoUrl,
+        video_qualities: Object.keys(qualities).length > 0 ? qualities : null,
         storage_path: storagePath,
         category,
         order_index: tutorials.length,
         is_published: false,
         created_by: userData.user!.id,
-      });
+      } as any);
 
       if (error) throw error;
 
@@ -188,6 +233,7 @@ const TutorialVideosPage: React.FC = () => {
       setDescription("");
       setCategory("general");
       setVideoFile(null);
+      setQualityFiles({ "360p": null, "720p": null, "1080p": null });
       setUploadProgress(0);
       setShowForm(false);
       fetchTutorials();
