@@ -1,0 +1,1 @@
+ALTER TABLE public.tutorials ADD COLUMN IF NOT EXISTS video_qualities jsonb DEFAULT '{}'::jsonb;
