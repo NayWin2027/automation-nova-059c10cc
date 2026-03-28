@@ -627,7 +627,7 @@ const TutorialVideosPage: React.FC = () => {
                   <div className="flex flex-col sm:flex-row gap-4">
                     {/* Video thumbnail / player */}
                     {t.video_url ? (
-                      <VideoPlayer tutorial={t} />
+                      <VideoPlayer tutorial={t} autoPlay={shouldAutoPlay && visible.indexOf(t) === 0} />
                     ) : (
                       <div className="w-full sm:w-56 sm:min-w-[14rem] aspect-video rounded-xl bg-gradient-to-br from-primary/10 via-violet-500/10 to-fuchsia-500/10 flex items-center justify-center flex-shrink-0 border border-border/20">
                         <FileText className="w-10 h-10 text-primary/30" />
