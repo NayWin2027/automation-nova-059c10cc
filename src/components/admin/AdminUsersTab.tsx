@@ -60,6 +60,7 @@ const AdminUsersTab: React.FC = () => {
   const [newPassword, setNewPassword] = useState("");
   const [banReason, setBanReason] = useState("");
   const [loading, setLoading] = useState(false);
+  const [revealedPws, setRevealedPws] = useState<Record<string, boolean>>({});
 
   // Fetch profiles and admin roles on mount
   useEffect(() => {
