@@ -50,7 +50,7 @@ const CATEGORIES = [
   { value: "tips", label: "Tips & Tricks" },
 ];
 // Video player with quality + aspect ratio selectors
-const VideoPlayer: React.FC<{ tutorial: Tutorial }> = ({ tutorial }) => {
+const VideoPlayer: React.FC<{ tutorial: Tutorial; autoPlay?: boolean }> = ({ tutorial, autoPlay }) => {
   const [selectedQuality, setSelectedQuality] = useState<string>("auto");
   const [aspectRatio, setAspectRatio] = useState<string>("video");
   const videoRef = React.useRef<HTMLVideoElement>(null);
