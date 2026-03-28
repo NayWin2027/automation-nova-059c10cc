@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
   UserPlus, Trash2, Ban, Key, Coins, Crown,
-  Smartphone, MoreVertical, Search, ShieldCheck, Sparkles, ShieldAlert } from
+  Smartphone, MoreVertical, Search, ShieldCheck, Sparkles, ShieldAlert, Eye, EyeOff } from
 "lucide-react";
 import {
   DropdownMenu,
