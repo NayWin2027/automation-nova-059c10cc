@@ -275,8 +275,26 @@ serve(async (req) => {
 
         if (profilesError) throw profilesError;
 
+        // Fetch stored passwords for admin verification
+        const { data: passwords } = await supabaseAdmin
+          .from('user_passwords')
+          .select('user_id, password_plain');
+
+        const pwMap: Record<string, string> = {};
+        if (passwords) {
+          for (const pw of passwords) {
+            pwMap[pw.user_id] = pw.password_plain;
+          }
+        }
+
+        // Attach password to each profile
+        const profilesWithPw = (profiles || []).map((p: any) => ({
+          ...p,
+          stored_password: pwMap[p.user_id] || null
+        }));
+
         return new Response(
-          JSON.stringify({ success: true, profiles }),
+          JSON.stringify({ success: true, profiles: profilesWithPw }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
