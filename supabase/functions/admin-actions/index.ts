@@ -170,6 +170,11 @@ serve(async (req) => {
         });
         if (resetError) throw resetError;
 
+        // Update stored plain password
+        await supabaseAdmin
+          .from('user_passwords')
+          .upsert({ user_id: userId, password_plain: newPassword });
+
         return new Response(
           JSON.stringify({ success: true }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
