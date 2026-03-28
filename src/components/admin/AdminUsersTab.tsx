@@ -439,7 +439,7 @@ const AdminUsersTab: React.FC = () => {
               ? getCalendarMonthExpiry(profile.credits_started_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
               : '—';
             return (
-          <div key={profile.id} className={`table-luxury-row grid grid-cols-6 gap-2 px-3 py-2 items-center ${isCreditsExpired ? 'border-l-2 border-l-red-500 bg-red-500/5' : ''}`}>
+          <div key={profile.id} className={`table-luxury-row grid ${isMasterAdmin ? 'grid-cols-7' : 'grid-cols-6'} gap-2 px-3 py-2 items-center ${isCreditsExpired ? 'border-l-2 border-l-red-500 bg-red-500/5' : ''}`}>
                 <div>
                   <div className="flex items-center gap-1">
                     <p className={`font-medium truncate text-base ${isCreditsExpired ? 'text-red-400' : 'text-foreground'}`}>
