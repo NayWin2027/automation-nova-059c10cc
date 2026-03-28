@@ -193,10 +193,14 @@ const AdminDashboardPage: React.FC = () => {
 
         {/* Main Tabs */}
         <Tabs defaultValue="users" className="mt-4">
-          <TabsList className="grid w-full max-w-lg grid-cols-5 mb-4 bg-secondary/30 p-0.5 h-8">
+          <TabsList className="grid w-full max-w-2xl grid-cols-6 mb-4 bg-secondary/30 p-0.5 h-8">
             <TabsTrigger value="users" className="flex items-center gap-1.5 text-2xs data-[state=active]:bg-card">
               <Users className="w-3 h-3" />
               Users
+            </TabsTrigger>
+            <TabsTrigger value="agents" className="flex items-center gap-1.5 text-2xs data-[state=active]:bg-card">
+              <UserCheck className="w-3 h-3" />
+              Agents
             </TabsTrigger>
             <TabsTrigger value="insights" className="flex items-center gap-1.5 text-2xs data-[state=active]:bg-card">
               <TrendingUp className="w-3 h-3" />
@@ -218,6 +222,10 @@ const AdminDashboardPage: React.FC = () => {
 
           <TabsContent value="users">
             <AdminUsersTab />
+          </TabsContent>
+
+          <TabsContent value="agents">
+            <AdminAgentSalesTab />
           </TabsContent>
 
           <TabsContent value="insights">
