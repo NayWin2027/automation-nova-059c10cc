@@ -93,7 +93,8 @@ const VideoPlayer: React.FC<{ tutorial: Tutorial; autoPlay?: boolean }> = ({ tut
           controlsList="nodownload"
           disablePictureInPicture
           onContextMenu={(e) => e.preventDefault()}
-          preload="metadata"
+          preload={autoPlay ? "auto" : "metadata"}
+          autoPlay={autoPlay}
           className="w-full h-full object-contain rounded-xl bg-black"
         />
       </div>
