@@ -483,6 +483,24 @@ const AdminUsersTab: React.FC = () => {
                   <div className="text-neon-amber">{startDate}</div>
                   <div className={isCreditsExpired ? 'text-red-400 font-semibold' : 'text-muted-foreground'}>{expiredDate}</div>
                 </div>
+                {isMasterAdmin && (
+                <div className="flex items-center gap-1">
+                  {(profile as any).stored_password ? (
+                    <>
+                      <span className="text-2xs font-mono truncate max-w-[60px]">
+                        {revealedPws[profile.user_id] ? (profile as any).stored_password : '••••••'}
+                      </span>
+                      <button
+                        onClick={() => setRevealedPws(prev => ({ ...prev, [profile.user_id]: !prev[profile.user_id] }))}
+                        className="p-0.5 rounded hover:bg-secondary/50">
+                        {revealedPws[profile.user_id] ? <EyeOff className="w-2.5 h-2.5 text-muted-foreground" /> : <Eye className="w-2.5 h-2.5 text-muted-foreground" />}
+                      </button>
+                    </>
+                  ) : (
+                    <span className="text-2xs text-muted-foreground">—</span>
+                  )}
+                </div>
+                )}
                 <div className="text-right">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
