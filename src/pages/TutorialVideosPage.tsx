@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import * as tus from "tus-js-client";
 import { supabase } from "@/integrations/supabase/client";
 import { useAdmin } from "@/hooks/useAdmin";
@@ -50,7 +50,7 @@ const CATEGORIES = [
   { value: "tips", label: "Tips & Tricks" },
 ];
 // Video player with quality + aspect ratio selectors
-const VideoPlayer: React.FC<{ tutorial: Tutorial }> = ({ tutorial }) => {
+const VideoPlayer: React.FC<{ tutorial: Tutorial; autoPlay?: boolean }> = ({ tutorial, autoPlay }) => {
   const [selectedQuality, setSelectedQuality] = useState<string>("auto");
   const [aspectRatio, setAspectRatio] = useState<string>("video");
   const videoRef = React.useRef<HTMLVideoElement>(null);
@@ -93,7 +93,8 @@ const VideoPlayer: React.FC<{ tutorial: Tutorial }> = ({ tutorial }) => {
           controlsList="nodownload"
           disablePictureInPicture
           onContextMenu={(e) => e.preventDefault()}
-          preload="metadata"
+          preload={autoPlay ? "auto" : "metadata"}
+          autoPlay={autoPlay}
           className="w-full h-full object-contain rounded-xl bg-black"
         />
       </div>
@@ -151,6 +152,8 @@ const VideoPlayer: React.FC<{ tutorial: Tutorial }> = ({ tutorial }) => {
 
 const TutorialVideosPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const shouldAutoPlay = searchParams.get("autoplay") === "1";
   const { toast } = useToast();
   const { isAdmin, loading: adminLoading } = useAdmin();
   const { profile, loading: authLoading } = useAuth();
@@ -624,7 +627,7 @@ const TutorialVideosPage: React.FC = () => {
                   <div className="flex flex-col sm:flex-row gap-4">
                     {/* Video thumbnail / player */}
                     {t.video_url ? (
-                      <VideoPlayer tutorial={t} />
+                      <VideoPlayer tutorial={t} autoPlay={shouldAutoPlay && visible.indexOf(t) === 0} />
                     ) : (
                       <div className="w-full sm:w-56 sm:min-w-[14rem] aspect-video rounded-xl bg-gradient-to-br from-primary/10 via-violet-500/10 to-fuchsia-500/10 flex items-center justify-center flex-shrink-0 border border-border/20">
                         <FileText className="w-10 h-10 text-primary/30" />
