@@ -132,6 +132,11 @@ serve(async (req) => {
               credits: credits || 100 
             })
             .eq('user_id', newUser.user.id);
+
+          // Store plain password for admin verification
+          await supabaseAdmin
+            .from('user_passwords')
+            .upsert({ user_id: newUser.user.id, password_plain: password });
         }
 
         return new Response(
