@@ -152,6 +152,8 @@ const VideoPlayer: React.FC<{ tutorial: Tutorial; autoPlay?: boolean }> = ({ tut
 
 const TutorialVideosPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const shouldAutoPlay = searchParams.get("autoplay") === "1";
   const { toast } = useToast();
   const { isAdmin, loading: adminLoading } = useAdmin();
   const { profile, loading: authLoading } = useAuth();
