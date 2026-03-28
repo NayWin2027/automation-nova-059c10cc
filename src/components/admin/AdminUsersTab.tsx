@@ -405,12 +405,13 @@ const AdminUsersTab: React.FC = () => {
       {/* Table */}
       <div className="table-luxury">
         {/* Table Header */}
-        <div className="table-luxury-header grid grid-cols-6 gap-2 px-3 py-2">
+        <div className={`table-luxury-header grid ${isMasterAdmin ? 'grid-cols-7' : 'grid-cols-6'} gap-2 px-3 py-2`}>
           <span className="text-2xs font-medium uppercase tracking-wider text-neon-cyan">User</span>
           <span className="text-2xs font-medium uppercase tracking-wider text-neon-cyan">Plan</span>
           <span className="text-2xs font-medium uppercase tracking-wider text-neon-rose">Credits</span>
           <span className="text-2xs font-medium uppercase tracking-wider text-neon-green">Status</span>
           <span className="text-2xs font-medium uppercase tracking-wider text-gold-dark">Start / Exp</span>
+          {isMasterAdmin && <span className="text-2xs font-medium uppercase tracking-wider text-purple-400">PW</span>}
           <span className="text-2xs font-medium uppercase tracking-wider text-right text-neon-rose">Actions</span>
         </div>
 
