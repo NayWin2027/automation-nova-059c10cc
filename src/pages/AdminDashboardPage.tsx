@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Shield, Users, Activity, Settings, LogOut,
-  RefreshCw, Home, Sparkles, BarChart3, TrendingUp, BookOpen } from
+  RefreshCw, Home, Sparkles, BarChart3, TrendingUp, BookOpen, UserCheck } from
 "lucide-react";
 import AdminUsersTab from "@/components/admin/AdminUsersTab";
 import AdminActivityTab from "@/components/admin/AdminActivityTab";
@@ -14,6 +14,7 @@ import AdminSettingsTab from "@/components/admin/AdminSettingsTab";
 import AdminStatsCards from "@/components/admin/AdminStatsCards";
 import AdminDailyUsageTab from "@/components/admin/AdminDailyUsageTab";
 import AdminUserInsightsTab from "@/components/admin/AdminUserInsightsTab";
+import AdminAgentSalesTab from "@/components/admin/AdminAgentSalesTab";
 
 const AdminDashboardPage: React.FC = () => {
   const navigate = useNavigate();
