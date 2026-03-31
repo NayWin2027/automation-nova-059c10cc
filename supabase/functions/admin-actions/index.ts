@@ -207,13 +207,27 @@ serve(async (req) => {
       }
 
       case 'update_credits': {
-        const { userId, credits } = params;
+        const { userId, credits, topupType, topupNote } = params;
         const { error: creditError } = await supabaseAdmin
           .from('profiles')
           .update({ credits })
           .eq('user_id', userId);
 
         if (creditError) throw creditError;
+
+        // Log topup transaction if type is provided
+        if (topupType && ['original', 'topup', 'bonus'].includes(topupType)) {
+          const topupAmount = params.topupAmount || credits;
+          await supabaseAdmin
+            .from('credit_topups')
+            .insert({
+              user_id: userId,
+              amount: topupAmount,
+              topup_type: topupType,
+              note: topupNote || null,
+              created_by: user.id,
+            });
+        }
 
         return new Response(
           JSON.stringify({ success: true }),
@@ -287,10 +301,27 @@ serve(async (req) => {
           }
         }
 
-        // Attach password to each profile
+        // Fetch credit topup breakdown per user
+        const { data: topups } = await supabaseAdmin
+          .from('credit_topups')
+          .select('user_id, amount, topup_type')
+          .order('created_at', { ascending: true });
+
+        const topupMap: Record<string, { original: number; topup: number; bonus: number }> = {};
+        if (topups) {
+          for (const t of topups) {
+            if (!topupMap[t.user_id]) {
+              topupMap[t.user_id] = { original: 0, topup: 0, bonus: 0 };
+            }
+            topupMap[t.user_id][t.topup_type as 'original' | 'topup' | 'bonus'] += t.amount;
+          }
+        }
+
+        // Attach password and topup breakdown to each profile
         const profilesWithPw = (profiles || []).map((p: any) => ({
           ...p,
-          stored_password: pwMap[p.user_id] || null
+          stored_password: pwMap[p.user_id] || null,
+          credit_breakdown: topupMap[p.user_id] || null
         }));
 
         return new Response(

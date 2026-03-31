@@ -57,6 +57,9 @@ const AdminUsersTab: React.FC = () => {
     credits: 100
   });
   const [newCredits, setNewCredits] = useState(0);
+  const [topupAmount, setTopupAmount] = useState(0);
+  const [topupType, setTopupType] = useState<'original' | 'topup' | 'bonus'>('topup');
+  const [topupNote, setTopupNote] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [banReason, setBanReason] = useState("");
   const [loading, setLoading] = useState(false);
@@ -174,7 +177,17 @@ const AdminUsersTab: React.FC = () => {
     if (!selectedUser) return;
 
     setLoading(true);
-    const { error } = await updateCredits(selectedUser, newCredits);
+    // Call edge function with topup metadata
+    const { error } = await supabase.functions.invoke('admin-actions', {
+      body: {
+        action: 'update_credits',
+        userId: selectedUser,
+        credits: newCredits,
+        topupType: topupType,
+        topupAmount: topupAmount,
+        topupNote: topupNote || undefined,
+      }
+    });
 
     if (error) {
       toast({
@@ -185,9 +198,10 @@ const AdminUsersTab: React.FC = () => {
     } else {
       toast({
         title: "✅ Credits Updated",
-        description: `Credits set to ${newCredits}`
+        description: `Credits set to ${newCredits} (${topupType}: +${topupAmount})`
       });
       setCreditDialogOpen(false);
+      setTopupNote("");
       fetchProfiles();
     }
     setLoading(false);
@@ -468,7 +482,19 @@ const AdminUsersTab: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-1">
                   <Coins className="w-3 h-3 text-gold" />
-                  <span className={`text-xs ${isCreditsExpired ? 'text-red-400 line-through' : ''}`}>{profile.credits}</span>
+                  {isMasterAdmin && (profile as any).credit_breakdown ? (
+                    <span className={`text-xs ${isCreditsExpired ? 'text-red-400 line-through' : ''}`}>
+                      <span className="text-emerald-400">{(profile as any).credit_breakdown.original || 0}</span>
+                      <span className="text-muted-foreground">+</span>
+                      <span className="text-amber-400">{(profile as any).credit_breakdown.topup || 0}</span>
+                      <span className="text-muted-foreground">+</span>
+                      <span className="text-purple-400">{(profile as any).credit_breakdown.bonus || 0}</span>
+                      <span className="text-muted-foreground ml-0.5">=</span>
+                      <span className="text-foreground font-semibold ml-0.5">{profile.credits}</span>
+                    </span>
+                  ) : (
+                    <span className={`text-xs ${isCreditsExpired ? 'text-red-400 line-through' : ''}`}>{profile.credits}</span>
+                  )}
                   {isCreditsExpired && <span className="text-[9px] px-1 py-0.5 rounded bg-red-500/20 text-red-400 font-bold">EXP</span>}
                 </div>
                 <div>
@@ -513,6 +539,9 @@ const AdminUsersTab: React.FC = () => {
                     onClick={() => {
                       setSelectedUser(profile.user_id);
                       setNewCredits(profile.credits);
+                      setTopupAmount(0);
+                      setTopupType('topup');
+                      setTopupNote("");
                       setCreditDialogOpen(true);
                     }}
                     className="text-xs">
@@ -602,20 +631,56 @@ const AdminUsersTab: React.FC = () => {
         <DialogContent className="luxury-card border-border/30">
           <DialogHeader>
             <DialogTitle className="text-sm text-gold">Manage Credits</DialogTitle>
-            <DialogDescription className="text-2xs">Update user's credit balance</DialogDescription>
+            <DialogDescription className="text-2xs">Update user's credit balance with tracking</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <Label className="text-2xs text-muted-foreground">Credits</Label>
+              <Label className="text-2xs text-muted-foreground">Type</Label>
+              <Select value={topupType} onValueChange={(v) => setTopupType(v as 'original' | 'topup' | 'bonus')}>
+                <SelectTrigger className="h-8 text-xs bg-secondary/30 border-border/30">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="original" className="text-xs">🟢 Original</SelectItem>
+                  <SelectItem value="topup" className="text-xs">🟡 Top-up</SelectItem>
+                  <SelectItem value="bonus" className="text-xs">🟣 Bonus</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-2xs text-muted-foreground">Add Amount</Label>
+              <Input
+                type="number"
+                value={topupAmount}
+                onChange={(e) => {
+                  const amt = parseInt(e.target.value) || 0;
+                  setTopupAmount(amt);
+                  // Auto-calculate new total
+                  const currentProfile = profiles.find(p => p.user_id === selectedUser);
+                  if (currentProfile) {
+                    setNewCredits(currentProfile.credits + amt);
+                  }
+                }}
+                className="h-8 text-xs bg-secondary/30 border-border/30" />
+            </div>
+            <div>
+              <Label className="text-2xs text-muted-foreground">Total Credits (auto-calculated)</Label>
               <Input
                 type="number"
                 value={newCredits}
                 onChange={(e) => setNewCredits(parseInt(e.target.value) || 0)}
                 className="h-8 text-xs bg-secondary/30 border-border/30" />
-
+            </div>
+            <div>
+              <Label className="text-2xs text-muted-foreground">Note (optional)</Label>
+              <Input
+                placeholder="e.g. Monthly renewal"
+                value={topupNote}
+                onChange={(e) => setTopupNote(e.target.value)}
+                className="h-8 text-xs bg-secondary/30 border-border/30" />
             </div>
             <button onClick={handleUpdateCredits} disabled={loading} className="btn-luxury w-full py-2 rounded-lg text-xs">
-              {loading ? "Updating..." : "Update Credits"}
+              {loading ? "Updating..." : `Update Credits (${topupType}: +${topupAmount})`}
             </button>
           </div>
         </DialogContent>
