@@ -6,7 +6,7 @@
  * If ALL 3 keys return 429, the last 429 response is returned to the caller.
  */
 
-const KEY_NAMES = ["GEMINI_API_KEY_A", "GEMINI_API_KEY_B", "GEMINI_API_KEY_C"] as const;
+const KEY_NAMES = ["GEMINI_API_KEY", "GEMINI_API_KEY_2", "GEMINI_API_KEY_3"] as const;
 let currentIndex = 0;
 
 /** Get the current active Gemini API key */
