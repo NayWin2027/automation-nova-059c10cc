@@ -208,9 +208,34 @@ serve(async (req) => {
 
       case 'update_credits': {
         const { userId, credits, topupType, topupNote } = params;
+        
+        // Get current profile to check credits_started_at
+        const { data: currentProfile } = await supabaseAdmin
+          .from('profiles')
+          .select('credits, credits_started_at')
+          .eq('user_id', userId)
+          .single();
+
+        // Build update object - always set credits, conditionally set credits_started_at
+        const updateObj: Record<string, any> = { credits };
+        if (currentProfile && credits > (currentProfile.credits || 0)) {
+          // If credits_started_at is null or expired, reset it
+          if (!currentProfile.credits_started_at) {
+            updateObj.credits_started_at = new Date().toISOString();
+          } else {
+            const startedAt = new Date(currentProfile.credits_started_at);
+            const expiry = new Date(startedAt);
+            expiry.setMonth(expiry.getMonth() + 1);
+            expiry.setDate(expiry.getDate() + 7);
+            if (expiry.getTime() < Date.now()) {
+              updateObj.credits_started_at = new Date().toISOString();
+            }
+          }
+        }
+
         const { error: creditError } = await supabaseAdmin
           .from('profiles')
-          .update({ credits })
+          .update(updateObj)
           .eq('user_id', userId);
 
         if (creditError) throw creditError;

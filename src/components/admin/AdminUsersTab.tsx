@@ -42,6 +42,8 @@ const AdminUsersTab: React.FC = () => {
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [banDialogOpen, setBanDialogOpen] = useState(false);
   const [devicesDialogOpen, setDevicesDialogOpen] = useState(false);
+  const [creditDetailOpen, setCreditDetailOpen] = useState(false);
+  const [creditDetailProfile, setCreditDetailProfile] = useState<typeof profiles[0] | null>(null);
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<typeof profiles[0] | null>(null);
 
@@ -480,7 +482,13 @@ const AdminUsersTab: React.FC = () => {
                     {profile.plan.toUpperCase()}
                   </span>
                 </div>
-                <div className="flex items-center gap-1">
+                <div 
+                  className="flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity"
+                  onClick={() => {
+                    setCreditDetailProfile(profile);
+                    setCreditDetailOpen(true);
+                  }}
+                >
                   <Coins className="w-3 h-3 text-gold" />
                   {isMasterAdmin && (profile as any).credit_breakdown ? (
                     <span className={`text-xs ${isCreditsExpired ? 'text-red-400 line-through' : ''}`}>
@@ -788,6 +796,91 @@ const AdminUsersTab: React.FC = () => {
               {loading ? "Clearing..." : "Clear All Devices"}
             </button>
           }
+        </DialogContent>
+      </Dialog>
+
+      {/* Credit Detail Dialog */}
+      <Dialog open={creditDetailOpen} onOpenChange={setCreditDetailOpen}>
+        <DialogContent className="luxury-card border-border/30 max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm text-gold flex items-center gap-2">
+              <Coins className="w-4 h-4" />
+              Credit Details
+            </DialogTitle>
+            <DialogDescription className="text-2xs">
+              {creditDetailProfile?.display_name || getUserDisplayId(creditDetailProfile?.email || "")}
+            </DialogDescription>
+          </DialogHeader>
+          {creditDetailProfile && (
+            <div className="space-y-3">
+              {/* Total Balance */}
+              <div className="text-center p-3 rounded-lg bg-secondary/30 border border-border/20">
+                <p className="text-2xs text-muted-foreground mb-1">Current Balance</p>
+                <p className="text-2xl font-bold text-gold">{creditDetailProfile.credits}</p>
+              </div>
+
+              {/* Breakdown - Master Admin only */}
+              {isMasterAdmin && (creditDetailProfile as any).credit_breakdown && (
+                <div className="space-y-2">
+                  <p className="text-2xs text-muted-foreground font-medium uppercase tracking-wider">Breakdown</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-center">
+                      <p className="text-[10px] text-emerald-400/70">Original</p>
+                      <p className="text-sm font-bold text-emerald-400">{(creditDetailProfile as any).credit_breakdown.original || 0}</p>
+                    </div>
+                    <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-center">
+                      <p className="text-[10px] text-amber-400/70">Top-up</p>
+                      <p className="text-sm font-bold text-amber-400">{(creditDetailProfile as any).credit_breakdown.topup || 0}</p>
+                    </div>
+                    <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-center">
+                      <p className="text-[10px] text-purple-400/70">Bonus</p>
+                      <p className="text-sm font-bold text-purple-400">{(creditDetailProfile as any).credit_breakdown.bonus || 0}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Credit Dates */}
+              <div className="space-y-1.5 pt-2 border-t border-border/20">
+                <div className="flex justify-between items-center">
+                  <span className="text-2xs text-muted-foreground">Start Date</span>
+                  <span className="text-2xs font-medium text-foreground">
+                    {creditDetailProfile.credits_started_at 
+                      ? new Date(creditDetailProfile.credits_started_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                      : '—'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-2xs text-muted-foreground">Expiry Date</span>
+                  <span className={`text-2xs font-medium ${
+                    creditDetailProfile.credits_started_at && (() => {
+                      const s = new Date(creditDetailProfile.credits_started_at);
+                      const exp = new Date(s);
+                      exp.setMonth(exp.getMonth() + 1);
+                      exp.setDate(exp.getDate() + 7);
+                      return exp.getTime() < Date.now();
+                    })() ? 'text-red-400' : 'text-foreground'
+                  }`}>
+                    {creditDetailProfile.credits_started_at 
+                      ? (() => {
+                          const s = new Date(creditDetailProfile.credits_started_at);
+                          const exp = new Date(s);
+                          exp.setMonth(exp.getMonth() + 1);
+                          exp.setDate(exp.getDate() + 7);
+                          return exp.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                        })()
+                      : '—'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-2xs text-muted-foreground">Plan</span>
+                  <span className={`inline-flex items-center gap-1 rounded-full ${getPlanBadgeClass(creditDetailProfile.plan)}`}>
+                    {creditDetailProfile.plan.toUpperCase()}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>);
