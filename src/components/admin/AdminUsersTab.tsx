@@ -482,7 +482,13 @@ const AdminUsersTab: React.FC = () => {
                     {profile.plan.toUpperCase()}
                   </span>
                 </div>
-                <div className="flex items-center gap-1">
+                <div 
+                  className="flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity"
+                  onClick={() => {
+                    setCreditDetailProfile(profile);
+                    setCreditDetailOpen(true);
+                  }}
+                >
                   <Coins className="w-3 h-3 text-gold" />
                   {isMasterAdmin && (profile as any).credit_breakdown ? (
                     <span className={`text-xs ${isCreditsExpired ? 'text-red-400 line-through' : ''}`}>
