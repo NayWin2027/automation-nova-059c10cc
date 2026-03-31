@@ -631,20 +631,56 @@ const AdminUsersTab: React.FC = () => {
         <DialogContent className="luxury-card border-border/30">
           <DialogHeader>
             <DialogTitle className="text-sm text-gold">Manage Credits</DialogTitle>
-            <DialogDescription className="text-2xs">Update user's credit balance</DialogDescription>
+            <DialogDescription className="text-2xs">Update user's credit balance with tracking</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <Label className="text-2xs text-muted-foreground">Credits</Label>
+              <Label className="text-2xs text-muted-foreground">Type</Label>
+              <Select value={topupType} onValueChange={(v) => setTopupType(v as 'original' | 'topup' | 'bonus')}>
+                <SelectTrigger className="h-8 text-xs bg-secondary/30 border-border/30">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="original" className="text-xs">🟢 Original</SelectItem>
+                  <SelectItem value="topup" className="text-xs">🟡 Top-up</SelectItem>
+                  <SelectItem value="bonus" className="text-xs">🟣 Bonus</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-2xs text-muted-foreground">Add Amount</Label>
+              <Input
+                type="number"
+                value={topupAmount}
+                onChange={(e) => {
+                  const amt = parseInt(e.target.value) || 0;
+                  setTopupAmount(amt);
+                  // Auto-calculate new total
+                  const currentProfile = profiles.find(p => p.user_id === selectedUser);
+                  if (currentProfile) {
+                    setNewCredits(currentProfile.credits + amt);
+                  }
+                }}
+                className="h-8 text-xs bg-secondary/30 border-border/30" />
+            </div>
+            <div>
+              <Label className="text-2xs text-muted-foreground">Total Credits (auto-calculated)</Label>
               <Input
                 type="number"
                 value={newCredits}
                 onChange={(e) => setNewCredits(parseInt(e.target.value) || 0)}
                 className="h-8 text-xs bg-secondary/30 border-border/30" />
-
+            </div>
+            <div>
+              <Label className="text-2xs text-muted-foreground">Note (optional)</Label>
+              <Input
+                placeholder="e.g. Monthly renewal"
+                value={topupNote}
+                onChange={(e) => setTopupNote(e.target.value)}
+                className="h-8 text-xs bg-secondary/30 border-border/30" />
             </div>
             <button onClick={handleUpdateCredits} disabled={loading} className="btn-luxury w-full py-2 rounded-lg text-xs">
-              {loading ? "Updating..." : "Update Credits"}
+              {loading ? "Updating..." : `Update Credits (${topupType}: +${topupAmount})`}
             </button>
           </div>
         </DialogContent>
