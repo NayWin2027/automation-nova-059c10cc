@@ -539,6 +539,9 @@ const AdminUsersTab: React.FC = () => {
                     onClick={() => {
                       setSelectedUser(profile.user_id);
                       setNewCredits(profile.credits);
+                      setTopupAmount(0);
+                      setTopupType('topup');
+                      setTopupNote("");
                       setCreditDialogOpen(true);
                     }}
                     className="text-xs">
