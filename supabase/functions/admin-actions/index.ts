@@ -207,13 +207,27 @@ serve(async (req) => {
       }
 
       case 'update_credits': {
-        const { userId, credits } = params;
+        const { userId, credits, topupType, topupNote } = params;
         const { error: creditError } = await supabaseAdmin
           .from('profiles')
           .update({ credits })
           .eq('user_id', userId);
 
         if (creditError) throw creditError;
+
+        // Log topup transaction if type is provided
+        if (topupType && ['original', 'topup', 'bonus'].includes(topupType)) {
+          const topupAmount = params.topupAmount || credits;
+          await supabaseAdmin
+            .from('credit_topups')
+            .insert({
+              user_id: userId,
+              amount: topupAmount,
+              topup_type: topupType,
+              note: topupNote || null,
+              created_by: user.id,
+            });
+        }
 
         return new Response(
           JSON.stringify({ success: true }),
