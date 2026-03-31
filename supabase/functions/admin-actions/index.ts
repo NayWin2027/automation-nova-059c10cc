@@ -208,6 +208,7 @@ serve(async (req) => {
 
       case 'update_credits': {
         const { userId, credits, topupType, topupNote } = params;
+        console.log('[admin-actions] update_credits called:', { userId, credits, topupType, topupAmount: params.topupAmount });
         
         // Get current profile
         const { data: currentProfile } = await supabaseAdmin
@@ -249,12 +250,17 @@ serve(async (req) => {
           }
         }
 
+        console.log('[admin-actions] Updating credits:', { currentCredits, newCredits, topupAmount, updateObj });
         const { error: creditError } = await supabaseAdmin
           .from('profiles')
           .update(updateObj)
           .eq('user_id', userId);
 
-        if (creditError) throw creditError;
+        if (creditError) {
+          console.error('[admin-actions] Credit update failed:', creditError);
+          throw creditError;
+        }
+        console.log('[admin-actions] Credit update successful for', userId);
 
         // Log topup transaction if type is provided
         if (topupType && ['original', 'topup', 'bonus'].includes(topupType)) {
