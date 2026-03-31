@@ -42,6 +42,8 @@ const AdminUsersTab: React.FC = () => {
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [banDialogOpen, setBanDialogOpen] = useState(false);
   const [devicesDialogOpen, setDevicesDialogOpen] = useState(false);
+  const [creditDetailOpen, setCreditDetailOpen] = useState(false);
+  const [creditDetailProfile, setCreditDetailProfile] = useState<typeof profiles[0] | null>(null);
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<typeof profiles[0] | null>(null);
 
