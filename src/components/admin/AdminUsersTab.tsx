@@ -468,7 +468,19 @@ const AdminUsersTab: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-1">
                   <Coins className="w-3 h-3 text-gold" />
-                  <span className={`text-xs ${isCreditsExpired ? 'text-red-400 line-through' : ''}`}>{profile.credits}</span>
+                  {isMasterAdmin && (profile as any).credit_breakdown ? (
+                    <span className={`text-xs ${isCreditsExpired ? 'text-red-400 line-through' : ''}`}>
+                      <span className="text-emerald-400">{(profile as any).credit_breakdown.original || 0}</span>
+                      <span className="text-muted-foreground">+</span>
+                      <span className="text-amber-400">{(profile as any).credit_breakdown.topup || 0}</span>
+                      <span className="text-muted-foreground">+</span>
+                      <span className="text-purple-400">{(profile as any).credit_breakdown.bonus || 0}</span>
+                      <span className="text-muted-foreground ml-0.5">=</span>
+                      <span className="text-foreground font-semibold ml-0.5">{profile.credits}</span>
+                    </span>
+                  ) : (
+                    <span className={`text-xs ${isCreditsExpired ? 'text-red-400 line-through' : ''}`}>{profile.credits}</span>
+                  )}
                   {isCreditsExpired && <span className="text-[9px] px-1 py-0.5 rounded bg-red-500/20 text-red-400 font-bold">EXP</span>}
                 </div>
                 <div>
