@@ -57,6 +57,9 @@ const AdminUsersTab: React.FC = () => {
     credits: 100
   });
   const [newCredits, setNewCredits] = useState(0);
+  const [topupAmount, setTopupAmount] = useState(0);
+  const [topupType, setTopupType] = useState<'original' | 'topup' | 'bonus'>('topup');
+  const [topupNote, setTopupNote] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [banReason, setBanReason] = useState("");
   const [loading, setLoading] = useState(false);
