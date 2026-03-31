@@ -209,18 +209,34 @@ serve(async (req) => {
       case 'update_credits': {
         const { userId, credits, topupType, topupNote } = params;
         
-        // Get current profile to check credits_started_at
+        // Get current profile
         const { data: currentProfile } = await supabaseAdmin
           .from('profiles')
           .select('credits, credits_started_at')
           .eq('user_id', userId)
           .single();
 
-        // Build update object - always set credits, conditionally set credits_started_at
-        const updateObj: Record<string, any> = { credits };
-        if (currentProfile && credits > (currentProfile.credits || 0)) {
-          // If credits_started_at is null or expired, reset it
-          if (!currentProfile.credits_started_at) {
+        const currentCredits = currentProfile?.credits || 0;
+
+        // If topupType is provided (topup/bonus/original), ADD the amount to existing balance
+        // Otherwise (direct credit set from admin), use the value as-is
+        let newCredits: number;
+        let topupAmount: number;
+
+        if (topupType && ['original', 'topup', 'bonus'].includes(topupType)) {
+          topupAmount = Number(params.topupAmount || credits) || 0;
+          newCredits = currentCredits + topupAmount;
+        } else {
+          newCredits = Number(credits) || 0;
+          topupAmount = 0;
+        }
+
+        // Build update object
+        const updateObj: Record<string, any> = { credits: newCredits };
+        
+        // Reset credits_started_at if null or expired
+        if (newCredits > currentCredits) {
+          if (!currentProfile?.credits_started_at) {
             updateObj.credits_started_at = new Date().toISOString();
           } else {
             const startedAt = new Date(currentProfile.credits_started_at);
@@ -242,7 +258,6 @@ serve(async (req) => {
 
         // Log topup transaction if type is provided
         if (topupType && ['original', 'topup', 'bonus'].includes(topupType)) {
-          const topupAmount = params.topupAmount || credits;
           await supabaseAdmin
             .from('credit_topups')
             .insert({
@@ -255,7 +270,7 @@ serve(async (req) => {
         }
 
         return new Response(
-          JSON.stringify({ success: true }),
+          JSON.stringify({ success: true, newBalance: newCredits }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
