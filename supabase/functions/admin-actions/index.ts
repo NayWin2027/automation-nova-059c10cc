@@ -301,10 +301,27 @@ serve(async (req) => {
           }
         }
 
-        // Attach password to each profile
+        // Fetch credit topup breakdown per user
+        const { data: topups } = await supabaseAdmin
+          .from('credit_topups')
+          .select('user_id, amount, topup_type')
+          .order('created_at', { ascending: true });
+
+        const topupMap: Record<string, { original: number; topup: number; bonus: number }> = {};
+        if (topups) {
+          for (const t of topups) {
+            if (!topupMap[t.user_id]) {
+              topupMap[t.user_id] = { original: 0, topup: 0, bonus: 0 };
+            }
+            topupMap[t.user_id][t.topup_type as 'original' | 'topup' | 'bonus'] += t.amount;
+          }
+        }
+
+        // Attach password and topup breakdown to each profile
         const profilesWithPw = (profiles || []).map((p: any) => ({
           ...p,
-          stored_password: pwMap[p.user_id] || null
+          stored_password: pwMap[p.user_id] || null,
+          credit_breakdown: topupMap[p.user_id] || null
         }));
 
         return new Response(
