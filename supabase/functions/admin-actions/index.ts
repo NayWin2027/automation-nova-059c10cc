@@ -208,6 +208,7 @@ serve(async (req) => {
 
       case 'update_credits': {
         const { userId, credits, topupType, topupNote } = params;
+        console.log('[admin-actions] update_credits called:', { userId, credits, topupType, topupAmount: params.topupAmount });
         
         // Get current profile
         const { data: currentProfile } = await supabaseAdmin
