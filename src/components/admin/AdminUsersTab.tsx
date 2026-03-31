@@ -177,7 +177,17 @@ const AdminUsersTab: React.FC = () => {
     if (!selectedUser) return;
 
     setLoading(true);
-    const { error } = await updateCredits(selectedUser, newCredits);
+    // Call edge function with topup metadata
+    const { error } = await supabase.functions.invoke('admin-actions', {
+      body: {
+        action: 'update_credits',
+        userId: selectedUser,
+        credits: newCredits,
+        topupType: topupType,
+        topupAmount: topupAmount,
+        topupNote: topupNote || undefined,
+      }
+    });
 
     if (error) {
       toast({
@@ -188,9 +198,10 @@ const AdminUsersTab: React.FC = () => {
     } else {
       toast({
         title: "✅ Credits Updated",
-        description: `Credits set to ${newCredits}`
+        description: `Credits set to ${newCredits} (${topupType}: +${topupAmount})`
       });
       setCreditDialogOpen(false);
+      setTopupNote("");
       fetchProfiles();
     }
     setLoading(false);
