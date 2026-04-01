@@ -9,9 +9,11 @@ const MAX_MESSAGES = 100;
 const MAX_PROMPT_LENGTH = 100000;
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const _corsBlock = handleCorsPreflightOrReject(req);
+  if (_corsBlock) return _corsBlock;
+
+  const corsHeaders = getCorsHeaders(req);
+
 
   try {
     // ===== AUTHENTICATION =====
