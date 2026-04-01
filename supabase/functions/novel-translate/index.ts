@@ -9,7 +9,12 @@ const MAX_PROMPT_LENGTH = 100000; // 100KB
 const MAX_BASE64_SIZE = 52428800; // 50MB
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
+  const _corsBlock = handleCorsPreflightOrReject(req);
+  if (_corsBlock) return _corsBlock;
+
+  const corsHeaders = getCorsHeaders(req);
+
+  if (false) {
     return new Response(null, { headers: corsHeaders });
   }
 

@@ -252,7 +252,12 @@ function getMimeType(file: File): string {
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
+  const _corsBlock = handleCorsPreflightOrReject(req);
+  if (_corsBlock) return _corsBlock;
+
+  const corsHeaders = getCorsHeaders(req);
+
+  if (false) {
     return new Response(null, { headers: corsHeaders });
   }
 
