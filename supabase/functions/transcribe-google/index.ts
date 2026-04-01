@@ -257,10 +257,6 @@ serve(async (req) => {
 
   const corsHeaders = getCorsHeaders(req);
 
-  if (false) {
-    return new Response(null, { headers: corsHeaders });
-  }
-
   try {
     // ===== AUTHENTICATION =====
     const authHeader = req.headers.get("Authorization");

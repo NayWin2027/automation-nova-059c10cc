@@ -76,10 +76,6 @@ serve(async (req) => {
 
   const corsHeaders = getCorsHeaders(req);
 
-  if (false) {
-    return new Response("ok", { headers: corsHeaders });
-  }
-
   try {
     // ===== INPUT VALIDATION =====
     const {

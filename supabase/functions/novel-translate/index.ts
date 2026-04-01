@@ -14,10 +14,6 @@ serve(async (req) => {
 
   const corsHeaders = getCorsHeaders(req);
 
-  if (false) {
-    return new Response(null, { headers: corsHeaders });
-  }
-
   try {
     // ===== INPUT VALIDATION (parse first for Own API bypass) =====
     const { prompt, targetLang, apiKey, fileData, customCreditCost } = await req.json();
