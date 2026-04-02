@@ -74,7 +74,7 @@ const AnnouncementBanner = () => {
     fetchAnnouncement();
   }, []);
 
-  if (!announcement || dismissed) return null;
+  if (!isAuthenticated || !announcement || dismissed) return null;
 
   const config = typeConfig[announcement.type] || typeConfig.info;
   const Icon = config.icon;
