@@ -128,6 +128,14 @@ const defaultTools = [
   gradient: "cyan" as const,
   route: "/creator"
 },
+{
+  id: "nova-cut-video",
+  icon: Scissors,
+  title: "Nova Cut Video",
+  description: "Video ကို မိနစ်ပိုင်း auto ဖြတ်တောက်ပေးခြင်း။",
+  gradient: "rose" as const,
+  route: "/nova-cut"
+},
 ];
 
 type Tool = (typeof defaultTools)[number];
