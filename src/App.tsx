@@ -50,6 +50,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        <AnnouncementBanner />
         <Suspense fallback={null}>
           <Routes>
             <Route path="/" element={<Index />} />
