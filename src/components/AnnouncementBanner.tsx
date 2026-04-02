@@ -49,6 +49,7 @@ const typeConfig: Record<string, {
 };
 
 const AnnouncementBanner = () => {
+  const { isAuthenticated } = useAuth();
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);
   const [dismissed, setDismissed] = useState(false);
 
