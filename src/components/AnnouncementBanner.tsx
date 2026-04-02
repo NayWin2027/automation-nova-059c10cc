@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { X, AlertTriangle, CheckCircle, Info, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 interface Announcement {
   id: string;
@@ -48,6 +49,7 @@ const typeConfig: Record<string, {
 };
 
 const AnnouncementBanner = () => {
+  const { isAuthenticated } = useAuth();
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);
   const [dismissed, setDismissed] = useState(false);
 
@@ -72,7 +74,7 @@ const AnnouncementBanner = () => {
     fetchAnnouncement();
   }, []);
 
-  if (!announcement || dismissed) return null;
+  if (!isAuthenticated || !announcement || dismissed) return null;
 
   const config = typeConfig[announcement.type] || typeConfig.info;
   const Icon = config.icon;
