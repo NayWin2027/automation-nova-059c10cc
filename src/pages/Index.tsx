@@ -21,7 +21,8 @@ import {
   Shield,
   Info,
   Sun,
-  Moon } from
+  Moon,
+  Scissors } from
 "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { ToolCard } from "@/components/ToolCard";
