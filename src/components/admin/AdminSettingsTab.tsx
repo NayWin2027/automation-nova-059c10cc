@@ -1080,7 +1080,3 @@ const AdminSettingsTab: React.FC = () => {
 };
 
 export default AdminSettingsTab;
-
-};
-
-export default AdminSettingsTab;
