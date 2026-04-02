@@ -114,7 +114,14 @@ const AdminSettingsTab: React.FC = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [activeSection, setActiveSection] = useState<'access' | 'branding' | 'tools' | 'security'>('access');
+  const [activeSection, setActiveSection] = useState<'access' | 'branding' | 'tools' | 'security' | 'announce'>('access');
+
+  const [announcementMsg, setAnnouncementMsg] = useState("");
+  const [announcementType, setAnnouncementType] = useState("info");
+  const [announcementActive, setAnnouncementActive] = useState(false);
+  const [announcementActionLabel, setAnnouncementActionLabel] = useState("");
+  const [announcementActionUrl, setAnnouncementActionUrl] = useState("");
+  const [announcementId, setAnnouncementId] = useState<string | null>(null);
 
   const [branding, setBranding] = useState<BrandingSettings>({
     appName: "MediaMaster",
