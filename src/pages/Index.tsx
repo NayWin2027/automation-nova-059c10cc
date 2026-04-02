@@ -21,7 +21,8 @@ import {
   Shield,
   Info,
   Sun,
-  Moon } from
+  Moon,
+  Scissors } from
 "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { ToolCard } from "@/components/ToolCard";
@@ -126,6 +127,14 @@ const defaultTools = [
   description: "မီဒီယာစီမံမှု ဖန်တီးခြင်း။",
   gradient: "cyan" as const,
   route: "/creator"
+},
+{
+  id: "nova-cut-video",
+  icon: Scissors,
+  title: "Nova Cut Video",
+  description: "Video ကို မိနစ်ပိုင်း auto ဖြတ်တောက်ပေးခြင်း။",
+  gradient: "rose" as const,
+  route: "/nova-cut"
 },
 ];
 
