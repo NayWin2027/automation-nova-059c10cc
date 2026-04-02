@@ -287,6 +287,42 @@ export type Database = {
         }
         Relationships: []
       }
+      site_announcements: {
+        Row: {
+          action_label: string | null
+          action_url: string | null
+          created_at: string | null
+          created_by: string | null
+          id: string
+          is_active: boolean
+          message: string
+          type: string
+          updated_at: string | null
+        }
+        Insert: {
+          action_label?: string | null
+          action_url?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          message: string
+          type?: string
+          updated_at?: string | null
+        }
+        Update: {
+          action_label?: string | null
+          action_url?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          message?: string
+          type?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       tool_settings: {
         Row: {
           created_at: string | null
