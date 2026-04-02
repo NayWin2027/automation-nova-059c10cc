@@ -961,7 +961,125 @@ const AdminSettingsTab: React.FC = () => {
            <TwoFactorSetup userId={user.id} />
          </div>
       }
+
+      {/* Announcement Section */}
+      {activeSection === 'announce' &&
+        <Card className="border-border/50 bg-card/50">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Megaphone className="w-4 h-4 text-primary" />
+              Site Announcement Banner
+            </CardTitle>
+            <CardDescription className="text-2xs">App အပေါ်ဆုံးမှာ ပြမယ့် announcement banner ထိန်းချုပ်ရန်</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="text-xs">Banner Active</Label>
+                <p className="text-2xs text-muted-foreground">ဖွင့်ထားရင် user များ မြင်ရမယ်</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <OnOffBadge checked={announcementActive} />
+                <Switch
+                  checked={announcementActive}
+                  onCheckedChange={setAnnouncementActive}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-2xs">Message</Label>
+              <Input
+                value={announcementMsg}
+                onChange={(e) => setAnnouncementMsg(e.target.value)}
+                placeholder="ကြေညာစာ ရေးပါ..."
+                className="h-8 text-xs"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-2xs">Type</Label>
+              <select
+                value={announcementType}
+                onChange={(e) => setAnnouncementType(e.target.value)}
+                className="w-full h-8 text-xs rounded-md border border-input bg-background px-3"
+              >
+                <option value="error">🔴 Error (Red)</option>
+                <option value="warning">🟡 Warning (Amber)</option>
+                <option value="info">🔵 Info (Blue)</option>
+                <option value="success">🟢 Success (Green)</option>
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-2xs">Action Button Label (optional)</Label>
+                <Input
+                  value={announcementActionLabel}
+                  onChange={(e) => setAnnouncementActionLabel(e.target.value)}
+                  placeholder="e.g. Learn More"
+                  className="h-8 text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-2xs">Action URL (optional)</Label>
+                <Input
+                  value={announcementActionUrl}
+                  onChange={(e) => setAnnouncementActionUrl(e.target.value)}
+                  placeholder="https://..."
+                  className="h-8 text-xs"
+                />
+              </div>
+            </div>
+
+            <Button
+              size="sm"
+              onClick={async () => {
+                setSaving(true);
+                const payload = {
+                  message: announcementMsg,
+                  type: announcementType,
+                  is_active: announcementActive,
+                  action_label: announcementActionLabel || null,
+                  action_url: announcementActionUrl || null,
+                  updated_at: new Date().toISOString(),
+                };
+
+                let error;
+                if (announcementId) {
+                  const res = await supabase
+                    .from('site_announcements')
+                    .update(payload)
+                    .eq('id', announcementId);
+                  error = res.error;
+                } else {
+                  const res = await supabase
+                    .from('site_announcements')
+                    .insert({ ...payload, created_by: user?.id || '' });
+                  error = res.error;
+                }
+
+                if (error) {
+                  toast({ title: "❌ သိမ်းမရပါ", description: error.message, variant: "destructive" });
+                } else {
+                  toast({ title: "✅ Announcement သိမ်းပြီး", description: "Banner အပြောင်းအလဲ အသက်ဝင်ပါပြီ" });
+                }
+                setSaving(false);
+              }}
+              disabled={saving || !announcementMsg.trim()}
+              className="w-full"
+            >
+              <Save className="w-3 h-3 mr-1" />
+              {saving ? "Saving..." : "Save Announcement"}
+            </Button>
+          </CardContent>
+        </Card>
+      }
     </div>);
+
+};
+
+export default AdminSettingsTab;
 
 };
 
