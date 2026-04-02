@@ -195,6 +195,23 @@ const AdminSettingsTab: React.FC = () => {
       setToolSettings(normalizedTools as ToolSetting[]);
     }
 
+    // Load announcement
+    const { data: ann } = await supabase
+      .from('site_announcements')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (ann) {
+      setAnnouncementId(ann.id);
+      setAnnouncementMsg(ann.message);
+      setAnnouncementType(ann.type);
+      setAnnouncementActive(ann.is_active);
+      setAnnouncementActionLabel(ann.action_label || "");
+      setAnnouncementActionUrl(ann.action_url || "");
+    }
+
     setLoading(false);
   };
 
