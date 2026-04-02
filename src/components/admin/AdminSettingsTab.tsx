@@ -337,9 +337,16 @@ const AdminSettingsTab: React.FC = () => {
           className={`px-3 py-1.5 rounded-md text-2xs font-medium transition-colors ${
           activeSection === 'branding' ? 'bg-card text-foreground' : 'text-muted-foreground hover:text-foreground'}`
           }>
-
           <Palette className="w-3 h-3 inline mr-1" />
           Branding
+        </button>
+        <button
+          onClick={() => setActiveSection('announce')}
+          className={`px-3 py-1.5 rounded-md text-2xs font-medium transition-colors ${
+          activeSection === 'announce' ? 'bg-card text-foreground' : 'text-muted-foreground hover:text-foreground'}`
+          }>
+          <Megaphone className="w-3 h-3 inline mr-1" />
+          Announcement
         </button>
       </div>
 
