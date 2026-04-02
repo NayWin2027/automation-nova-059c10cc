@@ -1,54 +1,59 @@
 
 
-## API Key Security & Web Protection — စစ်ဆေးချက်နှင့် Plan
+## Admin-Controlled Announcement Banner — Surgical Plan
 
-### စစ်ဆေးတွေ့ရှိချက်
+### ဘာလုပ်မလဲ
+Lovable ရဲ့ red notification banner စတိုင်လိုမျိုး — app ရဲ့ အပေါ်ဆုံးမှာ full-width announcement banner ပြမယ်။ Admin dashboard ကနေ:
+- Banner message ရေးထည့်နိုင်မယ်
+- Color/type ရွေးနိုင်မယ် (error=red, success=green, info=blue, warning=amber)
+- ဖွင့်/ပိတ် toggle လုပ်နိုင်မယ်
+- User ဘက်မှာ dismiss (X) button နဲ့ ပိတ်နိုင်မယ် (session-based)
 
-**API Key ပေါက်ကြားခြင်း ရှိ/မရှိ:**
-- ✅ API Key 3 ခု backend secrets ထဲမှာပဲ ရှိတယ်။ Frontend code ထဲ **လုံးဝ** မပါဘူး
-- ✅ Code editor တွေ (Claude, Cursor, Windsurf) ကနေ ပေါက်ကြားတာ **မဖြစ်နိုင်ဘူး** — အဲဒါတွေက Supabase secrets ကို access လုပ်လို့ မရဘူး
-- ❌ **ဒါပေမယ့်** Edge Function URLs ကို **ဘယ်သူမဆို** ဘယ် website ကနေမဆို တိုက်ရိုက်ခေါ်လို့ ရနေတယ် (`Access-Control-Allow-Origin: *`)
-
-**B1600 ကျတဲ့ အကြောင်းအရင်း (ဖြစ်နိုင်ခြေ အများဆုံး):**
-- Real user usage (TTS/Voice ကြီးကြီး သုံးရင် cost မြင့်တယ်)
-- ဒါပေမယ့် abuse ဖြစ်နိုင်ခြေလည်း ရှိတယ် — CORS `*` ကြောင့် ဘယ်သူမဆို edge function ကို direct call လုပ်နိုင်
-
----
-
-### Security Hardening Plan (Surgical Edits Only)
-
-**Edit 1: CORS Origin Restriction** — Edge Function 11 ခု
-- `Access-Control-Allow-Origin: *` ကို `https://color-magician-ai.lovable.app` နဲ့ preview URL ကိုပဲ allow ပေးမယ်
-- ဒါဆို တခြား website/script ကနေ Edge Function ကို call လို့ မရတော့ဘူး
-- ပြင်ရမယ့် functions: `gemini-tts`, `creator-ai`, `ai-chat`, `transcribe-google`, `transcribe`, `novel-translate`, `video-recap`, `recap-script-generator`, `transformative-transcribe`, `transformative-translate`, `promotion-tracking`
-- Admin functions (`admin-actions`, `admin-register`, `admin-2fa`) နဲ့ upload functions (`get-upload-url`, `upload-chunk`) ကို **မထိဘူး** (Golden Protection)
-
-**Edit 2: Shared CORS helper** — `_shared/cors.ts` file အသစ်
-- Allowed origins list ကို တစ်နေရာတည်းမှာ manage လုပ်ဖို့
-- `Origin` header ကို check ပြီး match မဖြစ်ရင် reject
-
-```text
-Request flow (before):
-  Any website → Edge Function → Gemini API (uses your key)
-
-Request flow (after):
-  Only your app → Edge Function → Gemini API
-  Other sites → 403 Forbidden
+### Database Change
+**New table: `site_announcements`**
+```sql
+CREATE TABLE public.site_announcements (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  message text NOT NULL,
+  type text NOT NULL DEFAULT 'info',  -- error, success, info, warning
+  is_active boolean NOT NULL DEFAULT true,
+  action_label text,        -- optional button text e.g. "Update payment"
+  action_url text,          -- optional button link
+  created_by text,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+ALTER TABLE public.site_announcements ENABLE ROW LEVEL SECURITY;
+-- Everyone can read active announcements
+CREATE POLICY "Anyone can read active announcements"
+  ON public.site_announcements FOR SELECT
+  USING (is_active = true);
 ```
 
-**Edit 3: Rate Limiting header** — Edge Functions
-- `X-RateLimit` response header ထည့်မယ် (informational)
-- Per-user rate limit check: user တစ်ယောက် 1 မိနစ်ထဲ request အများကြီး ပို့ရင် reject
+### Files to Create/Edit
 
-### ဘာကို မထိဘူး
-- API key rotation logic (`_shared/geminiKeys.ts`) — **မထိဘူး**
-- Auth flow, credit deduction, RLS policies — **မထိဘူး**
-- Protected blocks 4 ခု — **မထိဘူး**
-- Upload logic — **မထိဘူး**
-- Admin functions — **မထိဘူး**
+**1. New: `src/components/AnnouncementBanner.tsx`**
+- Fetches active announcement from `site_announcements`
+- Renders full-width sticky banner at top (like Lovable's screenshot)
+- Color variants: red (error), green (success), blue (info), amber (warning)
+- Premium glassmorphism + gradient styling
+- X button to dismiss (sessionStorage so it stays dismissed until refresh)
+- Optional action button
 
-### Files to Edit (Surgical)
-1. **New:** `supabase/functions/_shared/cors.ts` — origin validation helper
-2. **Edit:** 11 edge functions — import shared CORS, replace `*` with origin check
-3. **No other files touched**
+**2. Edit: `src/App.tsx`** (surgical — add banner above Routes)
+- Import `AnnouncementBanner`
+- Place it inside BrowserRouter, above Suspense/Routes
+
+**3. Edit: `src/components/admin/AdminSettingsTab.tsx`** (surgical — add announcement section)
+- New card section: "Site Announcement"
+- Text input for message
+- Dropdown for type (error/success/info/warning)
+- Toggle for active/inactive
+- Save button → upserts into `site_announcements`
+
+### ဘာမထိဘူး
+- Protected blocks 4 ခု — မထိဘူး
+- Auth flow, credit logic, RLS policies — မထိဘူး
+- Upload logic — မထိဘူး
+- Existing components — မထိဘူး
 
