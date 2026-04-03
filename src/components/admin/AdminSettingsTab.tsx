@@ -204,21 +204,21 @@ const AdminSettingsTab: React.FC = () => {
       setToolSettings(normalizedTools as ToolSetting[]);
     }
 
-    // Load announcement
-    const { data: ann } = await supabase
+    // Load announcements (all)
+    const { data: anns } = await supabase
       .from('site_announcements')
       .select('*')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .order('created_at', { ascending: false });
 
-    if (ann) {
-      setAnnouncementId(ann.id);
-      setAnnouncementMsg(ann.message);
-      setAnnouncementType(ann.type);
-      setAnnouncementActive(ann.is_active);
-      setAnnouncementActionLabel(ann.action_label || "");
-      setAnnouncementActionUrl(ann.action_url || "");
+    if (anns && anns.length > 0) {
+      setAnnouncementList(anns.map((a) => ({
+        id: a.id,
+        message: a.message,
+        type: a.type,
+        is_active: a.is_active,
+        action_label: a.action_label || "",
+        action_url: a.action_url || "",
+      })));
     }
 
     setLoading(false);
