@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Settings, Palette, Save, RefreshCw, Lock, Unlock, Crown,
-  Zap, Edit3, Gift, Key, Server, Shield, BookOpen, Megaphone } from
+  Zap, Edit3, Gift, Key, Server, Shield, BookOpen, Megaphone, X } from
 "lucide-react";
 import TierLimitsEditor from "./TierLimitsEditor";
 import type { TierLimits } from "@/hooks/useToolSettings";
