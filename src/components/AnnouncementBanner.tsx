@@ -17,6 +17,7 @@ const typeConfig: Record<string, {
   text: string;
   icon: typeof AlertTriangle;
   iconColor: string;
+  neonClass: string;
 }> = {
   error: {
     bg: "bg-gradient-to-r from-red-600/95 via-red-500/90 to-red-600/95 backdrop-blur-md",
@@ -24,6 +25,7 @@ const typeConfig: Record<string, {
     text: "text-white",
     icon: AlertCircle,
     iconColor: "text-red-200",
+    neonClass: "neon-pulse-red",
   },
   success: {
     bg: "bg-gradient-to-r from-emerald-600/95 via-emerald-500/90 to-emerald-600/95 backdrop-blur-md",
@@ -31,6 +33,7 @@ const typeConfig: Record<string, {
     text: "text-white",
     icon: CheckCircle,
     iconColor: "text-emerald-200",
+    neonClass: "neon-pulse-green",
   },
   warning: {
     bg: "bg-gradient-to-r from-amber-600/95 via-amber-500/90 to-amber-600/95 backdrop-blur-md",
@@ -38,6 +41,7 @@ const typeConfig: Record<string, {
     text: "text-white",
     icon: AlertTriangle,
     iconColor: "text-amber-200",
+    neonClass: "neon-pulse-amber",
   },
   info: {
     bg: "bg-gradient-to-r from-blue-600/95 via-blue-500/90 to-blue-600/95 backdrop-blur-md",
@@ -45,70 +49,85 @@ const typeConfig: Record<string, {
     text: "text-white",
     icon: Info,
     iconColor: "text-blue-200",
+    neonClass: "neon-pulse-blue",
   },
 };
 
 const AnnouncementBanner = () => {
   const { isAuthenticated } = useAuth();
-  const [announcement, setAnnouncement] = useState<Announcement | null>(null);
-  const [dismissed, setDismissed] = useState(false);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    const fetchAnnouncement = async () => {
+    const fetchAnnouncements = async () => {
       const { data } = await supabase
         .from("site_announcements")
         .select("id, message, type, action_label, action_url")
         .eq("is_active", true)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .order("created_at", { ascending: false });
 
       if (data) {
-        const wasDismissed = sessionStorage.getItem(`banner_dismissed_${data.id}`);
-        if (!wasDismissed) {
-          setAnnouncement(data);
-        }
+        const dismissed = new Set<string>();
+        const visible = data.filter((a) => {
+          const wasDismissed = sessionStorage.getItem(`banner_dismissed_${a.id}`);
+          if (wasDismissed) {
+            dismissed.add(a.id);
+            return false;
+          }
+          return true;
+        });
+        setDismissedIds(dismissed);
+        setAnnouncements(visible);
       }
     };
 
-    fetchAnnouncement();
+    fetchAnnouncements();
   }, []);
 
-  if (!isAuthenticated || !announcement || dismissed) return null;
+  if (!isAuthenticated || announcements.length === 0) return null;
 
-  const config = typeConfig[announcement.type] || typeConfig.info;
-  const Icon = config.icon;
-
-  const handleDismiss = () => {
-    sessionStorage.setItem(`banner_dismissed_${announcement.id}`, "1");
-    setDismissed(true);
+  const handleDismiss = (id: string) => {
+    sessionStorage.setItem(`banner_dismissed_${id}`, "1");
+    setAnnouncements((prev) => prev.filter((a) => a.id !== id));
   };
 
   return (
-    <div className={`relative w-full ${config.bg} ${config.border} shadow-lg z-50`}>
-      <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center justify-center gap-3">
-        <Icon className={`w-4 h-4 ${config.iconColor} shrink-0`} />
-        <p className={`text-sm font-medium ${config.text} text-center`}>
-          {announcement.message}
-        </p>
-        {announcement.action_label && announcement.action_url && (
-          <a
-            href={announcement.action_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="ml-2 px-3 py-1 rounded-md bg-white/20 hover:bg-white/30 text-white text-xs font-semibold transition-colors whitespace-nowrap"
+    <div className="w-full z-50">
+      {announcements.map((announcement) => {
+        const config = typeConfig[announcement.type] || typeConfig.info;
+        const Icon = config.icon;
+
+        return (
+          <div
+            key={announcement.id}
+            className={`relative w-full ${config.bg} ${config.border} shadow-lg announcement-neon-glow ${config.neonClass}`}
           >
-            {announcement.action_label}
-          </a>
-        )}
-        <button
-          onClick={handleDismiss}
-          className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md hover:bg-white/20 transition-colors"
-          aria-label="Dismiss"
-        >
-          <X className={`w-4 h-4 ${config.text}`} />
-        </button>
-      </div>
+            <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center justify-center gap-3">
+              <Icon className={`w-4 h-4 ${config.iconColor} shrink-0 announcement-icon-pulse`} />
+              <p className={`text-sm font-medium ${config.text} text-center`}>
+                {announcement.message}
+              </p>
+              {announcement.action_label && announcement.action_url && (
+                <a
+                  href={announcement.action_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-2 px-3 py-1 rounded-md bg-white/20 hover:bg-white/30 text-white text-xs font-semibold transition-colors whitespace-nowrap"
+                >
+                  {announcement.action_label}
+                </a>
+              )}
+              <button
+                onClick={() => handleDismiss(announcement.id)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md hover:bg-white/20 transition-colors"
+                aria-label="Dismiss"
+              >
+                <X className={`w-4 h-4 ${config.text}`} />
+              </button>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 };
