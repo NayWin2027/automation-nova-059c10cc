@@ -776,3 +776,82 @@
   0% { transform: translateX(-100%) rotate(45deg); }
   100% { transform: translateX(100%) rotate(45deg); }
 }
+
+/* ═══ Announcement Banner Neon Pulse Animations ═══ */
+.announcement-neon-glow {
+  position: relative;
+  overflow: hidden;
+  animation: announcement-breathe 2.5s ease-in-out infinite;
+}
+
+.announcement-neon-glow::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.15),
+    rgba(255, 255, 255, 0.25),
+    rgba(255, 255, 255, 0.15),
+    transparent
+  );
+  animation: announcement-sweep 3s ease-in-out infinite;
+}
+
+.announcement-icon-pulse {
+  animation: icon-neon-blink 1.5s ease-in-out infinite;
+}
+
+@keyframes announcement-breathe {
+  0%, 100% { opacity: 0.92; }
+  50% { opacity: 1; }
+}
+
+@keyframes announcement-sweep {
+  0% { left: -60%; }
+  100% { left: 120%; }
+}
+
+@keyframes icon-neon-blink {
+  0%, 100% { opacity: 0.7; filter: drop-shadow(0 0 2px currentColor); }
+  50% { opacity: 1; filter: drop-shadow(0 0 8px currentColor) drop-shadow(0 0 16px currentColor); }
+}
+
+/* Per-type neon glow */
+.neon-pulse-red {
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.4), 0 0 20px rgba(239, 68, 68, 0.15);
+  animation: announcement-breathe 2.5s ease-in-out infinite, neon-shadow-red 2s ease-in-out infinite;
+}
+.neon-pulse-green {
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.4), 0 0 20px rgba(16, 185, 129, 0.15);
+  animation: announcement-breathe 2.5s ease-in-out infinite, neon-shadow-green 2s ease-in-out infinite;
+}
+.neon-pulse-amber {
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.4), 0 0 20px rgba(245, 158, 11, 0.15);
+  animation: announcement-breathe 2.5s ease-in-out infinite, neon-shadow-amber 2s ease-in-out infinite;
+}
+.neon-pulse-blue {
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.4), 0 0 20px rgba(59, 130, 246, 0.15);
+  animation: announcement-breathe 2.5s ease-in-out infinite, neon-shadow-blue 2s ease-in-out infinite;
+}
+
+@keyframes neon-shadow-red {
+  0%, 100% { box-shadow: 0 0 6px rgba(239, 68, 68, 0.3), 0 0 12px rgba(239, 68, 68, 0.1); }
+  50% { box-shadow: 0 0 14px rgba(239, 68, 68, 0.6), 0 0 30px rgba(239, 68, 68, 0.25), 0 0 50px rgba(239, 68, 68, 0.1); }
+}
+@keyframes neon-shadow-green {
+  0%, 100% { box-shadow: 0 0 6px rgba(16, 185, 129, 0.3), 0 0 12px rgba(16, 185, 129, 0.1); }
+  50% { box-shadow: 0 0 14px rgba(16, 185, 129, 0.6), 0 0 30px rgba(16, 185, 129, 0.25), 0 0 50px rgba(16, 185, 129, 0.1); }
+}
+@keyframes neon-shadow-amber {
+  0%, 100% { box-shadow: 0 0 6px rgba(245, 158, 11, 0.3), 0 0 12px rgba(245, 158, 11, 0.1); }
+  50% { box-shadow: 0 0 14px rgba(245, 158, 11, 0.6), 0 0 30px rgba(245, 158, 11, 0.25), 0 0 50px rgba(245, 158, 11, 0.1); }
+}
+@keyframes neon-shadow-blue {
+  0%, 100% { box-shadow: 0 0 6px rgba(59, 130, 246, 0.3), 0 0 12px rgba(59, 130, 246, 0.1); }
+  50% { box-shadow: 0 0 14px rgba(59, 130, 246, 0.6), 0 0 30px rgba(59, 130, 246, 0.25), 0 0 50px rgba(59, 130, 246, 0.1); }
+}
