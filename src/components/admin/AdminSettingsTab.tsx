@@ -973,116 +973,185 @@ const AdminSettingsTab: React.FC = () => {
 
       {/* Announcement Section */}
       {activeSection === 'announce' &&
-        <Card className="border-border/50 bg-card/50">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-sm">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium flex items-center gap-2">
               <Megaphone className="w-4 h-4 text-primary" />
-              Site Announcement Banner
-            </CardTitle>
-            <CardDescription className="text-2xs">App အပေါ်ဆုံးမှာ ပြမယ့် announcement banner ထိန်းချုပ်ရန်</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="text-xs">Banner Active</Label>
-                <p className="text-2xs text-muted-foreground">ဖွင့်ထားရင် user များ မြင်ရမယ်</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <OnOffBadge checked={announcementActive} />
-                <Switch
-                  checked={announcementActive}
-                  onCheckedChange={setAnnouncementActive}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-2xs">Message</Label>
-              <Input
-                value={announcementMsg}
-                onChange={(e) => setAnnouncementMsg(e.target.value)}
-                placeholder="ကြေညာစာ ရေးပါ..."
-                className="h-8 text-xs"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-2xs">Type</Label>
-              <select
-                value={announcementType}
-                onChange={(e) => setAnnouncementType(e.target.value)}
-                className="w-full h-8 text-xs rounded-md border border-input bg-background px-3"
-              >
-                <option value="error">🔴 Error (Red)</option>
-                <option value="warning">🟡 Warning (Amber)</option>
-                <option value="info">🔵 Info (Blue)</option>
-                <option value="success">🟢 Success (Green)</option>
-              </select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-2xs">Action Button Label (optional)</Label>
-                <Input
-                  value={announcementActionLabel}
-                  onChange={(e) => setAnnouncementActionLabel(e.target.value)}
-                  placeholder="e.g. Learn More"
-                  className="h-8 text-xs"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-2xs">Action URL (optional)</Label>
-                <Input
-                  value={announcementActionUrl}
-                  onChange={(e) => setAnnouncementActionUrl(e.target.value)}
-                  placeholder="https://..."
-                  className="h-8 text-xs"
-                />
-              </div>
-            </div>
-
+              Site Announcements
+            </h3>
             <Button
               size="sm"
-              onClick={async () => {
-                setSaving(true);
-                const payload = {
-                  message: announcementMsg,
-                  type: announcementType,
-                  is_active: announcementActive,
-                  action_label: announcementActionLabel || null,
-                  action_url: announcementActionUrl || null,
-                  updated_at: new Date().toISOString(),
-                };
-
-                let error;
-                if (announcementId) {
-                  const res = await supabase
-                    .from('site_announcements')
-                    .update(payload)
-                    .eq('id', announcementId);
-                  error = res.error;
-                } else {
-                  const res = await supabase
-                    .from('site_announcements')
-                    .insert({ ...payload, created_by: user?.id || '' });
-                  error = res.error;
-                }
-
-                if (error) {
-                  toast({ title: "❌ သိမ်းမရပါ", description: error.message, variant: "destructive" });
-                } else {
-                  toast({ title: "✅ Announcement သိမ်းပြီး", description: "Banner အပြောင်းအလဲ အသက်ဝင်ပါပြီ" });
-                }
-                setSaving(false);
-              }}
-              disabled={saving || !announcementMsg.trim()}
-              className="w-full"
+              variant="outline"
+              onClick={() => setAnnouncementList([...announcementList, { ...emptyAnnouncement }])}
+              className="h-7 text-xs"
             >
-              <Save className="w-3 h-3 mr-1" />
-              {saving ? "Saving..." : "Save Announcement"}
+              + Add Announcement
             </Button>
-          </CardContent>
-        </Card>
+          </div>
+
+          {announcementList.length === 0 && (
+            <Card className="border-border/50 bg-card/50">
+              <CardContent className="py-8 text-center text-muted-foreground text-sm">
+                Announcement မရှိသေးပါ။ "+ Add Announcement" ကိုနှိပ်ပါ။
+              </CardContent>
+            </Card>
+          )}
+
+          {announcementList.map((ann, idx) => (
+            <Card key={ann.id || `new-${idx}`} className="border-border/50 bg-card/50">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-2">
+                    <Megaphone className="w-3.5 h-3.5 text-primary" />
+                    Announcement #{idx + 1}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                    onClick={async () => {
+                      if (ann.id) {
+                        await supabase.from('site_announcements').delete().eq('id', ann.id);
+                      }
+                      setAnnouncementList(announcementList.filter((_, i) => i !== idx));
+                      toast({ title: "🗑️ ဖျက်ပြီး" });
+                    }}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-xs">Active</Label>
+                    <p className="text-2xs text-muted-foreground">ဖွင့်/ပိတ်</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <OnOffBadge checked={ann.is_active} />
+                    <Switch
+                      checked={ann.is_active}
+                      onCheckedChange={(checked) => {
+                        const updated = [...announcementList];
+                        updated[idx] = { ...ann, is_active: checked };
+                        setAnnouncementList(updated);
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-2xs">Message</Label>
+                  <Input
+                    value={ann.message}
+                    onChange={(e) => {
+                      const updated = [...announcementList];
+                      updated[idx] = { ...ann, message: e.target.value };
+                      setAnnouncementList(updated);
+                    }}
+                    placeholder="ကြေညာစာ ရေးပါ..."
+                    className="h-8 text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-2xs">Type</Label>
+                  <select
+                    value={ann.type}
+                    onChange={(e) => {
+                      const updated = [...announcementList];
+                      updated[idx] = { ...ann, type: e.target.value };
+                      setAnnouncementList(updated);
+                    }}
+                    className="w-full h-8 text-xs rounded-md border border-input bg-background px-3"
+                  >
+                    <option value="error">🔴 Error (Red)</option>
+                    <option value="warning">🟡 Warning (Amber)</option>
+                    <option value="info">🔵 Info (Blue)</option>
+                    <option value="success">🟢 Success (Green)</option>
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-2xs">Action Label (optional)</Label>
+                    <Input
+                      value={ann.action_label}
+                      onChange={(e) => {
+                        const updated = [...announcementList];
+                        updated[idx] = { ...ann, action_label: e.target.value };
+                        setAnnouncementList(updated);
+                      }}
+                      placeholder="e.g. Learn More"
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-2xs">Action URL (optional)</Label>
+                    <Input
+                      value={ann.action_url}
+                      onChange={(e) => {
+                        const updated = [...announcementList];
+                        updated[idx] = { ...ann, action_url: e.target.value };
+                        setAnnouncementList(updated);
+                      }}
+                      placeholder="https://..."
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                </div>
+
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    setSavingAnnounceIdx(idx);
+                    const payload = {
+                      message: ann.message,
+                      type: ann.type,
+                      is_active: ann.is_active,
+                      action_label: ann.action_label || null,
+                      action_url: ann.action_url || null,
+                      updated_at: new Date().toISOString(),
+                    };
+
+                    let error;
+                    if (ann.id) {
+                      const res = await supabase
+                        .from('site_announcements')
+                        .update(payload)
+                        .eq('id', ann.id);
+                      error = res.error;
+                    } else {
+                      const res = await supabase
+                        .from('site_announcements')
+                        .insert({ ...payload, created_by: user?.id || '' })
+                        .select()
+                        .single();
+                      if (res.data) {
+                        const updated = [...announcementList];
+                        updated[idx] = { ...ann, id: res.data.id };
+                        setAnnouncementList(updated);
+                      }
+                      error = res.error;
+                    }
+
+                    if (error) {
+                      toast({ title: "❌ သိမ်းမရပါ", description: error.message, variant: "destructive" });
+                    } else {
+                      toast({ title: "✅ Announcement သိမ်းပြီး" });
+                    }
+                    setSavingAnnounceIdx(null);
+                  }}
+                  disabled={savingAnnounceIdx === idx || !ann.message.trim()}
+                  className="w-full"
+                >
+                  <Save className="w-3 h-3 mr-1" />
+                  {savingAnnounceIdx === idx ? "Saving..." : "Save"}
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       }
     </div>);
 
