@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
-import { RefreshCw, Users, TrendingUp, ChevronDown, ChevronUp } from "lucide-react";
+import { RefreshCw, Users, TrendingUp, ChevronDown, ChevronUp, CalendarDays, Calendar } from "lucide-react";
 
 interface AgentUser {
   email: string;
@@ -14,13 +14,7 @@ interface AgentUser {
   credits: number;
 }
 
-interface MonthData {
-  month: string; // e.g. "2026-03"
-  label: string; // e.g. "Mar 2026"
-  nwUsers: AgentUser[];
-  kysUsers: AgentUser[];
-  numericUsers: AgentUser[];
-}
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 const AGENT_COLORS = {
   nw: "bg-blue-500/20 text-blue-400 border-blue-500/30",
@@ -32,6 +26,8 @@ const AdminAgentSalesTab: React.FC = () => {
   const [allUsers, setAllUsers] = useState<AgentUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<"monthly" | "yearly">("monthly");
+  const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
+  const [selectedMonth, setSelectedMonth] = useState<string>(String(new Date().getMonth() + 1).padStart(2, "0"));
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
 
   const fetchUsers = async () => {
@@ -54,15 +50,12 @@ const AdminAgentSalesTab: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
+  useEffect(() => { fetchUsers(); }, []);
 
   const toggleSection = (key: string) => {
     setExpandedSections((prev) => {
       const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
+      if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
   };
@@ -74,58 +67,57 @@ const AdminAgentSalesTab: React.FC = () => {
     return "numeric";
   };
 
-  const getMonthKey = (dateStr: string) => {
-    const d = new Date(dateStr);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  };
-
-  const getYearKey = (dateStr: string) => {
-    return `${new Date(dateStr).getFullYear()}`;
-  };
-
-  const formatMonthLabel = (key: string) => {
-    const [year, month] = key.split("-");
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    return `${months[parseInt(month) - 1]} ${year}`;
-  };
-
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
-    return `${d.getDate()} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()]} ${d.getFullYear()}`;
+    return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
   };
 
-  const getGroupedData = () => {
-    const groups = new Map<string, { nw: AgentUser[]; kys: AgentUser[]; numeric: AgentUser[] }>();
+  // Available years from data
+  const availableYears = useMemo(() => {
+    const years = new Set(allUsers.map((u) => String(new Date(u.created_at).getFullYear())));
+    return Array.from(years).sort((a, b) => b.localeCompare(a));
+  }, [allUsers]);
 
-    allUsers.forEach((u) => {
-      const key = viewMode === "monthly" ? getMonthKey(u.created_at) : getYearKey(u.created_at);
-      if (!groups.has(key)) groups.set(key, { nw: [], kys: [], numeric: [] });
-      const cat = categorizeUser(u.email);
-      groups.get(key)![cat].push(u);
-    });
+  // Filtered users based on selection
+  const filteredData = useMemo(() => {
+    if (viewMode === "monthly") {
+      const filtered = allUsers.filter((u) => {
+        const d = new Date(u.created_at);
+        return String(d.getFullYear()) === selectedYear &&
+               String(d.getMonth() + 1).padStart(2, "0") === selectedMonth;
+      });
+      const groups = { nw: [] as AgentUser[], kys: [] as AgentUser[], numeric: [] as AgentUser[] };
+      filtered.forEach((u) => groups[categorizeUser(u.email)].push(u));
+      Object.values(groups).forEach((arr) => arr.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
+      return [{ key: `${selectedYear}-${selectedMonth}`, label: `${MONTHS[parseInt(selectedMonth) - 1]} ${selectedYear}`, ...groups }];
+    } else {
+      // Yearly: show all 12 months for selected year
+      const yearUsers = allUsers.filter((u) => String(new Date(u.created_at).getFullYear()) === selectedYear);
+      const monthGroups: { key: string; label: string; nw: AgentUser[]; kys: AgentUser[]; numeric: AgentUser[] }[] = [];
 
-    // Sort each group's users by created_at ascending
-    groups.forEach((g) => {
-      g.nw.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-      g.kys.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-      g.numeric.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-    });
+      for (let m = 12; m >= 1; m--) {
+        const mStr = String(m).padStart(2, "0");
+        const monthUsers = yearUsers.filter((u) => new Date(u.created_at).getMonth() + 1 === m);
+        if (monthUsers.length === 0) continue;
+        const groups = { nw: [] as AgentUser[], kys: [] as AgentUser[], numeric: [] as AgentUser[] };
+        monthUsers.forEach((u) => groups[categorizeUser(u.email)].push(u));
+        Object.values(groups).forEach((arr) => arr.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
+        monthGroups.push({ key: `${selectedYear}-${mStr}`, label: `${MONTHS[m - 1]} ${selectedYear}`, ...groups });
+      }
+      return monthGroups;
+    }
+  }, [allUsers, viewMode, selectedYear, selectedMonth]);
 
-    // Sort keys descending (newest first)
-    return Array.from(groups.entries()).sort((a, b) => b[0].localeCompare(a[0]));
-  };
-
-  const groupedData = getGroupedData();
-
-  // Grand totals
-  const totalNW = allUsers.filter((u) => categorizeUser(u.email) === "nw").length;
-  const totalKYS = allUsers.filter((u) => categorizeUser(u.email) === "kys").length;
-  const totalNumeric = allUsers.filter((u) => categorizeUser(u.email) === "numeric").length;
+  // Totals for the current view
+  const viewTotals = useMemo(() => {
+    let nw = 0, kys = 0, numeric = 0;
+    filteredData.forEach((g) => { nw += g.nw.length; kys += g.kys.length; numeric += g.numeric.length; });
+    return { nw, kys, numeric, total: nw + kys + numeric };
+  }, [filteredData]);
 
   const renderUserList = (users: AgentUser[], agentType: "nw" | "kys" | "numeric", sectionKey: string) => {
     const isExpanded = expandedSections.has(sectionKey);
     if (users.length === 0) return null;
-
     const agentLabels = { nw: "NW (Nay Win)", kys: "KYS (Ko Ye Swan)", numeric: "Numeric IDs" };
 
     return (
@@ -188,87 +180,125 @@ const AdminAgentSalesTab: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      {/* Summary Cards */}
+      {/* Summary Cards - Current View Totals */}
       <div className="grid grid-cols-3 gap-3">
-        <Card className="bg-card/60 border-blue-500/20">
+        <Card className="bg-card/60 border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.08)]">
           <CardContent className="p-3 text-center">
             <p className="text-2xs text-muted-foreground mb-1">NW Total</p>
-            <p className="text-xl font-bold text-blue-400">{totalNW}</p>
+            <p className="text-xl font-bold text-blue-400">{viewTotals.nw}</p>
             <p className="text-2xs text-muted-foreground">Nay Win</p>
           </CardContent>
         </Card>
-        <Card className="bg-card/60 border-emerald-500/20">
+        <Card className="bg-card/60 border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.08)]">
           <CardContent className="p-3 text-center">
             <p className="text-2xs text-muted-foreground mb-1">KYS Total</p>
-            <p className="text-xl font-bold text-emerald-400">{totalKYS}</p>
+            <p className="text-xl font-bold text-emerald-400">{viewTotals.kys}</p>
             <p className="text-2xs text-muted-foreground">Ko Ye Swan</p>
           </CardContent>
         </Card>
-        <Card className="bg-card/60 border-amber-500/20">
+        <Card className="bg-card/60 border-amber-500/20 shadow-[0_0_15px_rgba(245,158,11,0.08)]">
           <CardContent className="p-3 text-center">
             <p className="text-2xs text-muted-foreground mb-1">Numeric Total</p>
-            <p className="text-xl font-bold text-amber-400">{totalNumeric}</p>
+            <p className="text-xl font-bold text-amber-400">{viewTotals.numeric}</p>
             <p className="text-2xs text-muted-foreground">ID System</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Controls */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Select value={viewMode} onValueChange={(v) => setViewMode(v as "monthly" | "yearly")}>
-            <SelectTrigger className="w-[130px] h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="monthly">Monthly</SelectItem>
-              <SelectItem value="yearly">Yearly</SelectItem>
-            </SelectContent>
-          </Select>
-          <Badge variant="secondary" className="text-2xs">
-            Total: {allUsers.length} agents
-          </Badge>
-        </div>
-        <Button variant="outline" size="sm" onClick={fetchUsers} disabled={loading} className="h-8 text-xs gap-1.5">
-          <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
-      </div>
+      <Card className="bg-card/60 border-primary/10">
+        <CardContent className="p-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* View Mode */}
+            <Select value={viewMode} onValueChange={(v) => setViewMode(v as "monthly" | "yearly")}>
+              <SelectTrigger className="w-[120px] h-8 text-xs bg-secondary/30 border-border/50">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="monthly"><div className="flex items-center gap-1.5"><CalendarDays className="w-3 h-3" />Monthly</div></SelectItem>
+                <SelectItem value="yearly"><div className="flex items-center gap-1.5"><Calendar className="w-3 h-3" />Yearly</div></SelectItem>
+              </SelectContent>
+            </Select>
 
-      {/* Grouped Data */}
+            {/* Year Selector */}
+            <Select value={selectedYear} onValueChange={setSelectedYear}>
+              <SelectTrigger className="w-[100px] h-8 text-xs bg-secondary/30 border-border/50">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(availableYears.length > 0 ? availableYears : [String(new Date().getFullYear())]).map((y) => (
+                  <SelectItem key={y} value={y}>{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Month Selector (only in monthly mode) */}
+            {viewMode === "monthly" && (
+              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                <SelectTrigger className="w-[110px] h-8 text-xs bg-secondary/30 border-border/50">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MONTHS.map((m, i) => (
+                    <SelectItem key={i} value={String(i + 1).padStart(2, "0")}>{m}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {/* Grand Total Badge */}
+            <Badge className="text-2xs bg-gradient-to-r from-primary/20 to-accent/20 text-primary border border-primary/30 shadow-[0_0_8px_rgba(168,85,247,0.15)]">
+              ✦ Total: {viewTotals.total}
+            </Badge>
+
+            <div className="ml-auto">
+              <Button variant="outline" size="sm" onClick={fetchUsers} disabled={loading} className="h-8 text-xs gap-1.5">
+                <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Data */}
       {loading ? (
         <div className="flex items-center justify-center py-12">
           <RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" />
         </div>
-      ) : groupedData.length === 0 ? (
-        <Card className="bg-card/60">
+      ) : filteredData.length === 0 || viewTotals.total === 0 ? (
+        <Card className="bg-card/60 border-border/30">
           <CardContent className="p-8 text-center">
             <Users className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-            <p className="text-sm text-muted-foreground">No agent users found</p>
+            <p className="text-sm text-muted-foreground">
+              {viewMode === "monthly"
+                ? `${MONTHS[parseInt(selectedMonth) - 1]} ${selectedYear} မှာ agent user မရှိပါ`
+                : `${selectedYear} မှာ agent user မရှိပါ`}
+            </p>
           </CardContent>
         </Card>
       ) : (
-        groupedData.map(([key, data]) => {
-          const periodLabel = viewMode === "monthly" ? formatMonthLabel(key) : key;
-          const periodTotal = data.nw.length + data.kys.length + data.numeric.length;
+        filteredData.map((group) => {
+          const periodTotal = group.nw.length + group.kys.length + group.numeric.length;
+          if (periodTotal === 0) return null;
 
           return (
-            <Card key={key} className="bg-card/60 border-border/50">
+            <Card key={group.key} className="bg-card/60 border-border/50 shadow-[0_0_20px_rgba(168,85,247,0.04)]">
               <CardHeader className="pb-2 pt-3 px-4">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm font-bold text-foreground flex items-center gap-2">
                     <TrendingUp className="w-4 h-4 text-primary" />
-                    {periodLabel}
+                    {group.label}
                   </CardTitle>
                   <div className="flex items-center gap-1.5">
-                    {data.nw.length > 0 && (
-                      <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.nw}`}>NW: {data.nw.length}</Badge>
+                    {group.nw.length > 0 && (
+                      <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.nw}`}>NW: {group.nw.length}</Badge>
                     )}
-                    {data.kys.length > 0 && (
-                      <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.kys}`}>KYS: {data.kys.length}</Badge>
+                    {group.kys.length > 0 && (
+                      <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.kys}`}>KYS: {group.kys.length}</Badge>
                     )}
-                    {data.numeric.length > 0 && (
-                      <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.numeric}`}>NUM: {data.numeric.length}</Badge>
+                    {group.numeric.length > 0 && (
+                      <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.numeric}`}>NUM: {group.numeric.length}</Badge>
                     )}
                     <Badge className="text-2xs bg-primary/20 text-primary border-primary/30">
                       Total: {periodTotal}
@@ -277,9 +307,9 @@ const AdminAgentSalesTab: React.FC = () => {
                 </div>
               </CardHeader>
               <CardContent className="px-4 pb-3">
-                {renderUserList(data.nw, "nw", `${key}-nw`)}
-                {renderUserList(data.kys, "kys", `${key}-kys`)}
-                {renderUserList(data.numeric, "numeric", `${key}-numeric`)}
+                {renderUserList(group.nw, "nw", `${group.key}-nw`)}
+                {renderUserList(group.kys, "kys", `${group.key}-kys`)}
+                {renderUserList(group.numeric, "numeric", `${group.key}-numeric`)}
               </CardContent>
             </Card>
           );
