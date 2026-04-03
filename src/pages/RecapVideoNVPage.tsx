@@ -1892,6 +1892,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             ? subSettings.neonColorOverride
             : `hsl(${neonHue}, 100%, 80%)`;
 
+          const strokeScale = 1;
+          const glowScale = 1;
           // ── BOX BORDER: Premium Neon glow on subtitle background box ──
           ctx.lineJoin = "miter";
           ctx.strokeStyle = neonBase;
