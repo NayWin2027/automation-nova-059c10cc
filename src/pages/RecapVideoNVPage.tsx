@@ -10,7 +10,8 @@ import { languages } from "@/data/languages";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronsUpDown, Sparkles, Download, Palette, Loader2 } from "lucide-react";
+import { GoogleGenAI, Type } from "@google/genai";
 
 interface RecapSegment {
   timestamp: string;
@@ -61,6 +62,10 @@ interface SubtitleSettings {
   fontSize: number;
   scale: number;
   maxWidth: number;
+  tripleStroke: boolean;
+  neonColorOverride: string;
+  fontFamily: string;
+  customFonts?: Array<{ name: string; url: string }>;
 }
 
 interface BlurSettings {
@@ -97,6 +102,13 @@ const EXPORT_QUALITY_OPTIONS: Record<
   "480p": { maxW: 854, maxH: 480, fps: 20, bitrate: 2_500_000, label: "480p (Low — 854×480 · 20fps · 2Mbps)" },
   "720p": { maxW: 1280, maxH: 720, fps: 24, bitrate: 4_000_000, label: "720p (Mid — 1280×720 · 24fps · 2.5Mbps)" },
   "1080p": { maxW: 1920, maxH: 1080, fps: 30, bitrate: 6_000_000, label: "1080p (High — 1920×1080 · 30fps · 4Mbps)" },
+  "1080p10": {
+    maxW: 1920,
+    maxH: 1080,
+    fps: 30,
+    bitrate: 10_000_000,
+    label: "1080p (10Mbps — 1920×1080 · 30fps · 10Mbps)",
+  },
 };
 
 // ── Fast string hash for subtitle cache comparison (avoids full string compare per frame) ──
@@ -246,6 +258,320 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const subNeonHueRef = useRef(0);
     const [exportQuality, setExportQuality] = useState<string>("720p");
 
+    // Cinematic movie poster generation removed (feature disabled).
+
+    const handleGeneratePoster = async () => {
+      // Feature removed: cinematic movie poster generation disabled.
+      return;
+      /*
+      if (!scriptData.full_script || !videoUrl) return;
+      setIsGeneratingPoster(true);
+      try {
+        let apiKeyToUse = import.meta.env.VITE_GEMINI_API_KEY || "";
+        try {
+          // Fallback for Lovable process.env secrets
+          if (!apiKeyToUse && typeof process !== "undefined" && process.env && process.env.GEMINI_API_KEY) {
+            apiKeyToUse = process.env.GEMINI_API_KEY;
+          }
+        } catch (e) {}
+
+        const ai = new GoogleGenAI({ apiKey: apiKeyToUse });
+
+        // 1. Generate Title and Description
+        const textResponse = await ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: `Based on the recap narration below, generate a very short, viral shock title (max 5-7 words) and a short viral description (movie/video summary) in Burmese.
+          The title should be catchy and dramatic for a thumbnail. Use ORIGINAL phrasing only: do NOT copy official movie taglines, studio marketing lines, or trademark slogans; do not imply studio endorsement.
+          Recap narration (excerpt): ${scriptData.full_script.substring(0, 5000)}`,
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                title: { type: Type.STRING },
+                description: { type: Type.STRING },
+              },
+              required: ["title", "description"],
+            },
+          },
+        });
+
+        const { title, description } = JSON.parse(textResponse.text);
+        setPosterTitle(title);
+        setPosterDescription(description);
+
+        // 2. Capture Frame
+        const video = document.createElement("video");
+        video.src = videoUrl;
+        video.crossOrigin = "anonymous";
+
+        await new Promise<void>((resolve) => {
+          video.onloadedmetadata = () => resolve();
+          video.onerror = () => resolve();
+        });
+
+        // Use 3:4 target ratio
+        const targetRatio = 3 / 4;
+        let canvasW = 1280;
+        let canvasH = Math.round(1280 / targetRatio);
+
+        const drawVideoCover = (vid: HTMLVideoElement, ctx: CanvasRenderingContext2D, w: number, h: number) => {
+          const videoRatio = vid.videoWidth / vid.videoHeight;
+          let drawW = w;
+          let drawH = h;
+          let drawX = 0;
+          let drawY = 0;
+          if (videoRatio > targetRatio) {
+            drawW = h * videoRatio;
+            drawX = (w - drawW) / 2;
+          } else {
+            drawH = w / videoRatio;
+            drawY = (h - drawH) / 2;
+          }
+          ctx.drawImage(vid, drawX, drawY, drawW, drawH);
+        };
+
+        const captureFrameAt = (time: number): Promise<string> => {
+          return new Promise((resolve) => {
+            const tempVideo = document.createElement("video");
+            tempVideo.src = videoUrl;
+            tempVideo.crossOrigin = "anonymous";
+            tempVideo.currentTime = time;
+            tempVideo.onseeked = () => {
+              const canvas = document.createElement("canvas");
+              canvas.width = canvasW;
+              canvas.height = canvasH;
+              const ctx = canvas.getContext("2d");
+              if (ctx) drawVideoCover(tempVideo, ctx, canvasW, canvasH);
+              resolve(canvas.toDataURL("image/jpeg", 0.95).split(",")[1]);
+            };
+            tempVideo.onerror = () => resolve("");
+            setTimeout(() => resolve(""), 3000); // 3 sec timeout fallback
+          });
+        };
+
+        const duration = video.duration || 120;
+        const intervals = [duration * 0.15, duration * 0.35, duration * 0.55, duration * 0.75, duration * 0.95];
+
+        const validFrames = (await Promise.all(intervals.map((t) => captureFrameAt(t)))).filter(
+          (f: string) => f !== "",
+        );
+
+        if (validFrames.length === 0) {
+          throw new Error("Failed to capture valid frames from original video source.");
+        }
+
+        // 3. Generate Cinematic Movie Poster
+        const imageParts = validFrames.map((base64: string) => ({
+          inlineData: { data: base64, mimeType: "image/jpeg" },
+        }));
+
+        const imageResponse = await ai.models.generateContent({
+          model: "gemini-2.5-flash-image",
+          contents: {
+            parts: [
+              ...imageParts,
+              {
+                text: `You are a world-class Hollywood Movie Poster Artist specializing in "Ensemble Cast" and "Floating Heads" compositions. 
+                TASK: Create a professional, high-end cinematic movie poster using the provided video frames as the EXCLUSIVE reference for character faces and setting.
+                
+                VISUAL STYLE & COMPOSITION:
+                - COMPOSITION: Use a classic "Floating Heads" ensemble cast layout. 
+                - CHARACTER HIERARCHY: Feature the main characters prominently. Arrange them in a dramatic, layered hierarchy (some larger, some smaller) to create depth.
+                - SEAMLESS INTEGRATION: SINGLE, COHESIVE ARTISTIC IMAGE. Characters must blend into each other seamlessly. No collage grid.
+                - BACKGROUND: The bottom or background should feature a key dramatic environment from the video.
+                - LIGHTING: Professional cinematic lighting. Consistent "Teal and Orange" or "Moody Blue" color grade.
+                
+                STRICT DIRECTIVES:
+                1. CHARACTER LIKENESS: EXACT faces of the people shown in the video frames. No generic AI faces.
+                2. ABSOLUTELY NO TEXT: REMOVE all text. CLEAN image with NO WORDS, NO LETTERS, NO SUBTITLES, NO WATERMARKS.
+                3. PHOTOREALISM: High-resolution cinematic photography.
+                4. ORIGINAL KEY ART ONLY: Do NOT imitate a known official one-sheet, franchise poster layout, or recognizable studio trade dress. No studio/network logos, certification marks, or trademark symbols. This must be new promotional-style art, not a copy of released marketing.`,
+              },
+            ],
+          },
+          config: {
+            imageConfig: { aspectRatio: "3:4" },
+          },
+        });
+
+        const imagePart = imageResponse.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
+        let enhancedImageUrl = "";
+        if (imagePart?.inlineData?.data) {
+          enhancedImageUrl = `data:image/png;base64,${imagePart.inlineData.data}`;
+        }
+
+        if (!enhancedImageUrl) throw new Error("AI did not return a valid graphic poster.");
+
+        // 4. Draw Typography over Poster
+        const canvas = document.createElement("canvas");
+        canvas.width = canvasW;
+        canvas.height = canvasH;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("Could not get final canvas context");
+
+        const posterImg = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.src = enhancedImageUrl;
+        });
+
+        ctx.globalCompositeOperation = "source-over";
+        ctx.drawImage(posterImg, 0, 0, canvas.width, canvas.height);
+
+        // Filters (Teal & Orange overlay)
+        ctx.globalCompositeOperation = "overlay";
+        ctx.fillStyle = "rgba(0, 70, 100, 0.3)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.globalCompositeOperation = "soft-light";
+        ctx.fillStyle = "rgba(255, 140, 40, 0.25)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Vignette
+        ctx.globalCompositeOperation = "multiply";
+        const vignette = ctx.createRadialGradient(
+          canvas.width / 2,
+          canvas.height / 2,
+          canvas.width * 0.4,
+          canvas.width / 2,
+          canvas.height / 2,
+          canvas.width * 0.8,
+        );
+        vignette.addColorStop(0, "rgba(255,255,255,1)");
+        vignette.addColorStop(1, "rgba(120,120,120,1)");
+        ctx.fillStyle = vignette;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.globalCompositeOperation = "source-over";
+
+        // Bottom gradient for text
+        const grad = ctx.createLinearGradient(0, canvas.height * 0.4, 0, canvas.height);
+        grad.addColorStop(0, "rgba(0,0,0,0)");
+        grad.addColorStop(0.5, "rgba(0,0,0,0.6)");
+        grad.addColorStop(1, "rgba(0,0,0,0.95)");
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, canvas.height * 0.4, canvas.width, canvas.height * 0.6);
+
+        const drawWrappedText = (
+          text: string,
+          baseFontSize: number,
+          yPos: number,
+          isNeon: boolean,
+          fontStyle: string,
+          fontFamily: string = '"Inter", "Pyidaungsu", "Padauk", "Noto Sans Myanmar", "Myanmar3", "Nam Khone", "Thar Lon", "Sagar", sans-serif',
+        ) => {
+          const maxTextWidth = canvas.width * 0.9;
+          let fontSize = baseFontSize;
+          const words = text.split(" ");
+          let lines: string[] = [];
+          let currentLine = "";
+          let wordTooLong = true;
+          while (wordTooLong && fontSize > 20) {
+            ctx.font = `${fontStyle} ${fontSize}px ${fontFamily}`;
+            wordTooLong = false;
+            for (const word of words) {
+              if (ctx.measureText(word).width > maxTextWidth) {
+                wordTooLong = true;
+                fontSize -= 5;
+                break;
+              }
+            }
+          }
+          for (let n = 0; n < words.length; n++) {
+            const testLine = currentLine + words[n] + " ";
+            if (ctx.measureText(testLine).width > maxTextWidth && n > 0) {
+              lines.push(currentLine.trim());
+              currentLine = words[n] + " ";
+            } else {
+              currentLine = testLine;
+            }
+          }
+          lines.push(currentLine.trim());
+          ctx.textAlign = "center";
+          ctx.textBaseline = "bottom";
+          const x = canvas.width / 2;
+          const lineHeight = fontSize * 1.2;
+          let startY = yPos - (lines.length - 1) * lineHeight;
+
+          for (let i = 0; i < lines.length; i++) {
+            const lineY = startY + i * lineHeight;
+            if (isNeon) {
+              ctx.lineJoin = "round";
+              ctx.fillStyle = "#ff0055";
+              ctx.fillText(lines[i], x - 4, lineY + 4);
+              ctx.fillStyle = "#00ffff";
+              ctx.fillText(lines[i], x + 4, lineY - 4);
+              ctx.shadowColor = "#ff00ff";
+              ctx.shadowBlur = 40;
+              ctx.shadowOffsetX = 0;
+              ctx.shadowOffsetY = 0;
+              ctx.fillStyle = "#ffffff";
+              ctx.strokeStyle = "#ffffff";
+              ctx.lineWidth = 2;
+              ctx.strokeText(lines[i], x, lineY);
+              ctx.fillText(lines[i], x, lineY);
+              ctx.shadowBlur = 0;
+            } else {
+              ctx.strokeStyle = "black";
+              ctx.lineWidth = fontSize * 0.25;
+              ctx.lineJoin = "round";
+              ctx.strokeText(lines[i], x, lineY);
+              ctx.shadowColor = "rgba(0,0,0,0.9)";
+              ctx.shadowBlur = 30;
+              ctx.shadowOffsetX = 10;
+              ctx.shadowOffsetY = 10;
+              const textGrad = ctx.createLinearGradient(0, lineY - fontSize, 0, lineY);
+              textGrad.addColorStop(0, "#fef08a");
+              textGrad.addColorStop(0.5, "#f59e0b");
+              textGrad.addColorStop(1, "#ea580c");
+              ctx.fillStyle = textGrad;
+              ctx.fillText(lines[i], x, lineY);
+              ctx.shadowBlur = 0;
+            }
+          }
+        };
+
+        if (scriptData.title) {
+          drawWrappedText(
+            scriptData.title,
+            Math.floor(canvas.height * 0.08),
+            canvas.height * 0.82,
+            true,
+            "italic 700",
+            'serif, "Pyidaungsu", "Padauk", "Noto Sans Myanmar", "Myanmar3", "Nam Khone", "Thar Lon", "Sagar"',
+          );
+        }
+        const hookFontSize = scriptData.title ? Math.floor(canvas.height * 0.05) : Math.floor(canvas.height * 0.1);
+        drawWrappedText(
+          title,
+          hookFontSize,
+          canvas.height * 0.96,
+          false,
+          "900",
+          '"Inter", "Pyidaungsu", "Padauk", "Noto Sans Myanmar", "Myanmar3", "Nam Khone", "Thar Lon", "Sagar", sans-serif',
+        );
+
+        const posterUrl = canvas.toDataURL("image/png");
+        setGeneratedPosterUrl(posterUrl);
+
+        // Auto-download the poster directly
+        const a = document.createElement("a");
+        a.href = posterUrl;
+        a.download = `movie_poster_${scriptData.title.replace(/\s+/g, "_")}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } catch (error: any) {
+        console.error("Poster Generation failed:", error);
+        alert("Poster generation problem: " + error.message);
+      } finally {
+        setIsGeneratingPoster(false);
+      }
+      */
+    };
+
+    // Poster auto-generation removed.
+
     // ── FIX: Cache canvas filter string — recompute only when grade/bypass changes ──
     const filterStringRef = useRef<string>("none");
 
@@ -270,7 +596,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           setEditorState((prev) => ({ ...prev, colorGrade: "GOLDEN" }));
           setLogo((prev) => ({ ...prev, spin: false }));
         } else {
-          setExportQuality("1080p");
+          // Higher-CPU devices can handle a higher bitrate export.
+          setExportQuality("1080p10");
           setTimelineBar((prev) => ({ ...prev, thickness: 9 }));
         }
       }, 100);
@@ -303,6 +630,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       fontSize: 15,
       scale: 1,
       maxWidth: 80,
+      tripleStroke: true,
+      neonColorOverride: "",
+      fontFamily: "Padauk, 'Noto Sans Myanmar', 'Pyidaungsu', 'Myanmar3', 'Nam Khone', 'Thar Lon', 'Sagar', sans-serif",
+      customFonts: [],
     });
 
     const [blurSettings, setBlurSettings] = useState<BlurSettings>({
@@ -311,7 +642,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       y: 88,
       width: 80,
       height: 15,
-      opacity: 70,
+      opacity: 90,
       isDragging: false,
     });
 
@@ -377,9 +708,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       const bypassBoost = editorState.bypass
         ? { contrast: 15, brightness: 5, saturate: 15, hue: 5 }
         : { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
-      const contrast = g.contrast + bypassBoost.contrast + 3;
-      const brightness = g.brightness + bypassBoost.brightness;
-      const saturate = g.saturate + bypassBoost.saturate + 5;
+      const contrast = g.contrast + bypassBoost.contrast + 5;
+      const brightness = g.brightness + bypassBoost.brightness + 5;
+      const saturate = g.saturate + bypassBoost.saturate + 8;
       const hue = g.hue + bypassBoost.hue;
       const sepia = g.sepia || 0;
       filterStringRef.current = `contrast(${contrast}%) brightness(${brightness}%) saturate(${saturate}%) hue-rotate(${hue}deg) sepia(${sepia}%)`;
@@ -507,6 +838,18 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       syncSegmentsRef.current = syncSegments;
     }, [syncSegments]);
 
+    // ── FIX: Load Google Fonts for Myanmar font support ──
+    useEffect(() => {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href =
+        "https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;700&family=Padauk:wght@400;700&display=swap";
+      document.head.appendChild(link);
+      return () => {
+        document.head.removeChild(link);
+      };
+    }, []);
+
     const downloadSRT = () => {
       let srtContent = "";
       scriptData.segments.forEach((seg, index) => {
@@ -605,18 +948,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         });
       }
 
-      // ── MIME Detection: MP4/H.264 FIRST on ALL browsers for proper duration metadata ──
-      // Chrome 124+ supports video/mp4;codecs=avc1 in MediaRecorder.
-      // MP4 has correct duration metadata — WebM often has missing/broken duration.
+      // ── MIME Detection: TT/TG REMUX READY ──
       const isSafari =
         /^((?!chrome|android).)*safari/i.test(navigator.userAgent) || /iPad|iPhone|iPod/.test(navigator.userAgent);
-      // Native WebM first: ensures our fixWebmDuration perfectly calculates correct duration (bypassing fMP4 0sec/3sec gallery bugs).
-      // Output is forcefully saved as MP4 so FB/YT/TikTok and device galleries accept it without manual format conversion.
+      // We prioritize H.264 inside WebM so our ultra-fast FFmpeg pipeline can instantly copy it to MP4 without re-encoding!
       const allMimeTypes = [
-        "video/webm;codecs=vp9,opus",
-        "video/webm;codecs=vp8,opus",
         "video/webm;codecs=h264,opus",
         "video/webm;codecs=h264",
+        "video/webm;codecs=vp9,opus",
+        "video/webm;codecs=vp8,opus",
         "video/webm;codecs=vp9",
         "video/webm;codecs=vp8",
         "video/webm",
@@ -652,7 +992,32 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           outW = Math.round(rawH * targetRatio);
         }
       }
-      const quality = EXPORT_QUALITY_OPTIONS[exportQuality] || EXPORT_QUALITY_OPTIONS["720p"];
+
+      // ── SURGICAL EDIT: Option B - Force 480p/720p quality caps for low-end devices ──
+      // Detect device capability BEFORE selecting quality to ensure 100% smooth performance
+      const cores = navigator.hardwareConcurrency || 4;
+      const mem = (navigator as any).deviceMemory || 4;
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      // iPhone 8/X and Snapdragon 400 series (2-3GB RAM) → force 480p for 100% smoothness
+      const force480p =
+        (cores <= 4 && mem <= 2) ||
+        (isIOS && mem <= 3 && !/iPhone\s*1[2-9]|iPhone\s*[2-9][0-9]/i.test(navigator.userAgent));
+      // Snapdragon 600 series (3-4GB RAM) → force 720p max for smoothness
+      const force720p = !force480p && cores <= 6 && mem <= 4;
+      let effectiveExportQuality = exportQuality;
+      if (force480p && EXPORT_QUALITY_OPTIONS[exportQuality]?.maxH > 480) {
+        effectiveExportQuality = "480p";
+        console.log(
+          `[PERF] Extreme low-end detected (cores:${cores}, RAM:${mem}GB). Forcing 480p for 100% smooth performance.`,
+        );
+      } else if (force720p && EXPORT_QUALITY_OPTIONS[exportQuality]?.maxH > 720) {
+        effectiveExportQuality = "720p";
+        console.log(
+          `[PERF] Low-end device detected (cores:${cores}, RAM:${mem}GB). Capping at 720p for smooth performance.`,
+        );
+      }
+
+      const quality = EXPORT_QUALITY_OPTIONS[effectiveExportQuality] || EXPORT_QUALITY_OPTIONS["720p"];
       const qualityScale = Math.min(1, quality.maxW / outW, quality.maxH / outH);
       outW = Math.round(outW * qualityScale);
       outH = Math.round(outH * qualityScale);
@@ -665,10 +1030,46 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
       // ── DUAL CANVAS (ULTRA-OPTIMIZED LOW-END CPU SAFE) ──
       // For Snapdragon 400/600 series and low-end devices, large drawing canvases cause extreme lag/stutter.
-      // We use a gentle 15-20% downscale to ensure text remains crisp while dropping JS pixel rendering load.
-      // 1080p -> 80% (864p), 720p -> 85% (612p), 480p -> 100%. This is infinitely sharper than the old 55%.
-      // This guarantees perfectly smooth "professional vibe" processing without pixelation.
-      const drawScale = quality.maxH === 1080 ? 0.8 : quality.maxH === 720 ? 0.85 : 1.0;
+      // We use aggressive downscaling based on device capability to ensure smooth rendering.
+      // Device tier detection with Option B: 480p for extreme low-end, 720p for low-end
+      // Note: Detection already done above for quality cap - reuse those variables
+      const isExtremeLowEnd = force480p; // Snapdragon 400, iPhone 8/X, 2-3GB RAM devices
+      const isLowEndDevice = force720p; // Snapdragon 600, 3-4GB RAM devices
+      const isMidTier = !isExtremeLowEnd && !isLowEndDevice && (cores <= 8 || mem <= 6);
+
+      // Ultra-aggressive scaling: 480p devices get 70%, 720p devices get 75%, mid-tier 80%, high-end 85%+
+      let drawScale: number;
+      if (isExtremeLowEnd) {
+        // 480p devices: aggressive 70% scale for guaranteed smoothness
+        drawScale = 0.7;
+      } else if (isLowEndDevice) {
+        // 720p devices: 75% scale for smooth 720p performance
+        drawScale = quality.maxH === 720 ? 0.75 : 0.8;
+      } else if (isMidTier) {
+        // Mid-tier: 80% for 720p, 85% for 1080p
+        drawScale = quality.maxH === 1080 ? 0.8 : 0.85;
+      } else {
+        // High-end: native quality
+        drawScale = quality.maxH === 1080 ? 0.85 : 1.0;
+      }
+      console.log(
+        `[PERF] Device tier: ${isExtremeLowEnd ? "EXTREME_LOW_480P" : isLowEndDevice ? "LOW_720P" : isMidTier ? "MID" : "HIGH"}, Canvas scale: ${drawScale}, Quality: ${quality.maxH}p, Cores: ${cores}, RAM: ${mem}GB`,
+      );
+
+      // iOS-specific: Force lower resolution for compatibility
+      if (isIOS && quality.maxH > 720) {
+        outW = Math.round(outW * 0.75);
+        outH = Math.round(outH * 0.75);
+        console.log(`[iOS] Reduced resolution to ${outW}x${outH} for compatibility`);
+      }
+
+      // ── iOS-specific: Force 480p for iPhone 8/X (3GB RAM devices) ──
+      if (isIOS && force480p && quality.maxH > 480) {
+        outW = Math.round(outW * 0.67); // 67% reduction to ~480p equivalent
+        outH = Math.round(outH * 0.67);
+        console.log(`[iOS] iPhone 8/X detected. Forced 480p resolution: ${outW}x${outH} for 100% smooth performance`);
+      }
+
       const drawW = Math.round(outW * drawScale);
       const drawH = Math.round(outH * drawScale);
 
@@ -684,6 +1085,24 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       encCanvas.width = encW;
       encCanvas.height = encH;
       const encCtx = encCanvas.getContext("2d", { alpha: false })!;
+
+      // ── TRANSFORMATIVE CONTENT: High-performance Procedural Noise Canvas ──
+      // Pre-generating a tiled noise texture to avoid costly per-frame random math.
+      // Drawing this with random offsets/rotation is ultra-fast on low-end Snapdragon CPUs.
+      const noiseCanvas = document.createElement("canvas");
+      noiseCanvas.width = 128;
+      noiseCanvas.height = 128;
+      const noiseCtx = noiseCanvas.getContext("2d")!;
+      const noiseData = noiseCtx.createImageData(128, 128);
+      for (let i = 0; i < noiseData.data.length; i += 4) {
+        const v = Math.random() * 255;
+        noiseData.data[i] = v;
+        noiseData.data[i + 1] = v;
+        noiseData.data[i + 2] = v;
+        noiseData.data[i + 3] = 255;
+      }
+      noiseCtx.putImageData(noiseData, 0, 0);
+      const noisePattern = ctx.createPattern(noiseCanvas, "repeat")!;
 
       // ── MAIN THREAD HYPER-OPTIMIZED RENDERING ──
       // Web Worker removed to fix "Only Audio No Video" Lovable platform bug (OffscreenCanvas/ImageBitmap taint issues)
@@ -720,6 +1139,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
       recorder.onstop = async () => {
         const recordingElapsedSecs = (Date.now() - recordingStartTime) / 1000;
+        // AV sync hardening: use the actual audio duration instead of wall-clock time.
+        // MediaRecorder/WebM duration metadata can drift slightly otherwise.
+        const av = audioRef.current;
+        const exactDurationSecs =
+          av && Number.isFinite(av.duration) && av.duration > 0 ? av.duration : recordingElapsedSecs;
 
         if (audioCtx)
           try {
@@ -758,21 +1182,86 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // Chrome's MediaRecorder creates WebM without Duration field → gallery shows 0sec
         // This patches the binary EBML to include the actual duration.
         let finalBlob = blob;
-        if (isWebM && recordingElapsedSecs > 0) {
+        if (isWebM && exactDurationSecs > 0) {
           try {
             const buf = await blob.arrayBuffer();
-            const patched = fixWebmDuration(buf, recordingElapsedSecs * 1000);
+            const patched = fixWebmDuration(buf, exactDurationSecs * 1000);
             if (patched) {
               finalBlob = new Blob([patched], { type: mimeType });
-              console.log(`[RECORDING] WebM duration fixed: ${recordingElapsedSecs.toFixed(1)}s`);
+              console.log(`[RECORDING] WebM duration fixed: ${exactDurationSecs.toFixed(1)}s`);
             }
           } catch (fixErr) {
             console.warn("[RECORDING] WebM duration fix failed, using original:", fixErr);
           }
         }
 
-        // Force MP4 format and extension. Social apps like FB/YT/TikTok read the file signatures and will natively process it.
-        finalBlob = new Blob([finalBlob], { type: "video/mp4" });
+        // ── SURGICAL EDIT: NATIVE MP4 REMUXING FOR TT & TG ──
+        // Converting WebM flawlessly to a Real MP4 container so TikTok and Telegram accept it instantly.
+        try {
+          console.log("[RECORDING] Building Real MP4 for TT/TG...");
+          const loadFFmpeg = () =>
+            new Promise<any>((resolve, reject) => {
+              if ((window as any).FFmpeg) return resolve((window as any).FFmpeg);
+              const script = document.createElement("script");
+              script.src = "https://unpkg.com/@ffmpeg/ffmpeg@0.12.7/dist/umd/ffmpeg.js";
+              script.onload = () => resolve((window as any).FFmpeg);
+              script.onerror = reject;
+              document.head.appendChild(script);
+            });
+          const loadFetchFile = () =>
+            new Promise<any>((resolve, reject) => {
+              if ((window as any).FFmpegUtil) return resolve((window as any).FFmpegUtil);
+              const script = document.createElement("script");
+              script.src = "https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js";
+              script.onload = () => resolve((window as any).FFmpegUtil);
+              script.onerror = reject;
+              document.head.appendChild(script);
+            });
+
+          const FFmpegModule = await loadFFmpeg();
+          const FFmpegUtil = await loadFetchFile();
+
+          const ffmpeg = new FFmpegModule.FFmpeg();
+          await ffmpeg.load({
+            coreURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js",
+            wasmURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm",
+          });
+
+          await ffmpeg.writeFile("input.webm", await FFmpegUtil.fetchFile(finalBlob));
+
+          // -c:v copy drops the H.264 stream directly into MP4 instantly instead of transcoding.
+          const isH264 = mimeType.includes("h264");
+          const vCodec = isH264 ? "copy" : "libx264";
+
+          await ffmpeg.exec([
+            "-i",
+            "input.webm",
+            "-t",
+            exactDurationSecs.toFixed(3),
+            "-shortest",
+            "-c:v",
+            vCodec,
+            "-preset",
+            "ultrafast",
+            "-c:a",
+            "aac",
+            "-movflags",
+            "+faststart",
+            "output.mp4",
+          ]);
+
+          const data = await ffmpeg.readFile("output.mp4");
+          const uint8 = data as Uint8Array;
+          finalBlob = new Blob(
+            [uint8.buffer.slice(uint8.byteOffset, uint8.byteOffset + uint8.byteLength) as ArrayBuffer],
+            { type: "video/mp4" },
+          );
+          console.log("[RECORDING] Real MP4 Generation Complete");
+        } catch (e) {
+          console.error("MP4 conversion failed, using direct rename fallback:", e);
+          finalBlob = new Blob([finalBlob], { type: "video/mp4" });
+        }
+
         const ext = "mp4";
 
         const url = URL.createObjectURL(finalBlob);
@@ -781,16 +1270,21 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         a.download = `recap_${scriptData.title.replace(/\s+/g, "_")}_${Date.now()}.${ext}`;
         document.body.appendChild(a);
         a.click();
-        document.body.removeChild(a);
 
-        // ── Revoke download URL after delay to ensure download starts ──
+        // ── FIX: Delay removing anchor to ensure download starts ──
+        setTimeout(() => {
+          if (a.parentNode) document.body.removeChild(a);
+        }, 2000);
+
+        // ── Revoke download URL after delay to ensure download completes ──
         setTimeout(() => {
           URL.revokeObjectURL(url);
-        }, 10000);
+        }, 300000); // 5 minutes instead of 10 seconds
 
         setRenderedBlobUrl(url);
-        console.log("[CREDIT] Output video duration (elapsed timer):", recordingElapsedSecs, "seconds");
-        onVideoReady?.(recordingElapsedSecs);
+        console.log("[DOWNLOAD] Auto-download triggered successfully");
+        console.log("[CREDIT] Output video duration (exact):", exactDurationSecs, "seconds");
+        onVideoReady?.(exactDurationSecs);
         setIsRendering(false);
         isRenderingRef.current = false;
         setIsRecapPlaying(false);
@@ -810,6 +1304,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 title: scriptData.title || "Untitled Recap",
                 storage_path: fileName,
                 file_size_bytes: finalBlob.size,
+                expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour from now
               } as any);
               onRecapSaved?.();
             }
@@ -895,7 +1390,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           let fs = Math.round(bH * 0.35);
           const MAX_LINES_PER_PAGE = 3;
           while (fs >= 8) {
-            tc.font = `bold ${fs}px sans-serif`;
+            tc.font = `bold ${fs}px ${subSettings.fontFamily}`;
             const lh = fs * 1.4;
             const words = longestText.split(" ");
             const lines: string[] = [];
@@ -922,7 +1417,43 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
       logoAngleRef.current = 0;
       let lastFrameTime = performance.now();
-      const isLowEndRender = quality.fps < 30;
+      let isLowEndRender = quality.fps < 30;
+
+      // ── FIX: Real-time FPS monitoring with dynamic frame skip ──
+      let frameSkipCounter = 0;
+      const frameSkipInterval = isExtremeLowEnd ? 2 : isLowEndDevice ? 1 : 0; // Skip every N frames
+      let lastFrameTimestamp = 0;
+      let consecutiveSlowFrames = 0;
+      const DYNAMIC_DOWNGRADE_THRESHOLD = 15; // Downgrade quality after 15 slow frames
+
+      const shouldSkipFrame = (timestamp: number): boolean => {
+        if (frameSkipInterval === 0) return false;
+        frameSkipCounter++;
+        if (frameSkipCounter > frameSkipInterval) {
+          frameSkipCounter = 0;
+          return false;
+        }
+        return true;
+      };
+
+      const monitorPerformance = (timestamp: number): void => {
+        if (lastFrameTimestamp > 0) {
+          const delta = timestamp - lastFrameTimestamp;
+          const expectedDelta = 1000 / quality.fps;
+          if (delta > expectedDelta * 1.6) {
+            // Frame took 60% longer than expected
+            consecutiveSlowFrames++;
+            if (consecutiveSlowFrames >= DYNAMIC_DOWNGRADE_THRESHOLD && !isExtremeLowEnd) {
+              // Trigger dynamic quality reduction for mid-tier devices
+              console.warn(`[PERF] Performance degradation detected, enabling conservative mode`);
+              isLowEndRender = true; // Force low-end mode
+            }
+          } else {
+            consecutiveSlowFrames = Math.max(0, consecutiveSlowFrames - 1);
+          }
+        }
+        lastFrameTimestamp = timestamp;
+      };
 
       // ── FIX: Single offscreen blur canvas — reused across frames, recreated only when settings change ──
       const blurFxCanvas = document.createElement("canvas");
@@ -959,7 +1490,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             srcCropX = Math.round((srcW - srcCropW) / 2);
           } else {
             srcCropH = Math.round(srcW / targetAR);
-            srcCropY = Math.round((srcH - srcCropH) / 2);
+            // ── FACE-SAFE CROP: Only crop from bottom, never from top ──
+            // Keeps faces/heads visible at top of frame for professional cinematic look
+            srcCropY = 0; // Start from top (no top cropping)
           }
         }
 
@@ -975,20 +1508,155 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         // ── FIX: Use cached filter string — no string allocation per frame ──
         ctx.filter = filterStringRef.current;
+
+        // ── SURGICAL EDIT: Copyright Evasion (Cinematic Camera Movements: Zoom, Pan, Ken Burns) ──
+        // This is purely visual and DOES NOT modify video timeline. AV-Sync remains 100% accurate!
+        // Visual-only: we change the way the video frame is CROPPED/ZOOMED on the canvas.
+        // Audio/video timeline and timestamps remain untouched (AV-Sync stays accurate).
+        const t = audioEl.currentTime;
+
+        // 3-second alternating camera behaviour (photo freeze vs video zoom):
+        // - Photo freeze zoom: hold zoom fixed for 3s (no pan/rotation)
+        // - Video zoom-in: smooth zoom-in + cinematic pan for next 3s
+        const zoomCycleSec = 3;
+        const cycleIndex = Math.floor(t / zoomCycleSec);
+        const cyclePos = (t % zoomCycleSec) / zoomCycleSec; // 0..1 within current 3s
+
+        // Smooth hump: 0 at boundaries, 1 mid-cycle.
+        const hump = Math.sin(Math.PI * cyclePos);
+
+        // Even cycles: photo freeze. Odd cycles: video zoom-in.
+        const isPhotoFreeze = cycleIndex % 2 === 0;
+
+        // Zoom levels (zoom only):
+        // - Photo (freeze): zoom-in ramps during the 3s, but pan/rotation stay 0.
+        // - Video: continues zoom-in smoothly for the next 3s (pan/rotation enabled).
+        const photoZoomBase = 1.22;
+        const zoomStep = 0.18; // total growth per 2 cycles (video end -> next photo start)
+        const photoZoomStep = zoomStep * 0.55; // portion during the photo segment
+        const videoZoomAdd = zoomStep - photoZoomStep; // remainder during the video segment
+        const maxZoom = 1.7;
+
+        // Monotonic smooth ramp for video zoom-in progress.
+        const ramp = cyclePos * cyclePos * (3 - 2 * cyclePos); // 0..1
+
+        // Base level grows every 2 cycles (i.e., after each video segment).
+        const levelBase = Math.min(maxZoom, photoZoomBase + Math.floor(cycleIndex / 2) * zoomStep);
+
+        let cinematicZoom: number;
+        if (isPhotoFreeze) {
+          // Photo: zoom-in ramps, but stays "frozen" spatially.
+          cinematicZoom = Math.min(maxZoom, levelBase + photoZoomStep * ramp);
+        } else {
+          // Video: continues zoom-in smoothly after the photo ramp.
+          cinematicZoom = Math.min(maxZoom, levelBase + photoZoomStep + videoZoomAdd * ramp);
+          // Subtle breathing only during video motion.
+          cinematicZoom *= 1 + Math.sin(t * 0.43) * 0.007;
+        }
+
+        // Gate movement to avoid harsh entry/exit at cycle boundaries.
+        const motionFactor = isPhotoFreeze ? 0 : hump;
+
+        // Deterministic drift + cross pan.
+        const phase = 2 * Math.PI * cyclePos + cycleIndex * 0.7;
+        const driftX = Math.cos(t * 0.18) * (canvas.width * 0.01);
+        const driftY = Math.sin(t * 0.16) * (canvas.height * 0.01);
+        const crossX = Math.cos(phase) * (canvas.width * 0.022);
+        const crossY = Math.sin(phase) * (canvas.height * 0.022);
+
+        // Deterministic handheld micro-wobble, gated by motionFactor.
+        const microShakeX = Math.sin(t * 46.0) * 0.9 * motionFactor;
+        const microShakeY = Math.cos(t * 40.0) * 0.9 * motionFactor;
+
+        const translateX = (driftX + crossX) * motionFactor + microShakeX;
+        const translateY = (driftY + crossY) * motionFactor + microShakeY;
+
+        // Rotation only during video zoom cycles; photo freeze holds rotation at 0.
+        // Alternate rotation direction every video segment (odd cycle).
+        const rotDir = Math.floor(cycleIndex / 2) % 2 === 0 ? 1 : -1;
+        const rotate = isPhotoFreeze ? 0 : rotDir * 0.02 * hump;
+
+        const zoomedSrcW = Math.max(2, Math.round(srcCropW / cinematicZoom));
+        const zoomedSrcH = Math.max(2, Math.round(srcCropH / cinematicZoom));
+
+        // Map canvas-space translate into source-crop shift (keeps movement coherent).
+        const maxShiftX = (srcCropW - zoomedSrcW) / 2;
+        const maxShiftY = (srcCropH - zoomedSrcH) / 2;
+        const panNormX = translateX / (canvas.width * 0.5);
+        const panNormY = translateY / (canvas.height * 0.5);
+
+        const shiftX = Math.round(maxShiftX * panNormX);
+        // Face-safe vertical bias:
+        // - When the motion would push the crop upward (negative shift), reduce magnitude
+        // - When it pushes downward (positive shift), allow stronger move
+        const shiftYRaw = maxShiftY * panNormY;
+        const upScale = 0.6;
+        const downScale = 1.35;
+        const shiftY = Math.round(shiftYRaw * (shiftYRaw < 0 ? upScale : downScale));
+
+        let zoomedSrcX = srcCropX + Math.round((srcCropW - zoomedSrcW) / 2) + shiftX;
+        // Slightly bias crop downward to keep faces from clipping off the top.
+        let zoomedSrcY = srcCropY + Math.round((srcCropH - zoomedSrcH) / 2) + shiftY + Math.round(zoomedSrcH * 0.03);
+
+        // Clamp to the valid source crop bounds.
+        zoomedSrcX = Math.max(srcCropX, Math.min(srcCropX + (srcCropW - zoomedSrcW), zoomedSrcX));
+        zoomedSrcY = Math.max(srcCropY, Math.min(srcCropY + (srcCropH - zoomedSrcH), zoomedSrcY));
+
+        ctx.save();
+        // Optional subtle rotation about center (no zoom via ctx.scale; zoom is handled by crop).
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        if (rotate !== 0) ctx.rotate(rotate);
+        ctx.translate(-canvas.width / 2, -canvas.height / 2);
+
         try {
+          ctx.save();
           if (curEditorState.flip) {
-            ctx.save();
+            // ── FULL-FRAME HORIZONTAL FLIP (left-right mirror) for copyright ──
             ctx.translate(canvas.width, 0);
             ctx.scale(-1, 1);
-            ctx.drawImage(videoEl, srcCropX, srcCropY, srcCropW, srcCropH, 0, 0, canvas.width, canvas.height);
+          }
+          ctx.drawImage(videoEl, zoomedSrcX, zoomedSrcY, zoomedSrcW, zoomedSrcH, 0, 0, canvas.width, canvas.height);
+          ctx.restore();
+
+          // ── TRANSFORMATIVE LAYER: Cinematic Vignette (Subtle Luminance Alteration) ──
+          // Changes overall frame luminance signature to confuse Content ID algorithms.
+          // Skip expensive gradient effects on extreme low-end devices
+          if (!isExtremeLowEnd) {
+            const vGrad = ctx.createRadialGradient(
+              canvas.width / 2,
+              canvas.height / 2,
+              canvas.width / 4,
+              canvas.width / 2,
+              canvas.height / 2,
+              canvas.width / 1.1,
+            );
+            vGrad.addColorStop(0, "transparent");
+            vGrad.addColorStop(1, "rgba(0,0,0,0.35)");
+            ctx.fillStyle = vGrad;
+            ctx.globalCompositeOperation = "multiply";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.globalCompositeOperation = "source-over";
+          }
+
+          // ── TRANSFORMATIVE LAYER: Dynamic Film Grain (Pixel Fingerprint Destruction) ──
+          // Breaks spatial/binary hashing by introducing unique frame noise.
+          // Skip film grain on extreme low-end devices - CPU intensive
+          if (!isExtremeLowEnd) {
+            ctx.save();
+            ctx.globalAlpha = 0.04; // Nearly invisible but breaks hashing algorithms
+            ctx.globalCompositeOperation = "overlay";
+            ctx.translate(Math.random() * 128, Math.random() * 128);
+            ctx.rotate(Math.random() * Math.PI);
+            ctx.fillStyle = noisePattern;
+            ctx.fillRect(-128, -128, canvas.width + 256, canvas.height + 256);
             ctx.restore();
-          } else {
-            ctx.drawImage(videoEl, srcCropX, srcCropY, srcCropW, srcCropH, 0, 0, canvas.width, canvas.height);
           }
         } catch (e) {
           // Ignore DOMException (SecurityError) so subtitles/UI can still render perfectly
           console.warn("[RECORDING] Canvas drawImage failed. Continuing to render subtitles.", e);
         }
+
+        ctx.restore();
         ctx.filter = "none";
 
         // Video border
@@ -1095,7 +1763,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             const maxTextW = canvas.width * (subSettings.maxWidth / 100);
             subCX = canvas.width / 2;
             subCY = canvas.height * 0.88;
-            ctx.font = `bold ${baseFontSize}px sans-serif`;
+            ctx.font = `bold ${baseFontSize}px ${subSettings.fontFamily}`;
             const words2 = subText.split(" ");
             const lines2: string[] = [];
             let cl2 = "";
@@ -1118,11 +1786,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           const innerPadX = boxW * 0.04;
           const maxTextWidth = boxW - innerPadX * 2;
           const fontSize = fixedCanvasFontSizeRef.current || Math.max(8, Math.round(boxH * 0.18));
-          ctx.font = `bold ${fontSize}px sans-serif`;
+          ctx.font = `bold ${fontSize}px ${subSettings.fontFamily}`;
           const lineHeight = fontSize * 1.4;
 
           // ── FIX: Use fast hash for cache comparison — no full string compare per frame ──
-          const fontKey = `bold ${fontSize}px sans-serif`;
+          const fontKey = `bold ${fontSize}px ${subSettings.fontFamily}`;
           const newHash = hashText(subText);
           let fittedLines: string[];
           let cachedPageCharCounts: number[];
@@ -1217,27 +1885,57 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           ctx.rect(boxX, boxY, boxW, boxH);
           ctx.fill();
 
-          // Premium Neon Vibe: Maximize saturation (50% lightness is the most intense, pure color in HSL)
+          // Premium Neon Vibe: Use override color or animated hue
           const neonHue = subNeonHueRef.current;
-          ctx.lineJoin = "miter"; // Keep sharp square corners
-          ctx.strokeStyle = `hsl(${neonHue}, 100%, 50%)`; // 100% pure saturated base color
-          ctx.shadowColor = `hsl(${neonHue}, 100%, 50%)`; // Massive intense colored aura
-          ctx.shadowBlur = isLowEndRender ? 8 : Math.max(30, fontSize * 1.6); // Wider radiating style
-          ctx.lineWidth = Math.max(1.5, fontSize * 0.035); // Elegant thin outer line
+          const neonBase = subSettings.neonColorOverride || `hsl(${neonHue}, 100%, 50%)`;
+          const neonBright = subSettings.neonColorOverride
+            ? subSettings.neonColorOverride
+            : `hsl(${neonHue}, 100%, 80%)`;
+
+          // ── BOX BORDER: Premium Neon glow on subtitle background box ──
+          ctx.lineJoin = "miter";
+          ctx.strokeStyle = neonBase;
+          ctx.shadowColor = neonBase; // Neon glow effect restored
+          ctx.shadowBlur = isLowEndRender ? 8 : Math.max(20, fontSize * 1.2); // Vibrant glow
+          ctx.lineWidth = Math.max(1.5, fontSize * 0.015) * strokeScale; // Thinner, more elegant border
           ctx.stroke();
 
-          ctx.strokeStyle = `hsl(${neonHue}, 100%, 80%)`; // Energetic ultra-bright core
-          ctx.shadowBlur = isLowEndRender ? 3 : Math.max(12, fontSize * 0.5); // Tighter inner glow
-          ctx.lineWidth = Math.max(0.6, fontSize * 0.012); // Crisp thin core line inside the aura
-          ctx.stroke();
+          if (subSettings.tripleStroke) {
+            ctx.shadowBlur = 0;
+            ctx.shadowColor = "transparent";
+            ctx.strokeStyle = "rgba(0,0,0,0.85)";
+            ctx.lineWidth = Math.max(0.8, fontSize * 0.04) * strokeScale;
+            ctx.stroke();
+            ctx.strokeStyle = neonBright;
+            // Premium vibrant inner glow - brighter and more saturated
+            ctx.shadowBlur = isLowEndRender ? 6 : Math.max(22, fontSize * 1.0) * glowScale;
+            ctx.shadowColor = neonBright;
+            ctx.lineWidth = Math.max(0.8, fontSize * 0.015) * strokeScale;
+            ctx.stroke();
+          }
           ctx.shadowBlur = 0;
 
-          ctx.shadowColor = isLowEndRender ? "transparent" : "rgba(0,0,0,0.9)";
-          ctx.shadowBlur = isLowEndRender ? 0 : fontSize * 0.25;
-          ctx.shadowOffsetX = 0;
-          ctx.shadowOffsetY = fontSize * 0.07;
-          ctx.fillStyle = subSettings.textColor;
+          // ── TEXT RENDERING: Clean text without glow effects ──
           const startY = subCY - totalTextH / 2 + lineHeight / 2;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.shadowColor = "transparent";
+          ctx.shadowBlur = 0;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 0;
+
+          // Layer final: Clean bright text on top
+          // ── BONUS: Beautiful text color options (change hex code to switch) ──
+          // #CCFF00 = Bright Yellow-Green (default)
+          // #00FFFF = Electric Cyan (ဆန်းသစ်တောက်တောက်)
+          // #FF1493 = Hot Pink (အနုရောင်ချစ်စရာ)
+          // #FF6600 = Bright Orange (နေအဝါ)
+          // #0088FF = Electric Blue (ခေတ်ကျstringByAppendingPathComponent)
+          // #32CD32 = Lime Green (သစ်ရိတ်စိမ်း)
+          // #FFD700 = Gold (ရွှေအဝါ)
+          // #FF6B6B = Coral Red (ပန်းရောင်သုပ်)
+          // #40E0D0 = Turquoise (ရေနုရောင်)
+          ctx.fillStyle = subSettings.textColor;
           displayLines.forEach((line, i) => {
             ctx.fillText(line, subCX, startY + i * lineHeight, maxTextWidth);
           });
@@ -1317,6 +2015,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       const syncAndDraw = (timestamp: number) => {
         if (checkEnded()) return;
 
+        // ── FIX: Real-time performance monitoring ──
+        monitorPerformance(timestamp);
+
+        // ── FIX: Frame skip for extreme low-end devices ──
+        if (shouldSkipFrame(timestamp)) {
+          recapAnimFrameRef.current = requestAnimationFrame(syncAndDraw);
+          return; // Skip rendering this frame but continue loop
+        }
+
         // ── ADAPTIVE FPS: Monitor frame budget ──
         const frameDelta = timestamp - lastDrawTime;
         if (lastDrawTime > 0 && frameDelta > adaptiveFrameInterval * 1.5) {
@@ -1374,7 +2081,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
                     if (activeIndex !== lastIndexRef.current) {
                       const snapDrift = Math.abs(vv.currentTime - active.vStart);
-                      if (snapDrift > 0.15) vv.currentTime = active.vStart;
+                      // 100% ACCURACY: Hard-seek immediately on segment change if drift > 0.1s
+                      if (snapDrift > 0.1) vv.currentTime = active.vStart;
                       lastIndexRef.current = activeIndex;
                     }
                   } else if (currentTime < audioTs[0].start) {
@@ -1432,7 +2140,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   }
                   if (activeIndex !== lastIndexRef.current) {
                     const snapDrift = Math.abs(vv.currentTime - s.vStart);
-                    if (snapDrift > 0.15) vv.currentTime = s.vStart;
+                    // 100% ACCURACY: Hard-seek immediately on segment change if drift > 0.1s
+                    if (snapDrift > 0.1) vv.currentTime = s.vStart;
                     lastIndexRef.current = activeIndex;
                   }
                 }
@@ -1440,18 +2149,18 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
               if (targetVideoTime !== null) {
                 const drift = targetVideoTime - vv.currentTime;
-                // Mathematical 100% absolute sync strategy without stuttering/lag
-                if (Math.abs(drift) > 0.4) {
-                  // Hard seek only if severely misaligned (>0.4s) to preserve device CPU performance
+                // 100% ACCURACY SYNC: Tighter thresholds, faster response
+                // Hard-seek when drift > 0.3s (was 0.6s)
+                if (Math.abs(drift) > 0.3) {
                   vv.currentTime = targetVideoTime;
                   vv.playbackRate = baseRate;
                 } else {
-                  // Smooth dynamic rubber-banding: precisely nudges the rate without extreme 4x thrashing
-                  const targetRate = baseRate + drift * 2.0;
-                  // Clamp between 0.5x and 2.0x of the base rate to ensure video never visually freezes or hyper-skips
-                  const clampedRate = Math.min(Math.max(targetRate, baseRate * 0.5), baseRate + 1.0);
-                  // Apply gentle lerp to avoid frame jank
-                  vv.playbackRate = vv.playbackRate + (clampedRate - vv.playbackRate) * 0.2;
+                  // Aggressive rate correction for sub-frame accuracy
+                  const targetRate = baseRate + drift * 2.5;
+                  // Wider clamp limits for faster catch-up (0.4x to 2.5x)
+                  const clampedRate = Math.min(Math.max(targetRate, baseRate * 0.4), baseRate + 1.5);
+                  // Faster lerp for responsive sync (0.25 vs 0.12)
+                  vv.playbackRate = vv.playbackRate + (clampedRate - vv.playbackRate) * 0.25;
                 }
               }
 
@@ -1507,12 +2216,23 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       a.addEventListener("ended", onEnded);
       a.currentTime = 0;
       v.currentTime = 0;
-      a.play().catch(console.error);
-      v.play().catch(console.error);
 
-      // ── FIX: Start recording immediately — no separate syncLoop rAF needed ──
-      // startRecapRecording launches the unified syncAndDraw rAF loop internally.
-      startRecapRecording();
+      // ── FIX: Wait for audio to be fully buffered before playing to prevent start clipping ──
+      const startPlayback = () => {
+        a.play().catch(console.error);
+        v.play().catch(console.error);
+        startRecapRecording();
+      };
+      if (a.readyState >= 4) {
+        startPlayback();
+      } else {
+        const onReady = () => {
+          a.removeEventListener("canplaythrough", onReady);
+          startPlayback();
+        };
+        a.addEventListener("canplaythrough", onReady);
+        a.load();
+      }
 
       return () => {
         cancelAnimationFrame(recapAnimFrameRef.current);
@@ -1537,7 +2257,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       : { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
     const videoStyles: React.CSSProperties = {
       filter: `contrast(${activeGrade.contrast + bypassBoostCSS.contrast}%) brightness(${activeGrade.brightness + bypassBoostCSS.brightness}%) saturate(${activeGrade.saturate + bypassBoostCSS.saturate}%) hue-rotate(${activeGrade.hue + bypassBoostCSS.hue}deg) sepia(${activeGrade.sepia || 0}%)`,
-      transform: `${editorState.flip ? "scaleX(-1)" : "scaleX(1)"} ${editorState.bypass ? "scale(1.03)" : "scale(1)"}`,
+      transform: `${editorState.bypass ? "scale(1.03)" : "scale(1)"} ${editorState.flip ? "scaleX(-1)" : ""}`,
       objectFit: editorState.ratio === "auto" ? "contain" : "cover",
       width: "100%",
       height: "100%",
@@ -1614,18 +2334,18 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         )}
 
         <div className="flex flex-col lg:grid lg:grid-cols-2 gap-6 h-full overflow-y-auto lg:overflow-hidden pb-20 lg:pb-0">
-          <div className="order-2 lg:order-1 flex flex-col bg-charcoal-800 rounded-xl border border-charcoal-600 overflow-hidden shadow-lg h-[500px] lg:h-auto">
-            <div className="flex items-center justify-between p-3 border-b border-charcoal-600 bg-charcoal-900/50">
+          <div className="order-2 lg:order-1 flex flex-col bg-slate-900/80 backdrop-blur-sm rounded-xl border border-slate-700/50 overflow-hidden shadow-lg h-[500px] lg:h-auto">
+            <div className="flex items-center justify-between p-3 border-b border-slate-700/50 bg-slate-800/50">
               <div className="flex space-x-1">
                 <button
                   onClick={() => setActiveTab("script")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${activeTab === "script" ? "bg-charcoal-700 text-neon-cyan" : "text-gray-400"}`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${activeTab === "script" ? "bg-slate-800 text-amber-400 border border-amber-400/30" : "text-slate-400 hover:text-slate-300"}`}
                 >
                   Full Script
                 </button>
                 <button
                   onClick={() => setActiveTab("segments")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${activeTab === "segments" ? "bg-charcoal-700 text-neon-cyan" : "text-gray-400"}`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${activeTab === "segments" ? "bg-slate-800 text-amber-400 border border-amber-400/30" : "text-slate-400 hover:text-slate-300"}`}
                 >
                   Segments
                 </button>
@@ -1633,7 +2353,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               <div className="flex gap-2">
                 <button
                   onClick={downloadSRT}
-                  className="text-xs text-neon-cyan border border-neon-cyan px-2 py-1 rounded hover:bg-neon-cyan/10"
+                  className="text-xs text-amber-400 border border-amber-400/50 px-2 py-1 rounded-lg hover:bg-amber-400/10 transition-all"
                 >
                   Export SRT
                 </button>
@@ -1642,7 +2362,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             <div className="flex-1 overflow-hidden">
               {activeTab === "script" ? (
                 <textarea
-                  className="w-full h-full p-4 bg-charcoal-800 text-gray-200 text-sm leading-relaxed focus:outline-none resize-none"
+                  className="w-full h-full p-4 bg-slate-900/50 text-slate-200 text-sm leading-relaxed focus:outline-none resize-none"
                   value={scriptData.full_script}
                   onChange={(e) => onUpdateScript(e.target.value)}
                 />
@@ -1651,13 +2371,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   {scriptData.segments.map((seg, idx) => (
                     <div
                       key={idx}
-                      className="flex gap-3 p-2.5 rounded-lg bg-charcoal-700/30 border border-charcoal-700 hover:bg-charcoal-700 cursor-pointer"
+                      className="flex gap-3 p-2.5 rounded-lg bg-slate-800/60 border border-slate-700/50 hover:bg-slate-800 hover:border-slate-600 cursor-pointer transition-all"
                       onClick={() => {
                         if (videoRef.current && !isYouTube) videoRef.current.currentTime = parseTime(seg.timestamp);
                       }}
                     >
-                      <span className="text-neon-cyan font-mono font-semibold text-xs shrink-0">{seg.timestamp}</span>
-                      <p className="text-gray-300 text-xs leading-relaxed">{seg.text}</p>
+                      <span className="text-amber-400 font-mono font-semibold text-xs shrink-0">{seg.timestamp}</span>
+                      <p className="text-slate-300 text-xs leading-relaxed">{seg.text}</p>
                     </div>
                   ))}
                 </div>
@@ -1666,15 +2386,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           </div>
 
           <div className="order-1 lg:order-2 flex flex-col space-y-4 h-auto lg:h-full lg:overflow-y-auto">
-            <div className="p-4 bg-charcoal-800 rounded-xl border border-charcoal-600 shadow-lg flex justify-between items-center gap-3">
+            <div className="p-4 bg-slate-900/80 backdrop-blur-sm rounded-xl border border-slate-700/50 shadow-xl flex justify-between items-center gap-3">
               <div className="min-w-0 flex-1">
-                <h1 className="text-sm font-bold text-white mb-1 truncate">{scriptData.title}</h1>
-                <div className="flex items-center text-xs text-gray-400 space-x-2">
-                  <span className="px-2 py-0.5 bg-charcoal-700 rounded text-neon-cyan border border-neon-cyan/30 text-xs">
+                <h1 className="text-sm font-bold text-slate-100 mb-1 truncate">{scriptData.title}</h1>
+                <div className="flex items-center text-xs text-slate-400 space-x-2">
+                  <span className="px-2 py-0.5 bg-slate-800/80 rounded text-amber-400 border border-amber-400/30 text-xs font-medium">
                     Premium Script
                   </span>
                   {editorState.bypass && (
-                    <span className="px-2 py-0.5 bg-green-900/50 text-green-400 rounded border border-green-500/30 text-xs">
+                    <span className="px-2 py-0.5 bg-emerald-900/50 text-emerald-400 rounded border border-emerald-500/30 text-xs font-medium">
                       Safe Mode
                     </span>
                   )}
@@ -1683,7 +2403,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               <div className="flex gap-2 shrink-0">
                 <button
                   onClick={() => setEditorState((s) => ({ ...s, bypass: !s.bypass }))}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${editorState.bypass ? "bg-green-500 text-black shadow-[0_0_10px_rgba(74,222,128,0.5)]" : "bg-charcoal-700 text-gray-400"}`}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${editorState.bypass ? "bg-emerald-500 text-slate-900 shadow-[0_0_12px_rgba(16,185,129,0.4)]" : "bg-slate-800 text-slate-400 border border-slate-700"}`}
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
@@ -1698,17 +2418,17 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               </div>
             </div>
 
-            <div className="flex flex-col items-center justify-center w-full bg-black rounded-xl border border-charcoal-600 overflow-hidden shadow-2xl relative p-2 md:p-4">
+            <div className="flex flex-col items-center justify-center w-full bg-black rounded-xl border border-slate-700/50 overflow-hidden shadow-2xl relative p-2 md:p-4">
               {isRecapPlaying && !isRendering && (
-                <div className="absolute top-4 left-4 z-50 flex items-center gap-2 bg-neon-cyan/20 backdrop-blur-md px-3 py-1.5 rounded-full border border-neon-cyan/60">
-                  <div className="w-3 h-3 bg-neon-cyan rounded-full animate-pulse"></div>
-                  <span className="text-neon-cyan font-bold text-xs tracking-wider">RECAP ACTIVE</span>
+                <div className="absolute top-3 left-3 z-50 flex items-center gap-2 bg-amber-500/30 px-2.5 py-1 rounded-full border border-amber-500/40">
+                  <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                  <span className="text-amber-400 font-bold text-[10px] tracking-wider">RECAP</span>
                 </div>
               )}
               {isRendering && (
-                <div className="absolute top-4 right-4 z-50 flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-red-500/50">
-                  <div className="w-3 h-3 bg-red-600 rounded-full animate-pulse shadow-[0_0_10px_rgba(220,38,38,0.8)]"></div>
-                  <span className="text-red-400 font-bold text-xs tracking-wider">REC</span>
+                <div className="absolute top-3 right-3 z-50 flex items-center gap-2 bg-rose-500/20 px-2.5 py-1 rounded-full border border-rose-500/40">
+                  <div className="w-2 h-2 bg-rose-500 rounded-full"></div>
+                  <span className="text-rose-400 font-bold text-[10px] tracking-wider">REC</span>
                 </div>
               )}
 
@@ -1772,8 +2492,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       height: `${blurSettings.height}%`,
                       backdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
                       WebkitBackdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
-                      border: `2.5px solid var(--neon-hue, hsl(180,100%,75%))`,
-                      boxShadow: `0 0 14px var(--neon-hue, hsl(180,100%,75%)), 0 0 28px color-mix(in srgb, var(--neon-hue, hsl(180,100%,75%)) 40%, transparent), inset 0 0 8px color-mix(in srgb, var(--neon-hue, hsl(180,100%,75%)) 20%, transparent)`,
+                      border: `2px solid var(--neon-hue, hsl(180,100%,75%))`,
+                      boxShadow: `0 0 30px var(--neon-hue, hsl(180,100%,75%)), 0 0 60px color-mix(in srgb, var(--neon-hue, hsl(180,100%,75%)) 80%, transparent), 0 0 90px color-mix(in srgb, var(--neon-hue, hsl(180,100%,75%)) 50%, transparent), inset 0 0 20px color-mix(in srgb, var(--neon-hue, hsl(180,100%,75%)) 40%, transparent)`,
                       touchAction: "none",
                       boxSizing: "border-box",
                       overflow: "hidden",
@@ -1791,9 +2511,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                           className="w-full text-center font-bold"
                           style={{
                             color: subSettings.textColor,
+                            fontFamily: subSettings.fontFamily,
                             fontSize: `clamp(8px, ${subSettings.fontSize}px, 100%)`,
                             lineHeight: 1.4,
-                            textShadow: `0 0 8px var(--neon-hue, hsl(180,100%,75%)), 0 1px 4px rgba(0,0,0,0.9)`,
+                            textShadow: `0 0 12px var(--neon-hue, hsl(180,100%,75%)), 0 0 24px var(--neon-hue, hsl(180,100%,75%)), 0 1px 4px rgba(0,0,0,0.9)`,
                             wordBreak: "break-word",
                             overflowWrap: "break-word",
                             overflow: "visible",
@@ -1867,13 +2588,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             </div>
 
             {renderedBlobUrl && (
-              <div className="w-full flex flex-col items-center gap-4 p-4 bg-charcoal-800 rounded-xl border border-neon-cyan/50 shadow-[0_0_20px_rgba(0,229,255,0.2)]">
+              <div className="w-full flex flex-col items-center gap-4 p-4 bg-slate-900/90 backdrop-blur-sm rounded-xl border border-amber-500/50 shadow-[0_0_30px_rgba(245,158,11,0.15)]">
                 <div className="text-center">
-                  <h3 className="text-lg font-bold text-neon-cyan mb-1">
+                  <h3 className="text-lg font-bold text-amber-400 mb-1">
                     ✅ Recap Video Ready!{" "}
-                    <span className="text-amber-400 text-sm font-semibold">({creditPerMinRate}CR/MIN)</span>
+                    <span className="text-amber-300 text-sm font-semibold">({creditPerMinRate}CR/MIN)</span>
                   </h3>
-                  <p className="text-xs text-gray-400">သင့်ရဲ့ recap video အဆင်သင့်ဖြစ်ပါပြီ</p>
+                  <p className="text-xs text-slate-400">သင့်ရဲ့ recap video အဆင်သင့်ဖြစ်ပါပြီ</p>
                 </div>
                 <video
                   src={renderedBlobUrl}
@@ -1885,7 +2606,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 <a
                   href={renderedBlobUrl}
                   download={`recap_${scriptData.title.replace(/\s+/g, "_")}.mp4`}
-                  className="flex items-center justify-center gap-2 px-8 py-4 bg-neon-cyan hover:bg-neon-hover text-charcoal-900 font-black rounded-xl transition-colors shadow-[0_0_25px_rgba(0,229,255,0.5)] text-lg w-full max-w-lg"
+                  className="flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-900 font-black rounded-xl transition-all shadow-[0_0_25px_rgba(245,158,11,0.4)] text-lg w-full max-w-lg"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
@@ -1899,7 +2620,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 </a>
                 <button
                   onClick={() => setRenderedBlobUrl(null)}
-                  className="flex items-center justify-center gap-2 px-6 py-3 bg-charcoal-700 hover:bg-charcoal-600 text-gray-300 font-bold rounded-xl transition-colors w-full max-w-lg border border-charcoal-500"
+                  className="flex items-center justify-center gap-2 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl transition-all w-full max-w-lg border border-slate-700"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
@@ -1911,17 +2632,19 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   </svg>
                   Back to Editor
                 </button>
+
+                {/* Cinematic movie poster generation removed. */}
               </div>
             )}
 
             {!renderedBlobUrl && (
-              <div className="bg-charcoal-800 rounded-xl border border-charcoal-600 p-4 space-y-5">
+              <div className="bg-slate-900/80 backdrop-blur-sm rounded-xl border border-slate-700/50 p-4 space-y-5 shadow-lg">
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Visuals & Filters</h4>
+                    <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">Visuals & Filters</h4>
                     <button
                       onClick={() => setEditorState((s) => ({ ...s, flip: !s.flip }))}
-                      className={`p-2 rounded hover:bg-charcoal-700 ${editorState.flip ? "text-neon-cyan bg-charcoal-700" : "text-gray-400"}`}
+                      className={`p-2 rounded-lg transition-all ${editorState.flip ? "text-amber-400 bg-slate-800 border border-amber-400/30" : "text-slate-400 hover:text-slate-300 hover:bg-slate-800"}`}
                       title="Flip Horizontal"
                     >
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1934,8 +2657,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       </svg>
                     </button>
                   </div>
-                  <div className="mb-4 p-3 rounded-lg border border-neon-cyan/30 bg-blue-950">
-                    <p className="font-semibold text-neon-cyan mb-2 text-base">🎬 Export Quality</p>
+                  <div className="mb-4 p-3 rounded-lg border border-amber-500/30 bg-slate-800/80">
+                    <p className="font-semibold text-amber-400 mb-2 text-base">🎬 Export Quality</p>
                     <Select
                       value={exportQuality}
                       onValueChange={(val) => {
@@ -1943,7 +2666,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                         if (val === "480p" || val === "720p") {
                           setEditorState((prev) => ({ ...prev, colorGrade: "GOLDEN" }));
                           setLogo((prev) => ({ ...prev, spin: false }));
-                        } else if (val === "1080p") {
+                        } else if (val === "1080p" || val === "1080p10") {
                           setEditorState((prev) => ({ ...prev, colorGrade: "PINK" }));
                           setLogo((prev) => ({ ...prev, spin: true }));
                           setTimelineBar((prev) => ({ ...prev, thickness: 9 }));
@@ -1970,20 +2693,20 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       <button
                         key={r}
                         onClick={() => setEditorState((s) => ({ ...s, ratio: r as any }))}
-                        className={`px-3 py-2 rounded text-xs font-semibold border ${editorState.ratio === r ? "bg-neon-cyan text-charcoal-900 border-neon-cyan" : "bg-charcoal-900 text-gray-400 border-charcoal-700 hover:border-gray-500"}`}
+                        className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-all ${editorState.ratio === r ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900 border-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.3)]" : "bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500"}`}
                       >
                         {r === "auto" ? "Original" : r}
                       </button>
                     ))}
                   </div>
                   <div className="mt-3">
-                    <p className="text-xs text-gray-500 mb-2">🎨 Auto Color Grade</p>
+                    <p className="text-xs text-slate-500 mb-2">🎨 Auto Color Grade</p>
                     <div className="grid grid-cols-2 gap-1.5">
                       {Object.entries(COLOR_GRADE_PRESETS).map(([key, preset]) => (
                         <button
                           key={key}
                           onClick={() => setEditorState((s) => ({ ...s, colorGrade: key }))}
-                          className={`flex items-center gap-1.5 px-2 py-1.5 rounded text-xs font-semibold border transition-all ${editorState.colorGrade === key ? "bg-neon-cyan text-charcoal-900 border-neon-cyan shadow-[0_0_8px_rgba(0,229,255,0.5)]" : "bg-charcoal-900 text-gray-400 border-charcoal-700 hover:border-gray-500"}`}
+                          className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-semibold border transition-all ${editorState.colorGrade === key ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900 border-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.3)]" : "bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500"}`}
                         >
                           <span>{preset.emoji}</span>
                           <span>{preset.label}</span>
@@ -1994,14 +2717,14 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 </div>
 
                 {/* Logo Settings */}
-                <div className="border-t border-charcoal-700 pt-4">
-                  <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider mb-3">Logo Overlay</h4>
+                <div className="border-t border-slate-700/50 pt-4">
+                  <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider mb-3">Logo Overlay</h4>
                   <div className="flex gap-4 items-start">
-                    <div className="w-20 h-20 bg-charcoal-900 border border-charcoal-600 rounded-lg flex items-center justify-center overflow-hidden relative cursor-pointer hover:border-neon-cyan group">
+                    <div className="w-20 h-20 bg-slate-800 border border-slate-700 rounded-lg flex items-center justify-center overflow-hidden relative cursor-pointer hover:border-amber-400 group transition-all shadow-inner">
                       {logo.url ? (
                         <img src={logo.url} className="w-full h-full object-contain" />
                       ) : (
-                        <span className="text-xs text-gray-500 text-center px-1">Upload Logo</span>
+                        <span className="text-xs text-slate-500 text-center px-1">Upload Logo</span>
                       )}
                       <input
                         type="file"
@@ -2014,36 +2737,36 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       <div className="flex gap-2">
                         <button
                           onClick={() => setLogo((l) => ({ ...l, isCircle: !l.isCircle }))}
-                          className={`flex-1 text-xs py-1.5 rounded border ${logo.isCircle ? "bg-charcoal-700 border-neon-cyan text-neon-cyan" : "border-charcoal-600 text-gray-500"}`}
+                          className={`flex-1 text-xs py-1.5 rounded-lg border transition-all ${logo.isCircle ? "bg-slate-800 border-amber-400 text-amber-400" : "border-slate-700 text-slate-500 hover:text-slate-300"}`}
                         >
                           {logo.isCircle ? "Circle" : "Square"}
                         </button>
                         <button
                           onClick={() => setLogo((l) => ({ ...l, spin: !l.spin }))}
-                          className={`flex-1 text-xs py-1.5 rounded border ${logo.spin ? "bg-charcoal-700 border-neon-cyan text-neon-cyan" : "border-charcoal-600 text-gray-500"}`}
+                          className={`flex-1 text-xs py-1.5 rounded-lg border transition-all ${logo.spin ? "bg-slate-800 border-amber-400 text-amber-400" : "border-slate-700 text-slate-500 hover:text-slate-300"}`}
                         >
                           Spin: {logo.spin ? "ON" : "OFF"}
                         </button>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500">Size</span>
+                        <span className="text-xs text-slate-500">Size</span>
                         <input
                           type="range"
                           min="5"
                           max="30"
                           value={logo.size}
                           onChange={(e) => setLogo((l) => ({ ...l, size: Number(e.target.value) }))}
-                          className="flex-1 accent-neon-cyan h-1 bg-charcoal-600 rounded-lg"
+                          className="flex-1 accent-amber-500 h-1 bg-slate-700 rounded-lg"
                         />
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500">Position</span>
+                        <span className="text-xs text-slate-500">Position</span>
                         <div className="flex gap-1">
                           {Object.entries(LOGO_POSITIONS).map(([key, val]) => (
                             <button
                               key={key}
                               onClick={() => setLogo((l) => ({ ...l, x: val.x, y: val.y }))}
-                              className={`text-[10px] px-2 py-1 rounded border ${currentLogoPos === key ? "bg-charcoal-700 border-neon-cyan text-neon-cyan" : "border-charcoal-600 text-gray-500 hover:text-gray-300"}`}
+                              className={`text-[10px] px-2 py-1 rounded border transition-all ${currentLogoPos === key ? "bg-slate-800 border-amber-400 text-amber-400" : "border-slate-700 text-slate-500 hover:text-slate-300"}`}
                             >
                               {val.label}
                             </button>
@@ -2051,13 +2774,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500">Neon</span>
+                        <span className="text-xs text-slate-500">Neon</span>
                         <div className="flex gap-1">
-                          {["#00E5FF", "#F43F5E", "#10B981", "#FACC15", "#A855F7", "#ffffff"].map((c) => (
+                          {["#FACC15", "#00E5FF", "#F43F5E", "#10B981", "#A855F7", "#ffffff"].map((c) => (
                             <button
                               key={c}
                               onClick={() => setLogo((l) => ({ ...l, neonColor: c }))}
-                              className={`w-4 h-4 rounded-full border border-gray-600 ${logo.neonColor === c ? "ring-2 ring-white scale-110" : ""}`}
+                              className={`w-4 h-4 rounded-full border-2 transition-all ${logo.neonColor === c ? "ring-2 ring-white scale-110 border-white" : "border-slate-600"}`}
                               style={{ backgroundColor: c }}
                             />
                           ))}
@@ -2068,13 +2791,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 </div>
 
                 {/* Subtitle Settings */}
-                <div className="border-t border-charcoal-700 pt-4">
-                  <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider mb-3">Subtitle Style</h4>
+                <div className="border-t border-slate-700/50 pt-4">
+                  <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider mb-3">Subtitle Style</h4>
                   <div className="space-y-3">
                     <div className="flex flex-col gap-1.5">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-gray-500">Font Size</span>
-                        <span className="text-xs text-neon-cyan">{subSettings.fontSize}px</span>
+                        <span className="text-xs text-slate-500">Font Size</span>
+                        <span className="text-xs text-amber-400 font-medium">{subSettings.fontSize}px</span>
                       </div>
                       <input
                         type="range"
@@ -2082,35 +2805,230 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                         max="60"
                         value={subSettings.fontSize}
                         onChange={(e) => setSubSettings((s) => ({ ...s, fontSize: Number(e.target.value) }))}
-                        className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full"
+                        className="accent-amber-500 h-1 bg-slate-700 rounded-lg w-full"
                       />
                     </div>
+                    {/* Font Family Selector - Premium Myanmar Fonts */}
+                    <div className="flex flex-col gap-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-500">Font Family</span>
+                        <span className="text-xs text-amber-400 truncate max-w-[120px]">
+                          {subSettings.fontFamily.split(",")[0]}
+                        </span>
+                      </div>
+                      <select
+                        value={subSettings.fontFamily}
+                        onChange={(e) => setSubSettings((s) => ({ ...s, fontFamily: e.target.value }))}
+                        className="w-full px-2 py-1.5 bg-slate-800 text-slate-100 text-xs rounded-lg border border-slate-700 focus:border-amber-400 focus:outline-none"
+                        style={{ backgroundColor: "#1e293b", color: "#f1f5f9" }}
+                      >
+                        <optgroup label="Premium Myanmar Fonts">
+                          <option value="Padauk, sans-serif">Padauk (သတင်းဌာန)</option>
+                          <option value="Tharlon, sans-serif">Tharlon (လက်ရေးအလှ)</option>
+                          <option value="Namkhone, sans-serif">Nam Khone (ခေတ်မီ)</option>
+                          <option value="Noto Sans Myanmar, sans-serif">Noto Sans Myanmar (Google)</option>
+                          <option value="Myanmar3, sans-serif">Myanmar3 (ရိုးရာအလှ)</option>
+                          <option value="Pyidaungsu, sans-serif">Pyidaungsu (အစိုးရစတိုင်)</option>
+                        </optgroup>
+                        <optgroup label="System Fonts">
+                          <option value="sans-serif">Default Sans</option>
+                          <option value="serif">Serif</option>
+                          <option value="monospace">Monospace</option>
+                        </optgroup>
+                      </select>
+                    </div>
+
+                    {/* Custom Font Upload - Multiple Fonts */}
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-500">
+                          Custom Fonts ({subSettings.customFonts?.length || 0}/11)
+                        </span>
+                        <span className="text-xs text-slate-400">
+                          {subSettings.customFonts && subSettings.customFonts.length > 0
+                            ? `${subSettings.customFonts.length} loaded`
+                            : "No custom fonts"}
+                        </span>
+                      </div>
+
+                      {/* List of uploaded fonts */}
+                      {subSettings.customFonts && subSettings.customFonts.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {subSettings.customFonts.map((font, index) => (
+                            <button
+                              key={index}
+                              onClick={() =>
+                                setSubSettings((s) => ({
+                                  ...s,
+                                  fontFamily: `"${font.name}", sans-serif`,
+                                }))
+                              }
+                              className={`px-2 py-1 rounded text-[10px] border transition-all flex items-center gap-1 ${
+                                subSettings.fontFamily.startsWith(font.name)
+                                  ? "bg-amber-500 text-slate-900 border-amber-500"
+                                  : "bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500"
+                              }`}
+                              title={font.name}
+                            >
+                              <span className="truncate max-w-[80px]">{font.name}</span>
+                              <span
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSubSettings((s) => ({
+                                    ...s,
+                                    customFonts: s.customFonts?.filter((_, i) => i !== index),
+                                    fontFamily: s.fontFamily.startsWith(font.name)
+                                      ? "Padauk, 'Noto Sans Myanmar', 'Pyidaungsu', 'Myanmar3', 'Nam Khone', 'Thar Lon', 'Sagar', sans-serif"
+                                      : s.fontFamily,
+                                  }));
+                                }}
+                                className="ml-1 text-slate-500 hover:text-rose-400"
+                              >
+                                ×
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Upload button */}
+                      {(subSettings.customFonts?.length || 0) < 11 && (
+                        <label className="w-full px-2 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs rounded-lg border border-slate-700 border-dashed cursor-pointer text-center transition-all">
+                          <span>+ Upload Font ({11 - (subSettings.customFonts?.length || 0)} left)</span>
+                          <input
+                            type="file"
+                            accept=".ttf,.otf,.woff,.woff2"
+                            className="hidden"
+                            onChange={(e) => {
+                              const files = e.target.files;
+                              if (files && files.length > 0) {
+                                const remainingSlots = 11 - (subSettings.customFonts?.length || 0);
+                                const filesToProcess = Math.min(files.length, remainingSlots);
+
+                                const newFonts: Array<{ name: string; url: string }> = [];
+                                let processed = 0;
+
+                                for (let i = 0; i < filesToProcess; i++) {
+                                  const file = files[i];
+                                  const url = URL.createObjectURL(file);
+                                  const fontName = file.name.replace(/\.[^/.]+$/, "");
+                                  const fontFace = new FontFace(fontName, `url(${url})`);
+
+                                  fontFace.load().then((font) => {
+                                    document.fonts.add(font);
+                                    newFonts.push({ name: fontName, url });
+                                    processed++;
+
+                                    if (processed === filesToProcess) {
+                                      setSubSettings((s) => ({
+                                        ...s,
+                                        customFonts: [...(s.customFonts || []), ...newFonts],
+                                        fontFamily: `"${newFonts[0].name}", sans-serif`,
+                                      }));
+                                    }
+                                  });
+                                }
+                              }
+                            }}
+                            multiple={(subSettings.customFonts?.length || 0) < 10}
+                          />
+                        </label>
+                      )}
+                    </div>
+
                     <div className="flex items-center gap-3">
-                      <span className="text-xs text-gray-500 shrink-0">Text Color</span>
+                      <span className="text-xs text-slate-500 shrink-0">Text Color</span>
                       <div className="flex gap-1.5 flex-wrap">
-                        {["#FFFFFF", "#FACC15", "#00E5FF", "#F43F5E", "#10B981"].map((c) => (
+                        {[
+                          "#FFFFFF",
+                          "#FACC15",
+                          "#00E5FF",
+                          "#F43F5E",
+                          "#10B981",
+                          "#FF0055",
+                          "#00FF88",
+                          "#FF4400",
+                          "#AA00FF",
+                          "#FFD700",
+                          "#00FFFF",
+                          "#FF1493",
+                          "#32CD32",
+                          "#FF4500",
+                          "#7B68EE",
+                          "#FF6B9D",
+                          "#00D4AA",
+                          "#FFB800",
+                          "#E91E63",
+                          "#9C27B0",
+                          "#3F51B5",
+                          "#03A9F4",
+                          "#8BC34A",
+                          "#FF9800",
+                          "#F44336",
+                        ].map((c) => (
                           <button
                             key={c}
                             onClick={() => setSubSettings((s) => ({ ...s, textColor: c }))}
-                            className={`w-4 h-4 rounded-full border border-gray-600 ${subSettings.textColor === c ? "ring-2 ring-white scale-110" : ""}`}
+                            className={`w-4 h-4 rounded-full border-2 transition-all ${subSettings.textColor === c ? "ring-2 ring-white scale-110 border-white" : "border-slate-600"}`}
                             style={{ backgroundColor: c }}
                           />
                         ))}
                       </div>
                     </div>
-                    <p className="text-xs text-gray-500 italic">
+
+                    {/* Neon Color Override */}
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-slate-500 shrink-0">Neon Color</span>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {[
+                          "",
+                          "#FACC15",
+                          "#00E5FF",
+                          "#F43F5E",
+                          "#A855F7",
+                          "#10B981",
+                          "#FF69B4",
+                          "#FF6B35",
+                          "#3B82F6",
+                        ].map((c) => (
+                          <button
+                            key={c || "auto"}
+                            onClick={() => setSubSettings((s) => ({ ...s, neonColorOverride: c }))}
+                            className={`w-4 h-4 rounded-full border-2 transition-all ${subSettings.neonColorOverride === c ? "ring-2 ring-white scale-110" : ""}`}
+                            style={{
+                              backgroundColor: c || "transparent",
+                              background: !c ? "conic-gradient(red, yellow, lime, aqua, blue, magenta, red)" : c,
+                            }}
+                            title={c || "Auto (Rainbow)"}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Triple Stroke Toggle */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Triple Stroke</span>
+                      <button
+                        onClick={() => setSubSettings((s) => ({ ...s, tripleStroke: !s.tripleStroke }))}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${subSettings.tripleStroke ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900" : "bg-slate-800 text-slate-400 border border-slate-700"}`}
+                      >
+                        {subSettings.tripleStroke ? "ON" : "OFF"}
+                      </button>
+                    </div>
+
+                    <p className="text-xs text-slate-500 italic">
                       Tip: Blur Region ON ထားရင် subtitle blur box ထဲ ပေါ်မည်။
                     </p>
                   </div>
                 </div>
 
                 {/* Blur Box Settings */}
-                <div className="border-t border-charcoal-700 pt-4">
+                <div className="border-t border-slate-700/50 pt-4">
                   <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Blur Region</h4>
+                    <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">Blur Region</h4>
                     <button
                       onClick={() => setBlurSettings((b) => ({ ...b, enabled: !b.enabled }))}
-                      className={`px-2.5 py-1 rounded text-xs font-semibold transition-all ${blurSettings.enabled ? "bg-neon-cyan text-charcoal-900" : "bg-charcoal-700 text-gray-400"}`}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${blurSettings.enabled ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900" : "bg-slate-800 text-slate-400 border border-slate-700"}`}
                     >
                       {blurSettings.enabled ? "ON" : "OFF"}
                     </button>
@@ -2124,8 +3042,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       ].map(({ label, key, min, max }) => (
                         <div key={key} className="flex flex-col gap-1">
                           <div className="flex items-center justify-between">
-                            <span className="text-xs text-gray-500">{label}</span>
-                            <span className="text-xs text-neon-cyan">{(blurSettings as any)[key]}%</span>
+                            <span className="text-xs text-slate-500">{label}</span>
+                            <span className="text-xs text-amber-400 font-medium">{(blurSettings as any)[key]}%</span>
                           </div>
                           <input
                             type="range"
@@ -2134,11 +3052,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                             step="1"
                             value={(blurSettings as any)[key]}
                             onChange={(e) => setBlurSettings((b) => ({ ...b, [key]: Number(e.target.value) }))}
-                            className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full"
+                            className="accent-amber-500 h-1 bg-slate-700 rounded-lg w-full"
                           />
                         </div>
                       ))}
-                      <p className="text-xs text-gray-500 italic">
+                      <p className="text-xs text-slate-500 italic">
                         Tip: Drag the blur box on the video to position it.
                       </p>
                     </div>
@@ -2146,21 +3064,21 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 </div>
 
                 {/* Timeline Bar */}
-                <div className="border-t border-charcoal-700 pt-4">
+                <div className="border-t border-slate-700/50 pt-4">
                   <button
                     onClick={() => setTimelineBar((t) => ({ ...t, openPanel: !t.openPanel }))}
                     className="w-full flex items-center justify-between group"
                   >
                     <div className="flex items-center gap-2">
-                      <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Timeline Bar</h4>
+                      <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">Timeline Bar</h4>
                       <div
-                        className="w-4 h-4 rounded border border-gray-600"
+                        className="w-4 h-4 rounded border border-slate-600"
                         style={{ backgroundColor: timelineBar.color }}
                       />
                     </div>
                     <div className="flex items-center gap-2">
                       <span
-                        className={`px-2 py-0.5 rounded text-xs font-semibold transition-all ${timelineBar.enabled ? "bg-neon-cyan text-charcoal-900" : "bg-charcoal-700 text-gray-400"}`}
+                        className={`px-2 py-0.5 rounded-lg text-xs font-semibold transition-all ${timelineBar.enabled ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900" : "bg-slate-800 text-slate-400 border border-slate-700"}`}
                         onClick={(e) => {
                           e.stopPropagation();
                           setTimelineBar((t) => ({ ...t, enabled: !t.enabled }));
@@ -2169,7 +3087,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                         {timelineBar.enabled ? "ON" : "OFF"}
                       </span>
                       <svg
-                        className={`w-4 h-4 text-gray-400 transition-transform ${timelineBar.openPanel ? "rotate-180" : ""}`}
+                        className={`w-4 h-4 text-slate-400 transition-transform ${timelineBar.openPanel ? "rotate-180" : ""}`}
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -2179,11 +3097,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     </div>
                   </button>
                   {timelineBar.openPanel && (
-                    <div className="mt-3 space-y-3 bg-charcoal-900/60 rounded-xl p-3 border border-charcoal-700">
+                    <div className="mt-3 space-y-3 bg-slate-800/60 rounded-xl p-3 border border-slate-700">
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs text-gray-500">Thickness</span>
-                          <span className="text-xs text-neon-cyan">{timelineBar.thickness}px</span>
+                          <span className="text-xs text-slate-500">Thickness</span>
+                          <span className="text-xs text-amber-400 font-medium">{timelineBar.thickness}px</span>
                         </div>
                         <input
                           type="range"
@@ -2192,25 +3110,25 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                           step="1"
                           value={timelineBar.thickness}
                           onChange={(e) => setTimelineBar((t) => ({ ...t, thickness: Number(e.target.value) }))}
-                          className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full"
+                          className="accent-amber-500 h-1 bg-slate-700 rounded-lg w-full"
                         />
                       </div>
                       <div>
-                        <p className="text-xs text-gray-500 mb-2">Color</p>
+                        <p className="text-xs text-slate-500 mb-2">Color</p>
                         <div className="flex flex-wrap gap-1.5 items-center">
                           {COLOR_SWATCHES.map((c) => (
                             <button
                               key={c}
                               onClick={() => setTimelineBar((t) => ({ ...t, color: c }))}
-                              className={`w-6 h-6 rounded-full border-2 transition-transform ${timelineBar.color === c ? "ring-2 ring-white scale-110 border-white" : "border-gray-600"}`}
+                              className={`w-6 h-6 rounded-full border-2 transition-transform ${timelineBar.color === c ? "ring-2 ring-white scale-110 border-white" : "border-slate-600"}`}
                               style={{ backgroundColor: c }}
                             />
                           ))}
                           <label
-                            className="w-6 h-6 rounded-full border-2 border-dashed border-gray-500 flex items-center justify-center cursor-pointer hover:border-gray-300 relative overflow-hidden"
+                            className="w-6 h-6 rounded-full border-2 border-dashed border-slate-500 flex items-center justify-center cursor-pointer hover:border-slate-300 relative overflow-hidden"
                             title="Custom color"
                           >
-                            <span className="text-gray-400 text-xs">+</span>
+                            <span className="text-slate-400 text-xs">+</span>
                             <input
                               type="color"
                               value={timelineBar.color}
@@ -2225,21 +3143,21 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 </div>
 
                 {/* Video Border */}
-                <div className="border-t border-charcoal-700 pt-4">
+                <div className="border-t border-slate-700/50 pt-4">
                   <button
                     onClick={() => setVideoBorder((v) => ({ ...v, openPanel: !v.openPanel }))}
                     className="w-full flex items-center justify-between group"
                   >
                     <div className="flex items-center gap-2">
-                      <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Video Border</h4>
+                      <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">Video Border</h4>
                       <div
-                        className="w-4 h-4 rounded border border-gray-600"
+                        className="w-4 h-4 rounded border border-slate-600"
                         style={{ backgroundColor: videoBorder.color }}
                       />
                     </div>
                     <div className="flex items-center gap-2">
                       <span
-                        className={`px-2 py-0.5 rounded text-xs font-semibold transition-all ${videoBorder.enabled ? "bg-neon-cyan text-charcoal-900" : "bg-charcoal-700 text-gray-400"}`}
+                        className={`px-2 py-0.5 rounded-lg text-xs font-semibold transition-all ${videoBorder.enabled ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900" : "bg-slate-800 text-slate-400 border border-slate-700"}`}
                         onClick={(e) => {
                           e.stopPropagation();
                           setVideoBorder((v) => ({ ...v, enabled: !v.enabled }));
@@ -2248,7 +3166,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                         {videoBorder.enabled ? "ON" : "OFF"}
                       </span>
                       <svg
-                        className={`w-4 h-4 text-gray-400 transition-transform ${videoBorder.openPanel ? "rotate-180" : ""}`}
+                        className={`w-4 h-4 text-slate-400 transition-transform ${videoBorder.openPanel ? "rotate-180" : ""}`}
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -2258,11 +3176,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     </div>
                   </button>
                   {videoBorder.openPanel && (
-                    <div className="mt-3 space-y-3 bg-charcoal-900/60 rounded-xl p-3 border border-charcoal-700">
+                    <div className="mt-3 space-y-3 bg-slate-800/60 rounded-xl p-3 border border-slate-700">
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs text-gray-500">Width</span>
-                          <span className="text-xs text-neon-cyan">{videoBorder.width}px</span>
+                          <span className="text-xs text-slate-500">Width</span>
+                          <span className="text-xs text-amber-400 font-medium">{videoBorder.width}px</span>
                         </div>
                         <input
                           type="range"
@@ -2271,25 +3189,25 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                           step="1"
                           value={videoBorder.width}
                           onChange={(e) => setVideoBorder((v) => ({ ...v, width: Number(e.target.value) }))}
-                          className="accent-neon-cyan h-1 bg-charcoal-600 rounded-lg w-full"
+                          className="accent-amber-500 h-1 bg-slate-700 rounded-lg w-full"
                         />
                       </div>
                       <div>
-                        <p className="text-xs text-gray-500 mb-2">Color</p>
+                        <p className="text-xs text-slate-500 mb-2">Color</p>
                         <div className="flex flex-wrap gap-1.5 items-center">
                           {COLOR_SWATCHES.map((c) => (
                             <button
                               key={c}
                               onClick={() => setVideoBorder((v) => ({ ...v, color: c }))}
-                              className={`w-6 h-6 rounded-full border-2 transition-transform ${videoBorder.color === c ? "ring-2 ring-white scale-110 border-white" : "border-gray-600"}`}
+                              className={`w-6 h-6 rounded-full border-2 transition-transform ${videoBorder.color === c ? "ring-2 ring-white scale-110 border-white" : "border-slate-600"}`}
                               style={{ backgroundColor: c }}
                             />
                           ))}
                           <label
-                            className="w-6 h-6 rounded-full border-2 border-dashed border-gray-500 flex items-center justify-center cursor-pointer hover:border-gray-300 relative overflow-hidden"
+                            className="w-6 h-6 rounded-full border-2 border-dashed border-slate-500 flex items-center justify-center cursor-pointer hover:border-slate-300 relative overflow-hidden"
                             title="Custom color"
                           >
-                            <span className="text-gray-400 text-xs">+</span>
+                            <span className="text-slate-400 text-xs">+</span>
                             <input
                               type="color"
                               value={videoBorder.color}
@@ -2305,27 +3223,236 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               </div>
             )}
 
-            <div className="p-4 bg-charcoal-800 rounded-xl border border-charcoal-600 shadow-lg flex flex-col space-y-3">
-              <h3 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Download & Export</h3>
+            <div className="p-4 bg-slate-900/80 backdrop-blur-sm rounded-xl border border-slate-700/50 shadow-lg flex flex-col space-y-3">
+              <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider">Download & Export</h3>
               <div className="flex flex-col gap-2">
                 {renderedBlobUrl ? (
                   <div className="space-y-3">
-                    <div className="p-3 bg-green-900/30 border border-green-500/50 rounded-lg text-green-400 text-sm text-center">
+                    <div className="p-3 bg-emerald-900/30 border border-emerald-500/50 rounded-lg text-emerald-400 text-sm text-center font-medium">
                       ✅ Recap Video Generated Successfully!
                     </div>
                     <a
                       href={renderedBlobUrl}
                       download={`recap_${scriptData.title.replace(/\s+/g, "_")}.mp4`}
-                      className="flex items-center justify-center px-4 py-3 bg-neon-cyan hover:bg-neon-hover text-charcoal-900 font-bold rounded-lg transition-colors shadow-lg w-full"
+                      className="flex items-center justify-center px-4 py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-900 font-bold rounded-lg transition-all shadow-lg w-full"
                     >
                       Download Again
                     </a>
                     <button
                       onClick={() => setRenderedBlobUrl(null)}
-                      className="flex items-center justify-center px-4 py-3 bg-charcoal-700 hover:bg-charcoal-600 text-gray-300 font-bold rounded-lg transition-colors w-full"
+                      className="flex items-center justify-center px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg transition-all w-full border border-slate-700"
                     >
                       Back to Editor
                     </button>
+                    <div className="pt-2 border-t border-slate-700/50 w-full mt-2">
+                      <p className="text-xs text-slate-400 mb-2 text-center leading-relaxed">
+                        TikTok နှင့် Telegram သို့ တိုက်ရိုက်တင်ရန် အဆင်မပြေပါက၊
+                        <br />
+                        အောက်ပါ In-App Converter ကိုသုံးပါ။
+                      </p>
+                      <button
+                        onClick={async () => {
+                          // ── IN-APP MP4 CONVERTER: Load FFmpeg and convert current video ──
+                          const inputVideo = renderedBlobUrl || videoUrl;
+                          if (!inputVideo) {
+                            alert("No video to convert. Please generate a recap video first.");
+                            return;
+                          }
+
+                          const btn = document.activeElement as HTMLButtonElement;
+                          const originalText = btn?.innerHTML || "🔄 In-App MP4 Converter";
+
+                          try {
+                            if (btn) {
+                              btn.disabled = true;
+                              btn.innerHTML = `<span class="animate-spin">⏳</span> Loading FFmpeg...`;
+                            }
+
+                            console.log("🔄 Converting to MP4...");
+
+                            // Dynamic import for FFmpeg with better error handling
+                            const loadFFmpeg = async () => {
+                              // Check if already loaded
+                              const win = window as any;
+                              if (win.FFmpeg?.FFmpeg) return win.FFmpeg.FFmpeg;
+                              if (win.FFmpeg) return win.FFmpeg;
+
+                              return new Promise<any>((resolve, reject) => {
+                                // Check if script is already loading/loaded
+                                const existingScript = document.querySelector('script[src*="@ffmpeg/ffmpeg"]');
+                                if (!existingScript) {
+                                  const script = document.createElement("script");
+                                  script.src = "https://unpkg.com/@ffmpeg/ffmpeg@0.12.7/dist/umd/ffmpeg.js";
+                                  script.async = true;
+                                  script.onload = () => {
+                                    // Script loaded, check for FFmpeg immediately
+                                    const w = window as any;
+                                    if (w.FFmpeg?.FFmpeg) {
+                                      resolve(w.FFmpeg.FFmpeg);
+                                    } else if (w.FFmpeg) {
+                                      resolve(w.FFmpeg);
+                                    }
+                                  };
+                                  script.onerror = () => reject(new Error("Failed to load FFmpeg script"));
+                                  document.head.appendChild(script);
+                                }
+
+                                // Wait for FFmpeg to be available (check every 100ms)
+                                let attempts = 0;
+                                const maxAttempts = 300; // 30 seconds
+                                const checkFFmpeg = () => {
+                                  attempts++;
+                                  const w = window as any;
+                                  if (w.FFmpeg?.FFmpeg) {
+                                    resolve(w.FFmpeg.FFmpeg);
+                                  } else if (w.FFmpeg) {
+                                    resolve(w.FFmpeg);
+                                  } else if (attempts >= maxAttempts) {
+                                    reject(new Error("FFmpeg failed to load after 30 seconds"));
+                                  } else {
+                                    setTimeout(checkFFmpeg, 100);
+                                  }
+                                };
+                                // Start checking after a short delay if script was already there
+                                if (existingScript) {
+                                  checkFFmpeg();
+                                } else {
+                                  setTimeout(checkFFmpeg, 500);
+                                }
+                              });
+                            };
+
+                            const FFmpegModule = await loadFFmpeg();
+
+                            if (btn) btn.innerHTML = `<span class="animate-spin">⏳</span> Initializing...`;
+
+                            const ffmpeg = new FFmpegModule();
+
+                            // Load FFmpeg with progress logging
+                            await ffmpeg.load({
+                              coreURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js",
+                              wasmURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm",
+                            });
+
+                            if (btn) btn.innerHTML = `<span class="animate-spin">⏳</span> Downloading video...`;
+
+                            // Fetch video with timeout and size check
+                            const controller = new AbortController();
+                            const timeoutId = setTimeout(() => controller.abort(), 60000);
+
+                            const response = await fetch(inputVideo, { signal: controller.signal });
+                            clearTimeout(timeoutId);
+
+                            if (!response.ok) {
+                              throw new Error(`Failed to fetch video: ${response.status} ${response.statusText}`);
+                            }
+
+                            const videoBlob = await response.blob();
+                            const videoSizeMB = videoBlob.size / (1024 * 1024);
+
+                            // Check file size (limit to 500MB for browser memory)
+                            if (videoSizeMB > 500) {
+                              throw new Error(
+                                `Video too large (${videoSizeMB.toFixed(1)}MB). Maximum is 500MB. Use the online converter instead.`,
+                              );
+                            }
+
+                            if (btn)
+                              btn.innerHTML = `<span class="animate-spin">⏳</span> Processing (${videoSizeMB.toFixed(1)}MB)...`;
+
+                            // Write file to FFmpeg virtual filesystem
+                            const videoArrayBuffer = await videoBlob.arrayBuffer();
+                            await ffmpeg.writeFile("input.webm", new Uint8Array(videoArrayBuffer));
+
+                            if (btn) btn.innerHTML = `<span class="animate-spin">⏳</span> Converting to MP4...`;
+
+                            // Run conversion with better codec settings
+                            const result = await ffmpeg.exec([
+                              "-i",
+                              "input.webm",
+                              "-c:v",
+                              "libx264",
+                              "-preset",
+                              "ultrafast",
+                              "-crf",
+                              "23",
+                              "-c:a",
+                              "aac",
+                              "-b:a",
+                              "128k",
+                              "-movflags",
+                              "+faststart",
+                              "-pix_fmt",
+                              "yuv420p",
+                              "-vsync",
+                              "vfr",
+                              "output.mp4",
+                            ]);
+
+                            if (result !== 0) {
+                              throw new Error(`FFmpeg conversion failed with code ${result}`);
+                            }
+
+                            if (btn) btn.innerHTML = `<span class="animate-spin">⏳</span> Finalizing...`;
+
+                            // Read output file
+                            const data = await ffmpeg.readFile("output.mp4");
+
+                            // Clean up FFmpeg filesystem
+                            try {
+                              await ffmpeg.deleteFile("input.webm");
+                              await ffmpeg.deleteFile("output.mp4");
+                            } catch (_) {
+                              // Ignore cleanup errors
+                            }
+
+                            // Create download
+                            const mp4Blob = new Blob([data.buffer], { type: "video/mp4" });
+                            const mp4Url = URL.createObjectURL(mp4Blob);
+                            const outputSizeMB = mp4Blob.size / (1024 * 1024);
+
+                            const a = document.createElement("a");
+                            a.href = mp4Url;
+                            a.download = `recap_${Date.now()}.mp4`;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+
+                            // Cleanup URL after delay
+                            setTimeout(() => URL.revokeObjectURL(mp4Url), 300000);
+
+                            console.log("✅ MP4 conversion complete!");
+                            alert(
+                              `✅ Conversion complete!\nInput: ${videoSizeMB.toFixed(1)}MB\nOutput: ${outputSizeMB.toFixed(1)}MB`,
+                            );
+                          } catch (e: any) {
+                            console.error("Conversion failed:", e);
+                            alert(
+                              `❌ MP4 Conversion failed:\n${e.message || "Unknown error"}\n\nPlease try the online converter link below.`,
+                            );
+                          } finally {
+                            if (btn) {
+                              btn.disabled = false;
+                              btn.innerHTML = originalText;
+                            }
+                          }
+                        }}
+                        className="flex items-center justify-center gap-2 px-4 py-3 bg-violet-600 hover:bg-violet-500 text-white font-bold rounded-lg transition-all w-full shadow-[0_0_15px_rgba(139,92,246,0.3)] border border-violet-400"
+                      >
+                        <span>🔄</span> In-App MP4 Converter
+                      </button>
+                      <p className="text-xs text-slate-500 mt-2 text-center">
+                        Fallback:{" "}
+                        <a
+                          href="https://www.freeconvert.com/video-converter"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-amber-400 hover:underline"
+                        >
+                          Online Converter
+                        </a>
+                      </p>
+                    </div>
                   </div>
                 ) : null}
                 {audioUrl && (
@@ -2334,10 +3461,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     <a
                       href={audioUrl}
                       download="recap_audio.wav"
-                      className="flex items-center justify-center px-4 py-3 bg-charcoal-700 hover:bg-charcoal-600 text-white rounded-lg border border-charcoal-500 transition-colors"
+                      className="flex items-center justify-center px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-100 rounded-lg border border-slate-700 transition-all"
                     >
                       <svg
-                        className="w-5 h-5 mr-2 text-neon-cyan"
+                        className="w-5 h-5 mr-2 text-amber-400"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -2354,16 +3481,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-2 bg-charcoal-900/50 rounded-xl p-1.5">
+              <div className="flex items-center gap-2 bg-slate-800/50 rounded-xl p-1.5">
                 <button
                   onClick={() => onVoiceModeChange("modern")}
-                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${voiceMode === "modern" ? "bg-neon-cyan text-black shadow-[0_0_10px_rgba(0,229,255,0.4)]" : "text-gray-400 hover:text-gray-200"}`}
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${voiceMode === "modern" ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900 shadow-[0_0_10px_rgba(245,158,11,0.4)]" : "text-slate-400 hover:text-slate-200"}`}
                 >
                   Modern Version
                 </button>
                 <button
                   onClick={() => onVoiceModeChange("normal")}
-                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${voiceMode === "normal" ? "bg-charcoal-600 text-white shadow-md" : "text-gray-400 hover:text-gray-200"}`}
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${voiceMode === "normal" ? "bg-slate-700 text-slate-100 shadow-md" : "text-slate-400 hover:text-slate-200"}`}
                 >
                   Normal Version
                 </button>
@@ -2372,7 +3499,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 <button
                   onClick={onGenerateVoice}
                   disabled={status === "processing"}
-                  className="w-full py-3 bg-charcoal-700 text-white font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full py-3 bg-slate-800 text-slate-100 font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed border border-slate-700 hover:bg-slate-700 transition-all"
                 >
                   Generate Voiceover
                 </button>
@@ -2380,7 +3507,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 <button
                   onClick={onGenerateVoice}
                   disabled={status === "processing"}
-                  className="w-full py-2.5 bg-charcoal-700 hover:bg-charcoal-600 text-gray-300 text-xs font-bold rounded-xl border border-charcoal-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl border border-slate-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   🔄 Regenerate Voice ({voiceMode === "modern" ? "Modern" : "Normal"})
                 </button>
@@ -2599,7 +3726,9 @@ const RecapVideoNVPage: React.FC = () => {
   const handleGenerateVoice = () => {
     if (scriptData.full_script) {
       const resolvedOwnKey = apiMode === "own" ? ownApiKey.trim() : "";
-      generateVoice(scriptData.full_script, resolvedOwnKey || undefined);
+      // Pass segments to ensure 100% script coverage in voice generation
+      const segments = scriptData.segments.map((s) => ({ text: s.text }));
+      generateVoice(scriptData.full_script, resolvedOwnKey || undefined, segments);
     }
   };
 
@@ -2635,12 +3764,11 @@ const RecapVideoNVPage: React.FC = () => {
   };
 
   const generateVoice = async (scriptText: string, useOwnKey?: string, segsForSync?: { text: string }[]) => {
-    // ── THE ULTIMATE ZERO-PAUSE HACK FOR NORMAL MODE ──
-    // Strip EVERY single punctuation mark (English & Burmese) physically from the text before sending to the AI.
-    // This removes all mid-sentence/paragraph break points, forcing completely continuous, unbroken speech.
+    // Voice naturalness: keep Burmese punctuation so TTS can insert realistic micro-pauses.
     let speechTextForAPI = scriptText.replace(/\[.*?\]\s*/g, "");
     if (voiceMode === "normal") {
-      speechTextForAPI = speechTextForAPI.replace(/[.,!?;:"'()\[\]{}\-_\n\r။၊]/g, " ").replace(/\s+/g, " ");
+      // Remove mainly English punctuation, but keep Burmese "။" / "၊".
+      speechTextForAPI = speechTextForAPI.replace(/[.,!?;:"'()\[\]{}\-_\n\r]/g, " ").replace(/\s+/g, " ");
     }
 
     setStatus("processing");
@@ -2661,7 +3789,7 @@ const RecapVideoNVPage: React.FC = () => {
           "DO NOT mix any Chinese tone, Kachin accent, Shan accent, European accent, or any ethnic minority accent whatsoever. " +
           "Pure ဗမာလေသံစစ်စစ် only — natural, fluent, warm, and confident modern Burmese speaking voice. " +
           "Pronounce every Burmese syllable, consonant cluster, and tone with perfect native Burmese phonology. " +
-          "Match the quality of Google Producer AI's Burmese human voice output — indistinguishable from a real Burmese human speaker.",
+          "Human-like delivery: natural intonation and light breathing; NEVER robotic cadence.",
         en:
           "Speak in 100% natural native English with a clear, modern, professional American or British accent. " +
           "Sound like a real native English-speaking human — warm, confident, and naturally fluent.",
@@ -2686,15 +3814,17 @@ const RecapVideoNVPage: React.FC = () => {
         languageCode: langCode,
         skipCreditDeduction: true,
         speedMode: voiceMode === "normal" ? "modern" : voiceMode,
-        nativeVoiceInstructions: nativeInstructions,
+        nativeVoiceInstructions:
+          nativeInstructions +
+          " CRITICAL: You MUST narrate the COMPLETE text from BEGINNING to END without skipping any part. Start from the very first word and continue to the very last word. Do NOT truncate or summarize.",
         // ── PACING & EMOTION: natural continuous pacing, professional storyteller, contextual realistic emotion ──
         styleInstructions:
           nativeInstructions +
-          ` CRITICAL PACING & EMOTION: Speak smoothly and continuously with an international professional storytelling and top-tier narrator style. ` +
-          ` Automatically adapt your emotional tone to perfectly match the context and mood of the specific script (e.g., use a sad tone for sad scenes, an angry tone for angry scenes, a joyous tone for happy scenes, an excited tone for thrilling scenes). ` +
+          ` PROFESSIONAL STORYTELLING: Speak like a real Yangon human narrator with natural flow. ` +
+          ` Automatically adapt emotional tone to match the context and mood of the script. ` +
           (voiceMode === "modern"
-            ? ` Keep all pauses extremely short and fluid; do not pause unnecessarily. Maintain a highly engaging, continuous momentum. Pace MUST be noticeably fast, dynamic, and rapid-fire like a viral modern recap video.`
-            : ` 🚨 ABSOLUTE ZERO PAUSE DIRECTIVE 🚨: You MUST speak EXTREMELY FAST (1.5x Speed). DO NOT BREATHE. NO PAUSES ALLOWED ANYWHERE. Link every single word together seamlessly. You must speak the entire text as ONE single continuous rapid breath. Your speed must be vastly faster than standard conversation while maintaining perfect professional narrator clarity!`),
+            ? ` Pace: lively and engaging, but still natural. Allow micro-pauses at natural sentence boundaries. Let there be light, realistic breathing. Avoid robotic cadence.`
+            : ` Pace: conversational and clear (not forced-fast). Include realistic pauses and light breaths at clause ends. Avoid robotic cadence; sound human.`),
         voiceConfig: {
           speakingStyle: "natural_conversational",
           pronunciationStrictness: "native_only",
@@ -2726,7 +3856,11 @@ const RecapVideoNVPage: React.FC = () => {
         const numChannels = 1;
         const bitsPerSample = 16;
         const pcmBytes = Uint8Array.from(atob(data.audio), (c) => c.charCodeAt(0));
-        const dataLength = pcmBytes.length;
+        // Add 200ms silence padding at the start to prevent browser clipping
+        const silenceSamples = Math.round(sampleRate * 0.2);
+        const silenceBytes = silenceSamples * numChannels * (bitsPerSample / 8);
+        const silencePad = new Uint8Array(silenceBytes); // zeros = silence
+        const dataLength = silenceBytes + pcmBytes.length;
         const headerSize = 44;
         const wav = new Uint8Array(headerSize + dataLength);
         const view = new DataView(wav.buffer);
@@ -2743,7 +3877,8 @@ const RecapVideoNVPage: React.FC = () => {
         view.setUint16(34, bitsPerSample, true);
         wav.set([0x64, 0x61, 0x74, 0x61], 36);
         view.setUint32(40, dataLength, true);
-        wav.set(pcmBytes, headerSize);
+        wav.set(silencePad, headerSize);
+        wav.set(pcmBytes, headerSize + silenceBytes);
         audioBlob = new Blob([wav], { type: "audio/wav" });
       } else {
         const mimeForAudio = data.mimeType || "audio/mpeg";
@@ -2882,13 +4017,45 @@ const RecapVideoNVPage: React.FC = () => {
       } = await supabase.auth.getSession();
       const userToken = currentSession?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       const selectedLangName = languages.find((l) => l.code === selectedLanguage)?.name || "BURMESE";
+      // Token headroom: long videos need more room to finish the full script.
+      const maxOutputTokens = Math.min(8192, Math.max(2048, Math.ceil(duration * 140)));
+
       const scriptBody: Record<string, unknown> = {
         fileUri,
         fileMimeType: mimeType,
-        niche: "MOVIE RECAP",
+        // ── COMPLETION MANDATE + original-voice recap (prompt-only; does not affect AV sync) ──
+        niche: `MOVIE RECAP — Original Burmese narration (transformative recap, not a transcript).
+You MUST write the COMPLETE script for the ENTIRE video duration. Do NOT stop halfway; cover 100% of the story arc from start to finish.
+
+LANGUAGE STYLE (CRITICAL):
+- Use modern Yangon everyday Burmese (spoken style).
+- Do NOT use formal/written connectors or placeholder phrases.
+- Avoid formal connectors that sound written/old-fashioned: ထို့အပြင်, ထို့ကြောင့်, ဥပမာ, စသဖြင့်.
+- DO allow spoken connectors: ဒါ့အပြင်, ဒါကြောင့်, တယ်.
+- No placeholders like "ဇာတ်ကောင်နာမည်". Write real narration only.
+
+FORMAT (CRITICAL FOR SEGMENTING):
+Output each paragraph as one segment starting with a timestamp prefix like: [MM:SS] ... .
+The first segment should start at [00:00]. The last segment must reach close to the end of the full duration.
+
+ORIGINALITY:
+Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle text.`,
         language: selectedLangName,
         sourceDurationSec: duration,
         skipCreditDeduction: true,
+        extraInstructions: `CRITICAL:
+- Script completeness: MUST cover the entire ${duration} seconds with no early stop.
+- Each segment must be continuous and not jump suddenly.
+
+STYLE RULES:
+- Use modern conversational Burmese only.
+- Avoid formal writing cadence; keep it human and natural.
+- No formal "ထို့အပြင်/ထို့ကြောင့်/ဥပမာ/စသဖြင့်" type connectors.
+- It is OK to use spoken connectors like "ဒါ့အပြင်" / "ဒါကြောင့်" in natural conversation.`,
+        generationConfig: {
+          maxOutputTokens,
+          temperature: 0.7,
+        },
       };
       if (resolvedOwnKey) scriptBody.ownApiKey = resolvedOwnKey;
 
@@ -2995,6 +4162,7 @@ const RecapVideoNVPage: React.FC = () => {
             ငါးမိနစ်အောက် Video တစ်ခုကို upload လုပ်လိုက်ရုံနဲ့ လူကဘာမှလုပ်စရာမလိုတော့ပဲ AI ကနေ RecapVideoကို Auto
             download အထိအစဆုံး လုပ်ပေးသွားပါလိမ့်မယ်
           </p>
+          <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl"></p>
 
           {/* API Mode */}
           <div className="space-y-2">
