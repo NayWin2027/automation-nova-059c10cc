@@ -1720,7 +1720,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           ctx.fillRect(0, 0, canvas.width, bw); // Top Edge
           ctx.fillRect(0, canvas.height - bw, canvas.width, bw); // Bottom Edge
           ctx.fillRect(0, 0, bw, canvas.height); // Left Edge
-          ctx.fillRect(canvas.width - bw + 1, 0, bw + 1, canvas.height);
+          ctx.fillRect(canvas.width - bw * 2, 0, bw * 2, canvas.height);
 
           ctx.restore();
         }
