@@ -2128,8 +2128,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     if (activeIndex !== lastIndexRef.current) {
                       const snapDrift = Math.abs(vv.currentTime - active.vStart);
                       // SURGICAL FIX: At the very moment of a new sentence/scene cut, a hard-seek is completely invisible.
-                      // Snapping at >0.05s here guarantees 100% mechanical starting sync without causing mid-scene stutters.
-                      if (snapDrift > 0.05) vv.currentTime = active.vStart;
+                      // Snapping at >0.02s here guarantees 100% mechanical starting sync without causing mid-scene stutters.
+                      if (snapDrift > 0.02) vv.currentTime = active.vStart;
                       lastIndexRef.current = activeIndex;
                     }
                   } else if (currentTime < audioTs[0].start) {
@@ -2188,7 +2188,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   if (activeIndex !== lastIndexRef.current) {
                     const snapDrift = Math.abs(vv.currentTime - s.vStart);
                     // SURGICAL FIX: Invisible scene-cut hard seek for 100% accuracy.
-                    if (snapDrift > 0.05) vv.currentTime = s.vStart;
+                    if (snapDrift > 0.02) vv.currentTime = s.vStart;
                     lastIndexRef.current = activeIndex;
                   }
                 }
