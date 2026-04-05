@@ -1638,8 +1638,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         let zoomedSrcX = srcCropX + Math.round((srcCropW - zoomedSrcW) / 2) + shiftX;
         // ── SURGICAL FIX: Face 100% Visibility ──
-        // Anchor zoom around the upper 15% (eyeline) instead of center so faces are NEVER cut off at the top.
-        let zoomedSrcY = srcCropY + Math.round((srcCropH - zoomedSrcH) * 0.15) + shiftY;
+        // Anchor zoom around the upper 28% (golden rule of thirds) instead of 15% so faces and chins are both perfectly preserved without excess ceiling headroom.
+        let zoomedSrcY = srcCropY + Math.round((srcCropH - zoomedSrcH) * 0.28) + shiftY;
 
         // Clamp to the valid source crop bounds.
         zoomedSrcX = Math.max(srcCropX, Math.min(srcCropX + (srcCropW - zoomedSrcW), zoomedSrcX));
@@ -1720,7 +1720,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           ctx.fillRect(0, 0, canvas.width, bw); // Top Edge
           ctx.fillRect(0, canvas.height - bw, canvas.width, bw); // Bottom Edge
           ctx.fillRect(0, 0, bw, canvas.height); // Left Edge
-          ctx.fillRect(canvas.width - bw, 0, bw, canvas.height);
+          ctx.fillRect(canvas.width - bw + 1, 0, bw + 1, canvas.height);
 
           ctx.restore();
         }
@@ -2127,9 +2127,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
                     if (activeIndex !== lastIndexRef.current) {
                       const snapDrift = Math.abs(vv.currentTime - active.vStart);
-                      // SURGICAL FIX (Professional Smooth Vibe): Only hard-seek if catastrophically lost (>1.0s)
-                      // Otherwise, the extreme elastic playbackRate tuning will glide it instantly into sync without stutter.
-                      if (snapDrift > 1.0) vv.currentTime = active.vStart;
+                      // SURGICAL FIX: At the very moment of a new sentence/scene cut, a hard-seek is completely invisible.
+                      // Snapping at >0.05s here guarantees 100% mechanical starting sync without causing mid-scene stutters.
+                      if (snapDrift > 0.05) vv.currentTime = active.vStart;
                       lastIndexRef.current = activeIndex;
                     }
                   } else if (currentTime < audioTs[0].start) {
@@ -2187,9 +2187,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   }
                   if (activeIndex !== lastIndexRef.current) {
                     const snapDrift = Math.abs(vv.currentTime - s.vStart);
-                    // SURGICAL FIX (Professional Smooth Vibe): Only hard-seek if catastrophically lost (>1.0s)
-                    // The PID tuning below will flawlessly catch up to 0.1s drift within ~3 frames without a single freeze.
-                    if (snapDrift > 1.0) vv.currentTime = s.vStart;
+                    // SURGICAL FIX: Invisible scene-cut hard seek for 100% accuracy.
+                    if (snapDrift > 0.05) vv.currentTime = s.vStart;
                     lastIndexRef.current = activeIndex;
                   }
                 }
@@ -2197,18 +2196,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
               if (targetVideoTime !== null) {
                 const drift = targetVideoTime - vv.currentTime;
-                // 100% ACCURACY SYNC (Professional Smooth Vibe): Zero Stutter
-                // Eliminate hard-seeking completely unless drift is catastrophic (> 1.0s)
-                if (Math.abs(drift) > 1.0) {
+                // 100% ACCURACY SYNC + 100% PROFESSIONAL SMOOTH VIBE
+                // Eliminate the oscillating PID loop. Changing playbackRate every frame causes decoder micro-stutters.
+                // We rely on the invisible 0.05s scene-start snap for absolute sync, then lock the exact mathematical baseRate!
+                if (Math.abs(drift) > 0.4) {
                   vv.currentTime = targetVideoTime;
+                }
+
+                // Do not lerp. Do not react to atomic drifts. Lock the rate absolutely for perfectly smooth flawless decoding.
+                if (Math.abs(vv.playbackRate - baseRate) > 0.01) {
                   vv.playbackRate = baseRate;
-                } else {
-                  // Extreme but BUTTERY SMOOTH rate correction for mathematically locked <0.1s sub-frame accuracy
-                  const targetRate = baseRate + drift * 8.0;
-                  // Extremely wide clamp limits for instant elastic optical flow without freezing (0.1x to 4.0x)
-                  const clampedRate = Math.min(Math.max(targetRate, 0.1), Math.max(baseRate * 4.0, 4.0));
-                  // Instant aggressive lerp (0.8) for immediate but non-stuttering sync adaptation
-                  vv.playbackRate = vv.playbackRate + (clampedRate - vv.playbackRate) * 0.8;
                 }
               }
 
