@@ -80,8 +80,8 @@ serve(async (req) => {
       if (now > record.resetAt) {
         ipRequestMap.set(ip, { count: 1, resetAt: now + RATE_WINDOW_MS });
       } else if (record.count >= RATE_LIMIT) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
+      return new Response(
+          JSON.stringify({ error: "Rate limit exceeded", errorBurmese: "ကန့်သတ်ချက် ပြည့်သွားပါပြီ။ တစ်နာရီအကြာ ပြန်မေးနိုင်ပါတယ်။" }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       } else {
