@@ -184,7 +184,7 @@ export function LoginChatBot() {
           />
           <button
             onClick={sendMessage}
-            disabled={isLoading || !input.trim()}
+            disabled={isLoading || !input.trim() || isRateLimited}
             className="p-2.5 rounded-full bg-emerald-600 text-white disabled:opacity-50 transition-all hover:bg-emerald-500"
           >
             <Send className="w-3.5 h-3.5" />
