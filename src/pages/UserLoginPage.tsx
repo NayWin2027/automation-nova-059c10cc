@@ -125,7 +125,7 @@ const UserLoginPage: React.FC = () => {
         {/* Glow effect */}
         <div className="absolute inset-0 bg-gradient-to-r from-violet-500/20 via-blue-500/20 to-purple-500/20 rounded-2xl blur-xl" />
         
-        <div className="relative premium-tool-card rounded-2xl p-6 border border-white/10 bg-card">
+        <div className="relative premium-tool-card rounded-2xl p-6 border border-white/10 bg-black">
           {/* Header */}
            <div className="text-center mb-6">
             <div className="flex justify-center mb-3">
