@@ -52,6 +52,18 @@ export function LoginChatBot() {
         throw new Error("ချိတ်ဆက်မှု မအောင်မြင်ပါ။ ခဏနေပြီး ပြန်ကြိုးစားပါ။");
       }
 
+      // Handle non-streaming blocked response (security probe)
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        const data = await response.json();
+        const blockedContent = data.choices?.[0]?.message?.content;
+        if (blockedContent) {
+          setMessages((prev) => [...prev, { role: "assistant", content: blockedContent }]);
+        }
+        setIsLoading(false);
+        return;
+      }
+
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let textBuffer = "";

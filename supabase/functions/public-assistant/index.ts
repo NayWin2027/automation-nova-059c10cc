@@ -179,6 +179,33 @@ serve(async (req) => {
       );
     }
 
+    // Security probe detection — block immediately without calling AI
+    const SECURITY_PROBE_PATTERNS = [
+      /\b(api\s*key|api\s*secret|secret\s*key|private\s*key|access\s*token|auth\s*token)\b/gi,
+      /\b(web\s*security|cyber\s*security|penetration\s*test|pen\s*test|vulnerability|exploit|injection|xss|csrf|sql\s*injection)\b/gi,
+      /\b(hack|hacking|hacker|crack|cracking|brute\s*force|ddos|phishing)\b/gi,
+      /\b(rls|row\s*level|edge\s*function|supabase|database\s*schema|backend\s*code|source\s*code|server\s*config)\b/gi,
+      /\b(gemini\s*api|google\s*api|lovable\s*api|openai|gpt|claude)\b/gi,
+      /\b(encryption|decrypt|token|jwt|bearer|oauth|cors|header)\b/gi,
+      /\b(admin\s*panel|admin\s*login|admin\s*dashboard|gate\s*code|2fa|totp|two\s*factor)\b/gi,
+      /\b(environment\s*variable|env\s*file|\.env|config\s*file|secret\s*manager)\b/gi,
+    ];
+
+    const isSecurityProbe = (text: string): boolean => {
+      return SECURITY_PROBE_PATTERNS.some(pattern => pattern.test(text));
+    };
+
+    // Check the latest user message for security probing
+    const lastUserMsg = messages[messages.length - 1];
+    if (lastUserMsg && lastUserMsg.role === "user" && isSecurityProbe(lastUserMsg.content)) {
+      const blockedReply = "ဒီအကြောင်းအရာကို ဖြေကြားပေးလို့မရပါဘူး။ App အကြောင်း၊ Plan စျေးနှုန်း၊ Tool အသုံးပြုပုံ စတာတွေ သိချင်ရင် မေးနိုင်ပါတယ်။";
+      // Return a non-streaming JSON response for blocked queries
+      return new Response(
+        JSON.stringify({ choices: [{ message: { role: "assistant", content: blockedReply } }] }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Sanitize user messages — strip common prompt injection patterns
     const sanitize = (text: string): string => {
       return text
