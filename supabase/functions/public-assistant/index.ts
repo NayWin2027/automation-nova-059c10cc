@@ -80,8 +80,8 @@ serve(async (req) => {
       if (now > record.resetAt) {
         ipRequestMap.set(ip, { count: 1, resetAt: now + RATE_WINDOW_MS });
       } else if (record.count >= RATE_LIMIT) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
+      return new Response(
+          JSON.stringify({ error: "Rate limit exceeded", errorBurmese: "ကန့်သတ်ချက် ပြည့်သွားပါပြီ။ တစ်နာရီအကြာ ပြန်မေးနိုင်ပါတယ်။" }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       } else {
@@ -133,7 +133,11 @@ serve(async (req) => {
     // Use Lovable AI Gateway — NO Gemini API key exposure
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
-      throw new Error("AI service not configured");
+      console.error("[public-assistant] LOVABLE_API_KEY is missing");
+      return new Response(
+        JSON.stringify({ error: "AI service not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // Build OpenAI-compatible messages
@@ -162,7 +166,7 @@ serve(async (req) => {
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error("[public-assistant] AI Gateway error:", response.status, errText);
+      console.error("[public-assistant] AI Gateway error:", response.status, errText.slice(0, 500));
       if (response.status === 429) {
         return new Response(
           JSON.stringify({ error: "AI service busy. Please try again." }),

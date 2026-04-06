@@ -11,6 +11,7 @@ export function LoginChatBot() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isRateLimited, setIsRateLimited] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -43,11 +44,12 @@ export function LoginChatBot() {
       );
 
       if (response.status === 429) {
-        throw new Error("မေးခွန်းများစွာ မေးပြီးပါပြီ။ ခဏစောင့်ပြီး ပြန်မေးပါ။");
+        setIsRateLimited(true);
+        throw new Error("⚠️ ကန့်သတ်ချက် ပြည့်သွားပါပြီ။ တစ်နာရီအကြာ ပြန်မေးနိုင်ပါတယ်။");
       }
 
       if (!response.ok || !response.body) {
-        throw new Error("AI response မရပါ။ ခဏနေပြီး ပြန်ကြိုးစားပါ။");
+        throw new Error("ချိတ်ဆက်မှု မအောင်မြင်ပါ။ ခဏနေပြီး ပြန်ကြိုးစားပါ။");
       }
 
       const reader = response.body.getReader();
@@ -94,7 +96,10 @@ export function LoginChatBot() {
         }
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "တစ်ခုခု မှားသွားပါတယ်။";
+      const isNetworkError = error instanceof TypeError && error.message === "Failed to fetch";
+      const errorMessage = isNetworkError
+        ? "ချိတ်ဆက်မှု မအောင်မြင်ပါ။ ခဏနေပြီး ပြန်ကြိုးစားပါ။"
+        : error instanceof Error ? error.message : "တစ်ခုခု မှားသွားပါတယ်။";
       setMessages((prev) => [...prev, { role: "assistant", content: errorMessage }]);
     } finally {
       setIsLoading(false);
@@ -173,13 +178,14 @@ export function LoginChatBot() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-            placeholder="မေးခွန်းမေးရန်..."
-            className="flex-1 bg-white/5 border border-white/10 rounded-full px-4 py-2 text-xs text-white placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+            placeholder={isRateLimited ? "ကန့်သတ်ချက် ပြည့်သွားပါပြီ" : "မေးခွန်းမေးရန်..."}
+            disabled={isRateLimited}
+            className="flex-1 bg-white/5 border border-white/10 rounded-full px-4 py-2 text-xs text-white placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 disabled:opacity-40"
             autoFocus
           />
           <button
             onClick={sendMessage}
-            disabled={isLoading || !input.trim()}
+            disabled={isLoading || !input.trim() || isRateLimited}
             className="p-2.5 rounded-full bg-emerald-600 text-white disabled:opacity-50 transition-all hover:bg-emerald-500"
           >
             <Send className="w-3.5 h-3.5" />
