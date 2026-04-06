@@ -1,14 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
-import { getNextGeminiKey } from "../_shared/geminiKeys.ts";
 
 // Rate limiting: simple in-memory store (per isolate)
 const ipRequestMap = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMIT = 5; // max requests per window
+const RATE_LIMIT = 5; // max requests per window per IP
 const RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 
-const MAX_MESSAGES = 20;
-const MAX_CONTENT_LENGTH = 2000;
+const MAX_MESSAGES = 10;
+const MAX_CONTENT_LENGTH = 1500;
 
 const SYSTEM_PROMPT = `You are "Nova AI Assistant" — a friendly, helpful customer support chatbot for the "Automation Nova AI" platform.
 
@@ -132,38 +131,45 @@ serve(async (req) => {
       }
       if (msg.content.length > MAX_CONTENT_LENGTH) {
         return new Response(
-          JSON.stringify({ error: "Message too long (max 2000 chars)" }),
+          JSON.stringify({ error: "Message too long (max 1500 chars)" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
     }
 
-    // Get API key with rotation
-    const apiKey = getNextGeminiKey();
+    // Use Lovable AI Gateway — NO Gemini API key exposure
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      throw new Error("AI service not configured");
+    }
 
-    // Convert to Gemini format
-    const geminiContents = messages.map((msg: any) => ({
-      role: msg.role === "assistant" ? "model" : "user",
-      parts: [{ text: msg.content }],
-    }));
+    // Build OpenAI-compatible messages
+    const aiMessages = [
+      { role: "system", content: SYSTEM_PROMPT },
+      ...messages.map((msg: any) => ({
+        role: msg.role === "assistant" ? "assistant" : "user",
+        content: msg.content,
+      })),
+    ];
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents: geminiContents,
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 2048,
-          },
-        }),
-      }
-    );
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: aiMessages,
+        stream: true,
+        temperature: 0.7,
+        max_tokens: 2048,
+      }),
+    });
 
     if (!response.ok) {
+      const errText = await response.text();
+      console.error("[public-assistant] AI Gateway error:", response.status, errText);
       if (response.status === 429) {
         return new Response(
           JSON.stringify({ error: "AI service busy. Please try again." }),
@@ -173,45 +179,8 @@ serve(async (req) => {
       throw new Error("AI service error");
     }
 
-    // Transform to OpenAI-compatible SSE
-    const transformStream = new TransformStream({
-      transform(chunk, controller) {
-        const text = new TextDecoder().decode(chunk);
-        const lines = text.split("\n");
-        
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const jsonStr = line.slice(6).trim();
-          if (!jsonStr || jsonStr === "[DONE]") {
-            if (jsonStr === "[DONE]") controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
-            continue;
-          }
-          
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const content = parsed.candidates?.[0]?.content?.parts?.[0]?.text || "";
-            if (content) {
-              const openAiChunk = {
-                choices: [{ delta: { content }, index: 0 }],
-              };
-              controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(openAiChunk)}\n\n`));
-            }
-            
-            const finishReason = parsed.candidates?.[0]?.finishReason;
-            if (finishReason && finishReason !== "STOP" || (finishReason === "STOP" && parsed.candidates?.[0]?.content?.parts?.[0]?.text === undefined)) {
-              controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
-            }
-          } catch {
-            // Skip unparseable
-          }
-        }
-      },
-      flush(controller) {
-        controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
-      }
-    });
-
-    return new Response(response.body!.pipeThrough(transformStream), {
+    // Lovable AI Gateway already returns OpenAI-compatible SSE — pass through directly
+    return new Response(response.body, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (error) {
