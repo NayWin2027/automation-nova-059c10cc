@@ -8,6 +8,7 @@ import {
   LogIn, Home, MessageCircle } from
 "lucide-react";
 import { AppLogo } from "@/components/AppLogo";
+import { LoginChatBot } from "@/components/LoginChatBot";
 
 const ADMIN_GATE_CODE = "k$@w$@n008060964999777999";
 
