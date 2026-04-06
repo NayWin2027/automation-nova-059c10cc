@@ -224,7 +224,7 @@ const UserLoginPage: React.FC = () => {
                 href="https://m.me/NAYWIN2027"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-2xs font-semibold text-blue-400 hover:text-blue-300 transition-colors"
+                className="flex items-center gap-1.5 transition-colors font-extrabold text-xs text-neon-amber"
               >
                 <MessageCircle className="w-3.5 h-3.5" />
                 Nay Win
@@ -233,7 +233,7 @@ const UserLoginPage: React.FC = () => {
                 href="https://m.me/koyeswan.tds"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-2xs font-semibold text-violet-400 hover:text-violet-300 transition-colors"
+                className="flex items-center gap-1.5 transition-colors text-red-600 font-extrabold text-xs"
               >
                 <MessageCircle className="w-3.5 h-3.5" />
                 Ko Ye Swan
