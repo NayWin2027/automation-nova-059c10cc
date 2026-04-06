@@ -1,19 +1,26 @@
 
 
-## Plan: Add Messenger Contact Links to Login Page
+## Analysis
 
-**What**: Add two Messenger links below the "Admin ထံဆက်သွယ်ပါ" text — Nay Win on the left, Ko Ye Swan on the right.
+Screenshot ကြည့်ရင် "Failed to fetch" ပြနေတာက **network error** ဖြစ်နေတာ — rate limit (429) ထိတာ မဟုတ်ဘူး။ Rate limit ထိရင် "မေးခွန်းများစွာ မေးပြီးပါပြီ" လို့ ပြမှာ။
 
-**Where**: `src/pages/UserLoginPage.tsx`, lines 218-222 only.
+Edge function logs ကြည့်ရင် function က boot ဖြစ်ပေမယ့် request processing log လုံးဝ မရှိဘူး — AI Gateway call fail ဖြစ်နေတာ ဖြစ်နိုင်တယ် (LOVABLE_API_KEY issue or gateway error)။
 
-**Change**: After the existing `<p>` tag (line 221), insert a `flex justify-between` container with two Messenger icon links:
+### ပြင်ရမယ့်အရာ (2 files, surgical only)
 
-```
-Left side:  "Nay Win" → https://m.me/NAYWIN2027
-Right side: "Ko Ye Swan" → https://m.me/koyeswan.tds
-```
+**1. `src/components/LoginChatBot.tsx`** — Error handling ပြင်ပြီး rate limit message ကောင်းကောင်းပြ
 
-Each link will have a small Messenger-style icon (using `MessageCircle` from lucide-react) + name text, styled with premium blue/violet gradient text, opening in new tab.
+- 429 response ရရင် → "⚠️ ကန့်သတ်ချက် ပြည့်သွားပါပြီ။ တစ်နာရီအကြာ ပြန်မေးနိုင်ပါတယ်။"
+- Network error (Failed to fetch) ရရင် → "ချိတ်ဆက်မှု မအောင်မြင်ပါ။ ခဏနေပြီး ပြန်ကြိုးစားပါ။"
+- Rate limit ထိပြီးရင် input ကို disable လုပ်ပြီး message ပြ
 
-**Surgical scope**: Only inserting ~15 lines inside the existing info-text div. No other files or sections touched.
+**2. `supabase/functions/public-assistant/index.ts`** — Rate limit response message ကို Burmese ထည့်
+
+- 429 response body ထဲမှာ `errorBurmese: "ကန့်သတ်ချက် ပြည့်သွားပါပြီ။ တစ်နာရီအကြာ ပြန်မေးနိုင်ပါတယ်။"` ထည့်
+- Error logging ပိုကောင်းအောင် ပြင်
+
+### မထိတဲ့အရာ
+- Security, CORS, API key rotation, other edge functions — အကုန်လုံး မထိ
+- LoginChatBot UI layout — မပြောင်း
+- System prompt — မပြောင်း
 
