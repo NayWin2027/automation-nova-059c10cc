@@ -219,6 +219,26 @@ const UserLoginPage: React.FC = () => {
             <p className="text-sm text-platinum">
               အကောင့်မရှိသေးပါက Admin ထံဆက်သွယ်ပါ
             </p>
+            <div className="flex justify-between mt-3">
+              <a
+                href="https://m.me/NAYWIN2027"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-2xs font-semibold text-blue-400 hover:text-blue-300 transition-colors"
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+                Nay Win
+              </a>
+              <a
+                href="https://m.me/koyeswan.tds"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-2xs font-semibold text-violet-400 hover:text-violet-300 transition-colors"
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+                Ko Ye Swan
+              </a>
+            </div>
           </div>
 
           {/* Admin Link - subtle */}
