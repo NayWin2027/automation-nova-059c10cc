@@ -186,12 +186,21 @@ serve(async (req) => {
       );
     }
 
-    // Build OpenAI-compatible messages
+    // Sanitize user messages — strip common prompt injection patterns
+    const sanitize = (text: string): string => {
+      return text
+        .replace(/\bsystem\s*:/gi, "")
+        .replace(/\b(ignore|forget|override|disregard)\s+(all\s+)?(previous|prior|above|system)\s+(instructions?|prompts?|rules?)/gi, "")
+        .replace(/\b(you are now|act as|pretend to be|new instructions?|developer mode|jailbreak|DAN)\b/gi, "")
+        .trim();
+    };
+
+    // Build OpenAI-compatible messages — force all user messages to "user" role
     const aiMessages = [
       { role: "system", content: SYSTEM_PROMPT },
       ...messages.map((msg: any) => ({
         role: msg.role === "assistant" ? "assistant" : "user",
-        content: msg.content,
+        content: sanitize(msg.content),
       })),
     ];
 
