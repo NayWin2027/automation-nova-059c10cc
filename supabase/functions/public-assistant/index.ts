@@ -133,7 +133,11 @@ serve(async (req) => {
     // Use Lovable AI Gateway — NO Gemini API key exposure
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
-      throw new Error("AI service not configured");
+      console.error("[public-assistant] LOVABLE_API_KEY is missing");
+      return new Response(
+        JSON.stringify({ error: "AI service not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // Build OpenAI-compatible messages
