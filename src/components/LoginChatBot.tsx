@@ -96,7 +96,10 @@ export function LoginChatBot() {
         }
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "တစ်ခုခု မှားသွားပါတယ်။";
+      const isNetworkError = error instanceof TypeError && error.message === "Failed to fetch";
+      const errorMessage = isNetworkError
+        ? "ချိတ်ဆက်မှု မအောင်မြင်ပါ။ ခဏနေပြီး ပြန်ကြိုးစားပါ။"
+        : error instanceof Error ? error.message : "တစ်ခုခု မှားသွားပါတယ်။";
       setMessages((prev) => [...prev, { role: "assistant", content: errorMessage }]);
     } finally {
       setIsLoading(false);
