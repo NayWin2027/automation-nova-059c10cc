@@ -230,6 +230,7 @@ const UserLoginPage: React.FC = () => {
                 <MessageCircle className="w-3.5 h-3.5" />
                 Nay Win
               </a>
+              <LoginChatBot />
               <a
                 href="https://m.me/koyeswan.tds"
                 target="_blank"
