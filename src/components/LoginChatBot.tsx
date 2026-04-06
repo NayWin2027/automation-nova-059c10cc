@@ -44,11 +44,12 @@ export function LoginChatBot() {
       );
 
       if (response.status === 429) {
-        throw new Error("မေးခွန်းများစွာ မေးပြီးပါပြီ။ ခဏစောင့်ပြီး ပြန်မေးပါ။");
+        setIsRateLimited(true);
+        throw new Error("⚠️ ကန့်သတ်ချက် ပြည့်သွားပါပြီ။ တစ်နာရီအကြာ ပြန်မေးနိုင်ပါတယ်။");
       }
 
       if (!response.ok || !response.body) {
-        throw new Error("AI response မရပါ။ ခဏနေပြီး ပြန်ကြိုးစားပါ။");
+        throw new Error("ချိတ်ဆက်မှု မအောင်မြင်ပါ။ ခဏနေပြီး ပြန်ကြိုးစားပါ။");
       }
 
       const reader = response.body.getReader();
