@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useSessionEnforcement } from "@/hooks/useSessionEnforcement";
 import {
   User, Lock, ArrowRight, Eye, EyeOff,
-  LogIn, Home } from
+  LogIn, Home, MessageCircle } from
 "lucide-react";
 import { AppLogo } from "@/components/AppLogo";
 
