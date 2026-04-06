@@ -8,6 +8,7 @@ import {
   LogIn, Home, MessageCircle } from
 "lucide-react";
 import { AppLogo } from "@/components/AppLogo";
+import { LoginChatBot } from "@/components/LoginChatBot";
 
 const ADMIN_GATE_CODE = "k$@w$@n008060964999777999";
 
@@ -229,6 +230,7 @@ const UserLoginPage: React.FC = () => {
                 <MessageCircle className="w-3.5 h-3.5" />
                 Nay Win
               </a>
+              <LoginChatBot />
               <a
                 href="https://m.me/koyeswan.tds"
                 target="_blank"
