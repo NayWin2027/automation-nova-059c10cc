@@ -216,7 +216,7 @@ const UserLoginPage: React.FC = () => {
 
           {/* Info text */}
           <div className="mt-4 pt-4 border-t border-white/10 text-center">
-            <p className="text-sm text-platinum">
+            <p className="text-sm text-orange-500 font-extrabold">
               အကောင့်မရှိသေးပါက Admin ထံဆက်သွယ်ပါ
             </p>
             <div className="flex justify-between mt-3">
