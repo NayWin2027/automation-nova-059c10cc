@@ -42,34 +42,27 @@ const SYSTEM_PROMPT = `You are "Nova AI Assistant" — a friendly, helpful custo
   10. Story Creator — ပုံပြင်ဖန်တီး ရေးသားခြင်း
 - Tutorial Videos section လည်း ရှိပါတယ်။
 
-### Plans & Pricing (EXACT DATA)
-There are TWO plans:
+### Plans & Pricing (EXACT DATA — SINGLE PLAN ONLY)
+Plan တစ်ခုတည်းသာ ရှိပါတယ်:
 
-**Premium+ (1 Month) — 52000 MMK (13$) (425 THB)**
-- Video Recap NV အပါအဝင် Tool အားလုံးအသုံးပြုနိုင်
-- APP API ဖြင့် Tool အားလုံး တစ်ရက် ၃၀ ကြိမ်စီအသုံးပြုခွင့်
-- OWN API ဖြင့် Text Tool အားလုံးနှင့် AI Voice Unlimited
-- Credits: 450 Credits (1 Month) ပါဝင်
+**Premium Plan (1 Month) — 45,000 MMK (380 THB)**
+- Tool အားလုံး အသုံးပြုနိုင်
+- 450 Credits ပါဝင် (1 Month)
+- APP API ဖြင့် Tool အားလုံး အသုံးပြုနိုင်
+- OWN API ဖြင့်လည်း အသုံးပြုနိုင်
 
-**Premium (1 Month) — 32000 MMK (8$) (264 THB)**
-- အသုံးပြုနိုင်သော Tool ၆ ခု: Transcribe, Translate, AI Voice, Content Creator, Sub Generator, SRT Translator
-- APP API ဖြင့် Tool အားလုံး တစ်ရက် ၃ ကြိမ်စီ
-- OWN API ဖြင့် Tool အားလုံး တစ်ရက် ၅ ကြိမ်စီ
-- Credits: 180 Credits (1 Month) ပါဝင်
-- Video Recap လုပ်ချင်ရင် Premium+ ဝယ်ရမယ်
+Premium+ plan မရှိပါ။ Plan တစ်ခုတည်းသာ ရှိပါတယ်။
 
-### Credit Top-Up Packages
-- 50 Credits — 10000 MMK (200 MMK/Credit)
-- 100 Credits — 18000 MMK (180 MMK/Credit)
-- 200 Credits — 32000 MMK (160 MMK/Credit)
-- 400 Credits — 56000 MMK (140 MMK/Credit)
+### Credit ထပ်ဝယ်ခြင်း
+- 450 Credit ကုန်သွားရင် 1 Credit = 100 MMK နှုန်းဖြင့် ထပ်ဝယ်နိုင်ပါတယ်
+- ဝယ်ချင်သလောက် ဝယ်လို့ရပါတယ်
 
 ### How Credits Work
 - APP API mode သုံးတဲ့အခါ အသုံးပြုတဲ့ပမာဏအပေါ်မူတည်ပြီး Credit နှုတ်မည်
 - OWN API mode သုံးရင် Credit လုံးဝမလို
-- Plan validity: Login ID ရရှိသည့်နေ့မှ ရက်၃၀
-- သက်တမ်းကုန်ပြီး ၅ရက်အတွင်း ပြန်မတိုးပါက လက်ကျန် Credit ပြန်မရ
-- သက်တမ်းပြန်တိုးတိုင်း Premium=180, Premium+=450 Credits ထပ်ရ
+- Plan validity: တစ်လ (Login ID ရရှိသည့်နေ့မှ)
+- သက်တမ်းကုန်ပြီး Tool ဆက်သုံးချင်ရင် မန်ဘာကြေး တစ်လစာ ပြန်တိုးရမယ်
+- သက်တမ်းပြန်တိုးတဲ့အခါ လက်ကျန် Credit နှင့် တစ်လစာ 450 Credit ပေါင်းပေးသွားမယ်
 - Credit ကုန်ရင် APP API ဆက်သုံးလို့မရ၊ Credit ထပ်ဝယ်ဖြည့်ရမည်
 
 ### Payment Methods (SHARE FREELY — PUBLIC INFO)
