@@ -4,7 +4,7 @@ import { getNextGeminiKey } from "../_shared/geminiKeys.ts";
 
 // Rate limiting: simple in-memory store (per isolate)
 const ipRequestMap = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMIT = 15; // max requests per window
+const RATE_LIMIT = 5; // max requests per window
 const RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 
 const MAX_MESSAGES = 20;
