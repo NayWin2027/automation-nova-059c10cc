@@ -144,7 +144,7 @@ const UserLoginPage: React.FC = () => {
 
               Automation Nova AI
             </h1>
-            <p className="text-2xs uppercase tracking-widest text-primary font-bold">
+            <p className="uppercase tracking-widest text-primary font-bold text-xs">
               User Login
             </p>
           </div>
