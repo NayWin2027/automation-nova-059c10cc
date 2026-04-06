@@ -225,6 +225,14 @@ const UserLoginPage: React.FC = () => {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1.5 text-2xs font-semibold text-blue-400 hover:text-blue-300 transition-colors"
+                onClick={(e) => {
+                  e.preventDefault();
+                  const appUrl = "fb-messenger://user-thread/NAYWIN2027";
+                  const webUrl = "https://m.me/NAYWIN2027";
+                  const timeout = setTimeout(() => { window.open(webUrl, "_blank"); }, 800);
+                  window.location.href = appUrl;
+                  window.addEventListener("blur", () => clearTimeout(timeout), { once: true });
+                }}
               >
                 <MessageCircle className="w-3.5 h-3.5" />
                 Nay Win
@@ -234,6 +242,14 @@ const UserLoginPage: React.FC = () => {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1.5 text-2xs font-semibold text-violet-400 hover:text-violet-300 transition-colors"
+                onClick={(e) => {
+                  e.preventDefault();
+                  const appUrl = "fb-messenger://user-thread/koyeswan.tds";
+                  const webUrl = "https://m.me/koyeswan.tds";
+                  const timeout = setTimeout(() => { window.open(webUrl, "_blank"); }, 800);
+                  window.location.href = appUrl;
+                  window.addEventListener("blur", () => clearTimeout(timeout), { once: true });
+                }}
               >
                 <MessageCircle className="w-3.5 h-3.5" />
                 Ko Ye Swan
