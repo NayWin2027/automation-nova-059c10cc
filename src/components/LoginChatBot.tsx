@@ -178,8 +178,9 @@ export function LoginChatBot() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-            placeholder="မေးခွန်းမေးရန်..."
-            className="flex-1 bg-white/5 border border-white/10 rounded-full px-4 py-2 text-xs text-white placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+            placeholder={isRateLimited ? "ကန့်သတ်ချက် ပြည့်သွားပါပြီ" : "မေးခွန်းမေးရန်..."}
+            disabled={isRateLimited}
+            className="flex-1 bg-white/5 border border-white/10 rounded-full px-4 py-2 text-xs text-white placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 disabled:opacity-40"
             autoFocus
           />
           <button

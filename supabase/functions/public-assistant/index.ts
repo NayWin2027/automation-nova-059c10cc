@@ -166,7 +166,7 @@ serve(async (req) => {
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error("[public-assistant] AI Gateway error:", response.status, errText);
+      console.error("[public-assistant] AI Gateway error:", response.status, errText.slice(0, 500));
       if (response.status === 429) {
         return new Response(
           JSON.stringify({ error: "AI service busy. Please try again." }),
