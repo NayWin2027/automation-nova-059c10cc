@@ -111,9 +111,23 @@ const AdminCreditAgentTab: React.FC = () => {
     return Array.from(years).sort((a, b) => b.localeCompare(a));
   }, [allRecords]);
 
+  // Split records by category (topup vs bonus)
+  const splitByCategory = (records: CreditRecord[]) => {
+    const topups = records.filter((r) => r.topup_type !== "bonus");
+    const bonuses = records.filter((r) => r.topup_type === "bonus");
+    return { topups, bonuses };
+  };
+
   // Group records by period
   const filteredData = useMemo(() => {
     type AgentGroup = { key: string; label: string; nw: CreditRecord[]; kys: CreditRecord[]; numeric: CreditRecord[] };
+
+    const buildGroups = (records: CreditRecord[]): { nw: CreditRecord[]; kys: CreditRecord[]; numeric: CreditRecord[] } => {
+      const groups = { nw: [] as CreditRecord[], kys: [] as CreditRecord[], numeric: [] as CreditRecord[] };
+      records.forEach((r) => groups[categorizeUser(r.user_email)].push(r));
+      Object.values(groups).forEach((arr) => arr.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
+      return groups;
+    };
 
     if (viewMode === "monthly") {
       const filtered = allRecords.filter((r) => {
@@ -121,9 +135,7 @@ const AdminCreditAgentTab: React.FC = () => {
         return String(d.getFullYear()) === selectedYear &&
                String(d.getMonth() + 1).padStart(2, "0") === selectedMonth;
       });
-      const groups = { nw: [] as CreditRecord[], kys: [] as CreditRecord[], numeric: [] as CreditRecord[] };
-      filtered.forEach((r) => groups[categorizeUser(r.user_email)].push(r));
-      Object.values(groups).forEach((arr) => arr.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
+      const groups = buildGroups(filtered);
       return [{ key: `${selectedYear}-${selectedMonth}`, label: `${MONTHS[parseInt(selectedMonth) - 1]} ${selectedYear}`, ...groups }] as AgentGroup[];
     } else {
       const yearRecords = allRecords.filter((r) => String(new Date(r.created_at).getFullYear()) === selectedYear);
@@ -133,29 +145,41 @@ const AdminCreditAgentTab: React.FC = () => {
         const mStr = String(m).padStart(2, "0");
         const monthRecords = yearRecords.filter((r) => new Date(r.created_at).getMonth() + 1 === m);
         if (monthRecords.length === 0) continue;
-        const groups = { nw: [] as CreditRecord[], kys: [] as CreditRecord[], numeric: [] as CreditRecord[] };
-        monthRecords.forEach((r) => groups[categorizeUser(r.user_email)].push(r));
-        Object.values(groups).forEach((arr) => arr.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
+        const groups = buildGroups(monthRecords);
         monthGroups.push({ key: `${selectedYear}-${mStr}`, label: `${MONTHS[m - 1]} ${selectedYear}`, ...groups });
       }
       return monthGroups;
     }
   }, [allRecords, viewMode, selectedYear, selectedMonth]);
 
-  // Totals for current view (amounts, not counts)
+  // Totals for current view split by topup/bonus
   const viewTotals = useMemo(() => {
-    let nwAmount = 0, kysAmount = 0, numericAmount = 0;
-    let nwCount = 0, kysCount = 0, numericCount = 0;
+    let topupAmount = 0, bonusAmount = 0;
+    let topupCount = 0, bonusCount = 0;
+    const agentTopup = { nw: 0, kys: 0, numeric: 0 };
+    const agentBonus = { nw: 0, kys: 0, numeric: 0 };
+    const agentTopupCount = { nw: 0, kys: 0, numeric: 0 };
+    const agentBonusCount = { nw: 0, kys: 0, numeric: 0 };
+
     filteredData.forEach((g) => {
-      g.nw.forEach((r) => { nwAmount += r.amount; nwCount++; });
-      g.kys.forEach((r) => { kysAmount += r.amount; kysCount++; });
-      g.numeric.forEach((r) => { numericAmount += r.amount; numericCount++; });
+      (["nw", "kys", "numeric"] as const).forEach((agent) => {
+        g[agent].forEach((r) => {
+          if (r.topup_type === "bonus") {
+            bonusAmount += r.amount; bonusCount++;
+            agentBonus[agent] += r.amount; agentBonusCount[agent]++;
+          } else {
+            topupAmount += r.amount; topupCount++;
+            agentTopup[agent] += r.amount; agentTopupCount[agent]++;
+          }
+        });
+      });
     });
+
     return {
-      nwAmount, kysAmount, numericAmount,
-      nwCount, kysCount, numericCount,
-      totalAmount: nwAmount + kysAmount + numericAmount,
-      totalCount: nwCount + kysCount + numericCount,
+      topupAmount, bonusAmount, topupCount, bonusCount,
+      agentTopup, agentBonus, agentTopupCount, agentBonusCount,
+      totalAmount: topupAmount + bonusAmount,
+      totalCount: topupCount + bonusCount,
     };
   }, [filteredData]);
 
@@ -191,7 +215,6 @@ const AdminCreditAgentTab: React.FC = () => {
                 <TableRow className="bg-muted/30">
                   <TableHead className="text-2xs py-1.5 px-3">#</TableHead>
                   <TableHead className="text-2xs py-1.5 px-3">User ID</TableHead>
-                  <TableHead className="text-2xs py-1.5 px-3">Type</TableHead>
                   <TableHead className="text-2xs py-1.5 px-3">Amount</TableHead>
                   <TableHead className="text-2xs py-1.5 px-3">Date</TableHead>
                 </TableRow>
@@ -202,15 +225,6 @@ const AdminCreditAgentTab: React.FC = () => {
                     <TableCell className="text-2xs py-1.5 px-3 text-muted-foreground">{idx + 1}</TableCell>
                     <TableCell className="text-2xs py-1.5 px-3 font-mono font-medium">
                       {r.user_email.split("@")[0].toUpperCase()}
-                    </TableCell>
-                    <TableCell className="text-2xs py-1.5 px-3">
-                      <Badge variant="outline" className={`text-2xs ${
-                        r.topup_type === "bonus" ? "text-purple-400 border-purple-500/30" :
-                        r.topup_type === "topup" ? "text-amber-400 border-amber-500/30" :
-                        "text-emerald-400 border-emerald-500/30"
-                      }`}>
-                        {r.topup_type}
-                      </Badge>
                     </TableCell>
                     <TableCell className="text-2xs py-1.5 px-3 font-semibold text-emerald-400">
                       +{r.amount}
@@ -228,29 +242,68 @@ const AdminCreditAgentTab: React.FC = () => {
     );
   };
 
+  const renderCategorySection = (
+    allGroupRecords: { nw: CreditRecord[]; kys: CreditRecord[]; numeric: CreditRecord[] },
+    category: RecordCategory,
+    groupKey: string
+  ) => {
+    const filterFn = category === "bonus"
+      ? (r: CreditRecord) => r.topup_type === "bonus"
+      : (r: CreditRecord) => r.topup_type !== "bonus";
+
+    const nw = allGroupRecords.nw.filter(filterFn);
+    const kys = allGroupRecords.kys.filter(filterFn);
+    const numeric = allGroupRecords.numeric.filter(filterFn);
+    const total = nw.length + kys.length + numeric.length;
+    if (total === 0) return null;
+    const totalAmount = [...nw, ...kys, ...numeric].reduce((s, r) => s + r.amount, 0);
+
+    const categoryLabel = category === "bonus" ? "🎁 Bonus" : "💰 Credit Top-up";
+    const categoryColor = category === "bonus" ? "text-purple-400" : "text-amber-400";
+    const categoryBorderColor = category === "bonus" ? "border-purple-500/30" : "border-amber-500/30";
+    const categoryBgColor = category === "bonus" ? "bg-purple-500/20" : "bg-amber-500/20";
+
+    return (
+      <div className="mb-4">
+        <div className={`flex items-center justify-between mb-2 px-1`}>
+          <span className={`text-xs font-bold ${categoryColor}`}>{categoryLabel}</span>
+          <Badge className={`text-2xs ${categoryBgColor} ${categoryColor} ${categoryBorderColor}`}>
+            {totalAmount} cr ({total} txns)
+          </Badge>
+        </div>
+        {renderCreditList(nw, "nw", `${groupKey}-${category}-nw`)}
+        {renderCreditList(kys, "kys", `${groupKey}-${category}-kys`)}
+        {renderCreditList(numeric, "numeric", `${groupKey}-${category}-numeric`)}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-4">
       {/* Summary Cards */}
-      <div className="grid grid-cols-3 gap-3">
-        <Card className="bg-card/60 border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.08)]">
-          <CardContent className="p-3 text-center">
-            <p className="text-2xs text-muted-foreground mb-1">NW Credits</p>
-            <p className="text-xl font-bold text-blue-400">{viewTotals.nwAmount}</p>
-            <p className="text-2xs text-muted-foreground">{viewTotals.nwCount} txns</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-card/60 border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.08)]">
-          <CardContent className="p-3 text-center">
-            <p className="text-2xs text-muted-foreground mb-1">KYS Credits</p>
-            <p className="text-xl font-bold text-emerald-400">{viewTotals.kysAmount}</p>
-            <p className="text-2xs text-muted-foreground">{viewTotals.kysCount} txns</p>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 gap-3">
         <Card className="bg-card/60 border-amber-500/20 shadow-[0_0_15px_rgba(245,158,11,0.08)]">
           <CardContent className="p-3 text-center">
-            <p className="text-2xs text-muted-foreground mb-1">Numeric Credits</p>
-            <p className="text-xl font-bold text-amber-400">{viewTotals.numericAmount}</p>
-            <p className="text-2xs text-muted-foreground">{viewTotals.numericCount} txns</p>
+            <p className="text-2xs text-muted-foreground mb-1">💰 Credit Top-up</p>
+            <p className="text-xl font-bold text-amber-400">{viewTotals.topupAmount}</p>
+            <p className="text-2xs text-muted-foreground">{viewTotals.topupCount} txns</p>
+            <div className="flex items-center justify-center gap-1.5 mt-1.5">
+              {viewTotals.agentTopupCount.nw > 0 && <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.nw}`}>NW:{viewTotals.agentTopup.nw}</Badge>}
+              {viewTotals.agentTopupCount.kys > 0 && <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.kys}`}>KYS:{viewTotals.agentTopup.kys}</Badge>}
+              {viewTotals.agentTopupCount.numeric > 0 && <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.numeric}`}>NUM:{viewTotals.agentTopup.numeric}</Badge>}
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-card/60 border-purple-500/20 shadow-[0_0_15px_rgba(168,85,247,0.08)]">
+          <CardContent className="p-3 text-center">
+            <p className="text-2xs text-muted-foreground mb-1">🎁 Bonus</p>
+            <p className="text-xl font-bold text-purple-400">{viewTotals.bonusAmount}</p>
+            <p className="text-2xs text-muted-foreground">{viewTotals.bonusCount} txns</p>
+            <div className="flex items-center justify-center gap-1.5 mt-1.5">
+              {viewTotals.agentBonusCount.nw > 0 && <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.nw}`}>NW:{viewTotals.agentBonus.nw}</Badge>}
+              {viewTotals.agentBonusCount.kys > 0 && <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.kys}`}>KYS:{viewTotals.agentBonus.kys}</Badge>}
+              {viewTotals.agentBonusCount.numeric > 0 && <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.numeric}`}>NUM:{viewTotals.agentBonus.numeric}</Badge>}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -293,7 +346,7 @@ const AdminCreditAgentTab: React.FC = () => {
               </Select>
             )}
 
-            <Badge className="text-2xs bg-gradient-to-r from-emerald-500/20 to-amber-500/20 text-emerald-400 border border-emerald-500/30 shadow-[0_0_8px_rgba(16,185,129,0.15)]">
+            <Badge className="text-2xs bg-gradient-to-r from-amber-500/20 to-purple-500/20 text-foreground border border-border/50 shadow-[0_0_8px_rgba(168,85,247,0.15)]">
               ✦ Total: {viewTotals.totalAmount} cr ({viewTotals.totalCount} txns)
             </Badge>
 
@@ -326,8 +379,8 @@ const AdminCreditAgentTab: React.FC = () => {
       ) : (
         filteredData.map((group) => {
           const periodTotal = group.nw.length + group.kys.length + group.numeric.length;
-          const periodAmount = [...group.nw, ...group.kys, ...group.numeric].reduce((s, r) => s + r.amount, 0);
           if (periodTotal === 0) return null;
+          const periodAmount = [...group.nw, ...group.kys, ...group.numeric].reduce((s, r) => s + r.amount, 0);
 
           return (
             <Card key={group.key} className="bg-card/60 border-border/50 shadow-[0_0_20px_rgba(16,185,129,0.04)]">
@@ -337,32 +390,14 @@ const AdminCreditAgentTab: React.FC = () => {
                     <TrendingUp className="w-4 h-4 text-emerald-400" />
                     {group.label}
                   </CardTitle>
-                  <div className="flex items-center gap-1.5">
-                    {group.nw.length > 0 && (
-                      <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.nw}`}>
-                        NW: {group.nw.reduce((s, r) => s + r.amount, 0)}
-                      </Badge>
-                    )}
-                    {group.kys.length > 0 && (
-                      <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.kys}`}>
-                        KYS: {group.kys.reduce((s, r) => s + r.amount, 0)}
-                      </Badge>
-                    )}
-                    {group.numeric.length > 0 && (
-                      <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.numeric}`}>
-                        NUM: {group.numeric.reduce((s, r) => s + r.amount, 0)}
-                      </Badge>
-                    )}
-                    <Badge className="text-2xs bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
-                      Total: {periodAmount} cr
-                    </Badge>
-                  </div>
+                  <Badge className="text-2xs bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+                    Total: {periodAmount} cr
+                  </Badge>
                 </div>
               </CardHeader>
               <CardContent className="px-4 pb-3">
-                {renderCreditList(group.nw, "nw", `${group.key}-nw`)}
-                {renderCreditList(group.kys, "kys", `${group.key}-kys`)}
-                {renderCreditList(group.numeric, "numeric", `${group.key}-numeric`)}
+                {renderCategorySection(group, "topup", group.key)}
+                {renderCategorySection(group, "bonus", group.key)}
               </CardContent>
             </Card>
           );
