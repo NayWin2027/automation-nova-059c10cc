@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Shield, Users, Activity, Settings, LogOut,
-  RefreshCw, Home, Sparkles, BarChart3, TrendingUp, BookOpen, UserCheck } from
+  RefreshCw, Home, Sparkles, BarChart3, TrendingUp, BookOpen, UserCheck, Coins } from
 "lucide-react";
 import AdminUsersTab from "@/components/admin/AdminUsersTab";
 import AdminActivityTab from "@/components/admin/AdminActivityTab";
