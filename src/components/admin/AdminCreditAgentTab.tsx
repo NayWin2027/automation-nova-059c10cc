@@ -15,6 +15,8 @@ interface CreditRecord {
   note: string | null;
 }
 
+type RecordCategory = "topup" | "bonus";
+
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 const AGENT_COLORS = {
