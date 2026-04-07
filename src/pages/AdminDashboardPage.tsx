@@ -233,6 +233,10 @@ const AdminDashboardPage: React.FC = () => {
             <AdminAgentSalesTab />
           </TabsContent>
 
+          <TabsContent value="credit-agents">
+            <AdminCreditAgentTab />
+          </TabsContent>
+
           <TabsContent value="insights">
             <AdminUserInsightsTab />
           </TabsContent>
