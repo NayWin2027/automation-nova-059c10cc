@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Shield, Users, Activity, Settings, LogOut,
-  RefreshCw, Home, Sparkles, BarChart3, TrendingUp, BookOpen, UserCheck } from
+  RefreshCw, Home, Sparkles, BarChart3, TrendingUp, BookOpen, UserCheck, Coins } from
 "lucide-react";
 import AdminUsersTab from "@/components/admin/AdminUsersTab";
 import AdminActivityTab from "@/components/admin/AdminActivityTab";
@@ -15,6 +15,7 @@ import AdminStatsCards from "@/components/admin/AdminStatsCards";
 import AdminDailyUsageTab from "@/components/admin/AdminDailyUsageTab";
 import AdminUserInsightsTab from "@/components/admin/AdminUserInsightsTab";
 import AdminAgentSalesTab from "@/components/admin/AdminAgentSalesTab";
+import AdminCreditAgentTab from "@/components/admin/AdminCreditAgentTab";
 
 const AdminDashboardPage: React.FC = () => {
   const navigate = useNavigate();
@@ -193,7 +194,7 @@ const AdminDashboardPage: React.FC = () => {
 
         {/* Main Tabs */}
         <Tabs defaultValue="users" className="mt-4">
-          <TabsList className="grid w-full max-w-2xl grid-cols-6 mb-4 bg-secondary/30 p-0.5 h-8">
+          <TabsList className="grid w-full max-w-3xl grid-cols-7 mb-4 bg-secondary/30 p-0.5 h-8">
             <TabsTrigger value="users" className="flex items-center gap-1.5 text-2xs data-[state=active]:bg-card">
               <Users className="w-3 h-3" />
               Users
@@ -201,6 +202,10 @@ const AdminDashboardPage: React.FC = () => {
             <TabsTrigger value="agents" className="flex items-center gap-1.5 text-2xs data-[state=active]:bg-card">
               <UserCheck className="w-3 h-3" />
               Agents
+            </TabsTrigger>
+            <TabsTrigger value="credit-agents" className="flex items-center gap-1.5 text-2xs data-[state=active]:bg-card">
+              <Coins className="w-3 h-3" />
+              Credits
             </TabsTrigger>
             <TabsTrigger value="insights" className="flex items-center gap-1.5 text-2xs data-[state=active]:bg-card">
               <TrendingUp className="w-3 h-3" />
@@ -226,6 +231,10 @@ const AdminDashboardPage: React.FC = () => {
 
           <TabsContent value="agents">
             <AdminAgentSalesTab />
+          </TabsContent>
+
+          <TabsContent value="credit-agents">
+            <AdminCreditAgentTab />
           </TabsContent>
 
           <TabsContent value="insights">
