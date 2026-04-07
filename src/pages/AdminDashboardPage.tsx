@@ -15,6 +15,7 @@ import AdminStatsCards from "@/components/admin/AdminStatsCards";
 import AdminDailyUsageTab from "@/components/admin/AdminDailyUsageTab";
 import AdminUserInsightsTab from "@/components/admin/AdminUserInsightsTab";
 import AdminAgentSalesTab from "@/components/admin/AdminAgentSalesTab";
+import AdminCreditAgentTab from "@/components/admin/AdminCreditAgentTab";
 
 const AdminDashboardPage: React.FC = () => {
   const navigate = useNavigate();
