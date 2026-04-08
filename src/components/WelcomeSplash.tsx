@@ -46,7 +46,8 @@ function FireworksCanvas() {
         const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.3;
         const speed = 1.5 + Math.random() * 3;
         particles.push({
-          x: cx, y: cy,
+          x: cx,
+          y: cy,
           vx: Math.cos(angle) * speed,
           vy: Math.sin(angle) * speed,
           hue: hue + Math.random() * 60 - 30,
@@ -59,7 +60,8 @@ function FireworksCanvas() {
       // Trail particles
       for (let i = 0; i < 8; i++) {
         particles.push({
-          x: cx, y: H(),
+          x: cx,
+          y: H(),
           vx: (Math.random() - 0.5) * 0.5,
           vy: -(H() - cy) / 30 - Math.random(),
           hue,
@@ -127,13 +129,7 @@ function FireworksCanvas() {
     };
   }, []);
 
-  return (
-    <canvas
-      ref={canvasRef}
-      className="absolute inset-0 w-full h-full"
-      style={{ pointerEvents: "none" }}
-    />
-  );
+  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" style={{ pointerEvents: "none" }} />;
 }
 
 export function WelcomeSplash({ onDone }: { onDone: () => void }) {
@@ -142,7 +138,10 @@ export function WelcomeSplash({ onDone }: { onDone: () => void }) {
   useEffect(() => {
     const t1 = setTimeout(() => setPhase("fading"), 6200);
     const t2 = setTimeout(() => onDone(), 7000);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, [onDone]);
 
   return (
@@ -216,21 +215,14 @@ export function WelcomeSplash({ onDone }: { onDone: () => void }) {
               textShadow: "0 0 12px hsl(200 100% 70% / 0.2)",
             }}
           >
-            မဂ်လာပါ...Automation Nova AI မှ နှစ်လိုဖွယ်အပြုံးဖြင့် ကြိုဆိုလိုက်ပါတယ်။
+            မဂ်လာပါ...Automation Nova AI မှ ကြိုဆိုပါတယ်ခင်ဗျာ။
           </p>
-          <p
-            className="text-xs leading-relaxed mb-3"
-            style={{ color: "hsl(220 20% 75%)" }}
-          >
-            ကျနုပ်တို့၏ App နှင့်ပတ်သက်ပြီး ယခုထက် ပိုမိုအဆင်ပြေပြည့်စုံလာစေရန်အလို့ငှာ
-            လူကြီးမင်းတို့၏ Appသုံးစွဲမှုအခက်အခဲများနှင့် Appတွင်
-            ထပ်မံဖြည့်စွက်လိုသည်များကို Admin များထံတွင် အချိန်မရွေးလာရောက်
+          <p className="text-xs leading-relaxed mb-3" style={{ color: "hsl(220 20% 75%)" }}>
+            ကျနုပ်တို့၏ App နှင့်ပတ်သက်ပြီး ယခုထက် ပိုမိုအဆင်ပြေပြည့်စုံလာစေရန်အလို့ငှာ လူကြီးမင်းတို့၏
+            Appသုံးစွဲမှုအခက်အခဲများနှင့် Appတွင် ထပ်မံဖြည့်စွက်လိုသည်များကို Admin များထံတွင် အချိန်မရွေးလာရောက်
             မေးမြန်းပြောဆိုနိုင်ပါတယ်။
           </p>
-          <p
-            className="text-xs leading-relaxed"
-            style={{ color: "hsl(220 20% 75%)" }}
-          >
+          <p className="text-xs leading-relaxed" style={{ color: "hsl(220 20% 75%)" }}>
             ပိုမိုကောင်းမွန်သော၀န်ဆောင်မှုများကို ပေးအပ်နိုင်ဖို့ ဆက်လက်ကြိုးစားသွားပါမယ်။
           </p>
         </div>
