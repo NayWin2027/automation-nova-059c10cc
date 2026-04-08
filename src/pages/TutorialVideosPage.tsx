@@ -203,7 +203,48 @@ const TutorialVideosPage: React.FC = () => {
       .order("order_index", { ascending: true });
 
     if (!error && data) {
-      setTutorials(data as Tutorial[]);
+      // Generate signed URLs for private bucket videos
+      const tutorialsWithSignedUrls = await Promise.all(
+        (data as Tutorial[]).map(async (t) => {
+          const updated = { ...t };
+          // Generate signed URL for main video
+          if (t.storage_path) {
+            const { data: signedData } = await supabase.storage
+              .from("tutorial-videos")
+              .createSignedUrl(t.storage_path, 3600); // 1 hour
+            if (signedData?.signedUrl) {
+              updated.video_url = signedData.signedUrl;
+            }
+          }
+          // Generate signed URLs for quality variants
+          if (t.video_qualities && typeof t.video_qualities === "object") {
+            const signedQualities: Record<string, string> = {};
+            for (const [quality, path] of Object.entries(t.video_qualities)) {
+              if (typeof path === "string" && path) {
+                // Extract storage path from old public URL or use as-is
+                const storagePath = path.includes("/object/public/tutorial-videos/")
+                  ? path.split("/object/public/tutorial-videos/")[1]
+                  : path.includes("/tutorial-videos/")
+                  ? path.split("/tutorial-videos/").pop()!
+                  : null;
+                if (storagePath) {
+                  const { data: qSignedData } = await supabase.storage
+                    .from("tutorial-videos")
+                    .createSignedUrl(storagePath, 3600);
+                  if (qSignedData?.signedUrl) {
+                    signedQualities[quality] = qSignedData.signedUrl;
+                  }
+                }
+              }
+            }
+            if (Object.keys(signedQualities).length > 0) {
+              updated.video_qualities = signedQualities;
+            }
+          }
+          return updated;
+        })
+      );
+      setTutorials(tutorialsWithSignedUrls);
     }
     setLoading(false);
   };
