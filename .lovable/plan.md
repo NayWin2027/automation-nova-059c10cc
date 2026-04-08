@@ -1,78 +1,42 @@
-အရင်ဆုံး အမှန်အတိုင်းပြောမယ် — code review တစ်ခုတည်းနဲ့ “data / API key အကုန်ခိုးခံရပြီးပြီ” လို့ confirm မလုပ်နိုင်သေးဘူး။ ဒါပေမယ့် real high-risk weaknesses တွေကို တွေ့ထားတယ်။ Good news က backend Gemini keys တွေကို active frontend path ထဲ တိုက်ရိုက် embed လုပ်ထားတာ မတွေ့ဘူး။ Bad news က admin/security side မှာ ချက်ချင်းပိတ်ရမယ့် holes တွေရှိနေတယ်။
 
-1. Immediate containment — admin exposure ပိတ်မယ်
-- `admin-register` public flow ကို disable လုပ်မယ်
-- `AdminLoginPage` ထဲက register link / route exposure ကို ပိတ်မယ်
-- `admin-register` function ကို public self-registration မရအောင် lock လုပ်မယ်
-- migrations ထဲ repo-known default secret (`ADMIN2024SECRET`) ကို အသစ် rotate/replace လုပ်မယ်
 
-2. Critical fix — plaintext password storage အပြီးပိတ်မယ်
-တွေ့ထားတာ:
-- `user_passwords.password_plain` table ရှိတယ်
-- `admin-actions` က create/reset password ကို plain-text save လုပ်နေတယ်
-- `get_profiles` response ထဲ `stored_password` ပြန်ပို့နေတယ်
-- `AdminUsersTab` က reveal လုပ်နိုင်တယ်
-- `AdminAgentSalesTab` ကလည်း same response ကို receive လုပ်နိုင်တယ်
-လုပ်မယ့် fix:
-- SQL migration နဲ့ existing plaintext rows purge
-- `user_passwords` select policy ကို deny-all ပြောင်း
-- `admin-actions` မှာ password save/read/return logic ဖယ်
-- admin UI ထဲ password reveal UI ဖယ်
-- create/reset flow ကို persistent password storage မလိုတဲ့ one-time-safe pattern ပြောင်း
+## Security Fixes Plan — 5 Active Issues
 
-3. Critical fix — hardcoded admin gate secret ကို frontend ကနေဖယ်မယ်
-တွေ့ထားတာ:
-- `ADMIN_GATE_CODE` ကို `UserLoginPage.tsx` နဲ့ `AdminLoginPage.tsx` ထဲ hardcode လုပ်ထားတယ်
-- gate logic က client-side only ဖြစ်နေတယ်
-လုပ်မယ့် fix:
-- client-side hardcoded gate constants ဖယ်
-- backend-only secret verification ပြောင်း
-- current gate UX/3-try feel ကိုနိုင်သလောက်ထားမယ်၊ verification ကို server-side ပြောင်းမယ်
-- existing admin 2FA / master-sub admin hierarchy ကို မထိဘူး
+From the scan results, there are **1 error** and **4 warnings** that need fixing. Here's the plan to resolve all of them in a single migration.
 
-4. Shared edge security hardening — CORS allowlist ကို တင်းကျပ်မယ်
-တွေ့ထားတာ:
-- `_shared/cors.ts` က any `*.lovable.app` origin ကို allow လုပ်နေတယ်
-လုပ်မယ့် fix:
-- exact project domains only allow လုပ်မယ်
-- published domain + this project preview domain(s) only
-- shared file တစ်ခုကို surgical fix လုပ်ပြီး importing functions အားလုံးကို တစ်ခါတည်း harden လုပ်မယ်
+---
 
-5. Page-by-page API key hardening — legacy localStorage ကိုဖယ်မယ်
-တွေ့ထားတာ:
-- pages အများစုက `useSecureApiKey` / sessionStorage သုံးနေပြီ
-- `VideoRecapPage.tsx` တစ်ခုက `master_recap_api_key` ကို `localStorage` ထဲ persist လုပ်နေတယ်
-လုပ်မယ့် fix:
-- `VideoRecapPage` ကို `useSecureApiKey` pattern ပြောင်း
-- old localStorage key cleanup ထည့်
-- backend key exposure မဟုတ်ပေမယ့် user own key persistence risk ကို လျှော့မယ်
+### Issues to Fix
 
-Targeted files only
-- `supabase/functions/_shared/cors.ts`
-- `supabase/functions/admin-actions/index.ts`
-- `supabase/functions/admin-register/index.ts`
-- backend gate verification entrypoint (tiny surgical addition)
-- `src/pages/AdminLoginPage.tsx`
-- `src/pages/UserLoginPage.tsx`
-- `src/pages/AdminRegisterPage.tsx` and `src/App.tsx` only if needed to remove route/link exposure
-- `src/components/admin/AdminUsersTab.tsx`
-- `src/components/admin/AdminAgentSalesTab.tsx`
-- `src/pages/VideoRecapPage.tsx`
-- 1 SQL migration for secret rotation + password-table lockdown/purge
+| # | Level | Issue | Fix |
+|---|-------|-------|-----|
+| 1 | **Error** | `user_roles_self_insert` — Any authenticated user can assign themselves admin role | Replace ALL policy with scoped per-command policies; explicit INSERT restricted to admins only |
+| 2 | **Warn** | `promotion_usage_tracking_ip_exposure` — No INSERT restriction on promotion tracking | Already fixed previously (INSERT blocked for public), but scan still shows it. Will add explicit deny policy and mark as fixed |
+| 3 | **Warn** | `credit_topups_no_user_select` — Users can't see their own top-up history | Add SELECT policy scoped to `auth.uid() = user_id` |
+| 4 | **Warn** | `temp_uploads_missing_update` — No UPDATE policy for temp-uploads bucket | Add restrictive deny-all UPDATE policy (updates not needed for temp uploads) |
+| 5 | **Warn** | Internal pricing/API config publicly readable | Restrict `tool_settings` public SELECT to only safe columns via the existing `safe_tool_settings` view; block direct SELECT on sensitive columns (`credit_cost`, `tier_limits`, `daily_free_limit`) for non-admins. Update client code (`useToolSettings`, `useCreditDeduction`, `creditPreCheck`) to use `safe_tool_settings` view for non-admin queries, and move credit cost lookups to server-side (already handled by `deduct_user_credits` RPC) |
 
-What I will not touch
-- RecapVideoNVPage locked 4 protected blocks
-- chunked upload proxy architecture
-- stable 2FA internals, master/sub hierarchy, credit logic except where exposure is being removed
+---
 
-Verification after fix
-- admin login → gate → password → 2FA end-to-end
-- non-admin cannot access admin actions
-- `get_profiles` response မှာ password field မပါတော့တာ confirm
-- direct read on `user_passwords` blocked confirm
-- public `admin-register` blocked confirm
-- `VideoRecapPage` own API key tab/session ပိတ်ရင် မကျန်တော့တာ confirm
-- preview + production domains only CORS success confirm
-- auth/edge logs ကို ပြန်စစ်ပြီး suspicious `admin-register` / password exposure style access ရှိမရှိ check လုပ်မယ်
+### Technical Implementation
 
-ဒီ plan က surgical security hardening only ဖြစ်ပြီး unrelated features မထိဘဲ အရေးပေါ် holes တွေကို အရင်ပိတ်မယ့် plan ပါ။
+**Migration SQL** — Single migration covering issues 1-4 and the `tool_settings` SELECT restriction:
+
+1. **user_roles** — Drop the ALL policy for `{public}`. Add explicit SELECT (users see own + admins see all), INSERT (admins only), UPDATE (admins only), DELETE (admins only) policies.
+
+2. **promotion_usage_tracking** — Add explicit `INSERT` deny policy for all non-service-role callers (already handled by edge function with service_role).
+
+3. **credit_topups** — Add `SELECT` policy: `auth.uid() = user_id` for authenticated users.
+
+4. **temp-uploads storage** — Add a RESTRICTIVE UPDATE policy on `storage.objects` that denies all updates for the `temp-uploads` bucket.
+
+5. **tool_settings** — Replace the `Anyone can view basic tool settings` policy with a restricted version that only exposes `tool_id`, `title`, `description`, `is_enabled`, `requires_auth`, `is_premium` (no `credit_cost`, `tier_limits`, `daily_free_limit`). Non-admin client code will query from `safe_tool_settings` view instead.
+
+**Code Changes** (Issue 5):
+- `src/hooks/useToolSettings.ts` — Non-admin path queries `safe_tool_settings` view; admin path continues using `tool_settings` directly
+- `src/hooks/useCreditDeduction.ts` — Remove client-side credit cost lookup (server-side `deduct_user_credits` already determines cost)
+- `src/utils/creditPreCheck.ts` — Remove direct `tool_settings` query for credit cost; use a simpler approach or the safe view
+- `src/pages/RecapVideoNVPage.tsx` — Replace direct `tool_settings` credit_cost query with safe alternative
+
+**Mark resolved** — All 5 findings marked as fixed via `security--manage_security_finding`.
+
