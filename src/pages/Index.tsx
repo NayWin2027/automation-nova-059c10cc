@@ -53,8 +53,9 @@ const defaultTools = [
   icon: Video,
   title: "Translate Video",
   description: "Video ကို မူရင်းအသံမဖျောက်ပဲ ဘာသာပြန်ခြင်း။",
-  gradient: "emerald" as const,
-  route: "/translate-video"
+  gradient: "blue-violet" as const,
+  route: "/translate-video",
+  pro: true
 },
 {
   id: "transcribe",

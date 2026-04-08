@@ -7,14 +7,15 @@ const GRADIENT_MAP: Record<string, string> = {
   violet: "from-purple-400 via-violet-500 to-purple-600",
   emerald: "from-emerald-400 via-green-500 to-teal-600",
   blue: "from-blue-400 via-indigo-500 to-blue-600",
-  neon: "from-fuchsia-500 via-violet-600 to-indigo-700"
+  neon: "from-fuchsia-500 via-violet-600 to-indigo-700",
+  "blue-violet": "from-blue-500 via-indigo-600 to-violet-700"
 };
 
 interface ToolCardProps {
   icon: LucideIcon;
   title: string;
   description: string;
-  gradient: "cyan" | "rose" | "amber" | "violet" | "emerald" | "blue" | "neon";
+  gradient: "cyan" | "rose" | "amber" | "violet" | "emerald" | "blue" | "neon" | "blue-violet";
   isPremium?: boolean;
   onClick?: () => void;
 }
@@ -30,7 +31,7 @@ export function ToolCard({
   return (
     <button
       onClick={onClick}
-      className={`tool-glossy-card group relative w-full bg-gradient-to-br ${GRADIENT_MAP[gradient] || GRADIENT_MAP.cyan}`}
+      className={`tool-glossy-card group relative w-full bg-gradient-to-br ${GRADIENT_MAP[gradient] || GRADIENT_MAP.cyan} ${gradient === "blue-violet" ? "ring-2 ring-indigo-400/60 shadow-[0_0_18px_rgba(129,140,248,0.45),0_0_40px_rgba(139,92,246,0.25)]" : ""}`}
     >
       {/* Glossy top highlight */}
       <div className="absolute inset-x-0 top-0 h-[45%] rounded-t-[inherit] bg-gradient-to-b from-white/30 via-white/10 to-transparent pointer-events-none z-[2]" />
