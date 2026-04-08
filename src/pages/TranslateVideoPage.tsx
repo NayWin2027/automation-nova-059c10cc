@@ -2,15 +2,18 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthGuard } from "../hooks/useAuthGuard";
+import { useAdmin } from "../hooks/useAdmin";
 import { Home, Lock } from "lucide-react";
 
 const TranslateVideoPage: React.FC = () => {
   const navigate = useNavigate();
   const { isAllowed, isLoading, userPlan, isAuthenticated } = useAuthGuard("translate-video");
+  const { isAdmin, loading: adminLoading } = useAdmin();
 
-  if (isLoading) return null;
+  if (isLoading || adminLoading) return null;
 
-  if (!isAllowed) {
+  // Admin-only access
+  if (!isAdmin) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="text-center space-y-4">
