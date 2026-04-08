@@ -83,15 +83,18 @@ export function useToolSettings() {
   }, []);
 
   const fetchSettings = async () => {
+    // Use safe_tool_settings view (no sensitive columns like credit_cost, tier_limits)
     const { data: tools } = await supabase
-      .from('tool_settings')
+      .from('safe_tool_settings')
       .select('*')
       .order('tool_id');
 
     if (tools) {
       const normalizedTools = tools.map(tool => ({
         ...tool,
-        tier_limits: tool.tier_limits ? (tool.tier_limits as unknown as TierLimits) : defaultTierLimits,
+        credit_cost: 10, // Default; actual cost is determined server-side by deduct_user_credits RPC
+        daily_free_limit: 3,
+        tier_limits: defaultTierLimits,
       }));
       setToolSettings(normalizedTools as ToolSetting[]);
       _cachedToolSettings = normalizedTools;

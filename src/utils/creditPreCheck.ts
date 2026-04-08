@@ -44,16 +44,9 @@ export async function preCheckCredits(toolId: string, customCost?: number): Prom
     });
     if (isAdmin) return true;
 
-    // Determine cost
-    let cost = customCost;
-    if (cost === undefined || cost === null) {
-      const { data: toolSetting } = await supabase
-        .from('tool_settings')
-        .select('credit_cost')
-        .eq('tool_id', toolId)
-        .maybeSingle();
-      cost = toolSetting?.credit_cost || 10;
-    }
+    // Determine cost — use provided custom cost or default
+    // Actual credit cost is determined server-side by deduct_user_credits RPC
+    const cost = customCost ?? 10;
 
     // Check sufficient credits
     if (profile.credits < cost) {

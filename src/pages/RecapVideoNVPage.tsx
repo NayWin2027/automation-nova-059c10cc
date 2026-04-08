@@ -3627,17 +3627,8 @@ const RecapVideoNVPage: React.FC = () => {
   const didDeductRef = useRef(false);
   const [creditPerMinRate, setCreditPerMinRate] = useState<number>(6);
 
-  useEffect(() => {
-    const timer = setTimeout(async () => {
-      const { data } = await supabase
-        .from("tool_settings")
-        .select("credit_cost")
-        .eq("tool_id", "recap-nv")
-        .maybeSingle();
-      if (data?.credit_cost) setCreditPerMinRate(data.credit_cost);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, []);
+  // Credit rate is determined server-side; use default for UI display only
+  // No need to query tool_settings directly (sensitive data restricted)
 
   const [scriptData, setScriptData] = useState<RecapScript>({ title: "Recap Video NV", full_script: "", segments: [] });
   const [audioUrl, setAudioUrl] = useState<string | undefined>(undefined);
