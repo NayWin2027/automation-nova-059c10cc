@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
   UserPlus, Trash2, Ban, Key, Coins, Crown,
-  Smartphone, MoreVertical, Search, ShieldCheck, Sparkles, ShieldAlert, Eye, EyeOff } from
+  Smartphone, MoreVertical, Search, ShieldCheck, Sparkles, ShieldAlert } from
 "lucide-react";
 import {
   DropdownMenu,
@@ -65,7 +65,6 @@ const AdminUsersTab: React.FC = () => {
   const [newPassword, setNewPassword] = useState("");
   const [banReason, setBanReason] = useState("");
   const [loading, setLoading] = useState(false);
-  const [revealedPws, setRevealedPws] = useState<Record<string, boolean>>({});
 
   // Fetch profiles and admin roles on mount
   useEffect(() => {
@@ -421,13 +420,12 @@ const AdminUsersTab: React.FC = () => {
       {/* Table */}
       <div className="table-luxury">
         {/* Table Header */}
-        <div className={`table-luxury-header grid ${isMasterAdmin ? 'grid-cols-7' : 'grid-cols-6'} gap-2 px-3 py-2`}>
+        <div className="table-luxury-header grid grid-cols-6 gap-2 px-3 py-2">
           <span className="text-2xs font-medium uppercase tracking-wider text-neon-cyan">User</span>
           <span className="text-2xs font-medium uppercase tracking-wider text-neon-cyan">Plan</span>
           <span className="text-2xs font-medium uppercase tracking-wider text-neon-rose">Credits</span>
           <span className="text-2xs font-medium uppercase tracking-wider text-neon-green">Status</span>
           <span className="text-2xs font-medium uppercase tracking-wider text-gold-dark">Start / Exp</span>
-          {isMasterAdmin && <span className="text-2xs font-medium uppercase tracking-wider text-purple-400">PW</span>}
           <span className="text-2xs font-medium uppercase tracking-wider text-right text-neon-rose">Actions</span>
         </div>
 
@@ -455,7 +453,7 @@ const AdminUsersTab: React.FC = () => {
               ? getCalendarMonthExpiry(profile.credits_started_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
               : '—';
             return (
-          <div key={profile.id} className={`table-luxury-row grid ${isMasterAdmin ? 'grid-cols-7' : 'grid-cols-6'} gap-2 px-3 py-2 items-center ${isCreditsExpired ? 'border-l-2 border-l-red-500 bg-red-500/5' : ''}`}>
+          <div key={profile.id} className={`table-luxury-row grid grid-cols-6 gap-2 px-3 py-2 items-center ${isCreditsExpired ? 'border-l-2 border-l-red-500 bg-red-500/5' : ''}`}>
                 <div>
                   <div className="flex items-center gap-1">
                     <p className={`font-medium truncate text-base ${isCreditsExpired ? 'text-red-400' : 'text-foreground'}`}>
@@ -517,24 +515,6 @@ const AdminUsersTab: React.FC = () => {
                   <div className="text-neon-amber">{startDate}</div>
                   <div className={isCreditsExpired ? 'text-red-400 font-semibold' : 'text-muted-foreground'}>{expiredDate}</div>
                 </div>
-                {isMasterAdmin && (
-                <div className="flex items-center gap-1">
-                  {(profile as any).stored_password ? (
-                    <>
-                      <span className="text-2xs font-mono truncate max-w-[60px]">
-                        {revealedPws[profile.user_id] ? (profile as any).stored_password : '••••••'}
-                      </span>
-                      <button
-                        onClick={() => setRevealedPws(prev => ({ ...prev, [profile.user_id]: !prev[profile.user_id] }))}
-                        className="p-0.5 rounded hover:bg-secondary/50">
-                        {revealedPws[profile.user_id] ? <EyeOff className="w-2.5 h-2.5 text-muted-foreground" /> : <Eye className="w-2.5 h-2.5 text-muted-foreground" />}
-                      </button>
-                    </>
-                  ) : (
-                    <span className="text-2xs text-muted-foreground">—</span>
-                  )}
-                </div>
-                )}
                 <div className="text-right">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>

@@ -351,7 +351,16 @@ export default function VideoRecapView() {
   // API Access Control
   const { appApiAllowed, ownApiAllowed, defaultApiMode, isLoading: accessLoading } = useApiAccess();
   const [apiType, setApiType] = useState<"app" | "own">("app");
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem("master_recap_api_key") || "");
+  const [apiKey, setApiKey] = useState(() => {
+    // Migrate from localStorage to sessionStorage
+    const legacy = localStorage.getItem("master_recap_api_key");
+    if (legacy) {
+      sessionStorage.setItem("master_recap_api_key", legacy);
+      localStorage.removeItem("master_recap_api_key");
+      return legacy;
+    }
+    return sessionStorage.getItem("master_recap_api_key") || "";
+  });
 
   // Sync apiType with access control
   useEffect(() => {
@@ -384,7 +393,11 @@ export default function VideoRecapView() {
   const audioCtxRef = useRef<AudioContext | null>(null);
 
   useEffect(() => {
-    localStorage.setItem("master_recap_api_key", apiKey);
+    if (apiKey) {
+      sessionStorage.setItem("master_recap_api_key", apiKey);
+    } else {
+      sessionStorage.removeItem("master_recap_api_key");
+    }
   }, [apiKey]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {

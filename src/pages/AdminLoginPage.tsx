@@ -16,7 +16,6 @@ const loginSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
-const ADMIN_GATE_CODE = "k$@w$@n008060964999777999";
 const GATE_SESSION_KEY = "admin_gate_verified";
 const MAX_GATE_ATTEMPTS = 3;
 
@@ -132,30 +131,41 @@ const AdminLoginPage: React.FC = () => {
     }
   };
  
-  const verifyGateCode = () => {
-    if (gateLocked) return;
-    if (gateCode === ADMIN_GATE_CODE) {
-      sessionStorage.setItem(GATE_SESSION_KEY, "true");
-      setGateVerified(true);
-      setGateCode("");
-    } else {
-      const newAttempts = gateAttempts + 1;
-      setGateAttempts(newAttempts);
-      setGateCode("");
-      if (newAttempts >= MAX_GATE_ATTEMPTS) {
-        setGateLocked(true);
-        toast({
-          title: "🔒 Access Locked",
-          description: "Too many failed attempts. Please refresh and try again.",
-          variant: "destructive",
-        });
+  const verifyGateCode = async () => {
+    if (gateLocked || !gateCode) return;
+    try {
+      const { data, error } = await supabase.functions.invoke('verify-gate', {
+        body: { code: gateCode }
+      });
+      if (!error && data?.success) {
+        sessionStorage.setItem(GATE_SESSION_KEY, "true");
+        setGateVerified(true);
+        setGateCode("");
       } else {
-        toast({
-          title: "❌ Invalid Code",
-          description: `Incorrect access code. ${MAX_GATE_ATTEMPTS - newAttempts} attempts remaining.`,
-          variant: "destructive",
-        });
+        const newAttempts = gateAttempts + 1;
+        setGateAttempts(newAttempts);
+        setGateCode("");
+        if (newAttempts >= MAX_GATE_ATTEMPTS) {
+          setGateLocked(true);
+          toast({
+            title: "🔒 Access Locked",
+            description: "Too many failed attempts. Please refresh and try again.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "❌ Invalid Code",
+            description: `Incorrect access code. ${MAX_GATE_ATTEMPTS - newAttempts} attempts remaining.`,
+            variant: "destructive",
+          });
+        }
       }
+    } catch {
+      toast({
+        title: "❌ Error",
+        description: "Verification failed. Try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -483,13 +493,7 @@ const AdminLoginPage: React.FC = () => {
               </Button>
             </form>
 
-            <div className="mt-6 text-center space-y-2">
-              <p className="text-sm text-muted-foreground">
-                Need an admin account?{" "}
-                <Link to="/admin/register" className="text-cyan-500 hover:underline">
-                  Register here
-                </Link>
-              </p>
+            <div className="mt-6 text-center">
               <p className="text-sm text-muted-foreground">
                 <Link to="/login" className="text-cyan-500 hover:underline">
                   ← User Login သို့ ပြန်သွားရန်
