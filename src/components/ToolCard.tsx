@@ -31,7 +31,7 @@ export function ToolCard({
   return (
     <button
       onClick={onClick}
-      className={`tool-glossy-card group relative w-full bg-gradient-to-br ${GRADIENT_MAP[gradient] || GRADIENT_MAP.cyan}`}
+      className={`tool-glossy-card group relative w-full bg-gradient-to-br ${GRADIENT_MAP[gradient] || GRADIENT_MAP.cyan} ${gradient === "blue-violet" ? "ring-2 ring-indigo-400/60 shadow-[0_0_18px_rgba(129,140,248,0.45),0_0_40px_rgba(139,92,246,0.25)]" : ""}`}
     >
       {/* Glossy top highlight */}
       <div className="absolute inset-x-0 top-0 h-[45%] rounded-t-[inherit] bg-gradient-to-b from-white/30 via-white/10 to-transparent pointer-events-none z-[2]" />
