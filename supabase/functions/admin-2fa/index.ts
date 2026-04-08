@@ -14,9 +14,9 @@ function normalizeBase32Secret(input: string): string {
 }
  
  serve(async (req: Request) => {
-   if (req.method === "OPTIONS") {
-     return new Response(null, { headers: corsHeaders });
-   }
+   const _corsBlock = handleCorsPreflightOrReject(req);
+   if (_corsBlock) return _corsBlock;
+   const corsHeaders = getCorsHeaders(req);
  
    try {
      const authHeader = req.headers.get("Authorization");
