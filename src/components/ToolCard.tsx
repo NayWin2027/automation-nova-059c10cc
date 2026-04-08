@@ -7,14 +7,15 @@ const GRADIENT_MAP: Record<string, string> = {
   violet: "from-purple-400 via-violet-500 to-purple-600",
   emerald: "from-emerald-400 via-green-500 to-teal-600",
   blue: "from-blue-400 via-indigo-500 to-blue-600",
-  neon: "from-fuchsia-500 via-violet-600 to-indigo-700"
+  neon: "from-fuchsia-500 via-violet-600 to-indigo-700",
+  "blue-violet": "from-blue-500 via-indigo-600 to-violet-700"
 };
 
 interface ToolCardProps {
   icon: LucideIcon;
   title: string;
   description: string;
-  gradient: "cyan" | "rose" | "amber" | "violet" | "emerald" | "blue" | "neon";
+  gradient: "cyan" | "rose" | "amber" | "violet" | "emerald" | "blue" | "neon" | "blue-violet";
   isPremium?: boolean;
   onClick?: () => void;
 }
