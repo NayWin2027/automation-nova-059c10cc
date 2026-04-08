@@ -49,6 +49,14 @@ const defaultTools = [
   route: "/recap-nv"
 },
 {
+  id: "translate-video",
+  icon: Video,
+  title: "Translate Video",
+  description: "Video ကို မူရင်းအသံမဖျောက်ပဲ ဘာသာပြန်ခြင်း။",
+  gradient: "emerald" as const,
+  route: "/translate-video"
+},
+{
   id: "transcribe",
   icon: Mic,
   title: "Transcribe",
@@ -135,14 +143,6 @@ const defaultTools = [
   description: "Video ကို မိနစ်ပိုင်း auto ဖြတ်တောက်ပေးခြင်း။",
   gradient: "rose" as const,
   route: "/nova-cut"
-},
-{
-  id: "translate-video",
-  icon: Video,
-  title: "Translate Video",
-  description: "Video ကို မူရင်းအသံမဖျောက်ပဲ ဘာသာပြန်ခြင်း။",
-  gradient: "emerald" as const,
-  route: "/translate-video"
 },
 ];
 
