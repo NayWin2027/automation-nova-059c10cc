@@ -12,20 +12,34 @@ const TranslateVideoPage: React.FC = () => {
 
   if (isLoading || adminLoading) return null;
 
+  // Not logged in → redirect to login
+  if (!isAuthenticated) {
+    navigate("/login", { replace: true });
+    return null;
+  }
+
   // Admin-only access
   if (!isAdmin) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="text-center space-y-4">
           <Lock className="w-16 h-16 text-muted-foreground mx-auto" />
-          <h2 className="text-xl font-bold text-foreground">Premium Only</h2>
-          <p className="text-muted-foreground">ဤ Tool ကို Premium User နှင့် Admin သာ အသုံးပြုနိုင်ပါသည်။</p>
-          <button
-            onClick={() => navigate("/")}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg"
-          >
-            ပင်မစာမျက်နှာ
-          </button>
+          <h2 className="text-xl font-bold text-foreground">Admin Only</h2>
+          <p className="text-muted-foreground">ဤ Tool ကို Admin သာ အသုံးပြုနိုင်ပါသည်။</p>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={() => navigate("/")}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg flex items-center gap-2"
+            >
+              <Home className="w-4 h-4" /> ပင်မစာမျက်နှာ
+            </button>
+            <button
+              onClick={() => navigate("/login")}
+              className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg"
+            >
+              Login
+            </button>
+          </div>
         </div>
       </div>
     );
