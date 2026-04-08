@@ -270,24 +270,29 @@ const UserLoginPage: React.FC = () => {
               placeholder="Secret Code"
               className="w-full h-10 px-3 rounded-lg bg-white/5 border border-white/10 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-violet-500/50 focus:bg-white/10 transition-all mb-3"
               autoFocus
-              onKeyDown={(e) => {
+              onKeyDown={async (e) => {
                 if (e.key === "Enter") {
-                  if (gateCode === ADMIN_GATE_CODE) {
-                    setShowGateDialog(false);
-                    setGateCode("");
-                    setGateAttempts(0);
-                    navigate("/x9k2m7");
-                  } else {
-                    const newAttempts = gateAttempts + 1;
-                    setGateAttempts(newAttempts);
-                    setGateCode("");
-                    if (newAttempts >= 3) {
+                  try {
+                    const { data, error } = await supabase.functions.invoke('verify-gate', { body: { code: gateCode } });
+                    if (!error && data?.success) {
                       setShowGateDialog(false);
-                      setGateLocked(true);
-                      toast({ title: "🔒 Locked", description: "ခွင့်ပြုချက် ပိတ်ထားပါသည်", variant: "destructive" });
+                      setGateCode("");
+                      setGateAttempts(0);
+                      navigate("/x9k2m7");
                     } else {
-                      toast({ title: "❌ Access Denied", description: `Code မှားနေပါသည် (${3 - newAttempts} ခါ ကျန်)`, variant: "destructive" });
+                      const newAttempts = gateAttempts + 1;
+                      setGateAttempts(newAttempts);
+                      setGateCode("");
+                      if (newAttempts >= 3) {
+                        setShowGateDialog(false);
+                        setGateLocked(true);
+                        toast({ title: "🔒 Locked", description: "ခွင့်ပြုချက် ပိတ်ထားပါသည်", variant: "destructive" });
+                      } else {
+                        toast({ title: "❌ Access Denied", description: `Code မှားနေပါသည် (${3 - newAttempts} ခါ ကျန်)`, variant: "destructive" });
+                      }
                     }
+                  } catch {
+                    toast({ title: "❌ Error", description: "Verification failed", variant: "destructive" });
                   }
                 }
               }} />
