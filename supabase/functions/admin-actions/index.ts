@@ -129,10 +129,7 @@ serve(async (req) => {
             })
             .eq('user_id', newUser.user.id);
 
-          // Store plain password for admin verification
-          await supabaseAdmin
-            .from('user_passwords')
-            .upsert({ user_id: newUser.user.id, password_plain: password });
+          // SECURITY: Plaintext password storage removed
         }
 
         return new Response(
@@ -166,10 +163,7 @@ serve(async (req) => {
         });
         if (resetError) throw resetError;
 
-        // Update stored plain password
-        await supabaseAdmin
-          .from('user_passwords')
-          .upsert({ user_id: userId, password_plain: newPassword });
+        // SECURITY: Plaintext password storage removed
 
         return new Response(
           JSON.stringify({ success: true }),
@@ -331,17 +325,7 @@ serve(async (req) => {
 
         if (profilesError) throw profilesError;
 
-        // Fetch stored passwords for admin verification
-        const { data: passwords } = await supabaseAdmin
-          .from('user_passwords')
-          .select('user_id, password_plain');
-
-        const pwMap: Record<string, string> = {};
-        if (passwords) {
-          for (const pw of passwords) {
-            pwMap[pw.user_id] = pw.password_plain;
-          }
-        }
+        // SECURITY: Plaintext password fetch removed
 
         // Fetch credit topup breakdown per user
         const { data: topups } = await supabaseAdmin
@@ -359,10 +343,9 @@ serve(async (req) => {
           }
         }
 
-        // Attach password and topup breakdown to each profile
+        // Attach topup breakdown to each profile (password field removed for security)
         const profilesWithPw = (profiles || []).map((p: any) => ({
           ...p,
-          stored_password: pwMap[p.user_id] || null,
           credit_breakdown: topupMap[p.user_id] || null
         }));
 

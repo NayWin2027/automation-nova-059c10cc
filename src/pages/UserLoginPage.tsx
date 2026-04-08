@@ -10,7 +10,7 @@ import {
 import { AppLogo } from "@/components/AppLogo";
 import { LoginChatBot } from "@/components/LoginChatBot";
 
-const ADMIN_GATE_CODE = "k$@w$@n008060964999777999";
+// Gate code moved to backend - verified via edge function
 
 const UserLoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -300,23 +300,28 @@ const UserLoginPage: React.FC = () => {
                   Cancel
                 </button>
                 <button
-                onClick={() => {
-                  if (gateCode === ADMIN_GATE_CODE) {
-                    setShowGateDialog(false);
-                    setGateCode("");
-                    setGateAttempts(0);
-                    navigate("/x9k2m7");
-                  } else {
-                    const newAttempts = gateAttempts + 1;
-                    setGateAttempts(newAttempts);
-                    setGateCode("");
-                    if (newAttempts >= 3) {
+                onClick={async () => {
+                  try {
+                    const { data, error } = await supabase.functions.invoke('verify-gate', { body: { code: gateCode } });
+                    if (!error && data?.success) {
                       setShowGateDialog(false);
-                      setGateLocked(true);
-                      toast({ title: "🔒 Locked", description: "ခွင့်ပြုချက် ပိတ်ထားပါသည်", variant: "destructive" });
+                      setGateCode("");
+                      setGateAttempts(0);
+                      navigate("/x9k2m7");
                     } else {
-                      toast({ title: "❌ Access Denied", description: `Code မှားနေပါသည် (${3 - newAttempts} ခါ ကျန်)`, variant: "destructive" });
+                      const newAttempts = gateAttempts + 1;
+                      setGateAttempts(newAttempts);
+                      setGateCode("");
+                      if (newAttempts >= 3) {
+                        setShowGateDialog(false);
+                        setGateLocked(true);
+                        toast({ title: "🔒 Locked", description: "ခွင့်ပြုချက် ပိတ်ထားပါသည်", variant: "destructive" });
+                      } else {
+                        toast({ title: "❌ Access Denied", description: `Code မှားနေပါသည် (${3 - newAttempts} ခါ ကျန်)`, variant: "destructive" });
+                      }
                     }
+                  } catch {
+                    toast({ title: "❌ Error", description: "Verification failed", variant: "destructive" });
                   }
                 }}
                 className="flex-1 h-9 rounded-lg bg-gradient-to-r from-violet-600 to-blue-600 text-2xs text-white font-semibold hover:from-violet-500 hover:to-blue-500 transition-all">

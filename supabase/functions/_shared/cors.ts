@@ -10,7 +10,7 @@ const ALLOWED_ORIGINS = [
 
 export function getCorsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get("origin") || "";
-  const isAllowed = ALLOWED_ORIGINS.some((o) => origin === o || origin.endsWith(".lovable.app"));
+  const isAllowed = ALLOWED_ORIGINS.some((o) => origin === o);
 
   return {
     "Access-Control-Allow-Origin": isAllowed ? origin : ALLOWED_ORIGINS[0],
@@ -22,7 +22,7 @@ export function getCorsHeaders(req: Request): Record<string, string> {
 
 export function handleCorsPreflightOrReject(req: Request): Response | null {
   const origin = req.headers.get("origin") || "";
-  const isAllowed = ALLOWED_ORIGINS.some((o) => origin === o || origin.endsWith(".lovable.app"));
+  const isAllowed = ALLOWED_ORIGINS.some((o) => origin === o);
 
   // For non-browser requests (no origin header), allow through (server-to-server won't have CORS)
   // But for browser requests from unauthorized origins, block
