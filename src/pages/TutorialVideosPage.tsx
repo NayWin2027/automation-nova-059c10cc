@@ -281,8 +281,8 @@ const TutorialVideosPage: React.FC = () => {
       });
     });
 
-    const { data: urlData } = supabase.storage.from("tutorial-videos").getPublicUrl(path);
-    return urlData.publicUrl;
+    // Return storage path (not public URL) - signed URLs generated at fetch time
+    return path;
   };
 
   const handleUpload = async () => {
