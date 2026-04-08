@@ -1,12 +1,7 @@
- import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
- import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
- import * as OTPAuth from "https://esm.sh/otpauth@9.2.4";
- 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import * as OTPAuth from "https://esm.sh/otpauth@9.2.4";
+import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
 
 function normalizeTotpCode(input: unknown): string {
   return String(input ?? "")
@@ -19,9 +14,9 @@ function normalizeBase32Secret(input: string): string {
 }
  
  serve(async (req: Request) => {
-   if (req.method === "OPTIONS") {
-     return new Response(null, { headers: corsHeaders });
-   }
+   const _corsBlock = handleCorsPreflightOrReject(req);
+   if (_corsBlock) return _corsBlock;
+   const corsHeaders = getCorsHeaders(req);
  
    try {
      const authHeader = req.headers.get("Authorization");
