@@ -136,6 +136,14 @@ const defaultTools = [
   gradient: "rose" as const,
   route: "/nova-cut"
 },
+{
+  id: "translate-video",
+  icon: Video,
+  title: "Translate Video",
+  description: "Video ကို မူရင်းအသံမဖျောက်ပဲ ဘာသာပြန်ခြင်း။",
+  gradient: "emerald" as const,
+  route: "/translate-video"
+},
 ];
 
 type Tool = (typeof defaultTools)[number];
