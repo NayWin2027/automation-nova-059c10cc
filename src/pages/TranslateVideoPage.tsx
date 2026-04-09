@@ -621,16 +621,34 @@ export default function App() {
       title = parsed.title || "Untitled";
       description = parsed.description || "";
 
-      // 2. Capture Frame
+      // 2. Capture Frame — wait for video metadata before seeking to prevent black frames
       if (!videoUrl) throw new Error("Original video not found");
       const video = document.createElement("video");
       video.src = videoUrl;
       video.crossOrigin = "anonymous";
-      video.currentTime = resultVideoRef.current?.currentTime || 0;
+      video.preload = "auto";
+
+      // Wait for metadata + data to load first
+      await new Promise<void>((resolve) => {
+        const onReady = () => {
+          video.removeEventListener("loadeddata", onReady);
+          video.removeEventListener("error", onReady);
+          resolve();
+        };
+        if (video.readyState >= 2) { resolve(); return; }
+        video.addEventListener("loadeddata", onReady);
+        video.addEventListener("error", onReady);
+        video.load();
+      });
+
+      // Seek to a meaningful frame (avoid black intro frames)
+      const seekTarget = resultVideoRef.current?.currentTime || Math.max(2, (video.duration || 10) * 0.1);
+      video.currentTime = Math.min(seekTarget, (video.duration || 10) - 1);
 
       await new Promise<void>((resolve) => {
         video.onseeked = () => resolve();
         video.onerror = () => resolve();
+        setTimeout(() => resolve(), 3000); // safety timeout
       });
 
       const ratioObj = ASPECT_RATIOS[aspectRatio];
@@ -947,21 +965,20 @@ This must look like a real professionally composited movie poster — photoreali
         }
       };
 
-      // Draw Movie Title (if provided)
+      // Draw Movie Title (if provided) — BIGGER than hook text, prominent neon style
       if (movieTitle) {
-        // Smaller, neon, cursive/serif style moved lower for cinematic feel
         drawWrappedText(
           movieTitle,
-          Math.floor(canvas.height * 0.08),
-          canvas.height * 0.82,
+          Math.floor(canvas.height * 0.12),
+          canvas.height * 0.78,
           true,
-          "italic 700",
+          "italic 900",
           'serif, "Pyidaungsu", "Padauk"',
         );
       }
 
       // Draw the viral hook title (smaller and at the very bottom)
-      const hookFontSize = movieTitle ? Math.floor(canvas.height * 0.05) : Math.floor(canvas.height * 0.1);
+      const hookFontSize = movieTitle ? Math.floor(canvas.height * 0.045) : Math.floor(canvas.height * 0.1);
       drawWrappedText(title, hookFontSize, canvas.height * 0.96, false, "900");
 
       const thumbnailUrl = canvas.toDataURL("image/png");
