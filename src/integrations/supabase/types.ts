@@ -520,6 +520,39 @@ export type Database = {
         }
         Relationships: []
       }
+      safe_site_announcements: {
+        Row: {
+          action_label: string | null
+          action_url: string | null
+          created_at: string | null
+          id: string | null
+          is_active: boolean | null
+          message: string | null
+          type: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          action_label?: string | null
+          action_url?: string | null
+          created_at?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          message?: string | null
+          type?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          action_label?: string | null
+          action_url?: string | null
+          created_at?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          message?: string | null
+          type?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       safe_tool_settings: {
         Row: {
           description: string | null
