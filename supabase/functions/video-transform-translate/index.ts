@@ -1,75 +1,19 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
-import { logToolActivity } from "../_shared/activityLog.ts";
 import { getGeminiKey, geminiRetryFetch } from "../_shared/geminiKeys.ts";
 
-/**
- * video-transform-translate Edge Function
- * 
- * Handles 3 modes for the Nova Translate Video tool:
- * 1. Audio transcription + translation (audioBase64 + targetLang)
- * 2. Marketing text generation (marketingMode + textBatch)
- * 3. Poster image generation (posterMode + videoFrames)
- * 
- * Security: Auth required, Premium/Admin only, server-side API keys with 3-key rotation.
- */
-
-// Input validation limits
-const MAX_AUDIO_BASE64_SIZE = 52_428_800; // 50MB
-const MAX_FRAME_SIZE = 10_485_760; // 10MB per frame
-const MAX_FRAMES = 6;
-const MAX_TEXT_LENGTH = 50_000;
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
 
 serve(async (req) => {
-  const _corsBlock = handleCorsPreflightOrReject(req);
-  if (_corsBlock) return _corsBlock;
-
-  const corsHeaders = getCorsHeaders(req);
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
 
   try {
-    // ===== AUTHENTICATION =====
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Authentication required" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-
-    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } }
-    });
-
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Invalid or expired token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // ===== ROLE CHECK: Premium + Admin only =====
-    const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-
-    const [{ data: profile }, { data: isAdmin }] = await Promise.all([
-      supabaseAdmin.from("profiles").select("plan").eq("user_id", user.id).single(),
-      supabaseAdmin.rpc("has_role", { _user_id: user.id, _role: "admin" }),
-    ]);
-
-    if (!isAdmin && profile?.plan !== "premium") {
-      return new Response(
-        JSON.stringify({ error: "Premium or Admin access required" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    console.log(`[video-transform-translate] User: ${user.id}, plan: ${profile?.plan}`);
-
-    // ===== PARSE BODY =====
     const body = await req.json();
     const {
       audioBase64,
@@ -84,300 +28,241 @@ serve(async (req) => {
       aspectRatio,
     } = body;
 
-    // ===== INPUT VALIDATION =====
-    if (audioBase64 && audioBase64.length > MAX_AUDIO_BASE64_SIZE) {
+    if (!targetLang) {
+      return new Response(JSON.stringify({ error: "targetLang is required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!audioBase64 && !textBatch && !marketingMode && !posterMode) {
       return new Response(
-        JSON.stringify({ error: "Audio data too large (max 50MB)" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "audioBase64, textBatch, marketingMode, or posterMode is required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    if (videoFrames && Array.isArray(videoFrames)) {
-      if (videoFrames.length > MAX_FRAMES) {
-        return new Response(
-          JSON.stringify({ error: `Too many frames (max ${MAX_FRAMES})` }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      for (const frame of videoFrames) {
-        if (typeof frame === "string" && frame.length > MAX_FRAME_SIZE) {
-          return new Response(
-            JSON.stringify({ error: "Frame data too large (max 10MB per frame)" }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-      }
+    let apiKey: string;
+    try {
+      apiKey = getGeminiKey();
+    } catch {
+      return new Response(JSON.stringify({ error: "Backend API key not configured" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // Sanitize target language
-    const safeLang = (targetLang || "Burmese").replace(/[<>"'&]/g, "").substring(0, 50);
-
-    // ============================================================
-    // MODE 1: POSTER GENERATION (Gemini image model)
-    // ============================================================
-    if (posterMode && posterPrompt && videoFrames?.length) {
-      console.log("[video-transform-translate] Poster generation mode");
-
-      const imageParts = videoFrames
-        .filter((f: string) => f && f.length > 0)
-        .slice(0, 4)
-        .map((f: string) => ({
-          inline_data: { mime_type: "image/jpeg", data: f },
-        }));
-
-      const geminiResponse = await geminiRetryFetch(
-        (apiKey) =>
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                { text: posterPrompt },
-                ...imageParts,
-              ],
-            }],
-            generationConfig: {
-              temperature: 0.8,
-              maxOutputTokens: 8192,
-              responseModalities: ["TEXT", "IMAGE"],
-            },
-          }),
-        }
-      );
-
-      if (!geminiResponse.ok) {
-        const errText = await geminiResponse.text();
-        console.error("[video-transform-translate] Poster API error:", geminiResponse.status, errText);
-        if (geminiResponse.status === 429) {
-          return new Response(
-            JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
-            { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-        throw new Error("Poster generation failed");
-      }
-
-      const posterData = await geminiResponse.json();
-      const posterParts = posterData?.candidates?.[0]?.content?.parts || [];
-      let posterBase64 = "";
-
-      for (const part of posterParts) {
-        if (part.inline_data?.data) {
-          posterBase64 = part.inline_data.data;
-          break;
-        }
-      }
-
-      logToolActivity(user.id, "video-transform-translate", "success", { mode: "poster" });
-
-      return new Response(
-        JSON.stringify({ posterBase64 }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // ============================================================
-    // MODE 2: MARKETING TEXT GENERATION
-    // ============================================================
+    // === MARKETING MODE: Generate title + description from subtitles ===
     if (marketingMode && marketingPrompt) {
-      console.log("[video-transform-translate] Marketing text mode");
-
-      const geminiResponse = await geminiRetryFetch(
-        (apiKey) =>
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            system_instruction: {
-              parts: [{ text: "You are a viral marketing expert. Output valid JSON only." }],
+      const marketingBody = JSON.stringify({
+        contents: [{ parts: [{ text: marketingPrompt }] }],
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "OBJECT",
+            properties: {
+              title: { type: "STRING" },
+              description: { type: "STRING" },
             },
-            contents: [{ parts: [{ text: marketingPrompt.substring(0, MAX_TEXT_LENGTH) }] }],
-            generationConfig: {
-              temperature: 0.9,
-              maxOutputTokens: 2048,
-            },
-          }),
-        }
-      );
-
-      if (!geminiResponse.ok) {
-        const errText = await geminiResponse.text();
-        console.error("[video-transform-translate] Marketing API error:", geminiResponse.status, errText);
-        if (geminiResponse.status === 429) {
-          return new Response(
-            JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
-            { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-        throw new Error("Marketing generation failed");
-      }
-
-      const marketingData = await geminiResponse.json();
-      const resultText = marketingData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-
-      logToolActivity(user.id, "video-transform-translate", "success", { mode: "marketing" });
-
-      return new Response(
-        JSON.stringify({ result: resultText }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // ============================================================
-    // MODE 3: AUDIO TRANSCRIPTION + TRANSLATION (Main pipeline)
-    // ============================================================
-    if (audioBase64) {
-      console.log(`[video-transform-translate] Transcription mode, duration: ${audioDuration}s, lang: ${safeLang}`);
-
-      const parts: any[] = [];
-
-      // Add audio data
-      parts.push({
-        inline_data: { mime_type: "audio/wav", data: audioBase64 },
+            required: ["title", "description"],
+          },
+        },
       });
 
-      // Add video frame for context if available
-      if (videoFrames?.length) {
-        parts.push({
-          inline_data: { mime_type: "image/jpeg", data: videoFrames[0] },
+      const mktResponse = await geminiRetryFetch(
+        (key) => `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: marketingBody },
+      );
+
+      if (!mktResponse.ok) {
+        const errText = await mktResponse.text();
+        return new Response(JSON.stringify({ error: `Marketing generation failed: ${mktResponse.status}` }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      // Transcription + translation prompt
-      parts.push({
-        text: `You are a professional transcription and translation AI.
+      const mktData = await mktResponse.json();
+      const mktText = mktData?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+      return new Response(JSON.stringify({ result: mktText }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-TASK: Listen to this audio (duration: ${audioDuration || "unknown"} seconds) and:
-1. Transcribe ALL spoken dialogue accurately.
-2. Translate the transcription to ${safeLang}.
-3. Return ONLY timestamps and translated text.
+    // === POSTER MODE: Generate cinematic poster from video frames ===
+    if (posterMode && posterPrompt && Array.isArray(videoFrames)) {
+      const posterParts: any[] = videoFrames.map((frame: string) => ({
+        inlineData: { mimeType: "image/jpeg", data: frame },
+      }));
+      posterParts.push({ text: posterPrompt });
+
+      const posterBody = JSON.stringify({
+        contents: [{ parts: posterParts }],
+        generationConfig: {
+          responseModalities: ["IMAGE", "TEXT"],
+        },
+      });
+
+      const posterResponse = await geminiRetryFetch(
+        (key) =>
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${key}`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: posterBody },
+      );
+
+      if (!posterResponse.ok) {
+        const errText = await posterResponse.text();
+        console.error("Poster generation error:", posterResponse.status, errText);
+        return new Response(JSON.stringify({ error: `Poster generation failed: ${posterResponse.status}` }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const posterData = await posterResponse.json();
+      const imagePart = posterData?.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
+      if (imagePart?.inlineData?.data) {
+        return new Response(JSON.stringify({ posterBase64: imagePart.inlineData.data }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ error: "No image generated" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    let parts: any[];
+
+    if (textBatch && Array.isArray(textBatch)) {
+      // Text-only subtitle translation mode
+      const prompt = `You are a precise subtitle translator.
+The input JSON array is the authoritative source subtitle file.
+Translate EVERY segment to ${targetLang} with 100% fidelity.
 
 CRITICAL RULES:
-1. Capture EVERY spoken word — do NOT skip any dialogue.
-2. Timestamps must be RELATIVE to this audio segment (starting from 0.0).
-3. Output the TRANSLATED text (in ${safeLang}), NOT the original language.
-4. Each subtitle should be 1-2 sentences max for readability.
-5. Remove speaker names, labels, brackets, and sound descriptions.
-6. If there is NO speech, return an empty array [].
-7. ABSOLUTELY NO SYMBOLS OR PUNCTUATION: Output ONLY the raw spoken words.
-8. ABSOLUTELY NO SPEAKER LABELS OR ENGLISH WORDS: ONLY output the dialogue itself.
+- Return EXACTLY ${textBatch.length} items in the EXACT same order
+- Preserve every 'start' and 'end' value EXACTLY as provided
+- Do NOT merge, split, skip, summarize, censor, or leave any segment untranslated
+- Do NOT add speaker names, labels, notes, or metadata
+- Translate every segment completely, even if it is short
+- Return ONLY a JSON array with 'start', 'end', and 'text' properties
 
-REQUIRED OUTPUT FORMAT:
-Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure translated spoken words.
-[{"start": 0.0, "end": 2.1, "text": "translated text here"}, ...]`,
-      });
-
-      const geminiResponse = await geminiRetryFetch(
-        (apiKey) =>
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+Subtitles to translate:
+${JSON.stringify(textBatch)}`;
+      parts = [{ text: prompt }];
+    } else {
+      // Audio-based translation mode
+      parts = [
         {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts }],
-            generationConfig: {
-              temperature: 0.1,
-              maxOutputTokens: 8192,
-            },
-          }),
-        }
-      );
+          inlineData: {
+            mimeType: "audio/wav",
+            data: audioBase64,
+          },
+        },
+      ];
 
-      if (!geminiResponse.ok) {
-        const errText = await geminiResponse.text();
-        console.error("[video-transform-translate] Transcription API error:", geminiResponse.status, errText);
-        if (geminiResponse.status === 429) {
-          return new Response(
-            JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
-            { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+      // Add video frames if provided
+      if (Array.isArray(videoFrames)) {
+        for (const frameBase64 of videoFrames) {
+          if (typeof frameBase64 === "string" && frameBase64.length > 0) {
+            parts.push({
+              inlineData: {
+                mimeType: "image/jpeg",
+                data: frameBase64,
+              },
+            });
+          }
         }
-        throw new Error("Transcription failed");
       }
 
-      const transcriptionData = await geminiResponse.json();
-      const resultText = transcriptionData?.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
+      const hasFrames = Array.isArray(videoFrames) && videoFrames.length > 0;
 
-      logToolActivity(user.id, "video-transform-translate", "success", {
-        mode: "transcribe",
-        lang: safeLang,
-        duration: audioDuration,
-      });
+      const prompt = hasFrames
+        ? `You are an expert subtitle translator with ABSOLUTE ZERO HALLUCINATION policy. You receive BOTH audio AND video frame screenshots.
 
-      return new Response(
-        JSON.stringify({ result: resultText }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+CRITICAL SOURCE PRIORITY:
+1. If the frames contain burned-in original subtitles, treat that on-screen text as the PRIMARY wording reference.
+2. Use the audio to verify timing, fill gaps, and catch spoken words not visible on screen.
+3. Translate EVERY clearly spoken or clearly visible subtitle line to ${targetLang}. Do not omit dialogue.
+4. ABSOLUTE ZERO HALLUCINATION: ONLY translate words that are ACTUALLY SPOKEN or ACTUALLY VISIBLE. NEVER fabricate, imagine, or add content not in the source.
+4b. MEANING PRESERVATION IS CRITICAL: NEVER reverse the meaning. If the original says "don't let him go" (negative), the translation MUST keep the negative meaning. Pay extreme attention to negations (don't, not, never, no) — reversing negative/positive is the WORST error.
+5. Keep character names EXACTLY as they appear in the original source. Do NOT translate or alter names.
+6. Translate into modern, natural ${targetLang} conversational spoken style. NEVER use formal or literary language.
+7. Do NOT add speaker names, labels, descriptions, or any metadata not present in the source.
+8. If there is no clear speech and no readable subtitle text, return [].
+
+Audio chunk duration: ${(audioDuration || 0).toFixed(2)} seconds. Timestamps: 0 to ${(audioDuration || 0).toFixed(2)}.
+Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'text' (translated text only).`
+        : `Transcribe the audio and translate it to ${targetLang}.
+CRITICAL RULES:
+- ONLY translate words that are ACTUALLY SPOKEN. NEVER fabricate or add content not in the source audio.
+- Keep character names exactly as spoken in the original.
+- Translate into modern, natural ${targetLang} conversational spoken style. No formal/literary language.
+- Do NOT add speaker names, labels, or descriptions.
+- If no clear speech is present, return [].
+- Timing must be accurate. Break into short 2-3 second subtitle chunks.
+Audio duration: ${(audioDuration || 0).toFixed(2)} seconds. Timestamps: 0 to ${(audioDuration || 0).toFixed(2)}.
+Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'text' (translated text only).`;
+
+      parts.push({ text: prompt });
     }
 
-    // ============================================================
-    // MODE 4: TEXT BATCH TRANSLATION (textBatch without marketingMode)
-    // ============================================================
-    if (textBatch && Array.isArray(textBatch)) {
-      console.log("[video-transform-translate] Text batch translation mode");
-
-      const batchText = textBatch
-        .map((item: any) => item.text || "")
-        .join("\n")
-        .substring(0, MAX_TEXT_LENGTH);
-
-      const geminiResponse = await geminiRetryFetch(
-        (apiKey) =>
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            system_instruction: {
-              parts: [{ text: `You are a professional translator. Translate naturally to ${safeLang}.` }],
+    const fetchBody = JSON.stringify({
+      contents: [{ parts }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: {
+              start: { type: "NUMBER" },
+              end: { type: "NUMBER" },
+              text: { type: "STRING" },
             },
-            contents: [{ parts: [{ text: batchText }] }],
-            generationConfig: {
-              temperature: 0.3,
-              maxOutputTokens: 8192,
-            },
-          }),
-        }
-      );
+            required: ["start", "end", "text"],
+          },
+        },
+      },
+    });
 
-      if (!geminiResponse.ok) {
-        const errText = await geminiResponse.text();
-        console.error("[video-transform-translate] Batch API error:", geminiResponse.status, errText);
-        if (geminiResponse.status === 429) {
-          return new Response(
-            JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
-            { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-        throw new Error("Batch translation failed");
-      }
-
-      const batchData = await geminiResponse.json();
-      const resultText = batchData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-
-      logToolActivity(user.id, "video-transform-translate", "success", { mode: "batch" });
-
-      return new Response(
-        JSON.stringify({ result: resultText }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // No valid mode specified
-    return new Response(
-      JSON.stringify({ error: "Invalid request. Provide audioBase64, textBatch, marketingMode, or posterMode." }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    const response = await geminiRetryFetch(
+      (key) => `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: fetchBody,
+      },
     );
 
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("Gemini API error:", response.status, errText);
+
+      if (response.status === 429) {
+        return new Response(
+          JSON.stringify({ error: "API rate limit exceeded. Please try again later.", errorCode: "RATE_LIMIT" }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      return new Response(JSON.stringify({ error: `Gemini API error: ${response.status}` }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const data = await response.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
+
+    return new Response(JSON.stringify({ result: text }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (error) {
-    console.error("[video-transform-translate] Error:", error);
-    const errMsg = error instanceof Error ? error.message : "Unknown error";
-    return new Response(
-      JSON.stringify({ error: errMsg }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    console.error("video-transform-translate error:", error);
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Internal error" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
