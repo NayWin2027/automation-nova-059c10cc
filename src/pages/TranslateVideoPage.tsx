@@ -693,18 +693,24 @@ export default function App() {
           const tempVideo = document.createElement("video");
           tempVideo.src = videoUrl;
           tempVideo.crossOrigin = "anonymous";
-          tempVideo.currentTime = time;
-          tempVideo.onseeked = () => {
-            const canvas = document.createElement("canvas");
-            canvas.width = canvasW;
-            canvas.height = canvasH;
-            const ctx = canvas.getContext("2d");
-            if (ctx) drawVideoCover(tempVideo, ctx, canvasW, canvasH);
-            resolve(canvas.toDataURL("image/jpeg", 0.95).split(",")[1]);
+          tempVideo.preload = "auto";
+          const doSeek = () => {
+            tempVideo.currentTime = Math.max(0.5, Math.min(time, (tempVideo.duration || 10) - 0.5));
+            tempVideo.onseeked = () => {
+              const canvas = document.createElement("canvas");
+              canvas.width = canvasW;
+              canvas.height = canvasH;
+              const ctx = canvas.getContext("2d");
+              if (ctx) drawVideoCover(tempVideo, ctx, canvasW, canvasH);
+              resolve(canvas.toDataURL("image/jpeg", 0.95).split(",")[1]);
+            };
+            tempVideo.onerror = () => resolve("");
           };
-          tempVideo.onerror = () => resolve("");
-          // Timeout fallback
-          setTimeout(() => resolve(""), 3000);
+          if (tempVideo.readyState >= 2) { doSeek(); return; }
+          tempVideo.addEventListener("loadeddata", doSeek);
+          tempVideo.addEventListener("error", () => resolve(""));
+          tempVideo.load();
+          setTimeout(() => resolve(""), 5000);
         });
       };
 
