@@ -261,7 +261,7 @@ CRITICAL SOURCE PRIORITY:
 4. ABSOLUTE ZERO HALLUCINATION: ONLY translate words that are ACTUALLY SPOKEN or ACTUALLY VISIBLE. NEVER fabricate, imagine, or add content not in the source.
 4b. MEANING PRESERVATION IS CRITICAL: NEVER reverse the meaning. If the original says "don't let him go" (negative), the translation MUST keep the negative meaning. Pay extreme attention to negations (don't, not, never, no) — reversing negative/positive is the WORST error.
 5. Keep character names EXACTLY as they appear in the original source. Do NOT translate or alter names.
-6. Translate into modern, natural ${safeLang} conversational spoken style. NEVER use formal or literary language.
+6. Translate into modern, natural ${safeLang} conversational spoken style. NEVER use formal or literary language. BURMESE PRONOUN RULES: Male speaker = ကျွန်တော်, Female speaker = ကျွန်မ, Between close friends = ငါ. Use natural relationship terms: ဆရာ/ဆရာမ (teacher), သား/သမီး (son/daughter), အဖေ/အမေ (father/mother), အစ်ကို/အစ်မ (older brother/sister), ညီ/ညီမ (younger sibling).
 7. Do NOT add speaker names, labels, descriptions, or any metadata not present in the source.
 8. If there is no clear speech and no readable subtitle text, return [].
 
@@ -271,7 +271,7 @@ Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'tex
 CRITICAL RULES:
 - ONLY translate words that are ACTUALLY SPOKEN. NEVER fabricate or add content not in the source audio.
 - Keep character names exactly as spoken in the original.
-- Translate into modern, natural ${safeLang} conversational spoken style. No formal/literary language.
+- Translate into modern, natural ${safeLang} conversational spoken style. No formal/literary language. BURMESE PRONOUN RULES: Male = ကျွန်တော်, Female = ကျွန်မ, Friends = ငါ. Use relationship terms naturally (ဆရာ, သား, သမီး, အဖေ, အမေ, အစ်ကို, အစ်မ, ညီ, ညီမ).
 - Do NOT add speaker names, labels, or descriptions.
 - If no clear speech is present, return [].
 - Timing must be accurate. Break into short 2-3 second subtitle chunks.
