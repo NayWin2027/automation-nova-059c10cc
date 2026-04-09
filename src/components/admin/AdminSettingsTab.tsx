@@ -1124,7 +1124,7 @@ const AdminSettingsTab: React.FC = () => {
                     } else {
                       const res = await supabase
                         .from('site_announcements')
-                        .insert({ ...payload, created_by: user?.id || '' })
+                        .insert({ ...payload, created_by: 'admin' })
                         .select()
                         .single();
                       if (res.data) {
