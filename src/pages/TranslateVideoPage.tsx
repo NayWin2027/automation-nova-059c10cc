@@ -727,19 +727,21 @@ export default function App() {
       const posterPrompt = `Create a single photorealistic Hollywood cinematic movie poster image from these video frame references.
 
 CRITICAL RULES:
-1. OUTPUT A SINGLE UNIFIED IMAGE — NOT a collage, NOT a grid, NOT split panels. ONE seamless cinematic composition.
-2. ZERO TEXT — absolutely NO subtitles, NO watermarks, NO titles, NO letters, NO words, NO numbers anywhere on the poster. Completely clean image.
-3. Use the EXACT faces from the provided frames — 100% likeness, do NOT generate new/generic faces.
+1. OUTPUT A SINGLE UNIFIED IMAGE — NOT a collage, NOT a grid, NOT split panels. ONE seamless cinematic composition like a real Hollywood movie poster.
+2. ZERO TEXT — absolutely NO subtitles, NO watermarks, NO titles, NO letters, NO words, NO numbers anywhere on the poster. Completely clean image only.
+3. Use the EXACT faces and appearances from the provided frames — 100% likeness, do NOT generate new/generic faces.
 
-COMPOSITION:
-- Main lead character: large dominant close-up portrait in the center (40-50% of poster height), from chest up
-- Supporting characters: smaller portraits layered BEHIND the lead, seamlessly blended into the background using cinematic fog, bokeh, and soft gradients — NO hard edges or borders between characters
-- Dark moody atmospheric background with subtle bokeh lights
-- Professional cinematic color grading (teal & orange or moody blue tones)
-- Dramatic rim lighting on faces, deep shadows
-- Portrait/vertical orientation
+COMPOSITION STYLE (REFERENCE: Korean Drama / Chinese Drama Movie Poster):
+- Main lead character: LARGE dominant close-up portrait filling the center (50-60% of poster), from chest/shoulders up, face clearly visible with dramatic expression
+- 2-4 supporting/side characters: SMALLER portraits seamlessly blended BEHIND and around the main lead, using cinematic depth-of-field blur, atmospheric fog, and soft gradient transitions — NO hard edges or borders
+- Characters should appear to be layered at DIFFERENT depths, creating a natural depth composition
+- Dark moody atmospheric background with subtle bokeh lights, lens flares, or atmospheric particles
+- Professional cinematic color grading: deep teal-blue shadows with warm orange-amber highlights (teal & orange look)
+- Dramatic rim lighting and edge lighting on faces, deep cinematic shadows
+- Portrait/vertical orientation (3:4 aspect ratio)
+- Overall mood: dramatic, emotional, cinematic — like a real movie poster you'd see in a cinema
 
-This must look like a real professionally composited movie poster — photorealistic quality, NOT an AI illustration, NOT a photo collage.`;
+This must look like a REAL professionally composited movie poster — photorealistic quality, NOT an AI illustration, NOT a photo collage, NOT cartoon/anime style.`;
 
       try {
         // Server-side via edge function (secure — no API key in browser)
