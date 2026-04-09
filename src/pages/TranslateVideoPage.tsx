@@ -621,16 +621,34 @@ export default function App() {
       title = parsed.title || "Untitled";
       description = parsed.description || "";
 
-      // 2. Capture Frame
+      // 2. Capture Frame — wait for video metadata before seeking to prevent black frames
       if (!videoUrl) throw new Error("Original video not found");
       const video = document.createElement("video");
       video.src = videoUrl;
       video.crossOrigin = "anonymous";
-      video.currentTime = resultVideoRef.current?.currentTime || 0;
+      video.preload = "auto";
+
+      // Wait for metadata + data to load first
+      await new Promise<void>((resolve) => {
+        const onReady = () => {
+          video.removeEventListener("loadeddata", onReady);
+          video.removeEventListener("error", onReady);
+          resolve();
+        };
+        if (video.readyState >= 2) { resolve(); return; }
+        video.addEventListener("loadeddata", onReady);
+        video.addEventListener("error", onReady);
+        video.load();
+      });
+
+      // Seek to a meaningful frame (avoid black intro frames)
+      const seekTarget = resultVideoRef.current?.currentTime || Math.max(2, (video.duration || 10) * 0.1);
+      video.currentTime = Math.min(seekTarget, (video.duration || 10) - 1);
 
       await new Promise<void>((resolve) => {
         video.onseeked = () => resolve();
         video.onerror = () => resolve();
+        setTimeout(() => resolve(), 3000); // safety timeout
       });
 
       const ratioObj = ASPECT_RATIOS[aspectRatio];
@@ -675,18 +693,24 @@ export default function App() {
           const tempVideo = document.createElement("video");
           tempVideo.src = videoUrl;
           tempVideo.crossOrigin = "anonymous";
-          tempVideo.currentTime = time;
-          tempVideo.onseeked = () => {
-            const canvas = document.createElement("canvas");
-            canvas.width = canvasW;
-            canvas.height = canvasH;
-            const ctx = canvas.getContext("2d");
-            if (ctx) drawVideoCover(tempVideo, ctx, canvasW, canvasH);
-            resolve(canvas.toDataURL("image/jpeg", 0.95).split(",")[1]);
+          tempVideo.preload = "auto";
+          const doSeek = () => {
+            tempVideo.currentTime = Math.max(0.5, Math.min(time, (tempVideo.duration || 10) - 0.5));
+            tempVideo.onseeked = () => {
+              const canvas = document.createElement("canvas");
+              canvas.width = canvasW;
+              canvas.height = canvasH;
+              const ctx = canvas.getContext("2d");
+              if (ctx) drawVideoCover(tempVideo, ctx, canvasW, canvasH);
+              resolve(canvas.toDataURL("image/jpeg", 0.95).split(",")[1]);
+            };
+            tempVideo.onerror = () => resolve("");
           };
-          tempVideo.onerror = () => resolve("");
-          // Timeout fallback
-          setTimeout(() => resolve(""), 3000);
+          if (tempVideo.readyState >= 2) { doSeek(); return; }
+          tempVideo.addEventListener("loadeddata", doSeek);
+          tempVideo.addEventListener("error", () => resolve(""));
+          tempVideo.load();
+          setTimeout(() => resolve(""), 5000);
         });
       };
 
@@ -703,19 +727,21 @@ export default function App() {
       const posterPrompt = `Create a single photorealistic Hollywood cinematic movie poster image from these video frame references.
 
 CRITICAL RULES:
-1. OUTPUT A SINGLE UNIFIED IMAGE — NOT a collage, NOT a grid, NOT split panels. ONE seamless cinematic composition.
-2. ZERO TEXT — absolutely NO subtitles, NO watermarks, NO titles, NO letters, NO words, NO numbers anywhere on the poster. Completely clean image.
-3. Use the EXACT faces from the provided frames — 100% likeness, do NOT generate new/generic faces.
+1. OUTPUT A SINGLE UNIFIED IMAGE — NOT a collage, NOT a grid, NOT split panels. ONE seamless cinematic composition like a real Hollywood movie poster.
+2. ZERO TEXT — absolutely NO subtitles, NO watermarks, NO titles, NO letters, NO words, NO numbers anywhere on the poster. Completely clean image only.
+3. Use the EXACT faces and appearances from the provided frames — 100% likeness, do NOT generate new/generic faces.
 
-COMPOSITION:
-- Main lead character: large dominant close-up portrait in the center (40-50% of poster height), from chest up
-- Supporting characters: smaller portraits layered BEHIND the lead, seamlessly blended into the background using cinematic fog, bokeh, and soft gradients — NO hard edges or borders between characters
-- Dark moody atmospheric background with subtle bokeh lights
-- Professional cinematic color grading (teal & orange or moody blue tones)
-- Dramatic rim lighting on faces, deep shadows
-- Portrait/vertical orientation
+COMPOSITION STYLE (REFERENCE: Korean Drama / Chinese Drama Movie Poster):
+- Main lead character: LARGE dominant close-up portrait filling the center (50-60% of poster), from chest/shoulders up, face clearly visible with dramatic expression
+- 2-4 supporting/side characters: SMALLER portraits seamlessly blended BEHIND and around the main lead, using cinematic depth-of-field blur, atmospheric fog, and soft gradient transitions — NO hard edges or borders
+- Characters should appear to be layered at DIFFERENT depths, creating a natural depth composition
+- Dark moody atmospheric background with subtle bokeh lights, lens flares, or atmospheric particles
+- Professional cinematic color grading: deep teal-blue shadows with warm orange-amber highlights (teal & orange look)
+- Dramatic rim lighting and edge lighting on faces, deep cinematic shadows
+- Portrait/vertical orientation (3:4 aspect ratio)
+- Overall mood: dramatic, emotional, cinematic — like a real movie poster you'd see in a cinema
 
-This must look like a real professionally composited movie poster — photorealistic quality, NOT an AI illustration, NOT a photo collage.`;
+This must look like a REAL professionally composited movie poster — photorealistic quality, NOT an AI illustration, NOT a photo collage, NOT cartoon/anime style.`;
 
       try {
         // Server-side via edge function (secure — no API key in browser)
@@ -947,21 +973,20 @@ This must look like a real professionally composited movie poster — photoreali
         }
       };
 
-      // Draw Movie Title (if provided)
+      // Draw Movie Title (if provided) — BIGGER than hook text, prominent neon style
       if (movieTitle) {
-        // Smaller, neon, cursive/serif style moved lower for cinematic feel
         drawWrappedText(
           movieTitle,
-          Math.floor(canvas.height * 0.08),
-          canvas.height * 0.82,
+          Math.floor(canvas.height * 0.12),
+          canvas.height * 0.78,
           true,
-          "italic 700",
+          "italic 900",
           'serif, "Pyidaungsu", "Padauk"',
         );
       }
 
       // Draw the viral hook title (smaller and at the very bottom)
-      const hookFontSize = movieTitle ? Math.floor(canvas.height * 0.05) : Math.floor(canvas.height * 0.1);
+      const hookFontSize = movieTitle ? Math.floor(canvas.height * 0.045) : Math.floor(canvas.height * 0.1);
       drawWrappedText(title, hookFontSize, canvas.height * 0.96, false, "900");
 
       const thumbnailUrl = canvas.toDataURL("image/png");
@@ -1178,7 +1203,13 @@ STRICT OPERATING PRINCIPLES:
    - Every single word in your output MUST have a corresponding spoken word in the source audio.
    - MEANING PRESERVATION IS CRITICAL: NEVER reverse the meaning of a sentence. If the original says "don't let him go" (negative), the translation MUST preserve the negative meaning. Pay extreme attention to negations (don't, not, never, no) — mistranslating a negative as positive or vice versa is the WORST possible error.
 3. CHARACTER NAMES: Keep all character names EXACTLY as they appear/sound in the original source. Do NOT translate, localize, or alter character names.
-4. NATURAL MODERN SPOKEN STYLE: Translate into modern, natural ${targetLang} conversational spoken style (ပြောစကား) that matches the emotion and tone of the characters. For example, use "တယ်" instead of "သည်", "ဒါကြောင့်" instead of "ထို့ကြောင့်", "ဘာကြောင့်လဲဆိုရင်" instead of "အဘယ်ကြောင့်ဆိုသော်", and "ဒါပေမယ့်" instead of "သို့သော်/သို့ပေမယ့်". NEVER use formal, literary, or bookish language. The translation must sound like how real people actually talk in everyday ${targetLang} conversation. When translating "I" (ငါ), infer the speaker's gender, age, and social context from the video and use appropriate Burmese pronouns such as "ကျွန်တော်" (male, formal/polite), "ငါ" (informal), "ကျွန်မ" (female, formal/polite), or "သမီး" (female, younger/familiar).
+4. NATURAL MODERN SPOKEN STYLE: Translate into modern, natural ${targetLang} conversational spoken style (ပြောစကား) that matches the emotion and tone of the characters. For example, use "တယ်" instead of "သည်", "ဒါကြောင့်" instead of "ထို့ကြောင့်", "ဘာကြောင့်လဲဆိုရင်" instead of "အဘယ်ကြောင့်ဆိုသော်", and "ဒါပေမယ့်" instead of "သို့သော်/သို့ပေမယ့်". NEVER use formal, literary, or bookish language. The translation must sound like how real people actually talk in everyday ${targetLang} conversation.
+BURMESE PRONOUN RULES (CRITICAL):
+- Male speaker (polite/formal): ကျွန်တော် for "I"
+- Female speaker (polite/formal): ကျွန်မ for "I"
+- Between close friends/informal: ငါ for "I"
+- ALWAYS use natural relationship terms when context is clear: ဆရာ/ဆရာမ (teacher), တပည့် (student), သား/သမီး (son/daughter), အဖေ/အမေ (father/mother), အစ်ကို/အစ်မ (older brother/sister), ညီ/ညီမ (younger brother/sister), etc.
+- Infer speaker gender, age, and relationship from video context to choose the most natural pronoun.
 5. ACCURATE TIMESTAMPS: Provide precise timestamps for every dialogue line, optimized for subtitle burn-in.
 6. TOTAL FIDELITY: Do not skip, summarize, or omit any actual dialogue. If the source material contains 18+, suggestive, or intense content, translate it literally and objectively. Do not sanitize or censor.
 
