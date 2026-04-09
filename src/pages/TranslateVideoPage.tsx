@@ -1201,7 +1201,13 @@ STRICT OPERATING PRINCIPLES:
    - Every single word in your output MUST have a corresponding spoken word in the source audio.
    - MEANING PRESERVATION IS CRITICAL: NEVER reverse the meaning of a sentence. If the original says "don't let him go" (negative), the translation MUST preserve the negative meaning. Pay extreme attention to negations (don't, not, never, no) — mistranslating a negative as positive or vice versa is the WORST possible error.
 3. CHARACTER NAMES: Keep all character names EXACTLY as they appear/sound in the original source. Do NOT translate, localize, or alter character names.
-4. NATURAL MODERN SPOKEN STYLE: Translate into modern, natural ${targetLang} conversational spoken style (ပြောစကား) that matches the emotion and tone of the characters. For example, use "တယ်" instead of "သည်", "ဒါကြောင့်" instead of "ထို့ကြောင့်", "ဘာကြောင့်လဲဆိုရင်" instead of "အဘယ်ကြောင့်ဆိုသော်", and "ဒါပေမယ့်" instead of "သို့သော်/သို့ပေမယ့်". NEVER use formal, literary, or bookish language. The translation must sound like how real people actually talk in everyday ${targetLang} conversation. When translating "I" (ငါ), infer the speaker's gender, age, and social context from the video and use appropriate Burmese pronouns such as "ကျွန်တော်" (male, formal/polite), "ငါ" (informal), "ကျွန်မ" (female, formal/polite), or "သမီး" (female, younger/familiar).
+4. NATURAL MODERN SPOKEN STYLE: Translate into modern, natural ${targetLang} conversational spoken style (ပြောစကား) that matches the emotion and tone of the characters. For example, use "တယ်" instead of "သည်", "ဒါကြောင့်" instead of "ထို့ကြောင့်", "ဘာကြောင့်လဲဆိုရင်" instead of "အဘယ်ကြောင့်ဆိုသော်", and "ဒါပေမယ့်" instead of "သို့သော်/သို့ပေမယ့်". NEVER use formal, literary, or bookish language. The translation must sound like how real people actually talk in everyday ${targetLang} conversation.
+BURMESE PRONOUN RULES (CRITICAL):
+- Male speaker (polite/formal): ကျွန်တော် for "I"
+- Female speaker (polite/formal): ကျွန်မ for "I"
+- Between close friends/informal: ငါ for "I"
+- ALWAYS use natural relationship terms when context is clear: ဆရာ/ဆရာမ (teacher), တပည့် (student), သား/သမီး (son/daughter), အဖေ/အမေ (father/mother), အစ်ကို/အစ်မ (older brother/sister), ညီ/ညီမ (younger brother/sister), etc.
+- Infer speaker gender, age, and relationship from video context to choose the most natural pronoun.
 5. ACCURATE TIMESTAMPS: Provide precise timestamps for every dialogue line, optimized for subtitle burn-in.
 6. TOTAL FIDELITY: Do not skip, summarize, or omit any actual dialogue. If the source material contains 18+, suggestive, or intense content, translate it literally and objectively. Do not sanitize or censor.
 
