@@ -635,7 +635,10 @@ export default function App() {
           video.removeEventListener("error", onReady);
           resolve();
         };
-        if (video.readyState >= 2) { resolve(); return; }
+        if (video.readyState >= 2) {
+          resolve();
+          return;
+        }
         video.addEventListener("loadeddata", onReady);
         video.addEventListener("error", onReady);
         video.load();
@@ -706,7 +709,10 @@ export default function App() {
             };
             tempVideo.onerror = () => resolve("");
           };
-          if (tempVideo.readyState >= 2) { doSeek(); return; }
+          if (tempVideo.readyState >= 2) {
+            doSeek();
+            return;
+          }
           tempVideo.addEventListener("loadeddata", doSeek);
           tempVideo.addEventListener("error", () => resolve(""));
           tempVideo.load();
@@ -1969,7 +1975,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
             </div>
             <span className="font-bold text-2xl tracking-tight">Nova Translate Video</span>
           </div>
-          <div className="text-sm font-medium text-zinc-1000">Enterprise Pipeline</div>
+          <div className="text-sm font-medium text-zinc-1000">Automation Pipeline</div>
         </div>
       </header>
 
