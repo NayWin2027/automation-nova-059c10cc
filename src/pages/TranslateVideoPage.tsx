@@ -387,6 +387,11 @@ export default function App() {
   const [subtitleFile, setSubtitleFile] = useState<File | null>(null);
   const [movieTitle, setMovieTitle] = useState("");
 
+  // API mode: "app" = server-side edge function, "own" = client-side with user's key
+  const [apiMode, setApiMode] = useState<"app" | "own">("app");
+  const [ownApiKey, setOwnApiKey] = useState("");
+  const [showApiKey, setShowApiKey] = useState(false);
+
   // API key removed — all AI calls go through secure server-side edge functions
   const [targetLang, setTargetLang] = useState("Burmese");
   const [langSearch, setLangSearch] = useState("");
