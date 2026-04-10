@@ -888,33 +888,6 @@ export default function App() {
       ctx.fillStyle = "rgba(255, 140, 40, 0.08)"; // Orange (lighter: 8% vs 16%)
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Hollywood Cinematic Light Rays (from top corners - dramatic movie poster effect)
-      ctx.globalCompositeOperation = "screen";
-      const rayGradient = ctx.createLinearGradient(0, 0, canvas.width / 2, canvas.height * 0.6);
-      rayGradient.addColorStop(0, "rgba(100, 200, 255, 0.15)"); // Cyan light from top
-      rayGradient.addColorStop(0.5, "rgba(100, 200, 255, 0.05)");
-      rayGradient.addColorStop(1, "rgba(0, 0, 0, 0)");
-      ctx.fillStyle = rayGradient;
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(canvas.width * 0.3, 0);
-      ctx.lineTo(canvas.width * 0.1, canvas.height * 0.7);
-      ctx.closePath();
-      ctx.fill();
-
-      // Second light ray from right
-      const rayGradient2 = ctx.createLinearGradient(canvas.width, 0, canvas.width / 2, canvas.height * 0.6);
-      rayGradient2.addColorStop(0, "rgba(100, 200, 255, 0.12)");
-      rayGradient2.addColorStop(0.5, "rgba(100, 200, 255, 0.04)");
-      rayGradient2.addColorStop(1, "rgba(0, 0, 0, 0)");
-      ctx.fillStyle = rayGradient2;
-      ctx.beginPath();
-      ctx.moveTo(canvas.width, 0);
-      ctx.lineTo(canvas.width * 0.7, 0);
-      ctx.lineTo(canvas.width * 0.9, canvas.height * 0.7);
-      ctx.closePath();
-      ctx.fill();
-
       // Minimal vignette for vibrant poster (lighter edges)
       ctx.globalCompositeOperation = "source-over";
       const vignette = ctx.createRadialGradient(
@@ -933,26 +906,13 @@ export default function App() {
 
       ctx.globalCompositeOperation = "source-over";
 
-      // Hollywood-style dramatic bottom gradient for text readability
-      const grad = ctx.createLinearGradient(0, canvas.height * 0.5, 0, canvas.height);
+      // Lighter bottom gradient for text readability (less washed out)
+      const grad = ctx.createLinearGradient(0, canvas.height * 0.6, 0, canvas.height);
       grad.addColorStop(0, "rgba(0,0,0,0)");
-      grad.addColorStop(0.4, "rgba(0,15,40,0.45)"); // Deep blue tint for cinematic feel
-      grad.addColorStop(1, "rgba(0,10,30,0.75)");
+      grad.addColorStop(0.5, "rgba(0,0,0,0.28)");
+      grad.addColorStop(1, "rgba(0,0,0,0.55)");
       ctx.fillStyle = grad;
-      ctx.fillRect(0, canvas.height * 0.5, canvas.width, canvas.height * 0.5);
-
-      // Subtle cinematic dust/particles effect (very light)
-      ctx.globalCompositeOperation = "screen";
-      for (let i = 0; i < 30; i++) {
-        const x = Math.random() * canvas.width;
-        const y = Math.random() * canvas.height * 0.7;
-        const size = Math.random() * 2 + 0.5;
-        ctx.fillStyle = `rgba(200, 220, 255, ${Math.random() * 0.15})`;
-        ctx.beginPath();
-        ctx.arc(x, y, size, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.globalCompositeOperation = "source-over";
+      ctx.fillRect(0, canvas.height * 0.6, canvas.width, canvas.height * 0.4);
 
       // Helper to wrap and draw text
       const drawWrappedText = (
@@ -1813,17 +1773,17 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           ctx.shadowColor = "transparent"; // Reset shadow
           ctx.shadowBlur = 0;
 
-          // 2.1 Draw subtle "Cross" effect across full face area for copyright protection
-          // Covers from top 10% to bottom 90% of the video frame (very light, keeps faces fully visible)
-          const crossZoneY = dy + dh * 0.1; // Start from 10% down (preserves hair/border)
-          const crossZoneH = dh * 0.8; // Cover 80% of height (full face area)
-          ctx.strokeStyle = "rgba(255, 255, 255, 0.08)"; // Very subtle (8% opacity)
-          ctx.lineWidth = 0.8; // Thin lines
+          // 2.1 Draw a "Cross" effect on the lower part of the face for copyright protection
+          // We only cross the bottom 40% of the foreground video area
+          const crossZoneY = dy + dh * 0.6;
+          const crossZoneH = dh * 0.4;
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+          ctx.lineWidth = 1;
           ctx.beginPath();
-          // Diagonal 1 (top-left to bottom-right)
+          // Diagonal 1
           ctx.moveTo(dx, crossZoneY);
           ctx.lineTo(dx + dw, crossZoneY + crossZoneH);
-          // Diagonal 2 (top-right to bottom-left)
+          // Diagonal 2
           ctx.moveTo(dx + dw, crossZoneY);
           ctx.lineTo(dx, crossZoneY + crossZoneH);
           ctx.stroke();
@@ -2413,7 +2373,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                     {(watermarkUrl || watermarkText) && (
                       <div
                         ref={watermarkBoxRef}
-                        className="absolute cursor-move border border-blue-400/30 hover:bg-blue-500/10 transition-colors z-10 flex items-center justify-center"
+                        className="absolute cursor-move border-2 border-dashed border-blue-500 hover:bg-blue-500/20 transition-colors z-10 flex items-center justify-center"
                         style={{
                           left: `${watermarkPos.x}%`,
                           top: `${watermarkPos.y}%`,
