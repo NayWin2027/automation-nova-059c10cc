@@ -58,7 +58,10 @@ const PIPELINE_STEPS = [
   "Rendering Final Video...",
 ];
 
-async function extractSmartAudioSegments(file: File): Promise<{ base64: string; offset: number; duration: number }[]> {
+async function extractSmartAudioSegments(
+  file: File,
+  maxChunkDuration = 30,
+): Promise<{ base64: string; offset: number; duration: number }[]> {
   try {
     const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
     let arrayBuffer: ArrayBuffer | null = await file.arrayBuffer();
@@ -70,7 +73,7 @@ async function extractSmartAudioSegments(file: File): Promise<{ base64: string; 
     const sampleRate = 16000;
 
     const results: { base64: string; offset: number; duration: number }[] = [];
-    const MAX_CHUNK_DURATION = 30; // 30 seconds per chunk for higher accuracy and fewer missed words
+    const MAX_CHUNK_DURATION = Math.max(8, Math.min(maxChunkDuration, 30));
     const MAX_CHUNK_SAMPLES = MAX_CHUNK_DURATION * sampleRate;
 
     let offsetSamples = 0;
@@ -1226,7 +1229,7 @@ export default function App() {
       }
 
       setProcessingStatus("Extracting audio with Client-Side VAD (Voice Activity Detection)...");
-      const audioChunks = await extractSmartAudioSegments(videoFile!);
+      const audioChunks = await extractSmartAudioSegments(videoFile!, apiMode === "app" ? 12 : 30);
       setProcessingProgress(15);
 
       if (audioChunks.length > 0) {

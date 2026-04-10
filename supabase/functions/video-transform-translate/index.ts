@@ -8,6 +8,33 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+async function geminiRetryFetchWithTimeout(
+  urlBuilder: (apiKey: string) => string,
+  options: RequestInit,
+  timeoutMs = 45000,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await geminiRetryFetch(urlBuilder, {
+      ...options,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const isAbort = error instanceof DOMException ? error.name === "AbortError" : message.includes("AbortError");
+
+    if (isAbort) {
+      throw new Error(`Gemini request timed out after ${timeoutMs}ms`);
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -132,6 +159,7 @@ serve(async (req) => {
     }
 
     let parts: any[];
+    let fallbackParts: any[] | null = null;
 
     if (textBatch && Array.isArray(textBatch)) {
       // Text-only subtitle translation mode
@@ -152,20 +180,20 @@ ${JSON.stringify(textBatch)}`;
       parts = [{ text: prompt }];
     } else {
       // Audio-based translation mode
-      parts = [
-        {
-          inlineData: {
-            mimeType: "audio/wav",
-            data: audioBase64,
-          },
+      const audioPart = {
+        inlineData: {
+          mimeType: "audio/wav",
+          data: audioBase64,
         },
-      ];
+      };
+
+      const frameParts: any[] = [];
 
       // Add video frames if provided
       if (Array.isArray(videoFrames)) {
         for (const frameBase64 of videoFrames) {
           if (typeof frameBase64 === "string" && frameBase64.length > 0) {
-            parts.push({
+            frameParts.push({
               inlineData: {
                 mimeType: "image/jpeg",
                 data: frameBase64,
@@ -175,9 +203,9 @@ ${JSON.stringify(textBatch)}`;
         }
       }
 
-      const hasFrames = Array.isArray(videoFrames) && videoFrames.length > 0;
+      const hasFrames = frameParts.length > 0;
 
-      const prompt = hasFrames
+      const multimodalPrompt = hasFrames
         ? `You are an expert subtitle translator with ABSOLUTE ZERO HALLUCINATION policy. You receive BOTH audio AND video frame screenshots.
 
 CRITICAL SOURCE PRIORITY:
@@ -204,36 +232,73 @@ CRITICAL RULES:
 Audio duration: ${(audioDuration || 0).toFixed(2)} seconds. Timestamps: 0 to ${(audioDuration || 0).toFixed(2)}.
 Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'text' (translated text only).`;
 
-      parts.push({ text: prompt });
+      parts = [audioPart, ...frameParts, { text: multimodalPrompt }];
+
+      if (hasFrames) {
+        fallbackParts = [
+          audioPart,
+          {
+            text: `Transcribe the audio and translate it to ${targetLang}.
+CRITICAL RULES:
+- ONLY translate words that are ACTUALLY SPOKEN. NEVER fabricate or add content not in the source audio.
+- Keep character names exactly as spoken in the original.
+- Translate into modern, natural ${targetLang} conversational spoken style. No formal/literary language.
+- Do NOT add speaker names, labels, or descriptions.
+- If no clear speech is present, return [].
+- Timing must be accurate. Break into short 2-3 second subtitle chunks.
+Audio duration: ${(audioDuration || 0).toFixed(2)} seconds. Timestamps: 0 to ${(audioDuration || 0).toFixed(2)}.
+Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'text' (translated text only).`,
+          },
+        ];
+      }
     }
 
-    const fetchBody = JSON.stringify({
-      contents: [{ parts }],
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: "ARRAY",
-          items: {
-            type: "OBJECT",
-            properties: {
-              start: { type: "NUMBER" },
-              end: { type: "NUMBER" },
-              text: { type: "STRING" },
+    const runSubtitleRequest = (requestParts: any[], timeoutMs: number) => {
+      const fetchBody = JSON.stringify({
+        contents: [{ parts: requestParts }],
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                start: { type: "NUMBER" },
+                end: { type: "NUMBER" },
+                text: { type: "STRING" },
+              },
+              required: ["start", "end", "text"],
             },
-            required: ["start", "end", "text"],
           },
         },
-      },
-    });
+      });
 
-    const response = await geminiRetryFetch(
-      (key) => `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: fetchBody,
-      },
-    );
+      return geminiRetryFetchWithTimeout(
+        (key) => `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: fetchBody,
+        },
+        timeoutMs,
+      );
+    };
+
+    let response: Response;
+
+    try {
+      response = await runSubtitleRequest(parts, fallbackParts ? 45000 : 35000);
+    } catch (error) {
+      if (!fallbackParts) throw error;
+
+      console.warn("Multimodal request stalled, retrying audio-only:", error instanceof Error ? error.message : error);
+      response = await runSubtitleRequest(fallbackParts, 35000);
+    }
+
+    if (!response.ok && fallbackParts && response.status >= 500) {
+      console.warn("Multimodal request returned server error, retrying audio-only:", response.status);
+      response = await runSubtitleRequest(fallbackParts, 35000);
+    }
 
     if (!response.ok) {
       const errText = await response.text();
