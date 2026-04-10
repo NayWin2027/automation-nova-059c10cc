@@ -624,8 +624,9 @@ export default function App() {
       // 2. Capture Frame — wait for video metadata before seeking to prevent black frames
       if (!videoUrl) throw new Error("Original video not found");
       const video = document.createElement("video");
-      video.src = videoUrl;
+      // CRITICAL: crossOrigin MUST be set BEFORE src to avoid CORS tainting (blank frames)
       video.crossOrigin = "anonymous";
+      video.src = videoUrl;
       video.preload = "auto";
 
       // Wait for metadata + data to load first
@@ -712,8 +713,9 @@ export default function App() {
       const captureFrameAt = (time: number): Promise<{ data: string; brightness: number }> => {
         return new Promise((resolve) => {
           const tempVideo = document.createElement("video");
-          tempVideo.src = videoUrl;
+          // CRITICAL: crossOrigin MUST be set BEFORE src to avoid CORS tainting (blank frames)
           tempVideo.crossOrigin = "anonymous";
+          tempVideo.src = videoUrl;
           tempVideo.preload = "auto";
           const doSeek = () => {
             tempVideo.currentTime = Math.max(0.5, Math.min(time, (tempVideo.duration || 10) - 0.5));
@@ -746,10 +748,15 @@ export default function App() {
       const intervals = [duration * 0.15, duration * 0.35, duration * 0.55, duration * 0.75, duration * 0.95];
 
       const additionalFrames = await Promise.all(intervals.map((t) => captureFrameAt(t)));
-      const selectedFrames = [baseFrame, ...additionalFrames]
-        .filter((frame) => frame.data)
+      let selectedFrames = [baseFrame, ...additionalFrames]
+        .filter((frame) => frame.data && frame.brightness > 0.05) // Filter out blank/black frames (min 5% brightness)
         .sort((a, b) => b.brightness - a.brightness)
         .slice(0, 6);
+
+      // Fallback: if no valid frames found, use the source canvas directly (it should have the first frame)
+      if (selectedFrames.length === 0 && baseFrame.data) {
+        selectedFrames = [baseFrame];
+      }
 
       // 3. Build poster from REAL extracted frames only (no AI generation)
       const canvas = document.createElement("canvas");
