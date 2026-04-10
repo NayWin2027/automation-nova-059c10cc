@@ -1145,8 +1145,10 @@ export default function App() {
     const file = e.target.files?.[0];
     if (file && file.type.startsWith("video/")) {
       (async () => {
-        const hasCredits = await preCheckCredits("video-transform");
-        if (!hasCredits) return;
+        if (apiMode === "app") {
+          const hasCredits = await preCheckCredits("video-transform");
+          if (!hasCredits) return;
+        }
         didDeductRef.current = false;
         startProcessingTriggeredRef.current = false;
 
