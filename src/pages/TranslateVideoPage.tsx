@@ -728,122 +728,73 @@ export default function App() {
       const additionalFrames = await Promise.all(intervals.map((t) => captureFrameAt(t)));
       const validAdditionalFrames = [base64ImageData, ...additionalFrames].filter((f) => f !== "");
 
-      // 3. Generate Cinematic Movie Poster using Gemini AI
-      let enhancedImageUrl = "";
-      const posterPrompt = `Create a single photorealistic Hollywood cinematic movie poster image from these video frame references.
-
-CRITICAL RULES:
-1. OUTPUT A SINGLE UNIFIED IMAGE — NOT a collage, NOT a grid, NOT split panels. ONE seamless cinematic composition like a real Hollywood movie poster.
-2. ZERO TEXT — absolutely NO subtitles, NO watermarks, NO titles, NO letters, NO words, NO numbers anywhere on the poster. Completely clean image only.
-3. Use the EXACT faces and appearances from the provided frames — 100% likeness, do NOT generate new/generic faces.
-
-COMPOSITION STYLE (REFERENCE: Korean Drama / Chinese Drama Movie Poster):
-- Main lead character: LARGE dominant close-up portrait filling the center (50-60% of poster), from chest/shoulders up, face clearly visible with dramatic expression
-- 2-4 supporting/side characters: SMALLER portraits seamlessly blended BEHIND and around the main lead, using cinematic depth-of-field blur, atmospheric fog, and soft gradient transitions — NO hard edges or borders
-- Characters should appear to be layered at DIFFERENT depths, creating a natural depth composition
-- Dark moody atmospheric background with subtle bokeh lights, lens flares, or atmospheric particles
-- Professional cinematic color grading: deep teal-blue shadows with warm orange-amber highlights (teal & orange look)
-- Dramatic rim lighting and edge lighting on faces, deep cinematic shadows
-- Portrait/vertical orientation (3:4 aspect ratio)
-- Overall mood: dramatic, emotional, cinematic — like a real movie poster you'd see in a cinema
-
-This must look like a REAL professionally composited movie poster — photorealistic quality, NOT an AI illustration, NOT a photo collage, NOT cartoon/anime style.`;
-
-      try {
-        // Server-side via edge function (secure — no API key in browser)
-        const { data, error } = await supabase.functions.invoke("video-transform-translate", {
-          body: {
-            posterMode: true,
-            posterPrompt,
-            videoFrames: validAdditionalFrames.slice(0, 4),
-            targetLang: "Burmese",
-            aspectRatio,
-          },
-        });
-        if (!error && data?.posterBase64) {
-          enhancedImageUrl = `data:image/png;base64,${data.posterBase64}`;
-        }
-      } catch (error) {
-        console.error("Gemini Poster Generation failed:", error);
-      }
-
+      // 3. Build poster from REAL extracted frames only (no AI generation)
       const canvas = document.createElement("canvas");
       canvas.width = sourceCanvas.width;
       canvas.height = sourceCanvas.height;
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Could not get final canvas context");
 
-      if (enhancedImageUrl) {
-        const posterImg = await new Promise<HTMLImageElement>((resolve, reject) => {
-          const img = new Image();
-          img.onload = () => resolve(img);
-          img.onerror = reject;
-          img.src = enhancedImageUrl;
-        });
-        // Draw AI generated poster to fill canvas
-        ctx.drawImage(posterImg, 0, 0, canvas.width, canvas.height);
-      } else {
-        // Fallback to manual montage if AI fails
-        ctx.drawImage(sourceCanvas, 0, 0, canvas.width, canvas.height);
+      // Use manual real-frame montage — 100% authentic characters from source video
+      ctx.drawImage(sourceCanvas, 0, 0, canvas.width, canvas.height);
 
-        const loadedImages = await Promise.all(
-          validAdditionalFrames.map((src) => {
-            return new Promise<HTMLImageElement>((resolve) => {
-              const img = new Image();
-              img.onload = () => resolve(img);
-              img.src = `data:image/jpeg;base64,${src}`;
-            });
-          }),
-        );
+      const loadedImages = await Promise.all(
+        validAdditionalFrames.map((src) => {
+          return new Promise<HTMLImageElement>((resolve) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.src = `data:image/jpeg;base64,${src}`;
+          });
+        }),
+      );
 
-        const isPortrait = canvas.height > canvas.width;
-        if (loadedImages.length >= 1) {
-          const overlayCanvas = document.createElement("canvas");
-          overlayCanvas.width = canvas.width;
-          overlayCanvas.height = canvas.height;
-          const oCtx = overlayCanvas.getContext("2d");
-          if (oCtx) {
-            if (isPortrait) {
-              const numImages = Math.min(2, loadedImages.length);
-              const imgWidth = canvas.width / numImages;
-              const imgHeight = canvas.height * 0.45;
-              for (let i = 0; i < numImages; i++) {
-                const img = loadedImages[i];
-                oCtx.drawImage(img, 0, 0, img.width, img.height, i * imgWidth, 0, imgWidth, imgHeight);
-              }
-              oCtx.globalCompositeOperation = "destination-in";
-              const mask = oCtx.createLinearGradient(0, 0, 0, imgHeight);
-              mask.addColorStop(0, "rgba(0,0,0,1)");
-              mask.addColorStop(0.7, "rgba(0,0,0,1)");
-              mask.addColorStop(1, "rgba(0,0,0,0)");
-              oCtx.fillStyle = mask;
-              oCtx.fillRect(0, 0, canvas.width, imgHeight);
-            } else {
-              const numImages = Math.min(2, loadedImages.length);
-              const imgWidth = canvas.width * 0.35;
-              const imgHeight = canvas.height;
-              for (let i = 0; i < numImages; i++) {
-                const img = loadedImages[i];
-                const dx = i === 0 ? 0 : canvas.width - imgWidth;
-                oCtx.drawImage(img, 0, 0, img.width, img.height, dx, 0, imgWidth, imgHeight);
-                oCtx.globalCompositeOperation = "destination-in";
-                const mask = oCtx.createLinearGradient(dx, 0, dx + imgWidth, 0);
-                if (i === 0) {
-                  mask.addColorStop(0, "rgba(0,0,0,1)");
-                  mask.addColorStop(0.6, "rgba(0,0,0,1)");
-                  mask.addColorStop(1, "rgba(0,0,0,0)");
-                } else {
-                  mask.addColorStop(0, "rgba(0,0,0,0)");
-                  mask.addColorStop(0.4, "rgba(0,0,0,1)");
-                  mask.addColorStop(1, "rgba(0,0,0,1)");
-                }
-                oCtx.fillStyle = mask;
-                oCtx.fillRect(dx, 0, imgWidth, imgHeight);
-                oCtx.globalCompositeOperation = "source-over";
-              }
+      const isPortrait = canvas.height > canvas.width;
+      if (loadedImages.length >= 1) {
+        const overlayCanvas = document.createElement("canvas");
+        overlayCanvas.width = canvas.width;
+        overlayCanvas.height = canvas.height;
+        const oCtx = overlayCanvas.getContext("2d");
+        if (oCtx) {
+          if (isPortrait) {
+            const numImages = Math.min(2, loadedImages.length);
+            const imgWidth = canvas.width / numImages;
+            const imgHeight = canvas.height * 0.45;
+            for (let i = 0; i < numImages; i++) {
+              const img = loadedImages[i];
+              oCtx.drawImage(img, 0, 0, img.width, img.height, i * imgWidth, 0, imgWidth, imgHeight);
             }
-            ctx.drawImage(overlayCanvas, 0, 0);
+            oCtx.globalCompositeOperation = "destination-in";
+            const mask = oCtx.createLinearGradient(0, 0, 0, imgHeight);
+            mask.addColorStop(0, "rgba(0,0,0,1)");
+            mask.addColorStop(0.7, "rgba(0,0,0,1)");
+            mask.addColorStop(1, "rgba(0,0,0,0)");
+            oCtx.fillStyle = mask;
+            oCtx.fillRect(0, 0, canvas.width, imgHeight);
+          } else {
+            const numImages = Math.min(2, loadedImages.length);
+            const imgWidth = canvas.width * 0.35;
+            const imgHeight = canvas.height;
+            for (let i = 0; i < numImages; i++) {
+              const img = loadedImages[i];
+              const dx = i === 0 ? 0 : canvas.width - imgWidth;
+              oCtx.drawImage(img, 0, 0, img.width, img.height, dx, 0, imgWidth, imgHeight);
+              oCtx.globalCompositeOperation = "destination-in";
+              const mask = oCtx.createLinearGradient(dx, 0, dx + imgWidth, 0);
+              if (i === 0) {
+                mask.addColorStop(0, "rgba(0,0,0,1)");
+                mask.addColorStop(0.6, "rgba(0,0,0,1)");
+                mask.addColorStop(1, "rgba(0,0,0,0)");
+              } else {
+                mask.addColorStop(0, "rgba(0,0,0,0)");
+                mask.addColorStop(0.4, "rgba(0,0,0,1)");
+                mask.addColorStop(1, "rgba(0,0,0,1)");
+              }
+              oCtx.fillStyle = mask;
+              oCtx.fillRect(dx, 0, imgWidth, imgHeight);
+              oCtx.globalCompositeOperation = "source-over";
+            }
           }
+          ctx.drawImage(overlayCanvas, 0, 0);
         }
       }
 
@@ -1616,19 +1567,28 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           resolve();
         };
 
-        recorder.start(1000); // Use timeslice to prevent huge memory buildup
+        // Do NOT start recorder until video is actually playing (prevents blank output)
+        let recorderStarted = false;
+        const startRecorderOnce = () => {
+          if (recorderStarted || recorder.state !== "inactive") return;
+          recorderStarted = true;
+          recorder.start(1000);
+          console.log("[renderVideo] Recorder started after video play confirmed");
+        };
 
         // Ensure video is ready and play it
         video.currentTime = 0;
         const playVideo = async () => {
           try {
             await video.play();
+            startRecorderOnce();
           } catch (err) {
             console.warn("Unmuted play blocked by browser, retrying muted (audio still captured via Web Audio):", err);
             video.muted = true;
             await audioCtx.resume().catch(() => undefined);
             try {
               await video.play();
+              startRecorderOnce();
             } catch (e) {
               console.error("Video play retry failed:", e);
               resolve();
