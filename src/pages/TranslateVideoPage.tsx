@@ -1201,43 +1201,41 @@ export default function App() {
 
           const chunk = audioChunks[i];
 
-          // Capture video frame for visual context
-          // Capture video frame for visual context
-          const frameBase64 = await new Promise<string>((resolve) => {
-            const video = document.createElement("video");
-            video.src = videoUrl!;
-            video.crossOrigin = "anonymous";
-            video.preload = "auto";
+          // Capture video frame for visual context — reuse a single video element
+          let frameBase64 = "";
+          try {
+            const frameVideo = document.createElement("video");
+            frameVideo.src = videoUrl!;
+            frameVideo.preload = "auto";
+            frameVideo.muted = true;
 
-            const doSeek = () => {
-              video.currentTime = chunk.offset + chunk.duration / 2;
-              video.onseeked = () => {
-                const canvas = document.createElement("canvas");
-                let w = video.videoWidth;
-                let h = video.videoHeight;
-                if (w > 854) {
-                  h = Math.round((854 / w) * h);
-                  w = 854;
-                }
-                canvas.width = w || 854;
-                canvas.height = h || 480;
-                const ctx = canvas.getContext("2d");
-                if (ctx) ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                resolve(canvas.toDataURL("image/jpeg", 0.8).split(",")[1]);
-              };
-              video.onerror = () => resolve("");
-            };
+            await new Promise<void>((res, rej) => {
+              if (frameVideo.readyState >= 2) return res();
+              frameVideo.addEventListener("loadeddata", () => res(), { once: true });
+              frameVideo.addEventListener("error", () => rej(new Error("frame video load error")), { once: true });
+              frameVideo.load();
+              setTimeout(() => res(), 3000); // don't block forever
+            });
 
-            if (video.readyState >= 2) {
-              doSeek();
-            } else {
-              video.addEventListener("loadeddata", doSeek, { once: true });
-              video.addEventListener("error", () => resolve(""), { once: true });
-              video.load();
-            }
+            frameVideo.currentTime = chunk.offset + chunk.duration / 2;
+            await new Promise<void>((res) => {
+              frameVideo.onseeked = () => res();
+              frameVideo.onerror = () => res();
+              setTimeout(() => res(), 3000);
+            });
 
-            setTimeout(() => resolve(""), 5000); // Safety timeout to prevent 15% hang
-          });
+            const canvas = document.createElement("canvas");
+            let w = frameVideo.videoWidth;
+            let h = frameVideo.videoHeight;
+            if (w > 854) { h = Math.round((854 / w) * h); w = 854; }
+            canvas.width = w || 854;
+            canvas.height = h || 480;
+            const ctx = canvas.getContext("2d");
+            if (ctx) ctx.drawImage(frameVideo, 0, 0, canvas.width, canvas.height);
+            frameBase64 = canvas.toDataURL("image/jpeg", 0.8).split(",")[1];
+          } catch (frameErr) {
+            console.warn("Frame capture failed, continuing without frame:", frameErr);
+          }
 
           // Find overlapping original subtitles
           const overlappingSubs = originalSubs.filter(
