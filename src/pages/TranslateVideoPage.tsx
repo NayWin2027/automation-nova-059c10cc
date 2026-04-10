@@ -1316,17 +1316,41 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
 
           try {
             let text = "[]";
-            // Always use server-side edge function (secure)
-            const { data, error } = await supabase.functions.invoke("video-transform-translate", {
-              body: {
-                audioBase64: chunk.base64,
-                audioDuration: chunk.duration,
-                targetLang,
-                videoFrames: frameBase64 ? [frameBase64] : [],
-              },
-            });
-            if (error) throw new Error(error.message || "Edge function error");
-            text = typeof data?.result === "string" ? data.result : JSON.stringify(data?.result || []);
+
+            if (apiMode === "own" && ownApiKey.trim()) {
+              // === OWN API MODE: Direct client-side Gemini call ===
+              const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
+              const ownParts: any[] = [
+                { inlineData: { mimeType: "audio/wav", data: chunk.base64 } },
+              ];
+              if (frameBase64) {
+                ownParts.push({ inlineData: { mimeType: "image/jpeg", data: frameBase64 } });
+              }
+              ownParts.push(parts[parts.length - 1]); // The prompt text part
+
+              const ownResult = await ai.models.generateContent({
+                model: "gemini-2.5-flash",
+                contents: [{ role: "user", parts: ownParts }],
+                config: {
+                  temperature: 0.1,
+                  maxOutputTokens: 8192,
+                  responseMimeType: "application/json",
+                },
+              });
+              text = ownResult.text || "[]";
+            } else {
+              // === APP API MODE: Server-side edge function (secure) ===
+              const { data, error } = await supabase.functions.invoke("video-transform-translate", {
+                body: {
+                  audioBase64: chunk.base64,
+                  audioDuration: chunk.duration,
+                  targetLang,
+                  videoFrames: frameBase64 ? [frameBase64] : [],
+                },
+              });
+              if (error) throw new Error(error.message || "Edge function error");
+              text = typeof data?.result === "string" ? data.result : JSON.stringify(data?.result || []);
+            }
             const jsonMatch = text.match(/\[[\s\S]*\]/);
             let chunkSubs = JSON.parse(jsonMatch ? jsonMatch[0] : "[]");
             if (!Array.isArray(chunkSubs)) {
