@@ -714,10 +714,11 @@ export default function App() {
       const baseFrame = {
         data: sourceCanvas.toDataURL("image/jpeg", 0.9).split(",")[1],
         brightness: getCanvasBrightness(sourceCanvas),
+        time: Math.min(seekTarget, Math.max(0.5, (video.duration || 10) - 0.5)),
       };
 
       // Helper to capture frame at specific time for more character variety
-      const captureFrameAt = (time: number): Promise<{ data: string; brightness: number }> => {
+      const captureFrameAt = (time: number): Promise<{ data: string; brightness: number; time: number }> => {
         return new Promise((resolve) => {
           const tempVideo = document.createElement("video");
           tempVideo.src = videoUrl;
@@ -734,30 +735,43 @@ export default function App() {
               resolve({
                 data: canvas.toDataURL("image/jpeg", 0.95).split(",")[1],
                 brightness: getCanvasBrightness(canvas),
+                time,
               });
             };
-            tempVideo.onerror = () => resolve({ data: "", brightness: 0 });
+            tempVideo.onerror = () => resolve({ data: "", brightness: 0, time });
           };
           if (tempVideo.readyState >= 2) {
             doSeek();
             return;
           }
           tempVideo.addEventListener("loadeddata", doSeek, { once: true });
-          tempVideo.addEventListener("error", () => resolve({ data: "", brightness: 0 }), { once: true });
+          tempVideo.addEventListener("error", () => resolve({ data: "", brightness: 0, time }), { once: true });
           tempVideo.load();
-          setTimeout(() => resolve({ data: "", brightness: 0 }), 5000);
+          setTimeout(() => resolve({ data: "", brightness: 0, time }), 5000);
         });
       };
 
       const duration = video.duration || 0;
-      // Spread captures across the entire video to ensure all key characters (like villains/supporting roles) are found
-      const intervals = [duration * 0.15, duration * 0.35, duration * 0.55, duration * 0.75, duration * 0.95];
+      const intervals = [0.12, 0.3, 0.48, 0.66, 0.82]
+        .map((point) => duration * point)
+        .filter((time) => time > 0.6 && time < Math.max(0.8, duration - 0.6));
 
       const additionalFrames = await Promise.all(intervals.map((t) => captureFrameAt(t)));
-      const selectedFrames = [baseFrame, ...additionalFrames]
-        .filter((frame) => frame.data)
-        .sort((a, b) => b.brightness - a.brightness)
-        .slice(0, 6);
+      const frameCandidates = [baseFrame, ...additionalFrames].filter((frame) => frame.data);
+      const brightEnoughFrames = frameCandidates.filter((frame) => frame.brightness >= 0.12);
+      const rankedFrames = (brightEnoughFrames.length > 0 ? brightEnoughFrames : frameCandidates)
+        .slice()
+        .sort((a, b) => b.brightness - a.brightness);
+
+      const heroFrame =
+        baseFrame.data && baseFrame.brightness >= 0.14 ? baseFrame : (rankedFrames[0] ?? frameCandidates[0] ?? baseFrame);
+
+      const supportingFrames = frameCandidates
+        .filter((frame) => !(frame.time === heroFrame.time && frame.data === heroFrame.data))
+        .sort((a, b) => a.time - b.time)
+        .slice(0, 5);
+
+      const selectedFrames = [heroFrame, ...supportingFrames].slice(0, 6);
 
       // 3. Build poster from REAL extracted frames only (no AI generation)
       const canvas = document.createElement("canvas");
@@ -776,98 +790,192 @@ export default function App() {
         }),
       );
 
-      if (loadedImages[0]) {
-        ctx.drawImage(loadedImages[0], 0, 0, canvas.width, canvas.height);
+      const drawImageCover = (
+        image: HTMLImageElement,
+        drawCtx: CanvasRenderingContext2D,
+        dx: number,
+        dy: number,
+        dw: number,
+        dh: number,
+        focusY = 0.18,
+        zoom = 1.15,
+      ) => {
+        const srcW = image.naturalWidth || image.width;
+        const srcH = image.naturalHeight || image.height;
+        if (!srcW || !srcH) return;
+
+        let sw = srcW / zoom;
+        let sh = srcH / zoom;
+        const destRatio = dw / dh;
+        const srcRatio = sw / sh;
+
+        if (srcRatio > destRatio) {
+          sw = sh * destRatio;
+        } else {
+          sh = sw / destRatio;
+        }
+
+        const sx = Math.max(0, (srcW - sw) / 2);
+        const maxSy = Math.max(0, srcH - sh);
+        const sy = Math.max(0, Math.min(maxSy, maxSy * focusY));
+
+        drawCtx.drawImage(image, sx, sy, sw, sh, dx, dy, dw, dh);
+      };
+
+      const drawFeatheredPortrait = (
+        image: HTMLImageElement,
+        x: number,
+        y: number,
+        w: number,
+        h: number,
+        {
+          focusY = 0.14,
+          zoom = 1.28,
+          opacity = 1,
+        }: { focusY?: number; zoom?: number; opacity?: number } = {},
+      ) => {
+        const layerCanvas = document.createElement("canvas");
+        layerCanvas.width = Math.max(1, Math.round(w));
+        layerCanvas.height = Math.max(1, Math.round(h));
+        const layerCtx = layerCanvas.getContext("2d");
+        if (!layerCtx) return;
+
+        layerCtx.filter = "contrast(1.04) saturate(1.08)";
+        drawImageCover(image, layerCtx, 0, 0, layerCanvas.width, layerCanvas.height, focusY, zoom);
+        layerCtx.filter = "none";
+
+        layerCtx.globalCompositeOperation = "destination-in";
+        const radialMask = layerCtx.createRadialGradient(
+          layerCanvas.width / 2,
+          layerCanvas.height * 0.42,
+          Math.min(layerCanvas.width, layerCanvas.height) * 0.12,
+          layerCanvas.width / 2,
+          layerCanvas.height * 0.48,
+          Math.max(layerCanvas.width, layerCanvas.height) * 0.72,
+        );
+        radialMask.addColorStop(0, "rgba(0,0,0,1)");
+        radialMask.addColorStop(0.72, "rgba(0,0,0,0.96)");
+        radialMask.addColorStop(1, "rgba(0,0,0,0)");
+        layerCtx.fillStyle = radialMask;
+        layerCtx.fillRect(0, 0, layerCanvas.width, layerCanvas.height);
+
+        layerCtx.globalCompositeOperation = "destination-in";
+        const bottomFade = layerCtx.createLinearGradient(0, 0, 0, layerCanvas.height);
+        bottomFade.addColorStop(0, "rgba(0,0,0,0.95)");
+        bottomFade.addColorStop(0.78, "rgba(0,0,0,0.95)");
+        bottomFade.addColorStop(1, "rgba(0,0,0,0)");
+        layerCtx.fillStyle = bottomFade;
+        layerCtx.fillRect(0, 0, layerCanvas.width, layerCanvas.height);
+
+        ctx.save();
+        ctx.globalAlpha = opacity;
+        ctx.shadowColor = "rgba(0,0,0,0.38)";
+        ctx.shadowBlur = 24;
+        ctx.drawImage(layerCanvas, x, y, w, h);
+        ctx.restore();
+      };
+
+      const drawGlow = (x: number, y: number, radius: number, color: string, opacity: number) => {
+        const glow = ctx.createRadialGradient(x, y, 0, x, y, radius);
+        glow.addColorStop(0, `rgba(${color}, ${opacity})`);
+        glow.addColorStop(0.45, `rgba(${color}, ${opacity * 0.38})`);
+        glow.addColorStop(1, `rgba(${color}, 0)`);
+        ctx.fillStyle = glow;
+        ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+      };
+
+      const heroImage = loadedImages[0] ?? null;
+      const montageImages = loadedImages.slice(1);
+      const isPortrait = canvas.height > canvas.width;
+
+      if (heroImage) {
+        ctx.save();
+        ctx.filter = "blur(26px) brightness(0.52) saturate(1.08)";
+        drawImageCover(heroImage, ctx, -canvas.width * 0.04, -canvas.height * 0.04, canvas.width * 1.08, canvas.height * 1.08, 0.16, 1.08);
+        ctx.restore();
       } else {
         ctx.drawImage(sourceCanvas, 0, 0, canvas.width, canvas.height);
       }
 
-      const isPortrait = canvas.height > canvas.width;
-      const montageImages = loadedImages.slice(1);
-      if (montageImages.length >= 1) {
-        const overlayCanvas = document.createElement("canvas");
-        overlayCanvas.width = canvas.width;
-        overlayCanvas.height = canvas.height;
-        const oCtx = overlayCanvas.getContext("2d");
-        if (oCtx) {
-          if (isPortrait) {
-            const numImages = Math.min(2, montageImages.length);
-            const imgWidth = canvas.width / numImages;
-            const imgHeight = canvas.height * 0.45;
-            for (let i = 0; i < numImages; i++) {
-              const img = montageImages[i];
-              oCtx.drawImage(img, 0, 0, img.width, img.height, i * imgWidth, 0, imgWidth, imgHeight);
-            }
-            oCtx.globalCompositeOperation = "destination-in";
-            const mask = oCtx.createLinearGradient(0, 0, 0, imgHeight);
-            mask.addColorStop(0, "rgba(0,0,0,1)");
-            mask.addColorStop(0.7, "rgba(0,0,0,1)");
-            mask.addColorStop(1, "rgba(0,0,0,0)");
-            oCtx.fillStyle = mask;
-            oCtx.fillRect(0, 0, canvas.width, imgHeight);
-            oCtx.globalCompositeOperation = "source-over";
-          } else {
-            const numImages = Math.min(2, montageImages.length);
-            const imgWidth = canvas.width * 0.35;
-            const imgHeight = canvas.height;
-            for (let i = 0; i < numImages; i++) {
-              const img = montageImages[i];
-              const dx = i === 0 ? 0 : canvas.width - imgWidth;
-              oCtx.drawImage(img, 0, 0, img.width, img.height, dx, 0, imgWidth, imgHeight);
-              oCtx.globalCompositeOperation = "destination-in";
-              const mask = oCtx.createLinearGradient(dx, 0, dx + imgWidth, 0);
-              if (i === 0) {
-                mask.addColorStop(0, "rgba(0,0,0,1)");
-                mask.addColorStop(0.6, "rgba(0,0,0,1)");
-                mask.addColorStop(1, "rgba(0,0,0,0)");
-              } else {
-                mask.addColorStop(0, "rgba(0,0,0,0)");
-                mask.addColorStop(0.4, "rgba(0,0,0,1)");
-                mask.addColorStop(1, "rgba(0,0,0,1)");
-              }
-              oCtx.fillStyle = mask;
-              oCtx.fillRect(dx, 0, imgWidth, imgHeight);
-              oCtx.globalCompositeOperation = "source-over";
-            }
-          }
-          ctx.drawImage(overlayCanvas, 0, 0);
-        }
+      const backdropGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      backdropGradient.addColorStop(0, "rgba(10,24,36,0.18)");
+      backdropGradient.addColorStop(0.5, "rgba(11,18,30,0.26)");
+      backdropGradient.addColorStop(1, "rgba(18,10,20,0.56)");
+      ctx.fillStyle = backdropGradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      drawGlow(canvas.width * 0.3, canvas.height * 0.16, canvas.width * 0.24, "112, 228, 255", 0.18);
+      drawGlow(canvas.width * 0.72, canvas.height * 0.18, canvas.width * 0.22, "180, 230, 255", 0.12);
+      drawGlow(canvas.width * 0.5, canvas.height * 0.42, Math.min(canvas.width, canvas.height) * 0.36, "255, 120, 175", 0.12);
+
+      const portraitSlots = isPortrait
+        ? [
+            { x: 0.0, y: 0.0, w: 0.36, h: 0.38, focusY: 0.08, zoom: 1.34, opacity: 0.92 },
+            { x: 0.64, y: 0.0, w: 0.36, h: 0.38, focusY: 0.08, zoom: 1.34, opacity: 0.92 },
+            { x: -0.02, y: 0.28, w: 0.28, h: 0.28, focusY: 0.12, zoom: 1.32, opacity: 0.78 },
+            { x: 0.74, y: 0.28, w: 0.28, h: 0.28, focusY: 0.12, zoom: 1.32, opacity: 0.78 },
+          ]
+        : [
+            { x: 0.0, y: 0.02, w: 0.24, h: 0.52, focusY: 0.08, zoom: 1.34, opacity: 0.88 },
+            { x: 0.76, y: 0.02, w: 0.24, h: 0.52, focusY: 0.08, zoom: 1.34, opacity: 0.88 },
+            { x: 0.0, y: 0.38, w: 0.22, h: 0.26, focusY: 0.12, zoom: 1.3, opacity: 0.72 },
+            { x: 0.78, y: 0.38, w: 0.22, h: 0.26, focusY: 0.12, zoom: 1.3, opacity: 0.72 },
+          ];
+
+      montageImages.slice(0, portraitSlots.length).forEach((img, index) => {
+        const slot = portraitSlots[index];
+        if (!slot) return;
+        drawFeatheredPortrait(
+          img,
+          canvas.width * slot.x,
+          canvas.height * slot.y,
+          canvas.width * slot.w,
+          canvas.height * slot.h,
+          { focusY: slot.focusY, zoom: slot.zoom, opacity: slot.opacity },
+        );
+      });
+
+      if (heroImage) {
+        const heroRect = isPortrait
+          ? { x: canvas.width * 0.16, y: canvas.height * 0.05, w: canvas.width * 0.68, h: canvas.height * 0.68 }
+          : { x: canvas.width * 0.22, y: canvas.height * 0.04, w: canvas.width * 0.56, h: canvas.height * 0.74 };
+
+        ctx.save();
+        ctx.shadowColor = "rgba(0,0,0,0.42)";
+        ctx.shadowBlur = 34;
+        drawImageCover(heroImage, ctx, heroRect.x, heroRect.y, heroRect.w, heroRect.h, 0.04, 1.26);
+        ctx.restore();
       }
 
-      // Apply Cinematic Color Grading
       ctx.globalCompositeOperation = "overlay";
-      ctx.fillStyle = "rgba(0, 70, 100, 0.18)"; // Teal
+      ctx.fillStyle = "rgba(24, 112, 150, 0.16)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       ctx.globalCompositeOperation = "soft-light";
-      ctx.fillStyle = "rgba(255, 140, 40, 0.16)"; // Orange
+      ctx.fillStyle = "rgba(255, 142, 44, 0.12)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Softer vignette so the poster does not go black
       ctx.globalCompositeOperation = "source-over";
       const vignette = ctx.createRadialGradient(
         canvas.width / 2,
-        canvas.height / 2,
-        canvas.width * 0.4,
+        canvas.height * 0.38,
+        canvas.width * 0.22,
         canvas.width / 2,
-        canvas.height / 2,
-        canvas.width * 0.8,
+        canvas.height * 0.46,
+        canvas.width * 0.9,
       );
       vignette.addColorStop(0, "rgba(0,0,0,0)");
-      vignette.addColorStop(0.72, "rgba(0,0,0,0.06)");
-      vignette.addColorStop(1, "rgba(0,0,0,0.35)");
+      vignette.addColorStop(0.68, "rgba(0,0,0,0.04)");
+      vignette.addColorStop(1, "rgba(0,0,0,0.28)");
       ctx.fillStyle = vignette;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      ctx.globalCompositeOperation = "source-over";
-
-      // Add a dark gradient at the bottom for text readability
-      const grad = ctx.createLinearGradient(0, canvas.height * 0.55, 0, canvas.height);
-      grad.addColorStop(0, "rgba(0,0,0,0)");
-      grad.addColorStop(0.5, "rgba(0,0,0,0.42)");
-      grad.addColorStop(1, "rgba(0,0,0,0.76)");
+      const grad = ctx.createLinearGradient(0, canvas.height * 0.6, 0, canvas.height);
+      grad.addColorStop(0, "rgba(10,8,16,0)");
+      grad.addColorStop(0.45, "rgba(10,8,16,0.34)");
+      grad.addColorStop(1, "rgba(9,7,14,0.78)");
       ctx.fillStyle = grad;
-      ctx.fillRect(0, canvas.height * 0.55, canvas.width, canvas.height * 0.45);
+      ctx.fillRect(0, canvas.height * 0.6, canvas.width, canvas.height * 0.4);
 
       // Helper to wrap and draw text
       const drawWrappedText = (
@@ -920,25 +1028,21 @@ export default function App() {
           const lineY = startY + i * lineHeight;
 
           if (isNeon) {
-            // 3D Neon Effect
             ctx.lineJoin = "round";
+            ctx.shadowColor = "rgba(255, 0, 166, 0.95)";
+            ctx.shadowBlur = Math.max(18, fontSize * 0.42);
+            ctx.strokeStyle = "rgba(89, 229, 255, 0.95)";
+            ctx.lineWidth = Math.max(2, fontSize * 0.06);
+            ctx.strokeText(lines[i], x, lineY);
 
-            // 3D offset layers
-            ctx.fillStyle = "#ff0055";
-            ctx.fillText(lines[i], x - 4, lineY + 4);
-            ctx.fillStyle = "#00ffff";
-            ctx.fillText(lines[i], x + 4, lineY - 4);
+            ctx.fillStyle = "rgba(255, 255, 255, 0.96)";
+            ctx.fillText(lines[i], x, lineY);
 
-            // Neon Glow
-            ctx.shadowColor = "#ff00ff";
-            ctx.shadowBlur = 40;
-            ctx.shadowOffsetX = 0;
-            ctx.shadowOffsetY = 0;
-
-            // Main text
+            ctx.shadowColor = "rgba(255,255,255,0.55)";
+            ctx.shadowBlur = Math.max(6, fontSize * 0.12);
             ctx.fillStyle = "#ffffff";
             ctx.strokeStyle = "#ffffff";
-            ctx.lineWidth = 2;
+            ctx.lineWidth = Math.max(1.5, fontSize * 0.03);
             ctx.strokeText(lines[i], x, lineY);
             ctx.fillText(lines[i], x, lineY);
 
