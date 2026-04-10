@@ -731,7 +731,22 @@ export default function App() {
               canvas.width = canvasW;
               canvas.height = canvasH;
               const ctx = canvas.getContext("2d");
-              if (ctx) drawVideoCover(tempVideo, ctx, canvasW, canvasH);
+              if (ctx) {
+                // To avoid original subtitles (usually at the bottom),
+                // we capture only the top 70% of the video frame and scale it to cover the canvas.
+                const subAvoidanceHeight = tempVideo.videoHeight * 0.7;
+                ctx.drawImage(
+                  tempVideo,
+                  0,
+                  0,
+                  tempVideo.videoWidth,
+                  subAvoidanceHeight, // Source: Top 70%
+                  0,
+                  0,
+                  canvasW,
+                  canvasH, // Destination: Full canvas
+                );
+              }
               resolve({
                 data: canvas.toDataURL("image/jpeg", 0.95).split(",")[1],
                 brightness: getCanvasBrightness(canvas),
@@ -783,7 +798,9 @@ export default function App() {
         ctx.drawImage(sourceCanvas, 0, 0, canvas.width, canvas.height);
       }
 
-      const isPortrait = canvas.height > canvas.width;
+      // Hollywood Cinematic Realistic Poster Composition
+      // 1. Main Character (loadedImages[0]) is already drawn as background.
+      // 2. Overlay supporting characters with soft blending and hierarchy.
       const montageImages = loadedImages.slice(1);
       if (montageImages.length >= 1) {
         const overlayCanvas = document.createElement("canvas");
@@ -791,47 +808,54 @@ export default function App() {
         overlayCanvas.height = canvas.height;
         const oCtx = overlayCanvas.getContext("2d");
         if (oCtx) {
-          if (isPortrait) {
-            const numImages = Math.min(2, montageImages.length);
-            const imgWidth = canvas.width / numImages;
-            const imgHeight = canvas.height * 0.45;
-            for (let i = 0; i < numImages; i++) {
-              const img = montageImages[i];
-              oCtx.drawImage(img, 0, 0, img.width, img.height, i * imgWidth, 0, imgWidth, imgHeight);
+          // Clear background for the overlay canvas
+          oCtx.clearRect(0, 0, canvas.width, canvas.height);
+
+          // Portrait: Characters at top/sides, Main character in center/bottom
+          // Landscape: Characters on left/right, Main character in center
+          const isPortrait = canvas.height > canvas.width;
+
+          montageImages.forEach((img, idx) => {
+            // Hierarchy: First few supporting characters are slightly larger
+            const scale = idx < 2 ? 0.45 : 0.3;
+            const imgW = canvas.width * scale;
+            const imgH = (imgW * img.height) / img.width;
+
+            let dx = 0,
+              dy = 0;
+            if (isPortrait) {
+              // Top-left, Top-right, Mid-left, Mid-right positions
+              dx = idx % 2 === 0 ? 0 : canvas.width - imgW;
+              dy = Math.floor(idx / 2) * (canvas.height * 0.25);
+            } else {
+              // Left side, Right side alternating
+              dx = idx % 2 === 0 ? 0 : canvas.width - imgW;
+              dy = Math.floor(idx / 2) * (canvas.height * 0.3);
             }
-            oCtx.globalCompositeOperation = "destination-in";
-            const mask = oCtx.createLinearGradient(0, 0, 0, imgHeight);
-            mask.addColorStop(0, "rgba(0,0,0,1)");
-            mask.addColorStop(0.7, "rgba(0,0,0,1)");
-            mask.addColorStop(1, "rgba(0,0,0,0)");
-            oCtx.fillStyle = mask;
-            oCtx.fillRect(0, 0, canvas.width, imgHeight);
-            oCtx.globalCompositeOperation = "source-over";
-          } else {
-            const numImages = Math.min(2, montageImages.length);
-            const imgWidth = canvas.width * 0.35;
-            const imgHeight = canvas.height;
-            for (let i = 0; i < numImages; i++) {
-              const img = montageImages[i];
-              const dx = i === 0 ? 0 : canvas.width - imgWidth;
-              oCtx.drawImage(img, 0, 0, img.width, img.height, dx, 0, imgWidth, imgHeight);
-              oCtx.globalCompositeOperation = "destination-in";
-              const mask = oCtx.createLinearGradient(dx, 0, dx + imgWidth, 0);
-              if (i === 0) {
-                mask.addColorStop(0, "rgba(0,0,0,1)");
-                mask.addColorStop(0.6, "rgba(0,0,0,1)");
-                mask.addColorStop(1, "rgba(0,0,0,0)");
-              } else {
-                mask.addColorStop(0, "rgba(0,0,0,0)");
-                mask.addColorStop(0.4, "rgba(0,0,0,1)");
-                mask.addColorStop(1, "rgba(0,0,0,1)");
-              }
-              oCtx.fillStyle = mask;
-              oCtx.fillRect(dx, 0, imgWidth, imgHeight);
-              oCtx.globalCompositeOperation = "source-over";
+
+            // Draw character with soft radial mask to blend into background
+            const charCanvas = document.createElement("canvas");
+            charCanvas.width = imgW;
+            charCanvas.height = imgH;
+            const cCtx = charCanvas.getContext("2d");
+            if (cCtx) {
+              cCtx.drawImage(img, 0, 0, imgW, imgH);
+              cCtx.globalCompositeOperation = "destination-in";
+              const mask = cCtx.createRadialGradient(imgW / 2, imgH / 2, 0, imgW / 2, imgH / 2, imgW * 0.6);
+              mask.addColorStop(0, "rgba(0,0,0,1)");
+              mask.addColorStop(0.6, "rgba(0,0,0,0.8)");
+              mask.addColorStop(1, "rgba(0,0,0,0)");
+              cCtx.fillStyle = mask;
+              cCtx.fillRect(0, 0, imgW, imgH);
+
+              oCtx.drawImage(charCanvas, dx, dy);
             }
-          }
+          });
+
+          // Blend the entire overlay onto the main background
+          ctx.globalAlpha = 0.85;
           ctx.drawImage(overlayCanvas, 0, 0);
+          ctx.globalAlpha = 1.0;
         }
       }
 
