@@ -2544,6 +2544,51 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
 
                 {/* API keys are handled server-side for security */}
 
+                {/* API Mode Toggle */}
+                <div className="space-y-3">
+                  <label className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                    <Key size={16} className="text-indigo-400" /> API Mode
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setApiMode("app")}
+                      disabled={!appApiAllowed}
+                      className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${apiMode === "app" ? "bg-indigo-500/20 border-indigo-500 text-indigo-300" : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800"} ${!appApiAllowed ? "opacity-40 cursor-not-allowed" : ""}`}
+                    >
+                      🖥️ App API
+                      <span className="block text-xs font-normal opacity-70">Admin · Premium · Pro</span>
+                    </button>
+                    <button
+                      onClick={() => setApiMode("own")}
+                      className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${apiMode === "own" ? "bg-indigo-500/20 border-indigo-500 text-indigo-300" : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800"}`}
+                    >
+                      🔑 Own API Key
+                      <span className="block text-xs font-normal opacity-70">သင့်ကိုယ်ပိုင် Key</span>
+                    </button>
+                  </div>
+                  {apiMode === "own" && (
+                    <div className="space-y-1">
+                      <label className="text-xs text-zinc-500">Google AI API Key (billing enabled)</label>
+                      <div className="flex gap-2">
+                        <input
+                          type={showApiKey ? "text" : "password"}
+                          value={ownApiKey}
+                          onChange={(e) => setOwnApiKey(e.target.value)}
+                          placeholder="AIza..."
+                          className="flex-1 px-3 py-2 text-sm bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                        <button
+                          onClick={() => setShowApiKey(!showApiKey)}
+                          className="px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-400 hover:text-zinc-200"
+                        >
+                          {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
+                      <p className="text-xs text-zinc-600">Credit မယူပါ။ သင့် Key နဲ့ တိုက်ရိုက်သုံးပါမည်။</p>
+                    </div>
+                  )}
+                </div>
+
                 {/* Target Language - Premium Searchable Dropdown */}
                 <div className="space-y-3">
                   <label className="text-sm font-medium text-zinc-300 flex items-center gap-2">
