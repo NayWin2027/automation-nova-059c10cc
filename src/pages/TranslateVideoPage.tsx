@@ -816,34 +816,41 @@ export default function App() {
           const isPortrait = canvas.height > canvas.width;
 
           montageImages.forEach((img, idx) => {
-            // Hierarchy: First few supporting characters are slightly larger
-            const scale = idx < 2 ? 0.45 : 0.3;
+            // Hierarchy: Supporting characters are placed behind the main character
+            // First 2 are slightly larger, others smaller
+            const scale = idx < 2 ? 0.5 : 0.35;
             const imgW = canvas.width * scale;
             const imgH = (imgW * img.height) / img.width;
 
             let dx = 0,
               dy = 0;
             if (isPortrait) {
-              // Top-left, Top-right, Mid-left, Mid-right positions
-              dx = idx % 2 === 0 ? 0 : canvas.width - imgW;
-              dy = Math.floor(idx / 2) * (canvas.height * 0.25);
+              // Positions: Top-Left, Top-Right, Mid-Left, Mid-Right
+              // Designed to frame the center main character
+              dx = idx % 2 === 0 ? -canvas.width * 0.05 : canvas.width - imgW + canvas.width * 0.05;
+              dy = Math.floor(idx / 2) * (canvas.height * 0.22);
             } else {
-              // Left side, Right side alternating
+              // Landscape: Left and Right sides
               dx = idx % 2 === 0 ? 0 : canvas.width - imgW;
-              dy = Math.floor(idx / 2) * (canvas.height * 0.3);
+              dy = Math.floor(idx / 2) * (canvas.height * 0.28);
             }
 
-            // Draw character with soft radial mask to blend into background
+            // Draw character with soft radial mask (No Blur as requested)
             const charCanvas = document.createElement("canvas");
             charCanvas.width = imgW;
             charCanvas.height = imgH;
             const cCtx = charCanvas.getContext("2d");
             if (cCtx) {
+              // Background characters are kept clear (no blur) but slightly color-matched
+              cCtx.filter = "brightness(0.9) contrast(1.05)";
               cCtx.drawImage(img, 0, 0, imgW, imgH);
+              cCtx.filter = "none";
+
               cCtx.globalCompositeOperation = "destination-in";
-              const mask = cCtx.createRadialGradient(imgW / 2, imgH / 2, 0, imgW / 2, imgH / 2, imgW * 0.6);
+              // Soft radial gradient for natural blending into the cinematic background
+              const mask = cCtx.createRadialGradient(imgW / 2, imgH / 2, 0, imgW / 2, imgH / 2, imgW * 0.75);
               mask.addColorStop(0, "rgba(0,0,0,1)");
-              mask.addColorStop(0.6, "rgba(0,0,0,0.8)");
+              mask.addColorStop(0.5, "rgba(0,0,0,0.85)");
               mask.addColorStop(1, "rgba(0,0,0,0)");
               cCtx.fillStyle = mask;
               cCtx.fillRect(0, 0, imgW, imgH);
