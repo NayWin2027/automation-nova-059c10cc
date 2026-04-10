@@ -681,6 +681,21 @@ export default function App() {
         ctx.drawImage(vid, drawX, drawY, drawW, drawH);
       };
 
+      const getCanvasBrightness = (inputCanvas: HTMLCanvasElement) => {
+        const sampleCanvas = document.createElement("canvas");
+        sampleCanvas.width = 48;
+        sampleCanvas.height = Math.max(24, Math.round((inputCanvas.height / inputCanvas.width) * 48));
+        const sampleCtx = sampleCanvas.getContext("2d", { willReadFrequently: true });
+        if (!sampleCtx) return 0;
+        sampleCtx.drawImage(inputCanvas, 0, 0, sampleCanvas.width, sampleCanvas.height);
+        const { data } = sampleCtx.getImageData(0, 0, sampleCanvas.width, sampleCanvas.height);
+        let totalLuma = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          totalLuma += data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+        }
+        return totalLuma / ((data.length / 4) * 255);
+      };
+
       const sourceCanvas = document.createElement("canvas");
       sourceCanvas.width = canvasW;
       sourceCanvas.height = canvasH;
@@ -688,10 +703,13 @@ export default function App() {
       if (!sourceCtx) throw new Error("Could not get canvas context");
       drawVideoCover(video, sourceCtx, canvasW, canvasH);
 
-      const base64ImageData = sourceCanvas.toDataURL("image/jpeg", 0.9).split(",")[1];
+      const baseFrame = {
+        data: sourceCanvas.toDataURL("image/jpeg", 0.9).split(",")[1],
+        brightness: getCanvasBrightness(sourceCanvas),
+      };
 
       // Helper to capture frame at specific time for more character variety
-      const captureFrameAt = (time: number): Promise<string> => {
+      const captureFrameAt = (time: number): Promise<{ data: string; brightness: number }> => {
         return new Promise((resolve) => {
           const tempVideo = document.createElement("video");
           tempVideo.src = videoUrl;
@@ -705,28 +723,33 @@ export default function App() {
               canvas.height = canvasH;
               const ctx = canvas.getContext("2d");
               if (ctx) drawVideoCover(tempVideo, ctx, canvasW, canvasH);
-              resolve(canvas.toDataURL("image/jpeg", 0.95).split(",")[1]);
+              resolve({
+                data: canvas.toDataURL("image/jpeg", 0.95).split(",")[1],
+                brightness: getCanvasBrightness(canvas),
+              });
             };
-            tempVideo.onerror = () => resolve("");
+            tempVideo.onerror = () => resolve({ data: "", brightness: 0 });
           };
           if (tempVideo.readyState >= 2) {
             doSeek();
             return;
           }
-          tempVideo.addEventListener("loadeddata", doSeek);
-          tempVideo.addEventListener("error", () => resolve(""));
+          tempVideo.addEventListener("loadeddata", doSeek, { once: true });
+          tempVideo.addEventListener("error", () => resolve({ data: "", brightness: 0 }), { once: true });
           tempVideo.load();
-          setTimeout(() => resolve(""), 5000);
+          setTimeout(() => resolve({ data: "", brightness: 0 }), 5000);
         });
       };
 
       const duration = video.duration || 0;
-      const currTime = video.currentTime;
       // Spread captures across the entire video to ensure all key characters (like villains/supporting roles) are found
       const intervals = [duration * 0.15, duration * 0.35, duration * 0.55, duration * 0.75, duration * 0.95];
 
       const additionalFrames = await Promise.all(intervals.map((t) => captureFrameAt(t)));
-      const validAdditionalFrames = [base64ImageData, ...additionalFrames].filter((f) => f !== "");
+      const selectedFrames = [baseFrame, ...additionalFrames]
+        .filter((frame) => frame.data)
+        .sort((a, b) => b.brightness - a.brightness)
+        .slice(0, 6);
 
       // 3. Build poster from REAL extracted frames only (no AI generation)
       const canvas = document.createElement("canvas");
@@ -735,32 +758,36 @@ export default function App() {
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Could not get final canvas context");
 
-      // Use manual real-frame montage — 100% authentic characters from source video
-      ctx.drawImage(sourceCanvas, 0, 0, canvas.width, canvas.height);
-
       const loadedImages = await Promise.all(
-        validAdditionalFrames.map((src) => {
+        selectedFrames.map((frame) => {
           return new Promise<HTMLImageElement>((resolve) => {
             const img = new Image();
             img.onload = () => resolve(img);
-            img.src = `data:image/jpeg;base64,${src}`;
+            img.src = `data:image/jpeg;base64,${frame.data}`;
           });
         }),
       );
 
+      if (loadedImages[0]) {
+        ctx.drawImage(loadedImages[0], 0, 0, canvas.width, canvas.height);
+      } else {
+        ctx.drawImage(sourceCanvas, 0, 0, canvas.width, canvas.height);
+      }
+
       const isPortrait = canvas.height > canvas.width;
-      if (loadedImages.length >= 1) {
+      const montageImages = loadedImages.slice(1);
+      if (montageImages.length >= 1) {
         const overlayCanvas = document.createElement("canvas");
         overlayCanvas.width = canvas.width;
         overlayCanvas.height = canvas.height;
         const oCtx = overlayCanvas.getContext("2d");
         if (oCtx) {
           if (isPortrait) {
-            const numImages = Math.min(2, loadedImages.length);
+            const numImages = Math.min(2, montageImages.length);
             const imgWidth = canvas.width / numImages;
             const imgHeight = canvas.height * 0.45;
             for (let i = 0; i < numImages; i++) {
-              const img = loadedImages[i];
+              const img = montageImages[i];
               oCtx.drawImage(img, 0, 0, img.width, img.height, i * imgWidth, 0, imgWidth, imgHeight);
             }
             oCtx.globalCompositeOperation = "destination-in";
@@ -770,12 +797,13 @@ export default function App() {
             mask.addColorStop(1, "rgba(0,0,0,0)");
             oCtx.fillStyle = mask;
             oCtx.fillRect(0, 0, canvas.width, imgHeight);
+            oCtx.globalCompositeOperation = "source-over";
           } else {
-            const numImages = Math.min(2, loadedImages.length);
+            const numImages = Math.min(2, montageImages.length);
             const imgWidth = canvas.width * 0.35;
             const imgHeight = canvas.height;
             for (let i = 0; i < numImages; i++) {
-              const img = loadedImages[i];
+              const img = montageImages[i];
               const dx = i === 0 ? 0 : canvas.width - imgWidth;
               oCtx.drawImage(img, 0, 0, img.width, img.height, dx, 0, imgWidth, imgHeight);
               oCtx.globalCompositeOperation = "destination-in";
@@ -800,15 +828,15 @@ export default function App() {
 
       // Apply Cinematic Color Grading
       ctx.globalCompositeOperation = "overlay";
-      ctx.fillStyle = "rgba(0, 70, 100, 0.3)"; // Teal
+      ctx.fillStyle = "rgba(0, 70, 100, 0.18)"; // Teal
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       ctx.globalCompositeOperation = "soft-light";
-      ctx.fillStyle = "rgba(255, 140, 40, 0.25)"; // Orange
+      ctx.fillStyle = "rgba(255, 140, 40, 0.16)"; // Orange
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Vignette
-      ctx.globalCompositeOperation = "multiply";
+      // Softer vignette so the poster does not go black
+      ctx.globalCompositeOperation = "source-over";
       const vignette = ctx.createRadialGradient(
         canvas.width / 2,
         canvas.height / 2,
@@ -817,20 +845,21 @@ export default function App() {
         canvas.height / 2,
         canvas.width * 0.8,
       );
-      vignette.addColorStop(0, "rgba(255,255,255,1)");
-      vignette.addColorStop(1, "rgba(120,120,120,1)");
+      vignette.addColorStop(0, "rgba(0,0,0,0)");
+      vignette.addColorStop(0.72, "rgba(0,0,0,0.06)");
+      vignette.addColorStop(1, "rgba(0,0,0,0.35)");
       ctx.fillStyle = vignette;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       ctx.globalCompositeOperation = "source-over";
 
       // Add a dark gradient at the bottom for text readability
-      const grad = ctx.createLinearGradient(0, canvas.height * 0.4, 0, canvas.height);
+      const grad = ctx.createLinearGradient(0, canvas.height * 0.55, 0, canvas.height);
       grad.addColorStop(0, "rgba(0,0,0,0)");
-      grad.addColorStop(0.5, "rgba(0,0,0,0.6)");
-      grad.addColorStop(1, "rgba(0,0,0,0.95)");
+      grad.addColorStop(0.5, "rgba(0,0,0,0.42)");
+      grad.addColorStop(1, "rgba(0,0,0,0.76)");
       ctx.fillStyle = grad;
-      ctx.fillRect(0, canvas.height * 0.4, canvas.width, canvas.height * 0.6);
+      ctx.fillRect(0, canvas.height * 0.55, canvas.width, canvas.height * 0.45);
 
       // Helper to wrap and draw text
       const drawWrappedText = (
@@ -1255,9 +1284,14 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
       const finalSubs = parseSubtitleFile(generatedSrt);
       setSubtitles(finalSubs);
 
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       setProcessingStatus("Applying Audio Pitch & EQ (Copyright Bypass)...");
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 1000));
       setProcessingProgress(60);
+
+      setProcessingStatus(`Applying ${COLOR_GRADES[colorGrade].label} Color Grade...`);
+      await new Promise((r) => setTimeout(r, 1000));
+      setProcessingProgress(75);
 
       setProcessingStatus("Rendering Final Video...");
       await renderVideo(finalSubs);
@@ -1503,9 +1537,9 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
         if (!MediaRecorder.isTypeSupported(options.mimeType!)) {
           options = { mimeType: "video/webm; codecs=vp9,vorbis" };
           if (!MediaRecorder.isTypeSupported(options.mimeType!)) {
-            options = { mimeType: "video/webm; codecs=vp9,vorbis" };
+            options = { mimeType: "video/webm; codecs=vp8,opus" };
             if (!MediaRecorder.isTypeSupported(options.mimeType!)) {
-              options = {};
+              options = MediaRecorder.isTypeSupported("video/webm") ? { mimeType: "video/webm" } : {};
             }
           }
         }
@@ -1518,7 +1552,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
         };
 
         recorder.onstop = () => {
-          const finalMimeType = options.mimeType || "video/mp4";
+          const finalMimeType = recorder.mimeType || options.mimeType || "video/webm";
           const blob = new Blob(chunks, { type: finalMimeType });
           const url = URL.createObjectURL(blob);
           const ext: "mp4" | "webm" = finalMimeType.includes("webm") ? "webm" : "mp4";
@@ -1565,6 +1599,10 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
               });
           }
 
+          if (audioCtx.state !== "closed") {
+            void audioCtx.close().catch(console.error);
+          }
+
           resolve();
         };
 
@@ -1574,7 +1612,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           if (recorderStarted || recorder.state !== "inactive") return;
           recorderStarted = true;
           recorder.start(1000);
-          console.log("[renderVideo] Recorder started after video play confirmed");
+          console.log("[renderVideo] Recorder started after first composed frame");
         };
 
         // Ensure video is ready and play it
@@ -1582,14 +1620,12 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
         const playVideo = async () => {
           try {
             await video.play();
-            startRecorderOnce();
           } catch (err) {
             console.warn("Unmuted play blocked by browser, retrying muted (audio still captured via Web Audio):", err);
             video.muted = true;
             await audioCtx.resume().catch(() => undefined);
             try {
               await video.play();
-              startRecorderOnce();
             } catch (e) {
               console.error("Video play retry failed:", e);
               resolve();
@@ -1684,6 +1720,8 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           ctx.drawImage(video, sx, sy, sw, sh, dx, dy, dw, dh);
           ctx.shadowColor = "transparent"; // Reset shadow
           ctx.shadowBlur = 0;
+
+          startRecorderOnce();
 
           ctx.filter = "none";
 
@@ -1916,9 +1954,6 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           if (animationFrameId) cancelFrame(animationFrameId);
           if (recorder.state !== "inactive") {
             recorder.stop();
-          }
-          if (audioCtx.state !== "closed") {
-            audioCtx.close().catch(console.error);
           }
         });
       };
