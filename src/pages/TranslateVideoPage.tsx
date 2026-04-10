@@ -665,20 +665,28 @@ export default function App() {
       }
 
       const drawVideoCover = (vid: HTMLVideoElement, ctx: CanvasRenderingContext2D, w: number, h: number) => {
-        const videoRatio = vid.videoWidth / vid.videoHeight;
+        // Crop out top 12% and bottom 20% of source to remove burned-in subtitles/text
+        const cropTop = 0.12;
+        const cropBottom = 0.20;
+        const sx = 0;
+        const sy = vid.videoHeight * cropTop;
+        const sw = vid.videoWidth;
+        const sh = vid.videoHeight * (1 - cropTop - cropBottom);
+
+        const srcRatio = sw / sh;
         let drawW = w;
         let drawH = h;
         let drawX = 0;
         let drawY = 0;
 
-        if (videoRatio > targetRatio) {
-          drawW = h * videoRatio;
+        if (srcRatio > w / h) {
+          drawW = h * srcRatio;
           drawX = (w - drawW) / 2;
         } else {
-          drawH = w / videoRatio;
+          drawH = w / srcRatio;
           drawY = (h - drawH) / 2;
         }
-        ctx.drawImage(vid, drawX, drawY, drawW, drawH);
+        ctx.drawImage(vid, sx, sy, sw, sh, drawX, drawY, drawW, drawH);
       };
 
       const getCanvasBrightness = (inputCanvas: HTMLCanvasElement) => {
