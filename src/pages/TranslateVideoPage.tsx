@@ -2257,7 +2257,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                 <h2 className="text-xl font-semibold flex items-center gap-2">
                   <Video size={20} className="text-indigo-400" /> Live Preview
                   {countdown !== null && countdown > 0 && (
-                    <span className="ml-auto text-sm font-normal text-zinc-400">
+                    <span className="ml-auto text-sm font-extrabold text-neon-rose">
                       Auto-start in{" "}
                       {Math.floor(countdown / 60)
                         .toString()
