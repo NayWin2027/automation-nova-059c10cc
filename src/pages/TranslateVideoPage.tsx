@@ -16,6 +16,9 @@ import {
   FileText,
   Settings,
   Search,
+  Eye,
+  EyeOff,
+  Key,
 } from "lucide-react";
 // All AI calls routed through server-side edge functions for security
 import { supabase } from "@/integrations/supabase/client";
@@ -23,6 +26,7 @@ import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useApiAccess } from "@/hooks/useApiAccess";
 import { preCheckCredits } from "@/utils/creditPreCheck";
 import { useCreditDeduction } from "@/hooks/useCreditDeduction";
+import { GoogleGenAI } from "@google/genai";
 
 type Step = "upload" | "configure" | "processing" | "review_subs" | "rendering" | "result";
 
