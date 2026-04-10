@@ -16,6 +16,9 @@ import {
   FileText,
   Settings,
   Search,
+  Eye,
+  EyeOff,
+  Key,
 } from "lucide-react";
 // All AI calls routed through server-side edge functions for security
 import { supabase } from "@/integrations/supabase/client";
@@ -23,6 +26,7 @@ import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useApiAccess } from "@/hooks/useApiAccess";
 import { preCheckCredits } from "@/utils/creditPreCheck";
 import { useCreditDeduction } from "@/hooks/useCreditDeduction";
+import { GoogleGenAI } from "@google/genai";
 
 type Step = "upload" | "configure" | "processing" | "review_subs" | "rendering" | "result";
 
@@ -383,6 +387,11 @@ export default function App() {
   const [subtitleFile, setSubtitleFile] = useState<File | null>(null);
   const [movieTitle, setMovieTitle] = useState("");
 
+  // API mode: "app" = server-side edge function, "own" = client-side with user's key
+  const [apiMode, setApiMode] = useState<"app" | "own">("app");
+  const [ownApiKey, setOwnApiKey] = useState("");
+  const [showApiKey, setShowApiKey] = useState(false);
+
   // API key removed — all AI calls go through secure server-side edge functions
   const [targetLang, setTargetLang] = useState("Burmese");
   const [langSearch, setLangSearch] = useState("");
@@ -440,6 +449,17 @@ export default function App() {
     }, 500);
     return () => clearTimeout(timer);
   }, []);
+
+  // Set default API mode based on access permissions
+  useEffect(() => {
+    if (!accessLoading) {
+      if (!appApiAllowed && ownApiAllowed) {
+        setApiMode("own");
+      } else if (defaultApiMode) {
+        setApiMode(defaultApiMode as "app" | "own");
+      }
+    }
+  }, [accessLoading, appApiAllowed, ownApiAllowed, defaultApiMode]);
 
   const previewRef = useRef<HTMLDivElement>(null);
   const renderPreviewRef = useRef<HTMLDivElement>(null);
@@ -595,31 +615,50 @@ export default function App() {
     if (!srtText) return;
     setIsGeneratingMarketing(true);
     try {
-      // === CREDIT DEDUCTION: 4CR per poster generation ===
-      const posterResult = await deductCredits("video-transform", false, 4);
-      if (!posterResult.success) {
-        setIsGeneratingMarketing(false);
-        return;
+      // === CREDIT DEDUCTION: 4CR per poster generation (skip for Own API) ===
+      if (apiMode !== "own") {
+        const posterResult = await deductCredits("video-transform", false, 4);
+        if (!posterResult.success) {
+          setIsGeneratingMarketing(false);
+          return;
+        }
       }
 
       let title = "";
       let description = "";
 
-      // Server-side via edge function (secure — no API key in browser)
-      const { data, error } = await supabase.functions.invoke("video-transform-translate", {
-        body: {
-          textBatch: [{ start: 0, end: 1, text: srtText.substring(0, 5000) }],
-          targetLang: "Burmese",
-          marketingMode: true,
-          marketingPrompt: `Based on these subtitles, generate a very short, viral shock title (max 5-7 words) and a short viral description (movie/video summary) in Burmese. The title should be extremely catchy, dramatic and "clickbaity" for a movie thumbnail. Subtitles: ${srtText.substring(0, 5000)}`,
-        },
-      });
-      if (error) throw new Error(error.message || "Marketing generation failed");
-      const resultText = typeof data?.result === "string" ? data.result : JSON.stringify(data?.result || "{}");
-      const jsonMatch = resultText.match(/\{[\s\S]*\}/);
-      const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : "{}");
-      title = parsed.title || "Untitled";
-      description = parsed.description || "";
+      const mktPrompt = `Based on these subtitles, generate a very short, viral shock title (max 5-7 words) and a short viral description (movie/video summary) in Burmese. The title should be extremely catchy, dramatic and "clickbaity" for a movie thumbnail. Subtitles: ${srtText.substring(0, 5000)}`;
+
+      if (apiMode === "own" && ownApiKey.trim()) {
+        // Own API: direct client-side call
+        const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
+        const result = await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: mktPrompt,
+          config: { temperature: 0.9, maxOutputTokens: 2048, responseMimeType: "application/json" },
+        });
+        const resultText = result.text || "{}";
+        const jsonMatch = resultText.match(/\{[\s\S]*\}/);
+        const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : "{}");
+        title = parsed.title || "Untitled";
+        description = parsed.description || "";
+      } else {
+        // Server-side via edge function (secure — no API key in browser)
+        const { data, error } = await supabase.functions.invoke("video-transform-translate", {
+          body: {
+            textBatch: [{ start: 0, end: 1, text: srtText.substring(0, 5000) }],
+            targetLang: "Burmese",
+            marketingMode: true,
+            marketingPrompt: mktPrompt,
+          },
+        });
+        if (error) throw new Error(error.message || "Marketing generation failed");
+        const resultText = typeof data?.result === "string" ? data.result : JSON.stringify(data?.result || "{}");
+        const jsonMatch = resultText.match(/\{[\s\S]*\}/);
+        const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : "{}");
+        title = parsed.title || "Untitled";
+        description = parsed.description || "";
+      }
 
       // 2. Capture Frame — wait for video metadata before seeking to prevent black frames
       if (!videoUrl) throw new Error("Original video not found");
@@ -1136,8 +1175,10 @@ export default function App() {
     const file = e.target.files?.[0];
     if (file && file.type.startsWith("video/")) {
       (async () => {
-        const hasCredits = await preCheckCredits("video-transform");
-        if (!hasCredits) return;
+        if (apiMode === "app") {
+          const hasCredits = await preCheckCredits("video-transform");
+          if (!hasCredits) return;
+        }
         didDeductRef.current = false;
         startProcessingTriggeredRef.current = false;
 
@@ -1163,6 +1204,11 @@ export default function App() {
 
   const startProcessing = async () => {
     if (startProcessingTriggeredRef.current || !videoFile) return;
+    // Validate own API key before starting
+    if (apiMode === "own" && !ownApiKey.trim()) {
+      alert("Own API Mode ရွေးထားပါသည်။ Google API Key ထည့်ပေးပါ။");
+      return;
+    }
     startProcessingTriggeredRef.current = true;
     setCountdown(null);
     setStep("processing");
@@ -1190,43 +1236,41 @@ export default function App() {
 
           const chunk = audioChunks[i];
 
-          // Capture video frame for visual context
-          // Capture video frame for visual context
-          const frameBase64 = await new Promise<string>((resolve) => {
-            const video = document.createElement("video");
-            video.src = videoUrl!;
-            video.crossOrigin = "anonymous";
-            video.preload = "auto";
+          // Capture video frame for visual context — reuse a single video element
+          let frameBase64 = "";
+          try {
+            const frameVideo = document.createElement("video");
+            frameVideo.src = videoUrl!;
+            frameVideo.preload = "auto";
+            frameVideo.muted = true;
 
-            const doSeek = () => {
-              video.currentTime = chunk.offset + chunk.duration / 2;
-              video.onseeked = () => {
-                const canvas = document.createElement("canvas");
-                let w = video.videoWidth;
-                let h = video.videoHeight;
-                if (w > 854) {
-                  h = Math.round((854 / w) * h);
-                  w = 854;
-                }
-                canvas.width = w || 854;
-                canvas.height = h || 480;
-                const ctx = canvas.getContext("2d");
-                if (ctx) ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                resolve(canvas.toDataURL("image/jpeg", 0.8).split(",")[1]);
-              };
-              video.onerror = () => resolve("");
-            };
+            await new Promise<void>((res, rej) => {
+              if (frameVideo.readyState >= 2) return res();
+              frameVideo.addEventListener("loadeddata", () => res(), { once: true });
+              frameVideo.addEventListener("error", () => rej(new Error("frame video load error")), { once: true });
+              frameVideo.load();
+              setTimeout(() => res(), 3000); // don't block forever
+            });
 
-            if (video.readyState >= 2) {
-              doSeek();
-            } else {
-              video.addEventListener("loadeddata", doSeek, { once: true });
-              video.addEventListener("error", () => resolve(""), { once: true });
-              video.load();
-            }
+            frameVideo.currentTime = chunk.offset + chunk.duration / 2;
+            await new Promise<void>((res) => {
+              frameVideo.onseeked = () => res();
+              frameVideo.onerror = () => res();
+              setTimeout(() => res(), 3000);
+            });
 
-            setTimeout(() => resolve(""), 5000); // Safety timeout to prevent 15% hang
-          });
+            const canvas = document.createElement("canvas");
+            let w = frameVideo.videoWidth;
+            let h = frameVideo.videoHeight;
+            if (w > 854) { h = Math.round((854 / w) * h); w = 854; }
+            canvas.width = w || 854;
+            canvas.height = h || 480;
+            const ctx = canvas.getContext("2d");
+            if (ctx) ctx.drawImage(frameVideo, 0, 0, canvas.width, canvas.height);
+            frameBase64 = canvas.toDataURL("image/jpeg", 0.8).split(",")[1];
+          } catch (frameErr) {
+            console.warn("Frame capture failed, continuing without frame:", frameErr);
+          }
 
           // Find overlapping original subtitles
           const overlappingSubs = originalSubs.filter(
@@ -1307,17 +1351,41 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
 
           try {
             let text = "[]";
-            // Always use server-side edge function (secure)
-            const { data, error } = await supabase.functions.invoke("video-transform-translate", {
-              body: {
-                audioBase64: chunk.base64,
-                audioDuration: chunk.duration,
-                targetLang,
-                videoFrames: frameBase64 ? [frameBase64] : [],
-              },
-            });
-            if (error) throw new Error(error.message || "Edge function error");
-            text = typeof data?.result === "string" ? data.result : JSON.stringify(data?.result || []);
+
+            if (apiMode === "own" && ownApiKey.trim()) {
+              // === OWN API MODE: Direct client-side Gemini call ===
+              const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
+              const ownParts: any[] = [
+                { inlineData: { mimeType: "audio/wav", data: chunk.base64 } },
+              ];
+              if (frameBase64) {
+                ownParts.push({ inlineData: { mimeType: "image/jpeg", data: frameBase64 } });
+              }
+              ownParts.push(parts[parts.length - 1]); // The prompt text part
+
+              const ownResult = await ai.models.generateContent({
+                model: "gemini-2.5-flash",
+                contents: [{ role: "user", parts: ownParts }],
+                config: {
+                  temperature: 0.1,
+                  maxOutputTokens: 8192,
+                  responseMimeType: "application/json",
+                },
+              });
+              text = ownResult.text || "[]";
+            } else {
+              // === APP API MODE: Server-side edge function (secure) ===
+              const { data, error } = await supabase.functions.invoke("video-transform-translate", {
+                body: {
+                  audioBase64: chunk.base64,
+                  audioDuration: chunk.duration,
+                  targetLang,
+                  videoFrames: frameBase64 ? [frameBase64] : [],
+                },
+              });
+              if (error) throw new Error(error.message || "Edge function error");
+              text = typeof data?.result === "string" ? data.result : JSON.stringify(data?.result || []);
+            }
             const jsonMatch = text.match(/\[[\s\S]*\]/);
             let chunkSubs = JSON.parse(jsonMatch ? jsonMatch[0] : "[]");
             if (!Array.isArray(chunkSubs)) {
@@ -1656,8 +1724,8 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
             document.body.removeChild(a);
           }, 100);
 
-          // === CREDIT DEDUCTION: 6CR/min with 30s threshold ===
-          if (!didDeductRef.current) {
+          // === CREDIT DEDUCTION: 6CR/min with 30s threshold (skip for Own API) ===
+          if (!didDeductRef.current && apiMode !== "own") {
             const exactDurationSecs = video.duration || 0;
             const totalMinutes = Math.floor(exactDurationSecs / 60);
             const remainingSeconds = exactDurationSecs % 60;
@@ -2113,6 +2181,48 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                   <Settings size={18} className="text-indigo-400" /> Pre-configure Settings
                 </h3>
 
+                {/* API Mode Toggle */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                    <Key size={14} className="text-indigo-400" /> API Mode
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setApiMode("app")}
+                      disabled={!appApiAllowed}
+                      className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${apiMode === "app" ? "bg-indigo-500/20 border-indigo-500 text-indigo-300" : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800"} ${!appApiAllowed ? "opacity-40 cursor-not-allowed" : ""}`}
+                    >
+                      🖥️ App API
+                    </button>
+                    <button
+                      onClick={() => setApiMode("own")}
+                      className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${apiMode === "own" ? "bg-indigo-500/20 border-indigo-500 text-indigo-300" : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800"}`}
+                    >
+                      🔑 Own Key
+                    </button>
+                  </div>
+                  {apiMode === "own" && (
+                    <div className="space-y-1">
+                      <div className="flex gap-2">
+                        <input
+                          type={showApiKey ? "text" : "password"}
+                          value={ownApiKey}
+                          onChange={(e) => setOwnApiKey(e.target.value)}
+                          placeholder="AIza..."
+                          className="flex-1 px-3 py-2 text-sm bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                        <button
+                          onClick={() => setShowApiKey(!showApiKey)}
+                          className="px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-400 hover:text-zinc-200"
+                        >
+                          {showApiKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                        </button>
+                      </div>
+                      <p className="text-xs text-zinc-600">Credit မယူပါ။ သင့် Key နဲ့ တိုက်ရိုက်သုံးပါမည်။</p>
+                    </div>
+                  )}
+                </div>
+
                 {/* Target Language - Premium Searchable Dropdown */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-zinc-300 flex items-center gap-2">
@@ -2510,6 +2620,51 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                 </div>
 
                 {/* API keys are handled server-side for security */}
+
+                {/* API Mode Toggle */}
+                <div className="space-y-3">
+                  <label className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                    <Key size={16} className="text-indigo-400" /> API Mode
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setApiMode("app")}
+                      disabled={!appApiAllowed}
+                      className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${apiMode === "app" ? "bg-indigo-500/20 border-indigo-500 text-indigo-300" : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800"} ${!appApiAllowed ? "opacity-40 cursor-not-allowed" : ""}`}
+                    >
+                      🖥️ App API
+                      <span className="block text-xs font-normal opacity-70">Admin · Premium · Pro</span>
+                    </button>
+                    <button
+                      onClick={() => setApiMode("own")}
+                      className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${apiMode === "own" ? "bg-indigo-500/20 border-indigo-500 text-indigo-300" : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800"}`}
+                    >
+                      🔑 Own API Key
+                      <span className="block text-xs font-normal opacity-70">သင့်ကိုယ်ပိုင် Key</span>
+                    </button>
+                  </div>
+                  {apiMode === "own" && (
+                    <div className="space-y-1">
+                      <label className="text-xs text-zinc-500">Google AI API Key (billing enabled)</label>
+                      <div className="flex gap-2">
+                        <input
+                          type={showApiKey ? "text" : "password"}
+                          value={ownApiKey}
+                          onChange={(e) => setOwnApiKey(e.target.value)}
+                          placeholder="AIza..."
+                          className="flex-1 px-3 py-2 text-sm bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                        <button
+                          onClick={() => setShowApiKey(!showApiKey)}
+                          className="px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-400 hover:text-zinc-200"
+                        >
+                          {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
+                      <p className="text-xs text-zinc-600">Credit မယူပါ။ သင့် Key နဲ့ တိုက်ရိုက်သုံးပါမည်။</p>
+                    </div>
+                  )}
+                </div>
 
                 {/* Target Language - Premium Searchable Dropdown */}
                 <div className="space-y-3">
