@@ -712,12 +712,21 @@ export default function App() {
       if (!sourceCtx) throw new Error("Could not get canvas context");
       // Crop bottom subtitle area: capture top 70% of video to avoid original subtitles
       const subAvoidanceHeight = video.videoHeight * 0.72;
+      const srcRatio1 = video.videoWidth / subAvoidanceHeight;
+      const destRatio1 = canvasW / canvasH;
+      let sW1 = video.videoWidth,
+        sH1 = subAvoidanceHeight;
+      if (srcRatio1 > destRatio1) {
+        sW1 = subAvoidanceHeight * destRatio1;
+      } else {
+        sH1 = video.videoWidth / destRatio1;
+      }
       sourceCtx.drawImage(
         video,
+        (video.videoWidth - sW1) / 2,
         0,
-        0,
-        video.videoWidth,
-        subAvoidanceHeight, // Source: Top 72% (keep faces, crop subtitles)
+        sW1,
+        sH1, // Secure aspect ratio crop
         0,
         0,
         canvasW,
@@ -748,12 +757,21 @@ export default function App() {
                 // we capture only the top 72% of the video frame and scale it to cover the canvas.
                 // 72% keeps faces fully visible while cropping out subtitle area at bottom.
                 const subAvoidanceHeight = tempVideo.videoHeight * 0.72;
+                const srcRatio2 = tempVideo.videoWidth / subAvoidanceHeight;
+                const destRatio2 = canvasW / canvasH;
+                let sW2 = tempVideo.videoWidth,
+                  sH2 = subAvoidanceHeight;
+                if (srcRatio2 > destRatio2) {
+                  sW2 = subAvoidanceHeight * destRatio2;
+                } else {
+                  sH2 = tempVideo.videoWidth / destRatio2;
+                }
                 ctx.drawImage(
                   tempVideo,
+                  (tempVideo.videoWidth - sW2) / 2,
                   0,
-                  0,
-                  tempVideo.videoWidth,
-                  subAvoidanceHeight, // Source: Top 72%
+                  sW2,
+                  sH2, // Source: Top 72% with aspect crop
                   0,
                   0,
                   canvasW,
@@ -1173,26 +1191,41 @@ export default function App() {
           const chunk = audioChunks[i];
 
           // Capture video frame for visual context
+          // Capture video frame for visual context
           const frameBase64 = await new Promise<string>((resolve) => {
             const video = document.createElement("video");
             video.src = videoUrl!;
             video.crossOrigin = "anonymous";
-            video.currentTime = chunk.offset + chunk.duration / 2;
-            video.onseeked = () => {
-              const canvas = document.createElement("canvas");
-              let w = video.videoWidth;
-              let h = video.videoHeight;
-              if (w > 854) {
-                h = Math.round((854 / w) * h);
-                w = 854;
-              }
-              canvas.width = w || 854;
-              canvas.height = h || 480;
-              const ctx = canvas.getContext("2d");
-              if (ctx) ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-              resolve(canvas.toDataURL("image/jpeg", 0.8).split(",")[1]);
+            video.preload = "auto";
+
+            const doSeek = () => {
+              video.currentTime = chunk.offset + chunk.duration / 2;
+              video.onseeked = () => {
+                const canvas = document.createElement("canvas");
+                let w = video.videoWidth;
+                let h = video.videoHeight;
+                if (w > 854) {
+                  h = Math.round((854 / w) * h);
+                  w = 854;
+                }
+                canvas.width = w || 854;
+                canvas.height = h || 480;
+                const ctx = canvas.getContext("2d");
+                if (ctx) ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                resolve(canvas.toDataURL("image/jpeg", 0.8).split(",")[1]);
+              };
+              video.onerror = () => resolve("");
             };
-            video.onerror = () => resolve("");
+
+            if (video.readyState >= 2) {
+              doSeek();
+            } else {
+              video.addEventListener("loadeddata", doSeek, { once: true });
+              video.addEventListener("error", () => resolve(""), { once: true });
+              video.load();
+            }
+
+            setTimeout(() => resolve(""), 5000); // Safety timeout to prevent 15% hang
           });
 
           // Find overlapping original subtitles
@@ -1739,7 +1772,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           // Source Rect (Object-Cover behavior + Copyright Bypass Zoom)
           // Aggressive bottom crop to remove original subtitles (like "I don't drink" at bottom)
           // while keeping full faces visible (faces are typically in upper portion of frame)
-          const ZOOM_FACTOR = 1.42; // 42% zoom — captures top 70% only, removes bottom subtitle area
+          const ZOOM_FACTOR = 1.15; // Moderate zoom, slight crop top and bottom
           const FACE_CROP_DOWN_BIAS = 0.0; // Keep top-aligned to preserve faces, crop from bottom
 
           let sx = 0,
@@ -1761,10 +1794,9 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
             sx = (video.videoWidth - sw) / 2;
           }
 
-          // Keep sy = 0 to ensure we capture from the TOP of the frame (preserves faces)
-          // The bottom ~30% (where subtitles appear) gets cropped out
+          // Crop slightly from top to align hair with border, rest from bottom
           const maxSy = Math.max(0, video.videoHeight - sh);
-          sy = 0; // Always start from top to keep faces fully visible
+          sy = maxSy * 0.15; // Top aligned close to border, with most crop at bottom
 
           // Draw a subtle drop shadow for the foreground video
           ctx.shadowColor = "rgba(0,0,0,0.8)";
@@ -1773,20 +1805,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           ctx.shadowColor = "transparent"; // Reset shadow
           ctx.shadowBlur = 0;
 
-          // 2.1 Draw a "Cross" effect on the lower part of the face for copyright protection
-          // We only cross the bottom 40% of the foreground video area
-          const crossZoneY = dy + dh * 0.6;
-          const crossZoneH = dh * 0.4;
-          ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          // Diagonal 1
-          ctx.moveTo(dx, crossZoneY);
-          ctx.lineTo(dx + dw, crossZoneY + crossZoneH);
-          // Diagonal 2
-          ctx.moveTo(dx + dw, crossZoneY);
-          ctx.lineTo(dx, crossZoneY + crossZoneH);
-          ctx.stroke();
+          // 2.1 (Cross effect removed as requested for watermark clarity)
 
           startRecorderOnce();
 
