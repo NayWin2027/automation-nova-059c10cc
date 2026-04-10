@@ -1166,11 +1166,12 @@ export default function App() {
 
           const chunk = audioChunks[i];
 
-          // Capture video frame for visual context (Fixed: Added timeout and readyState check to prevent 15% stall)
+          // Capture video frame for visual context (CRITICAL FIX: CORS order + timeout for 15% stall)
           const frameBase64 = await new Promise<string>((resolve) => {
             const tempVideo = document.createElement("video");
-            tempVideo.src = videoUrl!;
+            // CRITICAL: crossOrigin MUST be set BEFORE src to prevent CORS tainting (blank frames / stall)
             tempVideo.crossOrigin = "anonymous";
+            tempVideo.src = videoUrl!;
             tempVideo.preload = "auto";
 
             const timeout = setTimeout(() => {
@@ -1206,7 +1207,12 @@ export default function App() {
               clearTimeout(timeout);
               resolve("");
             };
-            if (tempVideo.readyState >= 2) doSeek();
+            // Force video loading to start (critical to prevent stall)
+            if (tempVideo.readyState >= 2) {
+              doSeek();
+            } else {
+              tempVideo.load();
+            }
           });
 
           // Find overlapping original subtitles
