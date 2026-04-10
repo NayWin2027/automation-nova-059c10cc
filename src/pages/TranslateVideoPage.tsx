@@ -665,13 +665,13 @@ export default function App() {
       }
 
       const drawVideoCover = (vid: HTMLVideoElement, ctx: CanvasRenderingContext2D, w: number, h: number) => {
-        // Crop out top 12% and bottom 20% of source to remove burned-in subtitles/text
-        const cropTop = 0.12;
-        const cropBottom = 0.20;
+        // Keep full face visible — only crop bottom 15% to remove subtitles/copyright
+        const cropTop = 0;
+        const cropBottom = 0.15;
         const sx = 0;
-        const sy = vid.videoHeight * cropTop;
+        const sy = 0;
         const sw = vid.videoWidth;
-        const sh = vid.videoHeight * (1 - cropTop - cropBottom);
+        const sh = vid.videoHeight * (1 - cropBottom);
 
         const srcRatio = sw / sh;
         let drawW = w;
