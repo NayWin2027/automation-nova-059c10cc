@@ -710,7 +710,19 @@ export default function App() {
       sourceCanvas.height = canvasH;
       const sourceCtx = sourceCanvas.getContext("2d");
       if (!sourceCtx) throw new Error("Could not get canvas context");
-      drawVideoCover(video, sourceCtx, canvasW, canvasH);
+      // Crop bottom subtitle area: capture top 70% of video to avoid original subtitles
+      const subAvoidanceHeight = video.videoHeight * 0.72;
+      sourceCtx.drawImage(
+        video,
+        0,
+        0,
+        video.videoWidth,
+        subAvoidanceHeight, // Source: Top 72% (keep faces, crop subtitles)
+        0,
+        0,
+        canvasW,
+        canvasH, // Destination: Full canvas
+      );
 
       const baseFrame = {
         data: sourceCanvas.toDataURL("image/jpeg", 0.9).split(",")[1],
@@ -733,14 +745,15 @@ export default function App() {
               const ctx = canvas.getContext("2d");
               if (ctx) {
                 // To avoid original subtitles (usually at the bottom),
-                // we capture only the top 70% of the video frame and scale it to cover the canvas.
-                const subAvoidanceHeight = tempVideo.videoHeight * 0.7;
+                // we capture only the top 72% of the video frame and scale it to cover the canvas.
+                // 72% keeps faces fully visible while cropping out subtitle area at bottom.
+                const subAvoidanceHeight = tempVideo.videoHeight * 0.72;
                 ctx.drawImage(
                   tempVideo,
                   0,
                   0,
                   tempVideo.videoWidth,
-                  subAvoidanceHeight, // Source: Top 70%
+                  subAvoidanceHeight, // Source: Top 72%
                   0,
                   0,
                   canvasW,
@@ -859,47 +872,47 @@ export default function App() {
             }
           });
 
-          // Blend the entire overlay onto the main background
-          ctx.globalAlpha = 0.85;
+          // Blend the entire overlay onto the main background (lighter for less washed out look)
+          ctx.globalAlpha = 0.92;
           ctx.drawImage(overlayCanvas, 0, 0);
           ctx.globalAlpha = 1.0;
         }
       }
 
-      // Apply Cinematic Color Grading
+      // Apply Cinematic Color Grading (subtle for vibrant look, not washed out)
       ctx.globalCompositeOperation = "overlay";
-      ctx.fillStyle = "rgba(0, 70, 100, 0.18)"; // Teal
+      ctx.fillStyle = "rgba(0, 60, 90, 0.10)"; // Teal (lighter: 10% vs 18%)
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       ctx.globalCompositeOperation = "soft-light";
-      ctx.fillStyle = "rgba(255, 140, 40, 0.16)"; // Orange
+      ctx.fillStyle = "rgba(255, 140, 40, 0.08)"; // Orange (lighter: 8% vs 16%)
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Softer vignette so the poster does not go black
+      // Minimal vignette for vibrant poster (lighter edges)
       ctx.globalCompositeOperation = "source-over";
       const vignette = ctx.createRadialGradient(
         canvas.width / 2,
         canvas.height / 2,
-        canvas.width * 0.4,
+        canvas.width * 0.45,
         canvas.width / 2,
         canvas.height / 2,
-        canvas.width * 0.8,
+        canvas.width * 0.85,
       );
       vignette.addColorStop(0, "rgba(0,0,0,0)");
-      vignette.addColorStop(0.72, "rgba(0,0,0,0.06)");
-      vignette.addColorStop(1, "rgba(0,0,0,0.35)");
+      vignette.addColorStop(0.75, "rgba(0,0,0,0.03)");
+      vignette.addColorStop(1, "rgba(0,0,0,0.18)");
       ctx.fillStyle = vignette;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       ctx.globalCompositeOperation = "source-over";
 
-      // Add a dark gradient at the bottom for text readability
-      const grad = ctx.createLinearGradient(0, canvas.height * 0.55, 0, canvas.height);
+      // Lighter bottom gradient for text readability (less washed out)
+      const grad = ctx.createLinearGradient(0, canvas.height * 0.6, 0, canvas.height);
       grad.addColorStop(0, "rgba(0,0,0,0)");
-      grad.addColorStop(0.5, "rgba(0,0,0,0.42)");
-      grad.addColorStop(1, "rgba(0,0,0,0.76)");
+      grad.addColorStop(0.5, "rgba(0,0,0,0.28)");
+      grad.addColorStop(1, "rgba(0,0,0,0.55)");
       ctx.fillStyle = grad;
-      ctx.fillRect(0, canvas.height * 0.55, canvas.width, canvas.height * 0.45);
+      ctx.fillRect(0, canvas.height * 0.6, canvas.width, canvas.height * 0.4);
 
       // Helper to wrap and draw text
       const drawWrappedText = (
@@ -1724,10 +1737,10 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           const dh = availableH;
 
           // Source Rect (Object-Cover behavior + Copyright Bypass Zoom)
-          // Moderate zoom for copyright differentiation while keeping full faces visible
-          // Natural center-framing: no bias so heads and chins both stay in frame
-          const ZOOM_FACTOR = 1.3; // 30% zoom — enough for copyright bypass, safe for full faces
-          const FACE_CROP_DOWN_BIAS = 0.0; // Pure center crop — no vertical bias, no head cutting
+          // Aggressive bottom crop to remove original subtitles (like "I don't drink" at bottom)
+          // while keeping full faces visible (faces are typically in upper portion of frame)
+          const ZOOM_FACTOR = 1.42; // 42% zoom — captures top 70% only, removes bottom subtitle area
+          const FACE_CROP_DOWN_BIAS = 0.0; // Keep top-aligned to preserve faces, crop from bottom
 
           let sx = 0,
             sy = 0,
@@ -1737,8 +1750,9 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           const srcRatio = sw / sh;
 
           // Calculate cropped source region (zoom = use smaller portion of source)
+          // This crops from the bottom to avoid original subtitles
           if (srcRatio > destRatio) {
-            sh = video.videoHeight / ZOOM_FACTOR;
+            sh = video.videoHeight / ZOOM_FACTOR; // Use only top ~70% of video height
             sw = sh * destRatio;
             sx = (video.videoWidth - sw) / 2;
           } else {
@@ -1747,11 +1761,10 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
             sx = (video.videoWidth - sw) / 2;
           }
 
-          // Face-aware vertical positioning: bias upward so hair meets top border
-          // but never crop chin/bottom of face
+          // Keep sy = 0 to ensure we capture from the TOP of the frame (preserves faces)
+          // The bottom ~30% (where subtitles appear) gets cropped out
           const maxSy = Math.max(0, video.videoHeight - sh);
-          // sy = 0 ensures the top of the frame (hair/head) is preserved and close to the border
-          sy = 0;
+          sy = 0; // Always start from top to keep faces fully visible
 
           // Draw a subtle drop shadow for the foreground video
           ctx.shadowColor = "rgba(0,0,0,0.8)";
