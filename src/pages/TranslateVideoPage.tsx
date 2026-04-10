@@ -604,31 +604,50 @@ export default function App() {
     if (!srtText) return;
     setIsGeneratingMarketing(true);
     try {
-      // === CREDIT DEDUCTION: 4CR per poster generation ===
-      const posterResult = await deductCredits("video-transform", false, 4);
-      if (!posterResult.success) {
-        setIsGeneratingMarketing(false);
-        return;
+      // === CREDIT DEDUCTION: 4CR per poster generation (skip for Own API) ===
+      if (apiMode !== "own") {
+        const posterResult = await deductCredits("video-transform", false, 4);
+        if (!posterResult.success) {
+          setIsGeneratingMarketing(false);
+          return;
+        }
       }
 
       let title = "";
       let description = "";
 
-      // Server-side via edge function (secure — no API key in browser)
-      const { data, error } = await supabase.functions.invoke("video-transform-translate", {
-        body: {
-          textBatch: [{ start: 0, end: 1, text: srtText.substring(0, 5000) }],
-          targetLang: "Burmese",
-          marketingMode: true,
-          marketingPrompt: `Based on these subtitles, generate a very short, viral shock title (max 5-7 words) and a short viral description (movie/video summary) in Burmese. The title should be extremely catchy, dramatic and "clickbaity" for a movie thumbnail. Subtitles: ${srtText.substring(0, 5000)}`,
-        },
-      });
-      if (error) throw new Error(error.message || "Marketing generation failed");
-      const resultText = typeof data?.result === "string" ? data.result : JSON.stringify(data?.result || "{}");
-      const jsonMatch = resultText.match(/\{[\s\S]*\}/);
-      const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : "{}");
-      title = parsed.title || "Untitled";
-      description = parsed.description || "";
+      const mktPrompt = `Based on these subtitles, generate a very short, viral shock title (max 5-7 words) and a short viral description (movie/video summary) in Burmese. The title should be extremely catchy, dramatic and "clickbaity" for a movie thumbnail. Subtitles: ${srtText.substring(0, 5000)}`;
+
+      if (apiMode === "own" && ownApiKey.trim()) {
+        // Own API: direct client-side call
+        const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
+        const result = await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: mktPrompt,
+          config: { temperature: 0.9, maxOutputTokens: 2048, responseMimeType: "application/json" },
+        });
+        const resultText = result.text || "{}";
+        const jsonMatch = resultText.match(/\{[\s\S]*\}/);
+        const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : "{}");
+        title = parsed.title || "Untitled";
+        description = parsed.description || "";
+      } else {
+        // Server-side via edge function (secure — no API key in browser)
+        const { data, error } = await supabase.functions.invoke("video-transform-translate", {
+          body: {
+            textBatch: [{ start: 0, end: 1, text: srtText.substring(0, 5000) }],
+            targetLang: "Burmese",
+            marketingMode: true,
+            marketingPrompt: mktPrompt,
+          },
+        });
+        if (error) throw new Error(error.message || "Marketing generation failed");
+        const resultText = typeof data?.result === "string" ? data.result : JSON.stringify(data?.result || "{}");
+        const jsonMatch = resultText.match(/\{[\s\S]*\}/);
+        const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : "{}");
+        title = parsed.title || "Untitled";
+        description = parsed.description || "";
+      }
 
       // 2. Capture Frame — wait for video metadata before seeking to prevent black frames
       if (!videoUrl) throw new Error("Original video not found");
