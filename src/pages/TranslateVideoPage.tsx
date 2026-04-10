@@ -1164,6 +1164,7 @@ STRICT OPERATING PRINCIPLES:
 BURMESE PRONOUN RULES (CRITICAL):
 - Male speaker (polite/formal): ကျွန်တော် for "I"
 - Female speaker (polite/formal): ကျွန်မ for "I"
+- Female speaker talking respectfully to seniors/elders: ညီမ for "I"
 - Between close friends/informal: ငါ for "I"
 - ALWAYS use natural relationship terms when context is clear: ဆရာ/ဆရာမ (teacher), တပည့် (student), သား/သမီး (son/daughter), အဖေ/အမေ (father/mother), အစ်ကို/အစ်မ (older brother/sister), ညီ/ညီမ (younger brother/sister), etc.
 - Infer speaker gender, age, and relationship from video context to choose the most natural pronoun.
