@@ -811,17 +811,9 @@ export default function App() {
         ctx.drawImage(sourceCanvas, 0, 0, canvas.width, canvas.height);
       }
 
-      // Realistic Cinematic Hollywood Movie Poster Composition
-      // 1. Main Character (loadedImages[0]) is drawn as background with high contrast.
-      ctx.filter = "contrast(1.15) brightness(1.05) saturate(1.1)";
-      if (loadedImages[0]) {
-        ctx.drawImage(loadedImages[0], 0, 0, canvas.width, canvas.height);
-      } else {
-        ctx.drawImage(sourceCanvas, 0, 0, canvas.width, canvas.height);
-      }
-      ctx.filter = "none";
-
-      // 2. Overlay supporting characters with cinematic blending.
+      // Hollywood Cinematic Realistic Poster Composition
+      // 1. Main Character (loadedImages[0]) is already drawn as background.
+      // 2. Overlay supporting characters with soft blending and hierarchy.
       const montageImages = loadedImages.slice(1);
       if (montageImages.length >= 1) {
         const overlayCanvas = document.createElement("canvas");
@@ -829,37 +821,49 @@ export default function App() {
         overlayCanvas.height = canvas.height;
         const oCtx = overlayCanvas.getContext("2d");
         if (oCtx) {
+          // Clear background for the overlay canvas
           oCtx.clearRect(0, 0, canvas.width, canvas.height);
+
+          // Portrait: Characters at top/sides, Main character in center/bottom
+          // Landscape: Characters on left/right, Main character in center
           const isPortrait = canvas.height > canvas.width;
 
           montageImages.forEach((img, idx) => {
-            const scale = idx < 2 ? 0.55 : 0.4;
+            // Hierarchy: Supporting characters are placed behind the main character
+            // First 2 are slightly larger, others smaller
+            const scale = idx < 2 ? 0.5 : 0.35;
             const imgW = canvas.width * scale;
             const imgH = (imgW * img.height) / img.width;
 
             let dx = 0,
               dy = 0;
             if (isPortrait) {
-              dx = idx % 2 === 0 ? -canvas.width * 0.02 : canvas.width - imgW + canvas.width * 0.02;
-              dy = Math.floor(idx / 2) * (canvas.height * 0.2);
+              // Positions: Top-Left, Top-Right, Mid-Left, Mid-Right
+              // Designed to frame the center main character
+              dx = idx % 2 === 0 ? -canvas.width * 0.05 : canvas.width - imgW + canvas.width * 0.05;
+              dy = Math.floor(idx / 2) * (canvas.height * 0.22);
             } else {
+              // Landscape: Left and Right sides
               dx = idx % 2 === 0 ? 0 : canvas.width - imgW;
-              dy = Math.floor(idx / 2) * (canvas.height * 0.25);
+              dy = Math.floor(idx / 2) * (canvas.height * 0.28);
             }
 
+            // Draw character with soft radial mask (No Blur as requested)
             const charCanvas = document.createElement("canvas");
             charCanvas.width = imgW;
             charCanvas.height = imgH;
             const cCtx = charCanvas.getContext("2d");
             if (cCtx) {
-              cCtx.filter = "contrast(1.2) brightness(1.1)";
+              // Background characters are kept clear (no blur) but slightly color-matched
+              cCtx.filter = "brightness(0.9) contrast(1.05)";
               cCtx.drawImage(img, 0, 0, imgW, imgH);
               cCtx.filter = "none";
 
               cCtx.globalCompositeOperation = "destination-in";
-              const mask = cCtx.createRadialGradient(imgW / 2, imgH / 2, 0, imgW / 2, imgH / 2, imgW * 0.8);
+              // Soft radial gradient for natural blending into the cinematic background
+              const mask = cCtx.createRadialGradient(imgW / 2, imgH / 2, 0, imgW / 2, imgH / 2, imgW * 0.75);
               mask.addColorStop(0, "rgba(0,0,0,1)");
-              mask.addColorStop(0.6, "rgba(0,0,0,0.9)");
+              mask.addColorStop(0.5, "rgba(0,0,0,0.85)");
               mask.addColorStop(1, "rgba(0,0,0,0)");
               cCtx.fillStyle = mask;
               cCtx.fillRect(0, 0, imgW, imgH);
@@ -868,45 +872,87 @@ export default function App() {
             }
           });
 
-          ctx.globalAlpha = 0.95;
+          // Blend the entire overlay onto the main background (lighter for less washed out look)
+          ctx.globalAlpha = 0.92;
           ctx.drawImage(overlayCanvas, 0, 0);
           ctx.globalAlpha = 1.0;
         }
       }
 
-      // 3. Hollywood Cinematic Color Grading & Lighting
+      // Apply Cinematic Color Grading (subtle for vibrant look, not washed out)
       ctx.globalCompositeOperation = "overlay";
-      ctx.fillStyle = "rgba(0, 100, 150, 0.15)"; // Deep Teal
+      ctx.fillStyle = "rgba(0, 60, 90, 0.10)"; // Teal (lighter: 10% vs 18%)
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       ctx.globalCompositeOperation = "soft-light";
-      ctx.fillStyle = "rgba(255, 180, 80, 0.12)"; // Warm Amber
+      ctx.fillStyle = "rgba(255, 140, 40, 0.08)"; // Orange (lighter: 8% vs 16%)
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // 4. Dramatic Vignette
-      ctx.globalCompositeOperation = "multiply";
+      // Hollywood Cinematic Light Rays (from top corners - dramatic movie poster effect)
+      ctx.globalCompositeOperation = "screen";
+      const rayGradient = ctx.createLinearGradient(0, 0, canvas.width / 2, canvas.height * 0.6);
+      rayGradient.addColorStop(0, "rgba(100, 200, 255, 0.15)"); // Cyan light from top
+      rayGradient.addColorStop(0.5, "rgba(100, 200, 255, 0.05)");
+      rayGradient.addColorStop(1, "rgba(0, 0, 0, 0)");
+      ctx.fillStyle = rayGradient;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(canvas.width * 0.3, 0);
+      ctx.lineTo(canvas.width * 0.1, canvas.height * 0.7);
+      ctx.closePath();
+      ctx.fill();
+
+      // Second light ray from right
+      const rayGradient2 = ctx.createLinearGradient(canvas.width, 0, canvas.width / 2, canvas.height * 0.6);
+      rayGradient2.addColorStop(0, "rgba(100, 200, 255, 0.12)");
+      rayGradient2.addColorStop(0.5, "rgba(100, 200, 255, 0.04)");
+      rayGradient2.addColorStop(1, "rgba(0, 0, 0, 0)");
+      ctx.fillStyle = rayGradient2;
+      ctx.beginPath();
+      ctx.moveTo(canvas.width, 0);
+      ctx.lineTo(canvas.width * 0.7, 0);
+      ctx.lineTo(canvas.width * 0.9, canvas.height * 0.7);
+      ctx.closePath();
+      ctx.fill();
+
+      // Minimal vignette for vibrant poster (lighter edges)
+      ctx.globalCompositeOperation = "source-over";
       const vignette = ctx.createRadialGradient(
         canvas.width / 2,
         canvas.height / 2,
-        canvas.width * 0.3,
+        canvas.width * 0.45,
         canvas.width / 2,
         canvas.height / 2,
-        canvas.width * 0.9,
+        canvas.width * 0.85,
       );
       vignette.addColorStop(0, "rgba(0,0,0,0)");
-      vignette.addColorStop(1, "rgba(0,0,0,0.4)");
+      vignette.addColorStop(0.75, "rgba(0,0,0,0.03)");
+      vignette.addColorStop(1, "rgba(0,0,0,0.18)");
       ctx.fillStyle = vignette;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       ctx.globalCompositeOperation = "source-over";
 
-      // 5. Deep Bottom Gradient for Text
+      // Hollywood-style dramatic bottom gradient for text readability
       const grad = ctx.createLinearGradient(0, canvas.height * 0.5, 0, canvas.height);
       grad.addColorStop(0, "rgba(0,0,0,0)");
-      grad.addColorStop(0.7, "rgba(0,0,0,0.6)");
-      grad.addColorStop(1, "rgba(0,0,0,0.9)");
+      grad.addColorStop(0.4, "rgba(0,15,40,0.45)"); // Deep blue tint for cinematic feel
+      grad.addColorStop(1, "rgba(0,10,30,0.75)");
       ctx.fillStyle = grad;
       ctx.fillRect(0, canvas.height * 0.5, canvas.width, canvas.height * 0.5);
+
+      // Subtle cinematic dust/particles effect (very light)
+      ctx.globalCompositeOperation = "screen";
+      for (let i = 0; i < 30; i++) {
+        const x = Math.random() * canvas.width;
+        const y = Math.random() * canvas.height * 0.7;
+        const size = Math.random() * 2 + 0.5;
+        ctx.fillStyle = `rgba(200, 220, 255, ${Math.random() * 0.15})`;
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalCompositeOperation = "source-over";
 
       // Helper to wrap and draw text
       const drawWrappedText = (
@@ -1166,53 +1212,27 @@ export default function App() {
 
           const chunk = audioChunks[i];
 
-          // Capture video frame for visual context (CRITICAL FIX: CORS order + timeout for 15% stall)
+          // Capture video frame for visual context
           const frameBase64 = await new Promise<string>((resolve) => {
-            const tempVideo = document.createElement("video");
-            // CRITICAL: crossOrigin MUST be set BEFORE src to prevent CORS tainting (blank frames / stall)
-            tempVideo.crossOrigin = "anonymous";
-            tempVideo.src = videoUrl!;
-            tempVideo.preload = "auto";
-
-            const timeout = setTimeout(() => {
-              tempVideo.onseeked = null;
-              tempVideo.onerror = null;
-              resolve("");
-            }, 5000);
-
-            const doSeek = () => {
-              tempVideo.currentTime = Math.max(
-                0,
-                Math.min(chunk.offset + chunk.duration / 2, tempVideo.duration || 9999),
-              );
-              tempVideo.onseeked = () => {
-                clearTimeout(timeout);
-                const canvas = document.createElement("canvas");
-                let w = tempVideo.videoWidth;
-                let h = tempVideo.videoHeight;
-                if (w > 854) {
-                  h = Math.round((854 / w) * h);
-                  w = 854;
-                }
-                canvas.width = w || 854;
-                canvas.height = h || 480;
-                const ctx = canvas.getContext("2d");
-                if (ctx) ctx.drawImage(tempVideo, 0, 0, canvas.width, canvas.height);
-                resolve(canvas.toDataURL("image/jpeg", 0.8).split(",")[1]);
-              };
+            const video = document.createElement("video");
+            video.src = videoUrl!;
+            video.crossOrigin = "anonymous";
+            video.currentTime = chunk.offset + chunk.duration / 2;
+            video.onseeked = () => {
+              const canvas = document.createElement("canvas");
+              let w = video.videoWidth;
+              let h = video.videoHeight;
+              if (w > 854) {
+                h = Math.round((854 / w) * h);
+                w = 854;
+              }
+              canvas.width = w || 854;
+              canvas.height = h || 480;
+              const ctx = canvas.getContext("2d");
+              if (ctx) ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+              resolve(canvas.toDataURL("image/jpeg", 0.8).split(",")[1]);
             };
-
-            tempVideo.onloadedmetadata = doSeek;
-            tempVideo.onerror = () => {
-              clearTimeout(timeout);
-              resolve("");
-            };
-            // Force video loading to start (critical to prevent stall)
-            if (tempVideo.readyState >= 2) {
-              doSeek();
-            } else {
-              tempVideo.load();
-            }
+            video.onerror = () => resolve("");
           });
 
           // Find overlapping original subtitles
@@ -1757,8 +1777,10 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           const dh = availableH;
 
           // Source Rect (Object-Cover behavior + Copyright Bypass Zoom)
-          // Balanced crop: Hair at top border, full face visible, copyright bypass zoom
-          const ZOOM_FACTOR = 1.25;
+          // Aggressive bottom crop to remove original subtitles (like "I don't drink" at bottom)
+          // while keeping full faces visible (faces are typically in upper portion of frame)
+          const ZOOM_FACTOR = 1.42; // 42% zoom — captures top 70% only, removes bottom subtitle area
+          const FACE_CROP_DOWN_BIAS = 0.0; // Keep top-aligned to preserve faces, crop from bottom
 
           let sx = 0,
             sy = 0,
@@ -1767,8 +1789,10 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           const destRatio = dw / dh;
           const srcRatio = sw / sh;
 
+          // Calculate cropped source region (zoom = use smaller portion of source)
+          // This crops from the bottom to avoid original subtitles
           if (srcRatio > destRatio) {
-            sh = video.videoHeight / ZOOM_FACTOR;
+            sh = video.videoHeight / ZOOM_FACTOR; // Use only top ~70% of video height
             sw = sh * destRatio;
             sx = (video.videoWidth - sw) / 2;
           } else {
@@ -1777,25 +1801,29 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
             sx = (video.videoWidth - sw) / 2;
           }
 
-          // sy = 0 ensures hair is at the top border as requested
-          sy = 0;
+          // Keep sy = 0 to ensure we capture from the TOP of the frame (preserves faces)
+          // The bottom ~30% (where subtitles appear) gets cropped out
+          const maxSy = Math.max(0, video.videoHeight - sh);
+          sy = 0; // Always start from top to keep faces fully visible
 
           // Draw a subtle drop shadow for the foreground video
           ctx.shadowColor = "rgba(0,0,0,0.8)";
-          ctx.shadowBlur = 10;
+          ctx.shadowBlur = 10; // Reduced from 20 for performance
           ctx.drawImage(video, sx, sy, sw, sh, dx, dy, dw, dh);
-          ctx.shadowColor = "transparent";
+          ctx.shadowColor = "transparent"; // Reset shadow
           ctx.shadowBlur = 0;
 
-          // 2.1 Subtle Copyright Protection (Cross lines removed from watermark area)
-          // Only apply very faint lines at the very bottom edge of the video frame
-          const crossZoneY = dy + dh * 0.85;
-          const crossZoneH = dh * 0.15;
-          ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
-          ctx.lineWidth = 1;
+          // 2.1 Draw subtle "Cross" effect across full face area for copyright protection
+          // Covers from top 10% to bottom 90% of the video frame (very light, keeps faces fully visible)
+          const crossZoneY = dy + dh * 0.1; // Start from 10% down (preserves hair/border)
+          const crossZoneH = dh * 0.8; // Cover 80% of height (full face area)
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.08)"; // Very subtle (8% opacity)
+          ctx.lineWidth = 0.8; // Thin lines
           ctx.beginPath();
+          // Diagonal 1 (top-left to bottom-right)
           ctx.moveTo(dx, crossZoneY);
           ctx.lineTo(dx + dw, crossZoneY + crossZoneH);
+          // Diagonal 2 (top-right to bottom-left)
           ctx.moveTo(dx + dw, crossZoneY);
           ctx.lineTo(dx, crossZoneY + crossZoneH);
           ctx.stroke();
@@ -2385,7 +2413,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                     {(watermarkUrl || watermarkText) && (
                       <div
                         ref={watermarkBoxRef}
-                        className="absolute cursor-move border-2 border-dashed border-blue-500 hover:bg-blue-500/20 transition-colors z-10 flex items-center justify-center"
+                        className="absolute cursor-move border border-blue-400/30 hover:bg-blue-500/10 transition-colors z-10 flex items-center justify-center"
                         style={{
                           left: `${watermarkPos.x}%`,
                           top: `${watermarkPos.y}%`,
