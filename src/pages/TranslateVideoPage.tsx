@@ -450,6 +450,17 @@ export default function App() {
     return () => clearTimeout(timer);
   }, []);
 
+  // Set default API mode based on access permissions
+  useEffect(() => {
+    if (!accessLoading) {
+      if (!appApiAllowed && ownApiAllowed) {
+        setApiMode("own");
+      } else if (defaultApiMode) {
+        setApiMode(defaultApiMode as "app" | "own");
+      }
+    }
+  }, [accessLoading, appApiAllowed, ownApiAllowed, defaultApiMode]);
+
   const previewRef = useRef<HTMLDivElement>(null);
   const renderPreviewRef = useRef<HTMLDivElement>(null);
   const resultVideoRef = useRef<HTMLVideoElement>(null);
