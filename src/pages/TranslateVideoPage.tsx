@@ -1166,27 +1166,47 @@ export default function App() {
 
           const chunk = audioChunks[i];
 
-          // Capture video frame for visual context
+          // Capture video frame for visual context (Fixed: Added timeout and readyState check to prevent 15% stall)
           const frameBase64 = await new Promise<string>((resolve) => {
-            const video = document.createElement("video");
-            video.src = videoUrl!;
-            video.crossOrigin = "anonymous";
-            video.currentTime = chunk.offset + chunk.duration / 2;
-            video.onseeked = () => {
-              const canvas = document.createElement("canvas");
-              let w = video.videoWidth;
-              let h = video.videoHeight;
-              if (w > 854) {
-                h = Math.round((854 / w) * h);
-                w = 854;
-              }
-              canvas.width = w || 854;
-              canvas.height = h || 480;
-              const ctx = canvas.getContext("2d");
-              if (ctx) ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-              resolve(canvas.toDataURL("image/jpeg", 0.8).split(",")[1]);
+            const tempVideo = document.createElement("video");
+            tempVideo.src = videoUrl!;
+            tempVideo.crossOrigin = "anonymous";
+            tempVideo.preload = "auto";
+
+            const timeout = setTimeout(() => {
+              tempVideo.onseeked = null;
+              tempVideo.onerror = null;
+              resolve("");
+            }, 5000);
+
+            const doSeek = () => {
+              tempVideo.currentTime = Math.max(
+                0,
+                Math.min(chunk.offset + chunk.duration / 2, tempVideo.duration || 9999),
+              );
+              tempVideo.onseeked = () => {
+                clearTimeout(timeout);
+                const canvas = document.createElement("canvas");
+                let w = tempVideo.videoWidth;
+                let h = tempVideo.videoHeight;
+                if (w > 854) {
+                  h = Math.round((854 / w) * h);
+                  w = 854;
+                }
+                canvas.width = w || 854;
+                canvas.height = h || 480;
+                const ctx = canvas.getContext("2d");
+                if (ctx) ctx.drawImage(tempVideo, 0, 0, canvas.width, canvas.height);
+                resolve(canvas.toDataURL("image/jpeg", 0.8).split(",")[1]);
+              };
             };
-            video.onerror = () => resolve("");
+
+            tempVideo.onloadedmetadata = doSeek;
+            tempVideo.onerror = () => {
+              clearTimeout(timeout);
+              resolve("");
+            };
+            if (tempVideo.readyState >= 2) doSeek();
           });
 
           // Find overlapping original subtitles
@@ -1731,9 +1751,8 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           const dh = availableH;
 
           // Source Rect (Object-Cover behavior + Copyright Bypass Zoom)
-          // Balanced crop to avoid copyright while keeping faces fully visible
-          // We crop slightly from both top and bottom, but keep top-aligned for hair/border
-          const ZOOM_FACTOR = 1.25; // 25% zoom for better balance
+          // Balanced crop: Hair at top border, full face visible, copyright bypass zoom
+          const ZOOM_FACTOR = 1.25;
 
           let sx = 0,
             sy = 0,
