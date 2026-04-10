@@ -1174,6 +1174,11 @@ export default function App() {
 
   const startProcessing = async () => {
     if (startProcessingTriggeredRef.current || !videoFile) return;
+    // Validate own API key before starting
+    if (apiMode === "own" && !ownApiKey.trim()) {
+      alert("Own API Mode ရွေးထားပါသည်။ Google API Key ထည့်ပေးပါ။");
+      return;
+    }
     startProcessingTriggeredRef.current = true;
     setCountdown(null);
     setStep("processing");
