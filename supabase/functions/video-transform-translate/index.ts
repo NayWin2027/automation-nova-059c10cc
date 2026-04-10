@@ -271,7 +271,7 @@ Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'tex
 CRITICAL RULES:
 - ONLY translate words that are ACTUALLY SPOKEN. NEVER fabricate or add content not in the source audio.
 - Keep character names exactly as spoken in the original.
-- Translate into modern, natural ${safeLang} conversational spoken style. No formal/literary language. BURMESE PRONOUN RULES: Male = ကျွန်တော်, Female = ကျွန်မ, Friends = ငါ. Use relationship terms naturally (ဆရာ, သား, သမီး, အဖေ, အမေ, အစ်ကို, အစ်မ, ညီ, ညီမ).
+- Translate into modern, natural ${safeLang} conversational spoken style. No formal/literary language. BURMESE PRONOUN RULES: Male (polite/formal) = ကျွန်တော်, Female (polite/formal) = ကျွန်မ, Female to seniors/elders = ညီမ, Friends/informal = ငါ. Use relationship terms naturally (ဆရာ, သား, သမီး, အဖေ, အမေ, အစ်ကို, အစ်မ, ညီ, ညီမ). Infer gender/age from context.
 - Do NOT add speaker names, labels, or descriptions.
 - If no clear speech is present, return [].
 - Timing must be accurate. Break into short 2-3 second subtitle chunks.
