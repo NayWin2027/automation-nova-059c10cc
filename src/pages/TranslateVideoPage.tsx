@@ -1689,8 +1689,8 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
             document.body.removeChild(a);
           }, 100);
 
-          // === CREDIT DEDUCTION: 6CR/min with 30s threshold ===
-          if (!didDeductRef.current) {
+          // === CREDIT DEDUCTION: 6CR/min with 30s threshold (skip for Own API) ===
+          if (!didDeductRef.current && apiMode !== "own") {
             const exactDurationSecs = video.duration || 0;
             const totalMinutes = Math.floor(exactDurationSecs / 60);
             const remainingSeconds = exactDurationSecs % 60;
