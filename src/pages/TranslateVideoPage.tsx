@@ -753,7 +753,7 @@ export default function App() {
       const sourceCtx = sourceCanvas.getContext("2d");
       if (!sourceCtx) throw new Error("Could not get canvas context");
       // Crop bottom subtitle area: capture top 70% of video to avoid original subtitles
-      const subAvoidanceHeight = video.videoHeight * 0.72;
+      const subAvoidanceHeight = video.videoHeight * 0.65;
       const srcRatio1 = video.videoWidth / subAvoidanceHeight;
       const destRatio1 = canvasW / canvasH;
       let sW1 = video.videoWidth,
@@ -1844,7 +1844,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           // Source Rect (Object-Cover behavior + Copyright Bypass Zoom)
           // Aggressive bottom crop to remove original subtitles (like "I don't drink" at bottom)
           // while keeping full faces visible (faces are typically in upper portion of frame)
-          const ZOOM_FACTOR = 1.25; // Adjusted to safely crop out bottom subtitles without cutting faces
+          const ZOOM_FACTOR = 1.5; // Moderate zoom, slight crop top and bottom
           const FACE_CROP_DOWN_BIAS = 0.0; // Keep top-aligned to preserve faces, crop from bottom
 
           let sx = 0,
@@ -1857,7 +1857,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           // Calculate cropped source region (zoom = use smaller portion of source)
           // This crops from the bottom to avoid original subtitles
           if (srcRatio > destRatio) {
-            sh = video.videoHeight / ZOOM_FACTOR; // Use only top portion
+            sh = video.videoHeight / ZOOM_FACTOR; // Use only top ~70% of video height
             sw = sh * destRatio;
             sx = (video.videoWidth - sw) / 2;
           } else {
@@ -1866,9 +1866,9 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
             sx = (video.videoWidth - sw) / 2;
           }
 
-          // Crop slightly from top to align hair with border, rest mostly from bottom to cut subtitles
+          // Crop slightly from top to align hair with border, rest from bottom
           const maxSy = Math.max(0, video.videoHeight - sh);
-          sy = maxSy * 0.1; // Top aligned close to border (10%), with heavy cut at bottom (90%)
+          sy = maxSy * 0.05; // Top aligned close to border, with most crop at bottom
 
           // Draw a subtle drop shadow for the foreground video
           ctx.shadowColor = "rgba(0,0,0,0.8)";
