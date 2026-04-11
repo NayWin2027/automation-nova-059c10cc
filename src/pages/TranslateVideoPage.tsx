@@ -377,6 +377,53 @@ function generateSRTContent(subs: { start: number; end: number; text: string }[]
     .join("\n");
 }
 
+const POSTER_CROP_TOP = 0;
+const POSTER_CROP_BOTTOM = 0.15;
+const POSTER_BRIGHTNESS_MIN = 0.14;
+
+function buildExactTextBatchPrompt(
+  textBatch: { start: number; end: number; text: string }[],
+  targetLang: string,
+) {
+  return `You are a precise subtitle translator.
+The input JSON array is the authoritative source subtitle file.
+Translate EVERY segment to ${targetLang} with 100% fidelity.
+
+CRITICAL RULES:
+- Return EXACTLY ${textBatch.length} items in the EXACT same order
+- Preserve every 'start' and 'end' value EXACTLY as provided
+- Do NOT merge, split, skip, summarize, censor, or leave any segment untranslated
+- Do NOT add speaker names, labels, notes, or metadata
+- Translate every segment completely, even if it is short
+- Return ONLY a JSON array with 'start', 'end', and 'text' properties
+
+Subtitles to translate:
+${JSON.stringify(textBatch)}`;
+}
+
+function parseJsonArrayResponse(raw: string) {
+  const jsonMatch = raw.match(/\[[\s\S]*\]/);
+  const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : "[]");
+  return Array.isArray(parsed) ? parsed : [parsed];
+}
+
+function normalizeAndDedupeSubtitles(subs: { start: number; end: number; text: string }[]) {
+  return subs
+    .map((sub) => ({
+      start: parseFloat(Number(sub.start || 0).toFixed(3)),
+      end: parseFloat(Number(sub.end || 0).toFixed(3)),
+      text: stripSpeakerName(String(sub.text || "")),
+    }))
+    .filter((sub) => sub.text.length > 0 && sub.end > sub.start)
+    .sort((a, b) => a.start - b.start || a.end - b.end)
+    .filter((sub, index, arr) => {
+      const prev = arr[index - 1];
+      if (!prev) return true;
+      const sameTiming = Math.abs(prev.start - sub.start) < 0.05 && Math.abs(prev.end - sub.end) < 0.05;
+      return !(sameTiming && prev.text === sub.text);
+    });
+}
+
 export default function App() {
   const { isAllowed, isLoading: authLoading } = useAuthGuard("video-transform");
   const { appApiAllowed, ownApiAllowed, defaultApiMode, isLoading: accessLoading } = useApiAccess();
@@ -720,20 +767,26 @@ export default function App() {
       }
 
       const drawVideoCover = (vid: HTMLVideoElement, ctx: CanvasRenderingContext2D, w: number, h: number) => {
-        const videoRatio = vid.videoWidth / vid.videoHeight;
-        let drawW = w;
-        let drawH = h;
-        let drawX = 0;
-        let drawY = 0;
+        if (!vid.videoWidth || !vid.videoHeight) return;
 
-        if (videoRatio > targetRatio) {
-          drawW = h * videoRatio;
-          drawX = (w - drawW) / 2;
+        const visibleHeight = vid.videoHeight * (1 - POSTER_CROP_TOP - POSTER_CROP_BOTTOM);
+        const sourceY = vid.videoHeight * POSTER_CROP_TOP;
+        const sourceRatio = vid.videoWidth / visibleHeight;
+        const destinationRatio = w / h;
+
+        let sx = 0;
+        let sy = sourceY;
+        let sw = vid.videoWidth;
+        let sh = visibleHeight;
+
+        if (sourceRatio > destinationRatio) {
+          sw = visibleHeight * destinationRatio;
+          sx = (vid.videoWidth - sw) / 2;
         } else {
-          drawH = w / videoRatio;
-          drawY = (h - drawH) / 2;
+          sh = vid.videoWidth / destinationRatio;
         }
-        ctx.drawImage(vid, drawX, drawY, drawW, drawH);
+
+        ctx.drawImage(vid, sx, sy, sw, sh, 0, 0, w, h);
       };
 
       const getCanvasBrightness = (inputCanvas: HTMLCanvasElement) => {
@@ -751,110 +804,101 @@ export default function App() {
         return totalLuma / ((data.length / 4) * 255);
       };
 
+      const waitForDecodedFrame = async (vid: HTMLVideoElement, timeoutMs = 2500) => {
+        if ("requestVideoFrameCallback" in vid) {
+          await new Promise<void>((resolve) => {
+            let settled = false;
+            const finish = () => {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timeoutId);
+              resolve();
+            };
+            const timeoutId = window.setTimeout(finish, timeoutMs);
+            (vid as any).requestVideoFrameCallback(() => finish());
+          });
+          return;
+        }
+
+        await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      };
+
       const sourceCanvas = document.createElement("canvas");
       sourceCanvas.width = canvasW;
       sourceCanvas.height = canvasH;
       const sourceCtx = sourceCanvas.getContext("2d");
       if (!sourceCtx) throw new Error("Could not get canvas context");
-      // Crop bottom subtitle area: capture top 70% of video to avoid original subtitles
-      const subAvoidanceHeight = video.videoHeight * 0.72;
-      const srcRatio1 = video.videoWidth / subAvoidanceHeight;
-      const destRatio1 = canvasW / canvasH;
-      let sW1 = video.videoWidth,
-        sH1 = subAvoidanceHeight;
-      if (srcRatio1 > destRatio1) {
-        sW1 = subAvoidanceHeight * destRatio1;
-      } else {
-        sH1 = video.videoWidth / destRatio1;
-      }
-      sourceCtx.drawImage(
-        video,
-        (video.videoWidth - sW1) / 2,
-        0,
-        sW1,
-        sH1, // Secure aspect ratio crop
-        0,
-        0,
-        canvasW,
-        canvasH, // Destination: Full canvas
-      );
+      drawVideoCover(video, sourceCtx, canvasW, canvasH);
 
       const baseFrame = {
         data: sourceCanvas.toDataURL("image/jpeg", 0.9).split(",")[1],
         brightness: getCanvasBrightness(sourceCanvas),
       };
 
-      // Helper to capture frame at specific time for more character variety
-      const captureFrameAt = (time: number): Promise<{ data: string; brightness: number }> => {
-        return new Promise((resolve) => {
-          const tempVideo = document.createElement("video");
-          tempVideo.src = videoUrl;
-          tempVideo.crossOrigin = "anonymous";
-          tempVideo.preload = "auto";
-          tempVideo.muted = true;
-          tempVideo.playsInline = true;
-          tempVideo.setAttribute("muted", "true");
-          tempVideo.setAttribute("playsinline", "true");
-          const doSeek = () => {
-            tempVideo.currentTime = Math.max(0.5, Math.min(time, (tempVideo.duration || 10) - 0.5));
-            tempVideo.onseeked = () => {
-              setTimeout(() => {
-                const canvas = document.createElement("canvas");
-                canvas.width = canvasW;
-                canvas.height = canvasH;
-                const ctx = canvas.getContext("2d");
-                if (ctx) {
-                  // To avoid original subtitles (usually at the bottom),
-                  // we capture only the top 72% of the video frame and scale it to cover the canvas.
-                  // 72% keeps faces fully visible while cropping out subtitle area at bottom.
-                  const subAvoidanceHeight = tempVideo.videoHeight * 0.72;
-                  const srcRatio2 = tempVideo.videoWidth / subAvoidanceHeight;
-                  const destRatio2 = canvasW / canvasH;
-                  let sW2 = tempVideo.videoWidth,
-                    sH2 = subAvoidanceHeight;
-                  if (srcRatio2 > destRatio2) {
-                    sW2 = subAvoidanceHeight * destRatio2;
-                  } else {
-                    sH2 = tempVideo.videoWidth / destRatio2;
-                  }
-                  ctx.drawImage(
-                    tempVideo,
-                    (tempVideo.videoWidth - sW2) / 2,
-                    0,
-                    sW2,
-                    sH2, // Source: Top 72% with aspect crop
-                    0,
-                    0,
-                    canvasW,
-                    canvasH, // Destination: Full canvas
-                  );
-                }
-                resolve({
-                  data: canvas.toDataURL("image/jpeg", 0.95).split(",")[1],
-                  brightness: getCanvasBrightness(canvas),
-                });
-              }, 250); // Delay to let frame decode into buffer
-            };
-            tempVideo.onerror = () => resolve({ data: "", brightness: 0 });
-          };
-          if (tempVideo.readyState >= 2) {
-            doSeek();
-            return;
+      const captureFrameAt = async (time: number): Promise<{ data: string; brightness: number }> => {
+        try {
+          const safeDuration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : time + 1;
+          const targetTime = Math.max(0.15, Math.min(time, safeDuration - 0.15));
+
+          if (Math.abs(video.currentTime - targetTime) > 0.05) {
+            await new Promise<void>((resolve) => {
+              let settled = false;
+              const finish = () => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeoutId);
+                resolve();
+              };
+              const timeoutId = window.setTimeout(finish, 3000);
+              video.addEventListener(
+                "seeked",
+                () => {
+                  void waitForDecodedFrame(video).finally(finish);
+                },
+                { once: true },
+              );
+              video.currentTime = targetTime;
+            });
+          } else {
+            await waitForDecodedFrame(video);
           }
-          tempVideo.addEventListener("loadeddata", doSeek, { once: true });
-          tempVideo.addEventListener("error", () => resolve({ data: "", brightness: 0 }), { once: true });
-          tempVideo.load();
-          setTimeout(() => resolve({ data: "", brightness: 0 }), 5000);
-        });
+
+          const canvas = document.createElement("canvas");
+          canvas.width = canvasW;
+          canvas.height = canvasH;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            drawVideoCover(video, ctx, canvasW, canvasH);
+          }
+
+          return {
+            data: canvas.toDataURL("image/jpeg", 0.95).split(",")[1],
+            brightness: getCanvasBrightness(canvas),
+          };
+        } catch (frameErr) {
+          console.warn("Poster frame capture failed:", frameErr);
+          return { data: "", brightness: 0 };
+        }
       };
 
       const duration = video.duration || 0;
-      // Spread captures across the entire video to ensure all key characters (like villains/supporting roles) are found
-      const intervals = [duration * 0.15, duration * 0.35, duration * 0.55, duration * 0.75, duration * 0.95];
+      const sampleTimes = Array.from(
+        new Set([
+          parseFloat(seekTarget.toFixed(3)),
+          ...[0.12, 0.28, 0.44, 0.6, 0.76, 0.82].map((ratio) => parseFloat((duration * ratio).toFixed(3))),
+        ]),
+      ).filter((time) => time > 0.1 && (!duration || time < duration - 0.1));
 
-      const additionalFrames = await Promise.all(intervals.map((t) => captureFrameAt(t)));
-      const selectedFrames = [baseFrame, ...additionalFrames]
-        .filter((frame) => frame.data)
+      const capturedFrames = [baseFrame];
+      for (const time of sampleTimes) {
+        if (Math.abs(time - seekTarget) < 0.05) continue;
+        const frame = await captureFrameAt(time);
+        if (frame.data) capturedFrames.push(frame);
+      }
+
+      const usableFrames = capturedFrames.filter((frame) => frame.data);
+      const brightFrames = usableFrames.filter((frame) => frame.brightness >= POSTER_BRIGHTNESS_MIN);
+      const selectedFrames = (brightFrames.length > 0 ? brightFrames : usableFrames)
         .sort((a, b) => b.brightness - a.brightness)
         .slice(0, 6);
 
@@ -865,15 +909,18 @@ export default function App() {
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Could not get final canvas context");
 
-      const loadedImages = await Promise.all(
-        selectedFrames.map((frame) => {
-          return new Promise<HTMLImageElement>((resolve) => {
-            const img = new Image();
-            img.onload = () => resolve(img);
-            img.src = `data:image/jpeg;base64,${frame.data}`;
-          });
-        }),
-      );
+      const loadedImages = (
+        await Promise.all(
+          selectedFrames.map((frame) => {
+            return new Promise<HTMLImageElement | null>((resolve) => {
+              const img = new Image();
+              img.onload = () => resolve(img);
+              img.onerror = () => resolve(null);
+              img.src = `data:image/jpeg;base64,${frame.data}`;
+            });
+          }),
+        )
+      ).filter((img): img is HTMLImageElement => Boolean(img));
 
       if (loadedImages[0]) {
         ctx.drawImage(loadedImages[0], 0, 0, canvas.width, canvas.height);
@@ -1249,52 +1296,61 @@ export default function App() {
 
           const chunk = audioChunks[i];
 
-          // Capture video frame for visual context — reuse a single video element
+          // Capture video frame only for Own API multimodal mode.
+          // App API stays audio-first to avoid partial OCR-only subtitle outputs.
           let frameBase64 = "";
-          try {
-            const frameVideo = document.createElement("video");
-            frameVideo.src = videoUrl!;
-            frameVideo.preload = "auto";
-            frameVideo.muted = true;
+          const shouldCaptureFrame = apiMode === "own" && originalSubs.length === 0;
+          if (shouldCaptureFrame) {
+            try {
+              const frameVideo = document.createElement("video");
+              frameVideo.src = videoUrl!;
+              frameVideo.preload = "auto";
+              frameVideo.muted = true;
 
-            await new Promise<void>((res, rej) => {
-              if (frameVideo.readyState >= 2) return res();
-              frameVideo.addEventListener("loadeddata", () => res(), { once: true });
-              frameVideo.addEventListener("error", () => rej(new Error("frame video load error")), { once: true });
-              frameVideo.load();
-              setTimeout(() => res(), 3000); // don't block forever
-            });
+              await new Promise<void>((res, rej) => {
+                if (frameVideo.readyState >= 2) return res();
+                frameVideo.addEventListener("loadeddata", () => res(), { once: true });
+                frameVideo.addEventListener("error", () => rej(new Error("frame video load error")), { once: true });
+                frameVideo.load();
+                setTimeout(() => res(), 3000);
+              });
 
-            frameVideo.currentTime = chunk.offset + chunk.duration / 2;
-            await new Promise<void>((res) => {
-              frameVideo.onseeked = () => res();
-              frameVideo.onerror = () => res();
-              setTimeout(() => res(), 3000);
-            });
+              frameVideo.currentTime = chunk.offset + chunk.duration / 2;
+              await new Promise<void>((res) => {
+                frameVideo.onseeked = () => res();
+                frameVideo.onerror = () => res();
+                setTimeout(() => res(), 3000);
+              });
 
-            const canvas = document.createElement("canvas");
-            let w = frameVideo.videoWidth;
-            let h = frameVideo.videoHeight;
-            if (w > 854) {
-              h = Math.round((854 / w) * h);
-              w = 854;
+              const canvas = document.createElement("canvas");
+              let w = frameVideo.videoWidth;
+              let h = frameVideo.videoHeight;
+              if (w > 854) {
+                h = Math.round((854 / w) * h);
+                w = 854;
+              }
+              canvas.width = w || 854;
+              canvas.height = h || 480;
+              const ctx = canvas.getContext("2d");
+              if (ctx) ctx.drawImage(frameVideo, 0, 0, canvas.width, canvas.height);
+              frameBase64 = canvas.toDataURL("image/jpeg", 0.8).split(",")[1];
+            } catch (frameErr) {
+              console.warn("Frame capture failed, continuing without frame:", frameErr);
             }
-            canvas.width = w || 854;
-            canvas.height = h || 480;
-            const ctx = canvas.getContext("2d");
-            if (ctx) ctx.drawImage(frameVideo, 0, 0, canvas.width, canvas.height);
-            frameBase64 = canvas.toDataURL("image/jpeg", 0.8).split(",")[1];
-          } catch (frameErr) {
-            console.warn("Frame capture failed, continuing without frame:", frameErr);
           }
 
-          // Find overlapping original subtitles
-          const overlappingSubs = originalSubs.filter(
-            (s) =>
-              (s.start >= chunk.offset && s.start <= chunk.offset + chunk.duration) ||
-              (s.end >= chunk.offset && s.end <= chunk.offset + chunk.duration) ||
-              (s.start <= chunk.offset && s.end >= chunk.offset + chunk.duration),
-          );
+          // Assign each original subtitle line to exactly one chunk by midpoint.
+          const overlappingSubs = originalSubs.filter((s) => {
+            const midpoint = s.start + (s.end - s.start) / 2;
+            return midpoint >= chunk.offset && midpoint < chunk.offset + chunk.duration;
+          });
+          const authoritativeTextBatch = overlappingSubs
+            .map((s) => ({
+              start: parseFloat(Math.max(0, s.start - chunk.offset).toFixed(3)),
+              end: parseFloat(Math.min(chunk.duration, s.end - chunk.offset).toFixed(3)),
+              text: s.text,
+            }))
+            .filter((s) => s.text.trim().length > 0 && s.end > s.start);
           const originalTextContext =
             overlappingSubs.length > 0
               ? `\n\nORIGINAL SUBTITLES FOR THIS SEGMENT:\n${overlappingSubs.map((s) => `[${(s.start - chunk.offset).toFixed(1)}s - ${(s.end - chunk.offset).toFixed(1)}s] ${s.text}`).join("\n")}\n*Use these original subtitles as a strong reference for names, timing, and context.*`
@@ -1368,7 +1424,37 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           try {
             let text = "[]";
 
-            if (apiMode === "own" && ownApiKey.trim()) {
+            const runAuthoritativeTextBatchTranslation = async () => {
+              if (apiMode === "own" && ownApiKey.trim()) {
+                const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
+                const ownResult = await ai.models.generateContent({
+                  model: "gemini-2.5-flash",
+                  contents: buildExactTextBatchPrompt(authoritativeTextBatch, targetLang),
+                  config: {
+                    temperature: 0.05,
+                    maxOutputTokens: 8192,
+                    responseMimeType: "application/json",
+                  },
+                });
+                return ownResult.text || "[]";
+              }
+
+              const { data, error } = await supabase.functions.invoke("video-transform-translate", {
+                body: {
+                  textBatch: authoritativeTextBatch,
+                  targetLang,
+                },
+              });
+              if (error) throw new Error(error.message || "Edge function error");
+              return typeof data?.result === "string" ? data.result : JSON.stringify(data?.result || []);
+            };
+
+            if (authoritativeTextBatch.length > 0) {
+              text = await runAuthoritativeTextBatchTranslation();
+              if (parseJsonArrayResponse(text).length !== authoritativeTextBatch.length) {
+                text = await runAuthoritativeTextBatchTranslation();
+              }
+            } else if (apiMode === "own" && ownApiKey.trim()) {
               // === OWN API MODE: Direct client-side Gemini call ===
               const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
               const ownParts: any[] = [{ inlineData: { mimeType: "audio/wav", data: chunk.base64 } }];
@@ -1394,17 +1480,13 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                   audioBase64: chunk.base64,
                   audioDuration: chunk.duration,
                   targetLang,
-                  videoFrames: frameBase64 ? [frameBase64] : [],
+                  videoFrames: [],
                 },
               });
               if (error) throw new Error(error.message || "Edge function error");
               text = typeof data?.result === "string" ? data.result : JSON.stringify(data?.result || []);
             }
-            const jsonMatch = text.match(/\[[\s\S]*\]/);
-            let chunkSubs = JSON.parse(jsonMatch ? jsonMatch[0] : "[]");
-            if (!Array.isArray(chunkSubs)) {
-              chunkSubs = [chunkSubs];
-            }
+            let chunkSubs = parseJsonArrayResponse(text);
 
             // Adjust timestamps by adding the EXACT segment offset (calculated by VAD)
             // Also clamp and validate each subtitle to prevent timing bugs
@@ -1423,7 +1505,8 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                   text: stripSpeakerName(sub.text || ""),
                 };
               })
-              .filter((sub: any) => sub.text.length > 0 && sub.end > sub.start);
+              .filter((sub: any) => sub.text.length > 0 && sub.end > sub.start)
+              .sort((a: any, b: any) => a.start - b.start || a.end - b.end);
 
             parsedSubtitles = [...parsedSubtitles, ...adjustedSubs];
           } catch (err: any) {
@@ -1440,6 +1523,8 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           }
         }
       }
+      parsedSubtitles = normalizeAndDedupeSubtitles(parsedSubtitles);
+
       // === AUTO PHASE 2: Render video with subtitles ===
       const generatedSrt = generateSRTContent(parsedSubtitles);
       setSubtitles(parsedSubtitles);
