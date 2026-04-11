@@ -1854,7 +1854,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           // Source Rect (Object-Cover behavior + Copyright Bypass Zoom)
           // Aggressive bottom crop to remove original subtitles (like "I don't drink" at bottom)
           // while keeping full faces visible (faces are typically in upper portion of frame)
-          const ZOOM_FACTOR = 1.25; // Adjusted to safely crop out bottom subtitles without cutting faces
+          const ZOOM_FACTOR = 1.8; // Adjusted to safely crop out bottom subtitles without cutting faces
           const FACE_CROP_DOWN_BIAS = 0.0; // Keep top-aligned to preserve faces, crop from bottom
 
           let sx = 0,
@@ -1878,7 +1878,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
 
           // Crop slightly from top to align hair with border, rest mostly from bottom to cut subtitles
           const maxSy = Math.max(0, video.videoHeight - sh);
-          sy = maxSy * 0.1; // Top aligned close to border (10%), with heavy cut at bottom (90%)
+          sy = maxSy * 0.05; // Top aligned close to border (10%), with heavy cut at bottom (90%)
 
           // Draw a subtle drop shadow for the foreground video
           ctx.shadowColor = "rgba(0,0,0,0.8)";
