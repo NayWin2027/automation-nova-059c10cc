@@ -381,25 +381,6 @@ const POSTER_CROP_TOP = 0;
 const POSTER_CROP_BOTTOM = 0.15;
 const POSTER_BRIGHTNESS_MIN = 0.14;
 
-async function waitForDecodedVideoFrame(vid: HTMLVideoElement, timeoutMs = 2500) {
-  if ("requestVideoFrameCallback" in vid) {
-    await new Promise<void>((resolve) => {
-      let settled = false;
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeoutId);
-        resolve();
-      };
-      const timeoutId = window.setTimeout(finish, timeoutMs);
-      (vid as any).requestVideoFrameCallback(() => finish());
-    });
-    return;
-  }
-
-  await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-}
-
 function buildExactTextBatchPrompt(
   textBatch: { start: number; end: number; text: string }[],
   targetLang: string,
@@ -505,7 +486,6 @@ export default function App() {
     thumbnailUrl: string;
   } | null>(null);
   const [isGeneratingMarketing, setIsGeneratingMarketing] = useState(false);
-  const [marketingError, setMarketingError] = useState("");
 
   // Load credit rate from tool_settings
   useEffect(() => {
@@ -562,7 +542,6 @@ export default function App() {
     }
     if (step !== "result") {
       autoMarketingTriggered.current = false;
-      setMarketingError("");
     }
   }, [step, marketingContent, isGeneratingMarketing]);
 
@@ -684,9 +663,17 @@ export default function App() {
 
   const generateMarketingContent = async () => {
     if (!srtText) return;
-    setMarketingError("");
     setIsGeneratingMarketing(true);
     try {
+      // === CREDIT DEDUCTION: 4CR per poster generation (skip for Own API) ===
+      if (apiMode !== "own") {
+        const posterResult = await deductCredits("video-transform", false, 4);
+        if (!posterResult.success) {
+          setIsGeneratingMarketing(false);
+          return;
+        }
+      }
+
       let title = "";
       let description = "";
 
@@ -761,7 +748,8 @@ export default function App() {
       await new Promise<void>((resolve) => {
         const onSeeked = () => {
           video.removeEventListener("seeked", onSeeked);
-          void waitForDecodedVideoFrame(video).finally(resolve);
+          // Small delay to ensure frame buffer is updated after seek
+          setTimeout(resolve, 200);
         };
         video.addEventListener("seeked", onSeeked);
         video.onerror = () => resolve();
@@ -816,6 +804,25 @@ export default function App() {
         return totalLuma / ((data.length / 4) * 255);
       };
 
+      const waitForDecodedFrame = async (vid: HTMLVideoElement, timeoutMs = 2500) => {
+        if ("requestVideoFrameCallback" in vid) {
+          await new Promise<void>((resolve) => {
+            let settled = false;
+            const finish = () => {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timeoutId);
+              resolve();
+            };
+            const timeoutId = window.setTimeout(finish, timeoutMs);
+            (vid as any).requestVideoFrameCallback(() => finish());
+          });
+          return;
+        }
+
+        await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      };
+
       const sourceCanvas = document.createElement("canvas");
       sourceCanvas.width = canvasW;
       sourceCanvas.height = canvasH;
@@ -846,14 +853,14 @@ export default function App() {
               video.addEventListener(
                 "seeked",
                 () => {
-                  void waitForDecodedVideoFrame(video).finally(finish);
+                  void waitForDecodedFrame(video).finally(finish);
                 },
                 { once: true },
               );
               video.currentTime = targetTime;
             });
           } else {
-            await waitForDecodedVideoFrame(video);
+            await waitForDecodedFrame(video);
           }
 
           const canvas = document.createElement("canvas");
@@ -914,10 +921,6 @@ export default function App() {
           }),
         )
       ).filter((img): img is HTMLImageElement => Boolean(img));
-
-      if (loadedImages.length === 0) {
-        throw new Error("Poster frames could not be extracted.");
-      }
 
       if (loadedImages[0]) {
         ctx.drawImage(loadedImages[0], 0, 0, canvas.width, canvas.height);
@@ -1142,22 +1145,7 @@ export default function App() {
       const hookFontSize = movieTitle ? Math.floor(canvas.height * 0.045) : Math.floor(canvas.height * 0.1);
       drawWrappedText(title, hookFontSize, canvas.height * 0.96, false, "900");
 
-      const finalPosterBrightness = getCanvasBrightness(canvas);
-      if (finalPosterBrightness < 0.08) {
-        throw new Error("Poster output is too dark.");
-      }
-
       const thumbnailUrl = canvas.toDataURL("image/png");
-
-      // Deduct poster credits only after a valid poster has been produced
-      if (apiMode !== "own") {
-        const posterResult = await deductCredits("video-transform", false, 4);
-        if (!posterResult.success) {
-          setMarketingError(String(posterResult.error || "Poster credits could not be processed."));
-          return;
-        }
-      }
-
       setMarketingContent({ title, description, thumbnailUrl });
 
       // Auto-download the thumbnail
@@ -1171,7 +1159,6 @@ export default function App() {
       }, 100);
     } catch (error) {
       console.error("Error generating marketing content:", error);
-      setMarketingError(error instanceof Error ? error.message : "Poster generation failed.");
     } finally {
       setIsGeneratingMarketing(false);
     }
@@ -1257,8 +1244,6 @@ export default function App() {
 
         setVideoFile(file);
         setVideoUrl(URL.createObjectURL(file));
-        setMarketingContent(null);
-        setMarketingError("");
         setStep("configure");
       })();
     }
@@ -1439,17 +1424,15 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           try {
             let text = "[]";
 
-            const runAuthoritativeTextBatchTranslation = async (
-              batch: { start: number; end: number; text: string }[] = authoritativeTextBatch,
-            ) => {
+            const runAuthoritativeTextBatchTranslation = async () => {
               if (apiMode === "own" && ownApiKey.trim()) {
                 const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
                 const ownResult = await ai.models.generateContent({
                   model: "gemini-2.5-flash",
-                  contents: buildExactTextBatchPrompt(batch, targetLang),
+                  contents: buildExactTextBatchPrompt(authoritativeTextBatch, targetLang),
                   config: {
                     temperature: 0.05,
-                    maxOutputTokens: 16384,
+                    maxOutputTokens: 8192,
                     responseMimeType: "application/json",
                   },
                 });
@@ -1458,7 +1441,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
 
               const { data, error } = await supabase.functions.invoke("video-transform-translate", {
                 body: {
-                  textBatch: batch,
+                  textBatch: authoritativeTextBatch,
                   targetLang,
                 },
               });
@@ -1470,15 +1453,6 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
               text = await runAuthoritativeTextBatchTranslation();
               if (parseJsonArrayResponse(text).length !== authoritativeTextBatch.length) {
                 text = await runAuthoritativeTextBatchTranslation();
-              }
-              if (parseJsonArrayResponse(text).length !== authoritativeTextBatch.length) {
-                const strictLines: any[] = [];
-                for (const item of authoritativeTextBatch) {
-                  const singleText = await runAuthoritativeTextBatchTranslation([item]);
-                  const singleParsed = parseJsonArrayResponse(singleText);
-                  if (singleParsed[0]) strictLines.push(singleParsed[0]);
-                }
-                text = JSON.stringify(strictLines);
               }
             } else if (apiMode === "own" && ownApiKey.trim()) {
               // === OWN API MODE: Direct client-side Gemini call ===
@@ -1494,7 +1468,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                 contents: [{ role: "user", parts: ownParts }],
                 config: {
                   temperature: 0.1,
-                  maxOutputTokens: 16384,
+                  maxOutputTokens: 8192,
                   responseMimeType: "application/json",
                 },
               });
@@ -1520,11 +1494,11 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
               .filter((sub: any) => {
                 const s = parseFloat(sub.start) || 0;
                 const e = parseFloat(sub.end) || 0;
-                return e > s && s >= 0; // Don't reject by end time — clamp instead
+                return e > s && s >= 0 && e <= chunk.duration + 0.5; // allow 500ms tolerance
               })
               .map((sub: any) => {
                 const relStart = Math.max(0, parseFloat(sub.start) || 0);
-                const relEnd = Math.min(chunk.duration + 1.0, parseFloat(sub.end) || 0);
+                const relEnd = Math.min(chunk.duration, parseFloat(sub.end) || 0);
                 return {
                   start: parseFloat((relStart + chunk.offset).toFixed(3)),
                   end: parseFloat((relEnd + chunk.offset).toFixed(3)),
@@ -1545,61 +1519,11 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
             if (isRateLimit) {
               throw new Error(`API Quota Exceeded! The server API key has hit its rate limit. Please try again later.`);
             }
-            console.warn(`Chunk ${i + 1} failed, continuing with remaining chunks...`);
-            continue;
+            throw new Error(`Failed to translate segment ${i + 1}. Please try again.`);
           }
         }
       }
       parsedSubtitles = normalizeAndDedupeSubtitles(parsedSubtitles);
-
-      // === RESCUE: Catch any original subtitle lines that were NOT translated ===
-      if (originalSubs.length > 0 && parsedSubtitles.length > 0) {
-        const translatedCount = parsedSubtitles.length;
-        const missedSubs = originalSubs.filter((orig) => {
-          const mid = orig.start + (orig.end - orig.start) / 2;
-          return !parsedSubtitles.some(
-            (t) => Math.abs(t.start - orig.start) < 2.0 || (mid >= t.start && mid <= t.end),
-          );
-        });
-        if (missedSubs.length > 0) {
-          console.warn(`[translate-video] ${missedSubs.length} original subtitle lines not covered. Running rescue...`);
-          try {
-            const rescueBatch = missedSubs.map((s) => ({ start: s.start, end: s.end, text: s.text }));
-            for (let ri = 0; ri < rescueBatch.length; ri += 30) {
-              const batch = rescueBatch.slice(ri, ri + 30);
-              let rescueText = "[]";
-              if (apiMode === "own" && ownApiKey.trim()) {
-                const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
-                const r = await ai.models.generateContent({
-                  model: "gemini-2.5-flash",
-                  contents: buildExactTextBatchPrompt(batch, targetLang),
-                  config: { temperature: 0.05, maxOutputTokens: 16384, responseMimeType: "application/json" },
-                });
-                rescueText = r.text || "[]";
-              } else {
-                const { data, error } = await supabase.functions.invoke("video-transform-translate", {
-                  body: { textBatch: batch, targetLang },
-                });
-                if (error) throw error;
-                rescueText = typeof data?.result === "string" ? data.result : JSON.stringify(data?.result || []);
-              }
-              const rescueParsed = parseJsonArrayResponse(rescueText);
-              const rescueSubs = rescueParsed
-                .map((s: any, idx: number) => ({
-                  start: batch[idx]?.start ?? parseFloat(s.start) ?? 0,
-                  end: batch[idx]?.end ?? parseFloat(s.end) ?? 0,
-                  text: stripSpeakerName(s.text || ""),
-                }))
-                .filter((s: any) => s.text.length > 0 && s.end > s.start);
-              parsedSubtitles = [...parsedSubtitles, ...rescueSubs];
-            }
-            parsedSubtitles = normalizeAndDedupeSubtitles(parsedSubtitles);
-            console.log(`[translate-video] Rescue done. Total: ${parsedSubtitles.length} (was ${translatedCount})`);
-          } catch (rescueErr) {
-            console.warn("[translate-video] Rescue failed:", rescueErr);
-          }
-        }
-      }
 
       // === AUTO PHASE 2: Render video with subtitles ===
       const generatedSrt = generateSRTContent(parsedSubtitles);
@@ -3564,8 +3488,6 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                         setVideoFile(null);
                         setVideoUrl(null);
                         setFinalVideoUrl(null);
-                        setMarketingContent(null);
-                        setMarketingError("");
                         setProcessingProgress(0);
                       }}
                       className="flex-1 sm:flex-none px-5 py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl font-medium flex items-center justify-center gap-2 transition-colors"
@@ -3610,7 +3532,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                     {/* Auto-generating... no manual button needed */}
                   </div>
 
-                  {!marketingContent && !isGeneratingMarketing && !marketingError && (
+                  {!marketingContent && !isGeneratingMarketing && (
                     <div className="bg-zinc-800/30 border border-zinc-800 rounded-3xl p-8 text-center">
                       <Loader2 size={32} className="animate-spin text-indigo-500 mx-auto mb-3" />
                       <p className="text-zinc-400 font-medium">Auto-generating marketing kit...</p>
@@ -3623,12 +3545,6 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                       <p className="text-zinc-400 font-medium">
                         Creating your viral title, description, and premium thumbnail...
                       </p>
-                    </div>
-                  )}
-
-                  {!marketingContent && !isGeneratingMarketing && marketingError && (
-                    <div className="bg-red-500/10 border border-red-500/30 rounded-3xl p-8 text-center">
-                      <p className="text-red-300 font-medium">{marketingError}</p>
                     </div>
                   )}
 
