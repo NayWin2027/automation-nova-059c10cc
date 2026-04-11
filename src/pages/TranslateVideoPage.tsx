@@ -669,6 +669,10 @@ export default function App() {
       video.src = videoUrl;
       video.crossOrigin = "anonymous";
       video.preload = "auto";
+      video.muted = true;
+      video.playsInline = true;
+      video.setAttribute("muted", "true");
+      video.setAttribute("playsinline", "true");
 
       // Wait for metadata + data to load first
       await new Promise<void>((resolve) => {
@@ -753,7 +757,7 @@ export default function App() {
       const sourceCtx = sourceCanvas.getContext("2d");
       if (!sourceCtx) throw new Error("Could not get canvas context");
       // Crop bottom subtitle area: capture top 70% of video to avoid original subtitles
-      const subAvoidanceHeight = video.videoHeight * 0.65;
+      const subAvoidanceHeight = video.videoHeight * 0.72;
       const srcRatio1 = video.videoWidth / subAvoidanceHeight;
       const destRatio1 = canvasW / canvasH;
       let sW1 = video.videoWidth,
@@ -787,43 +791,49 @@ export default function App() {
           tempVideo.src = videoUrl;
           tempVideo.crossOrigin = "anonymous";
           tempVideo.preload = "auto";
+          tempVideo.muted = true;
+          tempVideo.playsInline = true;
+          tempVideo.setAttribute("muted", "true");
+          tempVideo.setAttribute("playsinline", "true");
           const doSeek = () => {
             tempVideo.currentTime = Math.max(0.5, Math.min(time, (tempVideo.duration || 10) - 0.5));
             tempVideo.onseeked = () => {
-              const canvas = document.createElement("canvas");
-              canvas.width = canvasW;
-              canvas.height = canvasH;
-              const ctx = canvas.getContext("2d");
-              if (ctx) {
-                // To avoid original subtitles (usually at the bottom),
-                // we capture only the top 72% of the video frame and scale it to cover the canvas.
-                // 72% keeps faces fully visible while cropping out subtitle area at bottom.
-                const subAvoidanceHeight = tempVideo.videoHeight * 0.72;
-                const srcRatio2 = tempVideo.videoWidth / subAvoidanceHeight;
-                const destRatio2 = canvasW / canvasH;
-                let sW2 = tempVideo.videoWidth,
-                  sH2 = subAvoidanceHeight;
-                if (srcRatio2 > destRatio2) {
-                  sW2 = subAvoidanceHeight * destRatio2;
-                } else {
-                  sH2 = tempVideo.videoWidth / destRatio2;
+              setTimeout(() => {
+                const canvas = document.createElement("canvas");
+                canvas.width = canvasW;
+                canvas.height = canvasH;
+                const ctx = canvas.getContext("2d");
+                if (ctx) {
+                  // To avoid original subtitles (usually at the bottom),
+                  // we capture only the top 72% of the video frame and scale it to cover the canvas.
+                  // 72% keeps faces fully visible while cropping out subtitle area at bottom.
+                  const subAvoidanceHeight = tempVideo.videoHeight * 0.72;
+                  const srcRatio2 = tempVideo.videoWidth / subAvoidanceHeight;
+                  const destRatio2 = canvasW / canvasH;
+                  let sW2 = tempVideo.videoWidth,
+                    sH2 = subAvoidanceHeight;
+                  if (srcRatio2 > destRatio2) {
+                    sW2 = subAvoidanceHeight * destRatio2;
+                  } else {
+                    sH2 = tempVideo.videoWidth / destRatio2;
+                  }
+                  ctx.drawImage(
+                    tempVideo,
+                    (tempVideo.videoWidth - sW2) / 2,
+                    0,
+                    sW2,
+                    sH2, // Source: Top 72% with aspect crop
+                    0,
+                    0,
+                    canvasW,
+                    canvasH, // Destination: Full canvas
+                  );
                 }
-                ctx.drawImage(
-                  tempVideo,
-                  (tempVideo.videoWidth - sW2) / 2,
-                  0,
-                  sW2,
-                  sH2, // Source: Top 72% with aspect crop
-                  0,
-                  0,
-                  canvasW,
-                  canvasH, // Destination: Full canvas
-                );
-              }
-              resolve({
-                data: canvas.toDataURL("image/jpeg", 0.95).split(",")[1],
-                brightness: getCanvasBrightness(canvas),
-              });
+                resolve({
+                  data: canvas.toDataURL("image/jpeg", 0.95).split(",")[1],
+                  brightness: getCanvasBrightness(canvas),
+                });
+              }, 250); // Delay to let frame decode into buffer
             };
             tempVideo.onerror = () => resolve({ data: "", brightness: 0 });
           };
@@ -1844,7 +1854,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           // Source Rect (Object-Cover behavior + Copyright Bypass Zoom)
           // Aggressive bottom crop to remove original subtitles (like "I don't drink" at bottom)
           // while keeping full faces visible (faces are typically in upper portion of frame)
-          const ZOOM_FACTOR = 1.7; // Moderate zoom, slight crop top and bottom
+          const ZOOM_FACTOR = 1.25; // Adjusted to safely crop out bottom subtitles without cutting faces
           const FACE_CROP_DOWN_BIAS = 0.0; // Keep top-aligned to preserve faces, crop from bottom
 
           let sx = 0,
@@ -1857,7 +1867,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           // Calculate cropped source region (zoom = use smaller portion of source)
           // This crops from the bottom to avoid original subtitles
           if (srcRatio > destRatio) {
-            sh = video.videoHeight / ZOOM_FACTOR; // Use only top ~70% of video height
+            sh = video.videoHeight / ZOOM_FACTOR; // Use only top portion
             sw = sh * destRatio;
             sx = (video.videoWidth - sw) / 2;
           } else {
@@ -1866,9 +1876,9 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
             sx = (video.videoWidth - sw) / 2;
           }
 
-          // Crop slightly from top to align hair with border, rest from bottom
+          // Crop slightly from top to align hair with border, rest mostly from bottom to cut subtitles
           const maxSy = Math.max(0, video.videoHeight - sh);
-          sy = maxSy * 0.05; // Top aligned close to border, with most crop at bottom
+          sy = maxSy * 0.1; // Top aligned close to border (10%), with heavy cut at bottom (90%)
 
           // Draw a subtle drop shadow for the foreground video
           ctx.shadowColor = "rgba(0,0,0,0.8)";
