@@ -1449,7 +1449,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                   contents: buildExactTextBatchPrompt(batch, targetLang),
                   config: {
                     temperature: 0.05,
-                    maxOutputTokens: 8192,
+                    maxOutputTokens: 16384,
                     responseMimeType: "application/json",
                   },
                 });
@@ -1494,7 +1494,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                 contents: [{ role: "user", parts: ownParts }],
                 config: {
                   temperature: 0.1,
-                  maxOutputTokens: 8192,
+                  maxOutputTokens: 16384,
                   responseMimeType: "application/json",
                 },
               });
@@ -1520,11 +1520,11 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
               .filter((sub: any) => {
                 const s = parseFloat(sub.start) || 0;
                 const e = parseFloat(sub.end) || 0;
-                return e > s && s >= 0 && e <= chunk.duration + 0.5; // allow 500ms tolerance
+                return e > s && s >= 0; // Don't reject by end time — clamp instead
               })
               .map((sub: any) => {
                 const relStart = Math.max(0, parseFloat(sub.start) || 0);
-                const relEnd = Math.min(chunk.duration, parseFloat(sub.end) || 0);
+                const relEnd = Math.min(chunk.duration + 1.0, parseFloat(sub.end) || 0);
                 return {
                   start: parseFloat((relStart + chunk.offset).toFixed(3)),
                   end: parseFloat((relEnd + chunk.offset).toFixed(3)),
@@ -1545,11 +1545,61 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
             if (isRateLimit) {
               throw new Error(`API Quota Exceeded! The server API key has hit its rate limit. Please try again later.`);
             }
-            throw new Error(`Failed to translate segment ${i + 1}. Please try again.`);
+            console.warn(`Chunk ${i + 1} failed, continuing with remaining chunks...`);
+            continue;
           }
         }
       }
       parsedSubtitles = normalizeAndDedupeSubtitles(parsedSubtitles);
+
+      // === RESCUE: Catch any original subtitle lines that were NOT translated ===
+      if (originalSubs.length > 0 && parsedSubtitles.length > 0) {
+        const translatedCount = parsedSubtitles.length;
+        const missedSubs = originalSubs.filter((orig) => {
+          const mid = orig.start + (orig.end - orig.start) / 2;
+          return !parsedSubtitles.some(
+            (t) => Math.abs(t.start - orig.start) < 2.0 || (mid >= t.start && mid <= t.end),
+          );
+        });
+        if (missedSubs.length > 0) {
+          console.warn(`[translate-video] ${missedSubs.length} original subtitle lines not covered. Running rescue...`);
+          try {
+            const rescueBatch = missedSubs.map((s) => ({ start: s.start, end: s.end, text: s.text }));
+            for (let ri = 0; ri < rescueBatch.length; ri += 30) {
+              const batch = rescueBatch.slice(ri, ri + 30);
+              let rescueText = "[]";
+              if (apiMode === "own" && ownApiKey.trim()) {
+                const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
+                const r = await ai.models.generateContent({
+                  model: "gemini-2.5-flash",
+                  contents: buildExactTextBatchPrompt(batch, targetLang),
+                  config: { temperature: 0.05, maxOutputTokens: 16384, responseMimeType: "application/json" },
+                });
+                rescueText = r.text || "[]";
+              } else {
+                const { data, error } = await supabase.functions.invoke("video-transform-translate", {
+                  body: { textBatch: batch, targetLang },
+                });
+                if (error) throw error;
+                rescueText = typeof data?.result === "string" ? data.result : JSON.stringify(data?.result || []);
+              }
+              const rescueParsed = parseJsonArrayResponse(rescueText);
+              const rescueSubs = rescueParsed
+                .map((s: any, idx: number) => ({
+                  start: batch[idx]?.start ?? parseFloat(s.start) ?? 0,
+                  end: batch[idx]?.end ?? parseFloat(s.end) ?? 0,
+                  text: stripSpeakerName(s.text || ""),
+                }))
+                .filter((s: any) => s.text.length > 0 && s.end > s.start);
+              parsedSubtitles = [...parsedSubtitles, ...rescueSubs];
+            }
+            parsedSubtitles = normalizeAndDedupeSubtitles(parsedSubtitles);
+            console.log(`[translate-video] Rescue done. Total: ${parsedSubtitles.length} (was ${translatedCount})`);
+          } catch (rescueErr) {
+            console.warn("[translate-video] Rescue failed:", rescueErr);
+          }
+        }
+      }
 
       // === AUTO PHASE 2: Render video with subtitles ===
       const generatedSrt = generateSRTContent(parsedSubtitles);
