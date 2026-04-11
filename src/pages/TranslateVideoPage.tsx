@@ -1844,7 +1844,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           // Source Rect (Object-Cover behavior + Copyright Bypass Zoom)
           // Aggressive bottom crop to remove original subtitles (like "I don't drink" at bottom)
           // while keeping full faces visible (faces are typically in upper portion of frame)
-          const ZOOM_FACTOR = 1.5; // Moderate zoom, slight crop top and bottom
+          const ZOOM_FACTOR = 1.7; // Moderate zoom, slight crop top and bottom
           const FACE_CROP_DOWN_BIAS = 0.0; // Keep top-aligned to preserve faces, crop from bottom
 
           let sx = 0,
