@@ -381,6 +381,25 @@ const POSTER_CROP_TOP = 0;
 const POSTER_CROP_BOTTOM = 0.15;
 const POSTER_BRIGHTNESS_MIN = 0.14;
 
+async function waitForDecodedVideoFrame(vid: HTMLVideoElement, timeoutMs = 2500) {
+  if ("requestVideoFrameCallback" in vid) {
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        resolve();
+      };
+      const timeoutId = window.setTimeout(finish, timeoutMs);
+      (vid as any).requestVideoFrameCallback(() => finish());
+    });
+    return;
+  }
+
+  await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+}
+
 function buildExactTextBatchPrompt(
   textBatch: { start: number; end: number; text: string }[],
   targetLang: string,
@@ -486,6 +505,7 @@ export default function App() {
     thumbnailUrl: string;
   } | null>(null);
   const [isGeneratingMarketing, setIsGeneratingMarketing] = useState(false);
+  const [marketingError, setMarketingError] = useState("");
 
   // Load credit rate from tool_settings
   useEffect(() => {
@@ -542,6 +562,7 @@ export default function App() {
     }
     if (step !== "result") {
       autoMarketingTriggered.current = false;
+      setMarketingError("");
     }
   }, [step, marketingContent, isGeneratingMarketing]);
 
@@ -663,17 +684,9 @@ export default function App() {
 
   const generateMarketingContent = async () => {
     if (!srtText) return;
+    setMarketingError("");
     setIsGeneratingMarketing(true);
     try {
-      // === CREDIT DEDUCTION: 4CR per poster generation (skip for Own API) ===
-      if (apiMode !== "own") {
-        const posterResult = await deductCredits("video-transform", false, 4);
-        if (!posterResult.success) {
-          setIsGeneratingMarketing(false);
-          return;
-        }
-      }
-
       let title = "";
       let description = "";
 
@@ -748,8 +761,7 @@ export default function App() {
       await new Promise<void>((resolve) => {
         const onSeeked = () => {
           video.removeEventListener("seeked", onSeeked);
-          // Small delay to ensure frame buffer is updated after seek
-          setTimeout(resolve, 200);
+          void waitForDecodedVideoFrame(video).finally(resolve);
         };
         video.addEventListener("seeked", onSeeked);
         video.onerror = () => resolve();
@@ -804,25 +816,6 @@ export default function App() {
         return totalLuma / ((data.length / 4) * 255);
       };
 
-      const waitForDecodedFrame = async (vid: HTMLVideoElement, timeoutMs = 2500) => {
-        if ("requestVideoFrameCallback" in vid) {
-          await new Promise<void>((resolve) => {
-            let settled = false;
-            const finish = () => {
-              if (settled) return;
-              settled = true;
-              clearTimeout(timeoutId);
-              resolve();
-            };
-            const timeoutId = window.setTimeout(finish, timeoutMs);
-            (vid as any).requestVideoFrameCallback(() => finish());
-          });
-          return;
-        }
-
-        await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-      };
-
       const sourceCanvas = document.createElement("canvas");
       sourceCanvas.width = canvasW;
       sourceCanvas.height = canvasH;
@@ -853,14 +846,14 @@ export default function App() {
               video.addEventListener(
                 "seeked",
                 () => {
-                  void waitForDecodedFrame(video).finally(finish);
+                  void waitForDecodedVideoFrame(video).finally(finish);
                 },
                 { once: true },
               );
               video.currentTime = targetTime;
             });
           } else {
-            await waitForDecodedFrame(video);
+            await waitForDecodedVideoFrame(video);
           }
 
           const canvas = document.createElement("canvas");
@@ -921,6 +914,10 @@ export default function App() {
           }),
         )
       ).filter((img): img is HTMLImageElement => Boolean(img));
+
+      if (loadedImages.length === 0) {
+        throw new Error("Poster frames could not be extracted.");
+      }
 
       if (loadedImages[0]) {
         ctx.drawImage(loadedImages[0], 0, 0, canvas.width, canvas.height);
@@ -1145,7 +1142,22 @@ export default function App() {
       const hookFontSize = movieTitle ? Math.floor(canvas.height * 0.045) : Math.floor(canvas.height * 0.1);
       drawWrappedText(title, hookFontSize, canvas.height * 0.96, false, "900");
 
+      const finalPosterBrightness = getCanvasBrightness(canvas);
+      if (finalPosterBrightness < 0.08) {
+        throw new Error("Poster output is too dark.");
+      }
+
       const thumbnailUrl = canvas.toDataURL("image/png");
+
+      // Deduct poster credits only after a valid poster has been produced
+      if (apiMode !== "own") {
+        const posterResult = await deductCredits("video-transform", false, 4);
+        if (!posterResult.success) {
+          setMarketingError(String(posterResult.error || "Poster credits could not be processed."));
+          return;
+        }
+      }
+
       setMarketingContent({ title, description, thumbnailUrl });
 
       // Auto-download the thumbnail
@@ -1159,6 +1171,7 @@ export default function App() {
       }, 100);
     } catch (error) {
       console.error("Error generating marketing content:", error);
+      setMarketingError(error instanceof Error ? error.message : "Poster generation failed.");
     } finally {
       setIsGeneratingMarketing(false);
     }
@@ -1244,6 +1257,8 @@ export default function App() {
 
         setVideoFile(file);
         setVideoUrl(URL.createObjectURL(file));
+        setMarketingContent(null);
+        setMarketingError("");
         setStep("configure");
       })();
     }
@@ -1424,12 +1439,14 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           try {
             let text = "[]";
 
-            const runAuthoritativeTextBatchTranslation = async () => {
+            const runAuthoritativeTextBatchTranslation = async (
+              batch: { start: number; end: number; text: string }[] = authoritativeTextBatch,
+            ) => {
               if (apiMode === "own" && ownApiKey.trim()) {
                 const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
                 const ownResult = await ai.models.generateContent({
                   model: "gemini-2.5-flash",
-                  contents: buildExactTextBatchPrompt(authoritativeTextBatch, targetLang),
+                  contents: buildExactTextBatchPrompt(batch, targetLang),
                   config: {
                     temperature: 0.05,
                     maxOutputTokens: 8192,
@@ -1441,7 +1458,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
 
               const { data, error } = await supabase.functions.invoke("video-transform-translate", {
                 body: {
-                  textBatch: authoritativeTextBatch,
+                  textBatch: batch,
                   targetLang,
                 },
               });
@@ -1453,6 +1470,15 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
               text = await runAuthoritativeTextBatchTranslation();
               if (parseJsonArrayResponse(text).length !== authoritativeTextBatch.length) {
                 text = await runAuthoritativeTextBatchTranslation();
+              }
+              if (parseJsonArrayResponse(text).length !== authoritativeTextBatch.length) {
+                const strictLines: any[] = [];
+                for (const item of authoritativeTextBatch) {
+                  const singleText = await runAuthoritativeTextBatchTranslation([item]);
+                  const singleParsed = parseJsonArrayResponse(singleText);
+                  if (singleParsed[0]) strictLines.push(singleParsed[0]);
+                }
+                text = JSON.stringify(strictLines);
               }
             } else if (apiMode === "own" && ownApiKey.trim()) {
               // === OWN API MODE: Direct client-side Gemini call ===
@@ -3488,6 +3514,8 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                         setVideoFile(null);
                         setVideoUrl(null);
                         setFinalVideoUrl(null);
+                        setMarketingContent(null);
+                        setMarketingError("");
                         setProcessingProgress(0);
                       }}
                       className="flex-1 sm:flex-none px-5 py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl font-medium flex items-center justify-center gap-2 transition-colors"
@@ -3532,7 +3560,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                     {/* Auto-generating... no manual button needed */}
                   </div>
 
-                  {!marketingContent && !isGeneratingMarketing && (
+                  {!marketingContent && !isGeneratingMarketing && !marketingError && (
                     <div className="bg-zinc-800/30 border border-zinc-800 rounded-3xl p-8 text-center">
                       <Loader2 size={32} className="animate-spin text-indigo-500 mx-auto mb-3" />
                       <p className="text-zinc-400 font-medium">Auto-generating marketing kit...</p>
@@ -3545,6 +3573,12 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                       <p className="text-zinc-400 font-medium">
                         Creating your viral title, description, and premium thumbnail...
                       </p>
+                    </div>
+                  )}
+
+                  {!marketingContent && !isGeneratingMarketing && marketingError && (
+                    <div className="bg-red-500/10 border border-red-500/30 rounded-3xl p-8 text-center">
+                      <p className="text-red-300 font-medium">{marketingError}</p>
                     </div>
                   )}
 
