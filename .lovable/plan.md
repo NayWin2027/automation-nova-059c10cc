@@ -1,47 +1,38 @@
 
 
-## Current Status & Answers
+## Plan: Login Page မှာ Premium Plan Order Button + Dialog ထည့်ခြင်း
 
-**ပြည့်စုံပြီလား?** — အခြေခံ structure ရှိပြီးသားပါ။ သို့သော် critical bug 2 ခု ရှိနေပါသေးတယ်:
+### Surgical Edit — UserLoginPage.tsx only
 
-### Critical Bug #1: Order Form Submit မရ
-Edge function (`process-order`) ရဲ့ line 38-70 မှာ **admin auth check ကို အရင်စစ်ပြီးမှ** action switch case ကို ရောက်တာ။ ဒါကြောင့် regular user (non-admin) တွေ order form submit လုပ်ရင် **403 Unauthorized** error ပြန်ရမယ်။ `submit_order` နဲ့ `submit_order_public` actions တွေက admin မဟုတ်တဲ့ users အတွက် ဖြစ်ပေမဲ့ admin gate ကို ဖြတ်လို့ မရဘူး။
+**ဘာလုပ်မလဲ:**
+Login card ရဲ့ info text section (line 218-244) အောက်မှာ "Premium Plan ဝယ်ရန်" neon-glow button တစ်ခု ထည့်မယ်။ နှိပ်လိုက်ရင် OrderFormPage content ကို Dialog/Modal အနေနဲ့ ပြမယ်။ Navigate မလုပ်ဘူး — login page ပေါ်မှာပဲ overlay dialog ကျလာမယ်။
 
-**Fix**: Edge function ရဲ့ auth flow ကို restructure လုပ်ရမယ် — `submit_order`/`submit_order_public` actions ကို admin check မလုပ်ခင် ခွဲထုတ်ရမယ်။
+### UI Design
+- **Button**: gradient border + neon pulse animation, `ShoppingCart` icon, "Premium Plan ဝယ်ရန်" text
+- Neon glow effect: `animate-pulse` shadow with violet/cyan neon colors
+- **Dialog**: Full-screen overlay modal with premium glass background, OrderFormPage ရဲ့ form content ကို embed လုပ်မယ်
+- Close button ပါမယ်
 
-### Critical Bug #2: Slip Upload Permission
-`payment-slips` storage bucket မှာ RLS policies မရှိသေးလို့ non-admin users က slip image upload လုပ်လို့ မရဘူး။
+### Technical approach
+1. **UserLoginPage.tsx** မှာ surgical edit only:
+   - `useState` for `showOrderDialog` ထည့်
+   - Line 244 (info text div closing) နောက်မှာ neon button ထည့်
+   - Dialog modal component inline ထည့် (OrderFormPage ရဲ့ form logic ကို import မလုပ်ဘဲ `/order` page ကို iframe or navigate approach သုံးမယ်... 
+   
+   **Better approach**: Button click → `navigate("/order")` ကို သုံးမယ်ဆိုရင် simple ဖြစ်ပေမဲ့ user က "ကလစ်နှိပ်လိုက်မှ form ကျလာတာ" လိုချင်တာ → Dialog approach သုံးမယ်
+   
+   - OrderFormPage ကို lazy import လုပ်ပြီး Dialog ထဲမှာ render လုပ်မယ်
+   - OrderFormPage ကို `embedded` prop ထည့်ပြီး back button / navigation ကို hide လုပ်မယ်
 
-**Fix**: Storage bucket အတွက် upload policy ထည့်ရမယ်။
-
-### Email Domain
-Email domain setup က **Lovable Cloud မှာ free** ပါ။ ပိုက်ဆံ ပေးစရာမလိုပါ။
-
-### Feature Request: nw/kys Summary Totals
-Admin Orders tab မှာ orders list အပေါ်မှာ summary cards ထည့်မယ်:
-- **nw orders**: KPay/Wave total count + total approved credits
-- **kys orders**: Thai Bank total count + total approved credits
-
-## Plan
-
-### Step 1: Fix edge function auth flow
-`process-order/index.ts` ရဲ့ auth logic ကို restructure:
-- Request body ကို parse ပြီး action ကို အရင်ယူ
-- `submit_order_public` → auth check လုံးဝ မလို (anon user)
-- `submit_order` → authenticated user check only (admin မဟုတ်လည်းရ)
-- Other actions (`get_orders`, `approve_order`, `reject_order`, `get_slip_url`) → admin check required
-
-### Step 2: Add storage policy for payment-slips
-Migration: `payment-slips` bucket အတွက် RLS policy ထည့် — anyone can upload, only admins can read/delete.
-
-### Step 3: Add nw/kys summary cards to AdminOrdersTab
-`AdminOrdersTab.tsx` ရဲ့ orders list အပေါ်မှာ:
-- nw prefix orders count + total approved credits
-- kys prefix orders count + total approved credits  
-- Filter by nw/kys ကိုလည်း click ရတဲ့ cards
+2. **OrderFormPage.tsx** မှာ minor surgical edit:
+   - `embedded?: boolean` prop ထည့်
+   - `embedded` ဖြစ်ရင် back button နဲ့ outer wrapper ကို hide လုပ်မယ်
 
 ### Files to edit (surgical only)
-1. `supabase/functions/process-order/index.ts` — auth flow restructure
-2. `supabase/migrations/` — storage policy for payment-slips
-3. `src/components/admin/AdminOrdersTab.tsx` — summary cards UI
+1. `src/pages/UserLoginPage.tsx` — neon button + dialog modal ထည့်
+2. `src/pages/OrderFormPage.tsx` — `embedded` prop support ထည့် (back button hide)
+
+### Security
+- Order form ရဲ့ submit logic က process-order edge function ကိုပဲ သုံးမယ် (existing security intact)
+- Dialog ထဲမှာ form data leak မဖြစ်အောင် cleanup on close
 
