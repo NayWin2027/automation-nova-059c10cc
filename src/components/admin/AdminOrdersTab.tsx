@@ -162,6 +162,7 @@ const AdminOrdersTab: React.FC = () => {
       if (error) throw error;
       toast({ title: "❌ Rejected", description: `Order ${order.order_number} rejected` });
       fetchOrders();
+      fetchSummary();
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     }
