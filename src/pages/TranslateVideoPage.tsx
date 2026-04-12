@@ -865,7 +865,7 @@ export default function App() {
                   // 65% keeps faces fully visible while cropping out subtitle area at bottom.
                   const vW2 = tempVideo.videoWidth || 1280;
                   const vH2 = tempVideo.videoHeight || 720;
-                  const subAvoidanceHeight = vH2 * 0.90;
+                  const subAvoidanceHeight = vH2 * 0.9;
                   const srcRatio2 = vW2 / subAvoidanceHeight;
                   const destRatio2 = canvasW / canvasH;
                   let sW2 = vW2,
@@ -956,14 +956,16 @@ export default function App() {
       // Helper function for perfectly blended cinematic faces without ghosting
       const drawCinematicFace = (img, scaleMultiplier, alignX, alignY, maskConfig) => {
         const isPortrait = canvas.height > canvas.width;
-        const baseScale = isPortrait ? 1.4 : 1.1;
+        // ── FIX: Larger base scale so faces fill the frame fully ──
+        const baseScale = isPortrait ? 1.7 : 1.4;
         const scale = baseScale * scaleMultiplier;
 
         const imgW = canvas.width * scale;
         const imgH = (imgW * img.height) / img.width;
 
+        // ── FIX: anchor top of image higher so faces (upper portion) are always visible ──
         const dx = (canvas.width - imgW) / 2 + canvas.width * alignX;
-        const dy = (canvas.height - imgH) / 2 + canvas.height * alignY;
+        const dy = canvas.height * 0.02 + canvas.height * alignY; // top-anchored, not center
 
         const tempCanvas = document.createElement("canvas");
         tempCanvas.width = canvas.width;
@@ -974,22 +976,21 @@ export default function App() {
           tCtx.drawImage(img, dx, dy, imgW, imgH);
           tCtx.globalCompositeOperation = "destination-in";
 
-          // Radial Mask for seamless organic blending
           const cx = maskConfig.centerX !== undefined ? canvas.width * maskConfig.centerX : canvas.width / 2;
           const cy = maskConfig.centerY !== undefined ? canvas.height * maskConfig.centerY : canvas.height / 2;
           const innerR = maskConfig.innerR !== undefined ? canvas.width * maskConfig.innerR : 0;
-          const outerR = maskConfig.outerR !== undefined ? canvas.width * maskConfig.outerR : canvas.width * 0.8;
+          // ── FIX: outerR larger so faces not clipped by mask ──
+          const outerR = maskConfig.outerR !== undefined ? canvas.width * maskConfig.outerR : canvas.width;
 
           const mask = tCtx.createRadialGradient(cx, cy, innerR, cx, cy, outerR);
           mask.addColorStop(0, "rgba(0,0,0,1)");
-          mask.addColorStop(0.5, "rgba(0,0,0,0.85)");
-          mask.addColorStop(0.8, "rgba(0,0,0,0.2)");
+          mask.addColorStop(0.65, "rgba(0,0,0,0.95)");
+          mask.addColorStop(0.85, "rgba(0,0,0,0.4)");
           mask.addColorStop(1, "rgba(0,0,0,0)");
 
           tCtx.fillStyle = mask;
           tCtx.fillRect(0, 0, canvas.width, canvas.height);
 
-          // Cut specific edges smoothly behind other elements
           if (maskConfig.bottomCut) {
             tCtx.globalCompositeOperation = "destination-in";
             const bMask = tCtx.createLinearGradient(
@@ -1041,26 +1042,52 @@ export default function App() {
       if (styleIndex === 0) {
         const supportingCast = styleImages.slice(1, 4);
         if (isPortrait) {
+          // Supporting cast — top area, faces fully visible
           supportingCast.forEach((img, i) => {
-            const xOffsets = [0, -0.22, 0.22];
-            const yOffsets = [-0.22, -0.18, -0.18];
-            drawCinematicFace(img, 1.1, xOffsets[i] || 0, yOffsets[i] || -0.2, {
+            const xOffsets = [0, -0.25, 0.25];
+            const yOffsets = [-0.28, -0.24, -0.24];
+            drawCinematicFace(img, 0.9, xOffsets[i] || 0, yOffsets[i] || -0.25, {
               centerX: 0.5 + (xOffsets[i] || 0),
-              centerY: 0.3,
-              innerR: 0.2,
-              outerR: 0.75,
-              bottomCut: { y1: 0.4, y2: 0.6 },
+              centerY: 0.22,
+              innerR: 0.18,
+              outerR: 0.65,
+              bottomCut: { y1: 0.38, y2: 0.52 },
             });
           });
         } else {
-          if (supportingCast[0]) drawCinematicFace(supportingCast[0], 1.0, -0.28, 0, { centerX: 0.22, centerY: 0.5, innerR: 0.18, outerR: 0.6 });
-          if (supportingCast[1]) drawCinematicFace(supportingCast[1], 1.0, 0.28, 0, { centerX: 0.78, centerY: 0.5, innerR: 0.18, outerR: 0.6 });
+          if (supportingCast[0])
+            drawCinematicFace(supportingCast[0], 1.0, -0.28, 0, {
+              centerX: 0.22,
+              centerY: 0.5,
+              innerR: 0.18,
+              outerR: 0.65,
+            });
+          if (supportingCast[1])
+            drawCinematicFace(supportingCast[1], 1.0, 0.28, 0, {
+              centerX: 0.78,
+              centerY: 0.5,
+              innerR: 0.18,
+              outerR: 0.65,
+            });
         }
+        // Hero — large, bottom half, face clearly visible
         if (styleImages[0]) {
           if (isPortrait) {
-            drawCinematicFace(styleImages[0], 1.4, 0, 0.15, { centerX: 0.5, centerY: 0.55, innerR: 0.25, outerR: 0.9, topCut: { y1: 0.15, y2: 0.35 } });
+            drawCinematicFace(styleImages[0], 1.2, 0, 0.1, {
+              centerX: 0.5,
+              centerY: 0.6,
+              innerR: 0.28,
+              outerR: 1.05,
+              topCut: { y1: 0.22, y2: 0.38 },
+            });
           } else {
-            drawCinematicFace(styleImages[0], 1.2, 0, 0.08, { centerX: 0.5, centerY: 0.55, innerR: 0.22, outerR: 0.9, topCut: { y1: 0.08, y2: 0.28 } });
+            drawCinematicFace(styleImages[0], 1.1, 0, 0.05, {
+              centerX: 0.5,
+              centerY: 0.55,
+              innerR: 0.25,
+              outerR: 0.98,
+              topCut: { y1: 0.08, y2: 0.28 },
+            });
           }
         }
       }
@@ -1068,22 +1095,31 @@ export default function App() {
       // === STYLE 1: Side-by-Side Dual Hero ===
       else if (styleIndex === 1) {
         if (styleImages[0]) {
-          drawCinematicFace(styleImages[0], isPortrait ? 1.3 : 1.1, -0.18, isPortrait ? 0.05 : 0, {
-            centerX: 0.32, centerY: 0.5, innerR: 0.22, outerR: 0.8,
+          drawCinematicFace(styleImages[0], isPortrait ? 1.15 : 1.0, -0.18, isPortrait ? 0.0 : 0, {
+            centerX: 0.3,
+            centerY: 0.45,
+            innerR: 0.22,
+            outerR: 0.9,
           });
         }
         if (styleImages[1]) {
-          drawCinematicFace(styleImages[1], isPortrait ? 1.3 : 1.1, 0.18, isPortrait ? 0.05 : 0, {
-            centerX: 0.68, centerY: 0.5, innerR: 0.22, outerR: 0.8,
+          drawCinematicFace(styleImages[1], isPortrait ? 1.15 : 1.0, 0.18, isPortrait ? 0.0 : 0, {
+            centerX: 0.7,
+            centerY: 0.45,
+            innerR: 0.22,
+            outerR: 0.9,
           });
         }
-        // Small supporting faces at top
+        // Small supporting faces — top strip, faces visible
         const extras = styleImages.slice(2, 4);
         extras.forEach((img, i) => {
-          const xOff = i === 0 ? -0.25 : 0.25;
-          drawCinematicFace(img, 0.8, xOff, isPortrait ? -0.3 : -0.25, {
-            centerX: 0.5 + xOff, centerY: 0.2, innerR: 0.12, outerR: 0.5,
-            bottomCut: { y1: 0.35, y2: 0.5 },
+          const xOff = i === 0 ? -0.28 : 0.28;
+          drawCinematicFace(img, 0.75, xOff, isPortrait ? -0.32 : -0.28, {
+            centerX: 0.5 + xOff,
+            centerY: 0.18,
+            innerR: 0.12,
+            outerR: 0.55,
+            bottomCut: { y1: 0.32, y2: 0.45 },
           });
         });
       }
@@ -1091,23 +1127,28 @@ export default function App() {
       // === STYLE 2: Full-Frame Cinematic Single Hero + Collage Strip ===
       else {
         if (styleImages[0]) {
-          drawCinematicFace(styleImages[0], isPortrait ? 1.5 : 1.3, 0, 0, {
-            centerX: 0.5, centerY: 0.45, innerR: 0.3, outerR: 0.95,
+          drawCinematicFace(styleImages[0], isPortrait ? 1.35 : 1.2, 0, 0, {
+            centerX: 0.5,
+            centerY: 0.42,
+            innerR: 0.3,
+            outerR: 1.1,
           });
         }
-        // Small character strip at the very top
+        // Character strip at top — faces fully visible
         const stripChars = styleImages.slice(1, 5);
         if (stripChars.length > 0) {
-          const stripH = canvas.height * 0.18;
+          const stripH = canvas.height * 0.22;
           const stripW = canvas.width / stripChars.length;
-          ctx.globalAlpha = 0.6;
           stripChars.forEach((img, i) => {
             const sx = i * stripW;
-            ctx.drawImage(img, sx, 0, stripW, stripH);
+            // Draw top portion of each image (where faces are)
+            const srcH = img.height * 0.55; // top 55% = face area
+            ctx.globalAlpha = 0.75;
+            ctx.drawImage(img, 0, 0, img.width, srcH, sx, 0, stripW, stripH);
           });
           ctx.globalAlpha = 1.0;
           // Fade strip into main image
-          const stripFade = ctx.createLinearGradient(0, stripH * 0.5, 0, stripH * 1.2);
+          const stripFade = ctx.createLinearGradient(0, stripH * 0.55, 0, stripH * 1.2);
           stripFade.addColorStop(0, "rgba(5,8,20,0)");
           stripFade.addColorStop(1, "rgba(5,8,20,1)");
           ctx.fillStyle = stripFade;
