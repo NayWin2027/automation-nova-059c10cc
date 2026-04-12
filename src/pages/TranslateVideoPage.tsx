@@ -381,6 +381,7 @@ function generateSRTContent(subs: { start: number; end: number; text: string }[]
 }
 
 export default function App() {
+  const navigate = useNavigate();
   const { isAllowed, isLoading: authLoading } = useAuthGuard("video-transform");
   const { appApiAllowed, ownApiAllowed, defaultApiMode, isLoading: accessLoading } = useApiAccess();
   const { deductCredits } = useCreditDeduction();
