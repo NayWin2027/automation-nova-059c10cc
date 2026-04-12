@@ -183,6 +183,8 @@ export type Database = {
           admin_notes: string | null
           approved_at: string | null
           approved_by: string | null
+          contact_method: string | null
+          contact_value: string | null
           created_at: string
           id: string
           order_number: string
@@ -202,6 +204,8 @@ export type Database = {
           admin_notes?: string | null
           approved_at?: string | null
           approved_by?: string | null
+          contact_method?: string | null
+          contact_value?: string | null
           created_at?: string
           id?: string
           order_number: string
@@ -221,6 +225,8 @@ export type Database = {
           admin_notes?: string | null
           approved_at?: string | null
           approved_by?: string | null
+          contact_method?: string | null
+          contact_value?: string | null
           created_at?: string
           id?: string
           order_number?: string

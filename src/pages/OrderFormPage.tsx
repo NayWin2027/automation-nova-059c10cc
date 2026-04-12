@@ -7,7 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, FileCheck, ArrowLeft, ShieldCheck, Sparkles } from "lucide-react";
+import { Upload, FileCheck, ArrowLeft, ShieldCheck, Sparkles, Phone, Send, MessageCircle, Mail } from "lucide-react";
+import { AppLogo } from "@/components/AppLogo";
 
 interface OrderFormPageProps {
   embedded?: boolean;
@@ -26,6 +27,8 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
     paymentMethod: "" as "kpay" | "wave" | "thai_bank" | "",
     paymentRef: "",
     referrerDisplayId: "",
+    contactMethod: "" as "email" | "messenger" | "viber" | "telegram" | "",
+    contactValue: "",
   });
   const [slipFile, setSlipFile] = useState<File | null>(null);
   const [slipPreview, setSlipPreview] = useState<string | null>(null);
@@ -55,10 +58,13 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
   };
 
   const handleSubmit = async () => {
-    if (!formData.orderType || !formData.paymentMethod || !formData.paymentRef.trim() || !slipFile) {
-      toast({ title: "လိုအပ်ချက်မပြည့်စုံပါ", description: "Order type, payment method, transaction number, payment slip အားလုံး ဖြည့်ပေးပါ", variant: "destructive" });
+    if (!formData.orderType || !formData.paymentMethod || !formData.paymentRef.trim() || !slipFile || !formData.contactMethod || !formData.contactValue.trim()) {
+      toast({ title: "လိုအပ်ချက်မပြည့်စုံပါ", description: "Order type, payment method, transaction number, contact info, payment slip အားလုံး ဖြည့်ပေးပါ", variant: "destructive" });
       return;
     }
+
+    // Sanitize contact value
+    const sanitizedContact = formData.contactValue.trim().substring(0, 200).replace(/[<>]/g, '');
 
     if ((formData.orderType === "topup" || formData.orderType === "renew") && !currentUser) {
       toast({ title: "Login လိုအပ်ပါသည်", description: "Top-up/Renew အတွက် login ဝင်ပေးပါ", variant: "destructive" });
@@ -96,8 +102,10 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
           payment_method: formData.paymentMethod,
           user_email: currentUser?.email || "public_order",
           slip_image_path: slipImagePath,
-          payment_ref: formData.paymentRef.trim(),
-          referrer_display_id: formData.referrerDisplayId || null,
+          payment_ref: formData.paymentRef.trim().substring(0, 100),
+          referrer_display_id: formData.referrerDisplayId ? formData.referrerDisplayId.trim().substring(0, 50) : null,
+          contact_method: formData.contactMethod,
+          contact_value: sanitizedContact,
         }
       });
 
@@ -158,15 +166,18 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
           <CardDescription className="text-xs">
             Plan ဝယ်ယူခြင်း / Credit ဖြည့်သွင်းခြင်း / သက်တမ်းတိုးခြင်း
           </CardDescription>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate("/plans")}
-            className="mt-2 mx-auto border-violet-500/50 text-violet-400 hover:bg-violet-500/10 hover:text-violet-300 transition-all duration-300 shadow-[0_0_12px_rgba(139,92,246,0.3)] hover:shadow-[0_0_20px_rgba(139,92,246,0.5)]"
-          >
-            <Sparkles className="w-3.5 h-3.5 mr-1.5" />
-            Plan အသေးစိပ်
-          </Button>
+          <div className="flex items-center justify-center gap-2 mt-2">
+            <AppLogo size={28} />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate("/plans")}
+              className="border-violet-500/50 text-violet-400 hover:bg-violet-500/10 hover:text-violet-300 transition-all duration-300 shadow-[0_0_12px_rgba(139,92,246,0.3)] hover:shadow-[0_0_20px_rgba(139,92,246,0.5)]"
+            >
+              <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+              Plan အသေးစိပ်
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
@@ -224,6 +235,46 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
           </div>
 
           <div className="space-y-1.5">
+            <Label className="text-xs font-medium">ဆက်သွယ်ရန် နည်းလမ်း (Contact Method) *</Label>
+            <Select
+              value={formData.contactMethod}
+              onValueChange={(v) => setFormData(prev => ({ ...prev, contactMethod: v as any, contactValue: "" }))}
+            >
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue placeholder="ဆက်သွယ်ရန် နည်းလမ်းရွေးပါ" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="email"><Mail className="w-3.5 h-3.5 inline mr-1.5" />Email Address</SelectItem>
+                <SelectItem value="messenger"><MessageCircle className="w-3.5 h-3.5 inline mr-1.5" />Messenger Link</SelectItem>
+                <SelectItem value="viber"><Phone className="w-3.5 h-3.5 inline mr-1.5" />Viber No</SelectItem>
+                <SelectItem value="telegram"><Send className="w-3.5 h-3.5 inline mr-1.5" />Telegram</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {formData.contactMethod && (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">
+                {formData.contactMethod === "email" ? "Email Address *" :
+                 formData.contactMethod === "messenger" ? "Messenger Link / Username *" :
+                 formData.contactMethod === "viber" ? "Viber Phone Number *" :
+                 "Telegram Username / Phone *"}
+              </Label>
+              <Input
+                value={formData.contactValue}
+                onChange={(e) => setFormData(prev => ({ ...prev, contactValue: e.target.value.substring(0, 200) }))}
+                placeholder={
+                  formData.contactMethod === "email" ? "example@gmail.com" :
+                  formData.contactMethod === "messenger" ? "https://m.me/username" :
+                  formData.contactMethod === "viber" ? "09xxxxxxxxx" :
+                  "@username"
+                }
+                className="h-9 text-sm"
+                maxLength={200}
+              />
+            </div>
+          )}
+          <div className="space-y-1.5">
             <Label className="text-xs font-medium">Payment Slip (ငွေလွှဲ slip ပုံ) *</Label>
             <div className="border border-dashed border-primary/30 rounded-lg p-4 text-center">
               {slipPreview ? (
@@ -255,7 +306,7 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
 
           <Button
             onClick={handleSubmit}
-            disabled={loading || !formData.orderType || !formData.paymentMethod || !formData.paymentRef.trim() || !slipFile}
+            disabled={loading || !formData.orderType || !formData.paymentMethod || !formData.paymentRef.trim() || !slipFile || !formData.contactMethod || !formData.contactValue.trim()}
             className="w-full h-10"
           >
             {loading ? "တင်နေသည်..." : "Order တင်မယ်"}
