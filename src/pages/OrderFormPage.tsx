@@ -35,7 +35,9 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
 
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (session?.user) {
         setCurrentUser({ id: session.user.id, email: session.user.email || "" });
       }
@@ -58,13 +60,24 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
   };
 
   const handleSubmit = async () => {
-    if (!formData.orderType || !formData.paymentMethod || !formData.paymentRef.trim() || !slipFile || !formData.contactMethod || !formData.contactValue.trim()) {
-      toast({ title: "လိုအပ်ချက်မပြည့်စုံပါ", description: "Order type, payment method, transaction number, contact info, payment slip အားလုံး ဖြည့်ပေးပါ", variant: "destructive" });
+    if (
+      !formData.orderType ||
+      !formData.paymentMethod ||
+      !formData.paymentRef.trim() ||
+      !slipFile ||
+      !formData.contactMethod ||
+      !formData.contactValue.trim()
+    ) {
+      toast({
+        title: "လိုအပ်ချက်မပြည့်စုံပါ",
+        description: "Order type, payment method, transaction number, contact info, payment slip အားလုံး ဖြည့်ပေးပါ",
+        variant: "destructive",
+      });
       return;
     }
 
     // Sanitize contact value
-    const sanitizedContact = formData.contactValue.trim().substring(0, 200).replace(/[<>]/g, '');
+    const sanitizedContact = formData.contactValue.trim().substring(0, 200).replace(/[<>]/g, "");
 
     if ((formData.orderType === "topup" || formData.orderType === "renew") && !currentUser) {
       toast({ title: "Login လိုအပ်ပါသည်", description: "Top-up/Renew အတွက် login ဝင်ပေးပါ", variant: "destructive" });
@@ -78,9 +91,7 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
       if (slipFile) {
         const ext = slipFile.name.split(".").pop();
         const fileName = `${Date.now()}_${crypto.randomUUID().substring(0, 8)}.${ext}`;
-        const { error: uploadError } = await supabase.storage
-          .from("payment-slips")
-          .upload(fileName, slipFile);
+        const { error: uploadError } = await supabase.storage.from("payment-slips").upload(fileName, slipFile);
 
         if (uploadError) {
           console.error("Slip upload error:", uploadError);
@@ -106,7 +117,7 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
           referrer_display_id: formData.referrerDisplayId ? formData.referrerDisplayId.trim().substring(0, 50) : null,
           contact_method: formData.contactMethod,
           contact_value: sanitizedContact,
-        }
+        },
       });
 
       if (error) throw error;
@@ -140,7 +151,8 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
               <p className="text-2xl font-bold text-primary tracking-wider">{orderNumber}</p>
             </div>
             <p className="text-sm text-muted-foreground">
-              Admin မှ စစ်ဆေးပြီး approved လုပ်ပေးပါမည်။<br />
+              Admin မှ စစ်ဆေးပြီး approved လုပ်ပေးပါမည်။
+              <br />
               Approved ဖြစ်ပါက အကောင့်အချက်အလက်များ ပို့ပေးပါမည်။
             </p>
             {!embedded && (
@@ -184,7 +196,7 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
             <Label className="text-xs font-medium">Order Type *</Label>
             <Select
               value={formData.orderType}
-              onValueChange={(v) => setFormData(prev => ({ ...prev, orderType: v as any }))}
+              onValueChange={(v) => setFormData((prev) => ({ ...prev, orderType: v as any }))}
             >
               <SelectTrigger className="h-9 text-sm">
                 <SelectValue placeholder="ရွေးချယ်ပါ" />
@@ -201,7 +213,7 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
             <Label className="text-xs font-medium">Payment Method *</Label>
             <Select
               value={formData.paymentMethod}
-              onValueChange={(v) => setFormData(prev => ({ ...prev, paymentMethod: v as any }))}
+              onValueChange={(v) => setFormData((prev) => ({ ...prev, paymentMethod: v as any }))}
             >
               <SelectTrigger className="h-9 text-sm">
                 <SelectValue placeholder="ရွေးချယ်ပါ" />
@@ -218,7 +230,7 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
             <Label className="text-xs font-medium">Transaction Number (ငွေလွှဲ reference no) *</Label>
             <Input
               value={formData.paymentRef}
-              onChange={(e) => setFormData(prev => ({ ...prev, paymentRef: e.target.value }))}
+              onChange={(e) => setFormData((prev) => ({ ...prev, paymentRef: e.target.value }))}
               placeholder="ဥပမာ: KP123456789"
               className="h-9 text-sm"
             />
@@ -228,7 +240,7 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
             <Label className="text-xs font-medium">Referrer ID (မရှိရင် ကျော်လိုက်ပါ)</Label>
             <Input
               value={formData.referrerDisplayId}
-              onChange={(e) => setFormData(prev => ({ ...prev, referrerDisplayId: e.target.value }))}
+              onChange={(e) => setFormData((prev) => ({ ...prev, referrerDisplayId: e.target.value }))}
               placeholder="Referrer ၏ User ID"
               className="h-9 text-sm"
             />
@@ -238,16 +250,28 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
             <Label className="text-xs font-medium">ဆက်သွယ်ရန် နည်းလမ်း (Contact Method) *</Label>
             <Select
               value={formData.contactMethod}
-              onValueChange={(v) => setFormData(prev => ({ ...prev, contactMethod: v as any, contactValue: "" }))}
+              onValueChange={(v) => setFormData((prev) => ({ ...prev, contactMethod: v as any, contactValue: "" }))}
             >
               <SelectTrigger className="h-9 text-sm">
                 <SelectValue placeholder="ဆက်သွယ်ရန် နည်းလမ်းရွေးပါ" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="email"><Mail className="w-3.5 h-3.5 inline mr-1.5" />Email Address</SelectItem>
-                <SelectItem value="messenger"><MessageCircle className="w-3.5 h-3.5 inline mr-1.5" />Messenger Link</SelectItem>
-                <SelectItem value="viber"><Phone className="w-3.5 h-3.5 inline mr-1.5" />Viber No</SelectItem>
-                <SelectItem value="telegram"><Send className="w-3.5 h-3.5 inline mr-1.5" />Telegram</SelectItem>
+                <SelectItem value="email">
+                  <Mail className="w-3.5 h-3.5 inline mr-1.5" />
+                  Email Address
+                </SelectItem>
+                <SelectItem value="messenger">
+                  <MessageCircle className="w-3.5 h-3.5 inline mr-1.5" />
+                  Messenger Link
+                </SelectItem>
+                <SelectItem value="viber">
+                  <Phone className="w-3.5 h-3.5 inline mr-1.5" />
+                  Viber No
+                </SelectItem>
+                <SelectItem value="telegram">
+                  <Send className="w-3.5 h-3.5 inline mr-1.5" />
+                  Telegram
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -255,19 +279,25 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
           {formData.contactMethod && (
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">
-                {formData.contactMethod === "email" ? "Email Address *" :
-                 formData.contactMethod === "messenger" ? "Messenger Link / Username *" :
-                 formData.contactMethod === "viber" ? "Viber Phone Number *" :
-                 "Telegram Username / Phone *"}
+                {formData.contactMethod === "email"
+                  ? "Email Address *"
+                  : formData.contactMethod === "messenger"
+                    ? "Messenger Link / Username *"
+                    : formData.contactMethod === "viber"
+                      ? "Viber Phone Number *"
+                      : "Telegram Username / Phone *"}
               </Label>
               <Input
                 value={formData.contactValue}
-                onChange={(e) => setFormData(prev => ({ ...prev, contactValue: e.target.value.substring(0, 200) }))}
+                onChange={(e) => setFormData((prev) => ({ ...prev, contactValue: e.target.value.substring(0, 200) }))}
                 placeholder={
-                  formData.contactMethod === "email" ? "example@gmail.com" :
-                  formData.contactMethod === "messenger" ? "https://m.me/username" :
-                  formData.contactMethod === "viber" ? "09xxxxxxxxx" :
-                  "@username"
+                  formData.contactMethod === "email"
+                    ? "example@gmail.com"
+                    : formData.contactMethod === "messenger"
+                      ? "https://m.me/username"
+                      : formData.contactMethod === "viber"
+                        ? "09xxxxxxxxx"
+                        : "@username"
                 }
                 className="h-9 text-sm"
                 maxLength={200}
@@ -283,7 +313,10 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => { setSlipFile(null); setSlipPreview(null); }}
+                    onClick={() => {
+                      setSlipFile(null);
+                      setSlipPreview(null);
+                    }}
                     className="text-xs text-destructive"
                   >
                     ဖျက်ပြီး အသစ်တင်မယ်
@@ -293,12 +326,7 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
                 <label className="cursor-pointer flex flex-col items-center gap-2">
                   <Upload className="w-8 h-8 text-muted-foreground" />
                   <span className="text-xs text-muted-foreground">Slip ပုံ တင်ပါ (Max 5MB)</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleSlipChange}
-                    className="hidden"
-                  />
+                  <input type="file" accept="image/*" onChange={handleSlipChange} className="hidden" />
                 </label>
               )}
             </div>
@@ -306,7 +334,15 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
 
           <Button
             onClick={handleSubmit}
-            disabled={loading || !formData.orderType || !formData.paymentMethod || !formData.paymentRef.trim() || !slipFile || !formData.contactMethod || !formData.contactValue.trim()}
+            disabled={
+              loading ||
+              !formData.orderType ||
+              !formData.paymentMethod ||
+              !formData.paymentRef.trim() ||
+              !slipFile ||
+              !formData.contactMethod ||
+              !formData.contactValue.trim()
+            }
             className="w-full h-10"
           >
             {loading ? "တင်နေသည်..." : "Order တင်မယ်"}
