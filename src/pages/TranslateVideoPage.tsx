@@ -1242,11 +1242,17 @@ export default function App() {
         );
       }
 
-      // Draw the hook (AI generated title or description)
-      const hookText = title || description;
+      // Draw the hook text (description/subtitle from AI)
+      // Show description as hook; if no description, use title as fallback
+      const hookText = description || title;
       if (hookText) {
         const hookFontSize = Math.floor(canvas.height * 0.055);
         drawWrappedText(hookText, hookFontSize, canvas.height * 0.96, false, "900");
+      }
+      // If both title and description exist and no movieTitle, show title as secondary text
+      if (!movieTitle && title && description) {
+        const subFontSize = Math.floor(canvas.height * 0.04);
+        drawWrappedText(title, subFontSize, canvas.height * 0.88, false, "700");
       }
 
       const thumbnailUrl = canvas.toDataURL("image/png");
