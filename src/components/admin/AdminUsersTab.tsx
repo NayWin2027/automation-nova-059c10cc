@@ -126,12 +126,16 @@ const AdminUsersTab: React.FC = () => {
     setLoading(true);
     // Use userId as the email (internal identifier)
     const internalEmail = `${newUser.userId}@internal.user`;
-    const { error } = await createUser(
-      internalEmail,
-      newUser.password,
-      newUser.plan,
-      newUser.credits
-    );
+    const { error } = await supabase.functions.invoke('admin-actions', {
+      body: {
+        action: 'create_user',
+        email: internalEmail,
+        password: newUser.password,
+        plan: newUser.plan,
+        credits: newUser.credits,
+        referrerId: newUser.referrerId.trim() || undefined,
+      }
+    });
 
     if (error) {
       toast({
@@ -145,7 +149,7 @@ const AdminUsersTab: React.FC = () => {
         description: `User "${newUser.userId}" has been added`
       });
       setAddUserOpen(false);
-      setNewUser({ userId: "", password: "", plan: "free", credits: 100 });
+      setNewUser({ userId: "", password: "", plan: "free", credits: 100, referrerId: "" });
       fetchProfiles();
       fetchStats();
     }
