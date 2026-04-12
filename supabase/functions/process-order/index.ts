@@ -78,6 +78,8 @@ serve(async (req) => {
           slip_image_path: slip_image_path || null,
           payment_ref: payment_ref || null,
           referrer_display_id: referrer_display_id || null,
+          contact_method,
+          contact_value: sanitizedContact,
           status: "pending"
         })
         .select()
