@@ -27,6 +27,8 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
     paymentMethod: "" as "kpay" | "wave" | "thai_bank" | "",
     paymentRef: "",
     referrerDisplayId: "",
+    contactMethod: "" as "email" | "messenger" | "viber" | "telegram" | "",
+    contactValue: "",
   });
   const [slipFile, setSlipFile] = useState<File | null>(null);
   const [slipPreview, setSlipPreview] = useState<string | null>(null);
