@@ -212,22 +212,40 @@ const AdminOrdersTab: React.FC = () => {
       {summary && (
         <div className="grid grid-cols-2 gap-3">
           <Card className="border-blue-500/20">
-            <CardContent className="py-3 px-4">
-              <p className="text-xs font-bold text-blue-400 mb-1">💳 KPay / Wave (nw)</p>
-              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <CardContent className="py-3 px-4 space-y-1.5">
+              <p className="text-xs font-bold text-blue-400">💳 KPay / Wave (nw)</p>
+              <div className="flex items-center gap-2 text-3xs text-muted-foreground flex-wrap">
                 <span>Total: <strong className="text-foreground">{summary.nw.total}</strong></span>
+                <span>Pending: <strong className="text-amber-400">{summary.nw.pending}</strong></span>
                 <span>Approved: <strong className="text-emerald-400">{summary.nw.approved}</strong></span>
-                <span>Credits: <strong className="text-primary">{summary.nw.totalCredits.toLocaleString()}</strong></span>
+              </div>
+              <div className="flex items-center gap-2 text-3xs text-muted-foreground flex-wrap">
+                <span>🆕 <strong>{summary.nw.newUser}</strong></span>
+                <span>💰 <strong>{summary.nw.topup}</strong></span>
+                <span>🔄 <strong>{summary.nw.renew}</strong></span>
+              </div>
+              <div className="flex items-center gap-2 text-3xs">
+                <span className="text-emerald-400">💎 Credits: <strong>{summary.nw.totalCredits.toLocaleString()}</strong></span>
+                <span className="text-purple-400">🎁 Bonus: <strong>{summary.nw.totalBonus.toLocaleString()}</strong></span>
               </div>
             </CardContent>
           </Card>
           <Card className="border-amber-500/20">
-            <CardContent className="py-3 px-4">
-              <p className="text-xs font-bold text-amber-400 mb-1">🏦 Thai Bank (kys)</p>
-              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <CardContent className="py-3 px-4 space-y-1.5">
+              <p className="text-xs font-bold text-amber-400">🏦 Thai Bank (kys)</p>
+              <div className="flex items-center gap-2 text-3xs text-muted-foreground flex-wrap">
                 <span>Total: <strong className="text-foreground">{summary.kys.total}</strong></span>
+                <span>Pending: <strong className="text-amber-400">{summary.kys.pending}</strong></span>
                 <span>Approved: <strong className="text-emerald-400">{summary.kys.approved}</strong></span>
-                <span>Credits: <strong className="text-primary">{summary.kys.totalCredits.toLocaleString()}</strong></span>
+              </div>
+              <div className="flex items-center gap-2 text-3xs text-muted-foreground flex-wrap">
+                <span>🆕 <strong>{summary.kys.newUser}</strong></span>
+                <span>💰 <strong>{summary.kys.topup}</strong></span>
+                <span>🔄 <strong>{summary.kys.renew}</strong></span>
+              </div>
+              <div className="flex items-center gap-2 text-3xs">
+                <span className="text-emerald-400">💎 Credits: <strong>{summary.kys.totalCredits.toLocaleString()}</strong></span>
+                <span className="text-purple-400">🎁 Bonus: <strong>{summary.kys.totalBonus.toLocaleString()}</strong></span>
               </div>
             </CardContent>
           </Card>
