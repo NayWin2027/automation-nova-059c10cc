@@ -810,7 +810,7 @@ export default function App() {
       sourceCanvas.height = canvasH;
       const sourceCtx = sourceCanvas.getContext("2d");
       if (!sourceCtx) throw new Error("Could not get canvas context");
-      // Crop bottom subtitle area: capture top 70% of video to avoid original subtitles
+      // Capture almost full frame (avoiding only bottom UI) since we extract from ad-free 1-15% segment
       const vW = video.videoWidth || 1280;
       const vH = video.videoHeight || 720;
       const subAvoidanceHeight = vH * 0.85;
@@ -859,12 +859,10 @@ export default function App() {
                 canvas.height = canvasH;
                 const ctx = canvas.getContext("2d");
                 if (ctx) {
-                  // To avoid original subtitles (usually at the bottom),
-                  // we capture only the top 65% of the video frame and scale it to cover the canvas.
-                  // 65% keeps faces fully visible while cropping out subtitle area at bottom.
+                  // Capture almost full frame since we extract from subtitle-free 1-15% segment
                   const vW2 = tempVideo.videoWidth || 1280;
                   const vH2 = tempVideo.videoHeight || 720;
-                  const subAvoidanceHeight = vH2 * 0.65;
+                  const subAvoidanceHeight = vH2 * 0.85;
                   const srcRatio2 = vW2 / subAvoidanceHeight;
                   const destRatio2 = canvasW / canvasH;
                   let sW2 = vW2,
@@ -907,9 +905,9 @@ export default function App() {
 
       const duration = video.duration || 0;
       // Spread captures across the entire video to ensure all key characters (like villains/supporting roles) are found
-      // We take many samples to ensure we find good faces
+      // Capture exclusively from the highly probable subtitle-free beginning segment (1% to 15%)
       const intervals = [];
-      for (let i = 0.2; i < 0.9; i += 0.1) {
+      for (let i = 0.01; i <= 0.16; i += 0.03) {
         intervals.push(duration * i);
       }
 
@@ -939,190 +937,137 @@ export default function App() {
 
       const validImages = loadedImages.filter((img) => img && img.width > 0);
 
-      // Hollywood Cinematic Realistic Poster Composition (Surgical Match Reference)
+      // Hollywood Cinematic Realistic Poster (Linear Cinematic Blending - True Drama Poster Style)
 
-      // 1. Deep cinematic background (NO raw image to avoid ghosting)
       ctx.fillStyle = "#050814";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      if (validImages[0]) {
-        // Atmospheric blurred background layer instead of raw copy
-        ctx.filter = "blur(30px) opacity(0.2) brightness(0.4)";
-        ctx.drawImage(validImages[0], -20, -20, canvas.width + 40, canvas.height + 40);
-        ctx.filter = "none";
-      }
-
-      // Helper function for perfectly blended cinematic faces without ghosting
-      const drawCinematicFace = (img, scaleMultiplier, alignX, alignY, maskConfig) => {
-        const isPortrait = canvas.height > canvas.width;
-        const baseScale = isPortrait ? 1.4 : 1.1;
-        const scale = baseScale * scaleMultiplier;
-
-        const imgW = canvas.width * scale;
-        const imgH = (imgW * img.height) / img.width;
-
-        const dx = (canvas.width - imgW) / 2 + canvas.width * alignX;
-        const dy = (canvas.height - imgH) / 2 + canvas.height * alignY;
-
-        const tempCanvas = document.createElement("canvas");
-        tempCanvas.width = canvas.width;
-        tempCanvas.height = canvas.height;
-        const tCtx = tempCanvas.getContext("2d");
-
-        if (tCtx) {
-          tCtx.drawImage(img, dx, dy, imgW, imgH);
-          tCtx.globalCompositeOperation = "destination-in";
-
-          // Radial Mask for seamless organic blending
-          const cx = maskConfig.centerX !== undefined ? canvas.width * maskConfig.centerX : canvas.width / 2;
-          const cy = maskConfig.centerY !== undefined ? canvas.height * maskConfig.centerY : canvas.height / 2;
-          const innerR = maskConfig.innerR !== undefined ? canvas.width * maskConfig.innerR : 0;
-          const outerR = maskConfig.outerR !== undefined ? canvas.width * maskConfig.outerR : canvas.width * 0.8;
-
-          const mask = tCtx.createRadialGradient(cx, cy, innerR, cx, cy, outerR);
-          mask.addColorStop(0, "rgba(0,0,0,1)");
-          mask.addColorStop(0.5, "rgba(0,0,0,0.85)");
-          mask.addColorStop(0.8, "rgba(0,0,0,0.2)");
-          mask.addColorStop(1, "rgba(0,0,0,0)");
-
-          tCtx.fillStyle = mask;
-          tCtx.fillRect(0, 0, canvas.width, canvas.height);
-
-          // Cut specific edges smoothly behind other elements
-          if (maskConfig.bottomCut) {
-            tCtx.globalCompositeOperation = "destination-in";
-            const bMask = tCtx.createLinearGradient(
-              0,
-              canvas.height * maskConfig.bottomCut.y1,
-              0,
-              canvas.height * maskConfig.bottomCut.y2,
-            );
-            bMask.addColorStop(0, "rgba(0,0,0,1)");
-            bMask.addColorStop(1, "rgba(0,0,0,0)");
-            tCtx.fillStyle = bMask;
-            tCtx.fillRect(0, 0, canvas.width, canvas.height);
-          }
-          if (maskConfig.topCut) {
-            tCtx.globalCompositeOperation = "destination-in";
-            const tMask = tCtx.createLinearGradient(
-              0,
-              canvas.height * maskConfig.topCut.y1,
-              0,
-              canvas.height * maskConfig.topCut.y2,
-            );
-            tMask.addColorStop(0, "rgba(0,0,0,0)");
-            tMask.addColorStop(1, "rgba(0,0,0,1)");
-            tCtx.fillStyle = tMask;
-            tCtx.fillRect(0, 0, canvas.width, canvas.height);
-          }
-
-          ctx.drawImage(tempCanvas, 0, 0);
-        }
-      };
-
       const isPortrait = canvas.height > canvas.width;
 
-      // 2. Draw Supporting Characters (Background Layer)
-      const supportingCast = validImages.slice(1, 4);
-      if (isPortrait) {
-        if (supportingCast.length === 1) {
-          drawCinematicFace(supportingCast[0], 1.2, 0, -0.25, {
-            centerX: 0.5,
-            centerY: 0.25,
-            innerR: 0.15,
-            outerR: 0.7,
-            bottomCut: { y1: 0.35, y2: 0.55 },
-          });
-        } else if (supportingCast.length >= 2) {
-          if (supportingCast.length >= 3) {
-            drawCinematicFace(supportingCast[2], 1.1, 0, -0.35, {
-              centerX: 0.5,
-              centerY: 0.15,
-              innerR: 0.1,
-              outerR: 0.6,
-              bottomCut: { y1: 0.25, y2: 0.45 },
-            });
-          }
-          drawCinematicFace(supportingCast[0], 1.15, -0.25, -0.2, {
-            centerX: 0.25,
-            centerY: 0.28,
-            innerR: 0.1,
-            outerR: 0.65,
-            bottomCut: { y1: 0.35, y2: 0.55 },
-          });
-          drawCinematicFace(supportingCast[1], 1.15, 0.25, -0.2, {
-            centerX: 0.75,
-            centerY: 0.28,
-            innerR: 0.1,
-            outerR: 0.65,
-            bottomCut: { y1: 0.35, y2: 0.55 },
-          });
-        }
-      } else {
-        if (supportingCast.length >= 1) {
-          drawCinematicFace(supportingCast[0], 1.0, -0.3, 0, { centerX: 0.2, centerY: 0.5, innerR: 0.1, outerR: 0.5 });
-        }
-        if (supportingCast.length >= 2) {
-          drawCinematicFace(supportingCast[1], 1.0, 0.3, 0, { centerX: 0.8, centerY: 0.5, innerR: 0.1, outerR: 0.5 });
-        }
-      }
+      if (validImages.length >= 1) {
+        // Since we extracted from the clean 1-15% segment, we don't need any center blurs.
+        const cleanImages = validImages;
 
-      // 3. Draw Main Character (Foreground Layer)
-      if (validImages[0]) {
-        if (isPortrait) {
-          drawCinematicFace(validImages[0], 1.45, 0, 0.18, {
-            centerX: 0.5,
-            centerY: 0.55,
-            innerR: 0.2,
-            outerR: 0.85,
-            topCut: { y1: 0.2, y2: 0.4 },
+        // Helper to draw and seamlessly fade edges of a frame (NO ORBS)
+        const drawCinematicLayer = (img, x, y, w, h, maskConfig) => {
+          const tCanvas = document.createElement("canvas");
+          tCanvas.width = canvas.width;
+          tCanvas.height = canvas.height;
+          const tCtx = tCanvas.getContext("2d");
+
+          tCtx.filter = "contrast(1.1) saturate(1.15) brightness(0.95)";
+
+          const imgRatio = img.width / img.height;
+          const targetRatio = w / h;
+          let sWidth = img.width;
+          let sHeight = img.height;
+          let sx = 0,
+            sy = 0;
+
+          if (imgRatio > targetRatio) {
+            sWidth = sHeight * targetRatio;
+            sx = (img.width - sWidth) / 2;
+          } else {
+            sHeight = sWidth / targetRatio;
+            sy = (img.height - sHeight) / 2;
+          }
+
+          tCtx.drawImage(img, sx, sy, sWidth, sHeight, x, y, w, h);
+          tCtx.filter = "none";
+
+          // Seamless edge fading via linear gradients to prevent sharp edges overlapping
+          const applyLinearMask = (gradient) => {
+            tCtx.globalCompositeOperation = "destination-in";
+            tCtx.fillStyle = gradient;
+            tCtx.fillRect(x, y, w, h);
+            tCtx.globalCompositeOperation = "source-over"; // reset
+          };
+
+          if (maskConfig.fadeBottom) {
+            const grad = tCtx.createLinearGradient(0, y + h * maskConfig.fadeBottom.start, 0, y + h);
+            grad.addColorStop(0, "rgba(0,0,0,1)");
+            grad.addColorStop(1, "rgba(0,0,0,0)");
+            applyLinearMask(grad);
+          }
+          if (maskConfig.fadeTop) {
+            const grad = tCtx.createLinearGradient(0, y, 0, y + h * maskConfig.fadeTop.end);
+            grad.addColorStop(0, "rgba(0,0,0,0)");
+            grad.addColorStop(1, "rgba(0,0,0,1)");
+            applyLinearMask(grad);
+          }
+          if (maskConfig.fadeLeft) {
+            const grad = tCtx.createLinearGradient(x, 0, x + w * maskConfig.fadeLeft.end, 0);
+            grad.addColorStop(0, "rgba(0,0,0,0)");
+            grad.addColorStop(1, "rgba(0,0,0,1)");
+            applyLinearMask(grad);
+          }
+          if (maskConfig.fadeRight) {
+            const grad = tCtx.createLinearGradient(x + w * maskConfig.fadeRight.start, 0, x + w, 0);
+            grad.addColorStop(0, "rgba(0,0,0,1)");
+            grad.addColorStop(1, "rgba(0,0,0,0)");
+            applyLinearMask(grad);
+          }
+
+          ctx.drawImage(tCanvas, 0, 0);
+        };
+
+        if (isPortrait && cleanImages.length >= 3) {
+          // Supporting Left
+          drawCinematicLayer(cleanImages[1], 0, 0, canvas.width * 0.55, canvas.height * 0.45, {
+            fadeBottom: { start: 0.5 },
+            fadeRight: { start: 0.6 },
+          });
+          // Supporting Right
+          drawCinematicLayer(cleanImages[2], canvas.width * 0.45, 0, canvas.width * 0.55, canvas.height * 0.45, {
+            fadeBottom: { start: 0.5 },
+            fadeLeft: { end: 0.4 },
+          });
+          // Main Character
+          drawCinematicLayer(cleanImages[0], 0, canvas.height * 0.2, canvas.width, canvas.height * 0.8, {
+            fadeTop: { end: 0.25 },
+            fadeBottom: { start: 0.65 },
+          });
+        } else if (!isPortrait && cleanImages.length >= 3) {
+          // Landscape
+          drawCinematicLayer(cleanImages[1], canvas.width * 0.5, 0, canvas.width * 0.5, canvas.height * 0.55, {
+            fadeBottom: { start: 0.6 },
+            fadeLeft: { end: 0.3 },
+          });
+          drawCinematicLayer(
+            cleanImages[2],
+            canvas.width * 0.5,
+            canvas.height * 0.45,
+            canvas.width * 0.5,
+            canvas.height * 0.55,
+            {
+              fadeTop: { end: 0.3 },
+              fadeLeft: { end: 0.3 },
+            },
+          );
+          drawCinematicLayer(cleanImages[0], 0, 0, canvas.width * 0.6, canvas.height, {
+            fadeRight: { start: 0.6 },
+            fadeBottom: { start: 0.7 },
           });
         } else {
-          drawCinematicFace(validImages[0], 1.25, 0, 0.1, {
-            centerX: 0.5,
-            centerY: 0.55,
-            innerR: 0.15,
-            outerR: 0.85,
-            topCut: { y1: 0.1, y2: 0.3 },
+          // Fallback Single Frame
+          drawCinematicLayer(cleanImages[0], 0, 0, canvas.width, canvas.height, {
+            fadeBottom: { start: 0.7 },
           });
         }
       }
 
-      // Apply Cinematic Color Grading (subtle for vibrant look, not washed out)
+      // Very subtle cinematic grading to merge them visually
       ctx.globalCompositeOperation = "overlay";
-      ctx.fillStyle = "rgba(0, 60, 90, 0.10)"; // Teal (lighter: 10% vs 18%)
+      ctx.fillStyle = "rgba(0, 40, 60, 0.25)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      ctx.globalCompositeOperation = "soft-light";
-      ctx.fillStyle = "rgba(255, 140, 40, 0.08)"; // Orange (lighter: 8% vs 16%)
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      // Minimal vignette for vibrant poster (lighter edges)
-      ctx.globalCompositeOperation = "source-over";
-      const vignette = ctx.createRadialGradient(
-        canvas.width / 2,
-        canvas.height / 2,
-        canvas.width * 0.45,
-        canvas.width / 2,
-        canvas.height / 2,
-        canvas.width * 0.85,
-      );
-      vignette.addColorStop(0, "rgba(0,0,0,0)");
-      vignette.addColorStop(0.75, "rgba(0,0,0,0.03)");
-      vignette.addColorStop(1, "rgba(0,0,0,0.18)");
-      ctx.fillStyle = vignette;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
       ctx.globalCompositeOperation = "source-over";
 
-      // Bottom gradient for text readability
       const grad = ctx.createLinearGradient(0, canvas.height * 0.5, 0, canvas.height);
       grad.addColorStop(0, "rgba(0,0,0,0)");
-      grad.addColorStop(0.5, "rgba(0,0,0,0.6)");
-      grad.addColorStop(1, "rgba(0,0,0,0.9)");
+      grad.addColorStop(0.5, "rgba(0,0,0,0.7)");
+      grad.addColorStop(1, "rgba(0,0,0,1)");
       ctx.fillStyle = grad;
       ctx.fillRect(0, canvas.height * 0.5, canvas.width, canvas.height * 0.5);
-
       // Helper to wrap and draw text, limiting to maxLines and returning remaining text
       const drawWrappedText = (
         text: string,
@@ -1187,50 +1132,50 @@ export default function App() {
           const lineY = startY + i * lineHeight;
 
           if (isNeon) {
-            // Title: High-end Cinematic Neon (Reference Match)
+            // High-end Glowing Neon Cinematic Title (Korean/Chinese Drama Style)
             ctx.lineJoin = "round";
             ctx.miterLimit = 2;
 
-            // Deep Outer Shadow / Glow (Purple/Pink aura)
-            ctx.shadowColor = "rgba(147, 51, 234, 0.8)";
-            ctx.shadowBlur = 35;
+            // Bright purple/magenta outer glow
+            ctx.shadowColor = "rgba(217, 70, 239, 0.9)"; // Fuchsia/Purple glow
+            ctx.shadowBlur = 25;
             ctx.shadowOffsetX = 0;
             ctx.shadowOffsetY = 0;
 
-            // Outer Neon Stroke
-            ctx.strokeStyle = "rgba(236, 72, 153, 0.9)"; // Vibrant pink
-            ctx.lineWidth = fontSize * 0.22;
+            // Thick Stroke
+            ctx.strokeStyle = "rgba(192, 38, 211, 0.95)"; // Deep magenta edge
+            ctx.lineWidth = fontSize * 0.15;
             ctx.strokeText(lines[i], x, lineY);
 
-            // Inner Dark/Contrast Stroke (makes the white core pop)
+            // Inner dark separator stroke (gives a 3D pop)
             ctx.shadowBlur = 0;
-            ctx.strokeStyle = "#1e1b4b"; // Very dark indigo
-            ctx.lineWidth = fontSize * 0.12;
+            ctx.strokeStyle = "#4c1d95"; // Deep violet
+            ctx.lineWidth = fontSize * 0.08;
             ctx.strokeText(lines[i], x, lineY);
 
-            // White fill
+            // Pure White Core
             ctx.fillStyle = "#ffffff";
             ctx.fillText(lines[i], x, lineY);
           } else {
-            // Standard cinematic hook text
-            ctx.strokeStyle = "black";
-            ctx.lineWidth = fontSize * 0.25;
+            // Cinematic hook text (Subtle gold glow)
             ctx.lineJoin = "round";
-            ctx.strokeText(lines[i], x, lineY);
 
             ctx.shadowColor = "rgba(0,0,0,0.9)";
-            ctx.shadowBlur = 30;
-            ctx.shadowOffsetX = 5;
-            ctx.shadowOffsetY = 5;
+            ctx.shadowBlur = 10;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 4;
+
+            ctx.strokeStyle = "rgba(0, 0, 0, 0.9)";
+            ctx.lineWidth = fontSize * 0.08;
+            ctx.strokeText(lines[i], x, lineY);
 
             const textGrad = ctx.createLinearGradient(0, lineY - fontSize, 0, lineY);
-            textGrad.addColorStop(0, "#fef08a");
-            textGrad.addColorStop(0.5, "#f59e0b");
-            textGrad.addColorStop(1, "#ea580c");
+            textGrad.addColorStop(0, "#fde047");
+            textGrad.addColorStop(0.5, "#eab308");
+            textGrad.addColorStop(1, "#a16207");
             ctx.fillStyle = textGrad;
             ctx.fillText(lines[i], x, lineY);
-
-            ctx.shadowBlur = 0; // Reset
+            ctx.shadowBlur = 0;
           }
         }
         return remainingText;
@@ -2032,7 +1977,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
 
           // Crop slightly from top to align hair with border, rest mostly from bottom to cut subtitles
           const maxSy = Math.max(0, video.videoHeight - sh);
-          sy = maxSy * 0.2; // Top aligned close to border (10%), with heavy cut at bottom (90%)
+          sy = maxSy * 0.15; // Top aligned close to border (15%), with heavy cut at bottom (85%)
 
           // Draw a subtle drop shadow for the foreground video
           ctx.shadowColor = "rgba(0,0,0,0.8)";
