@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
   CheckCircle, XCircle, Eye, RefreshCw, Search,
-  Clock, Copy, ImageIcon, FileText
+  Clock, Copy, ImageIcon, FileText, Mail, MessageCircle, Phone, Send
 } from "lucide-react";
 
 interface PaymentOrder {
@@ -23,6 +23,8 @@ interface PaymentOrder {
   slip_image_path: string | null;
   payment_ref: string | null;
   referrer_display_id: string | null;
+  contact_method: string | null;
+  contact_value: string | null;
   status: string;
   admin_credit_amount: number | null;
   admin_bonus_amount: number;
@@ -197,6 +199,26 @@ const AdminOrdersTab: React.FC = () => {
     }
   };
 
+  const getContactIcon = (method: string | null) => {
+    switch (method) {
+      case "email": return <Mail className="w-3 h-3 inline mr-0.5" />;
+      case "messenger": return <MessageCircle className="w-3 h-3 inline mr-0.5" />;
+      case "viber": return <Phone className="w-3 h-3 inline mr-0.5" />;
+      case "telegram": return <Send className="w-3 h-3 inline mr-0.5" />;
+      default: return null;
+    }
+  };
+
+  const getContactLabel = (method: string | null) => {
+    switch (method) {
+      case "email": return "Email";
+      case "messenger": return "Messenger";
+      case "viber": return "Viber";
+      case "telegram": return "Telegram";
+      default: return method || "";
+    }
+  };
+
   const getPaymentMethodLabel = (method: string) => {
     switch (method) {
       case "kpay": return "KPay";
@@ -305,6 +327,23 @@ const AdminOrdersTab: React.FC = () => {
                     {order.payment_ref && <span>📋 {order.payment_ref}</span>}
                     {order.referrer_display_id && <span>🔗 Ref: {order.referrer_display_id}</span>}
                   </div>
+                  {order.contact_method && order.contact_value && (
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <span className="text-cyan-400 flex items-center gap-0.5">
+                        {getContactIcon(order.contact_method)}
+                        <strong>{getContactLabel(order.contact_method)}:</strong>
+                      </span>
+                      <span className="text-foreground/80 break-all">{order.contact_value}</span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-5 w-5 shrink-0"
+                        onClick={() => copyToClipboard(order.contact_value!)}
+                      >
+                        <Copy className="w-2.5 h-2.5" />
+                      </Button>
+                    </div>
+                  )}
                   <div className="text-3xs text-muted-foreground">
                     {new Date(order.created_at).toLocaleString()}
                     {order.admin_credit_amount != null && (
@@ -373,6 +412,24 @@ const AdminOrdersTab: React.FC = () => {
                 <p className="text-xs"><strong>Payment:</strong> {getPaymentMethodLabel(selectedOrder.payment_method)}</p>
                 {selectedOrder.payment_ref && (
                   <p className="text-xs"><strong>Ref:</strong> {selectedOrder.payment_ref}</p>
+                )}
+                {selectedOrder.contact_method && selectedOrder.contact_value && (
+                  <div className="flex items-center gap-1 text-xs">
+                    <strong className="shrink-0">Contact:</strong>
+                    <span className="text-cyan-400 flex items-center gap-0.5">
+                      {getContactIcon(selectedOrder.contact_method)}
+                      {getContactLabel(selectedOrder.contact_method)}
+                    </span>
+                    <span className="break-all">{selectedOrder.contact_value}</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-5 w-5 shrink-0"
+                      onClick={() => copyToClipboard(selectedOrder.contact_value!)}
+                    >
+                      <Copy className="w-2.5 h-2.5" />
+                    </Button>
+                  </div>
                 )}
               </div>
 
