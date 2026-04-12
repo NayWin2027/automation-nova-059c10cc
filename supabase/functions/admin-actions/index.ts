@@ -129,11 +129,12 @@ serve(async (req) => {
           // Handle referral (optional)
           const referrerId = params.referrerId;
           if (referrerId && typeof referrerId === 'string' && referrerId.trim()) {
-            // Validate referrer exists and is not the new user
+            // Look up referrer by their display ID (email = displayId@internal.user)
+            const referrerEmail = `${referrerId.trim()}@internal.user`;
             const { data: referrerProfile } = await supabaseAdmin
               .from('profiles')
               .select('user_id')
-              .eq('user_id', referrerId.trim())
+              .eq('email', referrerEmail)
               .single();
 
             if (referrerProfile && referrerProfile.user_id !== newUser.user.id) {
