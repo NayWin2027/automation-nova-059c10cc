@@ -199,6 +199,26 @@ const AdminOrdersTab: React.FC = () => {
     }
   };
 
+  const getContactIcon = (method: string | null) => {
+    switch (method) {
+      case "email": return <Mail className="w-3 h-3 inline mr-0.5" />;
+      case "messenger": return <MessageCircle className="w-3 h-3 inline mr-0.5" />;
+      case "viber": return <Phone className="w-3 h-3 inline mr-0.5" />;
+      case "telegram": return <Send className="w-3 h-3 inline mr-0.5" />;
+      default: return null;
+    }
+  };
+
+  const getContactLabel = (method: string | null) => {
+    switch (method) {
+      case "email": return "Email";
+      case "messenger": return "Messenger";
+      case "viber": return "Viber";
+      case "telegram": return "Telegram";
+      default: return method || "";
+    }
+  };
+
   const getPaymentMethodLabel = (method: string) => {
     switch (method) {
       case "kpay": return "KPay";
