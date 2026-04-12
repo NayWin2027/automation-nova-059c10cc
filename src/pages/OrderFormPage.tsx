@@ -170,12 +170,12 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
   return (
     <div className={embedded ? "p-4" : "min-h-screen bg-background flex items-center justify-center p-4"}>
       <Card className={embedded ? "w-full border-none shadow-none" : "w-full max-w-lg border-primary/20"}>
-        <CardHeader className="text-center pb-2">
+        <CardHeader className="text-center pb-2 bg-[#020627]">
           <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-3">
             <ShieldCheck className="w-6 h-6 text-primary" />
           </div>
           <CardTitle className="text-lg">Payment Order Form</CardTitle>
-          <CardDescription className="text-xs">
+          <CardDescription className="text-sm">
             Plan ဝယ်ယူခြင်း / Credit ဖြည့်သွင်းခြင်း / သက်တမ်းတိုးခြင်း
           </CardDescription>
           <div className="flex items-center justify-center gap-2 mt-2">
