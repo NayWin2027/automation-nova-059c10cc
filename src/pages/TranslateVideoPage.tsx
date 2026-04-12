@@ -1397,7 +1397,7 @@ export default function App() {
       }
 
       setProcessingStatus("Extracting audio with Client-Side VAD (Voice Activity Detection)...");
-      const audioChunks = await extractSmartAudioSegments(videoFile!, apiMode === "app" ? 12 : 30);
+      const audioChunks = await extractSmartAudioSegments(videoFile!, apiMode === "app" ? 30 : 30);
       setProcessingProgress(15);
 
       if (audioChunks.length > 0) {
