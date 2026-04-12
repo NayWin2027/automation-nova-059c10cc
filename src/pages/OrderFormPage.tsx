@@ -306,7 +306,7 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
 
           <Button
             onClick={handleSubmit}
-            disabled={loading || !formData.orderType || !formData.paymentMethod || !formData.paymentRef.trim() || !slipFile}
+            disabled={loading || !formData.orderType || !formData.paymentMethod || !formData.paymentRef.trim() || !slipFile || !formData.contactMethod || !formData.contactValue.trim()}
             className="w-full h-10"
           >
             {loading ? "တင်နေသည်..." : "Order တင်မယ်"}
