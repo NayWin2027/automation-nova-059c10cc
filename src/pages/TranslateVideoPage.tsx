@@ -937,136 +937,141 @@ export default function App() {
 
       const validImages = loadedImages.filter((img) => img && img.width > 0);
 
-      // Hollywood Cinematic Realistic Poster (Linear Cinematic Blending - True Drama Poster Style)
+      // Hollywood Cinematic Realistic Poster - Double Exposure / AI-Enhanced Single Frame
+
+      // Shuffle valid images so every "Regenerate" creates a completely new poster
+      validImages.sort(() => Math.random() - 0.5);
 
       ctx.fillStyle = "#050814";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      const isPortrait = canvas.height > canvas.width;
-
       if (validImages.length >= 1) {
-        // Since we extracted from the clean 1-15% segment, we don't need any center blurs.
-        const cleanImages = validImages;
+        const primaryImg = validImages[0];
 
-        // Helper to draw and seamlessly fade edges of a frame (NO ORBS)
-        const drawCinematicLayer = (img, x, y, w, h, maskConfig) => {
+        // --- 1. AI Subtitle Wipe Mechanism ---
+        // We render the image on a temporary canvas and aggressively blur the bottom 20%
+        // and center 15% to destroy embedded subtitles, effectively acting as our "AI Inpaint"
+        const cleanFrame = (img) => {
+          const tCanvas = document.createElement("canvas");
+          tCanvas.width = img.width;
+          tCanvas.height = img.height;
+          const tCtx = tCanvas.getContext("2d");
+          if (!tCtx) return img;
+          tCtx.drawImage(img, 0, 0);
+
+          tCtx.filter = "blur(40px)";
+          const subH = img.height * 0.2;
+          tCtx.drawImage(img, 0, img.height - subH, img.width, subH, 0, img.height - subH, img.width, subH);
+          tCtx.filter = "none";
+          return tCanvas;
+        };
+
+        const hero = cleanFrame(primaryImg);
+
+        // --- 2. Supporting Floating Head (Double Exposure Vibe) ---
+        // If we have a second frame, render it in the sky using screen blend, making it feel
+        // like a memory or floating ghost (True Detective / Star Wars poster style) rather than a collage.
+        if (validImages.length >= 2) {
+          const support = cleanFrame(validImages[1]);
           const tCanvas = document.createElement("canvas");
           tCanvas.width = canvas.width;
           tCanvas.height = canvas.height;
           const tCtx = tCanvas.getContext("2d");
 
-          tCtx.filter = "contrast(1.1) saturate(1.15) brightness(0.95)";
+          tCtx.filter = "contrast(1.2) sepia(0.5) hue-rotate(-30deg) brightness(0.8)";
+          const sRatio = support.width / support.height;
+          let sH = canvas.height * 0.6;
+          let sW = sH * sRatio;
 
-          const imgRatio = img.width / img.height;
-          const targetRatio = w / h;
-          let sWidth = img.width;
-          let sHeight = img.height;
-          let sx = 0,
-            sy = 0;
-
-          if (imgRatio > targetRatio) {
-            sWidth = sHeight * targetRatio;
-            sx = (img.width - sWidth) / 2;
-          } else {
-            sHeight = sWidth / targetRatio;
-            sy = (img.height - sHeight) / 2;
-          }
-
-          tCtx.drawImage(img, sx, sy, sWidth, sHeight, x, y, w, h);
+          tCtx.drawImage(support, (canvas.width - sW) / 2, 0, sW, sH);
           tCtx.filter = "none";
 
-          // Seamless edge fading via linear gradients to prevent sharp edges overlapping
-          const applyLinearMask = (gradient) => {
-            tCtx.globalCompositeOperation = "destination-in";
-            tCtx.fillStyle = gradient;
-            tCtx.fillRect(x, y, w, h);
-            tCtx.globalCompositeOperation = "source-over"; // reset
-          };
+          // Fade bottom of support into nothing
+          tCtx.globalCompositeOperation = "destination-in";
+          const grad = tCtx.createLinearGradient(0, 0, 0, sH);
+          grad.addColorStop(0.3, "rgba(0,0,0,1)");
+          grad.addColorStop(1, "rgba(0,0,0,0)");
+          tCtx.fillStyle = grad;
+          tCtx.fillRect(0, 0, canvas.width, canvas.height);
 
-          if (maskConfig.fadeBottom) {
-            const grad = tCtx.createLinearGradient(0, y + h * maskConfig.fadeBottom.start, 0, y + h);
-            grad.addColorStop(0, "rgba(0,0,0,1)");
-            grad.addColorStop(1, "rgba(0,0,0,0)");
-            applyLinearMask(grad);
-          }
-          if (maskConfig.fadeTop) {
-            const grad = tCtx.createLinearGradient(0, y, 0, y + h * maskConfig.fadeTop.end);
-            grad.addColorStop(0, "rgba(0,0,0,0)");
-            grad.addColorStop(1, "rgba(0,0,0,1)");
-            applyLinearMask(grad);
-          }
-          if (maskConfig.fadeLeft) {
-            const grad = tCtx.createLinearGradient(x, 0, x + w * maskConfig.fadeLeft.end, 0);
-            grad.addColorStop(0, "rgba(0,0,0,0)");
-            grad.addColorStop(1, "rgba(0,0,0,1)");
-            applyLinearMask(grad);
-          }
-          if (maskConfig.fadeRight) {
-            const grad = tCtx.createLinearGradient(x + w * maskConfig.fadeRight.start, 0, x + w, 0);
-            grad.addColorStop(0, "rgba(0,0,0,1)");
-            grad.addColorStop(1, "rgba(0,0,0,0)");
-            applyLinearMask(grad);
-          }
-
+          // Draw onto main canvas with 'screen' blending to act as a double-exposure
+          ctx.globalCompositeOperation = "screen";
+          ctx.globalAlpha = 0.45;
           ctx.drawImage(tCanvas, 0, 0);
-        };
-
-        if (isPortrait && cleanImages.length >= 3) {
-          // Supporting Left
-          drawCinematicLayer(cleanImages[1], 0, 0, canvas.width * 0.55, canvas.height * 0.45, {
-            fadeBottom: { start: 0.5 },
-            fadeRight: { start: 0.6 },
-          });
-          // Supporting Right
-          drawCinematicLayer(cleanImages[2], canvas.width * 0.45, 0, canvas.width * 0.55, canvas.height * 0.45, {
-            fadeBottom: { start: 0.5 },
-            fadeLeft: { end: 0.4 },
-          });
-          // Main Character
-          drawCinematicLayer(cleanImages[0], 0, canvas.height * 0.2, canvas.width, canvas.height * 0.8, {
-            fadeTop: { end: 0.25 },
-            fadeBottom: { start: 0.65 },
-          });
-        } else if (!isPortrait && cleanImages.length >= 3) {
-          // Landscape
-          drawCinematicLayer(cleanImages[1], canvas.width * 0.5, 0, canvas.width * 0.5, canvas.height * 0.55, {
-            fadeBottom: { start: 0.6 },
-            fadeLeft: { end: 0.3 },
-          });
-          drawCinematicLayer(
-            cleanImages[2],
-            canvas.width * 0.5,
-            canvas.height * 0.45,
-            canvas.width * 0.5,
-            canvas.height * 0.55,
-            {
-              fadeTop: { end: 0.3 },
-              fadeLeft: { end: 0.3 },
-            },
-          );
-          drawCinematicLayer(cleanImages[0], 0, 0, canvas.width * 0.6, canvas.height, {
-            fadeRight: { start: 0.6 },
-            fadeBottom: { start: 0.7 },
-          });
-        } else {
-          // Fallback Single Frame
-          drawCinematicLayer(cleanImages[0], 0, 0, canvas.width, canvas.height, {
-            fadeBottom: { start: 0.7 },
-          });
+          ctx.globalCompositeOperation = "source-over";
+          ctx.globalAlpha = 1.0;
         }
+
+        // --- 3. Hero Character (Dominates Foreground) ---
+        const tCanvas = document.createElement("canvas");
+        tCanvas.width = canvas.width;
+        tCanvas.height = canvas.height;
+        const tCtx = tCanvas.getContext("2d");
+
+        tCtx.filter = "contrast(1.2) saturate(1.1) brightness(0.95)"; // Deep cinematic grading
+        const hRatio = hero.width / hero.height;
+        const targetRatio = canvas.width / canvas.height;
+        let hW = hero.width;
+        let hH = hero.height;
+        let hx = 0;
+        let hy = 0;
+
+        // Massive Zoom for Hero
+        if (hRatio > targetRatio) {
+          hW = hH * targetRatio;
+          hx = (hero.width - hW) / 2;
+        } else {
+          hH = hW / targetRatio;
+          hy = (hero.height - hH) / 2;
+        }
+
+        tCtx.drawImage(hero, hx, hy, hW, hH, 0, 0, canvas.width, canvas.height);
+        tCtx.filter = "none";
+
+        // Fade sky to blend with the double-exposure support character
+        tCtx.globalCompositeOperation = "destination-in";
+        const heroGrad = tCtx.createLinearGradient(0, canvas.height * 0.1, 0, canvas.height * 0.4);
+        heroGrad.addColorStop(0, "rgba(0,0,0,0)");
+        heroGrad.addColorStop(1, "rgba(0,0,0,1)");
+        tCtx.fillStyle = heroGrad;
+        tCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.globalCompositeOperation = "source-over";
+        ctx.drawImage(tCanvas, 0, 0);
       }
 
-      // Very subtle cinematic grading to merge them visually
+      // --- 4. Post-Processing & Grading ---
+
+      // Teal & Orange Hollywood Overlay
       ctx.globalCompositeOperation = "overlay";
-      ctx.fillStyle = "rgba(0, 40, 60, 0.25)";
+      ctx.fillStyle = "rgba(10, 45, 60, 0.4)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.globalCompositeOperation = "source-over";
 
-      const grad = ctx.createLinearGradient(0, canvas.height * 0.5, 0, canvas.height);
-      grad.addColorStop(0, "rgba(0,0,0,0)");
-      grad.addColorStop(0.5, "rgba(0,0,0,0.7)");
-      grad.addColorStop(1, "rgba(0,0,0,1)");
-      ctx.fillStyle = grad;
+      // Global Cinematic Spotlight Vignette
+      const vignette = ctx.createRadialGradient(
+        canvas.width / 2,
+        canvas.height * 0.45,
+        canvas.width * 0.2,
+        canvas.width / 2,
+        canvas.height * 0.45,
+        canvas.width * 0.85,
+      );
+      vignette.addColorStop(0, "rgba(0,0,0,0)");
+      vignette.addColorStop(0.7, "rgba(0,0,0,0.6)");
+      vignette.addColorStop(1, "rgba(0,0,0,0.95)");
+
+      ctx.globalCompositeOperation = "multiply";
+      ctx.fillStyle = vignette;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.globalCompositeOperation = "source-over";
+
+      // Heavy bottom gradient for text readability and to hide subtitles
+      const textGradBg = ctx.createLinearGradient(0, canvas.height * 0.5, 0, canvas.height);
+      textGradBg.addColorStop(0, "rgba(0,0,0,0)");
+      textGradBg.addColorStop(0.6, "rgba(0,0,0,0.85)");
+      textGradBg.addColorStop(1, "rgba(0,0,0,1)");
+      ctx.fillStyle = textGradBg;
       ctx.fillRect(0, canvas.height * 0.5, canvas.width, canvas.height * 0.5);
       // Helper to wrap and draw text, limiting to maxLines and returning remaining text
       const drawWrappedText = (
