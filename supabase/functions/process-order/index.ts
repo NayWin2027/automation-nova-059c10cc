@@ -168,6 +168,7 @@ serve(async (req) => {
     }
 
     switch (action) {
+      case "get_orders": {
         const { status: filterStatus } = params;
         let query = supabaseAdmin
           .from("payment_orders")
