@@ -175,7 +175,7 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
             <ShieldCheck className="w-6 h-6 text-primary" />
           </div>
           <CardTitle className="text-lg">Payment Order Form</CardTitle>
-          <CardDescription className="text-xs">
+          <CardDescription className="text-base text-neon-cyan">
             Plan ဝယ်ယူခြင်း / Credit ဖြည့်သွင်းခြင်း / သက်တမ်းတိုးခြင်း
           </CardDescription>
           <div className="flex items-center justify-center gap-2 mt-2">
@@ -190,7 +190,7 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 text-black">
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">Order Type *</Label>
             <Select
