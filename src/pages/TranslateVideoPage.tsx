@@ -940,21 +940,25 @@ export default function App() {
 
       const validImages = loadedImages.filter((img) => img && img.width > 0);
 
-      // Hollywood Cinematic Realistic Poster Composition (Surgical Match Reference)
+      // Hollywood Cinematic Realistic Poster — Full Face + Half Body, No Cropping
 
-      // 1. Deep cinematic background (NO raw image to avoid ghosting)
-      ctx.fillStyle = "#050814";
+      // 1. Deep cinematic background
+      ctx.fillStyle = "#0a0c1a";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       if (validImages[0]) {
-        // Atmospheric blurred background layer instead of raw copy
-        ctx.filter = "blur(30px) opacity(0.2) brightness(0.4)";
-        ctx.drawImage(validImages[0], -20, -20, canvas.width + 40, canvas.height + 40);
+        ctx.filter = "blur(35px) brightness(0.3) saturate(1.4)";
+        ctx.drawImage(validImages[0], -30, -30, canvas.width + 60, canvas.height + 60);
         ctx.filter = "none";
       }
 
-      // Helper function for perfectly blended cinematic faces without ghosting
-      const drawCinematicFace = (img, scaleMultiplier, alignX, alignY, maskConfig) => {
+      // Draw character naturally — soft edge fade only, no radial crop
+      const drawCharacter = (
+        img: HTMLImageElement,
+        destX: number, destY: number,
+        destW: number, destH: number,
+        fadeEdges: { left?: number; right?: number; top?: number; bottom?: number },
+      ) => {
         const isPortrait = canvas.height > canvas.width;
         const baseScale = isPortrait ? 1.4 : 1.1;
         const scale = baseScale * scaleMultiplier;
