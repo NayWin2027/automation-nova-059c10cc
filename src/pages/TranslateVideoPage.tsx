@@ -907,7 +907,7 @@ export default function App() {
       // Spread captures across the entire video to ensure all key characters (like villains/supporting roles) are found
       // Capture exclusively from the highly probable subtitle-free beginning segment (1% to 15%)
       const intervals = [];
-      for (let i = 0.01; i <= 0.26; i += 0.03) {
+      for (let i = 0.01; i <= 0.16; i += 0.03) {
         intervals.push(duration * i);
       }
 
@@ -937,139 +937,190 @@ export default function App() {
 
       const validImages = loadedImages.filter((img) => img && img.width > 0);
 
-      // Hollywood Cinematic Realistic Poster - Double Exposure / AI-Enhanced Single Frame
+      // Hollywood Cinematic Realistic Poster - Drama Ensemble Layout
+      // As requested: Main character HUGE, supporting characters SMALL floating heads.
 
-      // Shuffle valid images so every "Regenerate" creates a completely new poster
+      // Shuffle valid images so every "Regenerate" creates a completely new poster cast
       validImages.sort(() => Math.random() - 0.5);
 
       ctx.fillStyle = "#050814";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       if (validImages.length >= 1) {
-        const primaryImg = validImages[0];
-
-        // --- 1. AI Subtitle Wipe Mechanism ---
-        // We render the image on a temporary canvas and aggressively blur the bottom 20%
-        // and center 15% to destroy embedded subtitles, effectively acting as our "AI Inpaint"
-        const cleanFrame = (img) => {
-          const tCanvas = document.createElement("canvas");
-          tCanvas.width = img.width;
-          tCanvas.height = img.height;
-          const tCtx = tCanvas.getContext("2d");
-          if (!tCtx) return img;
-          tCtx.drawImage(img, 0, 0);
-
-          tCtx.filter = "blur(40px)";
-          const subH = img.height * 0.2;
-          tCtx.drawImage(img, 0, img.height - subH, img.width, subH, 0, img.height - subH, img.width, subH);
-          tCtx.filter = "none";
-          return tCanvas;
-        };
-
-        const hero = cleanFrame(primaryImg);
-
-        // --- 2. Supporting Floating Head (Double Exposure Vibe) ---
-        // If we have a second frame, render it in the sky using screen blend, making it feel
-        // like a memory or floating ghost (True Detective / Star Wars poster style) rather than a collage.
-        if (validImages.length >= 2) {
-          const support = cleanFrame(validImages[1]);
+        // Helper to draw a soft floating head (for support) or a massive solid hero
+        const drawLayer = (img, x, y, w, h, isHero = false) => {
           const tCanvas = document.createElement("canvas");
           tCanvas.width = canvas.width;
           tCanvas.height = canvas.height;
           const tCtx = tCanvas.getContext("2d");
 
-          tCtx.filter = "contrast(1.2) sepia(0.5) hue-rotate(-30deg) brightness(0.8)";
-          const sRatio = support.width / support.height;
-          let sH = canvas.height * 0.6;
-          let sW = sH * sRatio;
+          // Heavy cinematic coloring
+          tCtx.filter = isHero
+            ? "contrast(1.15) saturate(1.1) brightness(0.95)"
+            : "contrast(1.2) saturate(0.9) brightness(0.85)";
 
-          tCtx.drawImage(support, (canvas.width - sW) / 2, 0, sW, sH);
+          const imgRatio = img.width / img.height;
+          const targetRatio = w / h;
+          let sW = img.width,
+            sH = img.height,
+            sx = 0,
+            sy = 0;
+
+          // Cover layout calculation
+          if (imgRatio > targetRatio) {
+            sW = sH * targetRatio;
+            sx = (img.width - sW) / 2;
+          } else {
+            sH = sW / targetRatio;
+            sy = (img.height - sH) / 2;
+          }
+
+          // AI Subtitle Evasion via Geometry:
+          // Support characters are zoomed in (ignoring margins where subtitles exist)
+          if (!isHero) {
+            const zoom = 0.25; // Zoom in 25% closer to face
+            sx += sW * (zoom / 2);
+            sy += sH * (zoom / 2);
+            sW *= 1 - zoom;
+            sH *= 1 - zoom;
+          }
+
+          tCtx.drawImage(img, sx, sy, sW, sH, x, y, w, h);
           tCtx.filter = "none";
 
-          // Fade bottom of support into nothing
+          // Masking to prevent "photo collage" hard borders
           tCtx.globalCompositeOperation = "destination-in";
-          const grad = tCtx.createLinearGradient(0, 0, 0, sH);
-          grad.addColorStop(0.3, "rgba(0,0,0,1)");
-          grad.addColorStop(1, "rgba(0,0,0,0)");
-          tCtx.fillStyle = grad;
-          tCtx.fillRect(0, 0, canvas.width, canvas.height);
 
-          // Draw onto main canvas with 'screen' blending to act as a double-exposure
-          ctx.globalCompositeOperation = "screen";
-          ctx.globalAlpha = 0.45;
+          if (isHero) {
+            // Main Hero: Solid bottom, softly fading at the very top into the dark
+            const grad = tCtx.createLinearGradient(0, y, 0, y + h);
+            grad.addColorStop(0, "rgba(0,0,0,0)");
+            grad.addColorStop(0.2, "rgba(0,0,0,1)");
+            grad.addColorStop(1, "rgba(0,0,0,1)");
+            tCtx.fillStyle = grad;
+            tCtx.fillRect(x, y, w, h);
+          } else {
+            // Supporting actors: Perfect circular "floating heads" fading into shadow
+            const cx = x + w / 2;
+            const cy = y + h / 2;
+            const r = Math.min(w, h) / 2;
+            const grad = tCtx.createRadialGradient(cx, cy, r * 0.1, cx, cy, r * 0.95);
+            grad.addColorStop(0, "rgba(0,0,0,1)"); // Solid center
+            grad.addColorStop(1, "rgba(0,0,0,0)"); // Soft edge
+            tCtx.fillStyle = grad;
+            tCtx.fillRect(x, y, w, h);
+          }
+
+          // Blend with main canvas
+          ctx.globalCompositeOperation = isHero ? "source-over" : "lighten";
           ctx.drawImage(tCanvas, 0, 0);
-          ctx.globalCompositeOperation = "source-over";
-          ctx.globalAlpha = 1.0;
-        }
+          ctx.globalCompositeOperation = "source-over"; // Reset
+        };
 
-        // --- 3. Hero Character (Dominates Foreground) ---
-        const tCanvas = document.createElement("canvas");
-        tCanvas.width = canvas.width;
-        tCanvas.height = canvas.height;
-        const tCtx = tCanvas.getContext("2d");
+        const isPortrait = canvas.height > canvas.width;
 
-        tCtx.filter = "contrast(1.2) saturate(1.1) brightness(0.95)"; // Deep cinematic grading
-        const hRatio = hero.width / hero.height;
-        const targetRatio = canvas.width / canvas.height;
-        let hW = hero.width;
-        let hH = hero.height;
-        let hx = 0;
-        let hy = 0;
+        if (isPortrait && validImages.length >= 3) {
+          // --- ENSEMBLE DRAMA POSTER (Exact Match Reference) ---
+          // Draw supporting characters first so they sit in the background
 
-        // Massive Zoom for Hero
-        if (hRatio > targetRatio) {
-          hW = hH * targetRatio;
-          hx = (hero.width - hW) / 2;
+          // Top Left (Small)
+          drawLayer(
+            validImages[1],
+            canvas.width * -0.05,
+            canvas.height * 0.02,
+            canvas.width * 0.55,
+            canvas.height * 0.35,
+            false,
+          );
+          // Top Right (Small)
+          drawLayer(
+            validImages[2],
+            canvas.width * 0.5,
+            canvas.height * 0.02,
+            canvas.width * 0.55,
+            canvas.height * 0.35,
+            false,
+          );
+
+          if (validImages.length >= 4) {
+            // Mid Left (Small)
+            drawLayer(
+              validImages[3],
+              canvas.width * -0.1,
+              canvas.height * 0.35,
+              canvas.width * 0.45,
+              canvas.height * 0.3,
+              false,
+            );
+          }
+          if (validImages.length >= 5) {
+            // Mid Right (Small)
+            drawLayer(
+              validImages[4],
+              canvas.width * 0.65,
+              canvas.height * 0.35,
+              canvas.width * 0.45,
+              canvas.height * 0.3,
+              false,
+            );
+          }
+
+          // Main Hero (Foreground, Massive, Centered)
+          drawLayer(
+            validImages[0],
+            canvas.width * 0.05,
+            canvas.height * 0.25,
+            canvas.width * 0.9,
+            canvas.height * 0.75,
+            true,
+          );
         } else {
-          hH = hW / targetRatio;
-          hy = (hero.height - hH) / 2;
+          // Basic Double Exposure if not enough images or horizontal
+          if (validImages[1]) {
+            drawLayer(
+              validImages[1],
+              canvas.width * 0.2,
+              canvas.height * 0.05,
+              canvas.width * 0.6,
+              canvas.height * 0.5,
+              false,
+            );
+          }
+          drawLayer(validImages[0], 0, canvas.height * 0.3, canvas.width, canvas.height * 0.7, true);
         }
-
-        tCtx.drawImage(hero, hx, hy, hW, hH, 0, 0, canvas.width, canvas.height);
-        tCtx.filter = "none";
-
-        // Fade sky to blend with the double-exposure support character
-        tCtx.globalCompositeOperation = "destination-in";
-        const heroGrad = tCtx.createLinearGradient(0, canvas.height * 0.1, 0, canvas.height * 0.4);
-        heroGrad.addColorStop(0, "rgba(0,0,0,0)");
-        heroGrad.addColorStop(1, "rgba(0,0,0,1)");
-        tCtx.fillStyle = heroGrad;
-        tCtx.fillRect(0, 0, canvas.width, canvas.height);
-
-        ctx.globalCompositeOperation = "source-over";
-        ctx.drawImage(tCanvas, 0, 0);
       }
 
-      // --- 4. Post-Processing & Grading ---
+      // --- Post-Processing & Grading (The Cinematic Glue) ---
 
       // Teal & Orange Hollywood Overlay
       ctx.globalCompositeOperation = "overlay";
-      ctx.fillStyle = "rgba(10, 45, 60, 0.4)";
+      ctx.fillStyle = "rgba(10, 35, 60, 0.45)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.globalCompositeOperation = "source-over";
 
-      // Global Cinematic Spotlight Vignette
+      // Heavy Cinematic Spotlight Vignette (Vastly improves realism)
       const vignette = ctx.createRadialGradient(
         canvas.width / 2,
-        canvas.height * 0.45,
-        canvas.width * 0.2,
+        canvas.height * 0.5,
+        canvas.width * 0.15,
         canvas.width / 2,
-        canvas.height * 0.45,
-        canvas.width * 0.85,
+        canvas.height * 0.5,
+        canvas.width * 0.95,
       );
       vignette.addColorStop(0, "rgba(0,0,0,0)");
-      vignette.addColorStop(0.7, "rgba(0,0,0,0.6)");
-      vignette.addColorStop(1, "rgba(0,0,0,0.95)");
+      vignette.addColorStop(0.7, "rgba(0,0,0,0.5)");
+      vignette.addColorStop(1, "rgba(0,0,0,0.98)");
 
       ctx.globalCompositeOperation = "multiply";
       ctx.fillStyle = vignette;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.globalCompositeOperation = "source-over";
 
-      // Heavy bottom gradient for text readability and to hide subtitles
+      // Deep bottom gradient to guarantee clean text readability and physically
+      // override any potential leftover UI/Subtitles on the hero's bottom edge!
       const textGradBg = ctx.createLinearGradient(0, canvas.height * 0.5, 0, canvas.height);
       textGradBg.addColorStop(0, "rgba(0,0,0,0)");
-      textGradBg.addColorStop(0.6, "rgba(0,0,0,0.85)");
+      textGradBg.addColorStop(0.5, "rgba(0,0,0,0.85)");
       textGradBg.addColorStop(1, "rgba(0,0,0,1)");
       ctx.fillStyle = textGradBg;
       ctx.fillRect(0, canvas.height * 0.5, canvas.width, canvas.height * 0.5);
