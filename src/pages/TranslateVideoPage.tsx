@@ -630,24 +630,8 @@ export default function App() {
       let description = "";
 
       const mktPrompt = srtText
-        ? `You are a master viral content strategist. Analyze these subtitles and identify the SINGLE most shocking, intense, or emotionally explosive moment in the story.
-
-RULES:
-- Title: Max 5-7 words in Burmese. Must be a dramatic shock hook that makes people STOP scrolling. Use cliffhanger energy, rhetorical shock, or emotional gut-punch phrasing. NO generic titles.
-- Description: Max 8-12 words in Burmese. Write a punchy, suspenseful one-liner that hints at the climax WITHOUT spoiling it. Use the storytelling technique of "open loop" — make viewers desperate to know what happens next. Reference the most dramatic character action or plot twist directly.
-
-STYLE: Think tabloid headlines meets movie trailer voiceover. Raw, visceral, impossible to ignore.
-BAD example: "ဒီဇာတ်ကားကြည့်ပါ" (too generic)
-GOOD example: "သူမကို သတ်ဖို့ ဆုံးဖြတ်လိုက်တဲ့ည..." (specific, dramatic, open loop)
-
-Output MUST be a valid JSON object with "title" and "description" keys.
-Subtitles: ${srtText.substring(0, 5000)}`
-        : `You are a master viral content strategist. Generate an extremely dramatic, scroll-stopping title and description in Burmese for a movie/video thumbnail.
-
-- Title: Max 5-7 words. Shock hook with cliffhanger energy.
-- Description: Max 8-12 words. Suspenseful one-liner with "open loop" technique.
-
-Output MUST be a valid JSON object with "title" and "description" keys.`;
+        ? `Based on these subtitles, generate a very short, viral shock title (max 5-7 words) and a very short subtitle/hook (max 6-8 words) in Burmese. The title should be extremely catchy, dramatic and "clickbaity" for a movie thumbnail. Output MUST be a valid JSON object with "title" and "description" keys (use "description" key for the short hook). Subtitles: ${srtText.substring(0, 5000)}`
+        : `Generate a very short, viral shock title (max 5-7 words) and a very short subtitle/hook (max 6-8 words) in Burmese for a generic movie thumbnail. The title should be extremely catchy, dramatic and "clickbaity". Output MUST be a valid JSON object with "title" and "description" keys (use "description" key for the short hook).`;
 
       if (apiMode === "own" && ownApiKey.trim()) {
         // Own API: direct client-side call
@@ -1016,19 +1000,41 @@ Output MUST be a valid JSON object with "title" and "description" keys.`;
             tCtx.fillStyle = grad;
             tCtx.fillRect(x, y, w, h);
           } else {
-            // Supporting actors: Perfect circular "floating heads" fading into shadow
-            const cx = x + w / 2;
-            const cy = y + h / 2;
-            const r = Math.min(w, h) / 2;
-            const grad = tCtx.createRadialGradient(cx, cy, r * 0.1, cx, cy, r * 0.95);
-            grad.addColorStop(0, "rgba(0,0,0,1)"); // Solid center
-            grad.addColorStop(1, "rgba(0,0,0,0)"); // Soft edge
-            tCtx.fillStyle = grad;
-            tCtx.fillRect(x, y, w, h);
+            // Support actors: Seamless four-way edge fading to prevent glowing bubbles or hard cuts
+            const applyLinearMask = (gradient) => {
+              tCtx.globalCompositeOperation = "destination-in";
+              tCtx.fillStyle = gradient;
+              tCtx.fillRect(x, y, w, h);
+              tCtx.globalCompositeOperation = "source-over"; // reset
+            };
+
+            // Bottom fade
+            let grad = tCtx.createLinearGradient(0, y + h * 0.4, 0, y + h);
+            grad.addColorStop(0, "rgba(0,0,0,1)");
+            grad.addColorStop(1, "rgba(0,0,0,0)");
+            applyLinearMask(grad);
+
+            // Left fade
+            grad = tCtx.createLinearGradient(x, 0, x + w * 0.2, 0);
+            grad.addColorStop(0, "rgba(0,0,0,0)");
+            grad.addColorStop(1, "rgba(0,0,0,1)");
+            applyLinearMask(grad);
+
+            // Right fade
+            grad = tCtx.createLinearGradient(x + w * 0.8, 0, x + w, 0);
+            grad.addColorStop(0, "rgba(0,0,0,1)");
+            grad.addColorStop(1, "rgba(0,0,0,0)");
+            applyLinearMask(grad);
+
+            // Top fade
+            grad = tCtx.createLinearGradient(0, y, 0, y + h * 0.15);
+            grad.addColorStop(0, "rgba(0,0,0,0)");
+            grad.addColorStop(1, "rgba(0,0,0,1)");
+            applyLinearMask(grad);
           }
 
-          // Blend with main canvas
-          ctx.globalCompositeOperation = isHero ? "source-over" : "lighten";
+          // Blend with main canvas (Use standard overlay so bright backgrounds don't become glowing orbs)
+          ctx.globalCompositeOperation = "source-over";
           ctx.drawImage(tCanvas, 0, 0);
           ctx.globalCompositeOperation = "source-over"; // Reset
         };
