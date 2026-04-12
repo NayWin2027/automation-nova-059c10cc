@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Shield, Users, Activity, Settings, LogOut,
-  RefreshCw, Home, Sparkles, BarChart3, TrendingUp, BookOpen, UserCheck, Coins } from
+  RefreshCw, Home, Sparkles, BarChart3, TrendingUp, BookOpen, UserCheck, Coins, FileText } from
 "lucide-react";
 import AdminUsersTab from "@/components/admin/AdminUsersTab";
 import AdminActivityTab from "@/components/admin/AdminActivityTab";
@@ -16,6 +16,7 @@ import AdminDailyUsageTab from "@/components/admin/AdminDailyUsageTab";
 import AdminUserInsightsTab from "@/components/admin/AdminUserInsightsTab";
 import AdminAgentSalesTab from "@/components/admin/AdminAgentSalesTab";
 import AdminCreditAgentTab from "@/components/admin/AdminCreditAgentTab";
+import AdminOrdersTab from "@/components/admin/AdminOrdersTab";
 
 const AdminDashboardPage: React.FC = () => {
   const navigate = useNavigate();
@@ -193,8 +194,12 @@ const AdminDashboardPage: React.FC = () => {
         <AdminStatsCards stats={stats} />
 
         {/* Main Tabs */}
-        <Tabs defaultValue="users" className="mt-4">
-          <TabsList className="grid w-full max-w-3xl grid-cols-7 mb-4 bg-secondary/30 p-0.5 h-8">
+        <Tabs defaultValue="orders" className="mt-4">
+          <TabsList className="grid w-full max-w-4xl grid-cols-8 mb-4 bg-secondary/30 p-0.5 h-8">
+            <TabsTrigger value="orders" className="flex items-center gap-1.5 text-2xs data-[state=active]:bg-card">
+              <FileText className="w-3 h-3" />
+              Orders
+            </TabsTrigger>
             <TabsTrigger value="users" className="flex items-center gap-1.5 text-2xs data-[state=active]:bg-card">
               <Users className="w-3 h-3" />
               Users
@@ -224,6 +229,10 @@ const AdminDashboardPage: React.FC = () => {
               Settings
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="orders">
+            <AdminOrdersTab />
+          </TabsContent>
 
           <TabsContent value="users">
             <AdminUsersTab />

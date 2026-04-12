@@ -34,6 +34,7 @@ const SrtSubPage = lazyRetry(() => import("./pages/SrtSubPage"));
 const TutorialVideosPage = lazyRetry(() => import("./pages/TutorialVideosPage"));
 const NovaCutVideoPage = lazyRetry(() => import("./pages/NovaCutVideoPage"));
 const TranslateVideoPage = lazyRetry(() => import("./pages/TranslateVideoPage"));
+const OrderFormPage = lazyRetry(() => import("./pages/OrderFormPage"));
 
 
 const AdminDashboardPage = lazyRetry(() => import("./pages/AdminDashboardPage"));
@@ -75,6 +76,8 @@ const App = () => (
             {/* Admin Routes */}
             <Route path="/x9k2m7" element={<AdminLoginPage />} />
             <Route path="/admin/dashboard" element={<Suspense fallback={null}><AdminRoute><AdminDashboardPage /></AdminRoute></Suspense>} />
+            {/* Order Form */}
+            <Route path="/order" element={<OrderFormPage />} />
             {/* User Routes */}
             <Route path="/login" element={<UserLoginPage />} />
             {/* Legal Pages */}

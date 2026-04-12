@@ -1,0 +1,639 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
+
+// Generate a cryptographically secure random password
+function generateSecurePassword(length = 16): string {
+  const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=";
+  const values = new Uint8Array(length);
+  crypto.getRandomValues(values);
+  let password = "";
+  for (let i = 0; i < length; i++) {
+    password += charset[values[i] % charset.length];
+  }
+  // Ensure at least one of each type
+  const ensure = [
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+    "abcdefghijklmnopqrstuvwxyz",
+    "0123456789",
+    "!@#$%^&*()_+-="
+  ];
+  const positions = new Uint8Array(4);
+  crypto.getRandomValues(positions);
+  for (let i = 0; i < ensure.length; i++) {
+    const pos = positions[i] % length;
+    const charSet = ensure[i];
+    const charIdx = new Uint8Array(1);
+    crypto.getRandomValues(charIdx);
+    password = password.substring(0, pos) + charSet[charIdx[0] % charSet.length] + password.substring(pos + 1);
+  }
+  return password;
+}
+
+serve(async (req) => {
+  const _corsBlock = handleCorsPreflightOrReject(req);
+  if (_corsBlock) return _corsBlock;
+  const corsHeaders = getCorsHeaders(req);
+
+  try {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "No authorization header" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
+    if (userError || !user) {
+      return new Response(
+        JSON.stringify({ error: "Invalid authentication" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Verify admin
+    const { data: isAdmin } = await supabaseAdmin.rpc("has_role", {
+      _user_id: user.id,
+      _role: "admin"
+    });
+    if (!isAdmin) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized: Admin access required" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const { action, ...params } = await req.json();
+
+    switch (action) {
+      case "submit_order": {
+        // Public action - no admin required (called without auth for new users)
+        // But we got here with auth, so this is an authenticated user submitting
+        const { order_type, payment_method, user_email, slip_image_path, payment_ref, referrer_display_id } = params;
+
+        if (!order_type || !payment_method || !user_email) {
+          return new Response(
+            JSON.stringify({ error: "Missing required fields" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Generate order number
+        const { data: orderNum, error: seqError } = await supabaseAdmin.rpc("generate_order_number", {
+          _payment_method: payment_method
+        });
+
+        if (seqError) throw seqError;
+
+        const { data: order, error: insertError } = await supabaseAdmin
+          .from("payment_orders")
+          .insert({
+            order_number: orderNum,
+            order_type,
+            payment_method,
+            user_email,
+            user_id: user.id,
+            slip_image_path: slip_image_path || null,
+            payment_ref: payment_ref || null,
+            referrer_display_id: referrer_display_id || null,
+            status: "pending"
+          })
+          .select()
+          .single();
+
+        if (insertError) {
+          if (insertError.message?.includes("idx_payment_orders_payment_ref")) {
+            return new Response(
+              JSON.stringify({ error: "Transaction number already exists. Duplicate not allowed." }),
+              { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          throw insertError;
+        }
+
+        return new Response(
+          JSON.stringify({ success: true, order }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "submit_order_public": {
+        // For unauthenticated new users - called via service role
+        const { order_type, payment_method, user_email, slip_image_path, payment_ref, referrer_display_id } = params;
+
+        if (!order_type || !payment_method || !user_email) {
+          return new Response(
+            JSON.stringify({ error: "Missing required fields" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { data: orderNum } = await supabaseAdmin.rpc("generate_order_number", {
+          _payment_method: payment_method
+        });
+
+        const { data: order, error: insertError } = await supabaseAdmin
+          .from("payment_orders")
+          .insert({
+            order_number: orderNum,
+            order_type,
+            payment_method,
+            user_email,
+            slip_image_path: slip_image_path || null,
+            payment_ref: payment_ref || null,
+            referrer_display_id: referrer_display_id || null,
+            status: "pending"
+          })
+          .select()
+          .single();
+
+        if (insertError) {
+          if (insertError.message?.includes("idx_payment_orders_payment_ref")) {
+            return new Response(
+              JSON.stringify({ error: "Transaction number already exists." }),
+              { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          throw insertError;
+        }
+
+        return new Response(
+          JSON.stringify({ success: true, order }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "get_orders": {
+        const { status: filterStatus } = params;
+        let query = supabaseAdmin
+          .from("payment_orders")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (filterStatus) {
+          query = query.eq("status", filterStatus);
+        }
+
+        const { data: orders, error } = await query;
+        if (error) throw error;
+
+        return new Response(
+          JSON.stringify({ success: true, orders }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "approve_order": {
+        const { orderId, creditAmount, bonusAmount, referrerDisplayId, adminNotes } = params;
+
+        if (!orderId) {
+          return new Response(
+            JSON.stringify({ error: "orderId required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Get order
+        const { data: order, error: orderError } = await supabaseAdmin
+          .from("payment_orders")
+          .select("*")
+          .eq("id", orderId)
+          .single();
+
+        if (orderError || !order) {
+          return new Response(
+            JSON.stringify({ error: "Order not found" }),
+            { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        if (order.status !== "pending") {
+          return new Response(
+            JSON.stringify({ error: "Order already processed" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const finalCreditAmount = Number(creditAmount) || 0;
+        const finalBonusAmount = Number(bonusAmount) || 0;
+        const finalReferrerId = referrerDisplayId || order.referrer_display_id;
+        let resultData: Record<string, any> = {};
+
+        if (order.order_type === "new_user") {
+          // AUTO CREATE USER
+          const securePassword = generateSecurePassword(18);
+          const internalEmail = `${order.user_email}@internal.user`;
+
+          const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+            email: internalEmail,
+            password: securePassword,
+            email_confirm: true,
+          });
+
+          if (createError) throw createError;
+
+          if (newUser.user) {
+            const updateObj: Record<string, any> = {
+              plan: "premium",
+              credits: finalCreditAmount + finalBonusAmount,
+            };
+
+            // Handle referral
+            if (finalReferrerId && finalReferrerId.trim()) {
+              const referrerEmail = `${finalReferrerId.trim()}@internal.user`;
+              const { data: referrerProfile } = await supabaseAdmin
+                .from("profiles")
+                .select("user_id")
+                .eq("email", referrerEmail)
+                .single();
+
+              if (referrerProfile && referrerProfile.user_id !== newUser.user.id) {
+                updateObj.referred_by = referrerProfile.user_id;
+
+                const { data: rewardSetting } = await supabaseAdmin
+                  .from("app_settings")
+                  .select("value")
+                  .eq("key", "referral_reward")
+                  .single();
+
+                const rewardCredits = rewardSetting?.value?.credits ?? 50;
+
+                if (rewardCredits > 0) {
+                  const { data: referrerCurrent } = await supabaseAdmin
+                    .from("profiles")
+                    .select("credits")
+                    .eq("user_id", referrerProfile.user_id)
+                    .single();
+
+                  await supabaseAdmin
+                    .from("profiles")
+                    .update({ credits: (referrerCurrent?.credits || 0) + rewardCredits })
+                    .eq("user_id", referrerProfile.user_id);
+
+                  await supabaseAdmin
+                    .from("credit_topups")
+                    .insert({
+                      user_id: referrerProfile.user_id,
+                      amount: rewardCredits,
+                      topup_type: "referral",
+                      note: `Referral reward: referred user ${order.user_email}`,
+                      created_by: user.id,
+                    });
+                }
+              }
+            }
+
+            // Set credits_started_at for new user
+            updateObj.credits_started_at = new Date().toISOString();
+
+            await supabaseAdmin
+              .from("profiles")
+              .update(updateObj)
+              .eq("user_id", newUser.user.id);
+
+            // Log credit topup
+            if (finalCreditAmount > 0) {
+              await supabaseAdmin
+                .from("credit_topups")
+                .insert({
+                  user_id: newUser.user.id,
+                  amount: finalCreditAmount,
+                  topup_type: "original",
+                  note: `New user order: ${order.order_number}`,
+                  created_by: user.id,
+                });
+            }
+
+            if (finalBonusAmount > 0) {
+              await supabaseAdmin
+                .from("credit_topups")
+                .insert({
+                  user_id: newUser.user.id,
+                  amount: finalBonusAmount,
+                  topup_type: "bonus",
+                  note: `Bonus for order: ${order.order_number}`,
+                  created_by: user.id,
+                });
+            }
+
+            // Update order with user_id
+            await supabaseAdmin
+              .from("payment_orders")
+              .update({
+                user_id: newUser.user.id,
+                admin_credit_amount: finalCreditAmount,
+                admin_bonus_amount: finalBonusAmount,
+                referrer_display_id: finalReferrerId || null,
+                admin_notes: adminNotes || null,
+                approved_by: user.id,
+                approved_at: new Date().toISOString(),
+                status: "approved"
+              })
+              .eq("id", orderId);
+
+            resultData = {
+              userId: order.user_email,
+              password: securePassword,
+              internalEmail,
+              newUserId: newUser.user.id
+            };
+          }
+        } else if (order.order_type === "topup") {
+          // TOP UP credits for existing user
+          if (!order.user_id) {
+            return new Response(
+              JSON.stringify({ error: "No user linked to this order" }),
+              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+
+          const { data: profile } = await supabaseAdmin
+            .from("profiles")
+            .select("credits, credits_started_at")
+            .eq("user_id", order.user_id)
+            .single();
+
+          const currentCredits = profile?.credits || 0;
+          const totalAdd = finalCreditAmount + finalBonusAmount;
+          const newCredits = currentCredits + totalAdd;
+
+          const updateObj: Record<string, any> = { credits: newCredits };
+          if (!profile?.credits_started_at) {
+            updateObj.credits_started_at = new Date().toISOString();
+          }
+
+          await supabaseAdmin
+            .from("profiles")
+            .update(updateObj)
+            .eq("user_id", order.user_id);
+
+          if (finalCreditAmount > 0) {
+            await supabaseAdmin
+              .from("credit_topups")
+              .insert({
+                user_id: order.user_id,
+                amount: finalCreditAmount,
+                topup_type: "topup",
+                note: `Top-up order: ${order.order_number}`,
+                created_by: user.id,
+              });
+          }
+
+          if (finalBonusAmount > 0) {
+            await supabaseAdmin
+              .from("credit_topups")
+              .insert({
+                user_id: order.user_id,
+                amount: finalBonusAmount,
+                topup_type: "bonus",
+                note: `Bonus for order: ${order.order_number}`,
+                created_by: user.id,
+              });
+          }
+
+          // Handle referral for topup
+          if (finalReferrerId && finalReferrerId.trim()) {
+            const referrerEmail = `${finalReferrerId.trim()}@internal.user`;
+            const { data: referrerProfile } = await supabaseAdmin
+              .from("profiles")
+              .select("user_id, credits")
+              .eq("email", referrerEmail)
+              .single();
+
+            if (referrerProfile && referrerProfile.user_id !== order.user_id) {
+              const { data: rewardSetting } = await supabaseAdmin
+                .from("app_settings")
+                .select("value")
+                .eq("key", "referral_reward")
+                .single();
+
+              const rewardCredits = rewardSetting?.value?.credits ?? 50;
+              if (rewardCredits > 0) {
+                await supabaseAdmin
+                  .from("profiles")
+                  .update({ credits: (referrerProfile.credits || 0) + rewardCredits })
+                  .eq("user_id", referrerProfile.user_id);
+
+                await supabaseAdmin
+                  .from("credit_topups")
+                  .insert({
+                    user_id: referrerProfile.user_id,
+                    amount: rewardCredits,
+                    topup_type: "referral",
+                    note: `Referral from order: ${order.order_number}`,
+                    created_by: user.id,
+                  });
+              }
+            }
+          }
+
+          await supabaseAdmin
+            .from("payment_orders")
+            .update({
+              admin_credit_amount: finalCreditAmount,
+              admin_bonus_amount: finalBonusAmount,
+              referrer_display_id: finalReferrerId || null,
+              admin_notes: adminNotes || null,
+              approved_by: user.id,
+              approved_at: new Date().toISOString(),
+              status: "approved"
+            })
+            .eq("id", orderId);
+
+          resultData = { newBalance: newCredits };
+        } else if (order.order_type === "renew") {
+          // RENEW plan - reset credits_started_at using original cycle
+          if (!order.user_id) {
+            return new Response(
+              JSON.stringify({ error: "No user linked to this order" }),
+              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+
+          const { data: profile } = await supabaseAdmin
+            .from("profiles")
+            .select("credits, credits_started_at")
+            .eq("user_id", order.user_id)
+            .single();
+
+          const currentCredits = profile?.credits || 0;
+          const totalAdd = finalCreditAmount + finalBonusAmount;
+          const newCredits = currentCredits + totalAdd;
+
+          const updateObj: Record<string, any> = { credits: newCredits };
+
+          // Renew: advance from original purchase date cycle
+          if (profile?.credits_started_at) {
+            const prevStart = new Date(profile.credits_started_at);
+            const nextStart = new Date(prevStart);
+            nextStart.setMonth(nextStart.getMonth() + 1);
+            updateObj.credits_started_at = nextStart.toISOString();
+          } else {
+            updateObj.credits_started_at = new Date().toISOString();
+          }
+
+          await supabaseAdmin
+            .from("profiles")
+            .update(updateObj)
+            .eq("user_id", order.user_id);
+
+          if (finalCreditAmount > 0) {
+            await supabaseAdmin
+              .from("credit_topups")
+              .insert({
+                user_id: order.user_id,
+                amount: finalCreditAmount,
+                topup_type: "renew",
+                note: `Renew order: ${order.order_number}`,
+                created_by: user.id,
+              });
+          }
+
+          if (finalBonusAmount > 0) {
+            await supabaseAdmin
+              .from("credit_topups")
+              .insert({
+                user_id: order.user_id,
+                amount: finalBonusAmount,
+                topup_type: "bonus",
+                note: `Bonus for renew order: ${order.order_number}`,
+                created_by: user.id,
+              });
+          }
+
+          // Handle referral for renew
+          if (finalReferrerId && finalReferrerId.trim()) {
+            const referrerEmail = `${finalReferrerId.trim()}@internal.user`;
+            const { data: referrerProfile } = await supabaseAdmin
+              .from("profiles")
+              .select("user_id, credits")
+              .eq("email", referrerEmail)
+              .single();
+
+            if (referrerProfile && referrerProfile.user_id !== order.user_id) {
+              const { data: rewardSetting } = await supabaseAdmin
+                .from("app_settings")
+                .select("value")
+                .eq("key", "referral_reward")
+                .single();
+
+              const rewardCredits = rewardSetting?.value?.credits ?? 50;
+              if (rewardCredits > 0) {
+                await supabaseAdmin
+                  .from("profiles")
+                  .update({ credits: (referrerProfile.credits || 0) + rewardCredits })
+                  .eq("user_id", referrerProfile.user_id);
+
+                await supabaseAdmin
+                  .from("credit_topups")
+                  .insert({
+                    user_id: referrerProfile.user_id,
+                    amount: rewardCredits,
+                    topup_type: "referral",
+                    note: `Referral from renew order: ${order.order_number}`,
+                    created_by: user.id,
+                  });
+              }
+            }
+          }
+
+          await supabaseAdmin
+            .from("payment_orders")
+            .update({
+              admin_credit_amount: finalCreditAmount,
+              admin_bonus_amount: finalBonusAmount,
+              referrer_display_id: finalReferrerId || null,
+              admin_notes: adminNotes || null,
+              approved_by: user.id,
+              approved_at: new Date().toISOString(),
+              status: "approved"
+            })
+            .eq("id", orderId);
+
+          resultData = { newBalance: newCredits };
+        }
+
+        return new Response(
+          JSON.stringify({ success: true, ...resultData }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "reject_order": {
+        const { orderId, adminNotes } = params;
+
+        if (!orderId) {
+          return new Response(
+            JSON.stringify({ error: "orderId required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { data: order } = await supabaseAdmin
+          .from("payment_orders")
+          .select("status")
+          .eq("id", orderId)
+          .single();
+
+        if (order?.status !== "pending") {
+          return new Response(
+            JSON.stringify({ error: "Order already processed" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        await supabaseAdmin
+          .from("payment_orders")
+          .update({
+            status: "rejected",
+            admin_notes: adminNotes || null,
+            approved_by: user.id,
+            approved_at: new Date().toISOString()
+          })
+          .eq("id", orderId);
+
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "get_slip_url": {
+        const { path } = params;
+        if (!path) {
+          return new Response(
+            JSON.stringify({ error: "path required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { data } = await supabaseAdmin.storage
+          .from("payment-slips")
+          .createSignedUrl(path, 300); // 5 min signed URL
+
+        return new Response(
+          JSON.stringify({ success: true, url: data?.signedUrl }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      default:
+        return new Response(
+          JSON.stringify({ error: "Unknown action" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+    }
+  } catch (error) {
+    console.error("Process order error:", error);
+    return new Response(
+      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+});
