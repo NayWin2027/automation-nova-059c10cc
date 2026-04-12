@@ -810,7 +810,7 @@ export default function App() {
       sourceCanvas.height = canvasH;
       const sourceCtx = sourceCanvas.getContext("2d");
       if (!sourceCtx) throw new Error("Could not get canvas context");
-      // Capture almost full frame (avoiding only bottom UI) since we extract from ad-free 1-15% segment
+      // Capture almost full frame (avoiding only bottom UI) since we extract from ad-free 1-25% segment
       const vW = video.videoWidth || 1280;
       const vH = video.videoHeight || 720;
       const subAvoidanceHeight = vH * 0.85;
