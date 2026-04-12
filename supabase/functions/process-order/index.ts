@@ -621,6 +621,32 @@ serve(async (req) => {
         );
       }
 
+      case "get_order_summary": {
+        // Get summary totals by prefix
+        const { data: allOrders } = await supabaseAdmin
+          .from("payment_orders")
+          .select("order_number, status, admin_credit_amount, admin_bonus_amount");
+
+        const summary = {
+          nw: { total: 0, approved: 0, totalCredits: 0 },
+          kys: { total: 0, approved: 0, totalCredits: 0 },
+        };
+
+        for (const o of allOrders || []) {
+          const prefix = o.order_number?.startsWith("kys") ? "kys" : "nw";
+          summary[prefix].total++;
+          if (o.status === "approved") {
+            summary[prefix].approved++;
+            summary[prefix].totalCredits += (o.admin_credit_amount || 0) + (o.admin_bonus_amount || 0);
+          }
+        }
+
+        return new Response(
+          JSON.stringify({ success: true, summary }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: "Unknown action" }),
