@@ -121,12 +121,64 @@ serve(async (req) => {
 
         // Update profile with custom values
         if (newUser.user) {
+          const updateObj: Record<string, any> = { 
+            plan: plan || 'free', 
+            credits: credits || 100 
+          };
+
+          // Handle referral (optional)
+          const referrerId = params.referrerId;
+          if (referrerId && typeof referrerId === 'string' && referrerId.trim()) {
+            // Validate referrer exists and is not the new user
+            const { data: referrerProfile } = await supabaseAdmin
+              .from('profiles')
+              .select('user_id')
+              .eq('user_id', referrerId.trim())
+              .single();
+
+            if (referrerProfile && referrerProfile.user_id !== newUser.user.id) {
+              updateObj.referred_by = referrerProfile.user_id;
+
+              // Get referral reward amount from app_settings
+              const { data: rewardSetting } = await supabaseAdmin
+                .from('app_settings')
+                .select('value')
+                .eq('key', 'referral_reward')
+                .single();
+
+              const rewardCredits = rewardSetting?.value?.credits ?? 50;
+
+              if (rewardCredits > 0) {
+                // Add reward credits to referrer
+                const { data: referrerCurrent } = await supabaseAdmin
+                  .from('profiles')
+                  .select('credits')
+                  .eq('user_id', referrerProfile.user_id)
+                  .single();
+
+                const currentReferrerCredits = referrerCurrent?.credits || 0;
+                await supabaseAdmin
+                  .from('profiles')
+                  .update({ credits: currentReferrerCredits + rewardCredits })
+                  .eq('user_id', referrerProfile.user_id);
+
+                // Audit log in credit_topups
+                await supabaseAdmin
+                  .from('credit_topups')
+                  .insert({
+                    user_id: referrerProfile.user_id,
+                    amount: rewardCredits,
+                    topup_type: 'referral',
+                    note: `Referral reward: referred user ${newUser.user.email}`,
+                    created_by: user.id,
+                  });
+              }
+            }
+          }
+
           await supabaseAdmin
             .from('profiles')
-            .update({ 
-              plan: plan || 'free', 
-              credits: credits || 100 
-            })
+            .update(updateObj)
             .eq('user_id', newUser.user.id);
 
           // SECURITY: Plaintext password storage removed

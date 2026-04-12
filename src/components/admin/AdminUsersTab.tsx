@@ -56,7 +56,8 @@ const AdminUsersTab: React.FC = () => {
     userId: "",
     password: "",
     plan: "free" as "free" | "pro" | "premium",
-    credits: 100
+    credits: 100,
+    referrerId: ""
   });
   const [newCredits, setNewCredits] = useState(0);
   const [topupAmount, setTopupAmount] = useState(0);
