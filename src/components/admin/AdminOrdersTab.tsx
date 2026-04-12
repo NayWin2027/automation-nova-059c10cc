@@ -413,6 +413,24 @@ const AdminOrdersTab: React.FC = () => {
                 {selectedOrder.payment_ref && (
                   <p className="text-xs"><strong>Ref:</strong> {selectedOrder.payment_ref}</p>
                 )}
+                {selectedOrder.contact_method && selectedOrder.contact_value && (
+                  <div className="flex items-center gap-1 text-xs">
+                    <strong className="shrink-0">Contact:</strong>
+                    <span className="text-cyan-400 flex items-center gap-0.5">
+                      {getContactIcon(selectedOrder.contact_method)}
+                      {getContactLabel(selectedOrder.contact_method)}
+                    </span>
+                    <span className="break-all">{selectedOrder.contact_value}</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-5 w-5 shrink-0"
+                      onClick={() => copyToClipboard(selectedOrder.contact_value!)}
+                    >
+                      <Copy className="w-2.5 h-2.5" />
+                    </Button>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1.5">
