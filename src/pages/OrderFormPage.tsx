@@ -190,7 +190,7 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 bg-[#050524]">
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">Order Type *</Label>
             <Select
@@ -342,12 +342,12 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
               !formData.contactMethod ||
               !formData.contactValue.trim()
             }
-            className="w-full h-10"
+            className="w-full h-10 text-gold font-extrabold bg-black"
           >
             {loading ? "တင်နေသည်..." : "Order တင်မယ်"}
           </Button>
 
-          <p className="text-3xs text-muted-foreground text-center">
+          <p className="text-3xs text-muted-foreground text-center text-sm">
             Admin စစ်ဆေးပြီး approved လုပ်ပေးပါမည်။ စစ်ဆေးရန် အချိန်အနည်းငယ် ယူပါမည်။
           </p>
         </CardContent>
