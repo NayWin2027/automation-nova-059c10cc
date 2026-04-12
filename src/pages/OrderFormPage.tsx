@@ -24,7 +24,6 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
   const [formData, setFormData] = useState({
     orderType: "" as "new_user" | "topup" | "renew" | "",
     paymentMethod: "" as "kpay" | "wave" | "thai_bank" | "",
-    userEmail: "",
     paymentRef: "",
     referrerDisplayId: "",
   });
