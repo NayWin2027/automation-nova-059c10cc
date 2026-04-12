@@ -206,6 +206,31 @@ const AdminOrdersTab: React.FC = () => {
 
   return (
     <div className="space-y-4">
+      {/* Summary Cards */}
+      {summary && (
+        <div className="grid grid-cols-2 gap-3">
+          <Card className="border-blue-500/20">
+            <CardContent className="py-3 px-4">
+              <p className="text-xs font-bold text-blue-400 mb-1">💳 KPay / Wave (nw)</p>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <span>Total: <strong className="text-foreground">{summary.nw.total}</strong></span>
+                <span>Approved: <strong className="text-emerald-400">{summary.nw.approved}</strong></span>
+                <span>Credits: <strong className="text-primary">{summary.nw.totalCredits.toLocaleString()}</strong></span>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-amber-500/20">
+            <CardContent className="py-3 px-4">
+              <p className="text-xs font-bold text-amber-400 mb-1">🏦 Thai Bank (kys)</p>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <span>Total: <strong className="text-foreground">{summary.kys.total}</strong></span>
+                <span>Approved: <strong className="text-emerald-400">{summary.kys.approved}</strong></span>
+                <span>Credits: <strong className="text-primary">{summary.kys.totalCredits.toLocaleString()}</strong></span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
       {/* Filters */}
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 min-w-[200px]">
