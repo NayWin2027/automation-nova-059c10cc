@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, FileCheck, ArrowLeft, ShieldCheck, Sparkles, Phone, Send, MessageCircle, Mail } from "lucide-react";
+import { Upload, FileCheck, ArrowLeft, ShieldCheck, Phone, Send, MessageCircle, Mail } from "lucide-react";
 import { AppLogo } from "@/components/AppLogo";
 
 interface OrderFormPageProps {
@@ -186,7 +186,6 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
               onClick={() => navigate("/plans")}
               className="border-violet-500/50 text-violet-400 hover:bg-violet-500/10 hover:text-violet-300 transition-all duration-300 shadow-[0_0_12px_rgba(139,92,246,0.3)] hover:shadow-[0_0_20px_rgba(139,92,246,0.5)]"
             >
-              <Sparkles className="w-3.5 h-3.5 mr-1.5" />
               Plan အသေးစိပ်
             </Button>
           </div>
