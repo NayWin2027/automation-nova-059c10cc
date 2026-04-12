@@ -39,8 +39,8 @@ const AdminOrdersTab: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>("pending");
   const [search, setSearch] = useState("");
   const [summary, setSummary] = useState<{
-    nw: { total: number; approved: number; totalCredits: number };
-    kys: { total: number; approved: number; totalCredits: number };
+    nw: { total: number; approved: number; pending: number; totalCredits: number; totalBonus: number; newUser: number; topup: number; renew: number };
+    kys: { total: number; approved: number; pending: number; totalCredits: number; totalBonus: number; newUser: number; topup: number; renew: number };
   } | null>(null);
 
   // Approval dialog state
