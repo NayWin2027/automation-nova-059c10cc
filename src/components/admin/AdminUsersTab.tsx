@@ -60,7 +60,7 @@ const AdminUsersTab: React.FC = () => {
   });
   const [newCredits, setNewCredits] = useState(0);
   const [topupAmount, setTopupAmount] = useState(0);
-  const [topupType, setTopupType] = useState<'original' | 'topup' | 'bonus'>('topup');
+  const [topupType, setTopupType] = useState<'original' | 'topup' | 'bonus' | 'renew'>('topup');
   const [topupNote, setTopupNote] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [banReason, setBanReason] = useState("");
@@ -624,7 +624,7 @@ const AdminUsersTab: React.FC = () => {
           <div className="space-y-3">
             <div>
               <Label className="text-2xs text-muted-foreground">Type</Label>
-              <Select value={topupType} onValueChange={(v) => setTopupType(v as 'original' | 'topup' | 'bonus')}>
+              <Select value={topupType} onValueChange={(v) => setTopupType(v as 'original' | 'topup' | 'bonus' | 'renew')}>
                 <SelectTrigger className="h-8 text-xs bg-secondary/30 border-border/30">
                   <SelectValue />
                 </SelectTrigger>
@@ -632,6 +632,7 @@ const AdminUsersTab: React.FC = () => {
                   <SelectItem value="original" className="text-xs">🟢 Original</SelectItem>
                   <SelectItem value="topup" className="text-xs">🟡 Top-up</SelectItem>
                   <SelectItem value="bonus" className="text-xs">🟣 Bonus</SelectItem>
+                  <SelectItem value="renew" className="text-xs">🔵 Renew (သက်တမ်းတိုး)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
