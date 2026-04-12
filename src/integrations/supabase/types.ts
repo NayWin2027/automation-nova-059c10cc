@@ -176,6 +176,66 @@ export type Database = {
         }
         Relationships: []
       }
+      payment_orders: {
+        Row: {
+          admin_bonus_amount: number | null
+          admin_credit_amount: number | null
+          admin_notes: string | null
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          id: string
+          order_number: string
+          order_type: string
+          payment_method: string
+          payment_ref: string | null
+          referrer_display_id: string | null
+          slip_image_path: string | null
+          status: string
+          updated_at: string
+          user_email: string
+          user_id: string | null
+        }
+        Insert: {
+          admin_bonus_amount?: number | null
+          admin_credit_amount?: number | null
+          admin_notes?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          id?: string
+          order_number: string
+          order_type: string
+          payment_method: string
+          payment_ref?: string | null
+          referrer_display_id?: string | null
+          slip_image_path?: string | null
+          status?: string
+          updated_at?: string
+          user_email: string
+          user_id?: string | null
+        }
+        Update: {
+          admin_bonus_amount?: number | null
+          admin_credit_amount?: number | null
+          admin_notes?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          id?: string
+          order_number?: string
+          order_type?: string
+          payment_method?: string
+          payment_ref?: string | null
+          referrer_display_id?: string | null
+          slip_image_path?: string | null
+          status?: string
+          updated_at?: string
+          user_email?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           active_session_id: string | null
@@ -570,6 +630,10 @@ export type Database = {
           _user_id: string
         }
         Returns: Json
+      }
+      generate_order_number: {
+        Args: { _payment_method: string }
+        Returns: string
       }
       has_role: {
         Args: {
