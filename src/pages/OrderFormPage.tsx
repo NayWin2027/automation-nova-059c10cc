@@ -347,7 +347,7 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
             {loading ? "တင်နေသည်..." : "Order တင်မယ်"}
           </Button>
 
-          <p className="text-sm text-muted-foreground text-center">
+          <p className="text-3xs text-muted-foreground text-center text-sm">
             Admin စစ်ဆေးပြီး approved လုပ်ပေးပါမည်။ စစ်ဆေးရန် အချိန်အနည်းငယ် ယူပါမည်။
           </p>
         </CardContent>
