@@ -56,7 +56,8 @@ const AdminUsersTab: React.FC = () => {
     userId: "",
     password: "",
     plan: "free" as "free" | "pro" | "premium",
-    credits: 100
+    credits: 100,
+    referrerId: ""
   });
   const [newCredits, setNewCredits] = useState(0);
   const [topupAmount, setTopupAmount] = useState(0);
@@ -125,17 +126,23 @@ const AdminUsersTab: React.FC = () => {
     setLoading(true);
     // Use userId as the email (internal identifier)
     const internalEmail = `${newUser.userId}@internal.user`;
-    const { error } = await createUser(
-      internalEmail,
-      newUser.password,
-      newUser.plan,
-      newUser.credits
-    );
+    const { data, error } = await supabase.functions.invoke('admin-actions', {
+      body: {
+        action: 'create_user',
+        email: internalEmail,
+        password: newUser.password,
+        plan: newUser.plan,
+        credits: newUser.credits,
+        referrerId: newUser.referrerId.trim() || undefined,
+      }
+    });
 
-    if (error) {
+    const invokeError = error || (data && !data.success ? { message: data.error || 'Unknown error' } : null);
+
+    if (invokeError) {
       toast({
         title: "❌ Failed to create user",
-        description: error.message,
+        description: invokeError.message,
         variant: "destructive"
       });
     } else {
@@ -144,7 +151,7 @@ const AdminUsersTab: React.FC = () => {
         description: `User "${newUser.userId}" has been added`
       });
       setAddUserOpen(false);
-      setNewUser({ userId: "", password: "", plan: "free", credits: 100 });
+      setNewUser({ userId: "", password: "", plan: "free", credits: 100, referrerId: "" });
       fetchProfiles();
       fetchStats();
     }
@@ -390,6 +397,14 @@ const AdminUsersTab: React.FC = () => {
                     onChange={(e) => setNewUser({ ...newUser, credits: parseInt(e.target.value) || 0 })}
                     className="h-8 text-xs bg-secondary/30 border-border/30" />
 
+                </div>
+                <div>
+                  <Label className="text-2xs text-muted-foreground">Referrer ID <span className="text-muted-foreground/50">(optional)</span></Label>
+                  <Input
+                    placeholder="Enter referrer's user ID (optional)"
+                    value={newUser.referrerId}
+                    onChange={(e) => setNewUser({ ...newUser, referrerId: e.target.value })}
+                    className="h-8 text-xs bg-secondary/30 border-border/30" />
                 </div>
                 <button
                   onClick={handleCreateUser}
