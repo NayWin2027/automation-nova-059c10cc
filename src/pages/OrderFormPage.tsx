@@ -9,7 +9,11 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Upload, FileCheck, ArrowLeft, ShieldCheck } from "lucide-react";
 
-const OrderFormPage: React.FC = () => {
+interface OrderFormPageProps {
+  embedded?: boolean;
+}
+
+const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -119,8 +123,8 @@ const OrderFormPage: React.FC = () => {
 
   if (submitted) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-md border-primary/20">
+      <div className={embedded ? "p-4" : "min-h-screen bg-background flex items-center justify-center p-4"}>
+        <Card className={embedded ? "w-full border-primary/20" : "w-full max-w-md border-primary/20"}>
           <CardContent className="pt-8 pb-8 text-center space-y-4">
             <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto">
               <FileCheck className="w-8 h-8 text-emerald-400" />
@@ -134,10 +138,12 @@ const OrderFormPage: React.FC = () => {
               Admin မှ စစ်ဆေးပြီး approved လုပ်ပေးပါမည်။<br />
               Approved ဖြစ်ပါက အကောင့်အချက်အလက်များ ပို့ပေးပါမည်။
             </p>
-            <Button onClick={() => navigate("/")} variant="outline" className="mt-4">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              ပင်မစာမျက်နှာသို့
-            </Button>
+            {!embedded && (
+              <Button onClick={() => navigate("/")} variant="outline" className="mt-4">
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                ပင်မစာမျက်နှာသို့
+              </Button>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -145,8 +151,8 @@ const OrderFormPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <Card className="w-full max-w-lg border-primary/20">
+    <div className={embedded ? "p-4" : "min-h-screen bg-background flex items-center justify-center p-4"}>
+      <Card className={embedded ? "w-full border-none shadow-none" : "w-full max-w-lg border-primary/20"}>
         <CardHeader className="text-center pb-2">
           <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-3">
             <ShieldCheck className="w-6 h-6 text-primary" />

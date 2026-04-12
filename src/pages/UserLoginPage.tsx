@@ -1,14 +1,17 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, lazy, Suspense } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useSessionEnforcement } from "@/hooks/useSessionEnforcement";
 import {
   User, Lock, ArrowRight, Eye, EyeOff,
-  LogIn, Home, MessageCircle } from
+  LogIn, Home, MessageCircle, ShoppingCart } from
 "lucide-react";
 import { AppLogo } from "@/components/AppLogo";
 import { LoginChatBot } from "@/components/LoginChatBot";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+
+const OrderFormPage = lazy(() => import("@/pages/OrderFormPage"));
 
 // Gate code moved to backend - verified via edge function
 
@@ -25,6 +28,7 @@ const UserLoginPage: React.FC = () => {
   const [gateCode, setGateCode] = useState("");
   const [gateAttempts, setGateAttempts] = useState(0);
   const [gateLocked, setGateLocked] = useState(false);
+  const [showOrderDialog, setShowOrderDialog] = useState(false);
 
   useEffect(() => {
     // Check if already logged in
@@ -242,6 +246,38 @@ const UserLoginPage: React.FC = () => {
               </a>
             </div>
           </div>
+
+          {/* Premium Plan Order Button */}
+          <div className="mt-4 flex justify-center">
+            <button
+              type="button"
+              onClick={() => setShowOrderDialog(true)}
+              className="relative group flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white transition-all duration-300 overflow-hidden"
+              style={{
+                background: "linear-gradient(135deg, hsl(270 80% 55%), hsl(200 100% 50%))",
+                boxShadow: "0 0 20px hsl(270 80% 55% / 0.4), 0 0 40px hsl(200 100% 50% / 0.2)",
+              }}
+            >
+              {/* Animated glow ring */}
+              <span className="absolute inset-0 rounded-xl animate-pulse" style={{
+                background: "linear-gradient(135deg, hsl(270 80% 65% / 0.3), hsl(200 100% 60% / 0.3))",
+                filter: "blur(8px)",
+              }} />
+              <span className="relative flex items-center gap-2">
+                <ShoppingCart className="w-4 h-4" />
+                Premium Plan ဝယ်ရန်
+              </span>
+            </button>
+          </div>
+
+          {/* Order Form Dialog */}
+          <Dialog open={showOrderDialog} onOpenChange={setShowOrderDialog}>
+            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0 border-violet-500/20 bg-background">
+              <Suspense fallback={<div className="p-8 text-center text-sm text-muted-foreground">Loading...</div>}>
+                <OrderFormPage embedded />
+              </Suspense>
+            </DialogContent>
+          </Dialog>
 
           {/* Admin Link - subtle */}
           {!gateLocked &&
