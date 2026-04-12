@@ -23,6 +23,8 @@ interface PaymentOrder {
   slip_image_path: string | null;
   payment_ref: string | null;
   referrer_display_id: string | null;
+  contact_method: string | null;
+  contact_value: string | null;
   status: string;
   admin_credit_amount: number | null;
   admin_bonus_amount: number;
