@@ -45,6 +45,7 @@ const TermsPage = lazyRetry(() => import("./pages/TermsPage"));
 const PrivacyPage = lazyRetry(() => import("./pages/PrivacyPage"));
 const AboutPage = lazyRetry(() => import("./pages/AboutPage"));
 const NotFound = lazyRetry(() => import("./pages/NotFound"));
+const PlansPage = lazyRetry(() => import("./pages/PlansPage"));
 
 const queryClient = new QueryClient();
 
