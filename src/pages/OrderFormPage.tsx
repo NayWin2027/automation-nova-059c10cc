@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, FileCheck, ArrowLeft, ShieldCheck } from "lucide-react";
+import { Upload, FileCheck, ArrowLeft, ShieldCheck, Sparkles } from "lucide-react";
 
 interface OrderFormPageProps {
   embedded?: boolean;
@@ -24,7 +24,6 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
   const [formData, setFormData] = useState({
     orderType: "" as "new_user" | "topup" | "renew" | "",
     paymentMethod: "" as "kpay" | "wave" | "thai_bank" | "",
-    userEmail: "",
     paymentRef: "",
     referrerDisplayId: "",
   });
@@ -35,9 +34,7 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        const emailParts = session.user.email?.replace("@internal.user", "") || "";
         setCurrentUser({ id: session.user.id, email: session.user.email || "" });
-        setFormData(prev => ({ ...prev, userEmail: emailParts }));
       }
     };
     checkAuth();
@@ -58,8 +55,8 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
   };
 
   const handleSubmit = async () => {
-    if (!formData.orderType || !formData.paymentMethod || !formData.userEmail) {
-      toast({ title: "လိုအပ်ချက်မပြည့်စုံပါ", description: "Order type, payment method, email ဖြည့်ပေးပါ", variant: "destructive" });
+    if (!formData.orderType || !formData.paymentMethod || !formData.paymentRef.trim() || !slipFile) {
+      toast({ title: "လိုအပ်ချက်မပြည့်စုံပါ", description: "Order type, payment method, transaction number, payment slip အားလုံး ဖြည့်ပေးပါ", variant: "destructive" });
       return;
     }
 
@@ -97,9 +94,9 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
           action: currentUser ? "submit_order" : "submit_order_public",
           order_type: formData.orderType,
           payment_method: formData.paymentMethod,
-          user_email: formData.userEmail,
+          user_email: currentUser?.email || "public_order",
           slip_image_path: slipImagePath,
-          payment_ref: formData.paymentRef || null,
+          payment_ref: formData.paymentRef.trim(),
           referrer_display_id: formData.referrerDisplayId || null,
         }
       });
@@ -161,6 +158,15 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
           <CardDescription className="text-xs">
             Plan ဝယ်ယူခြင်း / Credit ဖြည့်သွင်းခြင်း / သက်တမ်းတိုးခြင်း
           </CardDescription>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate("/plans")}
+            className="mt-2 mx-auto border-violet-500/50 text-violet-400 hover:bg-violet-500/10 hover:text-violet-300 transition-all duration-300 shadow-[0_0_12px_rgba(139,92,246,0.3)] hover:shadow-[0_0_20px_rgba(139,92,246,0.5)]"
+          >
+            <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+            Plan အသေးစိပ်
+          </Button>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
@@ -198,20 +204,7 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium">
-              {formData.orderType === "new_user" ? "User ID (လိုချင်သော ID)" : "User ID"} *
-            </Label>
-            <Input
-              value={formData.userEmail}
-              onChange={(e) => setFormData(prev => ({ ...prev, userEmail: e.target.value }))}
-              placeholder={formData.orderType === "new_user" ? "ဥပမာ: john123" : "သင့် User ID"}
-              className="h-9 text-sm"
-              disabled={!!currentUser && formData.orderType !== "new_user"}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Transaction Number (ငွေလွှဲ reference no)</Label>
+            <Label className="text-xs font-medium">Transaction Number (ငွေလွှဲ reference no) *</Label>
             <Input
               value={formData.paymentRef}
               onChange={(e) => setFormData(prev => ({ ...prev, paymentRef: e.target.value }))}
@@ -231,7 +224,7 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Payment Slip (ငွေလွှဲ slip ပုံ)</Label>
+            <Label className="text-xs font-medium">Payment Slip (ငွေလွှဲ slip ပုံ) *</Label>
             <div className="border border-dashed border-primary/30 rounded-lg p-4 text-center">
               {slipPreview ? (
                 <div className="space-y-2">
@@ -262,7 +255,7 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
 
           <Button
             onClick={handleSubmit}
-            disabled={loading || !formData.orderType || !formData.paymentMethod || !formData.userEmail}
+            disabled={loading || !formData.orderType || !formData.paymentMethod || !formData.paymentRef.trim() || !slipFile}
             className="w-full h-10"
           >
             {loading ? "တင်နေသည်..." : "Order တင်မယ်"}
