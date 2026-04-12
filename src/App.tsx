@@ -45,6 +45,7 @@ const TermsPage = lazyRetry(() => import("./pages/TermsPage"));
 const PrivacyPage = lazyRetry(() => import("./pages/PrivacyPage"));
 const AboutPage = lazyRetry(() => import("./pages/AboutPage"));
 const NotFound = lazyRetry(() => import("./pages/NotFound"));
+const PlansPage = lazyRetry(() => import("./pages/PlansPage"));
 
 const queryClient = new QueryClient();
 
@@ -78,6 +79,7 @@ const App = () => (
             <Route path="/admin/dashboard" element={<Suspense fallback={null}><AdminRoute><AdminDashboardPage /></AdminRoute></Suspense>} />
             {/* Order Form */}
             <Route path="/order" element={<OrderFormPage />} />
+            <Route path="/plans" element={<PlansPage />} />
             {/* User Routes */}
             <Route path="/login" element={<UserLoginPage />} />
             {/* Legal Pages */}
