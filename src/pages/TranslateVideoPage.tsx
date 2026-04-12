@@ -439,7 +439,6 @@ export default function App() {
     thumbnailUrl: string;
   } | null>(null);
   const [isGeneratingMarketing, setIsGeneratingMarketing] = useState(false);
-  const posterStyleIndexRef = useRef(0);
 
   // Load credit rate from tool_settings
   useEffect(() => {
@@ -814,7 +813,7 @@ export default function App() {
       // Crop bottom subtitle area: capture top 70% of video to avoid original subtitles
       const vW = video.videoWidth || 1280;
       const vH = video.videoHeight || 720;
-      const subAvoidanceHeight = vH * 0.92;
+      const subAvoidanceHeight = vH * 0.85;
       const srcRatio1 = vW / subAvoidanceHeight;
       const destRatio1 = canvasW / canvasH;
       let sW1 = vW,
@@ -865,7 +864,7 @@ export default function App() {
                   // 65% keeps faces fully visible while cropping out subtitle area at bottom.
                   const vW2 = tempVideo.videoWidth || 1280;
                   const vH2 = tempVideo.videoHeight || 720;
-                  const subAvoidanceHeight = vH2 * 0.9;
+                  const subAvoidanceHeight = vH2 * 0.65;
                   const srcRatio2 = vW2 / subAvoidanceHeight;
                   const destRatio2 = canvasW / canvasH;
                   let sW2 = vW2,
@@ -956,16 +955,14 @@ export default function App() {
       // Helper function for perfectly blended cinematic faces without ghosting
       const drawCinematicFace = (img, scaleMultiplier, alignX, alignY, maskConfig) => {
         const isPortrait = canvas.height > canvas.width;
-        // ── FIX: Larger base scale so faces fill the frame fully ──
-        const baseScale = isPortrait ? 1.7 : 1.4;
+        const baseScale = isPortrait ? 1.4 : 1.1;
         const scale = baseScale * scaleMultiplier;
 
         const imgW = canvas.width * scale;
         const imgH = (imgW * img.height) / img.width;
 
-        // ── FIX: anchor top of image higher so faces (upper portion) are always visible ──
         const dx = (canvas.width - imgW) / 2 + canvas.width * alignX;
-        const dy = canvas.height * 0.02 + canvas.height * alignY; // top-anchored, not center
+        const dy = (canvas.height - imgH) / 2 + canvas.height * alignY;
 
         const tempCanvas = document.createElement("canvas");
         tempCanvas.width = canvas.width;
@@ -976,21 +973,22 @@ export default function App() {
           tCtx.drawImage(img, dx, dy, imgW, imgH);
           tCtx.globalCompositeOperation = "destination-in";
 
+          // Radial Mask for seamless organic blending
           const cx = maskConfig.centerX !== undefined ? canvas.width * maskConfig.centerX : canvas.width / 2;
           const cy = maskConfig.centerY !== undefined ? canvas.height * maskConfig.centerY : canvas.height / 2;
           const innerR = maskConfig.innerR !== undefined ? canvas.width * maskConfig.innerR : 0;
-          // ── FIX: outerR larger so faces not clipped by mask ──
-          const outerR = maskConfig.outerR !== undefined ? canvas.width * maskConfig.outerR : canvas.width;
+          const outerR = maskConfig.outerR !== undefined ? canvas.width * maskConfig.outerR : canvas.width * 0.8;
 
           const mask = tCtx.createRadialGradient(cx, cy, innerR, cx, cy, outerR);
           mask.addColorStop(0, "rgba(0,0,0,1)");
-          mask.addColorStop(0.65, "rgba(0,0,0,0.95)");
-          mask.addColorStop(0.85, "rgba(0,0,0,0.4)");
+          mask.addColorStop(0.5, "rgba(0,0,0,0.85)");
+          mask.addColorStop(0.8, "rgba(0,0,0,0.2)");
           mask.addColorStop(1, "rgba(0,0,0,0)");
 
           tCtx.fillStyle = mask;
           tCtx.fillRect(0, 0, canvas.width, canvas.height);
 
+          // Cut specific edges smoothly behind other elements
           if (maskConfig.bottomCut) {
             tCtx.globalCompositeOperation = "destination-in";
             const bMask = tCtx.createLinearGradient(
@@ -1024,135 +1022,69 @@ export default function App() {
 
       const isPortrait = canvas.height > canvas.width;
 
-      // Cycle through poster styles on each regenerate
-      const styleIndex = posterStyleIndexRef.current % 3;
-      posterStyleIndexRef.current++;
-
-      // Shuffle images based on style to show different characters in hero position
-      const styleImages = [...validImages];
-      if (styleIndex > 0 && styleImages.length > 1) {
-        // Rotate the array so different characters become the "hero"
-        for (let r = 0; r < styleIndex; r++) {
-          const first = styleImages.shift()!;
-          styleImages.push(first);
-        }
-      }
-
-      // === STYLE 0: Classic Hero + Supporting Cast ===
-      if (styleIndex === 0) {
-        const supportingCast = styleImages.slice(1, 4);
-        if (isPortrait) {
-          // Supporting cast — top area, faces fully visible
-          supportingCast.forEach((img, i) => {
-            const xOffsets = [0, -0.25, 0.25];
-            const yOffsets = [-0.28, -0.24, -0.24];
-            drawCinematicFace(img, 0.9, xOffsets[i] || 0, yOffsets[i] || -0.25, {
-              centerX: 0.5 + (xOffsets[i] || 0),
-              centerY: 0.22,
-              innerR: 0.18,
-              outerR: 0.65,
-              bottomCut: { y1: 0.38, y2: 0.52 },
-            });
+      // 2. Draw Supporting Characters (Background Layer)
+      const supportingCast = validImages.slice(1, 4);
+      if (isPortrait) {
+        if (supportingCast.length === 1) {
+          drawCinematicFace(supportingCast[0], 1.2, 0, -0.25, {
+            centerX: 0.5,
+            centerY: 0.25,
+            innerR: 0.15,
+            outerR: 0.7,
+            bottomCut: { y1: 0.35, y2: 0.55 },
           });
-        } else {
-          if (supportingCast[0])
-            drawCinematicFace(supportingCast[0], 1.0, -0.28, 0, {
-              centerX: 0.22,
-              centerY: 0.5,
-              innerR: 0.18,
-              outerR: 0.65,
-            });
-          if (supportingCast[1])
-            drawCinematicFace(supportingCast[1], 1.0, 0.28, 0, {
-              centerX: 0.78,
-              centerY: 0.5,
-              innerR: 0.18,
-              outerR: 0.65,
-            });
-        }
-        // Hero — large, bottom half, face clearly visible
-        if (styleImages[0]) {
-          if (isPortrait) {
-            drawCinematicFace(styleImages[0], 1.2, 0, 0.1, {
+        } else if (supportingCast.length >= 2) {
+          if (supportingCast.length >= 3) {
+            drawCinematicFace(supportingCast[2], 1.1, 0, -0.35, {
               centerX: 0.5,
-              centerY: 0.6,
-              innerR: 0.28,
-              outerR: 1.05,
-              topCut: { y1: 0.22, y2: 0.38 },
-            });
-          } else {
-            drawCinematicFace(styleImages[0], 1.1, 0, 0.05, {
-              centerX: 0.5,
-              centerY: 0.55,
-              innerR: 0.25,
-              outerR: 0.98,
-              topCut: { y1: 0.08, y2: 0.28 },
+              centerY: 0.15,
+              innerR: 0.1,
+              outerR: 0.6,
+              bottomCut: { y1: 0.25, y2: 0.45 },
             });
           }
+          drawCinematicFace(supportingCast[0], 1.15, -0.25, -0.2, {
+            centerX: 0.25,
+            centerY: 0.28,
+            innerR: 0.1,
+            outerR: 0.65,
+            bottomCut: { y1: 0.35, y2: 0.55 },
+          });
+          drawCinematicFace(supportingCast[1], 1.15, 0.25, -0.2, {
+            centerX: 0.75,
+            centerY: 0.28,
+            innerR: 0.1,
+            outerR: 0.65,
+            bottomCut: { y1: 0.35, y2: 0.55 },
+          });
+        }
+      } else {
+        if (supportingCast.length >= 1) {
+          drawCinematicFace(supportingCast[0], 1.0, -0.3, 0, { centerX: 0.2, centerY: 0.5, innerR: 0.1, outerR: 0.5 });
+        }
+        if (supportingCast.length >= 2) {
+          drawCinematicFace(supportingCast[1], 1.0, 0.3, 0, { centerX: 0.8, centerY: 0.5, innerR: 0.1, outerR: 0.5 });
         }
       }
 
-      // === STYLE 1: Side-by-Side Dual Hero ===
-      else if (styleIndex === 1) {
-        if (styleImages[0]) {
-          drawCinematicFace(styleImages[0], isPortrait ? 1.15 : 1.0, -0.18, isPortrait ? 0.0 : 0, {
-            centerX: 0.3,
-            centerY: 0.45,
-            innerR: 0.22,
-            outerR: 0.9,
-          });
-        }
-        if (styleImages[1]) {
-          drawCinematicFace(styleImages[1], isPortrait ? 1.15 : 1.0, 0.18, isPortrait ? 0.0 : 0, {
-            centerX: 0.7,
-            centerY: 0.45,
-            innerR: 0.22,
-            outerR: 0.9,
-          });
-        }
-        // Small supporting faces — top strip, faces visible
-        const extras = styleImages.slice(2, 4);
-        extras.forEach((img, i) => {
-          const xOff = i === 0 ? -0.28 : 0.28;
-          drawCinematicFace(img, 0.75, xOff, isPortrait ? -0.32 : -0.28, {
-            centerX: 0.5 + xOff,
-            centerY: 0.18,
-            innerR: 0.12,
-            outerR: 0.55,
-            bottomCut: { y1: 0.32, y2: 0.45 },
-          });
-        });
-      }
-
-      // === STYLE 2: Full-Frame Cinematic Single Hero + Collage Strip ===
-      else {
-        if (styleImages[0]) {
-          drawCinematicFace(styleImages[0], isPortrait ? 1.35 : 1.2, 0, 0, {
+      // 3. Draw Main Character (Foreground Layer)
+      if (validImages[0]) {
+        if (isPortrait) {
+          drawCinematicFace(validImages[0], 1.45, 0, 0.18, {
             centerX: 0.5,
-            centerY: 0.42,
-            innerR: 0.3,
-            outerR: 1.1,
+            centerY: 0.55,
+            innerR: 0.2,
+            outerR: 0.85,
+            topCut: { y1: 0.2, y2: 0.4 },
           });
-        }
-        // Character strip at top — faces fully visible
-        const stripChars = styleImages.slice(1, 5);
-        if (stripChars.length > 0) {
-          const stripH = canvas.height * 0.22;
-          const stripW = canvas.width / stripChars.length;
-          stripChars.forEach((img, i) => {
-            const sx = i * stripW;
-            // Draw top portion of each image (where faces are)
-            const srcH = img.height * 0.55; // top 55% = face area
-            ctx.globalAlpha = 0.75;
-            ctx.drawImage(img, 0, 0, img.width, srcH, sx, 0, stripW, stripH);
+        } else {
+          drawCinematicFace(validImages[0], 1.25, 0, 0.1, {
+            centerX: 0.5,
+            centerY: 0.55,
+            innerR: 0.15,
+            outerR: 0.85,
+            topCut: { y1: 0.1, y2: 0.3 },
           });
-          ctx.globalAlpha = 1.0;
-          // Fade strip into main image
-          const stripFade = ctx.createLinearGradient(0, stripH * 0.55, 0, stripH * 1.2);
-          stripFade.addColorStop(0, "rgba(5,8,20,0)");
-          stripFade.addColorStop(1, "rgba(5,8,20,1)");
-          ctx.fillStyle = stripFade;
-          ctx.fillRect(0, 0, canvas.width, stripH * 1.3);
         }
       }
 
