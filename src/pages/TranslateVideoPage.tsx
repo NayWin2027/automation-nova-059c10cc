@@ -859,7 +859,7 @@ export default function App() {
                 canvas.height = canvasH;
                 const ctx = canvas.getContext("2d");
                 if (ctx) {
-                  // Capture almost full frame since we extract from subtitle-free 1-25% segment
+                  // Capture almost full frame since we extract from subtitle-free 1-15% segment
                   const vW2 = tempVideo.videoWidth || 1280;
                   const vH2 = tempVideo.videoHeight || 720;
                   const subAvoidanceHeight = vH2 * 0.85;
