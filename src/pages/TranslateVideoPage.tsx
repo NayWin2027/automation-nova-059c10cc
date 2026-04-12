@@ -439,6 +439,7 @@ export default function App() {
     thumbnailUrl: string;
   } | null>(null);
   const [isGeneratingMarketing, setIsGeneratingMarketing] = useState(false);
+  const posterStyleIndexRef = useRef(0);
 
   // Load credit rate from tool_settings
   useEffect(() => {
@@ -813,7 +814,7 @@ export default function App() {
       // Crop bottom subtitle area: capture top 70% of video to avoid original subtitles
       const vW = video.videoWidth || 1280;
       const vH = video.videoHeight || 720;
-      const subAvoidanceHeight = vH * 0.85;
+      const subAvoidanceHeight = vH * 0.92;
       const srcRatio1 = vW / subAvoidanceHeight;
       const destRatio1 = canvasW / canvasH;
       let sW1 = vW,
@@ -864,7 +865,7 @@ export default function App() {
                   // 65% keeps faces fully visible while cropping out subtitle area at bottom.
                   const vW2 = tempVideo.videoWidth || 1280;
                   const vH2 = tempVideo.videoHeight || 720;
-                  const subAvoidanceHeight = vH2 * 0.65;
+                  const subAvoidanceHeight = vH2 * 0.90;
                   const srcRatio2 = vW2 / subAvoidanceHeight;
                   const destRatio2 = canvasW / canvasH;
                   let sW2 = vW2,
@@ -1022,69 +1023,95 @@ export default function App() {
 
       const isPortrait = canvas.height > canvas.width;
 
-      // 2. Draw Supporting Characters (Background Layer)
-      const supportingCast = validImages.slice(1, 4);
-      if (isPortrait) {
-        if (supportingCast.length === 1) {
-          drawCinematicFace(supportingCast[0], 1.2, 0, -0.25, {
-            centerX: 0.5,
-            centerY: 0.25,
-            innerR: 0.15,
-            outerR: 0.7,
-            bottomCut: { y1: 0.35, y2: 0.55 },
-          });
-        } else if (supportingCast.length >= 2) {
-          if (supportingCast.length >= 3) {
-            drawCinematicFace(supportingCast[2], 1.1, 0, -0.35, {
-              centerX: 0.5,
-              centerY: 0.15,
-              innerR: 0.1,
-              outerR: 0.6,
-              bottomCut: { y1: 0.25, y2: 0.45 },
-            });
-          }
-          drawCinematicFace(supportingCast[0], 1.15, -0.25, -0.2, {
-            centerX: 0.25,
-            centerY: 0.28,
-            innerR: 0.1,
-            outerR: 0.65,
-            bottomCut: { y1: 0.35, y2: 0.55 },
-          });
-          drawCinematicFace(supportingCast[1], 1.15, 0.25, -0.2, {
-            centerX: 0.75,
-            centerY: 0.28,
-            innerR: 0.1,
-            outerR: 0.65,
-            bottomCut: { y1: 0.35, y2: 0.55 },
-          });
-        }
-      } else {
-        if (supportingCast.length >= 1) {
-          drawCinematicFace(supportingCast[0], 1.0, -0.3, 0, { centerX: 0.2, centerY: 0.5, innerR: 0.1, outerR: 0.5 });
-        }
-        if (supportingCast.length >= 2) {
-          drawCinematicFace(supportingCast[1], 1.0, 0.3, 0, { centerX: 0.8, centerY: 0.5, innerR: 0.1, outerR: 0.5 });
+      // Cycle through poster styles on each regenerate
+      const styleIndex = posterStyleIndexRef.current % 3;
+      posterStyleIndexRef.current++;
+
+      // Shuffle images based on style to show different characters in hero position
+      const styleImages = [...validImages];
+      if (styleIndex > 0 && styleImages.length > 1) {
+        // Rotate the array so different characters become the "hero"
+        for (let r = 0; r < styleIndex; r++) {
+          const first = styleImages.shift()!;
+          styleImages.push(first);
         }
       }
 
-      // 3. Draw Main Character (Foreground Layer)
-      if (validImages[0]) {
+      // === STYLE 0: Classic Hero + Supporting Cast ===
+      if (styleIndex === 0) {
+        const supportingCast = styleImages.slice(1, 4);
         if (isPortrait) {
-          drawCinematicFace(validImages[0], 1.45, 0, 0.18, {
-            centerX: 0.5,
-            centerY: 0.55,
-            innerR: 0.2,
-            outerR: 0.85,
-            topCut: { y1: 0.2, y2: 0.4 },
+          supportingCast.forEach((img, i) => {
+            const xOffsets = [0, -0.22, 0.22];
+            const yOffsets = [-0.22, -0.18, -0.18];
+            drawCinematicFace(img, 1.1, xOffsets[i] || 0, yOffsets[i] || -0.2, {
+              centerX: 0.5 + (xOffsets[i] || 0),
+              centerY: 0.3,
+              innerR: 0.2,
+              outerR: 0.75,
+              bottomCut: { y1: 0.4, y2: 0.6 },
+            });
           });
         } else {
-          drawCinematicFace(validImages[0], 1.25, 0, 0.1, {
-            centerX: 0.5,
-            centerY: 0.55,
-            innerR: 0.15,
-            outerR: 0.85,
-            topCut: { y1: 0.1, y2: 0.3 },
+          if (supportingCast[0]) drawCinematicFace(supportingCast[0], 1.0, -0.28, 0, { centerX: 0.22, centerY: 0.5, innerR: 0.18, outerR: 0.6 });
+          if (supportingCast[1]) drawCinematicFace(supportingCast[1], 1.0, 0.28, 0, { centerX: 0.78, centerY: 0.5, innerR: 0.18, outerR: 0.6 });
+        }
+        if (styleImages[0]) {
+          if (isPortrait) {
+            drawCinematicFace(styleImages[0], 1.4, 0, 0.15, { centerX: 0.5, centerY: 0.55, innerR: 0.25, outerR: 0.9, topCut: { y1: 0.15, y2: 0.35 } });
+          } else {
+            drawCinematicFace(styleImages[0], 1.2, 0, 0.08, { centerX: 0.5, centerY: 0.55, innerR: 0.22, outerR: 0.9, topCut: { y1: 0.08, y2: 0.28 } });
+          }
+        }
+      }
+
+      // === STYLE 1: Side-by-Side Dual Hero ===
+      else if (styleIndex === 1) {
+        if (styleImages[0]) {
+          drawCinematicFace(styleImages[0], isPortrait ? 1.3 : 1.1, -0.18, isPortrait ? 0.05 : 0, {
+            centerX: 0.32, centerY: 0.5, innerR: 0.22, outerR: 0.8,
           });
+        }
+        if (styleImages[1]) {
+          drawCinematicFace(styleImages[1], isPortrait ? 1.3 : 1.1, 0.18, isPortrait ? 0.05 : 0, {
+            centerX: 0.68, centerY: 0.5, innerR: 0.22, outerR: 0.8,
+          });
+        }
+        // Small supporting faces at top
+        const extras = styleImages.slice(2, 4);
+        extras.forEach((img, i) => {
+          const xOff = i === 0 ? -0.25 : 0.25;
+          drawCinematicFace(img, 0.8, xOff, isPortrait ? -0.3 : -0.25, {
+            centerX: 0.5 + xOff, centerY: 0.2, innerR: 0.12, outerR: 0.5,
+            bottomCut: { y1: 0.35, y2: 0.5 },
+          });
+        });
+      }
+
+      // === STYLE 2: Full-Frame Cinematic Single Hero + Collage Strip ===
+      else {
+        if (styleImages[0]) {
+          drawCinematicFace(styleImages[0], isPortrait ? 1.5 : 1.3, 0, 0, {
+            centerX: 0.5, centerY: 0.45, innerR: 0.3, outerR: 0.95,
+          });
+        }
+        // Small character strip at the very top
+        const stripChars = styleImages.slice(1, 5);
+        if (stripChars.length > 0) {
+          const stripH = canvas.height * 0.18;
+          const stripW = canvas.width / stripChars.length;
+          ctx.globalAlpha = 0.6;
+          stripChars.forEach((img, i) => {
+            const sx = i * stripW;
+            ctx.drawImage(img, sx, 0, stripW, stripH);
+          });
+          ctx.globalAlpha = 1.0;
+          // Fade strip into main image
+          const stripFade = ctx.createLinearGradient(0, stripH * 0.5, 0, stripH * 1.2);
+          stripFade.addColorStop(0, "rgba(5,8,20,0)");
+          stripFade.addColorStop(1, "rgba(5,8,20,1)");
+          ctx.fillStyle = stripFade;
+          ctx.fillRect(0, 0, canvas.width, stripH * 1.3);
         }
       }
 
