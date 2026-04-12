@@ -19,10 +19,7 @@ import {
   Eye,
   EyeOff,
   Key,
-  Home,
 } from "lucide-react";
-import { AppLogo } from "@/components/AppLogo";
-import { useNavigate } from "react-router-dom";
 // All AI calls routed through server-side edge functions for security
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
@@ -381,7 +378,6 @@ function generateSRTContent(subs: { start: number; end: number; text: string }[]
 }
 
 export default function App() {
-  const navigate = useNavigate();
   const { isAllowed, isLoading: authLoading } = useAuthGuard("video-transform");
   const { appApiAllowed, ownApiAllowed, defaultApiMode, isLoading: accessLoading } = useApiAccess();
   const { deductCredits } = useCreditDeduction();
@@ -958,10 +954,10 @@ export default function App() {
           tCanvas.height = canvas.height;
           const tCtx = tCanvas.getContext("2d");
 
-          // Heavy cinematic coloring
+          // Pristine 8K High-Clarity Coloring
           tCtx.filter = isHero
-            ? "contrast(1.15) saturate(1.1) brightness(0.95)"
-            : "contrast(1.2) saturate(0.9) brightness(0.85)";
+            ? "contrast(1.15) saturate(1.2) brightness(1.05)"
+            : "contrast(1.1) saturate(1.1) brightness(1.0)";
 
           const imgRatio = img.width / img.height;
           const targetRatio = w / h;
@@ -1004,19 +1000,41 @@ export default function App() {
             tCtx.fillStyle = grad;
             tCtx.fillRect(x, y, w, h);
           } else {
-            // Supporting actors: Perfect circular "floating heads" fading into shadow
-            const cx = x + w / 2;
-            const cy = y + h / 2;
-            const r = Math.min(w, h) / 2;
-            const grad = tCtx.createRadialGradient(cx, cy, r * 0.1, cx, cy, r * 0.95);
-            grad.addColorStop(0, "rgba(0,0,0,1)"); // Solid center
-            grad.addColorStop(1, "rgba(0,0,0,0)"); // Soft edge
-            tCtx.fillStyle = grad;
-            tCtx.fillRect(x, y, w, h);
+            // Support actors: Seamless four-way edge fading to prevent glowing bubbles or hard cuts
+            const applyLinearMask = (gradient) => {
+              tCtx.globalCompositeOperation = "destination-in";
+              tCtx.fillStyle = gradient;
+              tCtx.fillRect(x, y, w, h);
+              tCtx.globalCompositeOperation = "source-over"; // reset
+            };
+
+            // Bottom fade
+            let grad = tCtx.createLinearGradient(0, y + h * 0.4, 0, y + h);
+            grad.addColorStop(0, "rgba(0,0,0,1)");
+            grad.addColorStop(1, "rgba(0,0,0,0)");
+            applyLinearMask(grad);
+
+            // Left fade
+            grad = tCtx.createLinearGradient(x, 0, x + w * 0.2, 0);
+            grad.addColorStop(0, "rgba(0,0,0,0)");
+            grad.addColorStop(1, "rgba(0,0,0,1)");
+            applyLinearMask(grad);
+
+            // Right fade
+            grad = tCtx.createLinearGradient(x + w * 0.8, 0, x + w, 0);
+            grad.addColorStop(0, "rgba(0,0,0,1)");
+            grad.addColorStop(1, "rgba(0,0,0,0)");
+            applyLinearMask(grad);
+
+            // Top fade
+            grad = tCtx.createLinearGradient(0, y, 0, y + h * 0.15);
+            grad.addColorStop(0, "rgba(0,0,0,0)");
+            grad.addColorStop(1, "rgba(0,0,0,1)");
+            applyLinearMask(grad);
           }
 
-          // Blend with main canvas
-          ctx.globalCompositeOperation = isHero ? "source-over" : "lighten";
+          // Blend with main canvas (Use standard overlay so bright backgrounds don't become glowing orbs)
+          ctx.globalCompositeOperation = "source-over";
           ctx.drawImage(tCanvas, 0, 0);
           ctx.globalCompositeOperation = "source-over"; // Reset
         };
@@ -1070,14 +1088,7 @@ export default function App() {
           }
 
           // Main Hero (Foreground, Massive, Centered)
-          drawLayer(
-            validImages[0],
-            canvas.width * 0.05,
-            canvas.height * 0.25,
-            canvas.width * 0.9,
-            canvas.height * 0.75,
-            true,
-          );
+          drawLayer(validImages[0], 0, canvas.height * 0.25, canvas.width, canvas.height * 0.75, true);
         } else {
           // Basic Double Exposure if not enough images or horizontal
           if (validImages[1]) {
@@ -1096,24 +1107,24 @@ export default function App() {
 
       // --- Post-Processing & Grading (The Cinematic Glue) ---
 
-      // Teal & Orange Hollywood Overlay
+      // Warm & Bright 8K Overlay (Golden Hour Vibe)
       ctx.globalCompositeOperation = "overlay";
-      ctx.fillStyle = "rgba(10, 35, 60, 0.45)";
+      ctx.fillStyle = "rgba(255, 220, 190, 0.15)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.globalCompositeOperation = "source-over";
 
-      // Heavy Cinematic Spotlight Vignette (Vastly improves realism)
+      // Soft Bright Cinematic Vignette (Removes the horror/night look)
       const vignette = ctx.createRadialGradient(
         canvas.width / 2,
         canvas.height * 0.5,
-        canvas.width * 0.15,
+        canvas.width * 0.2,
         canvas.width / 2,
         canvas.height * 0.5,
         canvas.width * 0.95,
       );
       vignette.addColorStop(0, "rgba(0,0,0,0)");
-      vignette.addColorStop(0.7, "rgba(0,0,0,0.5)");
-      vignette.addColorStop(1, "rgba(0,0,0,0.98)");
+      vignette.addColorStop(0.8, "rgba(0,0,0,0.2)");
+      vignette.addColorStop(1, "rgba(0,0,0,0.45)");
 
       ctx.globalCompositeOperation = "multiply";
       ctx.fillStyle = vignette;
@@ -1124,8 +1135,8 @@ export default function App() {
       // override any potential leftover UI/Subtitles on the hero's bottom edge!
       const textGradBg = ctx.createLinearGradient(0, canvas.height * 0.5, 0, canvas.height);
       textGradBg.addColorStop(0, "rgba(0,0,0,0)");
-      textGradBg.addColorStop(0.5, "rgba(0,0,0,0.85)");
-      textGradBg.addColorStop(1, "rgba(0,0,0,1)");
+      textGradBg.addColorStop(0.65, "rgba(0,0,0,0.75)");
+      textGradBg.addColorStop(1, "rgba(0,0,0,0.95)");
       ctx.fillStyle = textGradBg;
       ctx.fillRect(0, canvas.height * 0.5, canvas.width, canvas.height * 0.5);
       // Helper to wrap and draw text, limiting to maxLines and returning remaining text
@@ -2314,20 +2325,13 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
       {/* Header */}
       <header className="border-b border-zinc-800/50 bg-zinc-950/50 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <AppLogo size={36} />
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
+              <Sparkles size={18} className="text-white" />
+            </div>
             <span className="font-bold text-2xl tracking-tight">Nova Translate Video</span>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="text-sm font-medium text-zinc-400">Automation Pipeline</div>
-            <button
-              onClick={() => navigate("/")}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-indigo-600/80 to-purple-600/80 text-white text-xs font-semibold tracking-wide hover:from-indigo-500 hover:to-purple-500 transition-all duration-200 shadow-lg shadow-indigo-500/20 border border-white/10"
-            >
-              <Home size={14} />
-              <span>HOME</span>
-            </button>
-          </div>
+          <div className="text-sm font-medium text-zinc-1000">Automation Pipeline</div>
         </div>
       </header>
 
