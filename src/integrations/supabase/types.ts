@@ -589,6 +589,18 @@ export type Database = {
         }
         Relationships: []
       }
+      safe_plan_settings: {
+        Row: {
+          value: Json | null
+        }
+        Insert: {
+          value?: Json | null
+        }
+        Update: {
+          value?: Json | null
+        }
+        Relationships: []
+      }
       safe_tool_settings: {
         Row: {
           description: string | null

@@ -16,8 +16,9 @@ interface PlanSettings {
 
 const db = {
   getPlanSettings: async (): Promise<PlanSettings | null> => {
-    const { data } = await supabase.from("app_settings").select("value").eq("key", "plan_settings").maybeSingle();
-    return data?.value as PlanSettings | null;
+    // Read from safe_plan_settings view (accessible to all users including guests)
+    const { data } = await (supabase.from as any)("safe_plan_settings").select("value").maybeSingle();
+    return (data as any)?.value as PlanSettings | null;
   },
   upsertPlanSettings: async (settings: PlanSettings) => {
     const { data: existing } = await supabase.
