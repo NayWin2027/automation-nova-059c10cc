@@ -4,6 +4,7 @@
 const ALLOWED_ORIGINS = [
   "https://color-magician-ai.lovable.app",
   "https://id-preview--d9dcee33-52b1-4076-9806-821681b20378.lovable.app",
+  "https://d9dcee33-52b1-4076-9806-821681b20378.lovableproject.com",
   "https://www.automationnova.app",
   "https://automationnova.app",
 ];
