@@ -327,6 +327,23 @@ const AdminOrdersTab: React.FC = () => {
                     {order.payment_ref && <span>📋 {order.payment_ref}</span>}
                     {order.referrer_display_id && <span>🔗 Ref: {order.referrer_display_id}</span>}
                   </div>
+                  {order.contact_method && order.contact_value && (
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <span className="text-cyan-400 flex items-center gap-0.5">
+                        {getContactIcon(order.contact_method)}
+                        <strong>{getContactLabel(order.contact_method)}:</strong>
+                      </span>
+                      <span className="text-foreground/80 break-all">{order.contact_value}</span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-5 w-5 shrink-0"
+                        onClick={() => copyToClipboard(order.contact_value!)}
+                      >
+                        <Copy className="w-2.5 h-2.5" />
+                      </Button>
+                    </div>
+                  )}
                   <div className="text-3xs text-muted-foreground">
                     {new Date(order.created_at).toLocaleString()}
                     {order.admin_credit_amount != null && (
