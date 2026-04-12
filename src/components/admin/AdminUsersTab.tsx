@@ -137,10 +137,12 @@ const AdminUsersTab: React.FC = () => {
       }
     });
 
-    if (error) {
+    const invokeError = error || (data && !data.success ? { message: data.error || 'Unknown error' } : null);
+
+    if (invokeError) {
       toast({
         title: "❌ Failed to create user",
-        description: error.message,
+        description: invokeError.message,
         variant: "destructive"
       });
     } else {
