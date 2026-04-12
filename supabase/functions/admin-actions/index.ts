@@ -214,7 +214,7 @@ serve(async (req) => {
         let newCredits: number;
         let topupAmount: number;
 
-        if (topupType && ['original', 'topup', 'bonus'].includes(topupType)) {
+        if (topupType && ['original', 'topup', 'bonus', 'renew'].includes(topupType)) {
           topupAmount = Number(params.topupAmount || credits) || 0;
           newCredits = currentCredits + topupAmount;
         } else {
@@ -225,8 +225,22 @@ serve(async (req) => {
         // Build update object
         const updateObj: Record<string, any> = { credits: newCredits };
         
-        // Reset credits_started_at if null or expired
-        if (newCredits > currentCredits) {
+        // Reset credits_started_at logic
+        if (topupType === 'renew') {
+          // Renew: extend plan duration from ORIGINAL purchase date cycle
+          // If previous credits_started_at exists, advance by 1 month from it
+          // to maintain the original billing cycle date
+          if (currentProfile?.credits_started_at) {
+            const prevStart = new Date(currentProfile.credits_started_at);
+            // Advance to next month from previous start (keep same day-of-month)
+            const nextStart = new Date(prevStart);
+            nextStart.setMonth(nextStart.getMonth() + 1);
+            updateObj.credits_started_at = nextStart.toISOString();
+          } else {
+            updateObj.credits_started_at = new Date().toISOString();
+          }
+        } else if (newCredits > currentCredits) {
+          // Non-renew types: do NOT reset credits_started_at (don't extend plan)
           if (!currentProfile?.credits_started_at) {
             updateObj.credits_started_at = new Date().toISOString();
           } else {
@@ -235,7 +249,8 @@ serve(async (req) => {
             expiry.setMonth(expiry.getMonth() + 1);
             expiry.setDate(expiry.getDate() + 7);
             if (expiry.getTime() < Date.now()) {
-              updateObj.credits_started_at = new Date().toISOString();
+              // Past expiry: only renew can reset, so don't reset for topup/bonus
+              // But still allow credits to be added (they'll be expired on next tool use)
             }
           }
         }
@@ -253,7 +268,7 @@ serve(async (req) => {
         console.log('[admin-actions] Credit update successful for', userId);
 
         // Log topup transaction if type is provided
-        if (topupType && ['original', 'topup', 'bonus'].includes(topupType)) {
+        if (topupType && ['original', 'topup', 'bonus', 'renew'].includes(topupType)) {
           await supabaseAdmin
             .from('credit_topups')
             .insert({
