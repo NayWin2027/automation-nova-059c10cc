@@ -102,8 +102,10 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
           payment_method: formData.paymentMethod,
           user_email: currentUser?.email || "public_order",
           slip_image_path: slipImagePath,
-          payment_ref: formData.paymentRef.trim(),
-          referrer_display_id: formData.referrerDisplayId || null,
+          payment_ref: formData.paymentRef.trim().substring(0, 100),
+          referrer_display_id: formData.referrerDisplayId ? formData.referrerDisplayId.trim().substring(0, 50) : null,
+          contact_method: formData.contactMethod,
+          contact_value: sanitizedContact,
         }
       });
 
