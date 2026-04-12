@@ -38,6 +38,10 @@ const AdminOrdersTab: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("pending");
   const [search, setSearch] = useState("");
+  const [summary, setSummary] = useState<{
+    nw: { total: number; approved: number; totalCredits: number };
+    kys: { total: number; approved: number; totalCredits: number };
+  } | null>(null);
 
   // Approval dialog state
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
@@ -72,9 +76,20 @@ const AdminOrdersTab: React.FC = () => {
     }
   }, [statusFilter, toast]);
 
+  const fetchSummary = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke("process-order", {
+        body: { action: "get_order_summary" }
+      });
+      if (error) throw error;
+      setSummary(data?.summary || null);
+    } catch { /* silent */ }
+  }, []);
+
   useEffect(() => {
     fetchOrders();
-  }, [fetchOrders]);
+    fetchSummary();
+  }, [fetchOrders, fetchSummary]);
 
   const handleViewSlip = async (path: string) => {
     try {
