@@ -398,6 +398,14 @@ const AdminUsersTab: React.FC = () => {
                     className="h-8 text-xs bg-secondary/30 border-border/30" />
 
                 </div>
+                <div>
+                  <Label className="text-2xs text-muted-foreground">Referrer ID <span className="text-muted-foreground/50">(optional)</span></Label>
+                  <Input
+                    placeholder="Enter referrer's user ID (optional)"
+                    value={newUser.referrerId}
+                    onChange={(e) => setNewUser({ ...newUser, referrerId: e.target.value })}
+                    className="h-8 text-xs bg-secondary/30 border-border/30" />
+                </div>
                 <button
                   onClick={handleCreateUser}
                   disabled={loading}
