@@ -126,7 +126,7 @@ const AdminUsersTab: React.FC = () => {
     setLoading(true);
     // Use userId as the email (internal identifier)
     const internalEmail = `${newUser.userId}@internal.user`;
-    const { error } = await supabase.functions.invoke('admin-actions', {
+    const { data, error } = await supabase.functions.invoke('admin-actions', {
       body: {
         action: 'create_user',
         email: internalEmail,
