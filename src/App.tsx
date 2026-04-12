@@ -79,6 +79,7 @@ const App = () => (
             <Route path="/admin/dashboard" element={<Suspense fallback={null}><AdminRoute><AdminDashboardPage /></AdminRoute></Suspense>} />
             {/* Order Form */}
             <Route path="/order" element={<OrderFormPage />} />
+            <Route path="/plans" element={<PlansPage />} />
             {/* User Routes */}
             <Route path="/login" element={<UserLoginPage />} />
             {/* Legal Pages */}
