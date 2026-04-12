@@ -36,6 +36,60 @@ serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
 
   try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+
+    const { action, ...params } = await req.json();
+
+    // --- Public actions: no auth required ---
+    if (action === "submit_order_public") {
+      const { order_type, payment_method, user_email, slip_image_path, payment_ref, referrer_display_id } = params;
+
+      if (!order_type || !payment_method || !user_email) {
+        return new Response(
+          JSON.stringify({ error: "Missing required fields" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const { data: orderNum, error: seqError } = await supabaseAdmin.rpc("generate_order_number", {
+        _payment_method: payment_method
+      });
+      if (seqError) throw seqError;
+
+      const { data: order, error: insertError } = await supabaseAdmin
+        .from("payment_orders")
+        .insert({
+          order_number: orderNum,
+          order_type,
+          payment_method,
+          user_email,
+          slip_image_path: slip_image_path || null,
+          payment_ref: payment_ref || null,
+          referrer_display_id: referrer_display_id || null,
+          status: "pending"
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        if (insertError.message?.includes("idx_payment_orders_payment_ref")) {
+          return new Response(
+            JSON.stringify({ error: "Transaction number already exists." }),
+            { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        throw insertError;
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, order }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // --- All other actions require authentication ---
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(
@@ -43,10 +97,6 @@ serve(async (req) => {
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     const token = authHeader.replace("Bearer ", "");
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
@@ -57,7 +107,55 @@ serve(async (req) => {
       );
     }
 
-    // Verify admin
+    // --- submit_order: any authenticated user ---
+    if (action === "submit_order") {
+      const { order_type, payment_method, user_email, slip_image_path, payment_ref, referrer_display_id } = params;
+
+      if (!order_type || !payment_method || !user_email) {
+        return new Response(
+          JSON.stringify({ error: "Missing required fields" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const { data: orderNum, error: seqError } = await supabaseAdmin.rpc("generate_order_number", {
+        _payment_method: payment_method
+      });
+      if (seqError) throw seqError;
+
+      const { data: order, error: insertError } = await supabaseAdmin
+        .from("payment_orders")
+        .insert({
+          order_number: orderNum,
+          order_type,
+          payment_method,
+          user_email,
+          user_id: user.id,
+          slip_image_path: slip_image_path || null,
+          payment_ref: payment_ref || null,
+          referrer_display_id: referrer_display_id || null,
+          status: "pending"
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        if (insertError.message?.includes("idx_payment_orders_payment_ref")) {
+          return new Response(
+            JSON.stringify({ error: "Transaction number already exists. Duplicate not allowed." }),
+            { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        throw insertError;
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, order }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // --- Admin-only actions ---
     const { data: isAdmin } = await supabaseAdmin.rpc("has_role", {
       _user_id: user.id,
       _role: "admin"
@@ -69,106 +167,7 @@ serve(async (req) => {
       );
     }
 
-    const { action, ...params } = await req.json();
-
     switch (action) {
-      case "submit_order": {
-        // Public action - no admin required (called without auth for new users)
-        // But we got here with auth, so this is an authenticated user submitting
-        const { order_type, payment_method, user_email, slip_image_path, payment_ref, referrer_display_id } = params;
-
-        if (!order_type || !payment_method || !user_email) {
-          return new Response(
-            JSON.stringify({ error: "Missing required fields" }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        // Generate order number
-        const { data: orderNum, error: seqError } = await supabaseAdmin.rpc("generate_order_number", {
-          _payment_method: payment_method
-        });
-
-        if (seqError) throw seqError;
-
-        const { data: order, error: insertError } = await supabaseAdmin
-          .from("payment_orders")
-          .insert({
-            order_number: orderNum,
-            order_type,
-            payment_method,
-            user_email,
-            user_id: user.id,
-            slip_image_path: slip_image_path || null,
-            payment_ref: payment_ref || null,
-            referrer_display_id: referrer_display_id || null,
-            status: "pending"
-          })
-          .select()
-          .single();
-
-        if (insertError) {
-          if (insertError.message?.includes("idx_payment_orders_payment_ref")) {
-            return new Response(
-              JSON.stringify({ error: "Transaction number already exists. Duplicate not allowed." }),
-              { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-          }
-          throw insertError;
-        }
-
-        return new Response(
-          JSON.stringify({ success: true, order }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      case "submit_order_public": {
-        // For unauthenticated new users - called via service role
-        const { order_type, payment_method, user_email, slip_image_path, payment_ref, referrer_display_id } = params;
-
-        if (!order_type || !payment_method || !user_email) {
-          return new Response(
-            JSON.stringify({ error: "Missing required fields" }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        const { data: orderNum } = await supabaseAdmin.rpc("generate_order_number", {
-          _payment_method: payment_method
-        });
-
-        const { data: order, error: insertError } = await supabaseAdmin
-          .from("payment_orders")
-          .insert({
-            order_number: orderNum,
-            order_type,
-            payment_method,
-            user_email,
-            slip_image_path: slip_image_path || null,
-            payment_ref: payment_ref || null,
-            referrer_display_id: referrer_display_id || null,
-            status: "pending"
-          })
-          .select()
-          .single();
-
-        if (insertError) {
-          if (insertError.message?.includes("idx_payment_orders_payment_ref")) {
-            return new Response(
-              JSON.stringify({ error: "Transaction number already exists." }),
-              { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-          }
-          throw insertError;
-        }
-
-        return new Response(
-          JSON.stringify({ success: true, order }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
       case "get_orders": {
         const { status: filterStatus } = params;
         let query = supabaseAdmin
@@ -619,6 +618,32 @@ serve(async (req) => {
 
         return new Response(
           JSON.stringify({ success: true, url: data?.signedUrl }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "get_order_summary": {
+        // Get summary totals by prefix
+        const { data: allOrders } = await supabaseAdmin
+          .from("payment_orders")
+          .select("order_number, status, admin_credit_amount, admin_bonus_amount");
+
+        const summary = {
+          nw: { total: 0, approved: 0, totalCredits: 0 },
+          kys: { total: 0, approved: 0, totalCredits: 0 },
+        };
+
+        for (const o of allOrders || []) {
+          const prefix = o.order_number?.startsWith("kys") ? "kys" : "nw";
+          summary[prefix].total++;
+          if (o.status === "approved") {
+            summary[prefix].approved++;
+            summary[prefix].totalCredits += (o.admin_credit_amount || 0) + (o.admin_bonus_amount || 0);
+          }
+        }
+
+        return new Response(
+          JSON.stringify({ success: true, summary }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
