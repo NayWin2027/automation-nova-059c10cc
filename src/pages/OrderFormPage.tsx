@@ -235,6 +235,46 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
           </div>
 
           <div className="space-y-1.5">
+            <Label className="text-xs font-medium">ဆက်သွယ်ရန် နည်းလမ်း (Contact Method) *</Label>
+            <Select
+              value={formData.contactMethod}
+              onValueChange={(v) => setFormData(prev => ({ ...prev, contactMethod: v as any, contactValue: "" }))}
+            >
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue placeholder="ဆက်သွယ်ရန် နည်းလမ်းရွေးပါ" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="email"><Mail className="w-3.5 h-3.5 inline mr-1.5" />Email Address</SelectItem>
+                <SelectItem value="messenger"><MessageCircle className="w-3.5 h-3.5 inline mr-1.5" />Messenger Link</SelectItem>
+                <SelectItem value="viber"><Phone className="w-3.5 h-3.5 inline mr-1.5" />Viber No</SelectItem>
+                <SelectItem value="telegram"><Send className="w-3.5 h-3.5 inline mr-1.5" />Telegram</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {formData.contactMethod && (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">
+                {formData.contactMethod === "email" ? "Email Address *" :
+                 formData.contactMethod === "messenger" ? "Messenger Link / Username *" :
+                 formData.contactMethod === "viber" ? "Viber Phone Number *" :
+                 "Telegram Username / Phone *"}
+              </Label>
+              <Input
+                value={formData.contactValue}
+                onChange={(e) => setFormData(prev => ({ ...prev, contactValue: e.target.value.substring(0, 200) }))}
+                placeholder={
+                  formData.contactMethod === "email" ? "example@gmail.com" :
+                  formData.contactMethod === "messenger" ? "https://m.me/username" :
+                  formData.contactMethod === "viber" ? "09xxxxxxxxx" :
+                  "@username"
+                }
+                className="h-9 text-sm"
+                maxLength={200}
+              />
+            </div>
+          )}
+          <div className="space-y-1.5">
             <Label className="text-xs font-medium">Payment Slip (ငွေလွှဲ slip ပုံ) *</Label>
             <div className="border border-dashed border-primary/30 rounded-lg p-4 text-center">
               {slipPreview ? (
