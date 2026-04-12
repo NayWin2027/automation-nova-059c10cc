@@ -19,7 +19,10 @@ import {
   Eye,
   EyeOff,
   Key,
+  Home,
 } from "lucide-react";
+import { AppLogo } from "@/components/AppLogo";
+import { useNavigate } from "react-router-dom";
 // All AI calls routed through server-side edge functions for security
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
@@ -378,6 +381,7 @@ function generateSRTContent(subs: { start: number; end: number; text: string }[]
 }
 
 export default function App() {
+  const navigate = useNavigate();
   const { isAllowed, isLoading: authLoading } = useAuthGuard("video-transform");
   const { appApiAllowed, ownApiAllowed, defaultApiMode, isLoading: accessLoading } = useApiAccess();
   const { deductCredits } = useCreditDeduction();
@@ -2325,13 +2329,20 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
       {/* Header */}
       <header className="border-b border-zinc-800/50 bg-zinc-950/50 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
-              <Sparkles size={18} className="text-white" />
-            </div>
+          <div className="flex items-center gap-3">
+            <AppLogo size={36} />
             <span className="font-bold text-2xl tracking-tight">Nova Translate Video</span>
           </div>
-          <div className="text-sm font-medium text-zinc-1000">Automation Pipeline</div>
+          <div className="flex items-center gap-4">
+            <div className="text-sm font-medium text-zinc-400">Automation Pipeline</div>
+            <button
+              onClick={() => navigate("/")}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-indigo-600/80 to-purple-600/80 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-semibold tracking-wide transition-all duration-200 shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40"
+            >
+              <Home size={14} />
+              <span>HOME</span>
+            </button>
+          </div>
         </div>
       </header>
 
