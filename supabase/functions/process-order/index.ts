@@ -623,22 +623,35 @@ serve(async (req) => {
       }
 
       case "get_order_summary": {
-        // Get summary totals by prefix
+        // Get summary totals by prefix with credit/bonus breakdown
         const { data: allOrders } = await supabaseAdmin
           .from("payment_orders")
-          .select("order_number, status, admin_credit_amount, admin_bonus_amount");
+          .select("order_number, status, order_type, admin_credit_amount, admin_bonus_amount");
 
-        const summary = {
-          nw: { total: 0, approved: 0, totalCredits: 0 },
-          kys: { total: 0, approved: 0, totalCredits: 0 },
+        const makeBucket = () => ({
+          total: 0, approved: 0, pending: 0,
+          totalCredits: 0, totalBonus: 0,
+          newUser: 0, topup: 0, renew: 0,
+        });
+
+        const summary: Record<string, ReturnType<typeof makeBucket>> = {
+          nw: makeBucket(),
+          kys: makeBucket(),
         };
 
         for (const o of allOrders || []) {
           const prefix = o.order_number?.startsWith("kys") ? "kys" : "nw";
-          summary[prefix].total++;
+          const b = summary[prefix];
+          b.total++;
           if (o.status === "approved") {
-            summary[prefix].approved++;
-            summary[prefix].totalCredits += (o.admin_credit_amount || 0) + (o.admin_bonus_amount || 0);
+            b.approved++;
+            b.totalCredits += o.admin_credit_amount || 0;
+            b.totalBonus += o.admin_bonus_amount || 0;
+            if (o.order_type === "new_user") b.newUser++;
+            else if (o.order_type === "topup") b.topup++;
+            else if (o.order_type === "renew") b.renew++;
+          } else if (o.status === "pending") {
+            b.pending++;
           }
         }
 
