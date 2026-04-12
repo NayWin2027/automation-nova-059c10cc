@@ -145,6 +145,7 @@ const AdminOrdersTab: React.FC = () => {
       toast({ title: "✅ Approved", description: `Order ${selectedOrder.order_number} approved` });
       setApproveDialogOpen(false);
       fetchOrders();
+      fetchSummary();
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
