@@ -44,14 +44,24 @@ serve(async (req) => {
 
     // --- Public actions: no auth required ---
     if (action === "submit_order_public") {
-      const { order_type, payment_method, user_email, slip_image_path, payment_ref, referrer_display_id } = params;
+      const { order_type, payment_method, user_email, slip_image_path, payment_ref, referrer_display_id, contact_method, contact_value } = params;
 
-      if (!order_type || !payment_method || !user_email) {
+      if (!order_type || !payment_method || !user_email || !contact_method || !contact_value) {
         return new Response(
-          JSON.stringify({ error: "Missing required fields" }),
+          JSON.stringify({ error: "Missing required fields (including contact info)" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+
+      // Sanitize contact values server-side
+      const validContactMethods = ["email", "messenger", "viber", "telegram"];
+      if (!validContactMethods.includes(contact_method)) {
+        return new Response(
+          JSON.stringify({ error: "Invalid contact method" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      const sanitizedContact = String(contact_value).trim().substring(0, 200).replace(/<[^>]*>/g, '');
 
       const { data: orderNum, error: seqError } = await supabaseAdmin.rpc("generate_order_number", {
         _payment_method: payment_method
