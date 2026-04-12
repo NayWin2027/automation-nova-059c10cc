@@ -940,182 +940,215 @@ export default function App() {
 
       const validImages = loadedImages.filter((img) => img && img.width > 0);
 
-      // Hollywood Cinematic Realistic Poster — Full Face + Half Body, No Cropping
+      // Hollywood Cinematic Realistic Poster Composition (Surgical Match Reference)
 
-      // 1. Deep cinematic background
-      ctx.fillStyle = "#0a0c1a";
+      // 1. Deep cinematic background (NO raw image to avoid ghosting)
+      ctx.fillStyle = "#050814";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       if (validImages[0]) {
-        ctx.filter = "blur(35px) brightness(0.3) saturate(1.4)";
-        ctx.drawImage(validImages[0], -30, -30, canvas.width + 60, canvas.height + 60);
+        // Atmospheric blurred background layer instead of raw copy
+        ctx.filter = "blur(30px) opacity(0.2) brightness(0.4)";
+        ctx.drawImage(validImages[0], -20, -20, canvas.width + 40, canvas.height + 40);
         ctx.filter = "none";
       }
 
-      // Draw character naturally — soft edge fade only, no radial crop
-      const drawCharacter = (
-        img: HTMLImageElement,
-        destX: number, destY: number,
-        destW: number, destH: number,
-        fadeEdges: { left?: number; right?: number; top?: number; bottom?: number },
-      ) => {
+      // Helper function for perfectly blended cinematic faces without ghosting
+      const drawCinematicFace = (img, scaleMultiplier, alignX, alignY, maskConfig) => {
+        const isPortrait = canvas.height > canvas.width;
+        const baseScale = isPortrait ? 1.4 : 1.1;
+        const scale = baseScale * scaleMultiplier;
+
+        const imgW = canvas.width * scale;
+        const imgH = (imgW * img.height) / img.width;
+
+        const dx = (canvas.width - imgW) / 2 + canvas.width * alignX;
+        const dy = (canvas.height - imgH) / 2 + canvas.height * alignY;
+
         const tempCanvas = document.createElement("canvas");
         tempCanvas.width = canvas.width;
         tempCanvas.height = canvas.height;
         const tCtx = tempCanvas.getContext("2d");
-        if (!tCtx) return;
 
-        // Draw image at specified position — no radial mask, preserving full face + body
-        tCtx.drawImage(img, destX, destY, destW, destH);
+        if (tCtx) {
+          tCtx.drawImage(img, dx, dy, imgW, imgH);
+          tCtx.globalCompositeOperation = "destination-in";
 
-        // Soft edge fades only at boundaries
-        tCtx.globalCompositeOperation = "destination-in";
-        tCtx.fillStyle = "rgba(0,0,0,1)";
-        tCtx.fillRect(0, 0, canvas.width, canvas.height);
+          // Radial Mask for seamless organic blending
+          const cx = maskConfig.centerX !== undefined ? canvas.width * maskConfig.centerX : canvas.width / 2;
+          const cy = maskConfig.centerY !== undefined ? canvas.height * maskConfig.centerY : canvas.height / 2;
+          const innerR = maskConfig.innerR !== undefined ? canvas.width * maskConfig.innerR : 0;
+          const outerR = maskConfig.outerR !== undefined ? canvas.width * maskConfig.outerR : canvas.width * 0.8;
 
-        if (fadeEdges.left !== undefined) {
-          tCtx.globalCompositeOperation = "destination-in";
-          const g = tCtx.createLinearGradient(destX, 0, destX + destW * fadeEdges.left, 0);
-          g.addColorStop(0, "rgba(0,0,0,0)");
-          g.addColorStop(1, "rgba(0,0,0,1)");
-          tCtx.fillStyle = g;
-          tCtx.fillRect(destX, 0, destW * fadeEdges.left, canvas.height);
-        }
-        if (fadeEdges.right !== undefined) {
-          tCtx.globalCompositeOperation = "destination-in";
-          const rx = destX + destW * (1 - fadeEdges.right);
-          const g = tCtx.createLinearGradient(rx, 0, destX + destW, 0);
-          g.addColorStop(0, "rgba(0,0,0,1)");
-          g.addColorStop(1, "rgba(0,0,0,0)");
-          tCtx.fillStyle = g;
-          tCtx.fillRect(rx, 0, destW * fadeEdges.right, canvas.height);
-        }
-        if (fadeEdges.bottom !== undefined) {
-          tCtx.globalCompositeOperation = "destination-in";
-          const by = destY + destH * (1 - fadeEdges.bottom);
-          const g = tCtx.createLinearGradient(0, by, 0, destY + destH);
-          g.addColorStop(0, "rgba(0,0,0,1)");
-          g.addColorStop(1, "rgba(0,0,0,0)");
-          tCtx.fillStyle = g;
-          tCtx.fillRect(0, by, canvas.width, destH * fadeEdges.bottom);
-        }
-        if (fadeEdges.top !== undefined) {
-          tCtx.globalCompositeOperation = "destination-in";
-          const g = tCtx.createLinearGradient(0, destY, 0, destY + destH * fadeEdges.top);
-          g.addColorStop(0, "rgba(0,0,0,0)");
-          g.addColorStop(1, "rgba(0,0,0,1)");
-          tCtx.fillStyle = g;
-          tCtx.fillRect(0, destY, canvas.width, destH * fadeEdges.top);
-        }
+          const mask = tCtx.createRadialGradient(cx, cy, innerR, cx, cy, outerR);
+          mask.addColorStop(0, "rgba(0,0,0,1)");
+          mask.addColorStop(0.5, "rgba(0,0,0,0.85)");
+          mask.addColorStop(0.8, "rgba(0,0,0,0.2)");
+          mask.addColorStop(1, "rgba(0,0,0,0)");
 
-        ctx.drawImage(tempCanvas, 0, 0);
+          tCtx.fillStyle = mask;
+          tCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+          // Cut specific edges smoothly behind other elements
+          if (maskConfig.bottomCut) {
+            tCtx.globalCompositeOperation = "destination-in";
+            const bMask = tCtx.createLinearGradient(
+              0,
+              canvas.height * maskConfig.bottomCut.y1,
+              0,
+              canvas.height * maskConfig.bottomCut.y2,
+            );
+            bMask.addColorStop(0, "rgba(0,0,0,1)");
+            bMask.addColorStop(1, "rgba(0,0,0,0)");
+            tCtx.fillStyle = bMask;
+            tCtx.fillRect(0, 0, canvas.width, canvas.height);
+          }
+          if (maskConfig.topCut) {
+            tCtx.globalCompositeOperation = "destination-in";
+            const tMask = tCtx.createLinearGradient(
+              0,
+              canvas.height * maskConfig.topCut.y1,
+              0,
+              canvas.height * maskConfig.topCut.y2,
+            );
+            tMask.addColorStop(0, "rgba(0,0,0,0)");
+            tMask.addColorStop(1, "rgba(0,0,0,1)");
+            tCtx.fillStyle = tMask;
+            tCtx.fillRect(0, 0, canvas.width, canvas.height);
+          }
+
+          ctx.drawImage(tempCanvas, 0, 0);
+        }
       };
 
       const isPortrait = canvas.height > canvas.width;
-      const W = canvas.width;
-      const H = canvas.height;
 
       // Cycle through poster styles on each regenerate
       const styleIndex = posterStyleIndexRef.current % 3;
       posterStyleIndexRef.current++;
 
-      // Shuffle images for character variety
+      // Shuffle images based on style to show different characters in hero position
       const styleImages = [...validImages];
       if (styleIndex > 0 && styleImages.length > 1) {
+        // Rotate the array so different characters become the "hero"
         for (let r = 0; r < styleIndex; r++) {
           const first = styleImages.shift()!;
           styleImages.push(first);
         }
       }
 
-      // === STYLE 0: Classic Hollywood — Big Hero Center + Side Characters ===
+      // === STYLE 0: Classic Hero + Supporting Cast ===
       if (styleIndex === 0) {
-        if (styleImages[1]) {
-          const iw = W * 0.55;
-          const ih = (iw * styleImages[1].height) / styleImages[1].width;
-          drawCharacter(styleImages[1], -W * 0.08, H * 0.05, iw, Math.max(ih, H * 0.75), { right: 0.35, bottom: 0.3 });
-        }
-        if (styleImages[2]) {
-          const iw = W * 0.55;
-          const ih = (iw * styleImages[2].height) / styleImages[2].width;
-          drawCharacter(styleImages[2], W * 0.53, H * 0.05, iw, Math.max(ih, H * 0.75), { left: 0.35, bottom: 0.3 });
+        const supportingCast = styleImages.slice(1, 4);
+        if (isPortrait) {
+          supportingCast.forEach((img, i) => {
+            const xOffsets = [0, -0.22, 0.22];
+            const yOffsets = [-0.22, -0.18, -0.18];
+            drawCinematicFace(img, 1.1, xOffsets[i] || 0, yOffsets[i] || -0.2, {
+              centerX: 0.5 + (xOffsets[i] || 0),
+              centerY: 0.3,
+              innerR: 0.2,
+              outerR: 0.75,
+              bottomCut: { y1: 0.4, y2: 0.6 },
+            });
+          });
+        } else {
+          if (supportingCast[0]) drawCinematicFace(supportingCast[0], 1.0, -0.28, 0, { centerX: 0.22, centerY: 0.5, innerR: 0.18, outerR: 0.6 });
+          if (supportingCast[1]) drawCinematicFace(supportingCast[1], 1.0, 0.28, 0, { centerX: 0.78, centerY: 0.5, innerR: 0.18, outerR: 0.6 });
         }
         if (styleImages[0]) {
-          const iw = W * 0.75;
-          const ih = (iw * styleImages[0].height) / styleImages[0].width;
-          drawCharacter(styleImages[0], (W - iw) / 2, H * 0.02, iw, Math.max(ih, H * 0.8), { bottom: 0.25, left: 0.08, right: 0.08 });
+          if (isPortrait) {
+            drawCinematicFace(styleImages[0], 1.4, 0, 0.15, { centerX: 0.5, centerY: 0.55, innerR: 0.25, outerR: 0.9, topCut: { y1: 0.15, y2: 0.35 } });
+          } else {
+            drawCinematicFace(styleImages[0], 1.2, 0, 0.08, { centerX: 0.5, centerY: 0.55, innerR: 0.22, outerR: 0.9, topCut: { y1: 0.08, y2: 0.28 } });
+          }
         }
       }
 
-      // === STYLE 1: Dual Hero Face-Off ===
+      // === STYLE 1: Side-by-Side Dual Hero ===
       else if (styleIndex === 1) {
         if (styleImages[0]) {
-          const iw = W * 0.6;
-          const ih = (iw * styleImages[0].height) / styleImages[0].width;
-          drawCharacter(styleImages[0], -W * 0.05, H * 0.02, iw, Math.max(ih, H * 0.78), { right: 0.3, bottom: 0.25 });
+          drawCinematicFace(styleImages[0], isPortrait ? 1.3 : 1.1, -0.18, isPortrait ? 0.05 : 0, {
+            centerX: 0.32, centerY: 0.5, innerR: 0.22, outerR: 0.8,
+          });
         }
         if (styleImages[1]) {
-          const iw = W * 0.6;
-          const ih = (iw * styleImages[1].height) / styleImages[1].width;
-          drawCharacter(styleImages[1], W * 0.45, H * 0.02, iw, Math.max(ih, H * 0.78), { left: 0.3, bottom: 0.25 });
+          drawCinematicFace(styleImages[1], isPortrait ? 1.3 : 1.1, 0.18, isPortrait ? 0.05 : 0, {
+            centerX: 0.68, centerY: 0.5, innerR: 0.22, outerR: 0.8,
+          });
         }
-        if (styleImages[2]) {
-          const iw = W * 0.35;
-          const ih = (iw * styleImages[2].height) / styleImages[2].width;
-          drawCharacter(styleImages[2], (W - iw) / 2, 0, iw, Math.min(ih, H * 0.35), { bottom: 0.4, left: 0.2, right: 0.2 });
-        }
+        // Small supporting faces at top
+        const extras = styleImages.slice(2, 4);
+        extras.forEach((img, i) => {
+          const xOff = i === 0 ? -0.25 : 0.25;
+          drawCinematicFace(img, 0.8, xOff, isPortrait ? -0.3 : -0.25, {
+            centerX: 0.5 + xOff, centerY: 0.2, innerR: 0.12, outerR: 0.5,
+            bottomCut: { y1: 0.35, y2: 0.5 },
+          });
+        });
       }
 
-      // === STYLE 2: Epic Single Hero Full Frame ===
+      // === STYLE 2: Full-Frame Cinematic Single Hero + Collage Strip ===
       else {
         if (styleImages[0]) {
-          const iw = W * 0.9;
-          const ih = (iw * styleImages[0].height) / styleImages[0].width;
-          drawCharacter(styleImages[0], (W - iw) / 2, 0, iw, Math.max(ih, H * 0.85), { bottom: 0.2, left: 0.05, right: 0.05 });
+          drawCinematicFace(styleImages[0], isPortrait ? 1.5 : 1.3, 0, 0, {
+            centerX: 0.5, centerY: 0.45, innerR: 0.3, outerR: 0.95,
+          });
         }
-        const stripChars = styleImages.slice(1, 4);
+        // Small character strip at the very top
+        const stripChars = styleImages.slice(1, 5);
         if (stripChars.length > 0) {
-          const stripH = H * 0.16;
-          const stripW = W / stripChars.length;
-          const stripY = H * 0.82;
-          ctx.globalAlpha = 0.5;
+          const stripH = canvas.height * 0.18;
+          const stripW = canvas.width / stripChars.length;
+          ctx.globalAlpha = 0.6;
           stripChars.forEach((img, i) => {
-            ctx.drawImage(img, i * stripW, stripY, stripW, stripH);
+            const sx = i * stripW;
+            ctx.drawImage(img, sx, 0, stripW, stripH);
           });
           ctx.globalAlpha = 1.0;
-          const sf1 = ctx.createLinearGradient(0, stripY, 0, stripY + stripH * 0.3);
-          sf1.addColorStop(0, "rgba(10,12,26,1)");
-          sf1.addColorStop(1, "rgba(10,12,26,0)");
-          ctx.fillStyle = sf1;
-          ctx.fillRect(0, stripY, W, stripH * 0.3);
+          // Fade strip into main image
+          const stripFade = ctx.createLinearGradient(0, stripH * 0.5, 0, stripH * 1.2);
+          stripFade.addColorStop(0, "rgba(5,8,20,0)");
+          stripFade.addColorStop(1, "rgba(5,8,20,1)");
+          ctx.fillStyle = stripFade;
+          ctx.fillRect(0, 0, canvas.width, stripH * 1.3);
         }
       }
 
-      // Cinematic Color Grading
+      // Apply Cinematic Color Grading (subtle for vibrant look, not washed out)
       ctx.globalCompositeOperation = "overlay";
-      ctx.fillStyle = "rgba(0, 50, 80, 0.08)";
-      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = "rgba(0, 60, 90, 0.10)"; // Teal (lighter: 10% vs 18%)
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
       ctx.globalCompositeOperation = "soft-light";
-      ctx.fillStyle = "rgba(255, 130, 40, 0.06)";
-      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = "rgba(255, 140, 40, 0.08)"; // Orange (lighter: 8% vs 16%)
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Subtle vignette
+      // Minimal vignette for vibrant poster (lighter edges)
       ctx.globalCompositeOperation = "source-over";
-      const vignette = ctx.createRadialGradient(W / 2, H / 2, W * 0.4, W / 2, H / 2, W * 0.9);
+      const vignette = ctx.createRadialGradient(
+        canvas.width / 2,
+        canvas.height / 2,
+        canvas.width * 0.45,
+        canvas.width / 2,
+        canvas.height / 2,
+        canvas.width * 0.85,
+      );
       vignette.addColorStop(0, "rgba(0,0,0,0)");
-      vignette.addColorStop(0.8, "rgba(0,0,0,0.05)");
-      vignette.addColorStop(1, "rgba(0,0,0,0.25)");
+      vignette.addColorStop(0.75, "rgba(0,0,0,0.03)");
+      vignette.addColorStop(1, "rgba(0,0,0,0.18)");
       ctx.fillStyle = vignette;
-      ctx.fillRect(0, 0, W, H);
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
       ctx.globalCompositeOperation = "source-over";
 
-      // Bottom gradient for text area
-      const grad = ctx.createLinearGradient(0, H * 0.55, 0, H);
+      // Bottom gradient for text readability
+      const grad = ctx.createLinearGradient(0, canvas.height * 0.5, 0, canvas.height);
       grad.addColorStop(0, "rgba(0,0,0,0)");
-      grad.addColorStop(0.4, "rgba(0,0,0,0.5)");
-      grad.addColorStop(1, "rgba(0,0,0,0.92)");
+      grad.addColorStop(0.5, "rgba(0,0,0,0.6)");
+      grad.addColorStop(1, "rgba(0,0,0,0.9)");
       ctx.fillStyle = grad;
-      ctx.fillRect(0, H * 0.55, W, H * 0.45);
+      ctx.fillRect(0, canvas.height * 0.5, canvas.width, canvas.height * 0.5);
 
       // Helper to wrap and draw text, limiting to maxLines and returning remaining text
       const drawWrappedText = (
@@ -1242,17 +1275,11 @@ export default function App() {
         );
       }
 
-      // Draw the hook text (description/subtitle from AI)
-      // Show description as hook; if no description, use title as fallback
-      const hookText = description || title;
+      // Draw the hook (AI generated title or description)
+      const hookText = title || description;
       if (hookText) {
         const hookFontSize = Math.floor(canvas.height * 0.055);
         drawWrappedText(hookText, hookFontSize, canvas.height * 0.96, false, "900");
-      }
-      // If both title and description exist and no movieTitle, show title as secondary text
-      if (!movieTitle && title && description) {
-        const subFontSize = Math.floor(canvas.height * 0.04);
-        drawWrappedText(title, subFontSize, canvas.height * 0.88, false, "700");
       }
 
       const thumbnailUrl = canvas.toDataURL("image/png");
