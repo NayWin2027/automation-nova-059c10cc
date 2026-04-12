@@ -954,10 +954,10 @@ export default function App() {
           tCanvas.height = canvas.height;
           const tCtx = tCanvas.getContext("2d");
 
-          // Heavy cinematic coloring
+          // Pristine 8K High-Clarity Coloring
           tCtx.filter = isHero
-            ? "contrast(1.15) saturate(1.1) brightness(0.95)"
-            : "contrast(1.2) saturate(0.9) brightness(0.85)";
+            ? "contrast(1.15) saturate(1.2) brightness(1.05)"
+            : "contrast(1.1) saturate(1.1) brightness(1.0)";
 
           const imgRatio = img.width / img.height;
           const targetRatio = w / h;
@@ -1066,14 +1066,7 @@ export default function App() {
           }
 
           // Main Hero (Foreground, Massive, Centered)
-          drawLayer(
-            validImages[0],
-            canvas.width * 0.05,
-            canvas.height * 0.25,
-            canvas.width * 0.9,
-            canvas.height * 0.75,
-            true,
-          );
+          drawLayer(validImages[0], 0, canvas.height * 0.25, canvas.width, canvas.height * 0.75, true);
         } else {
           // Basic Double Exposure if not enough images or horizontal
           if (validImages[1]) {
@@ -1092,24 +1085,24 @@ export default function App() {
 
       // --- Post-Processing & Grading (The Cinematic Glue) ---
 
-      // Teal & Orange Hollywood Overlay
+      // Warm & Bright 8K Overlay (Golden Hour Vibe)
       ctx.globalCompositeOperation = "overlay";
-      ctx.fillStyle = "rgba(10, 35, 60, 0.45)";
+      ctx.fillStyle = "rgba(255, 220, 190, 0.15)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.globalCompositeOperation = "source-over";
 
-      // Heavy Cinematic Spotlight Vignette (Vastly improves realism)
+      // Soft Bright Cinematic Vignette (Removes the horror/night look)
       const vignette = ctx.createRadialGradient(
         canvas.width / 2,
         canvas.height * 0.5,
-        canvas.width * 0.15,
+        canvas.width * 0.2,
         canvas.width / 2,
         canvas.height * 0.5,
         canvas.width * 0.95,
       );
       vignette.addColorStop(0, "rgba(0,0,0,0)");
-      vignette.addColorStop(0.7, "rgba(0,0,0,0.5)");
-      vignette.addColorStop(1, "rgba(0,0,0,0.98)");
+      vignette.addColorStop(0.8, "rgba(0,0,0,0.2)");
+      vignette.addColorStop(1, "rgba(0,0,0,0.45)");
 
       ctx.globalCompositeOperation = "multiply";
       ctx.fillStyle = vignette;
@@ -1120,8 +1113,8 @@ export default function App() {
       // override any potential leftover UI/Subtitles on the hero's bottom edge!
       const textGradBg = ctx.createLinearGradient(0, canvas.height * 0.5, 0, canvas.height);
       textGradBg.addColorStop(0, "rgba(0,0,0,0)");
-      textGradBg.addColorStop(0.5, "rgba(0,0,0,0.85)");
-      textGradBg.addColorStop(1, "rgba(0,0,0,1)");
+      textGradBg.addColorStop(0.65, "rgba(0,0,0,0.75)");
+      textGradBg.addColorStop(1, "rgba(0,0,0,0.95)");
       ctx.fillStyle = textGradBg;
       ctx.fillRect(0, canvas.height * 0.5, canvas.width, canvas.height * 0.5);
       // Helper to wrap and draw text, limiting to maxLines and returning remaining text
