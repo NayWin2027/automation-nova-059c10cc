@@ -907,7 +907,7 @@ export default function App() {
       // Spread captures across the entire video to ensure all key characters (like villains/supporting roles) are found
       // Capture exclusively from the highly probable subtitle-free beginning segment (1% to 15%)
       const intervals = [];
-      for (let i = 0.01; i <= 0.16; i += 0.03) {
+      for (let i = 0.01; i <= 0.26; i += 0.03) {
         intervals.push(duration * i);
       }
 
