@@ -166,15 +166,18 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
           <CardDescription className="text-xs">
             Plan ဝယ်ယူခြင်း / Credit ဖြည့်သွင်းခြင်း / သက်တမ်းတိုးခြင်း
           </CardDescription>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate("/plans")}
-            className="mt-2 mx-auto border-violet-500/50 text-violet-400 hover:bg-violet-500/10 hover:text-violet-300 transition-all duration-300 shadow-[0_0_12px_rgba(139,92,246,0.3)] hover:shadow-[0_0_20px_rgba(139,92,246,0.5)]"
-          >
-            <Sparkles className="w-3.5 h-3.5 mr-1.5" />
-            Plan အသေးစိပ်
-          </Button>
+          <div className="flex items-center justify-center gap-2 mt-2">
+            <AppLogo size={28} />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate("/plans")}
+              className="border-violet-500/50 text-violet-400 hover:bg-violet-500/10 hover:text-violet-300 transition-all duration-300 shadow-[0_0_12px_rgba(139,92,246,0.3)] hover:shadow-[0_0_20px_rgba(139,92,246,0.5)]"
+            >
+              <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+              Plan အသေးစိပ်
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
