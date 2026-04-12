@@ -377,72 +377,6 @@ function generateSRTContent(subs: { start: number; end: number; text: string }[]
     .join("\n");
 }
 
-const POSTER_CROP_TOP = 0;
-const POSTER_CROP_BOTTOM = 0.15;
-const POSTER_BRIGHTNESS_MIN = 0.14;
-
-async function waitForDecodedVideoFrame(vid: HTMLVideoElement, timeoutMs = 2500) {
-  if ("requestVideoFrameCallback" in vid) {
-    await new Promise<void>((resolve) => {
-      let settled = false;
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeoutId);
-        resolve();
-      };
-      const timeoutId = window.setTimeout(finish, timeoutMs);
-      (vid as any).requestVideoFrameCallback(() => finish());
-    });
-    return;
-  }
-
-  await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-}
-
-function buildExactTextBatchPrompt(
-  textBatch: { start: number; end: number; text: string }[],
-  targetLang: string,
-) {
-  return `You are a precise subtitle translator.
-The input JSON array is the authoritative source subtitle file.
-Translate EVERY segment to ${targetLang} with 100% fidelity.
-
-CRITICAL RULES:
-- Return EXACTLY ${textBatch.length} items in the EXACT same order
-- Preserve every 'start' and 'end' value EXACTLY as provided
-- Do NOT merge, split, skip, summarize, censor, or leave any segment untranslated
-- Do NOT add speaker names, labels, notes, or metadata
-- Translate every segment completely, even if it is short
-- Return ONLY a JSON array with 'start', 'end', and 'text' properties
-
-Subtitles to translate:
-${JSON.stringify(textBatch)}`;
-}
-
-function parseJsonArrayResponse(raw: string) {
-  const jsonMatch = raw.match(/\[[\s\S]*\]/);
-  const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : "[]");
-  return Array.isArray(parsed) ? parsed : [parsed];
-}
-
-function normalizeAndDedupeSubtitles(subs: { start: number; end: number; text: string }[]) {
-  return subs
-    .map((sub) => ({
-      start: parseFloat(Number(sub.start || 0).toFixed(3)),
-      end: parseFloat(Number(sub.end || 0).toFixed(3)),
-      text: stripSpeakerName(String(sub.text || "")),
-    }))
-    .filter((sub) => sub.text.length > 0 && sub.end > sub.start)
-    .sort((a, b) => a.start - b.start || a.end - b.end)
-    .filter((sub, index, arr) => {
-      const prev = arr[index - 1];
-      if (!prev) return true;
-      const sameTiming = Math.abs(prev.start - sub.start) < 0.05 && Math.abs(prev.end - sub.end) < 0.05;
-      return !(sameTiming && prev.text === sub.text);
-    });
-}
-
 export default function App() {
   const { isAllowed, isLoading: authLoading } = useAuthGuard("video-transform");
   const { appApiAllowed, ownApiAllowed, defaultApiMode, isLoading: accessLoading } = useApiAccess();
@@ -505,7 +439,6 @@ export default function App() {
     thumbnailUrl: string;
   } | null>(null);
   const [isGeneratingMarketing, setIsGeneratingMarketing] = useState(false);
-  const [marketingError, setMarketingError] = useState("");
 
   // Load credit rate from tool_settings
   useEffect(() => {
@@ -562,7 +495,6 @@ export default function App() {
     }
     if (step !== "result") {
       autoMarketingTriggered.current = false;
-      setMarketingError("");
     }
   }, [step, marketingContent, isGeneratingMarketing]);
 
@@ -683,14 +615,23 @@ export default function App() {
   };
 
   const generateMarketingContent = async () => {
-    if (!srtText) return;
-    setMarketingError("");
     setIsGeneratingMarketing(true);
     try {
+      // === CREDIT DEDUCTION: 4CR per poster generation (skip for Own API) ===
+      if (apiMode !== "own") {
+        const posterResult = await deductCredits("video-transform", false, 4);
+        if (!posterResult.success) {
+          setIsGeneratingMarketing(false);
+          return;
+        }
+      }
+
       let title = "";
       let description = "";
 
-      const mktPrompt = `Based on these subtitles, generate a very short, viral shock title (max 5-7 words) and a short viral description (movie/video summary) in Burmese. The title should be extremely catchy, dramatic and "clickbaity" for a movie thumbnail. Subtitles: ${srtText.substring(0, 5000)}`;
+      const mktPrompt = srtText
+        ? `Based on these subtitles, generate a very short, viral shock title (max 5-7 words) and a very short subtitle/hook (max 6-8 words) in Burmese. The title should be extremely catchy, dramatic and "clickbaity" for a movie thumbnail. Output MUST be a valid JSON object with "title" and "description" keys (use "description" key for the short hook). Subtitles: ${srtText.substring(0, 5000)}`
+        : `Generate a very short, viral shock title (max 5-7 words) and a very short subtitle/hook (max 6-8 words) in Burmese for a generic movie thumbnail. The title should be extremely catchy, dramatic and "clickbaity". Output MUST be a valid JSON object with "title" and "description" keys (use "description" key for the short hook).`;
 
       if (apiMode === "own" && ownApiKey.trim()) {
         // Own API: direct client-side call
@@ -727,7 +668,6 @@ export default function App() {
       if (!videoUrl) throw new Error("Original video not found");
       const video = document.createElement("video");
       video.src = videoUrl;
-      video.crossOrigin = "anonymous";
       video.preload = "auto";
       video.muted = true;
       video.playsInline = true;
@@ -761,7 +701,8 @@ export default function App() {
       await new Promise<void>((resolve) => {
         const onSeeked = () => {
           video.removeEventListener("seeked", onSeeked);
-          void waitForDecodedVideoFrame(video).finally(resolve);
+          // Small delay to ensure frame buffer is updated after seek
+          setTimeout(resolve, 200);
         };
         video.addEventListener("seeked", onSeeked);
         video.onerror = () => resolve();
@@ -779,41 +720,89 @@ export default function App() {
       }
 
       const drawVideoCover = (vid: HTMLVideoElement, ctx: CanvasRenderingContext2D, w: number, h: number) => {
-        if (!vid.videoWidth || !vid.videoHeight) return;
+        const videoRatio = vid.videoWidth / vid.videoHeight;
+        let drawW = w;
+        let drawH = h;
+        let drawX = 0;
+        let drawY = 0;
 
-        const visibleHeight = vid.videoHeight * (1 - POSTER_CROP_TOP - POSTER_CROP_BOTTOM);
-        const sourceY = vid.videoHeight * POSTER_CROP_TOP;
-        const sourceRatio = vid.videoWidth / visibleHeight;
-        const destinationRatio = w / h;
-
-        let sx = 0;
-        let sy = sourceY;
-        let sw = vid.videoWidth;
-        let sh = visibleHeight;
-
-        if (sourceRatio > destinationRatio) {
-          sw = visibleHeight * destinationRatio;
-          sx = (vid.videoWidth - sw) / 2;
+        if (videoRatio > targetRatio) {
+          drawW = h * videoRatio;
+          drawX = (w - drawW) / 2;
         } else {
-          sh = vid.videoWidth / destinationRatio;
+          drawH = w / videoRatio;
+          drawY = (h - drawH) / 2;
         }
-
-        ctx.drawImage(vid, sx, sy, sw, sh, 0, 0, w, h);
+        ctx.drawImage(vid, drawX, drawY, drawW, drawH);
       };
 
-      const getCanvasBrightness = (inputCanvas: HTMLCanvasElement) => {
+      const getFrameScore = (inputCanvas: HTMLCanvasElement) => {
         const sampleCanvas = document.createElement("canvas");
-        sampleCanvas.width = 48;
-        sampleCanvas.height = Math.max(24, Math.round((inputCanvas.height / inputCanvas.width) * 48));
+        sampleCanvas.width = 64;
+        sampleCanvas.height = Math.max(32, Math.round((inputCanvas.height / inputCanvas.width) * 64));
         const sampleCtx = sampleCanvas.getContext("2d", { willReadFrequently: true });
         if (!sampleCtx) return 0;
         sampleCtx.drawImage(inputCanvas, 0, 0, sampleCanvas.width, sampleCanvas.height);
         const { data } = sampleCtx.getImageData(0, 0, sampleCanvas.width, sampleCanvas.height);
+
         let totalLuma = 0;
-        for (let i = 0; i < data.length; i += 4) {
-          totalLuma += data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+        let centerVariance = 0;
+        let centerLumaTotal = 0;
+        let centerPixelCount = 0;
+        const lumas = [];
+
+        const centerX = sampleCanvas.width / 2;
+        const centerY = sampleCanvas.height / 2;
+        const maxDist = Math.sqrt(centerX * centerX + centerY * centerY);
+
+        for (let y = 0; y < sampleCanvas.height; y++) {
+          for (let x = 0; x < sampleCanvas.width; x++) {
+            const i = (y * sampleCanvas.width + x) * 4;
+            const luma = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+            totalLuma += luma;
+            lumas.push(luma);
+
+            // Weight center pixels more heavily (where faces usually are)
+            const distToCenter = Math.sqrt(Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2));
+            const centerWeight = 1 - distToCenter / maxDist;
+
+            if (centerWeight > 0.5) {
+              centerLumaTotal += luma;
+              centerPixelCount++;
+            }
+          }
         }
-        return totalLuma / ((data.length / 4) * 255);
+
+        const avgLuma = totalLuma / lumas.length;
+        const avgCenterLuma = centerPixelCount > 0 ? centerLumaTotal / centerPixelCount : avgLuma;
+
+        // Calculate variance (contrast). High contrast = subject in focus.
+        let variance = 0;
+        for (let i = 0; i < lumas.length; i++) {
+          variance += Math.pow(lumas[i] - avgLuma, 2);
+        }
+        variance = variance / lumas.length;
+
+        // Calculate center contrast specifically
+        for (let y = 0; y < sampleCanvas.height; y++) {
+          for (let x = 0; x < sampleCanvas.width; x++) {
+            const i = (y * sampleCanvas.width + x) * 4;
+            const luma = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+            const distToCenter = Math.sqrt(Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2));
+            const centerWeight = 1 - distToCenter / maxDist;
+
+            if (centerWeight > 0.5) {
+              centerVariance += Math.pow(luma - avgCenterLuma, 2);
+            }
+          }
+        }
+        centerVariance = centerPixelCount > 0 ? centerVariance / centerPixelCount : variance;
+
+        // Penalize extreme brightness (sky/white walls) or extreme darkness
+        const brightnessPenalty = Math.abs(avgLuma - 128) * 5;
+
+        // Score is heavily weighted towards center contrast (faces/subjects)
+        return variance * 0.3 + centerVariance * 0.7 - brightnessPenalty;
       };
 
       const sourceCanvas = document.createElement("canvas");
@@ -821,78 +810,113 @@ export default function App() {
       sourceCanvas.height = canvasH;
       const sourceCtx = sourceCanvas.getContext("2d");
       if (!sourceCtx) throw new Error("Could not get canvas context");
-      drawVideoCover(video, sourceCtx, canvasW, canvasH);
+      // Crop bottom subtitle area: capture top 70% of video to avoid original subtitles
+      const vW = video.videoWidth || 1280;
+      const vH = video.videoHeight || 720;
+      const subAvoidanceHeight = vH * 0.85;
+      const srcRatio1 = vW / subAvoidanceHeight;
+      const destRatio1 = canvasW / canvasH;
+      let sW1 = vW,
+        sH1 = subAvoidanceHeight;
+      if (srcRatio1 > destRatio1) {
+        sW1 = subAvoidanceHeight * destRatio1;
+      } else {
+        sH1 = vW / destRatio1;
+      }
+      sourceCtx.drawImage(
+        video,
+        (vW - sW1) / 2,
+        0,
+        sW1,
+        sH1, // Secure aspect ratio crop
+        0,
+        0,
+        canvasW,
+        canvasH, // Destination: Full canvas
+      );
 
       const baseFrame = {
         data: sourceCanvas.toDataURL("image/jpeg", 0.9).split(",")[1],
-        brightness: getCanvasBrightness(sourceCanvas),
+        score: getFrameScore(sourceCanvas),
       };
 
-      const captureFrameAt = async (time: number): Promise<{ data: string; brightness: number }> => {
-        try {
-          const safeDuration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : time + 1;
-          const targetTime = Math.max(0.15, Math.min(time, safeDuration - 0.15));
-
-          if (Math.abs(video.currentTime - targetTime) > 0.05) {
-            await new Promise<void>((resolve) => {
-              let settled = false;
-              const finish = () => {
-                if (settled) return;
-                settled = true;
-                clearTimeout(timeoutId);
-                resolve();
-              };
-              const timeoutId = window.setTimeout(finish, 3000);
-              video.addEventListener(
-                "seeked",
-                () => {
-                  void waitForDecodedVideoFrame(video).finally(finish);
-                },
-                { once: true },
-              );
-              video.currentTime = targetTime;
-            });
-          } else {
-            await waitForDecodedVideoFrame(video);
-          }
-
-          const canvas = document.createElement("canvas");
-          canvas.width = canvasW;
-          canvas.height = canvasH;
-          const ctx = canvas.getContext("2d");
-          if (ctx) {
-            drawVideoCover(video, ctx, canvasW, canvasH);
-          }
-
-          return {
-            data: canvas.toDataURL("image/jpeg", 0.95).split(",")[1],
-            brightness: getCanvasBrightness(canvas),
+      // Helper to capture frame at specific time for more character variety
+      const captureFrameAt = (time: number): Promise<{ data: string; score: number }> => {
+        return new Promise((resolve) => {
+          const tempVideo = document.createElement("video");
+          tempVideo.src = videoUrl;
+          tempVideo.preload = "auto";
+          tempVideo.muted = true;
+          tempVideo.playsInline = true;
+          tempVideo.setAttribute("muted", "true");
+          tempVideo.setAttribute("playsinline", "true");
+          const doSeek = () => {
+            tempVideo.currentTime = Math.max(0.5, Math.min(time, (tempVideo.duration || 10) - 0.5));
+            tempVideo.onseeked = () => {
+              setTimeout(() => {
+                const canvas = document.createElement("canvas");
+                canvas.width = canvasW;
+                canvas.height = canvasH;
+                const ctx = canvas.getContext("2d");
+                if (ctx) {
+                  // To avoid original subtitles (usually at the bottom),
+                  // we capture only the top 65% of the video frame and scale it to cover the canvas.
+                  // 65% keeps faces fully visible while cropping out subtitle area at bottom.
+                  const vW2 = tempVideo.videoWidth || 1280;
+                  const vH2 = tempVideo.videoHeight || 720;
+                  const subAvoidanceHeight = vH2 * 0.65;
+                  const srcRatio2 = vW2 / subAvoidanceHeight;
+                  const destRatio2 = canvasW / canvasH;
+                  let sW2 = vW2,
+                    sH2 = subAvoidanceHeight;
+                  if (srcRatio2 > destRatio2) {
+                    sW2 = subAvoidanceHeight * destRatio2;
+                  } else {
+                    sH2 = vW2 / destRatio2;
+                  }
+                  ctx.drawImage(
+                    tempVideo,
+                    (vW2 - sW2) / 2,
+                    0,
+                    sW2,
+                    sH2, // Source: Top 65% with aspect crop
+                    0,
+                    0,
+                    canvasW,
+                    canvasH, // Destination: Full canvas
+                  );
+                }
+                resolve({
+                  data: canvas.toDataURL("image/jpeg", 0.95).split(",")[1],
+                  score: getFrameScore(canvas),
+                });
+              }, 250); // Delay to let frame decode into buffer
+            };
+            tempVideo.onerror = () => resolve({ data: "", score: -99999 });
           };
-        } catch (frameErr) {
-          console.warn("Poster frame capture failed:", frameErr);
-          return { data: "", brightness: 0 };
-        }
+          if (tempVideo.readyState >= 2) {
+            doSeek();
+            return;
+          }
+          tempVideo.addEventListener("loadeddata", doSeek, { once: true });
+          tempVideo.addEventListener("error", () => resolve({ data: "", score: -99999 }), { once: true });
+          tempVideo.load();
+          setTimeout(() => resolve({ data: "", score: -99999 }), 5000);
+        });
       };
 
       const duration = video.duration || 0;
-      const sampleTimes = Array.from(
-        new Set([
-          parseFloat(seekTarget.toFixed(3)),
-          ...[0.12, 0.28, 0.44, 0.6, 0.76, 0.82].map((ratio) => parseFloat((duration * ratio).toFixed(3))),
-        ]),
-      ).filter((time) => time > 0.1 && (!duration || time < duration - 0.1));
-
-      const capturedFrames = [baseFrame];
-      for (const time of sampleTimes) {
-        if (Math.abs(time - seekTarget) < 0.05) continue;
-        const frame = await captureFrameAt(time);
-        if (frame.data) capturedFrames.push(frame);
+      // Spread captures across the entire video to ensure all key characters (like villains/supporting roles) are found
+      // We take many samples to ensure we find good faces
+      const intervals = [];
+      for (let i = 0.2; i < 0.9; i += 0.1) {
+        intervals.push(duration * i);
       }
 
-      const usableFrames = capturedFrames.filter((frame) => frame.data);
-      const brightFrames = usableFrames.filter((frame) => frame.brightness >= POSTER_BRIGHTNESS_MIN);
-      const selectedFrames = (brightFrames.length > 0 ? brightFrames : usableFrames)
-        .sort((a, b) => b.brightness - a.brightness)
+      const additionalFrames = await Promise.all(intervals.map((t) => captureFrameAt(t)));
+      const selectedFrames = [baseFrame, ...additionalFrames]
+        .filter((frame) => frame.data)
+        .sort((a, b) => b.score - a.score)
         .slice(0, 6);
 
       // 3. Build poster from REAL extracted frames only (no AI generation)
@@ -902,94 +926,165 @@ export default function App() {
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Could not get final canvas context");
 
-      const loadedImages = (
-        await Promise.all(
-          selectedFrames.map((frame) => {
-            return new Promise<HTMLImageElement | null>((resolve) => {
-              const img = new Image();
-              img.onload = () => resolve(img);
-              img.onerror = () => resolve(null);
-              img.src = `data:image/jpeg;base64,${frame.data}`;
-            });
-          }),
-        )
-      ).filter((img): img is HTMLImageElement => Boolean(img));
-
-      if (loadedImages.length === 0) {
-        throw new Error("Poster frames could not be extracted.");
-      }
-
-      if (loadedImages[0]) {
-        ctx.drawImage(loadedImages[0], 0, 0, canvas.width, canvas.height);
-      } else {
-        ctx.drawImage(sourceCanvas, 0, 0, canvas.width, canvas.height);
-      }
-
-      // Hollywood Cinematic Realistic Poster Composition
-      // 1. Main Character (loadedImages[0]) is already drawn as background.
-      // 2. Overlay supporting characters with soft blending and hierarchy.
-      const montageImages = loadedImages.slice(1);
-      if (montageImages.length >= 1) {
-        const overlayCanvas = document.createElement("canvas");
-        overlayCanvas.width = canvas.width;
-        overlayCanvas.height = canvas.height;
-        const oCtx = overlayCanvas.getContext("2d");
-        if (oCtx) {
-          // Clear background for the overlay canvas
-          oCtx.clearRect(0, 0, canvas.width, canvas.height);
-
-          // Portrait: Characters at top/sides, Main character in center/bottom
-          // Landscape: Characters on left/right, Main character in center
-          const isPortrait = canvas.height > canvas.width;
-
-          montageImages.forEach((img, idx) => {
-            // Hierarchy: Supporting characters are placed behind the main character
-            // First 2 are slightly larger, others smaller
-            const scale = idx < 2 ? 0.5 : 0.35;
-            const imgW = canvas.width * scale;
-            const imgH = (imgW * img.height) / img.width;
-
-            let dx = 0,
-              dy = 0;
-            if (isPortrait) {
-              // Positions: Top-Left, Top-Right, Mid-Left, Mid-Right
-              // Designed to frame the center main character
-              dx = idx % 2 === 0 ? -canvas.width * 0.05 : canvas.width - imgW + canvas.width * 0.05;
-              dy = Math.floor(idx / 2) * (canvas.height * 0.22);
-            } else {
-              // Landscape: Left and Right sides
-              dx = idx % 2 === 0 ? 0 : canvas.width - imgW;
-              dy = Math.floor(idx / 2) * (canvas.height * 0.28);
-            }
-
-            // Draw character with soft radial mask (No Blur as requested)
-            const charCanvas = document.createElement("canvas");
-            charCanvas.width = imgW;
-            charCanvas.height = imgH;
-            const cCtx = charCanvas.getContext("2d");
-            if (cCtx) {
-              // Background characters are kept clear (no blur) but slightly color-matched
-              cCtx.filter = "brightness(0.9) contrast(1.05)";
-              cCtx.drawImage(img, 0, 0, imgW, imgH);
-              cCtx.filter = "none";
-
-              cCtx.globalCompositeOperation = "destination-in";
-              // Soft radial gradient for natural blending into the cinematic background
-              const mask = cCtx.createRadialGradient(imgW / 2, imgH / 2, 0, imgW / 2, imgH / 2, imgW * 0.75);
-              mask.addColorStop(0, "rgba(0,0,0,1)");
-              mask.addColorStop(0.5, "rgba(0,0,0,0.85)");
-              mask.addColorStop(1, "rgba(0,0,0,0)");
-              cCtx.fillStyle = mask;
-              cCtx.fillRect(0, 0, imgW, imgH);
-
-              oCtx.drawImage(charCanvas, dx, dy);
-            }
+      const loadedImages = await Promise.all(
+        selectedFrames.map((frame) => {
+          return new Promise<HTMLImageElement>((resolve) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = () => resolve(img);
+            img.src = `data:image/jpeg;base64,${frame.data}`;
           });
+        }),
+      );
 
-          // Blend the entire overlay onto the main background (lighter for less washed out look)
-          ctx.globalAlpha = 0.92;
-          ctx.drawImage(overlayCanvas, 0, 0);
-          ctx.globalAlpha = 1.0;
+      const validImages = loadedImages.filter((img) => img && img.width > 0);
+
+      // Hollywood Cinematic Realistic Poster Composition (Surgical Match Reference)
+
+      // 1. Deep cinematic background (NO raw image to avoid ghosting)
+      ctx.fillStyle = "#050814";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      if (validImages[0]) {
+        // Atmospheric blurred background layer instead of raw copy
+        ctx.filter = "blur(30px) opacity(0.2) brightness(0.4)";
+        ctx.drawImage(validImages[0], -20, -20, canvas.width + 40, canvas.height + 40);
+        ctx.filter = "none";
+      }
+
+      // Helper function for perfectly blended cinematic faces without ghosting
+      const drawCinematicFace = (img, scaleMultiplier, alignX, alignY, maskConfig) => {
+        const isPortrait = canvas.height > canvas.width;
+        const baseScale = isPortrait ? 1.4 : 1.1;
+        const scale = baseScale * scaleMultiplier;
+
+        const imgW = canvas.width * scale;
+        const imgH = (imgW * img.height) / img.width;
+
+        const dx = (canvas.width - imgW) / 2 + canvas.width * alignX;
+        const dy = (canvas.height - imgH) / 2 + canvas.height * alignY;
+
+        const tempCanvas = document.createElement("canvas");
+        tempCanvas.width = canvas.width;
+        tempCanvas.height = canvas.height;
+        const tCtx = tempCanvas.getContext("2d");
+
+        if (tCtx) {
+          tCtx.drawImage(img, dx, dy, imgW, imgH);
+          tCtx.globalCompositeOperation = "destination-in";
+
+          // Radial Mask for seamless organic blending
+          const cx = maskConfig.centerX !== undefined ? canvas.width * maskConfig.centerX : canvas.width / 2;
+          const cy = maskConfig.centerY !== undefined ? canvas.height * maskConfig.centerY : canvas.height / 2;
+          const innerR = maskConfig.innerR !== undefined ? canvas.width * maskConfig.innerR : 0;
+          const outerR = maskConfig.outerR !== undefined ? canvas.width * maskConfig.outerR : canvas.width * 0.8;
+
+          const mask = tCtx.createRadialGradient(cx, cy, innerR, cx, cy, outerR);
+          mask.addColorStop(0, "rgba(0,0,0,1)");
+          mask.addColorStop(0.5, "rgba(0,0,0,0.85)");
+          mask.addColorStop(0.8, "rgba(0,0,0,0.2)");
+          mask.addColorStop(1, "rgba(0,0,0,0)");
+
+          tCtx.fillStyle = mask;
+          tCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+          // Cut specific edges smoothly behind other elements
+          if (maskConfig.bottomCut) {
+            tCtx.globalCompositeOperation = "destination-in";
+            const bMask = tCtx.createLinearGradient(
+              0,
+              canvas.height * maskConfig.bottomCut.y1,
+              0,
+              canvas.height * maskConfig.bottomCut.y2,
+            );
+            bMask.addColorStop(0, "rgba(0,0,0,1)");
+            bMask.addColorStop(1, "rgba(0,0,0,0)");
+            tCtx.fillStyle = bMask;
+            tCtx.fillRect(0, 0, canvas.width, canvas.height);
+          }
+          if (maskConfig.topCut) {
+            tCtx.globalCompositeOperation = "destination-in";
+            const tMask = tCtx.createLinearGradient(
+              0,
+              canvas.height * maskConfig.topCut.y1,
+              0,
+              canvas.height * maskConfig.topCut.y2,
+            );
+            tMask.addColorStop(0, "rgba(0,0,0,0)");
+            tMask.addColorStop(1, "rgba(0,0,0,1)");
+            tCtx.fillStyle = tMask;
+            tCtx.fillRect(0, 0, canvas.width, canvas.height);
+          }
+
+          ctx.drawImage(tempCanvas, 0, 0);
+        }
+      };
+
+      const isPortrait = canvas.height > canvas.width;
+
+      // 2. Draw Supporting Characters (Background Layer)
+      const supportingCast = validImages.slice(1, 4);
+      if (isPortrait) {
+        if (supportingCast.length === 1) {
+          drawCinematicFace(supportingCast[0], 1.2, 0, -0.25, {
+            centerX: 0.5,
+            centerY: 0.25,
+            innerR: 0.15,
+            outerR: 0.7,
+            bottomCut: { y1: 0.35, y2: 0.55 },
+          });
+        } else if (supportingCast.length >= 2) {
+          if (supportingCast.length >= 3) {
+            drawCinematicFace(supportingCast[2], 1.1, 0, -0.35, {
+              centerX: 0.5,
+              centerY: 0.15,
+              innerR: 0.1,
+              outerR: 0.6,
+              bottomCut: { y1: 0.25, y2: 0.45 },
+            });
+          }
+          drawCinematicFace(supportingCast[0], 1.15, -0.25, -0.2, {
+            centerX: 0.25,
+            centerY: 0.28,
+            innerR: 0.1,
+            outerR: 0.65,
+            bottomCut: { y1: 0.35, y2: 0.55 },
+          });
+          drawCinematicFace(supportingCast[1], 1.15, 0.25, -0.2, {
+            centerX: 0.75,
+            centerY: 0.28,
+            innerR: 0.1,
+            outerR: 0.65,
+            bottomCut: { y1: 0.35, y2: 0.55 },
+          });
+        }
+      } else {
+        if (supportingCast.length >= 1) {
+          drawCinematicFace(supportingCast[0], 1.0, -0.3, 0, { centerX: 0.2, centerY: 0.5, innerR: 0.1, outerR: 0.5 });
+        }
+        if (supportingCast.length >= 2) {
+          drawCinematicFace(supportingCast[1], 1.0, 0.3, 0, { centerX: 0.8, centerY: 0.5, innerR: 0.1, outerR: 0.5 });
+        }
+      }
+
+      // 3. Draw Main Character (Foreground Layer)
+      if (validImages[0]) {
+        if (isPortrait) {
+          drawCinematicFace(validImages[0], 1.45, 0, 0.18, {
+            centerX: 0.5,
+            centerY: 0.55,
+            innerR: 0.2,
+            outerR: 0.85,
+            topCut: { y1: 0.2, y2: 0.4 },
+          });
+        } else {
+          drawCinematicFace(validImages[0], 1.25, 0, 0.1, {
+            centerX: 0.5,
+            centerY: 0.55,
+            innerR: 0.15,
+            outerR: 0.85,
+            topCut: { y1: 0.1, y2: 0.3 },
+          });
         }
       }
 
@@ -1020,15 +1115,15 @@ export default function App() {
 
       ctx.globalCompositeOperation = "source-over";
 
-      // Lighter bottom gradient for text readability (less washed out)
-      const grad = ctx.createLinearGradient(0, canvas.height * 0.6, 0, canvas.height);
+      // Bottom gradient for text readability
+      const grad = ctx.createLinearGradient(0, canvas.height * 0.5, 0, canvas.height);
       grad.addColorStop(0, "rgba(0,0,0,0)");
-      grad.addColorStop(0.5, "rgba(0,0,0,0.28)");
-      grad.addColorStop(1, "rgba(0,0,0,0.55)");
+      grad.addColorStop(0.5, "rgba(0,0,0,0.6)");
+      grad.addColorStop(1, "rgba(0,0,0,0.9)");
       ctx.fillStyle = grad;
-      ctx.fillRect(0, canvas.height * 0.6, canvas.width, canvas.height * 0.4);
+      ctx.fillRect(0, canvas.height * 0.5, canvas.width, canvas.height * 0.5);
 
-      // Helper to wrap and draw text
+      // Helper to wrap and draw text, limiting to maxLines and returning remaining text
       const drawWrappedText = (
         text: string,
         baseFontSize: number,
@@ -1036,7 +1131,8 @@ export default function App() {
         isNeon: boolean,
         fontStyle: string,
         fontFamily: string = '"Inter", "Pyidaungsu", "Padauk", sans-serif',
-      ) => {
+        maxLines: number = 2,
+      ): string => {
         const maxTextWidth = canvas.width * 0.9;
         let fontSize = baseFontSize;
         const words = text.split(" ");
@@ -1056,17 +1152,29 @@ export default function App() {
           }
         }
 
+        let remainingText = "";
         for (let n = 0; n < words.length; n++) {
           const testLine = currentLine + words[n] + " ";
           const metrics = ctx.measureText(testLine);
           if (metrics.width > maxTextWidth && n > 0) {
-            lines.push(currentLine.trim());
-            currentLine = words[n] + " ";
+            if (lines.length < maxLines) {
+              lines.push(currentLine.trim());
+              currentLine = words[n] + " ";
+            } else {
+              // We've reached max lines, the rest goes to remainingText
+              remainingText = words.slice(n).join(" ");
+              currentLine = ""; // Clear current line so it doesn't get pushed
+              break;
+            }
           } else {
             currentLine = testLine;
           }
         }
-        lines.push(currentLine.trim());
+        if (currentLine.trim() && lines.length < maxLines) {
+          lines.push(currentLine.trim());
+        } else if (currentLine.trim()) {
+          remainingText = (remainingText + " " + currentLine).trim();
+        }
 
         ctx.textAlign = "center";
         ctx.textBaseline = "bottom";
@@ -1079,29 +1187,30 @@ export default function App() {
           const lineY = startY + i * lineHeight;
 
           if (isNeon) {
-            // 3D Neon Effect
+            // Title: High-end Cinematic Neon (Reference Match)
             ctx.lineJoin = "round";
+            ctx.miterLimit = 2;
 
-            // 3D offset layers
-            ctx.fillStyle = "#ff0055";
-            ctx.fillText(lines[i], x - 4, lineY + 4);
-            ctx.fillStyle = "#00ffff";
-            ctx.fillText(lines[i], x + 4, lineY - 4);
-
-            // Neon Glow
-            ctx.shadowColor = "#ff00ff";
-            ctx.shadowBlur = 40;
+            // Deep Outer Shadow / Glow (Purple/Pink aura)
+            ctx.shadowColor = "rgba(147, 51, 234, 0.8)";
+            ctx.shadowBlur = 35;
             ctx.shadowOffsetX = 0;
             ctx.shadowOffsetY = 0;
 
-            // Main text
-            ctx.fillStyle = "#ffffff";
-            ctx.strokeStyle = "#ffffff";
-            ctx.lineWidth = 2;
+            // Outer Neon Stroke
+            ctx.strokeStyle = "rgba(236, 72, 153, 0.9)"; // Vibrant pink
+            ctx.lineWidth = fontSize * 0.22;
             ctx.strokeText(lines[i], x, lineY);
-            ctx.fillText(lines[i], x, lineY);
 
-            ctx.shadowBlur = 0; // Reset
+            // Inner Dark/Contrast Stroke (makes the white core pop)
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = "#1e1b4b"; // Very dark indigo
+            ctx.lineWidth = fontSize * 0.12;
+            ctx.strokeText(lines[i], x, lineY);
+
+            // White fill
+            ctx.fillStyle = "#ffffff";
+            ctx.fillText(lines[i], x, lineY);
           } else {
             // Standard cinematic hook text
             ctx.strokeStyle = "black";
@@ -1111,8 +1220,8 @@ export default function App() {
 
             ctx.shadowColor = "rgba(0,0,0,0.9)";
             ctx.shadowBlur = 30;
-            ctx.shadowOffsetX = 10;
-            ctx.shadowOffsetY = 10;
+            ctx.shadowOffsetX = 5;
+            ctx.shadowOffsetY = 5;
 
             const textGrad = ctx.createLinearGradient(0, lineY - fontSize, 0, lineY);
             textGrad.addColorStop(0, "#fef08a");
@@ -1124,40 +1233,29 @@ export default function App() {
             ctx.shadowBlur = 0; // Reset
           }
         }
+        return remainingText;
       };
 
-      // Draw Movie Title (if provided) — BIGGER than hook text, prominent neon style
+      // Draw Movie Title (ONLY if user provided it)
       if (movieTitle) {
         drawWrappedText(
           movieTitle,
-          Math.floor(canvas.height * 0.12),
-          canvas.height * 0.78,
+          Math.floor(canvas.height * 0.11),
+          canvas.height * 0.82,
           true,
-          "italic 900",
-          'serif, "Pyidaungsu", "Padauk"',
+          "900",
+          '"Inter", "Pyidaungsu", "Padauk", sans-serif',
         );
       }
 
-      // Draw the viral hook title (smaller and at the very bottom)
-      const hookFontSize = movieTitle ? Math.floor(canvas.height * 0.045) : Math.floor(canvas.height * 0.1);
-      drawWrappedText(title, hookFontSize, canvas.height * 0.96, false, "900");
-
-      const finalPosterBrightness = getCanvasBrightness(canvas);
-      if (finalPosterBrightness < 0.08) {
-        throw new Error("Poster output is too dark.");
+      // Draw the hook (AI generated title or description)
+      const hookText = title || description;
+      if (hookText) {
+        const hookFontSize = Math.floor(canvas.height * 0.055);
+        drawWrappedText(hookText, hookFontSize, canvas.height * 0.96, false, "900");
       }
 
       const thumbnailUrl = canvas.toDataURL("image/png");
-
-      // Deduct poster credits only after a valid poster has been produced
-      if (apiMode !== "own") {
-        const posterResult = await deductCredits("video-transform", false, 4);
-        if (!posterResult.success) {
-          setMarketingError(String(posterResult.error || "Poster credits could not be processed."));
-          return;
-        }
-      }
-
       setMarketingContent({ title, description, thumbnailUrl });
 
       // Auto-download the thumbnail
@@ -1171,7 +1269,6 @@ export default function App() {
       }, 100);
     } catch (error) {
       console.error("Error generating marketing content:", error);
-      setMarketingError(error instanceof Error ? error.message : "Poster generation failed.");
     } finally {
       setIsGeneratingMarketing(false);
     }
@@ -1257,8 +1354,6 @@ export default function App() {
 
         setVideoFile(file);
         setVideoUrl(URL.createObjectURL(file));
-        setMarketingContent(null);
-        setMarketingError("");
         setStep("configure");
       })();
     }
@@ -1311,61 +1406,52 @@ export default function App() {
 
           const chunk = audioChunks[i];
 
-          // Capture video frame only for Own API multimodal mode.
-          // App API stays audio-first to avoid partial OCR-only subtitle outputs.
+          // Capture video frame for visual context — reuse a single video element
           let frameBase64 = "";
-          const shouldCaptureFrame = apiMode === "own" && originalSubs.length === 0;
-          if (shouldCaptureFrame) {
-            try {
-              const frameVideo = document.createElement("video");
-              frameVideo.src = videoUrl!;
-              frameVideo.preload = "auto";
-              frameVideo.muted = true;
+          try {
+            const frameVideo = document.createElement("video");
+            frameVideo.src = videoUrl!;
+            frameVideo.preload = "auto";
+            frameVideo.muted = true;
 
-              await new Promise<void>((res, rej) => {
-                if (frameVideo.readyState >= 2) return res();
-                frameVideo.addEventListener("loadeddata", () => res(), { once: true });
-                frameVideo.addEventListener("error", () => rej(new Error("frame video load error")), { once: true });
-                frameVideo.load();
-                setTimeout(() => res(), 3000);
-              });
+            await new Promise<void>((res, rej) => {
+              if (frameVideo.readyState >= 2) return res();
+              frameVideo.addEventListener("loadeddata", () => res(), { once: true });
+              frameVideo.addEventListener("error", () => rej(new Error("frame video load error")), { once: true });
+              frameVideo.load();
+              setTimeout(() => res(), 3000); // don't block forever
+            });
 
-              frameVideo.currentTime = chunk.offset + chunk.duration / 2;
-              await new Promise<void>((res) => {
-                frameVideo.onseeked = () => res();
-                frameVideo.onerror = () => res();
-                setTimeout(() => res(), 3000);
-              });
+            frameVideo.currentTime = chunk.offset + chunk.duration / 2;
+            await new Promise<void>((res) => {
+              frameVideo.onseeked = () => res();
+              frameVideo.onerror = () => res();
+              setTimeout(() => res(), 3000);
+            });
 
-              const canvas = document.createElement("canvas");
-              let w = frameVideo.videoWidth;
-              let h = frameVideo.videoHeight;
-              if (w > 854) {
-                h = Math.round((854 / w) * h);
-                w = 854;
-              }
-              canvas.width = w || 854;
-              canvas.height = h || 480;
-              const ctx = canvas.getContext("2d");
-              if (ctx) ctx.drawImage(frameVideo, 0, 0, canvas.width, canvas.height);
-              frameBase64 = canvas.toDataURL("image/jpeg", 0.8).split(",")[1];
-            } catch (frameErr) {
-              console.warn("Frame capture failed, continuing without frame:", frameErr);
+            const canvas = document.createElement("canvas");
+            let w = frameVideo.videoWidth;
+            let h = frameVideo.videoHeight;
+            if (w > 854) {
+              h = Math.round((854 / w) * h);
+              w = 854;
             }
+            canvas.width = w || 854;
+            canvas.height = h || 480;
+            const ctx = canvas.getContext("2d");
+            if (ctx) ctx.drawImage(frameVideo, 0, 0, canvas.width, canvas.height);
+            frameBase64 = canvas.toDataURL("image/jpeg", 0.8).split(",")[1];
+          } catch (frameErr) {
+            console.warn("Frame capture failed, continuing without frame:", frameErr);
           }
 
-          // Assign each original subtitle line to exactly one chunk by midpoint.
-          const overlappingSubs = originalSubs.filter((s) => {
-            const midpoint = s.start + (s.end - s.start) / 2;
-            return midpoint >= chunk.offset && midpoint < chunk.offset + chunk.duration;
-          });
-          const authoritativeTextBatch = overlappingSubs
-            .map((s) => ({
-              start: parseFloat(Math.max(0, s.start - chunk.offset).toFixed(3)),
-              end: parseFloat(Math.min(chunk.duration, s.end - chunk.offset).toFixed(3)),
-              text: s.text,
-            }))
-            .filter((s) => s.text.trim().length > 0 && s.end > s.start);
+          // Find overlapping original subtitles
+          const overlappingSubs = originalSubs.filter(
+            (s) =>
+              (s.start >= chunk.offset && s.start <= chunk.offset + chunk.duration) ||
+              (s.end >= chunk.offset && s.end <= chunk.offset + chunk.duration) ||
+              (s.start <= chunk.offset && s.end >= chunk.offset + chunk.duration),
+          );
           const originalTextContext =
             overlappingSubs.length > 0
               ? `\n\nORIGINAL SUBTITLES FOR THIS SEGMENT:\n${overlappingSubs.map((s) => `[${(s.start - chunk.offset).toFixed(1)}s - ${(s.end - chunk.offset).toFixed(1)}s] ${s.text}`).join("\n")}\n*Use these original subtitles as a strong reference for names, timing, and context.*`
@@ -1439,48 +1525,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           try {
             let text = "[]";
 
-            const runAuthoritativeTextBatchTranslation = async (
-              batch: { start: number; end: number; text: string }[] = authoritativeTextBatch,
-            ) => {
-              if (apiMode === "own" && ownApiKey.trim()) {
-                const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
-                const ownResult = await ai.models.generateContent({
-                  model: "gemini-2.5-flash",
-                  contents: buildExactTextBatchPrompt(batch, targetLang),
-                  config: {
-                    temperature: 0.05,
-                    maxOutputTokens: 8192,
-                    responseMimeType: "application/json",
-                  },
-                });
-                return ownResult.text || "[]";
-              }
-
-              const { data, error } = await supabase.functions.invoke("video-transform-translate", {
-                body: {
-                  textBatch: batch,
-                  targetLang,
-                },
-              });
-              if (error) throw new Error(error.message || "Edge function error");
-              return typeof data?.result === "string" ? data.result : JSON.stringify(data?.result || []);
-            };
-
-            if (authoritativeTextBatch.length > 0) {
-              text = await runAuthoritativeTextBatchTranslation();
-              if (parseJsonArrayResponse(text).length !== authoritativeTextBatch.length) {
-                text = await runAuthoritativeTextBatchTranslation();
-              }
-              if (parseJsonArrayResponse(text).length !== authoritativeTextBatch.length) {
-                const strictLines: any[] = [];
-                for (const item of authoritativeTextBatch) {
-                  const singleText = await runAuthoritativeTextBatchTranslation([item]);
-                  const singleParsed = parseJsonArrayResponse(singleText);
-                  if (singleParsed[0]) strictLines.push(singleParsed[0]);
-                }
-                text = JSON.stringify(strictLines);
-              }
-            } else if (apiMode === "own" && ownApiKey.trim()) {
+            if (apiMode === "own" && ownApiKey.trim()) {
               // === OWN API MODE: Direct client-side Gemini call ===
               const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
               const ownParts: any[] = [{ inlineData: { mimeType: "audio/wav", data: chunk.base64 } }];
@@ -1506,13 +1551,17 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                   audioBase64: chunk.base64,
                   audioDuration: chunk.duration,
                   targetLang,
-                  videoFrames: [],
+                  videoFrames: frameBase64 ? [frameBase64] : [],
                 },
               });
               if (error) throw new Error(error.message || "Edge function error");
               text = typeof data?.result === "string" ? data.result : JSON.stringify(data?.result || []);
             }
-            let chunkSubs = parseJsonArrayResponse(text);
+            const jsonMatch = text.match(/\[[\s\S]*\]/);
+            let chunkSubs = JSON.parse(jsonMatch ? jsonMatch[0] : "[]");
+            if (!Array.isArray(chunkSubs)) {
+              chunkSubs = [chunkSubs];
+            }
 
             // Adjust timestamps by adding the EXACT segment offset (calculated by VAD)
             // Also clamp and validate each subtitle to prevent timing bugs
@@ -1531,8 +1580,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                   text: stripSpeakerName(sub.text || ""),
                 };
               })
-              .filter((sub: any) => sub.text.length > 0 && sub.end > sub.start)
-              .sort((a: any, b: any) => a.start - b.start || a.end - b.end);
+              .filter((sub: any) => sub.text.length > 0 && sub.end > sub.start);
 
             parsedSubtitles = [...parsedSubtitles, ...adjustedSubs];
           } catch (err: any) {
@@ -1549,8 +1597,6 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           }
         }
       }
-      parsedSubtitles = normalizeAndDedupeSubtitles(parsedSubtitles);
-
       // === AUTO PHASE 2: Render video with subtitles ===
       const generatedSrt = generateSRTContent(parsedSubtitles);
       setSubtitles(parsedSubtitles);
@@ -1670,7 +1716,6 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           promises.push(
             new Promise<void>((res) => {
               const img = new Image();
-              img.crossOrigin = "anonymous";
               img.onload = () => {
                 localLogoImg = img;
                 setLogoImg(img);
@@ -1685,7 +1730,6 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           promises.push(
             new Promise<void>((res) => {
               const img = new Image();
-              img.crossOrigin = "anonymous";
               img.onload = () => {
                 localWatermarkImg = img;
                 setWatermarkImg(img);
@@ -1712,7 +1756,6 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
 
       const video = document.createElement("video");
       video.src = videoUrl;
-      video.crossOrigin = "anonymous";
       video.muted = false;
       video.playsInline = true;
       video.autoplay = true;
@@ -1989,7 +2032,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
 
           // Crop slightly from top to align hair with border, rest mostly from bottom to cut subtitles
           const maxSy = Math.max(0, video.videoHeight - sh);
-          sy = maxSy * 0.05; // Top aligned close to border (10%), with heavy cut at bottom (90%)
+          sy = maxSy * 0.2; // Top aligned close to border (10%), with heavy cut at bottom (90%)
 
           // Draw a subtle drop shadow for the foreground video
           ctx.shadowColor = "rgba(0,0,0,0.8)";
@@ -2126,7 +2169,17 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
             let lines: string[] = [];
             let lineHeight = 0;
 
-            if (text !== lastSubText) {
+            // Calculate screen index for long subtitles
+            let currentScreenIndex = 0;
+            const MAX_LINES = 2;
+
+            if (
+              text !== lastSubText ||
+              Math.floor(
+                (currentTime - currentSub.start) /
+                  ((currentSub.end - currentSub.start) / Math.ceil(text.split(" ").length / (MAX_LINES * 5))),
+              ) !== (cachedLines as any)._screenIndex
+            ) {
               while (fontSize >= minFontSize) {
                 ctx.font = `900 ${fontSize}px "Inter", "Pyidaungsu", "Padauk", sans-serif`;
                 lines = [];
@@ -2167,16 +2220,28 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                 }
 
                 lineHeight = fontSize * 1.3;
-                const totalTextHeight = lines.length * lineHeight;
+                break; // We found a font size where words fit horizontally
+              }
 
-                if (totalTextHeight <= boxH * 0.9) {
-                  break; // Fits within the box height
-                }
-                fontSize -= 2;
+              // Limit to 2 lines max per screen
+              if (lines.length > MAX_LINES) {
+                // Calculate how many screens we need
+                const totalScreens = Math.ceil(lines.length / MAX_LINES);
+                const duration = currentSub.end - currentSub.start;
+                const timePerScreen = duration / totalScreens;
+
+                // Determine which screen we are currently on based on time
+                const timePassed = currentTime - currentSub.start;
+                currentScreenIndex = Math.floor(timePassed / timePerScreen);
+
+                // Extract just the lines for the current screen
+                const startIndex = currentScreenIndex * MAX_LINES;
+                lines = lines.slice(startIndex, startIndex + MAX_LINES);
               }
 
               lastSubText = text;
               cachedLines = lines;
+              (cachedLines as any)._screenIndex = currentScreenIndex;
               cachedFontSize = fontSize;
               cachedLineHeight = lineHeight;
             } else {
@@ -3514,8 +3579,6 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                         setVideoFile(null);
                         setVideoUrl(null);
                         setFinalVideoUrl(null);
-                        setMarketingContent(null);
-                        setMarketingError("");
                         setProcessingProgress(0);
                       }}
                       className="flex-1 sm:flex-none px-5 py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl font-medium flex items-center justify-center gap-2 transition-colors"
@@ -3544,7 +3607,6 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                     src={finalVideoUrl!}
                     controls
                     autoPlay
-                    crossOrigin="anonymous"
                     className="max-w-full max-h-[600px]"
                   />
                 </div>
@@ -3560,7 +3622,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                     {/* Auto-generating... no manual button needed */}
                   </div>
 
-                  {!marketingContent && !isGeneratingMarketing && !marketingError && (
+                  {!marketingContent && !isGeneratingMarketing && (
                     <div className="bg-zinc-800/30 border border-zinc-800 rounded-3xl p-8 text-center">
                       <Loader2 size={32} className="animate-spin text-indigo-500 mx-auto mb-3" />
                       <p className="text-zinc-400 font-medium">Auto-generating marketing kit...</p>
@@ -3573,12 +3635,6 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                       <p className="text-zinc-400 font-medium">
                         Creating your viral title, description, and premium thumbnail...
                       </p>
-                    </div>
-                  )}
-
-                  {!marketingContent && !isGeneratingMarketing && marketingError && (
-                    <div className="bg-red-500/10 border border-red-500/30 rounded-3xl p-8 text-center">
-                      <p className="text-red-300 font-medium">{marketingError}</p>
                     </div>
                   )}
 
