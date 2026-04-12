@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, FileCheck, ArrowLeft, ShieldCheck, Sparkles, Phone, Send, MessageCircle, Mail } from "lucide-react";
+import { Upload, FileCheck, ArrowLeft, ShieldCheck, Phone, Send, MessageCircle, Mail } from "lucide-react";
 import { AppLogo } from "@/components/AppLogo";
 
 interface OrderFormPageProps {
