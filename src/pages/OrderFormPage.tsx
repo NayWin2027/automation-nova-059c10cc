@@ -58,10 +58,13 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
   };
 
   const handleSubmit = async () => {
-    if (!formData.orderType || !formData.paymentMethod || !formData.paymentRef.trim() || !slipFile) {
-      toast({ title: "လိုအပ်ချက်မပြည့်စုံပါ", description: "Order type, payment method, transaction number, payment slip အားလုံး ဖြည့်ပေးပါ", variant: "destructive" });
+    if (!formData.orderType || !formData.paymentMethod || !formData.paymentRef.trim() || !slipFile || !formData.contactMethod || !formData.contactValue.trim()) {
+      toast({ title: "လိုအပ်ချက်မပြည့်စုံပါ", description: "Order type, payment method, transaction number, contact info, payment slip အားလုံး ဖြည့်ပေးပါ", variant: "destructive" });
       return;
     }
+
+    // Sanitize contact value
+    const sanitizedContact = formData.contactValue.trim().substring(0, 200).replace(/[<>]/g, '');
 
     if ((formData.orderType === "topup" || formData.orderType === "renew") && !currentUser) {
       toast({ title: "Login လိုအပ်ပါသည်", description: "Top-up/Renew အတွက် login ဝင်ပေးပါ", variant: "destructive" });
