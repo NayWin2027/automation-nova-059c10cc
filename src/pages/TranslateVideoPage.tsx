@@ -810,32 +810,29 @@ export default function App() {
       sourceCanvas.height = canvasH;
       const sourceCtx = sourceCanvas.getContext("2d");
       if (!sourceCtx) throw new Error("Could not get canvas context");
-      // Safe Cinematic Crop: Cut Top 10% and Bottom 10% of the video securely
+      // Capture almost full frame (avoiding only bottom UI) since we extract from ad-free 1-15% segment
       const vW = video.videoWidth || 1280;
       const vH = video.videoHeight || 720;
-
-      const cropY = vH * 0.1;
-      const cropH = vH * 0.8; // Total height from 10% down to 90% is 80%
-
-      const srcRatio1 = vW / cropH;
+      const subAvoidanceHeight = vH * 0.85;
+      const srcRatio1 = vW / subAvoidanceHeight;
       const destRatio1 = canvasW / canvasH;
       let sW1 = vW,
-        sH1 = cropH;
+        sH1 = subAvoidanceHeight;
       if (srcRatio1 > destRatio1) {
-        sW1 = cropH * destRatio1;
+        sW1 = subAvoidanceHeight * destRatio1;
       } else {
         sH1 = vW / destRatio1;
       }
       sourceCtx.drawImage(
         video,
         (vW - sW1) / 2,
-        cropY + (cropH - sH1) / 2, // Center the crop bounds
+        0,
         sW1,
-        sH1,
+        sH1, // Secure aspect ratio crop
         0,
         0,
         canvasW,
-        canvasH,
+        canvasH, // Destination: Full canvas
       );
 
       const baseFrame = {
@@ -862,32 +859,29 @@ export default function App() {
                 canvas.height = canvasH;
                 const ctx = canvas.getContext("2d");
                 if (ctx) {
-                  // Safe Cinematic Crop: Cut Top 10% and Bottom 10% of the video securely
+                  // Capture almost full frame since we extract from subtitle-free 1-15% segment
                   const vW2 = tempVideo.videoWidth || 1280;
                   const vH2 = tempVideo.videoHeight || 720;
-
-                  const cropY2 = vH2 * 0.1;
-                  const cropH2 = vH2 * 0.8;
-
-                  const srcRatio2 = vW2 / cropH2;
+                  const subAvoidanceHeight = vH2 * 0.85;
+                  const srcRatio2 = vW2 / subAvoidanceHeight;
                   const destRatio2 = canvasW / canvasH;
                   let sW2 = vW2,
-                    sH2 = cropH2;
+                    sH2 = subAvoidanceHeight;
                   if (srcRatio2 > destRatio2) {
-                    sW2 = cropH2 * destRatio2;
+                    sW2 = subAvoidanceHeight * destRatio2;
                   } else {
                     sH2 = vW2 / destRatio2;
                   }
                   ctx.drawImage(
                     tempVideo,
                     (vW2 - sW2) / 2,
-                    cropY2 + (cropH2 - sH2) / 2, // Center the crop bounds
+                    0,
                     sW2,
-                    sH2,
+                    sH2, // Source: Top 65% with aspect crop
                     0,
                     0,
                     canvasW,
-                    canvasH,
+                    canvasH, // Destination: Full canvas
                   );
                 }
                 resolve({
@@ -960,10 +954,10 @@ export default function App() {
           tCanvas.height = canvas.height;
           const tCtx = tCanvas.getContext("2d");
 
-          // Pristine 8K High-Clarity Coloring
+          // Heavy cinematic coloring
           tCtx.filter = isHero
-            ? "contrast(1.15) saturate(1.2) brightness(1.05)"
-            : "contrast(1.1) saturate(1.1) brightness(1.0)";
+            ? "contrast(1.15) saturate(1.1) brightness(0.95)"
+            : "contrast(1.2) saturate(0.9) brightness(0.85)";
 
           const imgRatio = img.width / img.height;
           const targetRatio = w / h;
@@ -1006,41 +1000,19 @@ export default function App() {
             tCtx.fillStyle = grad;
             tCtx.fillRect(x, y, w, h);
           } else {
-            // Support actors: Seamless four-way edge fading to prevent glowing bubbles or hard cuts
-            const applyLinearMask = (gradient) => {
-              tCtx.globalCompositeOperation = "destination-in";
-              tCtx.fillStyle = gradient;
-              tCtx.fillRect(x, y, w, h);
-              tCtx.globalCompositeOperation = "source-over"; // reset
-            };
-
-            // Bottom fade
-            let grad = tCtx.createLinearGradient(0, y + h * 0.4, 0, y + h);
-            grad.addColorStop(0, "rgba(0,0,0,1)");
-            grad.addColorStop(1, "rgba(0,0,0,0)");
-            applyLinearMask(grad);
-
-            // Left fade
-            grad = tCtx.createLinearGradient(x, 0, x + w * 0.2, 0);
-            grad.addColorStop(0, "rgba(0,0,0,0)");
-            grad.addColorStop(1, "rgba(0,0,0,1)");
-            applyLinearMask(grad);
-
-            // Right fade
-            grad = tCtx.createLinearGradient(x + w * 0.8, 0, x + w, 0);
-            grad.addColorStop(0, "rgba(0,0,0,1)");
-            grad.addColorStop(1, "rgba(0,0,0,0)");
-            applyLinearMask(grad);
-
-            // Top fade
-            grad = tCtx.createLinearGradient(0, y, 0, y + h * 0.15);
-            grad.addColorStop(0, "rgba(0,0,0,0)");
-            grad.addColorStop(1, "rgba(0,0,0,1)");
-            applyLinearMask(grad);
+            // Supporting actors: Perfect circular "floating heads" fading into shadow
+            const cx = x + w / 2;
+            const cy = y + h / 2;
+            const r = Math.min(w, h) / 2;
+            const grad = tCtx.createRadialGradient(cx, cy, r * 0.1, cx, cy, r * 0.95);
+            grad.addColorStop(0, "rgba(0,0,0,1)"); // Solid center
+            grad.addColorStop(1, "rgba(0,0,0,0)"); // Soft edge
+            tCtx.fillStyle = grad;
+            tCtx.fillRect(x, y, w, h);
           }
 
-          // Blend with main canvas (Use standard overlay so bright backgrounds don't become glowing orbs)
-          ctx.globalCompositeOperation = "source-over";
+          // Blend with main canvas
+          ctx.globalCompositeOperation = isHero ? "source-over" : "lighten";
           ctx.drawImage(tCanvas, 0, 0);
           ctx.globalCompositeOperation = "source-over"; // Reset
         };
@@ -1094,7 +1066,14 @@ export default function App() {
           }
 
           // Main Hero (Foreground, Massive, Centered)
-          drawLayer(validImages[0], 0, canvas.height * 0.25, canvas.width, canvas.height * 0.75, true);
+          drawLayer(
+            validImages[0],
+            canvas.width * 0.05,
+            canvas.height * 0.25,
+            canvas.width * 0.9,
+            canvas.height * 0.75,
+            true,
+          );
         } else {
           // Basic Double Exposure if not enough images or horizontal
           if (validImages[1]) {
@@ -1113,24 +1092,24 @@ export default function App() {
 
       // --- Post-Processing & Grading (The Cinematic Glue) ---
 
-      // Warm & Bright 8K Overlay (Golden Hour Vibe)
+      // Teal & Orange Hollywood Overlay
       ctx.globalCompositeOperation = "overlay";
-      ctx.fillStyle = "rgba(255, 220, 190, 0.15)";
+      ctx.fillStyle = "rgba(10, 35, 60, 0.45)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.globalCompositeOperation = "source-over";
 
-      // Soft Bright Cinematic Vignette (Removes the horror/night look)
+      // Heavy Cinematic Spotlight Vignette (Vastly improves realism)
       const vignette = ctx.createRadialGradient(
         canvas.width / 2,
         canvas.height * 0.5,
-        canvas.width * 0.2,
+        canvas.width * 0.15,
         canvas.width / 2,
         canvas.height * 0.5,
         canvas.width * 0.95,
       );
       vignette.addColorStop(0, "rgba(0,0,0,0)");
-      vignette.addColorStop(0.8, "rgba(0,0,0,0.2)");
-      vignette.addColorStop(1, "rgba(0,0,0,0.45)");
+      vignette.addColorStop(0.7, "rgba(0,0,0,0.5)");
+      vignette.addColorStop(1, "rgba(0,0,0,0.98)");
 
       ctx.globalCompositeOperation = "multiply";
       ctx.fillStyle = vignette;
@@ -1141,8 +1120,8 @@ export default function App() {
       // override any potential leftover UI/Subtitles on the hero's bottom edge!
       const textGradBg = ctx.createLinearGradient(0, canvas.height * 0.5, 0, canvas.height);
       textGradBg.addColorStop(0, "rgba(0,0,0,0)");
-      textGradBg.addColorStop(0.65, "rgba(0,0,0,0.75)");
-      textGradBg.addColorStop(1, "rgba(0,0,0,0.95)");
+      textGradBg.addColorStop(0.5, "rgba(0,0,0,0.85)");
+      textGradBg.addColorStop(1, "rgba(0,0,0,1)");
       ctx.fillStyle = textGradBg;
       ctx.fillRect(0, canvas.height * 0.5, canvas.width, canvas.height * 0.5);
       // Helper to wrap and draw text, limiting to maxLines and returning remaining text
@@ -2030,7 +2009,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           // Source Rect (Object-Cover behavior + Copyright Bypass Zoom)
           // Aggressive bottom crop to remove original subtitles (like "I don't drink" at bottom)
           // while keeping full faces visible (faces are typically in upper portion of frame)
-          const ZOOM_FACTOR = 1.9; // Adjusted to safely crop out bottom subtitles without cutting faces
+          const ZOOM_FACTOR = 1.8; // Adjusted to safely crop out bottom subtitles without cutting faces
           const FACE_CROP_DOWN_BIAS = 0.0; // Keep top-aligned to preserve faces, crop from bottom
 
           let sx = 0,
@@ -2054,7 +2033,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
 
           // Crop slightly from top to align hair with border, rest mostly from bottom to cut subtitles
           const maxSy = Math.max(0, video.videoHeight - sh);
-          sy = maxSy * 0.1; // Top aligned close to border (10%), with heavy cut at bottom (90%)
+          sy = maxSy * 0.15; // Top aligned close to border (15%), with heavy cut at bottom (85%)
 
           // Draw a subtle drop shadow for the foreground video
           ctx.shadowColor = "rgba(0,0,0,0.8)";
