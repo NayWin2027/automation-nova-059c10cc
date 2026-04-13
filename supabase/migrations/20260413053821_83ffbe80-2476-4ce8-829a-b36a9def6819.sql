@@ -1,0 +1,1 @@
+ALTER TABLE public.site_announcements ADD COLUMN custom_color TEXT DEFAULT NULL;

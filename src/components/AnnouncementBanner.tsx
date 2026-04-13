@@ -9,6 +9,7 @@ interface Announcement {
   type: string;
   action_label: string | null;
   action_url: string | null;
+  custom_color: string | null;
 }
 
 const typeConfig: Record<string, {
@@ -62,7 +63,7 @@ const AnnouncementBanner = () => {
     const fetchAnnouncements = async () => {
       const { data } = await supabase
         .from("site_announcements")
-        .select("id, message, type, action_label, action_url")
+        .select("id, message, type, action_label, action_url, custom_color")
         .eq("is_active", true)
         .order("created_at", { ascending: false });
 
@@ -94,13 +95,19 @@ const AnnouncementBanner = () => {
   return (
     <div className="w-full z-50">
       {announcements.map((announcement) => {
-        const config = typeConfig[announcement.type] || typeConfig.info;
+        const isCustom = announcement.type === "custom" && announcement.custom_color;
+        const config = isCustom ? typeConfig.info : (typeConfig[announcement.type] || typeConfig.info);
         const Icon = config.icon;
+        const customStyle = isCustom ? {
+          background: `linear-gradient(to right, ${announcement.custom_color}f2, ${announcement.custom_color}e6, ${announcement.custom_color}f2)`,
+          backdropFilter: "blur(12px)",
+        } : undefined;
 
         return (
           <div
             key={announcement.id}
-            className={`relative w-full ${config.bg} ${config.border} shadow-lg announcement-neon-glow ${config.neonClass}`}
+            className={`relative w-full ${!isCustom ? `${config.bg} ${config.border}` : "border-b border-white/10"} shadow-lg announcement-neon-glow ${!isCustom ? config.neonClass : ""}`}
+            style={customStyle}
           >
             <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center justify-center gap-3">
               <Icon className={`w-4 h-4 ${config.iconColor} shrink-0 announcement-icon-pulse`} />

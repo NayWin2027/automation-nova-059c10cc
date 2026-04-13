@@ -362,6 +362,7 @@ export type Database = {
           action_url: string | null
           created_at: string | null
           created_by: string | null
+          custom_color: string | null
           id: string
           is_active: boolean
           message: string
@@ -373,6 +374,7 @@ export type Database = {
           action_url?: string | null
           created_at?: string | null
           created_by?: string | null
+          custom_color?: string | null
           id?: string
           is_active?: boolean
           message: string
@@ -384,6 +386,7 @@ export type Database = {
           action_url?: string | null
           created_at?: string | null
           created_by?: string | null
+          custom_color?: string | null
           id?: string
           is_active?: boolean
           message?: string
