@@ -1,4 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { AppLogo } from "@/components/AppLogo";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Upload,
