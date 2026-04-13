@@ -937,8 +937,8 @@ export default function App() {
 
       const validImages = loadedImages.filter((img) => img && img.width > 0);
 
-      // Hollywood Cinematic Realistic Poster - Drama Ensemble Layout
-      // As requested: Main character HUGE, supporting characters SMALL floating heads.
+      // Hollywood contrast and bright Cinematic Realistic Poster - Drama Ensemble Layout
+      // As requested: Main character HUGE, supporting characters SMALL contrast floating heads.
 
       // Shuffle valid images so every "Regenerate" creates a completely new poster cast
       validImages.sort(() => Math.random() - 0.5);
@@ -947,7 +947,7 @@ export default function App() {
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       if (validImages.length >= 1) {
-        // Helper to draw a soft floating head (for support) or a massive solid hero
+        // Helper to draw a soft floating heads (for support) or a massive solid hero
         const drawLayer = (img, x, y, w, h, isHero = false) => {
           const tCanvas = document.createElement("canvas");
           tCanvas.width = canvas.width;
@@ -956,8 +956,8 @@ export default function App() {
 
           // Heavy cinematic coloring
           tCtx.filter = isHero
-            ? "contrast(1.15) saturate(1.1) brightness(0.95)"
-            : "contrast(1.2) saturate(0.9) brightness(0.85)";
+            ? "contrast(1.15) saturate(1.1) brightness(1)"
+            : "contrast(1.2) saturate(0.9) brightness(0.9)";
 
           const imgRatio = img.width / img.height;
           const targetRatio = w / h;
