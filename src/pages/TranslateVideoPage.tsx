@@ -2033,7 +2033,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
 
           // Crop slightly from top to align hair with border, rest mostly from bottom to cut subtitles
           const maxSy = Math.max(0, video.videoHeight - sh);
-          sy = maxSy * 0.15; // Top aligned close to border (15%), with heavy cut at bottom (85%)
+          sy = maxSy * 0.1; // Top aligned close to border (10%), with heavy cut at bottom (90%)
 
           // Draw a subtle drop shadow for the foreground video
           ctx.shadowColor = "rgba(0,0,0,0.8)";
