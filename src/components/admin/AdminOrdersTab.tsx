@@ -10,7 +10,8 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
   CheckCircle, XCircle, Eye, RefreshCw, Search,
-  Clock, Copy, ImageIcon, FileText, Mail, MessageCircle, Phone, Send
+  Clock, Copy, ImageIcon, FileText, Mail, MessageCircle, Phone, Send,
+  Shield, Sparkles
 } from "lucide-react";
 
 interface PaymentOrder {
