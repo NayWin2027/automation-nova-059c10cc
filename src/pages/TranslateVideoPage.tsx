@@ -938,7 +938,7 @@ export default function App() {
       const validImages = loadedImages.filter((img) => img && img.width > 0);
 
       // Hollywood contrast and bright Cinematic Realistic Poster - Drama Ensemble Layout
-      // As requested: Main character HUGE, supporting characters SMALL contrast floating heads.
+      // As requested: Main character HUGE, supporting characters SMALL contrast floating heads like realistic holly movie poster style
 
       // Shuffle valid images so every "Regenerate" creates a completely new poster cast
       validImages.sort(() => Math.random() - 0.5);
