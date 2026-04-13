@@ -65,6 +65,14 @@ const AdminUsersTab: React.FC = () => {
   const [topupNote, setTopupNote] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [banReason, setBanReason] = useState("");
+
+  // Generate cryptographically secure random password
+  const generateSecurePassword = (length = 18): string => {
+    const charset = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%&*';
+    const array = new Uint8Array(length);
+    crypto.getRandomValues(array);
+    return Array.from(array, (b) => charset[b % charset.length]).join('');
+  };
   const [loading, setLoading] = useState(false);
 
   // Fetch profiles and admin roles on mount
@@ -691,22 +699,32 @@ const AdminUsersTab: React.FC = () => {
       </Dialog>
 
       {/* Password Dialog */}
-      <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+      <Dialog open={passwordDialogOpen} onOpenChange={(open) => {
+        setPasswordDialogOpen(open);
+        if (open) setNewPassword(generateSecurePassword());
+      }}>
         <DialogContent className="luxury-card border-border/30">
           <DialogHeader>
             <DialogTitle className="text-sm text-gold">Reset Password</DialogTitle>
-            <DialogDescription className="text-2xs">Set a new password for the user</DialogDescription>
+            <DialogDescription className="text-2xs">Auto-generated secure password</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <Label className="text-2xs text-muted-foreground">New Password</Label>
-              <Input
-                type="password"
-                placeholder="••••••••"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="h-8 text-xs bg-secondary/30 border-border/30" />
-
+              <Label className="text-2xs text-muted-foreground">Generated Password</Label>
+              <div className="flex items-center gap-1.5 mt-1">
+                <code className="flex-1 text-xs font-mono text-emerald-400 bg-secondary/50 rounded-lg px-3 py-2 break-all border border-border/20">
+                  {newPassword}
+                </code>
+                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => {
+                  navigator.clipboard.writeText(newPassword);
+                  toast({ title: "Copied!", description: "Password copied" });
+                }}>
+                  <Copy className="w-3.5 h-3.5" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setNewPassword(generateSecurePassword())} title="Regenerate">
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </Button>
+              </div>
             </div>
             <button onClick={handleResetPassword} disabled={loading} className="btn-luxury w-full py-2 rounded-lg text-xs">
               {loading ? "Resetting..." : "Reset Password"}
