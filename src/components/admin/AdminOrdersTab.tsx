@@ -64,6 +64,16 @@ const AdminOrdersTab: React.FC = () => {
   // New user result dialog
   const [newUserResult, setNewUserResult] = useState<{ userId: string; password: string } | null>(null);
 
+  // Generate cryptographically secure random password
+  const generateSecurePassword = (length = 18): string => {
+    const charset = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%&*';
+    const array = new Uint8Array(length);
+    crypto.getRandomValues(array);
+    return Array.from(array, (b) => charset[b % charset.length]).join('');
+  };
+
+  const [generatedPassword, setGeneratedPassword] = useState("");
+
   const fetchOrders = useCallback(async () => {
     setLoading(true);
     try {
@@ -115,6 +125,12 @@ const AdminOrdersTab: React.FC = () => {
       referrerDisplayId: order.referrer_display_id || "",
       adminNotes: "",
     });
+    // Auto-generate password for new_user orders
+    if (order.order_type === "new_user") {
+      setGeneratedPassword(generateSecurePassword());
+    } else {
+      setGeneratedPassword("");
+    }
     setApproveDialogOpen(true);
   };
 
