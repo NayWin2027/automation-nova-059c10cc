@@ -123,10 +123,11 @@ const AdminSettingsTab: React.FC = () => {
     is_active: boolean;
     action_label: string;
     action_url: string;
+    custom_color: string;
   }
 
   const emptyAnnouncement: AnnouncementItem = {
-    message: "", type: "info", is_active: false, action_label: "", action_url: ""
+    message: "", type: "info", is_active: false, action_label: "", action_url: "", custom_color: ""
   };
 
   const [announcementList, setAnnouncementList] = useState<AnnouncementItem[]>([]);
@@ -211,13 +212,14 @@ const AdminSettingsTab: React.FC = () => {
       .order('created_at', { ascending: false });
 
     if (anns && anns.length > 0) {
-      setAnnouncementList(anns.map((a) => ({
+      setAnnouncementList(anns.map((a: any) => ({
         id: a.id,
         message: a.message,
         type: a.type,
         is_active: a.is_active,
         action_label: a.action_label || "",
         action_url: a.action_url || "",
+        custom_color: a.custom_color || "",
       })));
     }
 
@@ -1069,8 +1071,41 @@ const AdminSettingsTab: React.FC = () => {
                     <option value="warning">🟡 Warning (Amber)</option>
                     <option value="info">🔵 Info (Blue)</option>
                     <option value="success">🟢 Success (Green)</option>
+                    <option value="custom">🎨 Custom Color</option>
                   </select>
                 </div>
+
+                {ann.type === "custom" && (
+                  <div className="space-y-1">
+                    <Label className="text-2xs">Custom Color</Label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={ann.custom_color || "#3b82f6"}
+                        onChange={(e) => {
+                          const updated = [...announcementList];
+                          updated[idx] = { ...ann, custom_color: e.target.value };
+                          setAnnouncementList(updated);
+                        }}
+                        className="w-10 h-8 rounded border border-input cursor-pointer bg-transparent p-0.5"
+                      />
+                      <Input
+                        value={ann.custom_color || "#3b82f6"}
+                        onChange={(e) => {
+                          const updated = [...announcementList];
+                          updated[idx] = { ...ann, custom_color: e.target.value };
+                          setAnnouncementList(updated);
+                        }}
+                        placeholder="#3b82f6"
+                        className="h-8 text-xs flex-1"
+                      />
+                      <div
+                        className="h-8 w-16 rounded border border-input shrink-0"
+                        style={{ backgroundColor: ann.custom_color || "#3b82f6" }}
+                      />
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
@@ -1111,6 +1146,7 @@ const AdminSettingsTab: React.FC = () => {
                       is_active: ann.is_active,
                       action_label: ann.action_label || null,
                       action_url: ann.action_url || null,
+                      custom_color: ann.type === "custom" ? (ann.custom_color || "#3b82f6") : null,
                       updated_at: new Date().toISOString(),
                     };
 
