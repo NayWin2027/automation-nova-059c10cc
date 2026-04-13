@@ -417,34 +417,61 @@ const AdminOrdersTab: React.FC = () => {
       <Dialog open={approveDialogOpen} onOpenChange={setApproveDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-sm">
-              Approve Order: {selectedOrder?.order_number}
+            <DialogTitle className="flex items-center gap-2 text-sm">
+              <Shield className="w-4 h-4 text-emerald-400" />
+              Order Approval: {selectedOrder?.order_number}
             </DialogTitle>
           </DialogHeader>
           {selectedOrder && (
             <div className="space-y-3">
-              <div className="bg-secondary/50 rounded-lg p-3 space-y-1">
-                <p className="text-xs"><strong>Type:</strong> {selectedOrder.order_type}</p>
-                <p className="text-xs"><strong>User:</strong> {selectedOrder.user_email}</p>
-                <p className="text-xs"><strong>Payment:</strong> {getPaymentMethodLabel(selectedOrder.payment_method)}</p>
-                {selectedOrder.payment_ref && (
-                  <p className="text-xs"><strong>Ref:</strong> {selectedOrder.payment_ref}</p>
-                )}
+              {/* Order Summary Box */}
+              <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-secondary/60 to-secondary/30 p-3 space-y-2">
+                <p className="text-2xs font-bold text-primary uppercase tracking-wider mb-1.5">📋 Order Details</p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                  <span className="text-muted-foreground">Order ID:</span>
+                  <span className="font-semibold text-foreground">{selectedOrder.order_number}</span>
+                  <span className="text-muted-foreground">Type:</span>
+                  <span>{getOrderTypeBadge(selectedOrder.order_type)}</span>
+                  <span className="text-muted-foreground">Email:</span>
+                  <span className="text-foreground break-all">{selectedOrder.user_email}</span>
+                  <span className="text-muted-foreground">Payment:</span>
+                  <span className="text-foreground">{getPaymentMethodLabel(selectedOrder.payment_method)}</span>
+                  {selectedOrder.payment_ref && (
+                    <>
+                      <span className="text-muted-foreground">Txn Ref:</span>
+                      <span className="text-foreground">{selectedOrder.payment_ref}</span>
+                    </>
+                  )}
+                  {selectedOrder.referrer_display_id && (
+                    <>
+                      <span className="text-muted-foreground">Referrer:</span>
+                      <span className="text-amber-400 font-medium">{selectedOrder.referrer_display_id}</span>
+                    </>
+                  )}
+                </div>
                 {selectedOrder.contact_method && selectedOrder.contact_value && (
-                  <div className="flex items-center gap-1 text-xs">
-                    <strong className="shrink-0">Contact:</strong>
+                  <div className="flex items-center gap-1.5 text-xs pt-1 border-t border-border/20">
+                    <span className="text-muted-foreground">Contact:</span>
                     <span className="text-cyan-400 flex items-center gap-0.5">
                       {getContactIcon(selectedOrder.contact_method)}
                       {getContactLabel(selectedOrder.contact_method)}
                     </span>
-                    <span className="break-all">{selectedOrder.contact_value}</span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-5 w-5 shrink-0"
-                      onClick={() => copyToClipboard(selectedOrder.contact_value!)}
-                    >
+                    <span className="text-foreground break-all flex-1">{selectedOrder.contact_value}</span>
+                    <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={() => copyToClipboard(selectedOrder.contact_value!)}>
                       <Copy className="w-2.5 h-2.5" />
+                    </Button>
+                  </div>
+                )}
+                {/* Auto-generated password for new users */}
+                {selectedOrder.order_type === "new_user" && generatedPassword && (
+                  <div className="flex items-center gap-1.5 text-xs pt-1 border-t border-border/20">
+                    <span className="text-muted-foreground">Password:</span>
+                    <code className="text-emerald-400 font-mono text-2xs flex-1 break-all">{generatedPassword}</code>
+                    <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={() => copyToClipboard(generatedPassword)}>
+                      <Copy className="w-2.5 h-2.5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={() => setGeneratedPassword(generateSecurePassword())} title="Regenerate">
+                      <RefreshCw className="w-2.5 h-2.5" />
                     </Button>
                   </div>
                 )}
@@ -493,9 +520,10 @@ const AdminOrdersTab: React.FC = () => {
               <Button
                 onClick={handleApprove}
                 disabled={approving}
-                className="w-full h-9 text-sm bg-emerald-600 hover:bg-emerald-700"
+                className="w-full h-10 text-sm font-bold bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 hover:from-emerald-500 hover:via-emerald-400 hover:to-teal-400 shadow-lg shadow-emerald-500/25 border-0 tracking-wide"
               >
-                {approving ? "Processing..." : "✅ Approve & Process"}
+                <Sparkles className="w-4 h-4 mr-2" />
+                {approving ? "Processing..." : "✅ APPROVE & PROCESS"}
               </Button>
             </div>
           )}
