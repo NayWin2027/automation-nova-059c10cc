@@ -810,29 +810,32 @@ export default function App() {
       sourceCanvas.height = canvasH;
       const sourceCtx = sourceCanvas.getContext("2d");
       if (!sourceCtx) throw new Error("Could not get canvas context");
-      // Capture almost full frame (avoiding only bottom UI) since we extract from ad-free 1-15% segment
+      // Safe Cinematic Crop: Cut Top 10% and Bottom 10% of the video securely
       const vW = video.videoWidth || 1280;
       const vH = video.videoHeight || 720;
-      const subAvoidanceHeight = vH * 0.85;
-      const srcRatio1 = vW / subAvoidanceHeight;
+
+      const cropY = vH * 0.1;
+      const cropH = vH * 0.8; // Total height from 10% down to 90% is 80%
+
+      const srcRatio1 = vW / cropH;
       const destRatio1 = canvasW / canvasH;
       let sW1 = vW,
-        sH1 = subAvoidanceHeight;
+        sH1 = cropH;
       if (srcRatio1 > destRatio1) {
-        sW1 = subAvoidanceHeight * destRatio1;
+        sW1 = cropH * destRatio1;
       } else {
         sH1 = vW / destRatio1;
       }
       sourceCtx.drawImage(
         video,
         (vW - sW1) / 2,
-        0,
+        cropY + (cropH - sH1) / 2, // Center the crop bounds
         sW1,
-        sH1, // Secure aspect ratio crop
+        sH1,
         0,
         0,
         canvasW,
-        canvasH, // Destination: Full canvas
+        canvasH,
       );
 
       const baseFrame = {
@@ -859,29 +862,32 @@ export default function App() {
                 canvas.height = canvasH;
                 const ctx = canvas.getContext("2d");
                 if (ctx) {
-                  // Capture almost full frame since we extract from subtitle-free 1-15% segment
+                  // Safe Cinematic Crop: Cut Top 10% and Bottom 10% of the video securely
                   const vW2 = tempVideo.videoWidth || 1280;
                   const vH2 = tempVideo.videoHeight || 720;
-                  const subAvoidanceHeight = vH2 * 0.85;
-                  const srcRatio2 = vW2 / subAvoidanceHeight;
+
+                  const cropY2 = vH2 * 0.1;
+                  const cropH2 = vH2 * 0.8;
+
+                  const srcRatio2 = vW2 / cropH2;
                   const destRatio2 = canvasW / canvasH;
                   let sW2 = vW2,
-                    sH2 = subAvoidanceHeight;
+                    sH2 = cropH2;
                   if (srcRatio2 > destRatio2) {
-                    sW2 = subAvoidanceHeight * destRatio2;
+                    sW2 = cropH2 * destRatio2;
                   } else {
                     sH2 = vW2 / destRatio2;
                   }
                   ctx.drawImage(
                     tempVideo,
                     (vW2 - sW2) / 2,
-                    0,
+                    cropY2 + (cropH2 - sH2) / 2, // Center the crop bounds
                     sW2,
-                    sH2, // Source: Top 65% with aspect crop
+                    sH2,
                     0,
                     0,
                     canvasW,
-                    canvasH, // Destination: Full canvas
+                    canvasH,
                   );
                 }
                 resolve({
