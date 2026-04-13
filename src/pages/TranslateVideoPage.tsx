@@ -813,30 +813,36 @@ export default function App() {
       sourceCanvas.height = canvasH;
       const sourceCtx = sourceCanvas.getContext("2d");
       if (!sourceCtx) throw new Error("Could not get canvas context");
-      // Capture almost full frame (avoiding only bottom UI) since we extract from ad-free 1-15% segment
+
+      // Safe Cinematic Crop: Cut Top 10% and Bottom 10% of the video securely
       const vW = video.videoWidth || 1280;
       const vH = video.videoHeight || 720;
-      const subAvoidanceHeight = vH * 0.85;
-      const srcRatio1 = vW / subAvoidanceHeight;
+
+      const sh = vH * 0.8; // Total height from 10% down to 90% is 80%
       const destRatio1 = canvasW / canvasH;
+      const srcRatio1 = vW / sh;
+
       let sW1 = vW,
-        sH1 = subAvoidanceHeight;
+        sH1 = sh;
+      let sx1 = 0,
+        finalSy1 = vH * 0.1;
+
       if (srcRatio1 > destRatio1) {
-        sW1 = subAvoidanceHeight * destRatio1;
+        sW1 = sh * destRatio1;
+        sx1 = (vW - sW1) / 2;
       } else {
         sH1 = vW / destRatio1;
+        // Vertically center within the 80% cropped zone
+        finalSy1 = vH * 0.1 + (sh - sH1) / 2;
       }
-      sourceCtx.drawImage(
-        video,
-        (vW - sW1) / 2,
-        0,
-        sW1,
-        sH1, // Secure aspect ratio crop
-        0,
-        0,
-        canvasW,
-        canvasH, // Destination: Full canvas
-      );
+
+      // Safe clamp to prevent black screen crash
+      sx1 = Math.max(0, sx1);
+      finalSy1 = Math.max(0, finalSy1);
+      sW1 = Math.min(sW1, vW - sx1);
+      sH1 = Math.min(sH1, vH - finalSy1);
+
+      sourceCtx.drawImage(video, sx1, finalSy1, sW1, sH1, 0, 0, canvasW, canvasH);
 
       const baseFrame = {
         data: sourceCanvas.toDataURL("image/jpeg", 0.9).split(",")[1],
@@ -862,30 +868,34 @@ export default function App() {
                 canvas.height = canvasH;
                 const ctx = canvas.getContext("2d");
                 if (ctx) {
-                  // Capture almost full frame since we extract from subtitle-free 1-15% segment
+                  // Safe Cinematic Crop: Cut Top 10% and Bottom 10% of the video securely
                   const vW2 = tempVideo.videoWidth || 1280;
                   const vH2 = tempVideo.videoHeight || 720;
-                  const subAvoidanceHeight = vH2 * 0.85;
-                  const srcRatio2 = vW2 / subAvoidanceHeight;
+
+                  const sh2 = vH2 * 0.8;
                   const destRatio2 = canvasW / canvasH;
+                  const srcRatio2 = vW2 / sh2;
+
                   let sW2 = vW2,
-                    sH2 = subAvoidanceHeight;
+                    sH2 = sh2;
+                  let sx2 = 0,
+                    finalSy2 = vH2 * 0.1;
+
                   if (srcRatio2 > destRatio2) {
-                    sW2 = subAvoidanceHeight * destRatio2;
+                    sW2 = sh2 * destRatio2;
+                    sx2 = (vW2 - sW2) / 2;
                   } else {
                     sH2 = vW2 / destRatio2;
+                    finalSy2 = vH2 * 0.1 + (sh2 - sH2) / 2;
                   }
-                  ctx.drawImage(
-                    tempVideo,
-                    (vW2 - sW2) / 2,
-                    0,
-                    sW2,
-                    sH2, // Source: Top 65% with aspect crop
-                    0,
-                    0,
-                    canvasW,
-                    canvasH, // Destination: Full canvas
-                  );
+
+                  // Safe clamp
+                  sx2 = Math.max(0, sx2);
+                  finalSy2 = Math.max(0, finalSy2);
+                  sW2 = Math.min(sW2, vW2 - sx2);
+                  sH2 = Math.min(sH2, vH2 - finalSy2);
+
+                  ctx.drawImage(tempVideo, sx2, finalSy2, sW2, sH2, 0, 0, canvasW, canvasH);
                 }
                 resolve({
                   data: canvas.toDataURL("image/jpeg", 0.95).split(",")[1],
@@ -2173,17 +2183,10 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
             let lines: string[] = [];
             let lineHeight = 0;
 
-            // Calculate screen index for long subtitles
-            let currentScreenIndex = 0;
             const MAX_LINES = 2;
 
-            if (
-              text !== lastSubText ||
-              Math.floor(
-                (currentTime - currentSub.start) /
-                  ((currentSub.end - currentSub.start) / Math.ceil(text.split(" ").length / (MAX_LINES * 5))),
-              ) !== (cachedLines as any)._screenIndex
-            ) {
+            // Only recalculate text wrapping if text changes or box width changes
+            if (text !== lastSubText || Math.abs(maxTextWidth - ((cachedLines as any)?._boxW || 0)) > 1) {
               while (fontSize >= minFontSize) {
                 ctx.font = `900 ${fontSize}px "Inter", "Pyidaungsu", "Padauk", sans-serif`;
                 lines = [];
@@ -2227,51 +2230,47 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                 break; // We found a font size where words fit horizontally
               }
 
-              // Limit to 2 lines max per screen
-              if (lines.length > MAX_LINES) {
-                // Calculate how many screens we need
-                const totalScreens = Math.ceil(lines.length / MAX_LINES);
-                const duration = currentSub.end - currentSub.start;
-                const timePerScreen = duration / totalScreens;
-
-                // Determine which screen we are currently on based on time
-                const timePassed = currentTime - currentSub.start;
-                currentScreenIndex = Math.floor(timePassed / timePerScreen);
-
-                // Extract just the lines for the current screen
-                const startIndex = currentScreenIndex * MAX_LINES;
-                lines = lines.slice(startIndex, startIndex + MAX_LINES);
-              }
-
               lastSubText = text;
-              cachedLines = lines;
-              (cachedLines as any)._screenIndex = currentScreenIndex;
+              cachedLines = lines; // Store the full list of lines
+              (cachedLines as any)._boxW = maxTextWidth;
               cachedFontSize = fontSize;
               cachedLineHeight = lineHeight;
-            } else {
-              lines = cachedLines;
-              fontSize = cachedFontSize;
-              lineHeight = cachedLineHeight;
             }
 
-            ctx.font = `900 ${fontSize}px "Inter", "Pyidaungsu", "Padauk", sans-serif`; // Ensure font is set to the final size
+            // Time-based Pagination: Slice the cached lines into pages of MAX_LINES
+            let displayLines = cachedLines;
+            if (displayLines.length > MAX_LINES) {
+              const totalScreens = Math.ceil(displayLines.length / MAX_LINES);
+              const duration = currentSub.end - currentSub.start;
+              const timePerScreen = Math.max(0.1, duration / totalScreens); // Prevent div-by-zero
+              const timePassed = currentTime - currentSub.start;
+
+              // Calculate which page we are on based on exactly how much time has passed
+              let screenIndex = Math.floor(timePassed / timePerScreen);
+              screenIndex = Math.max(0, Math.min(screenIndex, totalScreens - 1)); // Strict clamp
+
+              const startIndex = screenIndex * MAX_LINES;
+              displayLines = displayLines.slice(startIndex, startIndex + MAX_LINES);
+            }
+
+            ctx.font = `900 ${cachedFontSize}px "Inter", "Pyidaungsu", "Padauk", sans-serif`; // Ensure font is set to the final size
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
 
-            const startY = boxY - ((lines.length - 1) * lineHeight) / 2;
+            const startY = boxY - ((displayLines.length - 1) * cachedLineHeight) / 2;
 
             ctx.fillStyle = neonColor; // Neon text
             ctx.strokeStyle = "#000";
             ctx.lineWidth = Math.max(3, Math.floor(canvas.width / 300));
 
             // Draw each line
-            for (let i = 0; i < lines.length; i++) {
-              const lineY = startY + i * lineHeight;
+            for (let i = 0; i < displayLines.length; i++) {
+              const lineY = startY + i * cachedLineHeight;
               ctx.shadowBlur = 0;
-              ctx.strokeText(lines[i], boxX, lineY);
+              ctx.strokeText(displayLines[i], boxX, lineY);
               ctx.shadowColor = neonColor;
               ctx.shadowBlur = 5; // Reduced from 10
-              ctx.fillText(lines[i], boxX, lineY);
+              ctx.fillText(displayLines[i], boxX, lineY);
             }
             ctx.shadowBlur = 0; // Reset
           }
