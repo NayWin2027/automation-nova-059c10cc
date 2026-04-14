@@ -77,6 +77,24 @@ const AdminUsersTab: React.FC = () => {
   };
   const [loading, setLoading] = useState(false);
 
+  // Auto-generate next user ID from server
+  const fetchNextUserId = async (method: string = 'kpay') => {
+    setAutoIdLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: { action: 'get_next_user_id', paymentMethod: method }
+      });
+      if (!error && data?.nextId) {
+        const autoPassword = generateSecurePassword(18);
+        setNewUser(prev => ({ ...prev, userId: data.nextId, password: autoPassword }));
+      }
+    } catch (err) {
+      console.error('Failed to fetch next user ID:', err);
+    } finally {
+      setAutoIdLoading(false);
+    }
+  };
+
   // Fetch profiles and admin roles on mount
   useEffect(() => {
     fetchProfiles();
