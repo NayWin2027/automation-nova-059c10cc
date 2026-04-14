@@ -161,7 +161,7 @@ const AdminUsersTab: React.FC = () => {
         description: `User "${newUser.userId}" has been added`
       });
       setAddUserOpen(false);
-      setNewUser({ userId: "", password: "", plan: "free", credits: 100, referrerId: "" });
+      setNewUser({ userId: "", password: "", plan: "free", credits: 100, referrerId: "", paymentMethod: "kpay" });
       fetchProfiles();
       fetchStats();
     }
