@@ -30,6 +30,74 @@ function generateSecurePassword(length = 16): string {
   return password;
 }
 
+const RUNNING_ID_REGEX = /^(nw|kys)(\d+)$/i;
+const PAGE_SIZE = 1000;
+
+const getPrefixFromPaymentMethod = (paymentMethod: string) =>
+  paymentMethod === "thai_bank" ? "kys" : "nw";
+
+const extractRunningSequence = (value: string | null | undefined) => {
+  if (!value) return null;
+
+  const match = value.match(RUNNING_ID_REGEX);
+  if (!match) return null;
+
+  const sequence = Number.parseInt(match[2], 10);
+  return Number.isFinite(sequence) ? sequence : null;
+};
+
+const getNextRunningUserId = async (supabaseAdmin: any, paymentMethod: string) => {
+  let maxSequence = 0;
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await supabaseAdmin
+      .from("profiles")
+      .select("email")
+      .order("email", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) throw error;
+    if (!data?.length) break;
+
+    for (const profile of data) {
+      const localPart = typeof profile.email === "string" ? profile.email.split("@")[0] : "";
+      const sequence = extractRunningSequence(localPart);
+      if (sequence !== null && sequence > maxSequence) {
+        maxSequence = sequence;
+      }
+    }
+
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  from = 0;
+  while (true) {
+    const { data, error } = await supabaseAdmin
+      .from("payment_orders")
+      .select("order_number")
+      .eq("status", "pending")
+      .order("order_number", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) throw error;
+    if (!data?.length) break;
+
+    for (const order of data) {
+      const sequence = extractRunningSequence(order.order_number);
+      if (sequence !== null && sequence > maxSequence) {
+        maxSequence = sequence;
+      }
+    }
+
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  return `${getPrefixFromPaymentMethod(paymentMethod)}${String(maxSequence + 1).padStart(4, "0")}`;
+};
+
 serve(async (req) => {
   const _corsBlock = handleCorsPreflightOrReject(req);
   if (_corsBlock) return _corsBlock;
@@ -63,10 +131,7 @@ serve(async (req) => {
       }
       const sanitizedContact = String(contact_value).trim().substring(0, 200).replace(/<[^>]*>/g, '');
 
-      const { data: orderNum, error: seqError } = await supabaseAdmin.rpc("generate_order_number", {
-        _payment_method: payment_method
-      });
-      if (seqError) throw seqError;
+      const orderNum = await getNextRunningUserId(supabaseAdmin, payment_method);
 
       const { data: order, error: insertError } = await supabaseAdmin
         .from("payment_orders")
@@ -139,10 +204,7 @@ serve(async (req) => {
       }
       const cleanContact = String(cv).trim().substring(0, 200).replace(/<[^>]*>/g, '');
 
-      const { data: orderNum, error: seqError } = await supabaseAdmin.rpc("generate_order_number", {
-        _payment_method: payment_method
-      });
-      if (seqError) throw seqError;
+      const orderNum = await getNextRunningUserId(supabaseAdmin, payment_method);
 
       const { data: order, error: insertError } = await supabaseAdmin
         .from("payment_orders")
@@ -250,7 +312,8 @@ serve(async (req) => {
         if (order.order_type === "new_user") {
           // AUTO CREATE USER
           const securePassword = generateSecurePassword(18);
-          const internalEmail = `${order.user_email}@internal.user`;
+          const userDisplayId = order.order_number;
+          const internalEmail = `${userDisplayId}@internal.user`;
 
           const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
             email: internalEmail,
@@ -304,7 +367,7 @@ serve(async (req) => {
                       user_id: referrerProfile.user_id,
                       amount: rewardCredits,
                       topup_type: "referral",
-                      note: `Referral reward: referred user ${order.user_email}`,
+                      note: `Referral reward: referred user ${userDisplayId}`,
                       created_by: user.id,
                     });
                 }
@@ -360,7 +423,7 @@ serve(async (req) => {
               .eq("id", orderId);
 
             resultData = {
-              userId: order.user_email,
+              userId: userDisplayId,
               password: securePassword,
               internalEmail,
               newUserId: newUser.user.id
