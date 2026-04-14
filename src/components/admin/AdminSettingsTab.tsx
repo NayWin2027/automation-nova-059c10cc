@@ -33,6 +33,10 @@ interface FeatureSettings {
   defaultCredits: number;
 }
 
+interface ReferralRewardSettings {
+  credits: number;
+}
+
 interface ApiModeAccess {
   all: boolean;
   premium: boolean;
@@ -148,6 +152,9 @@ const AdminSettingsTab: React.FC = () => {
     maxDevices: 2,
     defaultCredits: 100
   });
+  const [referralReward, setReferralReward] = useState<ReferralRewardSettings>({
+    credits: 50
+  });
 
   const [accessControl, setAccessControl] = useState<AccessControl>({
     requireLogin: true,
@@ -177,6 +184,7 @@ const AdminSettingsTab: React.FC = () => {
       const brandingData = data.find((s: {key: string;}) => s.key === "branding");
       const featuresData = data.find((s: {key: string;}) => s.key === "features");
       const accessData = data.find((s: {key: string;}) => s.key === "access_control");
+      const referralRewardData = data.find((s: {key: string;}) => s.key === "referral_reward");
 
       if (brandingData?.value) {
         setBranding(brandingData.value as unknown as BrandingSettings);
@@ -186,6 +194,12 @@ const AdminSettingsTab: React.FC = () => {
       }
       if (accessData?.value) {
         setAccessControl(normalizeAccessControl(accessData.value as unknown as Partial<AccessControl>));
+      }
+      if (referralRewardData?.value && typeof referralRewardData.value === "object") {
+        const creditsValue = Number((referralRewardData.value as { credits?: unknown }).credits);
+        setReferralReward({
+          credits: Number.isFinite(creditsValue) && creditsValue >= 0 ? creditsValue : 50
+        });
       }
     }
 
@@ -242,6 +256,28 @@ const AdminSettingsTab: React.FC = () => {
       toast({
         title: "✅ Access Control သိမ်းပြီး",
         description: "ပြောင်းလဲမှုများ အသက်ဝင်ပါပြီ"
+      });
+    }
+    setSaving(false);
+  };
+
+  const handleSaveReferralReward = async () => {
+    setSaving(true);
+    const normalizedCredits = Math.max(0, Math.trunc(Number(referralReward.credits) || 0));
+    setReferralReward({ credits: normalizedCredits });
+
+    const { error } = await updateAppSettings("referral_reward", { credits: normalizedCredits });
+
+    if (error) {
+      toast({
+        title: "❌ သိမ်းမရပါ",
+        description: error.message,
+        variant: "destructive"
+      });
+    } else {
+      toast({
+        title: "✅ Referral Reward သိမ်းပြီး",
+        description: `Default reward ကို ${normalizedCredits} credits အဖြစ်ပြောင်းပြီးပါပြီ`
       });
     }
     setSaving(false);
@@ -500,6 +536,44 @@ const AdminSettingsTab: React.FC = () => {
                   onCheckedChange={(checked) => setAccessControl({ ...accessControl, planMode: checked })} />
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className="md:col-span-2 border-border/50 bg-card/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <Gift className="w-4 h-4 text-amber-500" />
+                Referral Reward
+              </CardTitle>
+              <CardDescription className="text-2xs">Referrer ID မှန်ရင် auto ပေါင်းမယ့် default credits</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Default Referral Credits</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={referralReward.credits}
+                  onChange={(e) => {
+                    const parsed = Number.parseInt(e.target.value, 10);
+                    setReferralReward({
+                      credits: Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
+                    });
+                  }}
+                  className="h-8 text-xs"
+                />
+                <p className="text-2xs text-muted-foreground">
+                  Add User / Order approve မှာ Referrer ID ထည့်ထားရင် ဒီ credits ပမာဏကို auto ပေါင်းပေးမယ်
+                </p>
+              </div>
+              <Button
+                onClick={handleSaveReferralReward}
+                disabled={saving}
+                className="bg-gradient-to-r from-amber-500 to-orange-600"
+              >
+                <Save className="w-3 h-3 mr-1" />
+                {saving ? "Saving..." : "Save Referral Reward"}
+              </Button>
             </CardContent>
           </Card>
 

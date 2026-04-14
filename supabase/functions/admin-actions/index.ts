@@ -2,6 +2,74 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
 
+const RUNNING_ID_REGEX = /^(nw|kys)(\d+)$/i;
+const PAGE_SIZE = 1000;
+
+const getPrefixFromPaymentMethod = (paymentMethod: string) =>
+  paymentMethod === "thai_bank" ? "kys" : "nw";
+
+const extractRunningSequence = (value: string | null | undefined) => {
+  if (!value) return null;
+
+  const match = value.match(RUNNING_ID_REGEX);
+  if (!match) return null;
+
+  const sequence = Number.parseInt(match[2], 10);
+  return Number.isFinite(sequence) ? sequence : null;
+};
+
+const getNextRunningUserId = async (supabaseAdmin: any, paymentMethod: string) => {
+  let maxSequence = 0;
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await supabaseAdmin
+      .from("profiles")
+      .select("email")
+      .order("email", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) throw error;
+    if (!data?.length) break;
+
+    for (const profile of data) {
+      const localPart = typeof profile.email === "string" ? profile.email.split("@")[0] : "";
+      const sequence = extractRunningSequence(localPart);
+      if (sequence !== null && sequence > maxSequence) {
+        maxSequence = sequence;
+      }
+    }
+
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  from = 0;
+  while (true) {
+    const { data, error } = await supabaseAdmin
+      .from("payment_orders")
+      .select("order_number")
+      .eq("status", "pending")
+      .order("order_number", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) throw error;
+    if (!data?.length) break;
+
+    for (const order of data) {
+      const sequence = extractRunningSequence(order.order_number);
+      if (sequence !== null && sequence > maxSequence) {
+        maxSequence = sequence;
+      }
+    }
+
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  return `${getPrefixFromPaymentMethod(paymentMethod)}${String(maxSequence + 1).padStart(4, "0")}`;
+};
+
 serve(async (req) => {
   const _corsBlock = handleCorsPreflightOrReject(req);
   if (_corsBlock) return _corsBlock;
@@ -112,10 +180,7 @@ serve(async (req) => {
       case 'get_next_user_id': {
         const { paymentMethod } = params;
         const method = paymentMethod || 'kpay';
-        const { data: nextId, error: nextIdError } = await supabaseAdmin.rpc('generate_order_number', {
-          _payment_method: method
-        });
-        if (nextIdError) throw nextIdError;
+        const nextId = await getNextRunningUserId(supabaseAdmin, method);
         return new Response(
           JSON.stringify({ success: true, nextId }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
