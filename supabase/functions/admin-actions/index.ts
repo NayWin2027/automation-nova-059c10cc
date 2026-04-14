@@ -109,6 +109,19 @@ serve(async (req) => {
         );
       }
 
+      case 'get_next_user_id': {
+        const { paymentMethod } = params;
+        const method = paymentMethod || 'kpay';
+        const { data: nextId, error: nextIdError } = await supabaseAdmin.rpc('generate_order_number', {
+          _payment_method: method
+        });
+        if (nextIdError) throw nextIdError;
+        return new Response(
+          JSON.stringify({ success: true, nextId }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       case 'create_user': {
         const { email, password, plan, credits } = params;
         const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({

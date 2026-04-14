@@ -57,8 +57,10 @@ const AdminUsersTab: React.FC = () => {
     password: "",
     plan: "free" as "free" | "pro" | "premium",
     credits: 100,
-    referrerId: ""
+    referrerId: "",
+    paymentMethod: "kpay" as "kpay" | "wave" | "thai_bank"
   });
+  const [autoIdLoading, setAutoIdLoading] = useState(false);
   const [newCredits, setNewCredits] = useState(0);
   const [topupAmount, setTopupAmount] = useState(0);
   const [topupType, setTopupType] = useState<'original' | 'topup' | 'bonus' | 'renew'>('topup');
@@ -74,6 +76,24 @@ const AdminUsersTab: React.FC = () => {
     return Array.from(array, (b) => charset[b % charset.length]).join('');
   };
   const [loading, setLoading] = useState(false);
+
+  // Auto-generate next user ID from server
+  const fetchNextUserId = async (method: string = 'kpay') => {
+    setAutoIdLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: { action: 'get_next_user_id', paymentMethod: method }
+      });
+      if (!error && data?.nextId) {
+        const autoPassword = generateSecurePassword(18);
+        setNewUser(prev => ({ ...prev, userId: data.nextId, password: autoPassword }));
+      }
+    } catch (err) {
+      console.error('Failed to fetch next user ID:', err);
+    } finally {
+      setAutoIdLoading(false);
+    }
+  };
 
   // Fetch profiles and admin roles on mount
   useEffect(() => {
@@ -159,7 +179,7 @@ const AdminUsersTab: React.FC = () => {
         description: `User "${newUser.userId}" has been added`
       });
       setAddUserOpen(false);
-      setNewUser({ userId: "", password: "", plan: "free", credits: 100, referrerId: "" });
+      setNewUser({ userId: "", password: "", plan: "free", credits: 100, referrerId: "", paymentMethod: "kpay" });
       fetchProfiles();
       fetchStats();
     }
@@ -349,7 +369,12 @@ const AdminUsersTab: React.FC = () => {
             <h3 className="font-semibold text-foreground text-lg">User Management</h3>
             <p className="text-2xs text-muted-foreground">Manage users & permissions</p>
           </div>
-          <Dialog open={addUserOpen} onOpenChange={setAddUserOpen}>
+          <Dialog open={addUserOpen} onOpenChange={(open) => {
+              setAddUserOpen(open);
+              if (open) {
+                fetchNextUserId('kpay');
+              }
+            }}>
             <DialogTrigger asChild>
               <button className="btn-luxury px-3 py-1.5 rounded-lg text-2xs flex items-center gap-1.5">
                 <UserPlus className="w-3 h-3" />
@@ -359,34 +384,71 @@ const AdminUsersTab: React.FC = () => {
             <DialogContent className="luxury-card border-border/30">
               <DialogHeader>
                 <DialogTitle className="text-sm text-gold">Add New User</DialogTitle>
-                <DialogDescription className="text-2xs">Create a new user with ID & Password</DialogDescription>
+                <DialogDescription className="text-2xs">Auto-generated ID & Secure Password</DialogDescription>
               </DialogHeader>
               <div className="space-y-3">
+                {/* Payment Method → determines prefix */}
                 <div>
-                  <Label className="text-2xs text-muted-foreground">User ID</Label>
-                  <Input
-                    placeholder="Enter unique user ID"
-                    value={newUser.userId}
-                    onChange={(e) => setNewUser({ ...newUser, userId: e.target.value })}
-                    className="h-8 text-xs bg-secondary/30 border-border/30" />
-
+                  <Label className="text-2xs text-muted-foreground">ID Prefix (Payment Type)</Label>
+                  <Select
+                    value={newUser.paymentMethod}
+                    onValueChange={(v) => {
+                      setNewUser(prev => ({ ...prev, paymentMethod: v as any }));
+                      fetchNextUserId(v);
+                    }}>
+                    <SelectTrigger className="h-8 text-xs bg-secondary/30 border-border/30">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="kpay" className="text-xs">KPay / Wave (nw)</SelectItem>
+                      <SelectItem value="thai_bank" className="text-xs">Thai Bank (kys)</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
+                {/* Auto User ID */}
                 <div>
-                  <Label className="text-2xs text-muted-foreground">Password</Label>
-                  <Input
-                    type="password"
-                    placeholder="••••••••"
-                    value={newUser.password}
-                    onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                    className="h-8 text-xs bg-secondary/30 border-border/30" />
-
+                  <Label className="text-2xs text-muted-foreground">User ID <span className="text-emerald-400 text-[10px]">⚡ Auto</span></Label>
+                  <div className="flex gap-1">
+                    <Input
+                      value={autoIdLoading ? "Loading..." : newUser.userId}
+                      readOnly
+                      className="h-8 text-xs bg-secondary/30 border-border/30 font-mono flex-1" />
+                    <button
+                      type="button"
+                      onClick={() => { navigator.clipboard.writeText(newUser.userId); toast({ title: "📋 Copied ID" }); }}
+                      className="px-2 h-8 rounded border border-border/30 hover:bg-secondary/50 transition-colors">
+                      <Copy className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+                {/* Auto Password */}
+                <div>
+                  <Label className="text-2xs text-muted-foreground">Password <span className="text-emerald-400 text-[10px]">🔐 Auto Secure</span></Label>
+                  <div className="flex gap-1">
+                    <Input
+                      value={newUser.password}
+                      readOnly
+                      className="h-8 text-xs bg-secondary/30 border-border/30 font-mono flex-1" />
+                    <button
+                      type="button"
+                      onClick={() => { navigator.clipboard.writeText(newUser.password); toast({ title: "📋 Copied Password" }); }}
+                      className="px-2 h-8 rounded border border-border/30 hover:bg-secondary/50 transition-colors">
+                      <Copy className="w-3 h-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewUser(prev => ({ ...prev, password: generateSecurePassword(18) }))}
+                      className="px-2 h-8 rounded border border-border/30 hover:bg-secondary/50 transition-colors"
+                      title="Regenerate">
+                      <RefreshCw className="w-3 h-3" />
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <Label className="text-2xs text-muted-foreground">Plan</Label>
                   <Select
                     value={newUser.plan}
                     onValueChange={(v) => setNewUser({ ...newUser, plan: v as "free" | "pro" | "premium" })}>
-
                     <SelectTrigger className="h-8 text-xs bg-secondary/30 border-border/30">
                       <SelectValue />
                     </SelectTrigger>
@@ -404,10 +466,9 @@ const AdminUsersTab: React.FC = () => {
                     value={newUser.credits}
                     onChange={(e) => setNewUser({ ...newUser, credits: parseInt(e.target.value) || 0 })}
                     className="h-8 text-xs bg-secondary/30 border-border/30" />
-
                 </div>
                 <div>
-                  <Label className="text-2xs text-muted-foreground">Referrer ID <span className="text-muted-foreground/50">(optional)</span></Label>
+                  <Label className="text-2xs text-muted-foreground">Referrer ID <span className="text-muted-foreground/50">(optional → auto +credits to referrer)</span></Label>
                   <Input
                     placeholder="Enter referrer's user ID (optional)"
                     value={newUser.referrerId}
@@ -416,9 +477,8 @@ const AdminUsersTab: React.FC = () => {
                 </div>
                 <button
                   onClick={handleCreateUser}
-                  disabled={loading}
+                  disabled={loading || autoIdLoading}
                   className="btn-luxury w-full py-2 rounded-lg text-xs">
-
                   {loading ? "Creating..." : "Create User"}
                 </button>
               </div>
