@@ -57,8 +57,10 @@ const AdminUsersTab: React.FC = () => {
     password: "",
     plan: "free" as "free" | "pro" | "premium",
     credits: 100,
-    referrerId: ""
+    referrerId: "",
+    paymentMethod: "kpay" as "kpay" | "wave" | "thai_bank"
   });
+  const [autoIdLoading, setAutoIdLoading] = useState(false);
   const [newCredits, setNewCredits] = useState(0);
   const [topupAmount, setTopupAmount] = useState(0);
   const [topupType, setTopupType] = useState<'original' | 'topup' | 'bonus' | 'renew'>('topup');
