@@ -2,32 +2,28 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
 
-// Generate a cryptographically secure random password
-function generateSecurePassword(length = 16): string {
-  const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=";
-  const values = new Uint8Array(length);
-  crypto.getRandomValues(values);
-  let password = "";
-  for (let i = 0; i < length; i++) {
-    password += charset[values[i] % charset.length];
+// Generate a cryptographically secure random password with ~55% symbols
+function generateSecurePassword(length = 18): string {
+  const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const lower = "abcdefghjkmnpqrstuvwxyz";
+  const symbols = '@#%~×•*°=!"?$&©£€¥¿/;:';
+  const symbolCount = Math.round(length * 0.55);
+  const letterCount = length - symbolCount;
+  const letters = upper + lower;
+  const result: string[] = [];
+  const symArr = new Uint8Array(symbolCount);
+  const letArr = new Uint8Array(letterCount);
+  crypto.getRandomValues(symArr);
+  crypto.getRandomValues(letArr);
+  for (let i = 0; i < symbolCount; i++) result.push(symbols[symArr[i] % symbols.length]);
+  for (let i = 0; i < letterCount; i++) result.push(letters[letArr[i] % letters.length]);
+  const shuffleArr = new Uint8Array(result.length);
+  crypto.getRandomValues(shuffleArr);
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = shuffleArr[i] % (i + 1);
+    [result[i], result[j]] = [result[j], result[i]];
   }
-  // Ensure at least one of each type
-  const ensure = [
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-    "abcdefghijklmnopqrstuvwxyz",
-    "0123456789",
-    "!@#$%^&*()_+-="
-  ];
-  const positions = new Uint8Array(4);
-  crypto.getRandomValues(positions);
-  for (let i = 0; i < ensure.length; i++) {
-    const pos = positions[i] % length;
-    const charSet = ensure[i];
-    const charIdx = new Uint8Array(1);
-    crypto.getRandomValues(charIdx);
-    password = password.substring(0, pos) + charSet[charIdx[0] % charSet.length] + password.substring(pos + 1);
-  }
-  return password;
+  return result.join('');
 }
 
 const RUNNING_ID_REGEX = /^(nw|kys)(\d+)$/i;
