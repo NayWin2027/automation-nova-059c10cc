@@ -289,10 +289,51 @@ serve(async (req) => {
 
       case 'reset_password': {
         const { userId, newPassword } = params;
+
+        if (typeof userId !== 'string' || !userId || typeof newPassword !== 'string' || newPassword.length < 12) {
+          return new Response(
+            JSON.stringify({ error: "Invalid password reset request" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { data: targetUserData, error: targetUserError } = await supabaseAdmin.auth.admin.getUserById(userId);
+        if (targetUserError) throw targetUserError;
+
+        const targetEmail = targetUserData.user?.email;
+        if (!targetEmail) {
+          throw new Error('Target user email not found');
+        }
+
         const { error: resetError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
           password: newPassword
         });
         if (resetError) throw resetError;
+
+        const verifyClient = createClient(supabaseUrl, supabaseAnonKey, {
+          auth: {
+            autoRefreshToken: false,
+            persistSession: false,
+            detectSessionInUrl: false,
+          },
+        });
+
+        const { data: verifyData, error: verifyError } = await verifyClient.auth.signInWithPassword({
+          email: targetEmail,
+          password: newPassword,
+        });
+
+        if (verifyError || verifyData.user?.id !== userId) {
+          console.error('Password reset verification failed:', verifyError?.message || 'user mismatch');
+          throw new Error('Password update verification failed');
+        }
+
+        const { error: invalidateSessionError } = await supabaseAdmin
+          .from('profiles')
+          .update({ active_session_id: `pw-reset-${crypto.randomUUID()}` })
+          .eq('user_id', userId);
+
+        if (invalidateSessionError) throw invalidateSessionError;
 
         // SECURITY: Plaintext password storage removed
 
