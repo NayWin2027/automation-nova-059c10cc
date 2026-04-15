@@ -737,39 +737,45 @@ const AdminUsersTab: React.FC = () => {
               </Select>
             </div>
             <div>
-              <Label className="text-2xs text-muted-foreground">Add Amount</Label>
+              <Label className="text-2xs text-muted-foreground">Amount (+ ပေါင်း / - နုတ်)</Label>
               <Input
                 type="number"
                 value={topupAmount}
                 onChange={(e) => {
                   const amt = parseInt(e.target.value) || 0;
                   setTopupAmount(amt);
-                  // Auto-calculate new total
+                  // Auto-calculate new total (supports negative for deduction)
                   const currentProfile = profiles.find(p => p.user_id === selectedUser);
                   if (currentProfile) {
-                    setNewCredits(currentProfile.credits + amt);
+                    const total = currentProfile.credits + amt;
+                    setNewCredits(total < 0 ? 0 : total);
                   }
                 }}
                 className="h-8 text-xs bg-secondary/30 border-border/30" />
+              {topupAmount < 0 && (
+                <p className="text-3xs text-red-400 mt-0.5">⚠ Credit {Math.abs(topupAmount)} နုတ်ယူမည်</p>
+              )}
             </div>
             <div>
               <Label className="text-2xs text-muted-foreground">Total Credits (auto-calculated)</Label>
               <Input
                 type="number"
                 value={newCredits}
-                onChange={(e) => setNewCredits(parseInt(e.target.value) || 0)}
+                onChange={(e) => setNewCredits(Math.max(0, parseInt(e.target.value) || 0))}
                 className="h-8 text-xs bg-secondary/30 border-border/30" />
             </div>
             <div>
               <Label className="text-2xs text-muted-foreground">Note (optional)</Label>
               <Input
-                placeholder="e.g. Monthly renewal"
+                placeholder="e.g. Monthly renewal / Credit ပြန်နုတ်"
                 value={topupNote}
                 onChange={(e) => setTopupNote(e.target.value)}
                 className="h-8 text-xs bg-secondary/30 border-border/30" />
             </div>
-            <button onClick={handleUpdateCredits} disabled={loading} className="btn-luxury w-full py-2 rounded-lg text-xs">
-              {loading ? "Updating..." : `Update Credits (${topupType}: +${topupAmount})`}
+            <button onClick={handleUpdateCredits} disabled={loading} className={`w-full py-2 rounded-lg text-xs ${topupAmount < 0 ? 'bg-red-600 hover:bg-red-700 text-white' : 'btn-luxury'}`}>
+              {loading ? "Updating..." : topupAmount < 0
+                ? `Deduct Credits (${topupType}: ${topupAmount})`
+                : `Update Credits (${topupType}: +${topupAmount})`}
             </button>
           </div>
         </DialogContent>
