@@ -250,8 +250,8 @@ const AdminUsersTab: React.FC = () => {
       });
     } else {
       toast({
-        title: "✅ Credits Updated",
-        description: `Credits set to ${newCredits} (${topupType}: +${topupAmount})`
+        title: topupAmount < 0 ? "⚠️ Credits Deducted" : "✅ Credits Updated",
+        description: `Credits set to ${newCredits} (${topupType}: ${topupAmount >= 0 ? '+' : ''}${topupAmount})`
       });
       setCreditDialogOpen(false);
       setTopupNote("");
