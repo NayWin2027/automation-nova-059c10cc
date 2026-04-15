@@ -160,6 +160,7 @@ const AdminOrdersTab: React.FC = () => {
           orderId: selectedOrder.id,
           creditAmount: approvalData.creditAmount,
           bonusAmount: approvalData.bonusAmount,
+          generatedPassword: selectedOrder.order_type === "new_user" ? generatedPassword : undefined,
           referrerDisplayId: approvalData.referrerDisplayId || null,
           adminNotes: approvalData.adminNotes || null,
         }
