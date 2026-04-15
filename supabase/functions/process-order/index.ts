@@ -270,7 +270,7 @@ serve(async (req) => {
       }
 
       case "approve_order": {
-        const { orderId, creditAmount, bonusAmount, referrerDisplayId, adminNotes } = params;
+        const { orderId, creditAmount, bonusAmount, generatedPassword, referrerDisplayId, adminNotes } = params;
 
         if (!orderId) {
           return new Response(
@@ -307,7 +307,9 @@ serve(async (req) => {
 
         if (order.order_type === "new_user") {
           // AUTO CREATE USER
-          const securePassword = generateSecurePassword(18);
+          const securePassword = typeof generatedPassword === "string" && generatedPassword.length >= 12
+            ? generatedPassword
+            : generateSecurePassword(18);
           const userDisplayId = order.order_number;
           const internalEmail = `${userDisplayId}@internal.user`;
 
@@ -320,6 +322,34 @@ serve(async (req) => {
           if (createError) throw createError;
 
           if (newUser.user) {
+            const verifyClient = createClient(supabaseUrl, supabaseAnonKey, {
+              auth: {
+                autoRefreshToken: false,
+                persistSession: false,
+                detectSessionInUrl: false,
+              },
+            });
+
+            const { data: verifyData, error: verifyError } = await verifyClient.auth.signInWithPassword({
+              email: internalEmail,
+              password: securePassword,
+            });
+
+            if (verifyError || verifyData.user?.id !== newUser.user.id) {
+              console.error("Order user password verification failed:", verifyError?.message || "user mismatch");
+              await supabaseAdmin.from("profiles").delete().eq("user_id", newUser.user.id);
+              await supabaseAdmin.from("user_roles").delete().eq("user_id", newUser.user.id);
+              await supabaseAdmin.auth.admin.deleteUser(newUser.user.id);
+              throw new Error("Generated password activation failed");
+            }
+
+            if (verifyData.session?.access_token) {
+              const { error: verifySignOutError } = await supabaseAdmin.auth.admin.signOut(verifyData.session.access_token, "local");
+              if (verifySignOutError) {
+                console.error("Verification session sign-out failed:", verifySignOutError.message);
+              }
+            }
+
             const updateObj: Record<string, any> = {
               plan: "premium",
               credits: finalCreditAmount + finalBonusAmount,
