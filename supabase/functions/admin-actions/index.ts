@@ -199,6 +199,34 @@ serve(async (req) => {
 
         // Update profile with custom values
         if (newUser.user) {
+          const verifyClient = createClient(supabaseUrl, supabaseAnonKey, {
+            auth: {
+              autoRefreshToken: false,
+              persistSession: false,
+              detectSessionInUrl: false,
+            },
+          });
+
+          const { data: verifyData, error: verifyError } = await verifyClient.auth.signInWithPassword({
+            email,
+            password,
+          });
+
+          if (verifyError || verifyData.user?.id !== newUser.user.id) {
+            console.error('User creation password verification failed:', verifyError?.message || 'user mismatch');
+            await supabaseAdmin.from('profiles').delete().eq('user_id', newUser.user.id);
+            await supabaseAdmin.from('user_roles').delete().eq('user_id', newUser.user.id);
+            await supabaseAdmin.auth.admin.deleteUser(newUser.user.id);
+            throw new Error('Generated password activation failed');
+          }
+
+          if (verifyData.session?.access_token) {
+            const { error: verifySignOutError } = await supabaseAdmin.auth.admin.signOut(verifyData.session.access_token, 'local');
+            if (verifySignOutError) {
+              console.error('Verification session sign-out failed:', verifySignOutError.message);
+            }
+          }
+
           const updateObj: Record<string, any> = { 
             plan: plan || 'free', 
             credits: credits || 100 
@@ -326,6 +354,13 @@ serve(async (req) => {
         if (verifyError || verifyData.user?.id !== userId) {
           console.error('Password reset verification failed:', verifyError?.message || 'user mismatch');
           throw new Error('Password update verification failed');
+        }
+
+        if (verifyData.session?.access_token) {
+          const { error: verifySignOutError } = await supabaseAdmin.auth.admin.signOut(verifyData.session.access_token, 'local');
+          if (verifySignOutError) {
+            console.error('Verification session sign-out failed:', verifySignOutError.message);
+          }
         }
 
         const { error: invalidateSessionError } = await supabaseAdmin
