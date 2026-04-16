@@ -377,6 +377,30 @@ const AdminCreditAgentTab: React.FC = () => {
             </div>
           </CardContent>
         </Card>
+        <Card className="bg-card/60 border-cyan-500/20 shadow-[0_0_15px_rgba(6,182,212,0.08)]">
+          <CardContent className="p-3 text-center">
+            <p className="text-2xs text-muted-foreground mb-1">🔄 Renew</p>
+            <p className="text-xl font-bold text-cyan-400">{viewTotals.renewAmount}</p>
+            <p className="text-2xs text-muted-foreground">{viewTotals.renewCount} txns</p>
+            <div className="flex items-center justify-center gap-1.5 mt-1.5">
+              {viewTotals.agentRenewCount.nw > 0 && <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.nw}`}>NW:{viewTotals.agentRenew.nw}</Badge>}
+              {viewTotals.agentRenewCount.kys > 0 && <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.kys}`}>KYS:{viewTotals.agentRenew.kys}</Badge>}
+              {viewTotals.agentRenewCount.numeric > 0 && <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.numeric}`}>NUM:{viewTotals.agentRenew.numeric}</Badge>}
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-card/60 border-pink-500/20 shadow-[0_0_15px_rgba(236,72,153,0.08)]">
+          <CardContent className="p-3 text-center">
+            <p className="text-2xs text-muted-foreground mb-1">🤝 Referral</p>
+            <p className="text-xl font-bold text-pink-400">{viewTotals.referralAmount}</p>
+            <p className="text-2xs text-muted-foreground">{viewTotals.referralCount} txns</p>
+            <div className="flex items-center justify-center gap-1.5 mt-1.5">
+              {viewTotals.agentReferralCount.nw > 0 && <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.nw}`}>NW:{viewTotals.agentReferral.nw}</Badge>}
+              {viewTotals.agentReferralCount.kys > 0 && <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.kys}`}>KYS:{viewTotals.agentReferral.kys}</Badge>}
+              {viewTotals.agentReferralCount.numeric > 0 && <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.numeric}`}>NUM:{viewTotals.agentReferral.numeric}</Badge>}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Controls */}
