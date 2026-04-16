@@ -17,7 +17,7 @@ interface CreditRecord {
   note: string | null;
 }
 
-type RecordCategory = "topup" | "bonus";
+type RecordCategory = "topup" | "bonus" | "renew" | "referral";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
