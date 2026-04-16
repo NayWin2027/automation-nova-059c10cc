@@ -193,12 +193,16 @@ const AdminCreditAgentTab: React.FC = () => {
 
   // Totals for current view split by topup/bonus
   const viewTotals = useMemo(() => {
-    let topupAmount = 0, bonusAmount = 0;
-    let topupCount = 0, bonusCount = 0;
+    let topupAmount = 0, bonusAmount = 0, renewAmount = 0, referralAmount = 0;
+    let topupCount = 0, bonusCount = 0, renewCount = 0, referralCount = 0;
     const agentTopup = { nw: 0, kys: 0, numeric: 0 };
     const agentBonus = { nw: 0, kys: 0, numeric: 0 };
+    const agentRenew = { nw: 0, kys: 0, numeric: 0 };
+    const agentReferral = { nw: 0, kys: 0, numeric: 0 };
     const agentTopupCount = { nw: 0, kys: 0, numeric: 0 };
     const agentBonusCount = { nw: 0, kys: 0, numeric: 0 };
+    const agentRenewCount = { nw: 0, kys: 0, numeric: 0 };
+    const agentReferralCount = { nw: 0, kys: 0, numeric: 0 };
 
     filteredData.forEach((g) => {
       (["nw", "kys", "numeric"] as const).forEach((agent) => {
@@ -206,6 +210,12 @@ const AdminCreditAgentTab: React.FC = () => {
           if (r.topup_type === "bonus") {
             bonusAmount += r.amount; bonusCount++;
             agentBonus[agent] += r.amount; agentBonusCount[agent]++;
+          } else if (r.topup_type === "renew") {
+            renewAmount += r.amount; renewCount++;
+            agentRenew[agent] += r.amount; agentRenewCount[agent]++;
+          } else if (r.topup_type === "referral") {
+            referralAmount += r.amount; referralCount++;
+            agentReferral[agent] += r.amount; agentReferralCount[agent]++;
           } else {
             topupAmount += r.amount; topupCount++;
             agentTopup[agent] += r.amount; agentTopupCount[agent]++;
@@ -215,10 +225,12 @@ const AdminCreditAgentTab: React.FC = () => {
     });
 
     return {
-      topupAmount, bonusAmount, topupCount, bonusCount,
-      agentTopup, agentBonus, agentTopupCount, agentBonusCount,
-      totalAmount: topupAmount + bonusAmount,
-      totalCount: topupCount + bonusCount,
+      topupAmount, bonusAmount, renewAmount, referralAmount,
+      topupCount, bonusCount, renewCount, referralCount,
+      agentTopup, agentBonus, agentRenew, agentReferral,
+      agentTopupCount, agentBonusCount, agentRenewCount, agentReferralCount,
+      totalAmount: topupAmount + bonusAmount + renewAmount + referralAmount,
+      totalCount: topupCount + bonusCount + renewCount + referralCount,
     };
   }, [filteredData]);
 
