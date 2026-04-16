@@ -150,9 +150,11 @@ const AdminCreditAgentTab: React.FC = () => {
 
   // Split records by category (topup vs bonus)
   const splitByCategory = (records: CreditRecord[]) => {
-    const topups = records.filter((r) => r.topup_type !== "bonus");
+    const topups = records.filter((r) => r.topup_type === "topup");
     const bonuses = records.filter((r) => r.topup_type === "bonus");
-    return { topups, bonuses };
+    const renews = records.filter((r) => r.topup_type === "renew");
+    const referrals = records.filter((r) => r.topup_type === "referral");
+    return { topups, bonuses, renews, referrals };
   };
 
   // Group records by period
