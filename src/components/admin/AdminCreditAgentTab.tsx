@@ -107,6 +107,8 @@ const AdminCreditAgentTab: React.FC = () => {
           new Date(record.created_at).toDateString() === new Date().toDateString()
       );
 
+      let finalRecords = records;
+
       if (!hasRenewToday) {
         const legacyRenewRecords = filteredTopups
           .filter((t: any) => t.topup_type === "topup")
@@ -136,12 +138,11 @@ const AdminCreditAgentTab: React.FC = () => {
 
         if (legacyRenewRecords.length > 0) {
           const legacyIds = new Set(legacyRenewRecords.map((record) => record.id.replace("legacy-renew-", "")));
-          const cleanedRecords = records.filter((record) => !legacyIds.has(record.id));
-          records.push(...cleanedRecords, ...legacyRenewRecords);
+          finalRecords = records.filter((record) => !legacyIds.has(record.id)).concat(legacyRenewRecords);
         }
       }
 
-      setAllRecords(records);
+      setAllRecords(finalRecords);
     } catch (err) {
       console.error("Error fetching credit agent data:", err);
     } finally {
