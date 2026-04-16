@@ -17,7 +17,7 @@ interface CreditRecord {
   note: string | null;
 }
 
-type RecordCategory = "topup" | "bonus";
+type RecordCategory = "topup" | "bonus" | "renew" | "referral";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -150,9 +150,11 @@ const AdminCreditAgentTab: React.FC = () => {
 
   // Split records by category (topup vs bonus)
   const splitByCategory = (records: CreditRecord[]) => {
-    const topups = records.filter((r) => r.topup_type !== "bonus");
+    const topups = records.filter((r) => r.topup_type === "topup");
     const bonuses = records.filter((r) => r.topup_type === "bonus");
-    return { topups, bonuses };
+    const renews = records.filter((r) => r.topup_type === "renew");
+    const referrals = records.filter((r) => r.topup_type === "referral");
+    return { topups, bonuses, renews, referrals };
   };
 
   // Group records by period
@@ -191,12 +193,16 @@ const AdminCreditAgentTab: React.FC = () => {
 
   // Totals for current view split by topup/bonus
   const viewTotals = useMemo(() => {
-    let topupAmount = 0, bonusAmount = 0;
-    let topupCount = 0, bonusCount = 0;
+    let topupAmount = 0, bonusAmount = 0, renewAmount = 0, referralAmount = 0;
+    let topupCount = 0, bonusCount = 0, renewCount = 0, referralCount = 0;
     const agentTopup = { nw: 0, kys: 0, numeric: 0 };
     const agentBonus = { nw: 0, kys: 0, numeric: 0 };
+    const agentRenew = { nw: 0, kys: 0, numeric: 0 };
+    const agentReferral = { nw: 0, kys: 0, numeric: 0 };
     const agentTopupCount = { nw: 0, kys: 0, numeric: 0 };
     const agentBonusCount = { nw: 0, kys: 0, numeric: 0 };
+    const agentRenewCount = { nw: 0, kys: 0, numeric: 0 };
+    const agentReferralCount = { nw: 0, kys: 0, numeric: 0 };
 
     filteredData.forEach((g) => {
       (["nw", "kys", "numeric"] as const).forEach((agent) => {
@@ -204,6 +210,12 @@ const AdminCreditAgentTab: React.FC = () => {
           if (r.topup_type === "bonus") {
             bonusAmount += r.amount; bonusCount++;
             agentBonus[agent] += r.amount; agentBonusCount[agent]++;
+          } else if (r.topup_type === "renew") {
+            renewAmount += r.amount; renewCount++;
+            agentRenew[agent] += r.amount; agentRenewCount[agent]++;
+          } else if (r.topup_type === "referral") {
+            referralAmount += r.amount; referralCount++;
+            agentReferral[agent] += r.amount; agentReferralCount[agent]++;
           } else {
             topupAmount += r.amount; topupCount++;
             agentTopup[agent] += r.amount; agentTopupCount[agent]++;
@@ -213,10 +225,12 @@ const AdminCreditAgentTab: React.FC = () => {
     });
 
     return {
-      topupAmount, bonusAmount, topupCount, bonusCount,
-      agentTopup, agentBonus, agentTopupCount, agentBonusCount,
-      totalAmount: topupAmount + bonusAmount,
-      totalCount: topupCount + bonusCount,
+      topupAmount, bonusAmount, renewAmount, referralAmount,
+      topupCount, bonusCount, renewCount, referralCount,
+      agentTopup, agentBonus, agentRenew, agentReferral,
+      agentTopupCount, agentBonusCount, agentRenewCount, agentReferralCount,
+      totalAmount: topupAmount + bonusAmount + renewAmount + referralAmount,
+      totalCount: topupCount + bonusCount + renewCount + referralCount,
     };
   }, [filteredData]);
 
@@ -299,7 +313,11 @@ const AdminCreditAgentTab: React.FC = () => {
   ) => {
     const filterFn = category === "bonus"
       ? (r: CreditRecord) => r.topup_type === "bonus"
-      : (r: CreditRecord) => r.topup_type !== "bonus";
+      : category === "renew"
+      ? (r: CreditRecord) => r.topup_type === "renew"
+      : category === "referral"
+      ? (r: CreditRecord) => r.topup_type === "referral"
+      : (r: CreditRecord) => r.topup_type === "topup";
 
     const nw = allGroupRecords.nw.filter(filterFn);
     const kys = allGroupRecords.kys.filter(filterFn);
@@ -308,16 +326,19 @@ const AdminCreditAgentTab: React.FC = () => {
     if (total === 0) return null;
     const totalAmount = [...nw, ...kys, ...numeric].reduce((s, r) => s + r.amount, 0);
 
-    const categoryLabel = category === "bonus" ? "🎁 Bonus" : "💰 Credit Top-up";
-    const categoryColor = category === "bonus" ? "text-purple-400" : "text-amber-400";
-    const categoryBorderColor = category === "bonus" ? "border-purple-500/30" : "border-amber-500/30";
-    const categoryBgColor = category === "bonus" ? "bg-purple-500/20" : "bg-amber-500/20";
+    const categoryConfig: Record<RecordCategory, { label: string; color: string; borderColor: string; bgColor: string }> = {
+      topup: { label: "💰 Credit Top-up", color: "text-amber-400", borderColor: "border-amber-500/30", bgColor: "bg-amber-500/20" },
+      bonus: { label: "🎁 Bonus", color: "text-purple-400", borderColor: "border-purple-500/30", bgColor: "bg-purple-500/20" },
+      renew: { label: "🔄 Renew", color: "text-cyan-400", borderColor: "border-cyan-500/30", bgColor: "bg-cyan-500/20" },
+      referral: { label: "🤝 Referral", color: "text-pink-400", borderColor: "border-pink-500/30", bgColor: "bg-pink-500/20" },
+    };
+    const cfg = categoryConfig[category];
 
     return (
       <div className="mb-4">
         <div className={`flex items-center justify-between mb-2 px-1`}>
-          <span className={`text-xs font-bold ${categoryColor}`}>{categoryLabel}</span>
-          <Badge className={`text-2xs ${categoryBgColor} ${categoryColor} ${categoryBorderColor}`}>
+          <span className={`text-xs font-bold ${cfg.color}`}>{cfg.label}</span>
+          <Badge className={`text-2xs ${cfg.bgColor} ${cfg.color} ${cfg.borderColor}`}>
             {totalAmount} cr ({total} txns)
           </Badge>
         </div>
@@ -353,6 +374,30 @@ const AdminCreditAgentTab: React.FC = () => {
               {viewTotals.agentBonusCount.nw > 0 && <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.nw}`}>NW:{viewTotals.agentBonus.nw}</Badge>}
               {viewTotals.agentBonusCount.kys > 0 && <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.kys}`}>KYS:{viewTotals.agentBonus.kys}</Badge>}
               {viewTotals.agentBonusCount.numeric > 0 && <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.numeric}`}>NUM:{viewTotals.agentBonus.numeric}</Badge>}
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-card/60 border-cyan-500/20 shadow-[0_0_15px_rgba(6,182,212,0.08)]">
+          <CardContent className="p-3 text-center">
+            <p className="text-2xs text-muted-foreground mb-1">🔄 Renew</p>
+            <p className="text-xl font-bold text-cyan-400">{viewTotals.renewAmount}</p>
+            <p className="text-2xs text-muted-foreground">{viewTotals.renewCount} txns</p>
+            <div className="flex items-center justify-center gap-1.5 mt-1.5">
+              {viewTotals.agentRenewCount.nw > 0 && <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.nw}`}>NW:{viewTotals.agentRenew.nw}</Badge>}
+              {viewTotals.agentRenewCount.kys > 0 && <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.kys}`}>KYS:{viewTotals.agentRenew.kys}</Badge>}
+              {viewTotals.agentRenewCount.numeric > 0 && <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.numeric}`}>NUM:{viewTotals.agentRenew.numeric}</Badge>}
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-card/60 border-pink-500/20 shadow-[0_0_15px_rgba(236,72,153,0.08)]">
+          <CardContent className="p-3 text-center">
+            <p className="text-2xs text-muted-foreground mb-1">🤝 Referral</p>
+            <p className="text-xl font-bold text-pink-400">{viewTotals.referralAmount}</p>
+            <p className="text-2xs text-muted-foreground">{viewTotals.referralCount} txns</p>
+            <div className="flex items-center justify-center gap-1.5 mt-1.5">
+              {viewTotals.agentReferralCount.nw > 0 && <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.nw}`}>NW:{viewTotals.agentReferral.nw}</Badge>}
+              {viewTotals.agentReferralCount.kys > 0 && <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.kys}`}>KYS:{viewTotals.agentReferral.kys}</Badge>}
+              {viewTotals.agentReferralCount.numeric > 0 && <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.numeric}`}>NUM:{viewTotals.agentReferral.numeric}</Badge>}
             </div>
           </CardContent>
         </Card>
@@ -448,6 +493,8 @@ const AdminCreditAgentTab: React.FC = () => {
               <CardContent className="px-4 pb-3">
                 {renderCategorySection(group, "topup", group.key)}
                 {renderCategorySection(group, "bonus", group.key)}
+                {renderCategorySection(group, "renew", group.key)}
+                {renderCategorySection(group, "referral", group.key)}
               </CardContent>
             </Card>
           );
