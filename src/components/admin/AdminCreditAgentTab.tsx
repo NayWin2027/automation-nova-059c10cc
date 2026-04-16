@@ -17,6 +17,12 @@ interface CreditRecord {
   note: string | null;
 }
 
+interface ProfileSummary {
+  user_id: string;
+  email: string;
+  credits_started_at?: string | null;
+}
+
 type RecordCategory = "topup" | "bonus" | "renew" | "referral";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -67,11 +73,15 @@ const AdminCreditAgentTab: React.FC = () => {
       const userIds = [...new Set(filteredTopups.map((t: any) => t.user_id))];
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("user_id, email")
+        .select("user_id, email, credits_started_at")
         .in("user_id", userIds);
 
       const emailMap = new Map<string, string>();
-      profiles?.forEach((p) => emailMap.set(p.user_id, p.email));
+      const profileMap = new Map<string, ProfileSummary>();
+      profiles?.forEach((p) => {
+        emailMap.set(p.user_id, p.email);
+        profileMap.set(p.user_id, p as ProfileSummary);
+      });
 
       // Filter to agent emails only & build records
       const records: CreditRecord[] = [];
@@ -91,7 +101,48 @@ const AdminCreditAgentTab: React.FC = () => {
         }
       }
 
-      setAllRecords(records);
+      const hasRenewToday = records.some(
+        (record) =>
+          record.topup_type === "renew" &&
+          new Date(record.created_at).toDateString() === new Date().toDateString()
+      );
+
+      let finalRecords = records;
+
+      if (!hasRenewToday) {
+        const legacyRenewRecords = filteredTopups
+          .filter((t: any) => t.topup_type === "topup")
+          .map((t: any) => {
+            const profile = profileMap.get(t.user_id);
+            const email = emailMap.get(t.user_id);
+            if (!profile || !email || !profile.credits_started_at) return null;
+
+            const ledgerDay = new Date(t.created_at).toDateString();
+            const renewDay = new Date(profile.credits_started_at).toDateString();
+
+            if (ledgerDay !== renewDay) return null;
+
+            const prefix = email.split("@")[0].toLowerCase();
+            if (!(prefix.startsWith("nw") || prefix.startsWith("kys") || /^\d+$/.test(prefix))) return null;
+
+            return {
+              id: `legacy-renew-${t.id}`,
+              user_email: email,
+              amount: t.amount,
+              topup_type: "renew",
+              created_at: profile.credits_started_at,
+              note: t.note,
+            } satisfies CreditRecord;
+          })
+          .filter((record): record is CreditRecord => record !== null);
+
+        if (legacyRenewRecords.length > 0) {
+          const legacyIds = new Set(legacyRenewRecords.map((record) => record.id.replace("legacy-renew-", "")));
+          finalRecords = records.filter((record) => !legacyIds.has(record.id)).concat(legacyRenewRecords);
+        }
+      }
+
+      setAllRecords(finalRecords);
     } catch (err) {
       console.error("Error fetching credit agent data:", err);
     } finally {
