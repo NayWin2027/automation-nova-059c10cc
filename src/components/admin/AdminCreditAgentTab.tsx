@@ -41,10 +41,16 @@ const AdminCreditAgentTab: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch credit_topups (admin RLS allows SELECT)
+      // Check master admin status
+      const { data: roleData } = await supabase.functions.invoke('admin-actions', {
+        body: { action: 'check_role' }
+      });
+      setIsMasterAdmin(roleData?.isMasterAdmin === true);
+
+      // Fetch credit_topups (admin RLS allows SELECT) - exclude deleted for sub-admins
       const { data: topups, error: topupErr } = await supabase
         .from("credit_topups")
-        .select("user_id, amount, topup_type, created_at, note")
+        .select("id, user_id, amount, topup_type, created_at, note, is_deleted")
         .order("created_at", { ascending: true });
 
       if (topupErr || !topups) {
@@ -54,8 +60,11 @@ const AdminCreditAgentTab: React.FC = () => {
         return;
       }
 
+      // Filter: master admins see all non-deleted; sub-admins see only non-deleted
+      const filteredTopups = topups.filter((t: any) => !t.is_deleted);
+
       // Fetch profiles for email mapping
-      const userIds = [...new Set(topups.map((t) => t.user_id))];
+      const userIds = [...new Set(filteredTopups.map((t: any) => t.user_id))];
       const { data: profiles } = await supabase
         .from("profiles")
         .select("user_id, email")
@@ -66,12 +75,13 @@ const AdminCreditAgentTab: React.FC = () => {
 
       // Filter to agent emails only & build records
       const records: CreditRecord[] = [];
-      for (const t of topups) {
+      for (const t of filteredTopups) {
         const email = emailMap.get(t.user_id);
         if (!email) continue;
         const prefix = email.split("@")[0].toLowerCase();
         if (prefix.startsWith("nw") || prefix.startsWith("kys") || /^\d+$/.test(prefix)) {
           records.push({
+            id: t.id,
             user_email: email,
             amount: t.amount,
             topup_type: t.topup_type,
@@ -86,6 +96,28 @@ const AdminCreditAgentTab: React.FC = () => {
       console.error("Error fetching credit agent data:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteTopup = async (topupId: string) => {
+    if (!isMasterAdmin) return;
+    if (!confirm("ဒီ transaction ကို ဖျက်မှာ သေချာပါသလား? (Credit balance မပြောင်းပါ)")) return;
+    
+    setDeletingId(topupId);
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: { action: 'delete_topup', topupId }
+      });
+      if (error || !data?.success) {
+        toast({ title: "❌ ဖျက်မရပါ", description: data?.error || "Error", variant: "destructive" });
+      } else {
+        toast({ title: "✅ Transaction ဖျက်ပြီး" });
+        setAllRecords(prev => prev.filter(r => r.id !== topupId));
+      }
+    } catch (err) {
+      toast({ title: "❌ Error", variant: "destructive" });
+    } finally {
+      setDeletingId(null);
     }
   };
 
