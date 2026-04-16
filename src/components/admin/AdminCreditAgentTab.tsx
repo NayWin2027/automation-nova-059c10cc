@@ -5,9 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
-import { RefreshCw, Coins, TrendingUp, ChevronDown, ChevronUp, CalendarDays, Calendar } from "lucide-react";
+import { RefreshCw, Coins, TrendingUp, ChevronDown, ChevronUp, CalendarDays, Calendar, Trash2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 interface CreditRecord {
+  id: string;
   user_email: string;
   amount: number;
   topup_type: string;
@@ -28,10 +30,13 @@ const AGENT_COLORS = {
 const AdminCreditAgentTab: React.FC = () => {
   const [allRecords, setAllRecords] = useState<CreditRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isMasterAdmin, setIsMasterAdmin] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"monthly" | "yearly">("monthly");
   const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
   const [selectedMonth, setSelectedMonth] = useState<string>(String(new Date().getMonth() + 1).padStart(2, "0"));
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+  const { toast } = useToast();
 
   const fetchData = async () => {
     setLoading(true);
