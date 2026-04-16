@@ -5,9 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
-import { RefreshCw, Coins, TrendingUp, ChevronDown, ChevronUp, CalendarDays, Calendar } from "lucide-react";
+import { RefreshCw, Coins, TrendingUp, ChevronDown, ChevronUp, CalendarDays, Calendar, Trash2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 interface CreditRecord {
+  id: string;
   user_email: string;
   amount: number;
   topup_type: string;
@@ -28,18 +30,27 @@ const AGENT_COLORS = {
 const AdminCreditAgentTab: React.FC = () => {
   const [allRecords, setAllRecords] = useState<CreditRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isMasterAdmin, setIsMasterAdmin] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"monthly" | "yearly">("monthly");
   const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
   const [selectedMonth, setSelectedMonth] = useState<string>(String(new Date().getMonth() + 1).padStart(2, "0"));
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+  const { toast } = useToast();
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch credit_topups (admin RLS allows SELECT)
+      // Check master admin status
+      const { data: roleData } = await supabase.functions.invoke('admin-actions', {
+        body: { action: 'check_role' }
+      });
+      setIsMasterAdmin(roleData?.isMasterAdmin === true);
+
+      // Fetch credit_topups (admin RLS allows SELECT) - exclude deleted for sub-admins
       const { data: topups, error: topupErr } = await supabase
         .from("credit_topups")
-        .select("user_id, amount, topup_type, created_at, note")
+        .select("id, user_id, amount, topup_type, created_at, note, is_deleted")
         .order("created_at", { ascending: true });
 
       if (topupErr || !topups) {
@@ -49,8 +60,11 @@ const AdminCreditAgentTab: React.FC = () => {
         return;
       }
 
+      // Filter: master admins see all non-deleted; sub-admins see only non-deleted
+      const filteredTopups = topups.filter((t: any) => !t.is_deleted);
+
       // Fetch profiles for email mapping
-      const userIds = [...new Set(topups.map((t) => t.user_id))];
+      const userIds = [...new Set(filteredTopups.map((t: any) => t.user_id))];
       const { data: profiles } = await supabase
         .from("profiles")
         .select("user_id, email")
@@ -61,12 +75,13 @@ const AdminCreditAgentTab: React.FC = () => {
 
       // Filter to agent emails only & build records
       const records: CreditRecord[] = [];
-      for (const t of topups) {
+      for (const t of filteredTopups) {
         const email = emailMap.get(t.user_id);
         if (!email) continue;
         const prefix = email.split("@")[0].toLowerCase();
         if (prefix.startsWith("nw") || prefix.startsWith("kys") || /^\d+$/.test(prefix)) {
           records.push({
+            id: t.id,
             user_email: email,
             amount: t.amount,
             topup_type: t.topup_type,
@@ -81,6 +96,28 @@ const AdminCreditAgentTab: React.FC = () => {
       console.error("Error fetching credit agent data:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteTopup = async (topupId: string) => {
+    if (!isMasterAdmin) return;
+    if (!confirm("ဒီ transaction ကို ဖျက်မှာ သေချာပါသလား? (Credit balance မပြောင်းပါ)")) return;
+    
+    setDeletingId(topupId);
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: { action: 'delete_topup', topupId }
+      });
+      if (error || !data?.success) {
+        toast({ title: "❌ ဖျက်မရပါ", description: data?.error || "Error", variant: "destructive" });
+      } else {
+        toast({ title: "✅ Transaction ဖျက်ပြီး" });
+        setAllRecords(prev => prev.filter(r => r.id !== topupId));
+      }
+    } catch (err) {
+      toast({ title: "❌ Error", variant: "destructive" });
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -217,11 +254,12 @@ const AdminCreditAgentTab: React.FC = () => {
                   <TableHead className="text-2xs py-1.5 px-3">User ID</TableHead>
                   <TableHead className="text-2xs py-1.5 px-3">Amount</TableHead>
                   <TableHead className="text-2xs py-1.5 px-3">Date</TableHead>
+                  {isMasterAdmin && <TableHead className="text-2xs py-1.5 px-2 w-8"></TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {records.map((r, idx) => (
-                  <TableRow key={`${r.user_email}-${r.created_at}-${idx}`} className="hover:bg-muted/20">
+                  <TableRow key={`${r.id}-${idx}`} className="hover:bg-muted/20">
                     <TableCell className="text-2xs py-1.5 px-3 text-muted-foreground">{idx + 1}</TableCell>
                     <TableCell className="text-2xs py-1.5 px-3 font-mono font-medium">
                       {r.user_email.split("@")[0].toUpperCase()}
@@ -232,6 +270,18 @@ const AdminCreditAgentTab: React.FC = () => {
                     <TableCell className="text-2xs py-1.5 px-3 text-muted-foreground">
                       {formatDate(r.created_at)}
                     </TableCell>
+                    {isMasterAdmin && (
+                      <TableCell className="py-1 px-2">
+                        <button
+                          onClick={() => handleDeleteTopup(r.id)}
+                          disabled={deletingId === r.id}
+                          className="p-1 rounded hover:bg-destructive/20 transition-colors disabled:opacity-50"
+                          title="Delete transaction"
+                        >
+                          <Trash2 className={`w-3 h-3 text-destructive ${deletingId === r.id ? 'animate-spin' : ''}`} />
+                        </button>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>

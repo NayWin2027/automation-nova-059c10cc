@@ -151,7 +151,10 @@ export type Database = {
           amount: number
           created_at: string | null
           created_by: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           id: string
+          is_deleted: boolean
           note: string | null
           topup_type: string
           user_id: string
@@ -160,7 +163,10 @@ export type Database = {
           amount: number
           created_at?: string | null
           created_by?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
+          is_deleted?: boolean
           note?: string | null
           topup_type?: string
           user_id: string
@@ -169,7 +175,10 @@ export type Database = {
           amount?: number
           created_at?: string | null
           created_by?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
+          is_deleted?: boolean
           note?: string | null
           topup_type?: string
           user_id?: string

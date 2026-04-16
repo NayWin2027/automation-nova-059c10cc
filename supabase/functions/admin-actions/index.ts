@@ -553,6 +553,7 @@ serve(async (req) => {
         const { data: topups } = await supabaseAdmin
           .from('credit_topups')
           .select('user_id, amount, topup_type')
+          .eq('is_deleted', false)
           .order('created_at', { ascending: true });
 
         const topupMap: Record<string, { original: number; topup: number; bonus: number }> = {};
@@ -592,6 +593,42 @@ serve(async (req) => {
           .update({ is_banned: false, ban_reason: null })
           .eq('user_id', userId)
           .eq('ban_reason', 'Auto-banned: Exceeded maximum device limit');
+
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case 'delete_topup': {
+        // SECURITY: Only master admins can delete topup records
+        if (!isCallerMasterAdmin) {
+          return new Response(
+            JSON.stringify({ error: "Master Admin access required for transaction deletion" }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { topupId } = params;
+        if (!topupId || typeof topupId !== 'string') {
+          return new Response(
+            JSON.stringify({ error: "Invalid topup ID" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Soft-delete: mark as deleted without changing user credit balance
+        const { error: deleteTopupError } = await supabaseAdmin
+          .from('credit_topups')
+          .update({
+            is_deleted: true,
+            deleted_by: user.id,
+            deleted_at: new Date().toISOString(),
+          })
+          .eq('id', topupId)
+          .eq('is_deleted', false); // Prevent double-delete
+
+        if (deleteTopupError) throw deleteTopupError;
 
         return new Response(
           JSON.stringify({ success: true }),
