@@ -313,7 +313,11 @@ const AdminCreditAgentTab: React.FC = () => {
   ) => {
     const filterFn = category === "bonus"
       ? (r: CreditRecord) => r.topup_type === "bonus"
-      : (r: CreditRecord) => r.topup_type !== "bonus";
+      : category === "renew"
+      ? (r: CreditRecord) => r.topup_type === "renew"
+      : category === "referral"
+      ? (r: CreditRecord) => r.topup_type === "referral"
+      : (r: CreditRecord) => r.topup_type === "topup";
 
     const nw = allGroupRecords.nw.filter(filterFn);
     const kys = allGroupRecords.kys.filter(filterFn);
@@ -322,16 +326,19 @@ const AdminCreditAgentTab: React.FC = () => {
     if (total === 0) return null;
     const totalAmount = [...nw, ...kys, ...numeric].reduce((s, r) => s + r.amount, 0);
 
-    const categoryLabel = category === "bonus" ? "🎁 Bonus" : "💰 Credit Top-up";
-    const categoryColor = category === "bonus" ? "text-purple-400" : "text-amber-400";
-    const categoryBorderColor = category === "bonus" ? "border-purple-500/30" : "border-amber-500/30";
-    const categoryBgColor = category === "bonus" ? "bg-purple-500/20" : "bg-amber-500/20";
+    const categoryConfig: Record<RecordCategory, { label: string; color: string; borderColor: string; bgColor: string }> = {
+      topup: { label: "💰 Credit Top-up", color: "text-amber-400", borderColor: "border-amber-500/30", bgColor: "bg-amber-500/20" },
+      bonus: { label: "🎁 Bonus", color: "text-purple-400", borderColor: "border-purple-500/30", bgColor: "bg-purple-500/20" },
+      renew: { label: "🔄 Renew", color: "text-cyan-400", borderColor: "border-cyan-500/30", bgColor: "bg-cyan-500/20" },
+      referral: { label: "🤝 Referral", color: "text-pink-400", borderColor: "border-pink-500/30", bgColor: "bg-pink-500/20" },
+    };
+    const cfg = categoryConfig[category];
 
     return (
       <div className="mb-4">
         <div className={`flex items-center justify-between mb-2 px-1`}>
-          <span className={`text-xs font-bold ${categoryColor}`}>{categoryLabel}</span>
-          <Badge className={`text-2xs ${categoryBgColor} ${categoryColor} ${categoryBorderColor}`}>
+          <span className={`text-xs font-bold ${cfg.color}`}>{cfg.label}</span>
+          <Badge className={`text-2xs ${cfg.bgColor} ${cfg.color} ${cfg.borderColor}`}>
             {totalAmount} cr ({total} txns)
           </Badge>
         </div>
