@@ -493,6 +493,8 @@ const AdminCreditAgentTab: React.FC = () => {
               <CardContent className="px-4 pb-3">
                 {renderCategorySection(group, "topup", group.key)}
                 {renderCategorySection(group, "bonus", group.key)}
+                {renderCategorySection(group, "renew", group.key)}
+                {renderCategorySection(group, "referral", group.key)}
               </CardContent>
             </Card>
           );
