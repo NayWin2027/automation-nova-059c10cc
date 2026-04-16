@@ -254,11 +254,12 @@ const AdminCreditAgentTab: React.FC = () => {
                   <TableHead className="text-2xs py-1.5 px-3">User ID</TableHead>
                   <TableHead className="text-2xs py-1.5 px-3">Amount</TableHead>
                   <TableHead className="text-2xs py-1.5 px-3">Date</TableHead>
+                  {isMasterAdmin && <TableHead className="text-2xs py-1.5 px-2 w-8"></TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {records.map((r, idx) => (
-                  <TableRow key={`${r.user_email}-${r.created_at}-${idx}`} className="hover:bg-muted/20">
+                  <TableRow key={`${r.id}-${idx}`} className="hover:bg-muted/20">
                     <TableCell className="text-2xs py-1.5 px-3 text-muted-foreground">{idx + 1}</TableCell>
                     <TableCell className="text-2xs py-1.5 px-3 font-mono font-medium">
                       {r.user_email.split("@")[0].toUpperCase()}
@@ -269,6 +270,18 @@ const AdminCreditAgentTab: React.FC = () => {
                     <TableCell className="text-2xs py-1.5 px-3 text-muted-foreground">
                       {formatDate(r.created_at)}
                     </TableCell>
+                    {isMasterAdmin && (
+                      <TableCell className="py-1 px-2">
+                        <button
+                          onClick={() => handleDeleteTopup(r.id)}
+                          disabled={deletingId === r.id}
+                          className="p-1 rounded hover:bg-destructive/20 transition-colors disabled:opacity-50"
+                          title="Delete transaction"
+                        >
+                          <Trash2 className={`w-3 h-3 text-destructive ${deletingId === r.id ? 'animate-spin' : ''}`} />
+                        </button>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>
