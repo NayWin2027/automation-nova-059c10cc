@@ -81,7 +81,8 @@ serve(async (req) => {
     const {
       text,
       voiceName,
-      apiKey: userApiKey,
+      apiKey: rawApiKey,
+      ownApiKey: rawOwnApiKey,
       languageCode,
       customCreditCost,
       segments,
@@ -91,6 +92,13 @@ serve(async (req) => {
       nativeVoiceInstructions,
       voiceConfig: clientVoiceConfig,
     } = await req.json();
+
+    // Surgical fix: accept both `apiKey` and `ownApiKey` from clients (Recap NV sends `ownApiKey`).
+    // Precedence: ownApiKey → apiKey. Response shape unchanged.
+    const userApiKey =
+      (typeof rawOwnApiKey === "string" && rawOwnApiKey.trim()) ||
+      (typeof rawApiKey === "string" && rawApiKey.trim()) ||
+      "";
 
     // Validate text
     if (!text || typeof text !== "string" || !text.trim()) {
