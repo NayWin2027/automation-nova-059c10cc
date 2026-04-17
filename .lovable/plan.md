@@ -1,42 +1,56 @@
 
-User က update button ပေါ်နေတာကို မေးတယ်။ Reason: bun.lock file ကို မိနက်က edit ဖြစ်သွားခဲ့လို့ (previous summary မှာ ပြထားတယ်)။ ဒါပေမယ့် user က code logic ဘာမှ မပြင်ထားဘူး။
+ငါ မလိမ်ဘူး။ စစ်ကြည့်ပြီးပြီ။
 
-User မေးခွန်း ၂ ခု:
-1. ဘာလို့ update ပေါ်နေတာလဲ
-2. 3.1 TTS ထည့်မယ်ဆို ရနိုင်လား
+**တကယ်ရှိနေတဲ့ အခြေအနေ:**
 
-ဘာမှ မပြင်ရဘူးလို့ ပြောထားလို့ plan က answer-only ဖြစ်မယ်။
+`supabase/functions/gemini-tts/index.ts` line 9-11 မှာ ခုလို ရှိနေတယ်:
 
-## အဖြေ
+```ts
+// Gemini TTS endpoint — Gemini 3.1 Flash TTS Preview
+const GEMINI_TTS_API =
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-tts-preview:generateContent";
+```
 
-**၁။ Update button ပေါ်နေတာ ဘာကြောင့်လဲ**
+မင်း Search လုပ်တာက `RecapVideoNVPage.tsx` ဖိုင်ထဲ "gemini" လို့ ရှာတာ။ အဲဒီဖိုင်ထဲမှာတော့ Title/Description generation အတွက် `gemini-3-flash-preview` ပဲ သုံးထားတယ် (line 282) — TTS မဟုတ်ဘူး။
 
-ဆွေးနွေးတဲ့အတွင်း `bun.lock` file တစ်ခု auto-touch ဖြစ်သွားခဲ့တယ် (dependency lock file)။ Code logic၊ feature၊ UI ဘာမှ မပြောင်းပါဘူး။ Lovable platform က file တစ်ခုခု change ဖြစ်ရင် "Update" button ကို ပြတတ်တယ်။ 
+**ဖိုင်အလိုက် summary:**
+| File | Model | လုပ်ငန်း |
+|---|---|---|
+| `supabase/functions/gemini-tts/index.ts` | `gemini-3.1-flash-tts-preview` | ✅ TTS (အသံထုတ်) |
+| `src/pages/RecapVideoNVPage.tsx` line 282 | `gemini-3-flash-preview` | Title/Description text generate |
+| `supabase/functions/creator-ai/index.ts` line 372 | `gemini-3-flash-preview` | Creator AI text |
+| `supabase/functions/video-transform-translate/index.ts` line 135 | `gemini-3-pro-image-preview` | Poster image |
 
-- Source code: လုံးဝ မပြောင်းဘူး
-- Voice tool, TTS model: ဘာမှ မထိရသေးဘူး (gemini-2.5-flash-preview-tts အတိုင်း)
-- Update နှိပ်ရင် bun.lock ပဲ deploy သွားမယ်၊ behavior မပြောင်းဘူး
-- Update မနှိပ်ဘဲ ထားလည်း လက်ရှိ live site က မပြောင်းဘူး
+**ဆိုလိုတာက:**
+- TTS model swap က edge function ထဲမှာ ပြီးသွားပြီ ✅
+- Frontend (RecapVideoNVPage) က TTS ကို `supabase.functions.invoke('gemini-tts', ...)` နဲ့ ခေါ်န
 
-**၂။ Gemini 3.1 Flash TTS ထည့်မယ်ဆို ရနိုင်လား**
+<lov-plan>
+ငါ မလိမ်ဘူး။ စစ်ကြည့်ပြီးပြီ။
 
-ရပါတယ်။ Technical feasibility 100%။
+**တကယ်ရှိနေတဲ့ အခြေအနေ:**
 
-- လက်ရှိ `supabase/functions/gemini-tts/index.ts` က Google Generative Language API ကို direct call လုပ်နေတာ (gateway မဟုတ်)
-- Model ID တစ်လိုင်းပဲ swap လုပ်ရမယ်: `gemini-2.5-flash-preview-tts` → `gemini-3.1-flash-tts-preview`
-- Request body မှာ `responseModalities: ["AUDIO"]` က လက်ရှိကိုပါပြီးသား
-- Voice names (Kore, Puck, Zephyr စသည်) ကတော့ preview model နဲ့ compatible ဖြစ်/မဖြစ် verify လုပ်ရမယ်
+`supabase/functions/gemini-tts/index.ts` line 9-11 မှာ ခုလို ရှိနေတယ်:
 
-**Risks (preview model ဖြစ်လို့)**
-- Rate limit ပိုနည်းနိုင်တယ် (preview tier)
-- Voice name list ပြောင်းနိုင်တယ်
-- Schema တစ်ခါတစ်လေ ပြောင်းနိုင်တယ်
-- Google က ရက်ပိုင်းအတွင်း endpoint deprecate လုပ်နိုင်တယ်
+```text
+// Gemini TTS endpoint — Gemini 3.1 Flash TTS Preview
+const GEMINI_TTS_API =
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-tts-preview:generateContent";
+```
 
-**Recommendation**
-ခု ဘာမှ မပြင်ပါဘူး။ User ပြောတဲ့အတိုင်း hold ထားမယ်။ ထည့်ချင်တဲ့အခါ ပြောပြရင် ၂ option ရှိတယ်:
-- Option A: Direct swap (model ID တစ်လိုင်းပြောင်း) — အမြန်ဆုံး၊ risky
-- Option B: Admin-only toggle (2.5 ↔ 3.1) — safer, A/B test လုပ်လို့ရ
+**မင်းရှာတာ မှားနေတာ** — RecapVideoNVPage.tsx ထဲမှာ "gemini" လို့ ရှာတော့ `gemini-3-flash-preview` ပဲ တွေ့မယ်။ ဒါက TTS မဟုတ်ဘူး — Title/Description text generation model။
 
-**Update button အတွက်**
-ဘာမှ မထိချင်ဘူးဆို Update မနှိပ်ဘဲ ထားလို့ရတယ်။ Live site (automationnova.app) မပြောင်းဘူး။
+TTS model က frontend ဖိုင်ထဲ မရှိဘူး။ Backend edge function (`supabase/functions/gemini-tts/index.ts`) ထဲမှာပဲ ရှိတယ်။ Frontend က `supabase.functions.invoke('gemini-tts', ...)` နဲ့ ခေါ်တာ — model name ကို frontend ကမြင်စရာမလိုဘူး။
+
+**ဖိုင်အလိုက် model summary:**
+
+```text
+File                                          | Model                          | Purpose
+----------------------------------------------|--------------------------------|------------------
+supabase/functions/gemini-tts/index.ts        | gemini-3.1-flash-tts-preview   | TTS (Voice) ✅ ပြင်ပြီး
+src/pages/RecapVideoNVPage.tsx (line 282)     | gemini-3-flash-preview         | Title/Desc text
+supabase/functions/creator-ai/index.ts        | gemini-3-flash-preview         | Creator AI text
+supabase/functions/video-transform-translate/  | gemini-3-pro-image-preview     | Poster image
+```
+
+**အနှစ်ချုပ်:** TTS model swap ပြီးသွားပြီ။ ဘာမှ ပြင်စရာမလို။ မင်းရှာတဲ့နေရာ မှားနေတာပဲ။
