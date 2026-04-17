@@ -538,9 +538,9 @@ serve(async (req) => {
     let finalMime = result.mimeType;
     let pcmSampleRate = 24000;
 
-    if (result.mimeType && result.mimeType.includes("L16")) {
-      // Extract sample rate from mimeType like "audio/L16;rate=24000"
-      const rateMatch = result.mimeType.match(/rate=(\d+)/);
+    if (result.mimeType && /(?:^|\/|[^a-z])l16\b/i.test(result.mimeType)) {
+      // Extract sample rate from mimeType like "audio/L16;rate=24000" or "audio/l16; rate=24000; channels=1"
+      const rateMatch = result.mimeType.match(/rate=(\d+)/i);
       pcmSampleRate = rateMatch ? parseInt(rateMatch[1], 10) : 24000;
       // Do NOT convert here — send raw PCM to client to avoid memory limit
       finalMime = "audio/pcm"; // signal to client to convert
