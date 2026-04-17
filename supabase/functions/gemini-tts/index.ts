@@ -93,9 +93,13 @@ serve(async (req) => {
       voiceConfig: clientVoiceConfig,
     } = await req.json();
 
+    const headerOwnApiKey = req.headers.get("x-own-api-key");
+
     // Surgical fix: accept both `apiKey` and `ownApiKey` from clients (Recap NV sends `ownApiKey`).
-    // Precedence: ownApiKey → apiKey. Response shape unchanged.
+    // Also accept x-own-api-key header for older/alternate call paths.
+    // Precedence: header own key → body ownApiKey → apiKey. Response shape unchanged.
     const userApiKey =
+      (typeof headerOwnApiKey === "string" && headerOwnApiKey.trim()) ||
       (typeof rawOwnApiKey === "string" && rawOwnApiKey.trim()) ||
       (typeof rawApiKey === "string" && rawApiKey.trim()) ||
       "";
@@ -428,7 +432,9 @@ serve(async (req) => {
 
         const part0 = json?.candidates?.[0]?.content?.parts?.[0];
         const audio = part0?.inlineData?.data as string | undefined;
-        const mime = (part0?.inlineData?.mimeType as string | undefined) || "audio/mp3";
+        // Gemini TTS preview returns raw PCM/Linear16 audio. If mime is omitted,
+        // default to audio/pcm so the client takes the safe WAV-conversion path.
+        const mime = (part0?.inlineData?.mimeType as string | undefined)?.trim() || "audio/pcm";
 
         return {
           ok: true as const,
@@ -538,7 +544,9 @@ serve(async (req) => {
     let finalMime = result.mimeType;
     let pcmSampleRate = 24000;
 
-    if (result.mimeType && /(?:^|\/|[^a-z])l16\b/i.test(result.mimeType)) {
+    const normalizedMimeType = (result.mimeType || "").trim().toLowerCase();
+
+    if (!normalizedMimeType || normalizedMimeType.includes("l16") || normalizedMimeType.includes("pcm")) {
       // Extract sample rate from mimeType like "audio/L16;rate=24000" or "audio/l16; rate=24000; channels=1"
       const rateMatch = result.mimeType.match(/rate=(\d+)/i);
       pcmSampleRate = rateMatch ? parseInt(rateMatch[1], 10) : 24000;
