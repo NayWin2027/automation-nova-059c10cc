@@ -223,10 +223,14 @@ serve(async (req) => {
     }
 
     const { videoUrl, useOwnApi, apiKey, ownApiKey, targetLang, fileName, fileSize, mimeType, fileUri, confirmSuccess } = body;
+    const headerOwnApiKey = req.headers.get("x-own-api-key");
     
     const BACKEND_GEMINI_KEY = Deno.env.get("GEMINI_API_KEY");
-    // Support both field names: "apiKey" (legacy) and "ownApiKey" (current frontend)
-    const resolvedOwnKey = (ownApiKey || apiKey || '').trim();
+    // Support own key from header + both body field names so Own API mode behaves like App mode across all Recap NV call paths.
+    const resolvedOwnKey = (typeof headerOwnApiKey === "string" && headerOwnApiKey.trim())
+      || (typeof ownApiKey === "string" && ownApiKey.trim())
+      || (typeof apiKey === "string" && apiKey.trim())
+      || '';
     const isOwnApiKey = useOwnApi && !!resolvedOwnKey;
 
     // ===== CREDIT DEDUCTION: Only on confirmSuccess =====
