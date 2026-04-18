@@ -11,6 +11,172 @@ const GEMINI_TTS_API =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-tts-preview:generateContent";
 
 /**
+ * Auto-detect emotion / niche / tone from script content.
+ * Returns a natural emotion-coaching instruction line that is appended to the
+ * existing native-voice instruction. Designed to be additive only — does NOT
+ * replace existing nativeStyleInstruction (so nothing else breaks).
+ *
+ * IMPORTANT: Tone is REALISTIC and NATURAL — NEVER over-acted.
+ */
+function detectEmotionInstruction(rawText: string, langCode: string): string {
+  const text = (rawText || "").toLowerCase();
+  if (!text.trim()) return "";
+
+  // Burmese keyword groups (覆盖 most niches the user listed)
+  const groups: Array<{ name: string; patterns: RegExp[]; instruction: string }> = [
+    {
+      name: "war/military",
+      patterns: [/စစ်ရေး|စစ်ပွဲ|စစ်တပ်|လက်နက်|war|military|battle|army|weapon|combat/i],
+      instruction:
+        "TONE: Serious, grounded, authoritative news/military analyst voice. Calm, controlled, factual. NEVER dramatic or theatrical.",
+    },
+    {
+      name: "news",
+      patterns: [/သတင်း|သတင်းထောက်|ဆောင်းပါး|news|breaking|reporter|journalist|headline/i],
+      instruction:
+        "TONE: Professional broadcast news anchor / field reporter. Clear, neutral, confident. Slight authority. NO emotional exaggeration.",
+    },
+    {
+      name: "sad/grief",
+      patterns: [/ဝမ်းနည်း|အလွမ်း|ငို|သေဆုံး|လွမ်း|ကွဲ|sad|grief|cry|tears|loss|mourn|heartbreak/i],
+      instruction:
+        "TONE: Gentle, soft, sincerely sad. Slow micro-pauses. Subtle vocal weight, NEVER sobbing or theatrical. A real human quietly feeling sorrow.",
+    },
+    {
+      name: "love/romance",
+      patterns: [/အချစ်|ချစ်သူ|ရင်ခုန်|love|romance|affection|sweetheart|crush/i],
+      instruction:
+        "TONE: Warm, soft, intimate, slightly tender. Gentle breath. Realistic affection — NOT whisper-acting, NOT dramatic.",
+    },
+    {
+      name: "happy/joy",
+      patterns: [/ပျော်|ဝမ်းသာ|ရယ်|အောင်မြင်|happy|joy|cheer|smile|win|celebrate/i],
+      instruction:
+        "TONE: Bright, naturally smiling voice. Light energy. Subtle warmth. NEVER over-excited or fake-cheerful.",
+    },
+    {
+      name: "horror/fear",
+      patterns: [/သရဲ|တစ္ဆေ|ကြောက်|ထိတ်လန့်|လန့်|ghost|horror|scary|haunted|fear|nightmare/i],
+      instruction:
+        "TONE: Hushed, tense, low-volume narration. Slight tremor. Slow careful pacing. Realistic suspense — NOT cartoon scary.",
+    },
+    {
+      name: "anger",
+      patterns: [/ဒေါသ|ဒေါသထွက်|စိတ်ဆိုး|ဆဲ|anger|rage|furious|mad|angry|outraged/i],
+      instruction:
+        "TONE: Firm, controlled anger. Tightened jaw, sharper consonants. Restrained intensity. NEVER shouting or hysterical.",
+    },
+    {
+      name: "adult/18+",
+      patterns: [/18\+|အရွယ်ရောက်|adult|nsfw|sensual|seductive/i],
+      instruction:
+        "TONE: Low, breathy, intimate adult narration. Slow, smooth, suggestive — but tasteful and realistic, never cartoonish.",
+    },
+    {
+      name: "action",
+      patterns: [/အက်ရှင်|လိုက်|ပြေး|ရိုက်|action|chase|fight|explosion|combat|adrenaline/i],
+      instruction:
+        "TONE: Punchy, energetic, fast-paced. Strong consonants, forward-leaning rhythm. Confident action narrator. Realistic — not screaming.",
+    },
+    {
+      name: "food",
+      patterns: [/အစားအသောက်|ချက်ပြုတ်|ဟင်း|food|cooking|recipe|delicious|tasty|chef/i],
+      instruction:
+        "TONE: Warm, inviting, slightly mouth-watering. Friendly food vlogger. Natural enthusiasm, NOT exaggerated.",
+    },
+    {
+      name: "travel",
+      patterns: [/ခရီး|လေယာဉ်|နိုင်ငံခြား|travel|trip|journey|destination|tourist|vlog/i],
+      instruction:
+        "TONE: Friendly, curious, conversational travel-vlogger. Light wonder, easy pacing. Real human storytelling.",
+    },
+    {
+      name: "movie recap",
+      patterns: [/ရုပ်ရှင်|ဇာတ်လမ်း|ဇာတ်ကား|recap|movie|film|cinema|spoiler|scene/i],
+      instruction:
+        "TONE: Engaging cinematic storyteller. Confident pacing. Subtle dramatic emphasis only at key moments. NEVER over-narrate every line.",
+    },
+    {
+      name: "tech/AI",
+      patterns: [/နည်းပညာ|ai|tech|software|gadget|app|computer|programming|ml|llm/i],
+      instruction:
+        "TONE: Clear, modern, knowledgeable tech presenter. Calm confidence. Crisp pronunciation. No excitement spikes.",
+    },
+    {
+      name: "sports",
+      patterns: [/အားကစား|ဘောလုံး|ပွဲ|sport|football|soccer|match|player|league|championship/i],
+      instruction:
+        "TONE: Energetic but controlled sports commentator. Forward energy at action beats, calm during analysis. Realistic broadcast feel.",
+    },
+    {
+      name: "science",
+      patterns: [/သိပ္ပံ|ဓာတ်ခွဲ|ဥပဒေသ|science|physics|biology|chemistry|experiment|discovery/i],
+      instruction:
+        "TONE: Curious, intelligent science narrator (Veritasium/National Geographic style). Calm wonder, natural pacing.",
+    },
+    {
+      name: "psychology",
+      patterns: [/စိတ်ပညာ|စိတ်ကျန်းမာ|psychology|mental|mindset|behavior|cognitive|emotion/i],
+      instruction:
+        "TONE: Warm, thoughtful, reassuring. Soft authority like a compassionate counselor. Slow, considered pacing.",
+    },
+    {
+      name: "motivation",
+      patterns: [/စိတ်ဓာတ်|အားပေး|ကြိုးစား|motivation|inspire|success|mindset|achieve|goal/i],
+      instruction:
+        "TONE: Sincere, grounded, uplifting. Calm conviction — NOT shouty motivational speaker style. Real human encouragement.",
+    },
+    {
+      name: "health",
+      patterns: [/ကျန်းမာရေး|ဆေး|ရောဂါ|health|medical|doctor|fitness|wellness|nutrition/i],
+      instruction:
+        "TONE: Trustworthy, calm health professional. Clear pronunciation, gentle authority. Reassuring pacing.",
+    },
+    {
+      name: "knowledge sharing",
+      patterns: [/ဗဟုသုတ|သိစရာ|knowledge|learn|fact|education|tutorial|explainer/i],
+      instruction:
+        "TONE: Friendly knowledgeable teacher. Conversational clarity. Natural curiosity. Engaging without being theatrical.",
+    },
+    {
+      name: "entertainment",
+      patterns: [/ဖျော်ဖြေ|အောက်စိုက်|entertainment|fun|comedy|gossip|celeb|drama/i],
+      instruction:
+        "TONE: Light, playful, conversational entertainment host. Natural smile in voice. Easygoing rhythm.",
+    },
+    {
+      name: "audiobook",
+      patterns: [/စာအုပ်|ဝတ္ထု|နာ‌ေရးတ|audiobook|chapter|novel|narration|story/i],
+      instruction:
+        "TONE: Refined audiobook narrator. Smooth, immersive, character-aware pacing. Emotion through subtle modulation, NEVER overacted.",
+    },
+    {
+      name: "production",
+      patterns: [/production|filmmaking|director|cinematography|editing|behind the scenes/i],
+      instruction:
+        "TONE: Documentary/behind-the-scenes voice. Professional, observant, slightly intimate. Confident but grounded.",
+    },
+  ];
+
+  for (const g of groups) {
+    if (g.patterns.some((re) => re.test(text))) {
+      return (
+        `EMOTION & NICHE STYLE (auto-detected: ${g.name}): ${g.instruction} ` +
+        `Stay 100% realistic and human. NEVER over-emote. Natural breathing, natural micro-pauses, ` +
+        `consistent voice quality from start to finish — no robotic flattening, no quality degradation over time.`
+      );
+    }
+  }
+
+  // Generic fallback — still enforces realism + anti-degradation
+  return (
+    "EMOTION & NICHE STYLE: Match the emotional tone of the script naturally and subtly, " +
+    "exactly as a real professional human narrator would. Keep emotion REALISTIC, NEVER exaggerated. " +
+    "Maintain consistent voice quality, clarity, and pronunciation from beginning to end."
+  );
+}
+
+/**
  * Convert raw PCM (Linear16) base64 data to WAV base64 with proper headers.
  * Gemini TTS returns raw PCM which browsers cannot play directly.
  */
@@ -321,6 +487,12 @@ serve(async (req) => {
         "Your pronunciation must be indistinguishable from a real Yangon native. " +
         "STRICTLY FORBIDDEN: Shan accent, Kachin accent, Chinese accent, Karen accent, Indian accent, European accent, robotic tone, overly formal tone, or any foreign phoneme bleed. " +
         "Use natural Burmese glottal stops, tones, and vowel lengths exactly as a native speaker would. " +
+        "PRONUNCIATION PRECISION (MANDATORY — DO NOT MISREAD CONSONANTS): " +
+        "  • The Burmese letter \u101E (\u201Csa.\u201D) is pronounced as a soft English /θ/ (like \u2018th\u2019 in \u2018think\u2019). " +
+        "    NEVER pronounce \u101E as \u1010 (/t/). Example: \u101E\u102d (\u2018thi\u2019, to know) must NEVER sound like \u1010\u102d (\u2018ti\u2019). " +
+        "  • Distinguish clearly: \u101E\u102d=thi, \u101E\u1030=thu, \u101E\u101D\u102C=thwa, \u101E\u1014\u103A=than. " +
+        "  • Distinguish aspirated vs unaspirated: \u1000/\u1001, \u1005/\u1006, \u1010/\u1011, \u1015/\u1016. " +
+        "  • Maintain crisp diction for every syllable, especially \u101E vs \u1010, \u1015 vs \u1016, \u101C vs \u101B. " +
         "Speak with warmth, confidence, and natural human expressiveness like a Burmese content creator or news presenter. " +
         "Match the quality of Google Producer AI's Burmese human voice — pure \u1017\u1019\u102c\u101c\u1031\u101e\u1036\u1005\u1005\u103a\u1005\u1005\u103a only, absolutely no foreign accent interference.",
       en: "CRITICAL VOICE STYLE: Speak in clear, natural, modern conversational American English with authentic native-speaker rhythm and intonation. Sound like a real native English-speaking human.",
@@ -343,10 +515,16 @@ serve(async (req) => {
       nativeStyleMap[langCode] ||
       `CRITICAL VOICE STYLE: Speak in natural, modern colloquial ${langCode.toUpperCase()} with 100% authentic native accent and pronunciation. Sound like a real native human speaker.`;
 
-    const buildRequestBody = (voice: string) => {
+    // Auto-detect emotion / niche from script content (additive, never replaces native style).
+    const emotionInstruction = detectEmotionInstruction(text, langCode);
+
+    // buildRequestBody now accepts a per-chunk text override so long-text chunking
+    // can reuse the exact same prompt structure (style, emotion, pacing) per chunk.
+    const buildRequestBody = (voice: string, chunkText: string = text) => {
       const instruction = isModernSpeed
         ? `You are a professional voice-over narrator for engaging videos.\n` +
           `${nativeStyleInstruction}\n` +
+          `${emotionInstruction}\n` +
           `Generate natural, continuous speech AUDIO for the following text.\n` +
           `CRITICAL PACING RULES (MODERN / FAST & CONTINUOUS):\n` +
           `- Speak at a FASTER pace (approximately 1.3x normal speed).\n` +
@@ -356,10 +534,15 @@ serve(async (req) => {
           `- The rhythm should feel like rapid-fire professional narration — swift, confident, and non-stop.\n` +
           `- Speak clearly but quickly, like a fast-paced documentary narrator.\n` +
           `- Natural breathing pauses are fine but keep them minimal and quick.\n` +
+          `CRITICAL QUALITY RULES (MUST HOLD FROM FIRST WORD TO LAST WORD):\n` +
+          `- Maintain IDENTICAL voice quality, clarity, volume, timbre, and pronunciation precision throughout.\n` +
+          `- DO NOT degrade, mumble, slur, speed-drift, or flatten near the end of the text.\n` +
+          `- Every consonant must remain crisp; every syllable must remain fully articulated.\n` +
           `Language (BCP-47): ${sanitizedLanguageCode}\n\n` +
-          `TEXT:\n${text}`
+          `TEXT:\n${chunkText}`
         : `You are a professional voice-over narrator for engaging videos.\n` +
           `${nativeStyleInstruction}\n` +
+          `${emotionInstruction}\n` +
           `Generate natural, continuous speech AUDIO for the following text.\n` +
           `CRITICAL PACING RULES:\n` +
           `- Speak fluently and continuously like a professional narrator or podcaster.\n` +
@@ -368,8 +551,12 @@ serve(async (req) => {
           `- Maintain a smooth, engaging flow that keeps listeners hooked.\n` +
           `- Natural micro-pauses at commas and periods are fine, but keep them brief.\n` +
           `- The overall rhythm should feel like a confident storyteller, not a slow reader.\n` +
+          `CRITICAL QUALITY RULES (MUST HOLD FROM FIRST WORD TO LAST WORD):\n` +
+          `- Maintain IDENTICAL voice quality, clarity, volume, timbre, and pronunciation precision throughout.\n` +
+          `- DO NOT degrade, mumble, slur, speed-drift, or flatten near the end of the text.\n` +
+          `- Every consonant must remain crisp; every syllable must remain fully articulated.\n` +
           `Language (BCP-47): ${sanitizedLanguageCode}\n\n` +
-          `TEXT:\n${text}`;
+          `TEXT:\n${chunkText}`;
 
       return {
         contents: [
@@ -390,7 +577,7 @@ serve(async (req) => {
       };
     };
 
-    const callGeminiTts = async (voice: string) => {
+    const callGeminiTts = async (voice: string, chunkText: string = text) => {
       // Try up to 3 keys on 429 (only for backend keys, not user's own key)
       const maxAttempts = isUserKey ? 1 : 3;
       let lastStatus = 0;
@@ -401,7 +588,7 @@ serve(async (req) => {
         const resp = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(buildRequestBody(voice)),
+          body: JSON.stringify(buildRequestBody(voice, chunkText)),
         });
 
         const bodyText = await resp.text();
@@ -448,12 +635,123 @@ serve(async (req) => {
       return { ok: false as const, status: lastStatus || 429, bodyText: lastBodyText };
     };
 
-    // Attempt 1: requested voice
-    let usedVoice = sanitizedVoiceName;
-    let result = await callGeminiTts(usedVoice);
+    // ===== LONG-TEXT AUTO-CHUNKING (anti-quality-degradation) =====
+    // Gemini TTS quality drops noticeably after ~1 minute of generated audio
+    // (≈ 900-1100 chars of Burmese, or ~250-300 words). To keep voice quality
+    // CONSISTENT from start to finish, split long text at sentence boundaries
+    // and concatenate the resulting raw PCM chunks. WAV conversion still runs
+    // client-side (unchanged response contract: audio + mimeType + sampleRate).
+    const CHUNK_CHAR_THRESHOLD = 900; // safe budget per single TTS call
+    const splitTextIntoChunks = (full: string, maxChars: number): string[] => {
+      const clean = (full || "").trim();
+      if (clean.length <= maxChars) return [clean];
 
-    // Attempt 2: fallback voice (Puck) if we got a 200 but no audio
-    if (result.ok && !result.audio && usedVoice !== "Puck") {
+      // Split on sentence boundaries: Burmese ။ ၊  + Latin . ! ? + newlines.
+      // Keep the delimiter glued to the preceding sentence to preserve prosody cues.
+      const parts = clean.split(/(?<=[။၊\.\!\?\n])\s+/);
+      const chunks: string[] = [];
+      let buf = "";
+      for (const p of parts) {
+        if (!p) continue;
+        if ((buf + " " + p).trim().length > maxChars && buf) {
+          chunks.push(buf.trim());
+          buf = p;
+        } else {
+          buf = buf ? `${buf} ${p}` : p;
+        }
+      }
+      if (buf.trim()) chunks.push(buf.trim());
+
+      // Safety: if any single chunk is still too big (no sentence breaks at all),
+      // hard-split on whitespace as a last resort.
+      const final: string[] = [];
+      for (const c of chunks) {
+        if (c.length <= maxChars) {
+          final.push(c);
+          continue;
+        }
+        const words = c.split(/\s+/);
+        let b = "";
+        for (const w of words) {
+          if ((b + " " + w).trim().length > maxChars && b) {
+            final.push(b.trim());
+            b = w;
+          } else {
+            b = b ? `${b} ${w}` : w;
+          }
+        }
+        if (b.trim()) final.push(b.trim());
+      }
+      return final.filter((c) => c.length > 0);
+    };
+
+    // Concatenate raw PCM base64 chunks into one base64 string (no header — still raw PCM).
+    const concatPcmBase64 = (chunks: string[]): string => {
+      if (chunks.length === 0) return "";
+      if (chunks.length === 1) return chunks[0];
+      // Decode each chunk, concatenate raw bytes, re-encode in safe-size groups.
+      let totalLen = 0;
+      const buffers: Uint8Array[] = chunks.map((b64) => {
+        const arr = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+        totalLen += arr.length;
+        return arr;
+      });
+      const merged = new Uint8Array(totalLen);
+      let offset = 0;
+      for (const b of buffers) {
+        merged.set(b, offset);
+        offset += b.length;
+      }
+      let binary = "";
+      const step = 8192;
+      for (let i = 0; i < merged.length; i += step) {
+        binary += String.fromCharCode(...merged.subarray(i, Math.min(i + step, merged.length)));
+      }
+      return btoa(binary);
+    };
+
+    const textChunks = splitTextIntoChunks(text, CHUNK_CHAR_THRESHOLD);
+    const useChunking = textChunks.length > 1;
+    if (useChunking) {
+      console.log(
+        `[gemini-tts] Long text detected (${text.length} chars) → splitting into ${textChunks.length} chunks for consistent quality`,
+      );
+    }
+
+    // Attempt 1: requested voice (single call OR chunked sequential calls)
+    let usedVoice = sanitizedVoiceName;
+    let result: Awaited<ReturnType<typeof callGeminiTts>>;
+
+    if (!useChunking) {
+      result = await callGeminiTts(usedVoice);
+    } else {
+      const audioChunks: string[] = [];
+      let lastMime = "audio/pcm";
+      let chunkFailed: Awaited<ReturnType<typeof callGeminiTts>> | null = null;
+      for (let i = 0; i < textChunks.length; i++) {
+        const r = await callGeminiTts(usedVoice, textChunks[i]);
+        if (!r.ok || !r.audio) {
+          chunkFailed = r;
+          console.warn(`[gemini-tts] Chunk ${i + 1}/${textChunks.length} failed`);
+          break;
+        }
+        audioChunks.push(r.audio);
+        lastMime = r.mimeType || lastMime;
+      }
+      if (chunkFailed) {
+        result = chunkFailed;
+      } else {
+        result = {
+          ok: true as const,
+          audio: concatPcmBase64(audioChunks),
+          mimeType: lastMime,
+          jsonPreview: `chunked:${textChunks.length}`,
+        };
+      }
+    }
+
+    // Attempt 2: fallback voice (Puck) if we got a 200 but no audio (only for non-chunked path)
+    if (!useChunking && result.ok && !result.audio && usedVoice !== "Puck") {
       console.warn(`[gemini-tts] No audio with voice=${usedVoice}. Retrying with Puck.`);
       usedVoice = "Puck";
       result = await callGeminiTts(usedVoice);
