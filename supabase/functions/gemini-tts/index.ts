@@ -487,6 +487,12 @@ serve(async (req) => {
         "Your pronunciation must be indistinguishable from a real Yangon native. " +
         "STRICTLY FORBIDDEN: Shan accent, Kachin accent, Chinese accent, Karen accent, Indian accent, European accent, robotic tone, overly formal tone, or any foreign phoneme bleed. " +
         "Use natural Burmese glottal stops, tones, and vowel lengths exactly as a native speaker would. " +
+        "PRONUNCIATION PRECISION (MANDATORY — DO NOT MISREAD CONSONANTS): " +
+        "  • The Burmese letter \u101E (\u201Csa.\u201D) is pronounced as a soft English /θ/ (like \u2018th\u2019 in \u2018think\u2019). " +
+        "    NEVER pronounce \u101E as \u1010 (/t/). Example: \u101E\u102d (\u2018thi\u2019, to know) must NEVER sound like \u1010\u102d (\u2018ti\u2019). " +
+        "  • Distinguish clearly: \u101E\u102d=thi, \u101E\u1030=thu, \u101E\u101D\u102C=thwa, \u101E\u1014\u103A=than. " +
+        "  • Distinguish aspirated vs unaspirated: \u1000/\u1001, \u1005/\u1006, \u1010/\u1011, \u1015/\u1016. " +
+        "  • Maintain crisp diction for every syllable, especially \u101E vs \u1010, \u1015 vs \u1016, \u101C vs \u101B. " +
         "Speak with warmth, confidence, and natural human expressiveness like a Burmese content creator or news presenter. " +
         "Match the quality of Google Producer AI's Burmese human voice — pure \u1017\u1019\u102c\u101c\u1031\u101e\u1036\u1005\u1005\u103a\u1005\u1005\u103a only, absolutely no foreign accent interference.",
       en: "CRITICAL VOICE STYLE: Speak in clear, natural, modern conversational American English with authentic native-speaker rhythm and intonation. Sound like a real native English-speaking human.",
