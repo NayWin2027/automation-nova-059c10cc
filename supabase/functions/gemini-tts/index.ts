@@ -515,10 +515,16 @@ serve(async (req) => {
       nativeStyleMap[langCode] ||
       `CRITICAL VOICE STYLE: Speak in natural, modern colloquial ${langCode.toUpperCase()} with 100% authentic native accent and pronunciation. Sound like a real native human speaker.`;
 
-    const buildRequestBody = (voice: string) => {
+    // Auto-detect emotion / niche from script content (additive, never replaces native style).
+    const emotionInstruction = detectEmotionInstruction(text, langCode);
+
+    // buildRequestBody now accepts a per-chunk text override so long-text chunking
+    // can reuse the exact same prompt structure (style, emotion, pacing) per chunk.
+    const buildRequestBody = (voice: string, chunkText: string = text) => {
       const instruction = isModernSpeed
         ? `You are a professional voice-over narrator for engaging videos.\n` +
           `${nativeStyleInstruction}\n` +
+          `${emotionInstruction}\n` +
           `Generate natural, continuous speech AUDIO for the following text.\n` +
           `CRITICAL PACING RULES (MODERN / FAST & CONTINUOUS):\n` +
           `- Speak at a FASTER pace (approximately 1.3x normal speed).\n` +
@@ -528,10 +534,15 @@ serve(async (req) => {
           `- The rhythm should feel like rapid-fire professional narration — swift, confident, and non-stop.\n` +
           `- Speak clearly but quickly, like a fast-paced documentary narrator.\n` +
           `- Natural breathing pauses are fine but keep them minimal and quick.\n` +
+          `CRITICAL QUALITY RULES (MUST HOLD FROM FIRST WORD TO LAST WORD):\n` +
+          `- Maintain IDENTICAL voice quality, clarity, volume, timbre, and pronunciation precision throughout.\n` +
+          `- DO NOT degrade, mumble, slur, speed-drift, or flatten near the end of the text.\n` +
+          `- Every consonant must remain crisp; every syllable must remain fully articulated.\n` +
           `Language (BCP-47): ${sanitizedLanguageCode}\n\n` +
-          `TEXT:\n${text}`
+          `TEXT:\n${chunkText}`
         : `You are a professional voice-over narrator for engaging videos.\n` +
           `${nativeStyleInstruction}\n` +
+          `${emotionInstruction}\n` +
           `Generate natural, continuous speech AUDIO for the following text.\n` +
           `CRITICAL PACING RULES:\n` +
           `- Speak fluently and continuously like a professional narrator or podcaster.\n` +
@@ -540,8 +551,12 @@ serve(async (req) => {
           `- Maintain a smooth, engaging flow that keeps listeners hooked.\n` +
           `- Natural micro-pauses at commas and periods are fine, but keep them brief.\n` +
           `- The overall rhythm should feel like a confident storyteller, not a slow reader.\n` +
+          `CRITICAL QUALITY RULES (MUST HOLD FROM FIRST WORD TO LAST WORD):\n` +
+          `- Maintain IDENTICAL voice quality, clarity, volume, timbre, and pronunciation precision throughout.\n` +
+          `- DO NOT degrade, mumble, slur, speed-drift, or flatten near the end of the text.\n` +
+          `- Every consonant must remain crisp; every syllable must remain fully articulated.\n` +
           `Language (BCP-47): ${sanitizedLanguageCode}\n\n` +
-          `TEXT:\n${text}`;
+          `TEXT:\n${chunkText}`;
 
       return {
         contents: [
