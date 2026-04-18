@@ -11,6 +11,172 @@ const GEMINI_TTS_API =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-tts-preview:generateContent";
 
 /**
+ * Auto-detect emotion / niche / tone from script content.
+ * Returns a natural emotion-coaching instruction line that is appended to the
+ * existing native-voice instruction. Designed to be additive only — does NOT
+ * replace existing nativeStyleInstruction (so nothing else breaks).
+ *
+ * IMPORTANT: Tone is REALISTIC and NATURAL — NEVER over-acted.
+ */
+function detectEmotionInstruction(rawText: string, langCode: string): string {
+  const text = (rawText || "").toLowerCase();
+  if (!text.trim()) return "";
+
+  // Burmese keyword groups (覆盖 most niches the user listed)
+  const groups: Array<{ name: string; patterns: RegExp[]; instruction: string }> = [
+    {
+      name: "war/military",
+      patterns: [/စစ်ရေး|စစ်ပွဲ|စစ်တပ်|လက်နက်|war|military|battle|army|weapon|combat/i],
+      instruction:
+        "TONE: Serious, grounded, authoritative news/military analyst voice. Calm, controlled, factual. NEVER dramatic or theatrical.",
+    },
+    {
+      name: "news",
+      patterns: [/သတင်း|သတင်းထောက်|ဆောင်းပါး|news|breaking|reporter|journalist|headline/i],
+      instruction:
+        "TONE: Professional broadcast news anchor / field reporter. Clear, neutral, confident. Slight authority. NO emotional exaggeration.",
+    },
+    {
+      name: "sad/grief",
+      patterns: [/ဝမ်းနည်း|အလွမ်း|ငို|သေဆုံး|လွမ်း|ကွဲ|sad|grief|cry|tears|loss|mourn|heartbreak/i],
+      instruction:
+        "TONE: Gentle, soft, sincerely sad. Slow micro-pauses. Subtle vocal weight, NEVER sobbing or theatrical. A real human quietly feeling sorrow.",
+    },
+    {
+      name: "love/romance",
+      patterns: [/အချစ်|ချစ်သူ|ရင်ခုန်|love|romance|affection|sweetheart|crush/i],
+      instruction:
+        "TONE: Warm, soft, intimate, slightly tender. Gentle breath. Realistic affection — NOT whisper-acting, NOT dramatic.",
+    },
+    {
+      name: "happy/joy",
+      patterns: [/ပျော်|ဝမ်းသာ|ရယ်|အောင်မြင်|happy|joy|cheer|smile|win|celebrate/i],
+      instruction:
+        "TONE: Bright, naturally smiling voice. Light energy. Subtle warmth. NEVER over-excited or fake-cheerful.",
+    },
+    {
+      name: "horror/fear",
+      patterns: [/သရဲ|တစ္ဆေ|ကြောက်|ထိတ်လန့်|လန့်|ghost|horror|scary|haunted|fear|nightmare/i],
+      instruction:
+        "TONE: Hushed, tense, low-volume narration. Slight tremor. Slow careful pacing. Realistic suspense — NOT cartoon scary.",
+    },
+    {
+      name: "anger",
+      patterns: [/ဒေါသ|ဒေါသထွက်|စိတ်ဆိုး|ဆဲ|anger|rage|furious|mad|angry|outraged/i],
+      instruction:
+        "TONE: Firm, controlled anger. Tightened jaw, sharper consonants. Restrained intensity. NEVER shouting or hysterical.",
+    },
+    {
+      name: "adult/18+",
+      patterns: [/18\+|အရွယ်ရောက်|adult|nsfw|sensual|seductive/i],
+      instruction:
+        "TONE: Low, breathy, intimate adult narration. Slow, smooth, suggestive — but tasteful and realistic, never cartoonish.",
+    },
+    {
+      name: "action",
+      patterns: [/အက်ရှင်|လိုက်|ပြေး|ရိုက်|action|chase|fight|explosion|combat|adrenaline/i],
+      instruction:
+        "TONE: Punchy, energetic, fast-paced. Strong consonants, forward-leaning rhythm. Confident action narrator. Realistic — not screaming.",
+    },
+    {
+      name: "food",
+      patterns: [/အစားအသောက်|ချက်ပြုတ်|ဟင်း|food|cooking|recipe|delicious|tasty|chef/i],
+      instruction:
+        "TONE: Warm, inviting, slightly mouth-watering. Friendly food vlogger. Natural enthusiasm, NOT exaggerated.",
+    },
+    {
+      name: "travel",
+      patterns: [/ခရီး|လေယာဉ်|နိုင်ငံခြား|travel|trip|journey|destination|tourist|vlog/i],
+      instruction:
+        "TONE: Friendly, curious, conversational travel-vlogger. Light wonder, easy pacing. Real human storytelling.",
+    },
+    {
+      name: "movie recap",
+      patterns: [/ရုပ်ရှင်|ဇာတ်လမ်း|ဇာတ်ကား|recap|movie|film|cinema|spoiler|scene/i],
+      instruction:
+        "TONE: Engaging cinematic storyteller. Confident pacing. Subtle dramatic emphasis only at key moments. NEVER over-narrate every line.",
+    },
+    {
+      name: "tech/AI",
+      patterns: [/နည်းပညာ|ai|tech|software|gadget|app|computer|programming|ml|llm/i],
+      instruction:
+        "TONE: Clear, modern, knowledgeable tech presenter. Calm confidence. Crisp pronunciation. No excitement spikes.",
+    },
+    {
+      name: "sports",
+      patterns: [/အားကစား|ဘောလုံး|ပွဲ|sport|football|soccer|match|player|league|championship/i],
+      instruction:
+        "TONE: Energetic but controlled sports commentator. Forward energy at action beats, calm during analysis. Realistic broadcast feel.",
+    },
+    {
+      name: "science",
+      patterns: [/သိပ္ပံ|ဓာတ်ခွဲ|ဥပဒေသ|science|physics|biology|chemistry|experiment|discovery/i],
+      instruction:
+        "TONE: Curious, intelligent science narrator (Veritasium/National Geographic style). Calm wonder, natural pacing.",
+    },
+    {
+      name: "psychology",
+      patterns: [/စိတ်ပညာ|စိတ်ကျန်းမာ|psychology|mental|mindset|behavior|cognitive|emotion/i],
+      instruction:
+        "TONE: Warm, thoughtful, reassuring. Soft authority like a compassionate counselor. Slow, considered pacing.",
+    },
+    {
+      name: "motivation",
+      patterns: [/စိတ်ဓာတ်|အားပေး|ကြိုးစား|motivation|inspire|success|mindset|achieve|goal/i],
+      instruction:
+        "TONE: Sincere, grounded, uplifting. Calm conviction — NOT shouty motivational speaker style. Real human encouragement.",
+    },
+    {
+      name: "health",
+      patterns: [/ကျန်းမာရေး|ဆေး|ရောဂါ|health|medical|doctor|fitness|wellness|nutrition/i],
+      instruction:
+        "TONE: Trustworthy, calm health professional. Clear pronunciation, gentle authority. Reassuring pacing.",
+    },
+    {
+      name: "knowledge sharing",
+      patterns: [/ဗဟုသုတ|သိစရာ|knowledge|learn|fact|education|tutorial|explainer/i],
+      instruction:
+        "TONE: Friendly knowledgeable teacher. Conversational clarity. Natural curiosity. Engaging without being theatrical.",
+    },
+    {
+      name: "entertainment",
+      patterns: [/ဖျော်ဖြေ|အောက်စိုက်|entertainment|fun|comedy|gossip|celeb|drama/i],
+      instruction:
+        "TONE: Light, playful, conversational entertainment host. Natural smile in voice. Easygoing rhythm.",
+    },
+    {
+      name: "audiobook",
+      patterns: [/စာအုပ်|ဝတ္ထု|နာ‌ေရးတ|audiobook|chapter|novel|narration|story/i],
+      instruction:
+        "TONE: Refined audiobook narrator. Smooth, immersive, character-aware pacing. Emotion through subtle modulation, NEVER overacted.",
+    },
+    {
+      name: "production",
+      patterns: [/production|filmmaking|director|cinematography|editing|behind the scenes/i],
+      instruction:
+        "TONE: Documentary/behind-the-scenes voice. Professional, observant, slightly intimate. Confident but grounded.",
+    },
+  ];
+
+  for (const g of groups) {
+    if (g.patterns.some((re) => re.test(text))) {
+      return (
+        `EMOTION & NICHE STYLE (auto-detected: ${g.name}): ${g.instruction} ` +
+        `Stay 100% realistic and human. NEVER over-emote. Natural breathing, natural micro-pauses, ` +
+        `consistent voice quality from start to finish — no robotic flattening, no quality degradation over time.`
+      );
+    }
+  }
+
+  // Generic fallback — still enforces realism + anti-degradation
+  return (
+    "EMOTION & NICHE STYLE: Match the emotional tone of the script naturally and subtly, " +
+    "exactly as a real professional human narrator would. Keep emotion REALISTIC, NEVER exaggerated. " +
+    "Maintain consistent voice quality, clarity, and pronunciation from beginning to end."
+  );
+}
+
+/**
  * Convert raw PCM (Linear16) base64 data to WAV base64 with proper headers.
  * Gemini TTS returns raw PCM which browsers cannot play directly.
  */
