@@ -577,7 +577,7 @@ serve(async (req) => {
       };
     };
 
-    const callGeminiTts = async (voice: string) => {
+    const callGeminiTts = async (voice: string, chunkText: string = text) => {
       // Try up to 3 keys on 429 (only for backend keys, not user's own key)
       const maxAttempts = isUserKey ? 1 : 3;
       let lastStatus = 0;
@@ -588,7 +588,7 @@ serve(async (req) => {
         const resp = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(buildRequestBody(voice)),
+          body: JSON.stringify(buildRequestBody(voice, chunkText)),
         });
 
         const bodyText = await resp.text();
@@ -635,12 +635,123 @@ serve(async (req) => {
       return { ok: false as const, status: lastStatus || 429, bodyText: lastBodyText };
     };
 
-    // Attempt 1: requested voice
-    let usedVoice = sanitizedVoiceName;
-    let result = await callGeminiTts(usedVoice);
+    // ===== LONG-TEXT AUTO-CHUNKING (anti-quality-degradation) =====
+    // Gemini TTS quality drops noticeably after ~1 minute of generated audio
+    // (≈ 900-1100 chars of Burmese, or ~250-300 words). To keep voice quality
+    // CONSISTENT from start to finish, split long text at sentence boundaries
+    // and concatenate the resulting raw PCM chunks. WAV conversion still runs
+    // client-side (unchanged response contract: audio + mimeType + sampleRate).
+    const CHUNK_CHAR_THRESHOLD = 900; // safe budget per single TTS call
+    const splitTextIntoChunks = (full: string, maxChars: number): string[] => {
+      const clean = (full || "").trim();
+      if (clean.length <= maxChars) return [clean];
 
-    // Attempt 2: fallback voice (Puck) if we got a 200 but no audio
-    if (result.ok && !result.audio && usedVoice !== "Puck") {
+      // Split on sentence boundaries: Burmese ။ ၊  + Latin . ! ? + newlines.
+      // Keep the delimiter glued to the preceding sentence to preserve prosody cues.
+      const parts = clean.split(/(?<=[။၊\.\!\?\n])\s+/);
+      const chunks: string[] = [];
+      let buf = "";
+      for (const p of parts) {
+        if (!p) continue;
+        if ((buf + " " + p).trim().length > maxChars && buf) {
+          chunks.push(buf.trim());
+          buf = p;
+        } else {
+          buf = buf ? `${buf} ${p}` : p;
+        }
+      }
+      if (buf.trim()) chunks.push(buf.trim());
+
+      // Safety: if any single chunk is still too big (no sentence breaks at all),
+      // hard-split on whitespace as a last resort.
+      const final: string[] = [];
+      for (const c of chunks) {
+        if (c.length <= maxChars) {
+          final.push(c);
+          continue;
+        }
+        const words = c.split(/\s+/);
+        let b = "";
+        for (const w of words) {
+          if ((b + " " + w).trim().length > maxChars && b) {
+            final.push(b.trim());
+            b = w;
+          } else {
+            b = b ? `${b} ${w}` : w;
+          }
+        }
+        if (b.trim()) final.push(b.trim());
+      }
+      return final.filter((c) => c.length > 0);
+    };
+
+    // Concatenate raw PCM base64 chunks into one base64 string (no header — still raw PCM).
+    const concatPcmBase64 = (chunks: string[]): string => {
+      if (chunks.length === 0) return "";
+      if (chunks.length === 1) return chunks[0];
+      // Decode each chunk, concatenate raw bytes, re-encode in safe-size groups.
+      let totalLen = 0;
+      const buffers: Uint8Array[] = chunks.map((b64) => {
+        const arr = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+        totalLen += arr.length;
+        return arr;
+      });
+      const merged = new Uint8Array(totalLen);
+      let offset = 0;
+      for (const b of buffers) {
+        merged.set(b, offset);
+        offset += b.length;
+      }
+      let binary = "";
+      const step = 8192;
+      for (let i = 0; i < merged.length; i += step) {
+        binary += String.fromCharCode(...merged.subarray(i, Math.min(i + step, merged.length)));
+      }
+      return btoa(binary);
+    };
+
+    const textChunks = splitTextIntoChunks(text, CHUNK_CHAR_THRESHOLD);
+    const useChunking = textChunks.length > 1;
+    if (useChunking) {
+      console.log(
+        `[gemini-tts] Long text detected (${text.length} chars) → splitting into ${textChunks.length} chunks for consistent quality`,
+      );
+    }
+
+    // Attempt 1: requested voice (single call OR chunked sequential calls)
+    let usedVoice = sanitizedVoiceName;
+    let result: Awaited<ReturnType<typeof callGeminiTts>>;
+
+    if (!useChunking) {
+      result = await callGeminiTts(usedVoice);
+    } else {
+      const audioChunks: string[] = [];
+      let lastMime = "audio/pcm";
+      let chunkFailed: Awaited<ReturnType<typeof callGeminiTts>> | null = null;
+      for (let i = 0; i < textChunks.length; i++) {
+        const r = await callGeminiTts(usedVoice, textChunks[i]);
+        if (!r.ok || !r.audio) {
+          chunkFailed = r;
+          console.warn(`[gemini-tts] Chunk ${i + 1}/${textChunks.length} failed`);
+          break;
+        }
+        audioChunks.push(r.audio);
+        lastMime = r.mimeType || lastMime;
+      }
+      if (chunkFailed) {
+        result = chunkFailed;
+      } else {
+        result = {
+          ok: true as const,
+          audio: concatPcmBase64(audioChunks),
+          mimeType: lastMime,
+          jsonPreview: `chunked:${textChunks.length}`,
+        };
+      }
+    }
+
+    // Attempt 2: fallback voice (Puck) if we got a 200 but no audio (only for non-chunked path)
+    if (!useChunking && result.ok && !result.audio && usedVoice !== "Puck") {
       console.warn(`[gemini-tts] No audio with voice=${usedVoice}. Retrying with Puck.`);
       usedVoice = "Puck";
       result = await callGeminiTts(usedVoice);
