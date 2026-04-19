@@ -1358,8 +1358,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
       // ── WARMUP: prime both draw and encode canvas GPU pipeline ──
       await new Promise<void>((resolve) => {
-        videoEl.currentTime = 0;
-        audioEl.currentTime = 0;
         let warmupFrames = 0;
         const warmupCtx = canvas.getContext("2d", { alpha: false })!;
         const doWarmup = () => {
@@ -2235,17 +2233,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         recapAnimFrameRef.current = requestAnimationFrame(syncAndDraw);
       };
       // SURGICAL FIX: Ensure perfect audio start by playing ONLY after async recorder setup completes (warmup + logo load)
-      if (audioRef.current) audioRef.current.play().catch(console.error);
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+        audioRef.current.play().catch(console.error);
+      }
       if (videoRef.current) {
-        videoRef.current.play().catch((err) => {
-          // SURGICAL IOS FIX: Safely bypass the WebKit muted autoplay bug.
-          // If iOS drops the gesture token due to heavy network awaits and permanently freezes the decoder,
-          // reloading the explicitly muted video seamlessly restarts the hardware pipeline.
-          console.warn("[RECORDING] iOS Video freeze detected, applying safe hardware reload...", err);
-          videoRef.current!.muted = true;
-          videoRef.current!.load();
-          videoRef.current!.play().catch(console.error);
-        });
+        videoRef.current.currentTime = 0;
+        videoRef.current.play().catch(console.error);
       }
 
       recapAnimFrameRef.current = requestAnimationFrame(syncAndDraw);
@@ -2274,8 +2268,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       };
 
       a.addEventListener("ended", onEnded);
-      a.currentTime = 0;
-      v.currentTime = 0;
 
       // ── FIX: Wait for audio to be fully buffered before playing to prevent start clipping ──
       const startPlayback = () => {
