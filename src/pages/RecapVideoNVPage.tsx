@@ -1378,7 +1378,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       setIsRendering(true);
       isRenderingRef.current = true;
       recorder.start(250);
-
       // Pre-load logo
       let logoImg: HTMLImageElement | null = null;
       if (logo.url) {
@@ -2237,7 +2236,17 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       };
       // SURGICAL FIX: Ensure perfect audio start by playing ONLY after async recorder setup completes (warmup + logo load)
       if (audioRef.current) audioRef.current.play().catch(console.error);
-      if (videoRef.current) videoRef.current.play().catch(console.error);
+      if (videoRef.current) {
+        videoRef.current.play().catch((err) => {
+          // SURGICAL IOS FIX: Safely bypass the WebKit muted autoplay bug.
+          // If iOS drops the gesture token due to heavy network awaits and permanently freezes the decoder,
+          // reloading the explicitly muted video seamlessly restarts the hardware pipeline.
+          console.warn("[RECORDING] iOS Video freeze detected, applying safe hardware reload...", err);
+          videoRef.current!.muted = true;
+          videoRef.current!.load();
+          videoRef.current!.play().catch(console.error);
+        });
+      }
 
       recapAnimFrameRef.current = requestAnimationFrame(syncAndDraw);
     };
