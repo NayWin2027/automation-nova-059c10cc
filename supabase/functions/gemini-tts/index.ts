@@ -286,33 +286,94 @@ function splitTextIntoChunks(text: string, targetSize = 1800): string[] {
 }
 
 /**
- * Memory-safe PCM base64 concatenation using Uint8Array + windowed btoa.
- * Avoids spread-operator stack overflow and per-char btoa CPU spikes.
+ * Memory-safe PCM base64 concatenation — streaming windowed encode.
+ *
+ * Avoids holding multiple full-size copies of the audio in memory:
+ *  - decodes each input base64 chunk into a single Uint8Array (one at a time),
+ *  - feeds bytes through a 3-byte-aligned carry buffer,
+ *  - encodes to base64 in fixed 48KB windows,
+ *  - appends to an output array of base64 segments and joins once at the end.
+ *
+ * Peak memory ≈ one decoded chunk + small (≤3 byte) carry + 48KB window string,
+ * instead of (sum-of-all-chunks decoded buffer) + (sum-of-all binary string) + base64.
  */
 function concatPcmBase64(pcmBase64Chunks: string[]): string {
-  const buffers = pcmBase64Chunks.map((b64) => {
-    const bin = atob(b64);
-    const buf = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
-    return buf;
-  });
-  const totalLen = buffers.reduce((s, b) => s + b.length, 0);
-  const merged = new Uint8Array(totalLen);
-  let offset = 0;
-  for (const b of buffers) {
-    merged.set(b, offset);
-    offset += b.length;
-  }
-  // Encode in 32KB windows to keep CPU + memory bounded
-  let binary = "";
-  const windowSize = 32768;
-  for (let i = 0; i < merged.length; i += windowSize) {
-    const slice = merged.subarray(i, Math.min(i + windowSize, merged.length));
+  const out: string[] = [];
+  const WINDOW = 48 * 1024; // bytes per encode pass (must be multiple of 3)
+  let carry: Uint8Array | null = null;
+
+  const encodeBytes = (bytes: Uint8Array): string => {
     let s = "";
-    for (let j = 0; j < slice.length; j++) s += String.fromCharCode(slice[j]);
-    binary += s;
+    // Build the binary string in small sub-windows to avoid one huge string concat
+    const SUB = 8192;
+    for (let i = 0; i < bytes.length; i += SUB) {
+      const end = Math.min(i + SUB, bytes.length);
+      let part = "";
+      for (let j = i; j < end; j++) part += String.fromCharCode(bytes[j]);
+      s += part;
+    }
+    return btoa(s);
+  };
+
+  for (let c = 0; c < pcmBase64Chunks.length; c++) {
+    const b64 = pcmBase64Chunks[c];
+    if (!b64) continue;
+
+    // Decode this chunk only
+    const bin = atob(b64);
+    const decoded = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) decoded[i] = bin.charCodeAt(i);
+
+    // Combine carry (≤2 bytes) with decoded chunk via a view sequence
+    let cursor = 0;
+    let buf: Uint8Array;
+    if (carry && carry.length > 0) {
+      buf = new Uint8Array(carry.length + decoded.length);
+      buf.set(carry, 0);
+      buf.set(decoded, carry.length);
+      carry = null;
+    } else {
+      buf = decoded;
+    }
+
+    // Emit full 3-byte-aligned WINDOW slices; keep tail (<WINDOW) for next round
+    const isLast = c === pcmBase64Chunks.length - 1;
+    const usableEnd = isLast
+      ? buf.length
+      : buf.length - (buf.length % 3); // align so no padding mid-stream
+
+    while (cursor + WINDOW <= usableEnd) {
+      const slice = buf.subarray(cursor, cursor + WINDOW);
+      out.push(encodeBytes(slice));
+      cursor += WINDOW;
+    }
+
+    // Encode whatever remains that's still 3-byte aligned (mid-stream)
+    if (!isLast) {
+      const remaining = usableEnd - cursor;
+      if (remaining > 0) {
+        out.push(encodeBytes(buf.subarray(cursor, usableEnd)));
+        cursor = usableEnd;
+      }
+      // Save unaligned tail (0–2 bytes) as carry for next chunk
+      if (cursor < buf.length) {
+        carry = buf.slice(cursor);
+      }
+    } else {
+      // Final chunk: encode the remainder (with proper base64 padding)
+      if (cursor < buf.length) {
+        out.push(encodeBytes(buf.subarray(cursor, buf.length)));
+      }
+    }
   }
-  return btoa(binary);
+
+  // Safety: flush any leftover carry (shouldn't happen because last chunk handled above)
+  if (carry && carry.length > 0) {
+    out.push(encodeBytes(carry));
+    carry = null;
+  }
+
+  return out.join("");
 }
 
 serve(async (req) => {
