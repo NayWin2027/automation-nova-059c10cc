@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Upload, Scissors, Download, CheckCircle, Loader2, Film } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,11 @@ import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
 
 const DURATION_OPTIONS = [1, 2, 3, 4, 5, 6, 7];
-const FFMPEG_LOAD_TIMEOUT_MS = 45000;
+const FFMPEG_LOAD_TIMEOUT_MS = 60000;
+const FFMPEG_CDN_BASE_URLS = [
+  "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm",
+  "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm",
+];
 
 interface CutPart {
   index: number;
@@ -25,6 +29,7 @@ const NovaCutVideoPage = () => {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const ffmpegRef = useRef<FFmpeg | null>(null);
+  const ffmpegLoadPromiseRef = useRef<Promise<FFmpeg> | null>(null);
   const execProgressBaseRef = useRef(20);
   const execProgressSpanRef = useRef(70);
 
@@ -74,36 +79,60 @@ const NovaCutVideoPage = () => {
     });
   };
 
-  const loadFFmpeg = async (): Promise<FFmpeg> => {
+  const loadFFmpeg = useCallback(async (): Promise<FFmpeg> => {
     if (ffmpegRef.current) return ffmpegRef.current;
+    if (ffmpegLoadPromiseRef.current) return ffmpegLoadPromiseRef.current;
 
-    const ffmpeg = new FFmpeg();
-    ffmpeg.on("log", ({ message }) => console.log("[FFMPEG-NovaCut]", message));
-    ffmpeg.on("progress", ({ progress }) => {
-      const base = execProgressBaseRef.current;
-      const span = execProgressSpanRef.current;
-      setProgress(Math.max(base, Math.min(95, Math.round(base + progress * span))));
+    ffmpegLoadPromiseRef.current = (async () => {
+      let lastError: unknown = null;
+
+      for (const baseURL of FFMPEG_CDN_BASE_URLS) {
+        try {
+          const ffmpeg = new FFmpeg();
+          ffmpeg.on("log", ({ message }) => console.log("[FFMPEG-NovaCut]", message));
+          ffmpeg.on("progress", ({ progress }) => {
+            const base = execProgressBaseRef.current;
+            const span = execProgressSpanRef.current;
+            setProgress(Math.max(base, Math.min(95, Math.round(base + progress * span))));
+          });
+
+          await Promise.race([
+            (async () => {
+              await ffmpeg.load({
+                coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+                wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+              });
+            })(),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error(`FFmpeg load timeout: ${baseURL}`)), FFMPEG_LOAD_TIMEOUT_MS),
+            ),
+          ]);
+
+          ffmpegRef.current = ffmpeg;
+          return ffmpeg;
+        } catch (error) {
+          lastError = error;
+          console.warn("[FFMPEG-NovaCut] core load failed, trying next CDN", baseURL, error);
+        }
+      }
+
+      throw lastError ?? new Error("FFmpeg core load failed");
+    })();
+
+    try {
+      return await ffmpegLoadPromiseRef.current;
+    } catch (error) {
+      ffmpegLoadPromiseRef.current = null;
+      throw new Error("FFmpeg core download မပြီးသေးပါ။ Network ကောင်းကောင်းနဲ့ ပြန်စမ်းပါ");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!videoFile) return;
+    void loadFFmpeg().catch((error) => {
+      console.warn("[FFMPEG-NovaCut] preload failed", error);
     });
-
-    const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm";
-
-    const loadWithTimeout = Promise.race([
-      (async () => {
-        await ffmpeg.load({
-          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
-          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
-        });
-        return ffmpeg;
-      })(),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("FFmpeg load timeout")), FFMPEG_LOAD_TIMEOUT_MS),
-      ),
-    ]);
-
-    const loaded = await loadWithTimeout;
-    ffmpegRef.current = loaded;
-    return loaded;
-  };
+  }, [videoFile, loadFFmpeg]);
 
   const formatDuration = (seconds: number): string => {
     const m = Math.floor(seconds / 60);
