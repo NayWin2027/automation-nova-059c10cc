@@ -731,11 +731,17 @@ serve(async (req) => {
     if (!useChunking) {
       result = await callGeminiTts(usedVoice);
     } else {
+      // PARALLEL chunked TTS: fire all chunks concurrently to stay under the
+      // 150s edge idle timeout on long scripts. Order is preserved by index.
+      // Response shape (audio + mimeType) unchanged.
+      const results = await Promise.all(
+        textChunks.map((chunkText) => callGeminiTts(usedVoice, chunkText)),
+      );
+      let chunkFailed: Awaited<ReturnType<typeof callGeminiTts>> | null = null;
       const audioChunks: string[] = [];
       let lastMime = "audio/pcm";
-      let chunkFailed: Awaited<ReturnType<typeof callGeminiTts>> | null = null;
-      for (let i = 0; i < textChunks.length; i++) {
-        const r = await callGeminiTts(usedVoice, textChunks[i]);
+      for (let i = 0; i < results.length; i++) {
+        const r = results[i];
         if (!r.ok || !r.audio) {
           chunkFailed = r;
           console.warn(`[gemini-tts] Chunk ${i + 1}/${textChunks.length} failed`);
