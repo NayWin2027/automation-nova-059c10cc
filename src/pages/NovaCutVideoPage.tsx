@@ -341,7 +341,7 @@ const NovaCutVideoPage = () => {
                       File Size ချုံ့မယ် (~50-70%)
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      720p HD · ရုပ်ထွက် quality မကျ · ဖြတ်ချိန် ပိုကြာ
+                      480p · ultrafast encode · ရုပ်ထွက် ကောင်း · 50-70% ချုံ့
                     </p>
                   </div>
                   <div
