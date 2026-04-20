@@ -13,7 +13,7 @@ const MAX_TEXT_LENGTH = 10000; // 10KB max for TTS text
 
 // Gemini TTS endpoint
 const GEMINI_TTS_API =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-tts-preview:generateContent";
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent";
 
 /**
  * Convert raw PCM (Linear16) base64 data to WAV base64 with proper headers.
