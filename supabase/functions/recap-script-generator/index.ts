@@ -466,7 +466,7 @@ ${transcript}
     console.log(`[recap-script-generator] Sending to Gemini (${fileObj ? 'file mode' : 'transcript mode'})...`);
 
     // Retry logic for Gemini API (handles 429 rate limits & 503 overloaded)
-    const MAX_RETRIES = 4;
+    const MAX_RETRIES = 2;
     let response: Response | null = null;
     let lastError = "";
 
