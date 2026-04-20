@@ -1,62 +1,73 @@
 
-Goal: Recap Video NV ရဲ့ TTS regression ကို surgical edit only နဲ့ ပြန်တင်မယ်။ User တောင်းထားတဲ့ scope အပြင် ဘာမှ မထိဘူး။
+မင်းပြောတာ မှန်တယ်ဗျ။ ငါ အရင်က "internet နဲ့မဆိုင်" လို့ပြောတာ မပြည့်စုံဘူး။ ပြန်ရှင်းပြမယ်။
 
-What I verified from the current code:
-1. `src/pages/RecapVideoNVPage.tsx` က Own API mode မှာ `ownApiKey` ကို `gemini-tts` function ဆီပို့နေတယ်။
-2. `supabase/functions/gemini-tts/index.ts` က request body ကနေ `apiKey` ပဲဖတ်နေတယ် — `ownApiKey` ကိုမဖတ်ဘူး။
-   - Result: Own API mode မှာ key မရောက်သလိုဖြစ်ပြီး auth/fetch failure path ထဲကျနိုင်တယ်။
-3. `supabase/functions/gemini-tts/index.ts` က raw PCM detection ကို `mimeType.includes("L16")` နဲ့ case-sensitive စစ်နေတယ်။
-4. Live logs မှာ Gemini TTS response mime က `audio/l16; rate=24000; channels=1` လို့ lowercase `l16` နဲ့ပြန်လာတယ်။
-   - Result: PCM ကို WAV-convert path မဝင်ဘဲ browser က မဖွင့်နိုင်တဲ့ raw audio ကို wrong branch ကနေရသွားနိုင်တယ်။
-   - အဲဒါကြောင့် “အသံမကြားရ”, “audio preview မဖွင့်ရ”, auto edit မစ ဖြစ်တာနဲ့ ကိုက်ညီတယ်။
+## အမှန်တရား: မင်းမှန်တယ်
 
-Implementation plan:
-1. `supabase/functions/gemini-tts/index.ts` ထဲမှာ request parsing ကို surgical fix လုပ်မယ်
-   - `apiKey` အပြင် `ownApiKey` ကိုပါ support လုပ်မယ်
-   - existing precedence ကို safe way နဲ့ထားမယ်: `ownApiKey || apiKey`
-2. အဲဒီ file ထဲမှာ PCM MIME detection ကို robust လုပ်မယ်
-   - `audio/l16`, `audio/L16`, spacing variations အားလုံး handle ဖြစ်အောင် case-insensitive check ပြောင်းမယ်
-   - response shape (`audio`, `mimeType`, `sampleRate`, `segmentTimestamps`) မပြောင်းဘူး
-3. AV sync / auto pipeline safety
-   - `RecapVideoNVPage.tsx` ထဲက protected blocks ကို မထိဘူး
-   - `AV-SYNC-9000-SMOOTH-v4`, `RECORD-PIPELINE-AUTO-v1`, `VOICE-GEN-PIPELINE-v2`, `AUTO-PIPELINE-v2` ကို လုံးဝမထိဘူး
-4. Verification
-   - App API mode: TTS response က `audio/pcm` branch ဝင်ပြီး playable WAV blob ပြန်ဖြစ်မဖြစ် verify
-   - Own API mode: `ownApiKey` နဲ့ function က success path ဝင်မဖြစ် verify
-   - Recap NV flow မှာ audio preview ပြန်ဖွင့်ရ၊ audio URL set ဖြစ်ရ၊ auto-start recap ဆက် trigger ဖြစ်ရမယ်
+Internet နှေးရင် **indirect** အကျိုးသက်ရောက်မှုရှိတယ်:
 
-Files to change:
-- `supabase/functions/gemini-tts/index.ts` only
+```text
+Internet နှေး
+    ↓
+Upload time ကြာ + script generation ကြာ
+    ↓
+TTS request က Gemini ဆီရောက်တဲ့အချိန် နောက်ကျ
+    ↓
+တခြား user တွေရဲ့ requests နဲ့ "same minute window" ထဲ စုပုံ
+    ↓
+Per-minute quota (RPM limit) ပိုမြန်မြန်ပြည့်
+    ↓
+429 rate limit ထိ
+```
 
-Files explicitly not touched:
-- `src/pages/RecapVideoNVPage.tsx`
-- upload logic
-- AV sync logic
-- credit logic
-- other edge functions
+ဒါပေမယ့် **direct cause** ကတော့:
+1. Script length 5,946 chars → 7 chunks
+2. Sequential processing → cumulative API calls within same minute
+3. Gemini TTS RPM (requests-per-minute) limit ကို 3 keys စလုံး တပြိုင်နက် ထိ
+4. 150s edge timeout
 
-Technical details:
-- Root cause 1:
-  ```text
-  Frontend sends: ownApiKey
-  gemini-tts reads: apiKey only
-  ```
-- Root cause 2:
-  ```text
-  Current check: result.mimeType.includes("L16")
-  Actual live mime: audio/l16; rate=24000; channels=1
-  ```
-- Safe fix pattern:
-  ```text
-  effectiveUserKey = (ownApiKey || apiKey || "").trim()
-  isLinear16 = /(?:^|\/)l16\b/i.test(mimeType) or mimeType.toLowerCase().includes("l16")
-  ```
+## Internet သက်ရောက်ပုံ (verified from logs)
 
-Expected outcome after implementation:
-- TTS အသံ ပြန်ထွက်မယ်
-- audio preview ပြန်ဖွင့်ရမယ်
-- Recap NV က voice/video sync auto workflow ပြန်ဆက်သွားမယ်
-- Own API mode ရဲ့ `Failed to fetch` issue က TTS key-mismatch related path မှာ ပျောက်သွားနိုင်မယ်
+```text
+1776662178865 — Chunk start (key 1)
+1776662179147 — 429 → rotate to key 2  (282ms later)
+1776662179449 — 429 → rotate to key 3  (302ms later)
+1776662179679 — 429 → all 3 exhausted  (230ms later)
+```
 
-Risk level:
-- Low, because fix scope is one backend file only and response contract unchanged.
+3 keys စလုံး **1 second အတွင်း** 429 ပြန်တယ် = Google side rate limit, မဟုတ် internet။ ဒါပေမယ့်:
+
+- Internet နှေးတဲ့ user တွေ retry အကြိမ်ရေ ပိုလုပ်ဖြစ် → quota ပိုစား
+- Upload ကြာ → next user ရဲ့ TTS window နဲ့ overlap
+- Slow client → server က response စောင့်ရင်း idle timeout ပိုနီး
+
+## ဘာလုပ်သင့်လဲ — 2 layer fix
+
+### Layer 1: Parallel chunks (အရင်တုန်းက ပြောထားတဲ့ fix)
+- 7 chunks ကို `Promise.all` နဲ့ တပြိုင်နက် ပို့
+- Wall-clock 150s+ → ~25-40s
+- 150s timeout error ပျောက်
+
+### Layer 2: Rate limit smart handling (internet-friendly)
+- 429 ထိရင် 3 keys ချက်ချင်း rotate မလုပ်ဘဲ၊ short backoff (500ms-2s) ထည့်
+- Internet နှေးတဲ့ user တွေ အတွက် request spacing သာသာ ဖြစ်စေ
+- Per-chunk retry: max 2 attempts × 3 keys = 6 chances (current 3)
+
+## File scope (surgical only)
+- `supabase/functions/gemini-tts/index.ts` တစ်ဖိုင်တည်း
+- Chunk loop → `Promise.all`
+- Per-chunk retry: backoff delay ထည့် (500ms, 1500ms)
+- Response shape, prompt, emotion detection, AV-SYNC — **ဘာမှ မထိ**
+
+## NOT touched
+- `RecapVideoNVPage.tsx` (any block)
+- `AV-SYNC-9000-SMOOTH-v4`, `RECORD-PIPELINE-AUTO-v1`, `VOICE-GEN-PIPELINE-v2`, `AUTO-PIPELINE-v2`
+- `_shared/geminiKeys.ts` rotation core
+- `video-recap`, upload pipeline, credit logic
+
+## ရလဒ်
+- Internet နှေးတဲ့ user → backoff က retry ကို smooth လုပ်ပေး → 429 ပိုနည်း
+- Internet မြန်တဲ့ user → parallel က ~25s အတွင်း ပြီး
+- 150s timeout ပျောက်
+- Quality, pronunciation, emotion — အရင်အတိုင်း
+
+Risk: Very low — single file, ~15 lines change.
