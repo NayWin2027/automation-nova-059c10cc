@@ -47,11 +47,54 @@ function pcmToWavBase64(pcmBase64: string, sampleRate = 24000, numChannels = 1, 
   view.setUint32(40, dataLength, true);
   wav.set(raw, headerSize);
 
-  // Encode to base64 in chunks to avoid stack overflow
+// Encode to base64 in chunks to avoid stack overflow
   let binary = "";
   const chunkSize = 8192;
   for (let i = 0; i < wav.length; i += chunkSize) {
     binary += String.fromCharCode(...wav.subarray(i, Math.min(i + chunkSize, wav.length)));
+  }
+  return btoa(binary);
+}
+
+/**
+ * Split text into chunks at sentence boundaries (~maxChars each).
+ * Used to parallelize long-text TTS to avoid edge function 150s idle timeout.
+ */
+function splitTextIntoChunks(text: string, maxChars = 900): string[] {
+  if (!text || text.length <= maxChars) return [text];
+  // Split on sentence terminators (Burmese ။, ASCII . ! ?, CJK 。！？) keeping the terminator.
+  const sentences = text.match(/[^။.!?。！？\n]+[။.!?。！？\n]?/g) || [text];
+  const chunks: string[] = [];
+  let current = "";
+  for (const s of sentences) {
+    if ((current + s).length > maxChars && current) {
+      chunks.push(current.trim());
+      current = s;
+    } else {
+      current += s;
+    }
+  }
+  if (current.trim()) chunks.push(current.trim());
+  return chunks.filter(Boolean);
+}
+
+/**
+ * Concatenate multiple raw PCM base64 strings into one base64 string.
+ * Safe for large buffers — decodes per chunk and re-encodes via 8KB windows.
+ */
+function concatPcmBase64(pcmBase64Chunks: string[]): string {
+  const buffers = pcmBase64Chunks.map((b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
+  const total = buffers.reduce((sum, b) => sum + b.length, 0);
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const b of buffers) {
+    merged.set(b, offset);
+    offset += b.length;
+  }
+  let binary = "";
+  const w = 8192;
+  for (let i = 0; i < merged.length; i += w) {
+    binary += String.fromCharCode(...merged.subarray(i, Math.min(i + w, merged.length)));
   }
   return btoa(binary);
 }
