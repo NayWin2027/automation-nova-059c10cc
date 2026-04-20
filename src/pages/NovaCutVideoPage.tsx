@@ -158,16 +158,18 @@ const NovaCutVideoPage = () => {
               "-ss", startSec.toString(),
               "-i", "input.mp4",
               "-t", thisDuration.toString(),
-              "-vf", "scale='min(854,iw)':'-2'",
+              "-vf", "scale='min(640,iw)':'-2',fps=24",
               "-c:v", "libx264",
               "-preset", "ultrafast",
-              "-tune", "fastdecode",
-              "-crf", "26",
-              "-g", "60",
-              "-x264-params", "ref=1:bframes=0:rc-lookahead=0:me=dia:subme=1:trellis=0:weightp=0:8x8dct=0:mixed-refs=0:fast-pskip=1:cabac=0",
+              "-tune", "fastdecode,zerolatency",
+              "-crf", "30",
+              "-g", "48",
+              "-threads", "0",
+              "-x264-params", "ref=1:bframes=0:rc-lookahead=0:me=dia:subme=0:trellis=0:weightp=0:8x8dct=0:mixed-refs=0:fast-pskip=1:cabac=0:no-deblock=1:aq-mode=0",
               "-c:a", "aac",
-              "-b:a", "96k",
-              "-ac", "2",
+              "-b:a", "64k",
+              "-ac", "1",
+              "-ar", "44100",
               "-movflags", "+faststart",
               outputName,
             ]
@@ -338,10 +340,10 @@ const NovaCutVideoPage = () => {
                 >
                   <div className="text-left">
                     <p className="text-sm font-semibold text-foreground">
-                      File Size ချုံ့မယ် (~50-70%)
+                      Cut + Compress (~70-80% ချုံ့)
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      480p · ultrafast encode · ရုပ်ထွက် ကောင်း · 50-70% ချုံ့
+                      360p · 24fps · mono audio · ဖြတ်ရင်း ချုံ့ · အရှိန်မြှင့်ထား
                     </p>
                   </div>
                   <div
