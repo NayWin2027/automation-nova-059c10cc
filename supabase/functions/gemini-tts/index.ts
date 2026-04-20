@@ -608,45 +608,87 @@ serve(async (req) => {
       let lastStatus = 0;
       let lastBodyText = "";
 
-      for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        const url = `${GEMINI_TTS_API}?key=${currentApiKey}`;
-        const resp = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(buildRequestBody(voice, chunkText, chunkIndex, totalChunks)),
-        });
+      // For user-supplied keys: try primary 3.1 model first, then transparently
+      // fall back to a publicly available TTS model if the user's key cannot
+      // access the preview. App-API (backend keys) keep using primary only.
+      const endpointCandidates = isUserKey
+        ? [GEMINI_TTS_API, GEMINI_TTS_API_FALLBACK_USERKEY]
+        : [GEMINI_TTS_API];
 
-        const bodyText = await resp.text();
+      for (let endpointIdx = 0; endpointIdx < endpointCandidates.length; endpointIdx++) {
+        const endpoint = endpointCandidates[endpointIdx];
 
-        if (resp.status === 429 && !isUserKey) {
-          console.warn(`[gemini-tts] 429 rate limit, rotating key (attempt ${attempt + 1}/${maxAttempts})`);
-          const nextKey = rotateKey();
-          if (nextKey && nextKey !== currentApiKey) {
-            currentApiKey = nextKey;
-            lastStatus = 429;
-            lastBodyText = bodyText;
-            continue;
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+          const url = `${endpoint}?key=${currentApiKey}`;
+          const resp = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(buildRequestBody(voice, chunkText, chunkIndex, totalChunks)),
+          });
+
+          const bodyText = await resp.text();
+
+          if (resp.status === 429 && !isUserKey) {
+            console.warn(`[gemini-tts] 429 rate limit, rotating key (attempt ${attempt + 1}/${maxAttempts})`);
+            const nextKey = rotateKey();
+            if (nextKey && nextKey !== currentApiKey) {
+              currentApiKey = nextKey;
+              lastStatus = 429;
+              lastBodyText = bodyText;
+              continue;
+            }
+            return { ok: false as const, status: 429, bodyText };
           }
-          return { ok: false as const, status: 429, bodyText };
+
+          if (!resp.ok) {
+            // For user keys: if primary preview model is not accessible to this key,
+            // silently retry the same request against the public fallback model.
+            if (
+              isUserKey &&
+              endpointIdx < endpointCandidates.length - 1 &&
+              USERKEY_MODEL_FALLBACK_STATUSES.has(resp.status)
+            ) {
+              console.warn(
+                `[gemini-tts] User key cannot access primary model (status=${resp.status}). ` +
+                  `Falling back to public TTS model.`,
+              );
+              lastStatus = resp.status;
+              lastBodyText = bodyText;
+              break; // break inner attempts loop → try next endpoint
+            }
+            return { ok: false as const, status: resp.status, bodyText };
+          }
+
+          let json: any = null;
+          try { json = JSON.parse(bodyText); } catch { json = null; }
+
+          const part0 = json?.candidates?.[0]?.content?.parts?.[0];
+          const audio = part0?.inlineData?.data as string | undefined;
+          const mime = (part0?.inlineData?.mimeType as string | undefined) || "audio/mp3";
+
+          // If user key got an empty-audio response from the primary preview model,
+          // fall back to the public model rather than returning silence.
+          if (
+            isUserKey &&
+            !audio &&
+            endpointIdx < endpointCandidates.length - 1
+          ) {
+            console.warn(
+              `[gemini-tts] User key got empty audio from primary model. ` +
+                `Falling back to public TTS model.`,
+            );
+            lastStatus = 200;
+            lastBodyText = bodyText;
+            break;
+          }
+
+          return {
+            ok: true as const,
+            audio,
+            mimeType: mime,
+            jsonPreview: json ? JSON.stringify(json).substring(0, 600) : bodyText.substring(0, 600),
+          };
         }
-
-        if (!resp.ok) {
-          return { ok: false as const, status: resp.status, bodyText };
-        }
-
-        let json: any = null;
-        try { json = JSON.parse(bodyText); } catch { json = null; }
-
-        const part0 = json?.candidates?.[0]?.content?.parts?.[0];
-        const audio = part0?.inlineData?.data as string | undefined;
-        const mime = (part0?.inlineData?.mimeType as string | undefined) || "audio/mp3";
-
-        return {
-          ok: true as const,
-          audio,
-          mimeType: mime,
-          jsonPreview: json ? JSON.stringify(json).substring(0, 600) : bodyText.substring(0, 600),
-        };
       }
 
       return { ok: false as const, status: lastStatus || 429, bodyText: lastBodyText };
