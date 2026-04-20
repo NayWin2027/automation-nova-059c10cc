@@ -25,6 +25,8 @@ const NovaCutVideoPage = () => {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const ffmpegRef = useRef<FFmpeg | null>(null);
+  const execProgressBaseRef = useRef(20);
+  const execProgressSpanRef = useRef(70);
 
   const [step, setStep] = useState<Step>("upload");
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -77,6 +79,11 @@ const NovaCutVideoPage = () => {
 
     const ffmpeg = new FFmpeg();
     ffmpeg.on("log", ({ message }) => console.log("[FFMPEG-NovaCut]", message));
+    ffmpeg.on("progress", ({ progress }) => {
+      const base = execProgressBaseRef.current;
+      const span = execProgressSpanRef.current;
+      setProgress(Math.max(base, Math.min(95, Math.round(base + progress * span))));
+    });
 
     const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm";
 
@@ -139,9 +146,10 @@ const NovaCutVideoPage = () => {
         const remaining = totalDuration - startSec;
         const thisDuration = Math.min(segmentSec, remaining);
 
-        setProgressMsg(`Part ${i + 1}/${totalParts} ဖြတ်နေသည်...`);
-        const partProgress = 20 + (i / totalParts) * 70;
-        setProgress(Math.round(partProgress));
+        setProgressMsg(`Part ${i + 1}/${totalParts} ${compressEnabled ? "ချုံ့နေသည်..." : "ဖြတ်နေသည်..."}`);
+        execProgressBaseRef.current = 20 + (i / totalParts) * 70;
+        execProgressSpanRef.current = 70 / totalParts;
+        setProgress(Math.round(execProgressBaseRef.current));
 
         const outputName = `part_${i}.mp4`;
 
