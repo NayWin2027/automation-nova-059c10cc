@@ -158,12 +158,16 @@ const NovaCutVideoPage = () => {
               "-ss", startSec.toString(),
               "-i", "input.mp4",
               "-t", thisDuration.toString(),
-              "-vf", "scale='min(1280,iw)':'-2'",
+              "-vf", "scale='min(854,iw)':'-2'",
               "-c:v", "libx264",
-              "-preset", "veryfast",
-              "-crf", "28",
+              "-preset", "ultrafast",
+              "-tune", "fastdecode",
+              "-crf", "26",
+              "-g", "60",
+              "-x264-params", "ref=1:bframes=0:rc-lookahead=0:me=dia:subme=1:trellis=0:weightp=0:8x8dct=0:mixed-refs=0:fast-pskip=1:cabac=0",
               "-c:a", "aac",
               "-b:a", "96k",
+              "-ac", "2",
               "-movflags", "+faststart",
               outputName,
             ]
@@ -337,7 +341,7 @@ const NovaCutVideoPage = () => {
                       File Size ချုံ့မယ် (~50-70%)
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      720p HD · ရုပ်ထွက် quality မကျ · ဖြတ်ချိန် ပိုကြာ
+                      480p · ultrafast encode · ရုပ်ထွက် ကောင်း · 50-70% ချုံ့
                     </p>
                   </div>
                   <div
