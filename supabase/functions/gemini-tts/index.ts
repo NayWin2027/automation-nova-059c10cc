@@ -514,7 +514,9 @@ serve(async (req) => {
     let result: Awaited<ReturnType<typeof callGeminiTts>>;
 
     if (text.length > PARALLEL_THRESHOLD) {
-      const textChunks = splitTextIntoChunks(text, 900);
+      // Larger chunks (1800 chars ≈ 75s audio each) → fewer parallel calls → smaller merge buffer
+      // → stays under Edge worker CPU limit even for 10-min scripts (~12000 chars → 7 chunks).
+      const textChunks = splitTextIntoChunks(text, 1800);
       console.log(
         `[gemini-tts] Long text (${text.length} chars) → ${textChunks.length} parallel chunks (timeout-safe)`,
       );
