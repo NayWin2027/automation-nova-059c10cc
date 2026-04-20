@@ -145,19 +145,30 @@ const NovaCutVideoPage = () => {
 
         const outputName = `part_${i}.mp4`;
 
-        await ffmpeg.exec([
-          "-ss",
-          startSec.toString(),
-          "-i",
-          "input.mp4",
-          "-t",
-          thisDuration.toString(),
-          "-c",
-          "copy",
-          "-avoid_negative_ts",
-          "make_zero",
-          outputName,
-        ]);
+        const ffmpegArgs = compressEnabled
+          ? [
+              "-ss", startSec.toString(),
+              "-i", "input.mp4",
+              "-t", thisDuration.toString(),
+              "-vf", "scale='min(1280,iw)':'-2'",
+              "-c:v", "libx264",
+              "-preset", "veryfast",
+              "-crf", "28",
+              "-c:a", "aac",
+              "-b:a", "96k",
+              "-movflags", "+faststart",
+              outputName,
+            ]
+          : [
+              "-ss", startSec.toString(),
+              "-i", "input.mp4",
+              "-t", thisDuration.toString(),
+              "-c", "copy",
+              "-avoid_negative_ts", "make_zero",
+              outputName,
+            ];
+
+        await ffmpeg.exec(ffmpegArgs);
 
         const outputData = await ffmpeg.readFile(outputName);
         if (typeof outputData === "string") {
