@@ -280,29 +280,33 @@ function splitTextIntoChunks(text: string, targetSize = 1800): string[] {
  * Avoids spread-operator stack overflow and per-char btoa CPU spikes.
  */
 function concatPcmBase64(pcmBase64Chunks: string[]): string {
-  const buffers = pcmBase64Chunks.map((b64) => {
-    const bin = atob(b64);
-    const buf = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
-    return buf;
-  });
-  const totalLen = buffers.reduce((s, b) => s + b.length, 0);
+  // CPU-light path: decode each base64 chunk once, merge raw bytes,
+  // then encode to base64 in large 64KB windows using fromCharCode.apply
+  // (avoids per-byte string concat which is the main CPU hog at 5-10 min).
+  const buffers: Uint8Array[] = new Array(pcmBase64Chunks.length);
+  let totalLen = 0;
+  for (let k = 0; k < pcmBase64Chunks.length; k++) {
+    const bin = atob(pcmBase64Chunks[k]);
+    const len = bin.length;
+    const buf = new Uint8Array(len);
+    for (let i = 0; i < len; i++) buf[i] = bin.charCodeAt(i);
+    buffers[k] = buf;
+    totalLen += len;
+  }
   const merged = new Uint8Array(totalLen);
   let offset = 0;
   for (const b of buffers) {
     merged.set(b, offset);
     offset += b.length;
   }
-  // Encode in 32KB windows to keep CPU + memory bounded
-  let binary = "";
-  const windowSize = 32768;
-  for (let i = 0; i < merged.length; i += windowSize) {
-    const slice = merged.subarray(i, Math.min(i + windowSize, merged.length));
-    let s = "";
-    for (let j = 0; j < slice.length; j++) s += String.fromCharCode(slice[j]);
-    binary += s;
+  // Fast base64 encode: 64KB windows via String.fromCharCode.apply
+  const CHUNK = 0x10000; // 64KB
+  const parts: string[] = [];
+  for (let i = 0; i < merged.length; i += CHUNK) {
+    const slice = merged.subarray(i, Math.min(i + CHUNK, merged.length));
+    parts.push(String.fromCharCode.apply(null, slice as unknown as number[]));
   }
-  return btoa(binary);
+  return btoa(parts.join(""));
 }
 
 serve(async (req) => {
