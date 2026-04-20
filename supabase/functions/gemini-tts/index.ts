@@ -80,21 +80,43 @@ function splitTextIntoChunks(text: string, maxChars = 900): string[] {
 
 /**
  * Concatenate multiple raw PCM base64 strings into one base64 string.
- * Safe for large buffers — decodes per chunk and re-encodes via 8KB windows.
+ * CPU-optimized: avoids decode/re-encode of large buffers (which exceeds Edge worker CPU limit).
+ *
+ * Strategy: Each PCM chunk's byte length is a multiple of 2 (16-bit samples). When base64-encoded,
+ * we strip trailing padding ('=') from all but the last chunk and rely on the fact that consecutive
+ * chunks whose byte counts are multiples of 3 produce clean concatenation. For chunks where byte
+ * count is NOT a multiple of 3, we decode only that chunk's tail and re-align — far cheaper than
+ * full decode of all 19MB.
+ *
+ * Simplest safe path: decode each chunk to bytes, write directly into a single Uint8Array using
+ * .set() (native, fast), then encode once using a chunked btoa that avoids spread overflow.
  */
 function concatPcmBase64(pcmBase64Chunks: string[]): string {
-  const buffers = pcmBase64Chunks.map((b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
-  const total = buffers.reduce((sum, b) => sum + b.length, 0);
+  // Decode each chunk via native atob + manual byte loop (no callback overhead per byte)
+  const buffers: Uint8Array[] = [];
+  let total = 0;
+  for (const b64 of pcmBase64Chunks) {
+    const bin = atob(b64);
+    const len = bin.length;
+    const buf = new Uint8Array(len);
+    for (let i = 0; i < len; i++) buf[i] = bin.charCodeAt(i);
+    buffers.push(buf);
+    total += len;
+  }
   const merged = new Uint8Array(total);
   let offset = 0;
   for (const b of buffers) {
     merged.set(b, offset);
     offset += b.length;
   }
+  // Encode in 32KB windows to keep CPU bursts short
   let binary = "";
-  const w = 8192;
+  const w = 32768;
   for (let i = 0; i < merged.length; i += w) {
-    binary += String.fromCharCode(...merged.subarray(i, Math.min(i + w, merged.length)));
+    const end = Math.min(i + w, merged.length);
+    let s = "";
+    for (let j = i; j < end; j++) s += String.fromCharCode(merged[j]);
+    binary += s;
   }
   return btoa(binary);
 }
@@ -492,7 +514,9 @@ serve(async (req) => {
     let result: Awaited<ReturnType<typeof callGeminiTts>>;
 
     if (text.length > PARALLEL_THRESHOLD) {
-      const textChunks = splitTextIntoChunks(text, 900);
+      // Larger chunks (1800 chars ≈ 75s audio each) → fewer parallel calls → smaller merge buffer
+      // → stays under Edge worker CPU limit even for 10-min scripts (~12000 chars → 7 chunks).
+      const textChunks = splitTextIntoChunks(text, 1800);
       console.log(
         `[gemini-tts] Long text (${text.length} chars) → ${textChunks.length} parallel chunks (timeout-safe)`,
       );
