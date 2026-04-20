@@ -47,11 +47,54 @@ function pcmToWavBase64(pcmBase64: string, sampleRate = 24000, numChannels = 1, 
   view.setUint32(40, dataLength, true);
   wav.set(raw, headerSize);
 
-  // Encode to base64 in chunks to avoid stack overflow
+// Encode to base64 in chunks to avoid stack overflow
   let binary = "";
   const chunkSize = 8192;
   for (let i = 0; i < wav.length; i += chunkSize) {
     binary += String.fromCharCode(...wav.subarray(i, Math.min(i + chunkSize, wav.length)));
+  }
+  return btoa(binary);
+}
+
+/**
+ * Split text into chunks at sentence boundaries (~maxChars each).
+ * Used to parallelize long-text TTS to avoid edge function 150s idle timeout.
+ */
+function splitTextIntoChunks(text: string, maxChars = 900): string[] {
+  if (!text || text.length <= maxChars) return [text];
+  // Split on sentence terminators (Burmese ။, ASCII . ! ?, CJK 。！？) keeping the terminator.
+  const sentences = text.match(/[^။.!?。！？\n]+[။.!?。！？\n]?/g) || [text];
+  const chunks: string[] = [];
+  let current = "";
+  for (const s of sentences) {
+    if ((current + s).length > maxChars && current) {
+      chunks.push(current.trim());
+      current = s;
+    } else {
+      current += s;
+    }
+  }
+  if (current.trim()) chunks.push(current.trim());
+  return chunks.filter(Boolean);
+}
+
+/**
+ * Concatenate multiple raw PCM base64 strings into one base64 string.
+ * Safe for large buffers — decodes per chunk and re-encodes via 8KB windows.
+ */
+function concatPcmBase64(pcmBase64Chunks: string[]): string {
+  const buffers = pcmBase64Chunks.map((b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
+  const total = buffers.reduce((sum, b) => sum + b.length, 0);
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const b of buffers) {
+    merged.set(b, offset);
+    offset += b.length;
+  }
+  let binary = "";
+  const w = 8192;
+  for (let i = 0; i < merged.length; i += w) {
+    binary += String.fromCharCode(...merged.subarray(i, Math.min(i + w, merged.length)));
   }
   return btoa(binary);
 }
@@ -440,13 +483,76 @@ serve(async (req) => {
 
     // Attempt 1: requested voice
     let usedVoice = sanitizedVoiceName;
-    let result = await callGeminiTts(usedVoice);
 
-    // Attempt 2: fallback voice (Puck) if we got a 200 but no audio
-    if (result.ok && !result.audio && usedVoice !== "Puck") {
-      console.warn(`[gemini-tts] No audio with voice=${usedVoice}. Retrying with Puck.`);
-      usedVoice = "Puck";
+    // ===== LONG-TEXT PARALLEL CHUNKING =====
+    // Long scripts (>1200 chars) are split and processed in PARALLEL via Promise.all
+    // to avoid the 150s edge function idle timeout. Sequential processing of 8 chunks
+    // would easily exceed the limit; parallel processing finishes in ~1 chunk's time.
+    const PARALLEL_THRESHOLD = 1200;
+    let result: Awaited<ReturnType<typeof callGeminiTts>>;
+
+    if (text.length > PARALLEL_THRESHOLD) {
+      const textChunks = splitTextIntoChunks(text, 900);
+      console.log(
+        `[gemini-tts] Long text (${text.length} chars) → ${textChunks.length} parallel chunks (timeout-safe)`,
+      );
+
+      // Build a per-chunk caller that swaps the outer `text` for the chunk text.
+      const callForChunk = async (chunkText: string) => {
+        const originalBuilder = buildRequestBody;
+        const url = `${GEMINI_TTS_API}?key=${currentApiKey}`;
+        const bodyObj = originalBuilder(usedVoice);
+        // Rewrite the prompt's TEXT: section to use only this chunk
+        if (bodyObj?.contents?.[0]?.parts?.[0]?.text) {
+          bodyObj.contents[0].parts[0].text = bodyObj.contents[0].parts[0].text.replace(
+            /TEXT:\n[\s\S]*$/,
+            `TEXT:\n${chunkText}`,
+          );
+        }
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(bodyObj),
+        });
+        const bodyText = await resp.text();
+        if (!resp.ok) return { ok: false as const, status: resp.status, bodyText };
+        let json: any = null;
+        try { json = JSON.parse(bodyText); } catch { json = null; }
+        const part0 = json?.candidates?.[0]?.content?.parts?.[0];
+        const audio = part0?.inlineData?.data as string | undefined;
+        const mime = (part0?.inlineData?.mimeType as string | undefined) || "audio/mp3";
+        return { ok: true as const, audio, mimeType: mime, jsonPreview: "" };
+      };
+
+      const settled = await Promise.all(textChunks.map((c) => callForChunk(c)));
+
+      // If any chunk failed, surface the first failure
+      const firstFail = settled.find((r) => !r.ok);
+      if (firstFail && !firstFail.ok) {
+        result = firstFail;
+      } else {
+        const audios = settled.map((r) => (r.ok ? r.audio : "")).filter(Boolean) as string[];
+        if (audios.length === 0) {
+          result = { ok: false as const, status: 500, bodyText: "No audio from any chunk" };
+        } else {
+          const firstOk = settled.find((r) => r.ok && r.audio) as Extract<typeof settled[number], { ok: true }>;
+          result = {
+            ok: true as const,
+            audio: concatPcmBase64(audios),
+            mimeType: firstOk.mimeType,
+            jsonPreview: `parallel-chunks=${audios.length}`,
+          };
+        }
+      }
+    } else {
       result = await callGeminiTts(usedVoice);
+
+      // Attempt 2: fallback voice (Puck) if we got a 200 but no audio
+      if (result.ok && !result.audio && usedVoice !== "Puck") {
+        console.warn(`[gemini-tts] No audio with voice=${usedVoice}. Retrying with Puck.`);
+        usedVoice = "Puck";
+        result = await callGeminiTts(usedVoice);
+      }
     }
 
     // Handle non-OK responses from upstream
