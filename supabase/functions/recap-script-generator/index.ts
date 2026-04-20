@@ -54,7 +54,10 @@ async function uploadToGoogleFiles(apiKey: string, fileBytes: Uint8Array, mimeTy
 }
 
 async function waitForFileProcessing(apiKey: string, fileName: string): Promise<void> {
-  const maxAttempts = 150;
+  // Cap polling well under Edge Function 150s idle timeout so we fail fast
+  // and let the frontend retry instead of silently idling to 504.
+  // Budget ~60s for file ACTIVE state; generation itself needs the rest.
+  const maxAttempts = 30;
   const delay = 2000;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
