@@ -34,6 +34,7 @@ const NovaCutVideoPage = () => {
   const [progressMsg, setProgressMsg] = useState("");
   const [parts, setParts] = useState<CutPart[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [compressEnabled, setCompressEnabled] = useState(false);
 
   const handleFileSelect = useCallback(
     (file: File) => {
