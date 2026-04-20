@@ -34,6 +34,7 @@ const NovaCutVideoPage = () => {
   const [progressMsg, setProgressMsg] = useState("");
   const [parts, setParts] = useState<CutPart[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [compressEnabled, setCompressEnabled] = useState(false);
 
   const handleFileSelect = useCallback(
     (file: File) => {
@@ -144,19 +145,30 @@ const NovaCutVideoPage = () => {
 
         const outputName = `part_${i}.mp4`;
 
-        await ffmpeg.exec([
-          "-ss",
-          startSec.toString(),
-          "-i",
-          "input.mp4",
-          "-t",
-          thisDuration.toString(),
-          "-c",
-          "copy",
-          "-avoid_negative_ts",
-          "make_zero",
-          outputName,
-        ]);
+        const ffmpegArgs = compressEnabled
+          ? [
+              "-ss", startSec.toString(),
+              "-i", "input.mp4",
+              "-t", thisDuration.toString(),
+              "-vf", "scale='min(1280,iw)':'-2'",
+              "-c:v", "libx264",
+              "-preset", "veryfast",
+              "-crf", "28",
+              "-c:a", "aac",
+              "-b:a", "96k",
+              "-movflags", "+faststart",
+              outputName,
+            ]
+          : [
+              "-ss", startSec.toString(),
+              "-i", "input.mp4",
+              "-t", thisDuration.toString(),
+              "-c", "copy",
+              "-avoid_negative_ts", "make_zero",
+              outputName,
+            ];
+
+        await ffmpeg.exec(ffmpegArgs);
 
         const outputData = await ffmpeg.readFile(outputName);
         if (typeof outputData === "string") {
@@ -301,7 +313,37 @@ const NovaCutVideoPage = () => {
                         {min} min
                       </button>
                     ))}
+                </div>
+
+                {/* Compress Toggle */}
+                <button
+                  onClick={() => setCompressEnabled((v) => !v)}
+                  className={`w-full flex items-center justify-between p-4 rounded-xl border transition-all ${
+                    compressEnabled
+                      ? "border-primary bg-primary/10"
+                      : "border-border bg-secondary/30 hover:bg-secondary/50"
+                  }`}
+                >
+                  <div className="text-left">
+                    <p className="text-sm font-semibold text-foreground">
+                      File Size ချုံ့မယ် (~50-70%)
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      720p HD · ရုပ်ထွက် quality မကျ · ဖြတ်ချိန် ပိုကြာ
+                    </p>
                   </div>
+                  <div
+                    className={`w-11 h-6 rounded-full p-0.5 transition-colors ${
+                      compressEnabled ? "bg-primary" : "bg-muted"
+                    }`}
+                  >
+                    <div
+                      className={`w-5 h-5 rounded-full bg-background shadow transition-transform ${
+                        compressEnabled ? "translate-x-5" : "translate-x-0"
+                      }`}
+                    />
+                  </div>
+                </button>
                 </div>
 
                 {/* Start Button */}
