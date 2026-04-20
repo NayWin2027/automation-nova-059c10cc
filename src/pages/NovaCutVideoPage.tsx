@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Upload, Scissors, Download, CheckCircle, Loader2, Film } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,11 +9,7 @@ import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
 
 const DURATION_OPTIONS = [1, 2, 3, 4, 5, 6, 7];
-const FFMPEG_LOAD_TIMEOUT_MS = 60000;
-const FFMPEG_CDN_BASE_URLS = [
-  "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm",
-  "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm",
-];
+const FFMPEG_LOAD_TIMEOUT_MS = 45000;
 
 interface CutPart {
   index: number;
@@ -29,9 +25,6 @@ const NovaCutVideoPage = () => {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const ffmpegRef = useRef<FFmpeg | null>(null);
-  const ffmpegLoadPromiseRef = useRef<Promise<FFmpeg> | null>(null);
-  const execProgressBaseRef = useRef(20);
-  const execProgressSpanRef = useRef(70);
 
   const [step, setStep] = useState<Step>("upload");
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -41,7 +34,6 @@ const NovaCutVideoPage = () => {
   const [progressMsg, setProgressMsg] = useState("");
   const [parts, setParts] = useState<CutPart[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [compressEnabled, setCompressEnabled] = useState(false);
 
   const handleFileSelect = useCallback(
     (file: File) => {
@@ -79,60 +71,31 @@ const NovaCutVideoPage = () => {
     });
   };
 
-  const loadFFmpeg = useCallback(async (): Promise<FFmpeg> => {
+  const loadFFmpeg = async (): Promise<FFmpeg> => {
     if (ffmpegRef.current) return ffmpegRef.current;
-    if (ffmpegLoadPromiseRef.current) return ffmpegLoadPromiseRef.current;
 
-    ffmpegLoadPromiseRef.current = (async () => {
-      let lastError: unknown = null;
+    const ffmpeg = new FFmpeg();
+    ffmpeg.on("log", ({ message }) => console.log("[FFMPEG-NovaCut]", message));
 
-      for (const baseURL of FFMPEG_CDN_BASE_URLS) {
-        try {
-          const ffmpeg = new FFmpeg();
-          ffmpeg.on("log", ({ message }) => console.log("[FFMPEG-NovaCut]", message));
-          ffmpeg.on("progress", ({ progress }) => {
-            const base = execProgressBaseRef.current;
-            const span = execProgressSpanRef.current;
-            setProgress(Math.max(base, Math.min(95, Math.round(base + progress * span))));
-          });
+    const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm";
 
-          await Promise.race([
-            (async () => {
-              await ffmpeg.load({
-                coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
-                wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
-              });
-            })(),
-            new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error(`FFmpeg load timeout: ${baseURL}`)), FFMPEG_LOAD_TIMEOUT_MS),
-            ),
-          ]);
+    const loadWithTimeout = Promise.race([
+      (async () => {
+        await ffmpeg.load({
+          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+        });
+        return ffmpeg;
+      })(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("FFmpeg load timeout")), FFMPEG_LOAD_TIMEOUT_MS),
+      ),
+    ]);
 
-          ffmpegRef.current = ffmpeg;
-          return ffmpeg;
-        } catch (error) {
-          lastError = error;
-          console.warn("[FFMPEG-NovaCut] core load failed, trying next CDN", baseURL, error);
-        }
-      }
-
-      throw lastError ?? new Error("FFmpeg core load failed");
-    })();
-
-    try {
-      return await ffmpegLoadPromiseRef.current;
-    } catch (error) {
-      ffmpegLoadPromiseRef.current = null;
-      throw new Error("FFmpeg core download မပြီးသေးပါ။ Network ကောင်းကောင်းနဲ့ ပြန်စမ်းပါ");
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!videoFile) return;
-    void loadFFmpeg().catch((error) => {
-      console.warn("[FFMPEG-NovaCut] preload failed", error);
-    });
-  }, [videoFile, loadFFmpeg]);
+    const loaded = await loadWithTimeout;
+    ffmpegRef.current = loaded;
+    return loaded;
+  };
 
   const formatDuration = (seconds: number): string => {
     const m = Math.floor(seconds / 60);
@@ -175,43 +138,25 @@ const NovaCutVideoPage = () => {
         const remaining = totalDuration - startSec;
         const thisDuration = Math.min(segmentSec, remaining);
 
-        setProgressMsg(`Part ${i + 1}/${totalParts} ${compressEnabled ? "ချုံ့နေသည်..." : "ဖြတ်နေသည်..."}`);
-        execProgressBaseRef.current = 20 + (i / totalParts) * 70;
-        execProgressSpanRef.current = 70 / totalParts;
-        setProgress(Math.round(execProgressBaseRef.current));
+        setProgressMsg(`Part ${i + 1}/${totalParts} ဖြတ်နေသည်...`);
+        const partProgress = 20 + (i / totalParts) * 70;
+        setProgress(Math.round(partProgress));
 
         const outputName = `part_${i}.mp4`;
 
-        const ffmpegArgs = compressEnabled
-          ? [
-              "-ss", startSec.toString(),
-              "-i", "input.mp4",
-              "-t", thisDuration.toString(),
-              "-vf", "scale='min(640,iw)':'-2',fps=24",
-              "-c:v", "libx264",
-              "-preset", "ultrafast",
-              "-tune", "fastdecode,zerolatency",
-              "-crf", "30",
-              "-g", "48",
-              "-threads", "0",
-              "-x264-params", "ref=1:bframes=0:rc-lookahead=0:me=dia:subme=0:trellis=0:weightp=0:8x8dct=0:mixed-refs=0:fast-pskip=1:cabac=0:no-deblock=1:aq-mode=0",
-              "-c:a", "aac",
-              "-b:a", "64k",
-              "-ac", "1",
-              "-ar", "44100",
-              "-movflags", "+faststart",
-              outputName,
-            ]
-          : [
-              "-ss", startSec.toString(),
-              "-i", "input.mp4",
-              "-t", thisDuration.toString(),
-              "-c", "copy",
-              "-avoid_negative_ts", "make_zero",
-              outputName,
-            ];
-
-        await ffmpeg.exec(ffmpegArgs);
+        await ffmpeg.exec([
+          "-ss",
+          startSec.toString(),
+          "-i",
+          "input.mp4",
+          "-t",
+          thisDuration.toString(),
+          "-c",
+          "copy",
+          "-avoid_negative_ts",
+          "make_zero",
+          outputName,
+        ]);
 
         const outputData = await ffmpeg.readFile(outputName);
         if (typeof outputData === "string") {
@@ -356,37 +301,7 @@ const NovaCutVideoPage = () => {
                         {min} min
                       </button>
                     ))}
-                </div>
-
-                {/* Compress Toggle */}
-                <button
-                  onClick={() => setCompressEnabled((v) => !v)}
-                  className={`w-full flex items-center justify-between p-4 rounded-xl border transition-all ${
-                    compressEnabled
-                      ? "border-primary bg-primary/10"
-                      : "border-border bg-secondary/30 hover:bg-secondary/50"
-                  }`}
-                >
-                  <div className="text-left">
-                    <p className="text-sm font-semibold text-foreground">
-                      Cut + Compress (~70-80% ချုံ့)
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      360p · 24fps · mono audio · ဖြတ်ရင်း ချုံ့ · အရှိန်မြှင့်ထား
-                    </p>
                   </div>
-                  <div
-                    className={`w-11 h-6 rounded-full p-0.5 transition-colors ${
-                      compressEnabled ? "bg-primary" : "bg-muted"
-                    }`}
-                  >
-                    <div
-                      className={`w-5 h-5 rounded-full bg-background shadow transition-transform ${
-                        compressEnabled ? "translate-x-5" : "translate-x-0"
-                      }`}
-                    />
-                  </div>
-                </button>
                 </div>
 
                 {/* Start Button */}

@@ -6,9 +6,9 @@ import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts"
 // Input validation constants
 const MAX_TEXT_LENGTH = 10000; // 10KB max for TTS text
 
-// Gemini TTS endpoint — Gemini 2.5 Flash Preview TTS (stable, human-like prosody & emotion)
+// Gemini TTS endpoint — Gemini 3.1 Flash TTS Preview (latest, more human-like prosody & emotion)
 const GEMINI_TTS_API =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent";
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-tts-preview:generateContent";
 
 /**
  * Auto-detect emotion / niche / tone from script content.
@@ -578,10 +578,8 @@ serve(async (req) => {
     };
 
     const callGeminiTts = async (voice: string, chunkText: string = text) => {
-      // 429-aware retry: 2 passes through up to 3 keys = max 6 chances (was 3).
-      // Adds short backoff between rotations so internet-slow users don't burn
-      // the per-minute quota in a tight loop.
-      const maxAttempts = isUserKey ? 1 : 6;
+      // Try up to 3 keys on 429 (only for backend keys, not user's own key)
+      const maxAttempts = isUserKey ? 1 : 3;
       let lastStatus = 0;
       let lastBodyText = "";
 
@@ -598,14 +596,10 @@ serve(async (req) => {
         if (resp.status === 429 && !isUserKey) {
           console.warn(`[gemini-tts] Key hit 429 rate limit, rotating... (attempt ${attempt + 1}/${maxAttempts})`);
           const nextKey = rotateKey();
-          if (nextKey) {
+          if (nextKey && nextKey !== currentApiKey) {
             currentApiKey = nextKey;
             lastStatus = 429;
             lastBodyText = bodyText;
-            // Backoff: 0ms on 1st rotate, then 500ms, 1500ms, 3000ms... (capped 3s)
-            // Smooths bursts so RPM window has time to recover.
-            const backoffMs = Math.min(3000, attempt === 0 ? 0 : 500 * Math.pow(2, attempt - 1));
-            if (backoffMs > 0) await new Promise((r) => setTimeout(r, backoffMs));
             continue; // retry with next key
           }
           // No more keys to try
@@ -647,8 +641,7 @@ serve(async (req) => {
     // CONSISTENT from start to finish, split long text at sentence boundaries
     // and concatenate the resulting raw PCM chunks. WAV conversion still runs
     // client-side (unchanged response contract: audio + mimeType + sampleRate).
-    const CHUNK_CHAR_THRESHOLD = isModernSpeed ? 1700 : 1400;
-    const INTER_CHUNK_DELAY_MS = isUserKey ? 0 : 1500;
+    const CHUNK_CHAR_THRESHOLD = 900; // safe budget per single TTS call
     const splitTextIntoChunks = (full: string, maxChars: number): string[] => {
       const clean = (full || "").trim();
       if (clean.length <= maxChars) return [clean];
@@ -732,13 +725,9 @@ serve(async (req) => {
     if (!useChunking) {
       result = await callGeminiTts(usedVoice);
     } else {
-      // Surgical rate-limit fix:
-      // 1) use larger chunks so a 6k script makes ~4-5 requests instead of ~8
-      // 2) process sequentially with a small cooldown between successful chunks
-      // This reduces RPM bursts drastically while still staying below edge timeout.
-      let chunkFailed: Awaited<ReturnType<typeof callGeminiTts>> | null = null;
       const audioChunks: string[] = [];
       let lastMime = "audio/pcm";
+      let chunkFailed: Awaited<ReturnType<typeof callGeminiTts>> | null = null;
       for (let i = 0; i < textChunks.length; i++) {
         const r = await callGeminiTts(usedVoice, textChunks[i]);
         if (!r.ok || !r.audio) {
@@ -748,12 +737,6 @@ serve(async (req) => {
         }
         audioChunks.push(r.audio);
         lastMime = r.mimeType || lastMime;
-        if (INTER_CHUNK_DELAY_MS > 0 && i < textChunks.length - 1) {
-          console.log(
-            `[gemini-tts] Cooling ${INTER_CHUNK_DELAY_MS}ms before chunk ${i + 2}/${textChunks.length}`,
-          );
-          await new Promise((resolve) => setTimeout(resolve, INTER_CHUNK_DELAY_MS));
-        }
       }
       if (chunkFailed) {
         result = chunkFailed;
