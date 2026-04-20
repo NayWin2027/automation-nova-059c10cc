@@ -578,8 +578,10 @@ serve(async (req) => {
     };
 
     const callGeminiTts = async (voice: string, chunkText: string = text) => {
-      // Try up to 3 keys on 429 (only for backend keys, not user's own key)
-      const maxAttempts = isUserKey ? 1 : 3;
+      // 429-aware retry: 2 passes through up to 3 keys = max 6 chances (was 3).
+      // Adds short backoff between rotations so internet-slow users don't burn
+      // the per-minute quota in a tight loop.
+      const maxAttempts = isUserKey ? 1 : 6;
       let lastStatus = 0;
       let lastBodyText = "";
 
@@ -596,10 +598,14 @@ serve(async (req) => {
         if (resp.status === 429 && !isUserKey) {
           console.warn(`[gemini-tts] Key hit 429 rate limit, rotating... (attempt ${attempt + 1}/${maxAttempts})`);
           const nextKey = rotateKey();
-          if (nextKey && nextKey !== currentApiKey) {
+          if (nextKey) {
             currentApiKey = nextKey;
             lastStatus = 429;
             lastBodyText = bodyText;
+            // Backoff: 0ms on 1st rotate, then 500ms, 1500ms, 3000ms... (capped 3s)
+            // Smooths bursts so RPM window has time to recover.
+            const backoffMs = Math.min(3000, attempt === 0 ? 0 : 500 * Math.pow(2, attempt - 1));
+            if (backoffMs > 0) await new Promise((r) => setTimeout(r, backoffMs));
             continue; // retry with next key
           }
           // No more keys to try
