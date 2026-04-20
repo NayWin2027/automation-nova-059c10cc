@@ -16,6 +16,16 @@ const MAX_TEXT_LENGTH = 20000; // 20KB max for TTS text (supports ~10min scripts
 const GEMINI_TTS_API =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-tts-preview:generateContent";
 
+// Fallback model for Own API keys that don't yet have access to the 3.1 preview.
+// Same request/response shape — only the model name changes. Used only when the
+// primary model returns a "model not available" style error for a user-supplied key.
+const GEMINI_TTS_API_FALLBACK_USERKEY =
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent";
+
+// Status codes that indicate the user's key cannot access the preview model
+// (allowlist / not-found / unsupported-modality style failures).
+const USERKEY_MODEL_FALLBACK_STATUSES = new Set<number>([400, 403, 404]);
+
 /**
  * Case-insensitive Linear16 / PCM mime detection.
  * Handles "audio/L16", "audio/l16", "audio/L16;codec=pcm;rate=24000", "audio/pcm", etc.
