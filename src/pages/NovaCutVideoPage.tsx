@@ -79,6 +79,11 @@ const NovaCutVideoPage = () => {
 
     const ffmpeg = new FFmpeg();
     ffmpeg.on("log", ({ message }) => console.log("[FFMPEG-NovaCut]", message));
+    ffmpeg.on("progress", ({ progress }) => {
+      const base = execProgressBaseRef.current;
+      const span = execProgressSpanRef.current;
+      setProgress(Math.max(base, Math.min(95, Math.round(base + progress * span))));
+    });
 
     const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm";
 
