@@ -6,9 +6,9 @@ import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts"
 // Input validation constants
 const MAX_TEXT_LENGTH = 10000; // 10KB max for TTS text
 
-// Gemini TTS endpoint — Gemini 3.1 Flash TTS Preview (latest, more human-like prosody & emotion)
+// Gemini TTS endpoint — Gemini 2.5 Flash Preview TTS (stable, human-like prosody & emotion)
 const GEMINI_TTS_API =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-tts-preview:generateContent";
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent";
 
 /**
  * Auto-detect emotion / niche / tone from script content.
