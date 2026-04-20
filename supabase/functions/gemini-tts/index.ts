@@ -731,12 +731,27 @@ serve(async (req) => {
     if (!useChunking) {
       result = await callGeminiTts(usedVoice);
     } else {
-      // PARALLEL chunked TTS: fire all chunks concurrently to stay under the
-      // 150s edge idle timeout on long scripts. Order is preserved by index.
-      // Response shape (audio + mimeType) unchanged.
-      const results = await Promise.all(
-        textChunks.map((chunkText) => callGeminiTts(usedVoice, chunkText)),
-      );
+      // CONCURRENCY-LIMITED chunked TTS (sliding window of 2).
+      // Why 2 and not Promise.all(N): firing 9+ chunks at once instantly
+      // saturates Gemini TTS per-minute quota across all 3 keys (observed:
+      // 9 chunks → 18 retries → all 429 in <1s). A window of 2 keeps
+      // wall-clock well under the 150s idle timeout while staying inside
+      // RPM headroom. Order preserved by index.
+      const CONCURRENCY = 2;
+      const results: Array<Awaited<ReturnType<typeof callGeminiTts>>> = new Array(textChunks.length);
+      let nextIdx = 0;
+      const workers: Promise<void>[] = [];
+      for (let w = 0; w < Math.min(CONCURRENCY, textChunks.length); w++) {
+        workers.push((async () => {
+          while (true) {
+            const i = nextIdx++;
+            if (i >= textChunks.length) return;
+            results[i] = await callGeminiTts(usedVoice, textChunks[i]);
+          }
+        })());
+      }
+      await Promise.all(workers);
+
       let chunkFailed: Awaited<ReturnType<typeof callGeminiTts>> | null = null;
       const audioChunks: string[] = [];
       let lastMime = "audio/pcm";
