@@ -146,9 +146,10 @@ const NovaCutVideoPage = () => {
         const remaining = totalDuration - startSec;
         const thisDuration = Math.min(segmentSec, remaining);
 
-        setProgressMsg(`Part ${i + 1}/${totalParts} ဖြတ်နေသည်...`);
-        const partProgress = 20 + (i / totalParts) * 70;
-        setProgress(Math.round(partProgress));
+        setProgressMsg(`Part ${i + 1}/${totalParts} ${compressEnabled ? "ချုံ့နေသည်..." : "ဖြတ်နေသည်..."}`);
+        execProgressBaseRef.current = 20 + (i / totalParts) * 70;
+        execProgressSpanRef.current = 70 / totalParts;
+        setProgress(Math.round(execProgressBaseRef.current));
 
         const outputName = `part_${i}.mp4`;
 
