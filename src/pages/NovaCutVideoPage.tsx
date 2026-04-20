@@ -340,10 +340,10 @@ const NovaCutVideoPage = () => {
                 >
                   <div className="text-left">
                     <p className="text-sm font-semibold text-foreground">
-                      File Size ချုံ့မယ် (~50-70%)
+                      Cut + Compress (~70-80% ချုံ့)
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      480p · ultrafast encode · ရုပ်ထွက် ကောင်း · 50-70% ချုံ့
+                      360p · 24fps · mono audio · ဖြတ်ရင်း ချုံ့ · အရှိန်မြှင့်ထား
                     </p>
                   </div>
                   <div
