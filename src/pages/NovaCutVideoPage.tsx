@@ -25,6 +25,8 @@ const NovaCutVideoPage = () => {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const ffmpegRef = useRef<FFmpeg | null>(null);
+  const execProgressBaseRef = useRef(20);
+  const execProgressSpanRef = useRef(70);
 
   const [step, setStep] = useState<Step>("upload");
   const [videoFile, setVideoFile] = useState<File | null>(null);
