@@ -86,7 +86,7 @@ const UserLoginPage: React.FC = () => {
         try {
           await supabase.rpc('register_active_session', {
             _user_id: data.user.id,
-            _session_id: data.session.access_token
+            _session_id: data.session.refresh_token
           });
         } catch (e) {
           console.error('Failed to register session:', e);
