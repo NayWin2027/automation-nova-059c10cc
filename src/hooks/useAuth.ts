@@ -30,7 +30,7 @@ export function useAuth() {
   // Viber-style single device enforcement
   const { registerSession } = useSessionEnforcement(
     user?.id ?? null,
-    session?.access_token ?? null
+    session?.refresh_token ?? null
   );
 
   useEffect(() => {
@@ -50,10 +50,11 @@ export function useAuth() {
           }, 0);
 
           // Fix: Re-register session on token refresh to prevent mismatch auto-logout
-          if (event === 'TOKEN_REFRESHED' && session.access_token) {
+          // Use refresh_token (stable across access-token refreshes within same session)
+          if (event === 'TOKEN_REFRESHED' && session.refresh_token) {
             supabase.rpc('register_active_session', {
               _user_id: session.user.id,
-              _session_id: session.access_token,
+              _session_id: session.refresh_token,
             }).then(({ error }) => {
               if (error) console.error('Session re-register on token refresh failed:', error);
             });
