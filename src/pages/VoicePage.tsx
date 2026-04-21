@@ -544,11 +544,20 @@ Script Context to Narrate:
           setResultSubtitles(srtMock);
           startLiveSubtitles(text, duration);
         }
-        recordToolOutcome("voice", "success");
+        // SURGICAL FIX (Voice analytics):
+        // - Own API mode: do NOT log success (user request — exclude own-API usage from stats).
+        // - App API mode: do NOT double-count. The gemini-tts edge function calls
+        //   deduct_user_credits per chunk, which already increments success_count.
+        //   Logging here would inflate success vs process counts.
       }
     } catch (error) {
       console.error(error);
-      recordToolOutcome("voice", "error");
+      // SURGICAL FIX: Skip error logging for Own API mode per user request.
+      // App API errors are still tracked server-side via deduct_user_credits (insufficient credits)
+      // and edge function activity logs.
+      if (apiType !== "own") {
+        recordToolOutcome("voice", "error");
+      }
       alert("Generation failed. Please check your API key or Quota.");
     } finally {
       setLoading(false);
