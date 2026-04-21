@@ -1,55 +1,59 @@
 
-Goal: Fix the `WORKER_RESOURCE_LIMIT` / “not having enough compute resources” failure for 5–10 minute TTS generation with a surgical edit in `supabase/functions/gemini-tts/index.ts` only, without touching Recap NV protected blocks, upload logic, app API flow, own API flow, key rotation, or other files.
 
-What is already confirmed:
-- The failure point is the long-text PCM merge path, not the 3-key rotation logic.
-- `gemini-tts/index.ts` already uses bounded concurrency (`2`) and chunked long-text generation.
-- The current memory spike comes from `concatPcmBase64()` decoding every chunk to buffers, then creating one large merged `Uint8Array`, then creating one more large binary string before `btoa()`.
-- `RecapVideoNVPage.tsx` protected voice/AV-sync orchestration does not need changes.
-- Response contract must stay unchanged: `{ audio, mimeType, sampleRate, voice, segmentTimestamps }`.
+## ပြဿနာ
 
-Surgical implementation:
-1. Replace only the PCM merge/encoding implementation inside `supabase/functions/gemini-tts/index.ts`
-   - Keep all auth, credits, prompt, voice model, own/app API, and retry logic exactly as-is.
-   - Do not change chunk splitting, concurrency, or frontend request/response shape.
+Voice tool မှာ admin နဲ့ user view ကွဲနေတယ်:
+- **Admin မှာ**: "UNDER 20,00 CHARS / 3 CREDITS" အစရှိသည် (DB မှ ပြ — paid values)
+- **User မှာ**: "UNDER 1,500 CHARS / 0 CREDITS (FREE)" (default fallback — free values)
+- **Result**: User တိုင်း voice generation ကို **0 credits** နဲ့ free ရသွားနေတယ်
 
-2. Refactor `concatPcmBase64()` to a lower-peak-memory merge
-   - Remove the current “decode all chunks → allocate merged buffer → build huge binary string” approach.
-   - Use a streaming-style / windowed merge path that:
-     - decodes one base64 chunk at a time,
-     - appends into a pre-sized output buffer or incremental encoder path,
-     - avoids holding multiple full-size copies of the same audio in memory,
-     - avoids one giant ever-growing `binary += ...` string.
+## Root Cause (သိရှိပြီး)
 
-3. Keep PCM behavior identical
-   - Preserve `audio/pcm` output for Linear16 responses.
-   - Preserve sample-rate extraction and timestamp calculation logic.
-   - Preserve chunk ordering exactly.
+Migration `20260408165813` က `app_settings` hardening လုပ်တုန်း `voice_settings` ကို public read whitelist ထဲက ပြန်ဖြုတ်ပစ်ထားလို့:
 
-4. Add a safe large-buffer encoding strategy
-   - Encode final bytes to base64 in fixed windows only.
-   - Avoid spread operators and avoid repeated string reallocation patterns that trigger memory spikes.
+1. Non-admin users → DB query empty result → `defaultVoiceSettings` (0 credits) fallback
+2. Admin users → `has_role` policy match → real DB values (3, 6, 9, 12 credits)
+3. Credit deduction က tier credit text ကနေ regex နဲ့ ဂဏန်းဆွဲတယ် → "0 Credits (FREE)" → **0 ဖြတ်**
 
-5. Preserve all non-memory behavior
-   - No changes to:
-     - `GEMINI_API_KEY` / `_2` / `_3` rotation
-     - App API mode
-     - Own API key mode
-     - user-key fallback model logic
-     - narration/emotion/pronunciation instructions
-     - Recap NV page code
-     - AV-SYNC-9000-SMOOTH-v4
-     - RECORD-PIPELINE-AUTO-v1
-     - VOICE-GEN-PIPELINE-v2
-     - AUTO-PIPELINE-v2
+## Surgical Fix
 
-Verification after implementation:
-- Test a 3–5 minute script and confirm no compute-resource failure.
-- Test a near 10-minute script and confirm long-text path completes without `WORKER_RESOURCE_LIMIT`.
-- Verify output contract is unchanged so frontend playback/WAV handling still works.
-- Confirm app API behavior is unchanged and no regressions appear in existing successful flows.
+**File တစ်ခုတည်း ထိမယ်**: New migration တစ်ခု ဖန်တီးပြီး `voice_settings` ကို public SELECT whitelist ထဲ ပြန်ထည့်မယ်။
 
-Expected outcome:
-- The main “Voice generation failed: not enough compute resources” complaint should be removed for long scripts.
-- 5–10 minute TTS requests should become much more stable and smooth.
-- This specifically fixes the memory-spike failure mode; unrelated upstream rate-limit or invalid-key errors would remain separate error classes.
+```sql
+DROP POLICY IF EXISTS "Anyone can view safe app settings" ON public.app_settings;
+
+CREATE POLICY "Anyone can view safe app settings"
+ON public.app_settings FOR SELECT TO public
+USING (key = ANY (ARRAY[
+  'app_name', 'app_subtitle', 'logo_url', 
+  'favicon_url', 'primary_color', 'accent_color', 
+  'contact_email', 'contact_phone', 'discord_url', 
+  'footer_text',
+  'voice_settings'  -- ← ဒါတစ်ခုပဲ ထပ်ထည့်
+]));
+```
+
+## ဘာကို မထိဘူး (Protected)
+
+- ❌ `VoicePage.tsx` — code တစ်လုံးမှ မပြင်ဘူး
+- ❌ `defaultVoiceSettings` values — အရှိအတိုင်း
+- ❌ Credit deduction logic — အရှိအတိုင်း
+- ❌ `useCreditDeduction.ts` — မထိဘူး
+- ❌ `preCheckCredits` — မထိဘူး
+- ❌ Transcribe, Recap NV, အခြား tools — မထိဘူး
+- ❌ Other RLS policies (admin-only, access_control) — အရှိအတိုင်း
+- ❌ AV-SYNC-9000-SMOOTH-v4, RECORD-PIPELINE-AUTO-v1, VOICE-GEN-PIPELINE-v2, AUTO-PIPELINE-v2 — touch မလုပ်ဘူး
+- ❌ Upload architecture, edge functions — မထိဘူး
+
+## ဖြစ်လာမယ့် Result
+
+Migration apply ပြီးတာနဲ့:
+- User refresh လုပ်တဲ့အခါ DB ကနေ admin set လုပ်ထားတဲ့ values ရတယ်
+- "UNDER 2,000 CHARS / 3 CREDITS", "UNDER 4,000 CHARS / 6 CREDITS"... အစရှိသည်ဖြင့် admin နဲ့ ထပ်တူ ပြမယ်
+- Credit deduction က admin set လုပ်ထားတဲ့ exact values (3, 6, 9, 12 + SRT 2 addon) နဲ့ **ကွက်တိ** ဖြတ်မယ်
+- Visual UI/colors လည်း admin CMS မှာ set လုပ်ထားတဲ့အတိုင်း user မှာ ပြမယ် (footer color, title size, label colors စသည်)
+
+## Security Implication
+
+`voice_settings` ထဲမှာ public-facing UI labels, colors, tier prices ပဲ ပါတာ၊ secret/sensitive data မပါဘူး။ Pricing info က user တိုင်း Voice page မှာ မြင်ရမှ trigger လုပ်နိုင်တာဆိုတော့ public read က risk မရှိပါဘူး။ (`transcribe_settings`, `plan_settings` ကို တောင် rollback မလုပ်ပါ — user က Voice ပဲ ပြောထားလို့။)
+
