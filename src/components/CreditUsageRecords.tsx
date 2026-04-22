@@ -222,10 +222,11 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
   const [exactCreditsByKey, setExactCreditsByKey] = useState<Record<string, number>>({});
   const [currentBalance, setCurrentBalance] = useState<number | null>(null);
   const [topupRows, setTopupRows] = useState<TopupRow[]>([]);
+  const [paymentOrderRows, setPaymentOrderRows] = useState<PaymentOrderRow[]>([]);
   const [creditLogRows, setCreditLogRows] = useState<CreditLogRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [period, setPeriod] = useState<Period>("daily");
+  const [period, setPeriod] = useState<Period>("monthly");
   const [view, setView] = useState<ViewMode>("detail");
 
   const now = new Date();
@@ -263,7 +264,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         }
         // For non-admin (no targetUserId), RLS limits to own rows automatically.
 
-        const [usageResult, logResult, profileResult, topupResult] = await Promise.all([
+        const [usageResult, logResult, profileResult, topupResult, paymentOrderResult] = await Promise.all([
           query,
           logQuery,
           effectiveUserId
@@ -275,6 +276,15 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
                 .select("amount,topup_type,note,created_at")
                 .eq("is_deleted", false)
                 .eq("user_id", effectiveUserId)
+                .order("created_at", { ascending: true })
+            : Promise.resolve({ data: null, error: null }),
+          effectiveUserId
+            ? supabase
+                .from("payment_orders")
+                .select("order_number,order_type,admin_credit_amount,admin_bonus_amount,approved_at,created_at")
+                .eq("user_id", effectiveUserId)
+                .eq("status", "approved")
+                .order("approved_at", { ascending: true })
             : Promise.resolve({ data: null, error: null }),
         ]);
 
@@ -283,6 +293,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         if (logResult.error) throw logResult.error;
         if (profileResult.error) throw profileResult.error;
         if (topupResult.error) throw topupResult.error;
+        if (paymentOrderResult.error) throw paymentOrderResult.error;
         if (!mounted) return;
 
         const logRowsRaw = (logResult.data || []) as CreditLogRow[];
@@ -299,6 +310,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         setExactCreditsByKey(exactMap);
         setCurrentBalance(profileResult.data?.credits ?? null);
         setTopupRows((topupResult.data || []) as TopupRow[]);
+        setPaymentOrderRows((paymentOrderResult.data || []) as PaymentOrderRow[]);
         setCreditLogRows(logRowsRaw);
       } catch (e: any) {
         if (mounted) setError(e?.message || "Failed to load usage records");
