@@ -501,7 +501,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
                     By Tool — Credits Used Per Tool
                   </p>
                   {Array.from(bucket.tools.entries())
-                    .sort((a, b) => b[1].deduct - a[1].deduct || b[1].usage - a[1].usage)
+                    .sort((a, b) => b[1].creditQuantity - a[1].creditQuantity || b[1].deduct - a[1].deduct)
                     .map(([toolId, t]) => (
                       <div
                         key={toolId}
@@ -514,14 +514,17 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
                           </span>
                           <div
                             className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-amber-500/25 to-amber-600/10 border border-amber-500/50 shadow-sm shadow-amber-500/10"
-                            title="Credits deducted for this tool"
+                            title={`${t.creditQuantity} credits deducted across ${t.deduct} transactions (${costFor(toolId)} CR/trs)`}
                           >
                             <Coins className="w-3.5 h-3.5 text-amber-400" />
                             <span className="text-sm font-extrabold text-amber-400 tabular-nums leading-none">
-                              {t.deduct}
+                              {t.creditQuantity}
                             </span>
                             <span className="text-3xs font-bold text-amber-400/90 uppercase tracking-wider">
                               CR
+                            </span>
+                            <span className="text-3xs font-bold text-amber-400/70 tabular-nums ml-1">
+                              · {t.deduct} trs
                             </span>
                           </div>
                         </div>
