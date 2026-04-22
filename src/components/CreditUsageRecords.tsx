@@ -52,6 +52,15 @@ interface TopupRow {
   created_at: string | null;
 }
 
+interface PaymentOrderRow {
+  order_number: string;
+  order_type: string;
+  admin_credit_amount: number | null;
+  admin_bonus_amount: number | null;
+  approved_at: string | null;
+  created_at: string;
+}
+
 interface CreditPool {
   original: number;
   topup: number;
@@ -141,6 +150,16 @@ type NormalizedTopup = TopupRow & {
   normalizedType: "original" | "topup" | "renew" | "bonus" | "referral";
 };
 
+type CreditBucketEntry = {
+  amount: number;
+  normalizedType: "original" | "topup" | "renew" | "bonus" | "referral";
+};
+
+type CreditAdditionEvent = CreditBucketEntry & {
+  occurredAt: string;
+  dateKey: string | null;
+};
+
 type NormalizedCreditLog = {
   toolName: string;
   dateKey: string | null;
@@ -149,6 +168,13 @@ type NormalizedCreditLog = {
 
 const pad2 = (value: number | string) => String(value).padStart(2, "0");
 
+const toIsoInstant = (value: string | null | undefined) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+};
+
 const toUtcDateKey = (value: string | null | undefined) => {
   if (!value) return null;
   const date = new Date(value);
@@ -156,7 +182,13 @@ const toUtcDateKey = (value: string | null | undefined) => {
   return date.toISOString().slice(0, 10);
 };
 
-const aggregatePool = (entries: NormalizedTopup[]): CreditPool => {
+const extractOrderNumberFromNote = (note: string | null | undefined) => {
+  if (!note) return null;
+  const match = note.match(/\b(?:nw|kys)\d{4,}\b/i);
+  return match?.[0]?.toLowerCase() ?? null;
+};
+
+const aggregatePool = (entries: CreditBucketEntry[]): CreditPool => {
   const pool: CreditPool = {
     original: 0,
     topup: 0,
