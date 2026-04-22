@@ -469,9 +469,27 @@ Script Context to Narrate:
 `;
 
       let combinedPcmBase64 = null;
-      let chunkCost =
-        voiceCreditCost !== undefined && chunks.length > 0 ? Math.ceil(voiceCreditCost / chunks.length) : undefined;
-
+      // SURGICAL FIX (Process/Success/Credit accounting):
+      // ----------------------------------------------------------------
+      // Previous behavior: each text chunk independently triggered the
+      // server-side `deduct_user_credits` RPC inside `gemini-tts`, which
+      // incremented usage_count + success_count AND deducted credits per
+      // chunk. If a single user request was split into 6 chunks the admin
+      // panel showed 6 processes / 6 successes / 6× credit deduction.
+      //
+      // New behavior:
+      //  * For every chunk we send `skipCreditDeduction: true`, so the
+      //    edge function does NOT touch usage stats or credits at all.
+      //  * After ALL chunks finish, we perform exactly ONE accounting
+      //    operation that represents the REAL process:
+      //      - On full success: ONE `deduct_user_credits` call with the
+      //        full computed cost → 1 process, 1 success, 1 deduction.
+      //      - On failure (no audio at all): ONE `record_tool_outcome`
+      //        error → 1 process, 1 error, 0 deduction.
+      //  * Process count = success_count + error_count (server-side).
+      //  * Credit deduction is gated on real success (pcmBuffers > 0).
+      // Own API mode is untouched (no credits, no logging — preserved).
+      // ----------------------------------------------------------------
       const pcmBuffers: string[] = [];
       let isError = false;
 
@@ -484,7 +502,8 @@ Script Context to Narrate:
             apiType === "own" ? apiKey : undefined,
             performance,
             selectedLanguage,
-            chunkCost,
+            undefined,
+            apiType === "app", // skipCreditDeduction for App API chunks (we deduct once below)
           );
           if (pcm) pcmBuffers.push(pcm);
         } catch (e) {
