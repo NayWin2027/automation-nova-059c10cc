@@ -619,7 +619,19 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         <div className="flex items-center justify-between gap-3 mb-3">
           <div>
             <p className="text-sm font-extrabold text-foreground tracking-wide">ACCOUNT CREDIT AUDIT</p>
-            <p className="text-xs text-muted-foreground">Lifetime pool vs real usage + remaining</p>
+            <p className="text-xs text-muted-foreground">
+              {auditScope === "lifetime"
+                ? "Lifetime pool vs real usage + remaining"
+                : `Audit window: ${
+                    period === "yearly"
+                      ? filterYear
+                      : period === "monthly"
+                      ? `${MONTHS[parseInt(filterMonth, 10) - 1]} ${filterYear}`
+                      : filterDay === ALL
+                      ? `${MONTHS[parseInt(filterMonth, 10) - 1]} ${filterYear}`
+                      : `${String(filterDay).padStart(2, "0")} ${MONTHS[parseInt(filterMonth, 10) - 1]} ${filterYear}`
+                  }`}
+            </p>
           </div>
           {lifetimeCreditAudit.status === "match" && (
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40">
@@ -643,10 +655,34 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
           )}
         </div>
 
+        {/* Audit scope toggle: Current selection vs Lifetime */}
+        <div className="grid grid-cols-2 gap-2 mb-3 p-1 rounded-xl bg-background/60 border border-border/40">
+          <button
+            onClick={() => setAuditScope("current")}
+            className={`h-9 rounded-lg text-xs font-extrabold uppercase tracking-wider transition-all ${
+              auditScope === "current"
+                ? "bg-amber-500 text-background shadow"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Current Selection
+          </button>
+          <button
+            onClick={() => setAuditScope("lifetime")}
+            className={`h-9 rounded-lg text-xs font-extrabold uppercase tracking-wider transition-all ${
+              auditScope === "lifetime"
+                ? "bg-amber-500 text-background shadow"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Lifetime
+          </button>
+        </div>
+
         {/* Lifetime Pool Breakdown */}
         <div className="mb-3 p-3 rounded-xl bg-background/50 border border-border/40">
           <p className="text-2xs font-bold text-muted-foreground uppercase tracking-widest mb-2">
-            Lifetime Pool Breakdown
+            {auditScope === "lifetime" ? "Lifetime Pool Breakdown" : "Pool Breakdown (Selected Period)"}
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
             <div className="px-2 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-center">
