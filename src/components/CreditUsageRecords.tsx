@@ -225,129 +225,230 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
   }, [filteredRows]);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {!compact && (
-        <div className="flex items-center gap-2">
-          <BarChart3 className="w-4 h-4 text-primary" />
-          <h3 className="text-sm font-bold text-foreground">Credit Usage Records</h3>
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500/30 to-amber-600/10 border border-amber-500/40 flex items-center justify-center shadow-lg shadow-amber-500/10">
+            <BarChart3 className="w-5 h-5 text-amber-400" />
+          </div>
+          <div>
+            <h3 className="text-base font-extrabold text-foreground tracking-wide">CREDIT USAGE RECORDS</h3>
+            <p className="text-xs text-muted-foreground/80">Detailed history of every process</p>
+          </div>
         </div>
       )}
 
-      {/* Grand Total Cards */}
-      <div className="grid grid-cols-4 gap-2">
-        <Card className="p-2 bg-card/60 border-primary/20">
-          <p className="text-3xs text-muted-foreground">Process</p>
-          <p className="text-base font-bold text-foreground">{grandTotal.usage}</p>
-        </Card>
-        <Card className="p-2 bg-card/60 border-emerald-500/20">
-          <p className="text-3xs text-muted-foreground">Success</p>
-          <p className="text-base font-bold text-emerald-500">{grandTotal.success}</p>
-        </Card>
-        <Card className="p-2 bg-card/60 border-rose-500/20">
-          <p className="text-3xs text-muted-foreground">Error</p>
-          <p className="text-base font-bold text-rose-500">{grandTotal.error}</p>
-        </Card>
-        <Card className="p-2 bg-card/60 border-amber-500/20">
-          <p className="text-3xs text-muted-foreground">Credits</p>
-          <p className="text-base font-bold text-amber-500">{grandTotal.deduct}</p>
-        </Card>
+      {/* Period Tabs (Daily / Monthly / Yearly) */}
+      <div className="grid grid-cols-3 gap-2 p-1.5 rounded-2xl bg-card/60 border border-border/40 backdrop-blur-sm">
+        {(["daily", "monthly", "yearly"] as const).map((p) => (
+          <button
+            key={p}
+            onClick={() => setPeriod(p)}
+            className={`relative h-10 rounded-xl text-sm font-bold uppercase tracking-wider transition-all ${
+              period === p
+                ? "bg-gradient-to-br from-amber-500 to-amber-600 text-background shadow-lg shadow-amber-500/30"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+            }`}
+          >
+            {p}
+          </button>
+        ))}
       </div>
 
-      {/* Filter Controls */}
-      <div className="flex flex-col sm:flex-row gap-2">
-        <Tabs value={period} onValueChange={(v) => setPeriod(v as Period)} className="flex-1">
-          <TabsList className="grid grid-cols-3 w-full h-8">
-            <TabsTrigger value="daily" className="text-2xs">
-              <Calendar className="w-3 h-3 mr-1" /> Daily
-            </TabsTrigger>
-            <TabsTrigger value="monthly" className="text-2xs">
-              <Calendar className="w-3 h-3 mr-1" /> Monthly
-            </TabsTrigger>
-            <TabsTrigger value="yearly" className="text-2xs">
-              <Calendar className="w-3 h-3 mr-1" /> Yearly
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <div className="flex gap-1">
+      {/* Date selector dropdowns */}
+      <Card className="p-3 bg-card/70 border border-border/50 backdrop-blur-sm">
+        <p className="text-xs font-bold text-amber-400/90 uppercase tracking-widest mb-2.5 flex items-center gap-1.5">
+          <Calendar className="w-3.5 h-3.5" /> Select {period === "yearly" ? "Year" : period === "monthly" ? "Month & Year" : "Date"}
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          {/* Day - only shown for daily */}
+          {period === "daily" && (
+            <Select value={filterDay} onValueChange={setFilterDay}>
+              <SelectTrigger className="h-11 text-sm font-bold bg-background/80 border-border/60 text-foreground">
+                <SelectValue placeholder="Day" />
+              </SelectTrigger>
+              <SelectContent className="max-h-72">
+                <SelectItem value={ALL} className="text-sm font-semibold">All Days</SelectItem>
+                {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => (
+                  <SelectItem key={d} value={String(d)} className="text-sm font-semibold">
+                    {String(d).padStart(2, "0")}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* Month - shown for daily & monthly */}
+          {period !== "yearly" && (
+            <Select value={filterMonth} onValueChange={setFilterMonth}>
+              <SelectTrigger className="h-11 text-sm font-bold bg-background/80 border-border/60 text-foreground">
+                <SelectValue placeholder="Month" />
+              </SelectTrigger>
+              <SelectContent className="max-h-72">
+                {MONTHS.map((name, i) => (
+                  <SelectItem key={i} value={String(i + 1)} className="text-sm font-semibold">
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* Year - always shown */}
+          <Select value={filterYear} onValueChange={setFilterYear}>
+            <SelectTrigger
+              className={`h-11 text-sm font-bold bg-background/80 border-border/60 text-foreground ${
+                period === "yearly" ? "col-span-3" : period === "monthly" ? "col-span-1" : ""
+              }`}
+            >
+              <SelectValue placeholder="Year" />
+            </SelectTrigger>
+            <SelectContent className="max-h-72">
+              {YEARS.map((y) => (
+                <SelectItem key={y} value={String(y)} className="text-sm font-semibold">
+                  {y}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* View toggle */}
+        <div className="flex gap-2 mt-3 pt-3 border-t border-border/40">
           <Button
             size="sm"
             variant={view === "detail" ? "default" : "outline"}
-            className="h-8 text-2xs"
+            className={`flex-1 h-9 text-sm font-bold ${
+              view === "detail" ? "bg-amber-500 hover:bg-amber-600 text-background" : ""
+            }`}
             onClick={() => setView("detail")}
           >
-            <List className="w-3 h-3 mr-1" /> Detail
+            <List className="w-4 h-4 mr-1.5" /> DETAIL
           </Button>
           <Button
             size="sm"
             variant={view === "total" ? "default" : "outline"}
-            className="h-8 text-2xs"
+            className={`flex-1 h-9 text-sm font-bold ${
+              view === "total" ? "bg-amber-500 hover:bg-amber-600 text-background" : ""
+            }`}
             onClick={() => setView("total")}
           >
-            <BarChart3 className="w-3 h-3 mr-1" /> Total
+            <BarChart3 className="w-4 h-4 mr-1.5" /> TOTAL
           </Button>
         </div>
+      </Card>
+
+      {/* Grand Total Summary Cards (filtered) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <Card className="p-3 bg-gradient-to-br from-primary/15 to-primary/5 border border-primary/30">
+          <div className="flex items-center gap-1.5 mb-1">
+            <Activity className="w-3.5 h-3.5 text-primary" />
+            <p className="text-2xs font-bold text-primary uppercase tracking-wider">Process</p>
+          </div>
+          <p className="text-2xl font-extrabold text-foreground tabular-nums">{grandTotal.usage}</p>
+        </Card>
+        <Card className="p-3 bg-gradient-to-br from-emerald-500/15 to-emerald-500/5 border border-emerald-500/30">
+          <div className="flex items-center gap-1.5 mb-1">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            <p className="text-2xs font-bold text-emerald-400 uppercase tracking-wider">Success</p>
+          </div>
+          <p className="text-2xl font-extrabold text-emerald-400 tabular-nums">{grandTotal.success}</p>
+        </Card>
+        <Card className="p-3 bg-gradient-to-br from-rose-500/15 to-rose-500/5 border border-rose-500/30">
+          <div className="flex items-center gap-1.5 mb-1">
+            <XCircle className="w-3.5 h-3.5 text-rose-400" />
+            <p className="text-2xs font-bold text-rose-400 uppercase tracking-wider">Error</p>
+          </div>
+          <p className="text-2xl font-extrabold text-rose-400 tabular-nums">{grandTotal.error}</p>
+        </Card>
+        <Card className="p-3 bg-gradient-to-br from-amber-500/20 to-amber-600/5 border border-amber-500/40 shadow-lg shadow-amber-500/10">
+          <div className="flex items-center gap-1.5 mb-1">
+            <Coins className="w-3.5 h-3.5 text-amber-400" />
+            <p className="text-2xs font-bold text-amber-400 uppercase tracking-wider">Credits</p>
+          </div>
+          <p className="text-2xl font-extrabold text-amber-400 tabular-nums">{grandTotal.deduct}</p>
+        </Card>
       </div>
 
       {/* Records */}
       {loading && (
-        <div className="flex items-center justify-center py-8 text-muted-foreground">
-          <Loader2 className="w-4 h-4 animate-spin mr-2" />
-          <span className="text-xs">Loading records...</span>
+        <div className="flex items-center justify-center py-12 text-muted-foreground">
+          <Loader2 className="w-5 h-5 animate-spin mr-2 text-amber-400" />
+          <span className="text-sm font-semibold">Loading records...</span>
         </div>
       )}
 
       {error && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive">
-          <AlertCircle className="w-4 h-4" />
-          <span className="text-xs">{error}</span>
+        <div className="flex items-center gap-2 p-4 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive">
+          <AlertCircle className="w-5 h-5" />
+          <span className="text-sm font-semibold">{error}</span>
         </div>
       )}
 
       {!loading && !error && grouped.length === 0 && (
-        <div className="text-center py-8 text-muted-foreground">
-          <Activity className="w-6 h-6 mx-auto mb-2 opacity-40" />
-          <p className="text-xs">No usage records found</p>
-        </div>
+        <Card className="text-center py-12 bg-card/40 border-dashed border-border/40">
+          <Activity className="w-10 h-10 mx-auto mb-3 text-muted-foreground/40" />
+          <p className="text-sm font-bold text-foreground">No usage records</p>
+          <p className="text-xs text-muted-foreground mt-1">No activity for the selected period</p>
+        </Card>
       )}
 
       {!loading && !error && grouped.length > 0 && (
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           {grouped.map(([key, bucket]) => (
-            <Card key={key} className="p-3 bg-card/40 border-border/30">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-bold text-foreground">{periodLabel(key, period)}</p>
-                <div className="flex items-center gap-2 text-2xs">
-                  <span className="text-muted-foreground">
-                    Process <span className="text-foreground font-semibold">{bucket.total.usage}</span>
-                  </span>
-                  <span className="text-emerald-500">
-                    OK <span className="font-semibold">{bucket.total.success}</span>
-                  </span>
-                  <span className="text-rose-500">
-                    Err <span className="font-semibold">{bucket.total.error}</span>
-                  </span>
-                  <span className="flex items-center gap-1 text-amber-500">
-                    <Coins className="w-3 h-3" />
-                    <span className="font-semibold">{bucket.total.deduct}</span>
-                  </span>
+            <Card key={key} className="p-4 bg-card/60 border border-border/40 hover:border-amber-500/30 transition-colors">
+              {/* Period header */}
+              <div className="flex items-center justify-between mb-3 pb-3 border-b border-border/30">
+                <div className="flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-amber-400" />
+                  <p className="text-sm font-extrabold text-foreground tracking-wide">{periodLabel(key, period)}</p>
+                </div>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30">
+                  <Coins className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="text-sm font-extrabold text-amber-400 tabular-nums">{bucket.total.deduct}</span>
+                  <span className="text-2xs font-bold text-amber-400/80 uppercase">CR</span>
                 </div>
               </div>
+
+              {/* Period totals row */}
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                <div className="px-2.5 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-center">
+                  <p className="text-3xs font-bold text-primary/80 uppercase">Process</p>
+                  <p className="text-base font-extrabold text-foreground tabular-nums">{bucket.total.usage}</p>
+                </div>
+                <div className="px-2.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-center">
+                  <p className="text-3xs font-bold text-emerald-400/80 uppercase">Success</p>
+                  <p className="text-base font-extrabold text-emerald-400 tabular-nums">{bucket.total.success}</p>
+                </div>
+                <div className="px-2.5 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-center">
+                  <p className="text-3xs font-bold text-rose-400/80 uppercase">Error</p>
+                  <p className="text-base font-extrabold text-rose-400 tabular-nums">{bucket.total.error}</p>
+                </div>
+              </div>
+
               {view === "detail" && (
-                <div className="space-y-1">
+                <div className="space-y-1.5">
+                  <p className="text-2xs font-bold text-muted-foreground uppercase tracking-wider mb-1">By Tool</p>
                   {Array.from(bucket.tools.entries())
                     .sort((a, b) => b[1].usage - a[1].usage)
                     .map(([toolId, t]) => (
                       <div
                         key={toolId}
-                        className="flex items-center justify-between px-2 py-1.5 rounded-md bg-muted/10 border border-border/10"
+                        className="flex items-center justify-between px-3 py-2 rounded-lg bg-muted/20 border border-border/30"
                       >
-                        <span className="text-2xs font-medium text-foreground">{labelTool(toolId)}</span>
-                        <div className="flex items-center gap-2 text-2xs">
-                          <span className="text-muted-foreground">P:{t.usage}</span>
-                          <span className="text-emerald-500">S:{t.success}</span>
-                          <span className="text-rose-500">E:{t.error}</span>
-                          <span className="flex items-center gap-0.5 text-amber-500 font-semibold">
-                            <Coins className="w-2.5 h-2.5" /> {t.deduct}
+                        <span className="text-sm font-bold text-foreground">{labelTool(toolId)}</span>
+                        <div className="flex items-center gap-2.5 text-xs">
+                          <span className="text-foreground font-bold tabular-nums" title="Process">
+                            <span className="text-muted-foreground font-normal">P</span> {t.usage}
+                          </span>
+                          <span className="text-emerald-400 font-bold tabular-nums" title="Success">
+                            <span className="opacity-70 font-normal">S</span> {t.success}
+                          </span>
+                          <span className="text-rose-400 font-bold tabular-nums" title="Error">
+                            <span className="opacity-70 font-normal">E</span> {t.error}
+                          </span>
+                          <span className="flex items-center gap-0.5 text-amber-400 font-extrabold tabular-nums" title="Credits deducted">
+                            <Coins className="w-3 h-3" /> {t.deduct}
                           </span>
                         </div>
                       </div>
@@ -359,8 +460,11 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         </div>
       )}
 
-      <p className="text-3xs text-muted-foreground/60 text-center pt-2">
-        P = Process · S = Success · E = Error · Credits = Actual deducted
+      <p className="text-2xs text-muted-foreground/70 text-center pt-2 font-medium">
+        <span className="text-foreground font-bold">P</span> = Process &nbsp;·&nbsp;
+        <span className="text-emerald-400 font-bold">S</span> = Success &nbsp;·&nbsp;
+        <span className="text-rose-400 font-bold">E</span> = Error &nbsp;·&nbsp;
+        <span className="text-amber-400 font-bold">Credits</span> = Actual deducted
       </p>
     </div>
   );
