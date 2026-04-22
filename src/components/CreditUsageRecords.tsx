@@ -707,7 +707,9 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
             </div>
           </div>
           <div className="mt-2.5 pt-2.5 border-t border-border/30 flex items-center justify-between">
-            <span className="text-2xs font-bold text-muted-foreground uppercase tracking-wider">Total Pool</span>
+            <span className="text-2xs font-bold text-muted-foreground uppercase tracking-wider">
+              {auditScope === "lifetime" ? "Total Pool (Lifetime)" : "Total Pool (Period)"}
+            </span>
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30">
               <Coins className="w-3.5 h-3.5 text-amber-400" />
               <span className="text-sm font-extrabold text-amber-400 tabular-nums">{creditPool.total}</span>
@@ -718,12 +720,23 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
 
         <div className="grid grid-cols-3 gap-2.5">
           <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25">
-            <p className="text-2xs font-bold text-amber-400 uppercase tracking-wider">Usage</p>
+            <p className="text-2xs font-bold text-amber-400 uppercase tracking-wider">
+              {auditScope === "lifetime" ? "Usage (Lifetime)" : "Usage (Period)"}
+            </p>
             <p className="text-2xl font-extrabold text-amber-400 tabular-nums">{lifetimeCreditAudit.used}</p>
           </div>
           <div className="p-3 rounded-xl bg-primary/10 border border-primary/25">
-            <p className="text-2xs font-bold text-primary uppercase tracking-wider">Remaining</p>
-            <p className="text-2xl font-extrabold text-foreground tabular-nums">{lifetimeCreditAudit.remaining}</p>
+            <p className="text-2xs font-bold text-primary uppercase tracking-wider">
+              {auditScope === "lifetime" ? "Balance" : "Period Net"}
+            </p>
+            <p className="text-2xl font-extrabold text-foreground tabular-nums">
+              {auditScope === "lifetime" ? lifetimeCreditAudit.remaining : lifetimeCreditAudit.periodNet}
+            </p>
+            {auditScope !== "lifetime" && (
+              <p className="text-3xs font-semibold text-muted-foreground/80 leading-tight mt-0.5">
+                Pool − Usage
+              </p>
+            )}
           </div>
           <div
             className={`p-3 rounded-xl border ${
@@ -743,7 +756,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
                   : "text-amber-400"
               }`}
             >
-              Used + Rem
+              {auditScope === "lifetime" ? "Used + Bal" : "Pool vs Used"}
             </p>
             <p
               className={`text-lg font-extrabold tabular-nums leading-tight ${
@@ -754,7 +767,9 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
                   : "text-amber-400"
               }`}
             >
-              {lifetimeCreditAudit.used} + {lifetimeCreditAudit.remaining}
+              {auditScope === "lifetime"
+                ? `${lifetimeCreditAudit.used} + ${lifetimeCreditAudit.remaining}`
+                : `${creditPool.total} − ${lifetimeCreditAudit.used}`}
             </p>
             <p
               className={`text-xs font-bold ${
@@ -765,8 +780,8 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
                   : "text-amber-400/85"
               }`}
             >
-              = {lifetimeCreditAudit.total}
-              {creditPool.hasRecords && (
+              = {auditScope === "lifetime" ? lifetimeCreditAudit.total : lifetimeCreditAudit.periodNet}
+              {auditScope === "lifetime" && creditPool.hasRecords && (
                 <span className="ml-1 opacity-80">/ Pool {creditPool.total}</span>
               )}
             </p>
@@ -775,13 +790,14 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
 
         {lifetimeCreditAudit.status === "mismatch" && (
           <p className="text-3xs font-semibold text-rose-400/85 mt-2.5 leading-snug">
-            ⚠ Pool ({creditPool.total}) ≠ Used + Remaining ({lifetimeCreditAudit.total}).
-            Possible expired credit reset, manual adjustment, or legacy seed credits.
+            {auditScope === "lifetime"
+              ? `⚠ Pool (${creditPool.total}) ≠ Used + Balance (${lifetimeCreditAudit.total}). Possible expired credit reset, manual adjustment, or legacy seed credits.`
+              : `⚠ Period usage (${lifetimeCreditAudit.used}) exceeds period pool (${creditPool.total}) by ${Math.abs(lifetimeCreditAudit.diff)} CR — credits earned in another period were spent here. Switch to Lifetime view for full reconciliation.`}
           </p>
         )}
         {lifetimeCreditAudit.status === "legacy" && (
           <p className="text-3xs font-semibold text-amber-400/85 mt-2.5 leading-snug">
-            ℹ No credit_topups records — account uses default seed credits. Lifetime pool tracking starts after the first top-up/renew.
+            ℹ No credit_topups records for this scope — account uses default seed credits. Pool tracking starts after the first top-up/renew.
           </p>
         )}
       </Card>
