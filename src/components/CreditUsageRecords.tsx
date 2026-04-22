@@ -543,14 +543,67 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         <div className="flex items-center justify-between gap-3 mb-3">
           <div>
             <p className="text-sm font-extrabold text-foreground tracking-wide">ACCOUNT CREDIT AUDIT</p>
-            <p className="text-xs text-muted-foreground">All-time real credit usage + current balance</p>
+            <p className="text-xs text-muted-foreground">Lifetime pool vs real usage + remaining</p>
           </div>
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30">
-            <Coins className="w-3.5 h-3.5 text-amber-400" />
-            <span className="text-sm font-extrabold text-amber-400 tabular-nums">{lifetimeCreditAudit.total}</span>
-            <span className="text-2xs font-bold text-amber-400/80 uppercase">Total</span>
+          {lifetimeCreditAudit.status === "match" && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="text-2xs font-extrabold text-emerald-400 uppercase tracking-wider">Match</span>
+            </div>
+          )}
+          {lifetimeCreditAudit.status === "mismatch" && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/15 border border-rose-500/40">
+              <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
+              <span className="text-2xs font-extrabold text-rose-400 uppercase tracking-wider">
+                Diff {lifetimeCreditAudit.diff > 0 ? "+" : ""}{lifetimeCreditAudit.diff}
+              </span>
+            </div>
+          )}
+          {lifetimeCreditAudit.status === "legacy" && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30">
+              <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+              <span className="text-2xs font-extrabold text-amber-400 uppercase tracking-wider">Legacy Seed</span>
+            </div>
+          )}
+        </div>
+
+        {/* Lifetime Pool Breakdown */}
+        <div className="mb-3 p-3 rounded-xl bg-background/50 border border-border/40">
+          <p className="text-2xs font-bold text-muted-foreground uppercase tracking-widest mb-2">
+            Lifetime Pool Breakdown
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            <div className="px-2 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-center">
+              <p className="text-3xs font-bold text-amber-400/80 uppercase">Original</p>
+              <p className="text-base font-extrabold text-amber-400 tabular-nums leading-tight">{creditPool.original}</p>
+            </div>
+            <div className="px-2 py-1.5 rounded-lg bg-sky-500/10 border border-sky-500/25 text-center">
+              <p className="text-3xs font-bold text-sky-400/80 uppercase">Top-up</p>
+              <p className="text-base font-extrabold text-sky-400 tabular-nums leading-tight">{creditPool.topup}</p>
+            </div>
+            <div className="px-2 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/25 text-center">
+              <p className="text-3xs font-bold text-violet-400/80 uppercase">Renew</p>
+              <p className="text-base font-extrabold text-violet-400 tabular-nums leading-tight">{creditPool.renew}</p>
+            </div>
+            <div className="px-2 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-center">
+              <p className="text-3xs font-bold text-emerald-400/80 uppercase">Bonus</p>
+              <p className="text-base font-extrabold text-emerald-400 tabular-nums leading-tight">{creditPool.bonus}</p>
+            </div>
+            <div className="px-2 py-1.5 rounded-lg bg-pink-500/10 border border-pink-500/25 text-center">
+              <p className="text-3xs font-bold text-pink-400/80 uppercase">Referral</p>
+              <p className="text-base font-extrabold text-pink-400 tabular-nums leading-tight">{creditPool.referral}</p>
+            </div>
+          </div>
+          <div className="mt-2.5 pt-2.5 border-t border-border/30 flex items-center justify-between">
+            <span className="text-2xs font-bold text-muted-foreground uppercase tracking-wider">Total Pool</span>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30">
+              <Coins className="w-3.5 h-3.5 text-amber-400" />
+              <span className="text-sm font-extrabold text-amber-400 tabular-nums">{creditPool.total}</span>
+              <span className="text-2xs font-bold text-amber-400/80 uppercase">CR</span>
+            </div>
           </div>
         </div>
+
         <div className="grid grid-cols-3 gap-2.5">
           <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25">
             <p className="text-2xs font-bold text-amber-400 uppercase tracking-wider">Usage</p>
@@ -560,14 +613,65 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
             <p className="text-2xs font-bold text-primary uppercase tracking-wider">Remaining</p>
             <p className="text-2xl font-extrabold text-foreground tabular-nums">{lifetimeCreditAudit.remaining}</p>
           </div>
-          <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25">
-            <p className="text-2xs font-bold text-emerald-400 uppercase tracking-wider">Check</p>
-            <p className="text-lg font-extrabold text-emerald-400 tabular-nums leading-tight">
+          <div
+            className={`p-3 rounded-xl border ${
+              lifetimeCreditAudit.status === "match"
+                ? "bg-emerald-500/10 border-emerald-500/25"
+                : lifetimeCreditAudit.status === "mismatch"
+                ? "bg-rose-500/10 border-rose-500/30"
+                : "bg-amber-500/10 border-amber-500/25"
+            }`}
+          >
+            <p
+              className={`text-2xs font-bold uppercase tracking-wider ${
+                lifetimeCreditAudit.status === "match"
+                  ? "text-emerald-400"
+                  : lifetimeCreditAudit.status === "mismatch"
+                  ? "text-rose-400"
+                  : "text-amber-400"
+              }`}
+            >
+              Used + Rem
+            </p>
+            <p
+              className={`text-lg font-extrabold tabular-nums leading-tight ${
+                lifetimeCreditAudit.status === "match"
+                  ? "text-emerald-400"
+                  : lifetimeCreditAudit.status === "mismatch"
+                  ? "text-rose-400"
+                  : "text-amber-400"
+              }`}
+            >
               {lifetimeCreditAudit.used} + {lifetimeCreditAudit.remaining}
             </p>
-            <p className="text-xs font-bold text-emerald-400/85">= {lifetimeCreditAudit.total}</p>
+            <p
+              className={`text-xs font-bold ${
+                lifetimeCreditAudit.status === "match"
+                  ? "text-emerald-400/85"
+                  : lifetimeCreditAudit.status === "mismatch"
+                  ? "text-rose-400/85"
+                  : "text-amber-400/85"
+              }`}
+            >
+              = {lifetimeCreditAudit.total}
+              {creditPool.hasRecords && (
+                <span className="ml-1 opacity-80">/ Pool {creditPool.total}</span>
+              )}
+            </p>
           </div>
         </div>
+
+        {lifetimeCreditAudit.status === "mismatch" && (
+          <p className="text-3xs font-semibold text-rose-400/85 mt-2.5 leading-snug">
+            ⚠ Pool ({creditPool.total}) ≠ Used + Remaining ({lifetimeCreditAudit.total}).
+            Possible expired credit reset, manual adjustment, or legacy seed credits.
+          </p>
+        )}
+        {lifetimeCreditAudit.status === "legacy" && (
+          <p className="text-3xs font-semibold text-amber-400/85 mt-2.5 leading-snug">
+            ℹ No credit_topups records — account uses default seed credits. Lifetime pool tracking starts after the first top-up/renew.
+          </p>
+        )}
       </Card>
 
       {/* Grand Total Summary Cards (filtered) */}
