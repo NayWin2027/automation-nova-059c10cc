@@ -428,7 +428,13 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
             <Coins className="w-3.5 h-3.5 text-amber-400" />
             <p className="text-2xs font-bold text-amber-400 uppercase tracking-wider">Credits</p>
           </div>
-          <p className="text-2xl font-extrabold text-amber-400 tabular-nums">{grandTotal.deduct}</p>
+          <p className="text-2xl font-extrabold text-amber-400 tabular-nums leading-none">
+            {grandTotal.creditQuantity}
+            <span className="text-2xs font-bold text-amber-400/80 ml-1">CR</span>
+          </p>
+          <p className="text-3xs font-bold text-amber-400/70 mt-0.5 tabular-nums">
+            {grandTotal.deduct} trs
+          </p>
         </Card>
       </div>
 
