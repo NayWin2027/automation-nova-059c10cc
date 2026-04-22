@@ -234,34 +234,43 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
   const grouped = useMemo(() => {
     const map = new Map<
       string,
-      { total: { usage: number; success: number; error: number; deduct: number }; tools: Map<string, { usage: number; success: number; error: number; deduct: number }> }
+      {
+        total: { usage: number; success: number; error: number; deduct: number; creditQuantity: number };
+        tools: Map<string, { usage: number; success: number; error: number; deduct: number; creditQuantity: number }>;
+      }
     >();
 
     for (const r of filteredRows) {
       const k = periodKey(r.usage_date, period);
       if (!map.has(k)) {
         map.set(k, {
-          total: { usage: 0, success: 0, error: 0, deduct: 0 },
+          total: { usage: 0, success: 0, error: 0, deduct: 0, creditQuantity: 0 },
           tools: new Map(),
         });
       }
       const bucket = map.get(k)!;
+      const unitCost = costFor(r.tool_id);
+      const rowCredits = (r.deduct_count || 0) * unitCost;
       bucket.total.usage += r.usage_count || 0;
       bucket.total.success += r.success_count || 0;
       bucket.total.error += r.error_count || 0;
       bucket.total.deduct += r.deduct_count || 0;
+      bucket.total.creditQuantity += rowCredits;
 
-      const t = bucket.tools.get(r.tool_id) || { usage: 0, success: 0, error: 0, deduct: 0 };
+      const t =
+        bucket.tools.get(r.tool_id) ||
+        { usage: 0, success: 0, error: 0, deduct: 0, creditQuantity: 0 };
       t.usage += r.usage_count || 0;
       t.success += r.success_count || 0;
       t.error += r.error_count || 0;
       t.deduct += r.deduct_count || 0;
+      t.creditQuantity += rowCredits;
       bucket.tools.set(r.tool_id, t);
     }
 
     // Sort periods desc
     return Array.from(map.entries()).sort((a, b) => (a[0] < b[0] ? 1 : -1));
-  }, [filteredRows, period]);
+  }, [filteredRows, period, toolCosts]);
 
   const grandTotal = useMemo(() => {
     return filteredRows.reduce(
@@ -270,11 +279,12 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         acc.success += r.success_count || 0;
         acc.error += r.error_count || 0;
         acc.deduct += r.deduct_count || 0;
+        acc.creditQuantity += (r.deduct_count || 0) * costFor(r.tool_id);
         return acc;
       },
-      { usage: 0, success: 0, error: 0, deduct: 0 }
+      { usage: 0, success: 0, error: 0, deduct: 0, creditQuantity: 0 }
     );
-  }, [filteredRows]);
+  }, [filteredRows, toolCosts]);
 
   return (
     <div className="space-y-4">
