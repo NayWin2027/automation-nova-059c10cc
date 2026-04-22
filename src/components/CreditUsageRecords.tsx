@@ -61,6 +61,11 @@ interface PaymentOrderRow {
   created_at: string;
 }
 
+interface ProfileCreditRow {
+  credits: number;
+  credits_started_at: string | null;
+}
+
 interface CreditPool {
   original: number;
   topup: number;
@@ -162,6 +167,7 @@ type CreditAdditionEvent = CreditBucketEntry & {
 
 type NormalizedCreditLog = {
   toolName: string;
+  occurredAt: string;
   dateKey: string | null;
   credits: number;
 };
@@ -221,6 +227,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
   const [rows, setRows] = useState<UsageRow[]>([]);
   const [exactCreditsByKey, setExactCreditsByKey] = useState<Record<string, number>>({});
   const [currentBalance, setCurrentBalance] = useState<number | null>(null);
+  const [profileCreditRow, setProfileCreditRow] = useState<ProfileCreditRow | null>(null);
   const [topupRows, setTopupRows] = useState<TopupRow[]>([]);
   const [paymentOrderRows, setPaymentOrderRows] = useState<PaymentOrderRow[]>([]);
   const [creditLogRows, setCreditLogRows] = useState<CreditLogRow[]>([]);
@@ -268,7 +275,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
           query,
           logQuery,
           effectiveUserId
-            ? supabase.from("profiles").select("credits").eq("user_id", effectiveUserId).maybeSingle()
+            ? supabase.from("profiles").select("credits,credits_started_at").eq("user_id", effectiveUserId).maybeSingle()
             : Promise.resolve({ data: null, error: null }),
           effectiveUserId
             ? supabase
@@ -309,6 +316,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         setRows((data || []) as UsageRow[]);
         setExactCreditsByKey(exactMap);
         setCurrentBalance(profileResult.data?.credits ?? null);
+        setProfileCreditRow((profileResult.data || null) as ProfileCreditRow | null);
         setTopupRows((topupResult.data || []) as TopupRow[]);
         setPaymentOrderRows((paymentOrderResult.data || []) as PaymentOrderRow[]);
         setCreditLogRows(logRowsRaw);
@@ -448,6 +456,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
     return creditLogRows
       .map((row) => ({
         toolName: row.tool_name,
+        occurredAt: toIsoInstant(row.created_at) || row.created_at,
         dateKey: toUtcDateKey(row.created_at),
         credits: Number(row?.metadata?.credits_deducted ?? 0),
       }))
@@ -511,6 +520,39 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
     return [...paymentOrderEvents, ...manualTopupEvents].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
   }, [paymentOrderEvents, manualTopupEvents]);
 
+  const creditStartInstant = useMemo(() => {
+    return toIsoInstant(profileCreditRow?.credits_started_at) || null;
+  }, [profileCreditRow?.credits_started_at]);
+
+  const seededOriginalAmount = useMemo(() => {
+    if (currentBalance == null || !creditStartInstant) return 0;
+    const usageSinceStart = normalizedCreditLogs
+      .filter((row) => row.occurredAt >= creditStartInstant)
+      .reduce((sum, row) => sum + row.credits, 0);
+    const trackedAdditionsSinceStart = additionEvents
+      .filter((row) => row.occurredAt >= creditStartInstant)
+      .reduce((sum, row) => sum + row.amount, 0);
+    return Math.max(currentBalance + usageSinceStart - trackedAdditionsSinceStart, 0);
+  }, [additionEvents, creditStartInstant, currentBalance, normalizedCreditLogs]);
+
+  const authoritativeAdditionEvents = useMemo<CreditAdditionEvent[]>(() => {
+    if (!creditStartInstant || seededOriginalAmount <= 0) return additionEvents;
+    const hasOpeningOriginal = additionEvents.some(
+      (row) => row.normalizedType === "original" && row.occurredAt >= creditStartInstant
+    );
+    if (hasOpeningOriginal) return additionEvents;
+    const seededOriginalEvent: CreditAdditionEvent = {
+      amount: seededOriginalAmount,
+      normalizedType: "original",
+      occurredAt: creditStartInstant,
+      dateKey: toUtcDateKey(creditStartInstant),
+    };
+    return [
+      seededOriginalEvent,
+      ...additionEvents,
+    ].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
+  }, [additionEvents, creditStartInstant, seededOriginalAmount]);
+
   const auditRange = useMemo(() => {
     if (auditScope === "lifetime") {
       return { start: null as string | null, end: null as string | null };
@@ -532,8 +574,8 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
   }, [auditScope, period, filterYear, filterMonth, filterDay]);
 
   const scopedAdditionEvents = useMemo(() => {
-    return additionEvents.filter((row) => row.dateKey && dateInAuditScope(row.dateKey));
-  }, [additionEvents, dateInAuditScope]);
+    return authoritativeAdditionEvents.filter((row) => row.dateKey && dateInAuditScope(row.dateKey));
+  }, [authoritativeAdditionEvents, dateInAuditScope]);
 
   const scopedCreditLogs = useMemo(() => {
     return normalizedCreditLogs.filter((row) => row.dateKey && dateInAuditScope(row.dateKey));
@@ -543,7 +585,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
 
   const lifetimeCreditAudit = useMemo(() => {
     const openingAdded = auditRange.start
-      ? aggregatePool(additionEvents.filter((row) => row.dateKey && row.dateKey < auditRange.start)).total
+      ? aggregatePool(authoritativeAdditionEvents.filter((row) => row.dateKey && row.dateKey < auditRange.start)).total
       : 0;
     const openingUsed = auditRange.start
       ? sumCredits(normalizedCreditLogs.filter((row) => row.dateKey && row.dateKey < auditRange.start))
@@ -566,7 +608,18 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
       status: Math.abs(reconciliationDiff) <= 1 && Math.abs(liveBalanceDelta) <= 1 ? ("balanced" as AuditStatus) : ("untracked" as AuditStatus),
       untrackedBalance: liveBalanceDelta,
     };
-  }, [auditRange.start, additionEvents, normalizedCreditLogs, auditScope, creditPool.total, scopedCreditLogs, currentBalance]);
+  }, [auditRange.start, authoritativeAdditionEvents, normalizedCreditLogs, auditScope, creditPool.total, scopedCreditLogs, currentBalance]);
+
+  const visibleCreditPoolEntries = useMemo(
+    () => [
+      { key: "original", label: "Original", value: creditPool.original, className: "bg-amber-500/10 border-amber-500/25 text-amber-400" },
+      { key: "topup", label: "Top-up", value: creditPool.topup, className: "bg-sky-500/10 border-sky-500/25 text-sky-400" },
+      { key: "renew", label: "Renew", value: creditPool.renew, className: "bg-violet-500/10 border-violet-500/25 text-violet-400" },
+      { key: "bonus", label: "Bonus", value: creditPool.bonus, className: "bg-emerald-500/10 border-emerald-500/25 text-emerald-400" },
+      { key: "referral", label: "Referral", value: creditPool.referral, className: "bg-pink-500/10 border-pink-500/25 text-pink-400" },
+    ].filter((entry) => entry.value > 0),
+    [creditPool.bonus, creditPool.original, creditPool.referral, creditPool.renew, creditPool.topup]
+  );
 
   return (
     <div className="space-y-4">
@@ -747,26 +800,19 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
             {auditScope === "lifetime" ? "Lifetime Pool Breakdown" : "Credits Added In Selected Period"}
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-            <div className="px-2 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-center">
-              <p className="text-3xs font-bold text-amber-400/80 uppercase">Original</p>
-              <p className="text-base font-extrabold text-amber-400 tabular-nums leading-tight">{creditPool.original}</p>
-            </div>
-            <div className="px-2 py-1.5 rounded-lg bg-sky-500/10 border border-sky-500/25 text-center">
-              <p className="text-3xs font-bold text-sky-400/80 uppercase">Top-up</p>
-              <p className="text-base font-extrabold text-sky-400 tabular-nums leading-tight">{creditPool.topup}</p>
-            </div>
-            <div className="px-2 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/25 text-center">
-              <p className="text-3xs font-bold text-violet-400/80 uppercase">Renew</p>
-              <p className="text-base font-extrabold text-violet-400 tabular-nums leading-tight">{creditPool.renew}</p>
-            </div>
-            <div className="px-2 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-center">
-              <p className="text-3xs font-bold text-emerald-400/80 uppercase">Bonus</p>
-              <p className="text-base font-extrabold text-emerald-400 tabular-nums leading-tight">{creditPool.bonus}</p>
-            </div>
-            <div className="px-2 py-1.5 rounded-lg bg-pink-500/10 border border-pink-500/25 text-center">
-              <p className="text-3xs font-bold text-pink-400/80 uppercase">Referral</p>
-              <p className="text-base font-extrabold text-pink-400 tabular-nums leading-tight">{creditPool.referral}</p>
-            </div>
+            {visibleCreditPoolEntries.length > 0 ? visibleCreditPoolEntries.map((entry) => {
+              const [bgClass, borderClass, textClass] = entry.className.split(" ");
+              return (
+                <div key={entry.key} className={`px-2 py-1.5 rounded-lg border text-center ${bgClass} ${borderClass}`}>
+                  <p className={`text-3xs font-bold uppercase ${textClass}/80`}>{entry.label}</p>
+                  <p className={`text-base font-extrabold tabular-nums leading-tight ${textClass}`}>{entry.value}</p>
+                </div>
+              );
+            }) : (
+              <div className="col-span-2 sm:col-span-5 px-3 py-4 rounded-lg border border-border/30 bg-background/40 text-center">
+                <p className="text-xs font-semibold text-muted-foreground">No real added credits in this period.</p>
+              </div>
+            )}
           </div>
           <div className="mt-2.5 pt-2.5 border-t border-border/30 flex items-center justify-between">
             <span className="text-2xs font-bold text-muted-foreground uppercase tracking-wider">
