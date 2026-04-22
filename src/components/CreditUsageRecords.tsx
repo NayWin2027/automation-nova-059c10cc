@@ -134,32 +134,60 @@ const ALL = "__all__";
 
 const exactCreditKey = (dateStr: string, toolId: string) => `${dateStr}__${toolId}`;
 
-// Fallback credit costs (used only if a tool is missing from tool_settings).
-// These mirror current DB defaults so historical rows still resolve correctly.
-const DEFAULT_TOOL_COST: Record<string, number> = {
-  voice: 15,
-  transcribe: 10,
-  translate: 10,
-  "translate-video": 10,
-  "video-recap": 18,
-  "recap-nv": 6,
-  recap: 18,
-  novel: 10,
-  story: 8,
-  thumbnail: 3,
-  srt: 5,
-  creator: 5,
-  "nova-cut-video": 10,
-  "nova-cut": 10,
-  downloader: 5,
-  subgen: 5,
-  transformative: 10,
+type AuditStatus = "balanced" | "untracked";
+
+type NormalizedTopup = TopupRow & {
+  dateKey: string | null;
+  normalizedType: "original" | "topup" | "renew" | "bonus" | "referral";
 };
+
+type NormalizedCreditLog = {
+  toolName: string;
+  dateKey: string | null;
+  credits: number;
+};
+
+const pad2 = (value: number | string) => String(value).padStart(2, "0");
+
+const toUtcDateKey = (value: string | null | undefined) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10);
+};
+
+const aggregatePool = (entries: NormalizedTopup[]): CreditPool => {
+  const pool: CreditPool = {
+    original: 0,
+    topup: 0,
+    renew: 0,
+    bonus: 0,
+    referral: 0,
+    total: 0,
+    hasRecords: false,
+  };
+
+  for (const entry of entries) {
+    const amount = Number(entry.amount || 0);
+    if (!Number.isFinite(amount) || amount === 0) continue;
+    pool.hasRecords = true;
+    if (entry.normalizedType === "original") pool.original += amount;
+    else if (entry.normalizedType === "topup") pool.topup += amount;
+    else if (entry.normalizedType === "renew") pool.renew += amount;
+    else if (entry.normalizedType === "referral") pool.referral += amount;
+    else pool.bonus += amount;
+  }
+
+  pool.total = pool.original + pool.topup + pool.renew + pool.bonus + pool.referral;
+  return pool;
+};
+
+const sumCredits = (entries: NormalizedCreditLog[]) =>
+  entries.reduce((sum, entry) => sum + entry.credits, 0);
 
 const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
   const [rows, setRows] = useState<UsageRow[]>([]);
   const [exactCreditsByKey, setExactCreditsByKey] = useState<Record<string, number>>({});
-  const [toolCosts, setToolCosts] = useState<Record<string, number>>({});
   const [currentBalance, setCurrentBalance] = useState<number | null>(null);
   const [topupRows, setTopupRows] = useState<TopupRow[]>([]);
   const [creditLogRows, setCreditLogRows] = useState<CreditLogRow[]>([]);
@@ -252,35 +280,6 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
     };
   }, [targetUserId]);
 
-  // Fetch tool credit costs once (used to convert deduct_count -> credit quantity).
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const { data } = await supabase
-          .from("tool_settings")
-          .select("tool_id,credit_cost");
-        if (!mounted || !data) return;
-        const map: Record<string, number> = {};
-        for (const r of data as Array<{ tool_id: string; credit_cost: number | null }>) {
-          if (r?.tool_id) map[r.tool_id] = Number(r.credit_cost ?? 0);
-        }
-        setToolCosts(map);
-      } catch {
-        // Non-fatal: fall back to DEFAULT_TOOL_COST below.
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const costFor = (toolId: string): number => {
-    if (toolCosts[toolId] != null) return toolCosts[toolId];
-    if (DEFAULT_TOOL_COST[toolId] != null) return DEFAULT_TOOL_COST[toolId];
-    return 10; // last-resort fallback matching DB default
-  };
-
   // Filter rows according to active selectors
   const filteredRows = useMemo(() => {
     return rows.filter((r) => {
@@ -326,9 +325,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         });
       }
       const bucket = map.get(k)!;
-      const rowCredits =
-        exactCreditsByKey[exactCreditKey(r.usage_date, r.tool_id)] ??
-        ((r.deduct_count || 0) * costFor(r.tool_id));
+      const rowCredits = exactCreditsByKey[exactCreditKey(r.usage_date, r.tool_id)] ?? 0;
       bucket.total.usage += r.usage_count || 0;
       bucket.total.success += r.success_count || 0;
       bucket.total.error += r.error_count || 0;
@@ -348,7 +345,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
 
     // Sort periods desc
     return Array.from(map.entries()).sort((a, b) => (a[0] < b[0] ? 1 : -1));
-  }, [filteredRows, period, exactCreditsByKey, toolCosts]);
+  }, [filteredRows, period, exactCreditsByKey]);
 
   const grandTotal = useMemo(() => {
     return filteredRows.reduce(
@@ -357,14 +354,12 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         acc.success += r.success_count || 0;
         acc.error += r.error_count || 0;
         acc.deduct += r.deduct_count || 0;
-        acc.creditQuantity +=
-          exactCreditsByKey[exactCreditKey(r.usage_date, r.tool_id)] ??
-          ((r.deduct_count || 0) * costFor(r.tool_id));
+        acc.creditQuantity += exactCreditsByKey[exactCreditKey(r.usage_date, r.tool_id)] ?? 0;
         return acc;
       },
       { usage: 0, success: 0, error: 0, deduct: 0, creditQuantity: 0 }
     );
-  }, [filteredRows, exactCreditsByKey, toolCosts]);
+  }, [filteredRows, exactCreditsByKey]);
 
   /**
    * Scope-aware predicate. Decides if a given UTC date string (YYYY-MM-DD)
@@ -386,119 +381,110 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
     };
   }, [auditScope, period, filterYear, filterMonth, filterDay]);
 
-  /**
-   * Credit pool aggregated for the current audit scope.
-   * Negative amounts (admin reversals) are honored so the math stays accurate.
-   * Referral bonuses are auto-detected via the note field.
-   */
-  const creditPool = useMemo<CreditPool>(() => {
-    const pool: CreditPool = {
-      original: 0,
-      topup: 0,
-      renew: 0,
-      bonus: 0,
-      referral: 0,
-      total: 0,
-      hasRecords: false,
-    };
-    for (const t of topupRows) {
-      const amt = Number(t.amount || 0);
-      if (!Number.isFinite(amt) || amt === 0) continue;
-      const createdAt = t.created_at ? new Date(t.created_at).toISOString().slice(0, 10) : null;
-      if (createdAt && !dateInAuditScope(createdAt)) continue;
-      pool.hasRecords = true;
-      const type = String(t.topup_type || "").toLowerCase();
-      const note = String(t.note || "").toLowerCase();
-      const isReferral = note.includes("referral") || note.includes("referal");
-      if (type === "original") pool.original += amt;
-      else if (type === "topup") pool.topup += amt;
-      else if (type === "renew") pool.renew += amt;
-      else if (type === "bonus") {
-        if (isReferral) pool.referral += amt;
-        else pool.bonus += amt;
-      } else {
-        pool.bonus += amt;
-      }
-    }
-    pool.total = pool.original + pool.topup + pool.renew + pool.bonus + pool.referral;
-    return pool;
-  }, [topupRows, dateInAuditScope]);
+  const normalizedTopups = useMemo<NormalizedTopup[]>(() => {
+    return topupRows.map((row) => {
+      const type = String(row.topup_type || "").toLowerCase();
+      const note = String(row.note || "").toLowerCase();
+      const normalizedType: NormalizedTopup["normalizedType"] =
+        type === "original" || type === "topup" || type === "renew" || type === "bonus" || type === "referral"
+          ? type
+          : note.includes("referral") || note.includes("referal")
+          ? "referral"
+          : "bonus";
 
-  /**
-   * Real credits deducted in the audit scope, sourced directly from
-   * activity_logs (the authoritative ledger). Falls back to deduct_count *
-   * tool_cost only if a row has no log (legacy data).
-   */
-  const scopedUsedCredits = useMemo(() => {
+      return {
+        ...row,
+        dateKey: toUtcDateKey(row.created_at),
+        normalizedType,
+      };
+    });
+  }, [topupRows]);
+
+  const normalizedCreditLogs = useMemo<NormalizedCreditLog[]>(() => {
+    return creditLogRows
+      .map((row) => ({
+        toolName: row.tool_name,
+        dateKey: toUtcDateKey(row.created_at),
+        credits: Number(row?.metadata?.credits_deducted ?? 0),
+      }))
+      .filter((row) => row.dateKey && Number.isFinite(row.credits) && row.credits > 0) as NormalizedCreditLog[];
+  }, [creditLogRows]);
+
+  const auditRange = useMemo(() => {
     if (auditScope === "lifetime") {
-      // Lifetime usage = sum of every credit_deduction log + legacy fallback
-      // for any row that has no matching log entry.
-      let logSum = 0;
-      for (const log of creditLogRows) {
-        const credits = Number(log?.metadata?.credits_deducted ?? 0);
-        if (Number.isFinite(credits) && credits > 0) logSum += credits;
-      }
-      let fallbackSum = 0;
-      for (const r of rows) {
-        const key = exactCreditKey(r.usage_date, r.tool_id);
-        if (exactCreditsByKey[key] != null) continue; // already counted in logSum
-        fallbackSum += (r.deduct_count || 0) * costFor(r.tool_id);
-      }
-      return logSum + fallbackSum;
+      return { start: null as string | null, end: null as string | null };
     }
-    // Scoped: use activity_logs first (UTC date), fallback to usage rows
-    let logSum = 0;
-    for (const log of creditLogRows) {
-      const credits = Number(log?.metadata?.credits_deducted ?? 0);
-      if (!Number.isFinite(credits) || credits <= 0) continue;
-      const utcDate = new Date(log.created_at).toISOString().slice(0, 10);
-      if (!dateInAuditScope(utcDate)) continue;
-      logSum += credits;
+
+    if (period === "yearly") {
+      return { start: `${filterYear}-01-01`, end: `${filterYear}-12-31` };
     }
-    let fallbackSum = 0;
-    for (const r of rows) {
-      if (!dateInAuditScope(r.usage_date)) continue;
-      const key = exactCreditKey(r.usage_date, r.tool_id);
-      if (exactCreditsByKey[key] != null) continue;
-      fallbackSum += (r.deduct_count || 0) * costFor(r.tool_id);
+
+    const monthKey = pad2(filterMonth);
+    const lastDay = pad2(new Date(parseInt(filterYear, 10), parseInt(filterMonth, 10), 0).getDate());
+
+    if (period === "monthly" || filterDay === ALL) {
+      return { start: `${filterYear}-${monthKey}-01`, end: `${filterYear}-${monthKey}-${lastDay}` };
     }
-    return logSum + fallbackSum;
-  }, [auditScope, creditLogRows, rows, exactCreditsByKey, toolCosts, dateInAuditScope]);
+
+    const dayKey = `${filterYear}-${monthKey}-${pad2(filterDay)}`;
+    return { start: dayKey, end: dayKey };
+  }, [auditScope, period, filterYear, filterMonth, filterDay]);
+
+  const lifetimeAddedTotal = useMemo(() => aggregatePool(normalizedTopups).total, [normalizedTopups]);
+  const lifetimeUsedTotal = useMemo(() => sumCredits(normalizedCreditLogs), [normalizedCreditLogs]);
+
+  const scopedTopups = useMemo(() => {
+    return normalizedTopups.filter((row) => row.dateKey && dateInAuditScope(row.dateKey));
+  }, [normalizedTopups, dateInAuditScope]);
+
+  const scopedCreditLogs = useMemo(() => {
+    return normalizedCreditLogs.filter((row) => row.dateKey && dateInAuditScope(row.dateKey));
+  }, [normalizedCreditLogs, dateInAuditScope]);
+
+  const creditPool = useMemo(() => aggregatePool(scopedTopups), [scopedTopups]);
+
+  const creditsAddedAfterScope = useMemo(() => {
+    if (!auditRange.end) return 0;
+    return aggregatePool(normalizedTopups.filter((row) => row.dateKey && row.dateKey > auditRange.end)).total;
+  }, [normalizedTopups, auditRange.end]);
+
+  const creditsUsedAfterScope = useMemo(() => {
+    if (!auditRange.end) return 0;
+    return sumCredits(normalizedCreditLogs.filter((row) => row.dateKey && row.dateKey > auditRange.end));
+  }, [normalizedCreditLogs, auditRange.end]);
 
   const lifetimeCreditAudit = useMemo(() => {
-    const used = scopedUsedCredits;
-    const remaining = Math.max(currentBalance ?? 0, 0);
-    const poolTotal = creditPool.total;
-
-    // Reconciliation rule:
-    //   Lifetime scope  → Pool == Used + Remaining (Total Credits - Spent = Balance)
-    //   Period  scope   → Pool == Used + (Pool - Used)  (informational only;
-    //                     "Remaining" reflects credits earned in this period
-    //                     that have not been spent in this period)
-    const usedPlusRemaining = auditScope === "lifetime" ? used + remaining : used;
-    const diff = poolTotal - usedPlusRemaining;
-    const status: "match" | "mismatch" | "legacy" =
-      !creditPool.hasRecords
-        ? "legacy"
-        : auditScope === "lifetime"
-        ? Math.abs(diff) <= 1
-          ? "match"
-          : "mismatch"
-        : poolTotal >= used - 1
-        ? "match"
-        : "mismatch";
+    const balanceNow = currentBalance ?? 0;
+    const addedThisScope = creditPool.total;
+    const usedThisScope = sumCredits(scopedCreditLogs);
+    const closingBalance = auditScope === "lifetime"
+      ? balanceNow
+      : balanceNow - creditsAddedAfterScope + creditsUsedAfterScope;
+    const openingBalance = closingBalance - addedThisScope + usedThisScope;
+    const totalAvailable = openingBalance + addedThisScope;
+    const reconciliationDiff = totalAvailable - (usedThisScope + closingBalance);
+    const untrackedBalance = balanceNow - lifetimeAddedTotal + lifetimeUsedTotal;
 
     return {
-      used,
-      remaining,
-      total: usedPlusRemaining,
-      poolTotal,
-      diff,
-      status,
-      // Net for this period = pool earned - credits spent in this period
-      periodNet: poolTotal - used,
+      addedThisScope,
+      used: usedThisScope,
+      openingBalance,
+      closingBalance,
+      totalAvailable,
+      diff: reconciliationDiff,
+      status: Math.abs(untrackedBalance) <= 1 ? ("balanced" as AuditStatus) : ("untracked" as AuditStatus),
+      untrackedBalance,
     };
-  }, [scopedUsedCredits, currentBalance, creditPool, auditScope]);
+  }, [
+    currentBalance,
+    creditPool.total,
+    scopedCreditLogs,
+    auditScope,
+    creditsAddedAfterScope,
+    creditsUsedAfterScope,
+    lifetimeAddedTotal,
+    lifetimeUsedTotal,
+  ]);
 
   return (
     <div className="space-y-4">
@@ -633,24 +619,18 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
                   }`}
             </p>
           </div>
-          {lifetimeCreditAudit.status === "match" && (
+          {lifetimeCreditAudit.status === "balanced" && (
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-2xs font-extrabold text-emerald-400 uppercase tracking-wider">Match</span>
+              <span className="text-2xs font-extrabold text-emerald-400 uppercase tracking-wider">DB Backed</span>
             </div>
           )}
-          {lifetimeCreditAudit.status === "mismatch" && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/15 border border-rose-500/40">
-              <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
-              <span className="text-2xs font-extrabold text-rose-400 uppercase tracking-wider">
-                Diff {lifetimeCreditAudit.diff > 0 ? "+" : ""}{lifetimeCreditAudit.diff}
-              </span>
-            </div>
-          )}
-          {lifetimeCreditAudit.status === "legacy" && (
+          {lifetimeCreditAudit.status === "untracked" && (
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30">
               <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
-              <span className="text-2xs font-extrabold text-amber-400 uppercase tracking-wider">Legacy Seed</span>
+              <span className="text-2xs font-extrabold text-rose-400 uppercase tracking-wider">
+                Carry-over {lifetimeCreditAudit.untrackedBalance > 0 ? "+" : ""}{lifetimeCreditAudit.untrackedBalance}
+              </span>
             </div>
           )}
         </div>
@@ -682,7 +662,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         {/* Lifetime Pool Breakdown */}
         <div className="mb-3 p-3 rounded-xl bg-background/50 border border-border/40">
           <p className="text-2xs font-bold text-muted-foreground uppercase tracking-widest mb-2">
-            {auditScope === "lifetime" ? "Lifetime Pool Breakdown" : "Pool Breakdown (Selected Period)"}
+            {auditScope === "lifetime" ? "Lifetime Pool Breakdown" : "Credits Added In Selected Period"}
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
             <div className="px-2 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-center">
@@ -708,7 +688,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
           </div>
           <div className="mt-2.5 pt-2.5 border-t border-border/30 flex items-center justify-between">
             <span className="text-2xs font-bold text-muted-foreground uppercase tracking-wider">
-              {auditScope === "lifetime" ? "Total Pool (Lifetime)" : "Total Pool (Period)"}
+              {auditScope === "lifetime" ? "Total Pool" : "Total Added"}
             </span>
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30">
               <Coins className="w-3.5 h-3.5 text-amber-400" />
@@ -718,86 +698,46 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-2 gap-2.5">
           <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25">
             <p className="text-2xs font-bold text-amber-400 uppercase tracking-wider">
-              {auditScope === "lifetime" ? "Usage (Lifetime)" : "Usage (Period)"}
+              {auditScope === "lifetime" ? "Opening Balance" : "Opening Balance"}
             </p>
-            <p className="text-2xl font-extrabold text-amber-400 tabular-nums">{lifetimeCreditAudit.used}</p>
+            <p className="text-2xl font-extrabold text-amber-400 tabular-nums">{lifetimeCreditAudit.openingBalance}</p>
           </div>
           <div className="p-3 rounded-xl bg-primary/10 border border-primary/25">
             <p className="text-2xs font-bold text-primary uppercase tracking-wider">
-              {auditScope === "lifetime" ? "Balance" : "Period Net"}
+              {auditScope === "lifetime" ? "Total Added" : "Total Added"}
             </p>
             <p className="text-2xl font-extrabold text-foreground tabular-nums">
-              {auditScope === "lifetime" ? lifetimeCreditAudit.remaining : lifetimeCreditAudit.periodNet}
+              {lifetimeCreditAudit.addedThisScope}
             </p>
-            {auditScope !== "lifetime" && (
-              <p className="text-3xs font-semibold text-muted-foreground/80 leading-tight mt-0.5">
-                Pool − Usage
-              </p>
-            )}
           </div>
-          <div
-            className={`p-3 rounded-xl border ${
-              lifetimeCreditAudit.status === "match"
-                ? "bg-emerald-500/10 border-emerald-500/25"
-                : lifetimeCreditAudit.status === "mismatch"
-                ? "bg-rose-500/10 border-rose-500/30"
-                : "bg-amber-500/10 border-amber-500/25"
-            }`}
-          >
-            <p
-              className={`text-2xs font-bold uppercase tracking-wider ${
-                lifetimeCreditAudit.status === "match"
-                  ? "text-emerald-400"
-                  : lifetimeCreditAudit.status === "mismatch"
-                  ? "text-rose-400"
-                  : "text-amber-400"
-              }`}
-            >
-              {auditScope === "lifetime" ? "Used + Bal" : "Pool vs Used"}
+          <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25">
+            <p className="text-2xs font-bold text-emerald-400 uppercase tracking-wider">Usage</p>
+            <p className="text-2xl font-extrabold text-emerald-400 tabular-nums">{lifetimeCreditAudit.used}</p>
+          </div>
+          <div className="p-3 rounded-xl bg-card/70 border border-border/40">
+            <p className="text-2xs font-bold text-muted-foreground uppercase tracking-wider">
+              {auditScope === "lifetime" ? "Current Balance" : "Closing Balance"}
             </p>
-            <p
-              className={`text-lg font-extrabold tabular-nums leading-tight ${
-                lifetimeCreditAudit.status === "match"
-                  ? "text-emerald-400"
-                  : lifetimeCreditAudit.status === "mismatch"
-                  ? "text-rose-400"
-                  : "text-amber-400"
-              }`}
-            >
-              {auditScope === "lifetime"
-                ? `${lifetimeCreditAudit.used} + ${lifetimeCreditAudit.remaining}`
-                : `${creditPool.total} − ${lifetimeCreditAudit.used}`}
-            </p>
-            <p
-              className={`text-xs font-bold ${
-                lifetimeCreditAudit.status === "match"
-                  ? "text-emerald-400/85"
-                  : lifetimeCreditAudit.status === "mismatch"
-                  ? "text-rose-400/85"
-                  : "text-amber-400/85"
-              }`}
-            >
-              = {auditScope === "lifetime" ? lifetimeCreditAudit.total : lifetimeCreditAudit.periodNet}
-              {auditScope === "lifetime" && creditPool.hasRecords && (
-                <span className="ml-1 opacity-80">/ Pool {creditPool.total}</span>
-              )}
-            </p>
+            <p className="text-2xl font-extrabold text-foreground tabular-nums">{lifetimeCreditAudit.closingBalance}</p>
           </div>
         </div>
 
-        {lifetimeCreditAudit.status === "mismatch" && (
-          <p className="text-3xs font-semibold text-rose-400/85 mt-2.5 leading-snug">
-            {auditScope === "lifetime"
-              ? `⚠ Pool (${creditPool.total}) ≠ Used + Balance (${lifetimeCreditAudit.total}). Possible expired credit reset, manual adjustment, or legacy seed credits.`
-              : `⚠ Period usage (${lifetimeCreditAudit.used}) exceeds period pool (${creditPool.total}) by ${Math.abs(lifetimeCreditAudit.diff)} CR — credits earned in another period were spent here. Switch to Lifetime view for full reconciliation.`}
+        <div className="mt-2.5 p-3 rounded-xl bg-background/50 border border-border/40">
+          <p className="text-2xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Reconciliation</p>
+          <p className="text-sm font-extrabold text-foreground tabular-nums leading-snug">
+            {lifetimeCreditAudit.openingBalance} + {lifetimeCreditAudit.addedThisScope} = {lifetimeCreditAudit.used} + {lifetimeCreditAudit.closingBalance}
           </p>
-        )}
-        {lifetimeCreditAudit.status === "legacy" && (
+          <p className="text-3xs font-semibold text-muted-foreground mt-1">
+            Total Available = <span className="text-foreground font-bold tabular-nums">{lifetimeCreditAudit.totalAvailable}</span> CR
+          </p>
+        </div>
+
+        {lifetimeCreditAudit.status === "untracked" && (
           <p className="text-3xs font-semibold text-amber-400/85 mt-2.5 leading-snug">
-            ℹ No credit_topups records for this scope — account uses default seed credits. Pool tracking starts after the first top-up/renew.
+            ℹ Opening balance includes {lifetimeCreditAudit.untrackedBalance > 0 ? lifetimeCreditAudit.untrackedBalance : Math.abs(lifetimeCreditAudit.untrackedBalance)} CR that are outside the `credit_topups` ledger (older seed/manual credits), so the breakdown above uses database topup records and the reconciliation uses real closing balance.
           </p>
         )}
       </Card>
