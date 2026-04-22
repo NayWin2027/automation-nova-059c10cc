@@ -469,9 +469,27 @@ Script Context to Narrate:
 `;
 
       let combinedPcmBase64 = null;
-      let chunkCost =
-        voiceCreditCost !== undefined && chunks.length > 0 ? Math.ceil(voiceCreditCost / chunks.length) : undefined;
-
+      // SURGICAL FIX (Process/Success/Credit accounting):
+      // ----------------------------------------------------------------
+      // Previous behavior: each text chunk independently triggered the
+      // server-side `deduct_user_credits` RPC inside `gemini-tts`, which
+      // incremented usage_count + success_count AND deducted credits per
+      // chunk. If a single user request was split into 6 chunks the admin
+      // panel showed 6 processes / 6 successes / 6× credit deduction.
+      //
+      // New behavior:
+      //  * For every chunk we send `skipCreditDeduction: true`, so the
+      //    edge function does NOT touch usage stats or credits at all.
+      //  * After ALL chunks finish, we perform exactly ONE accounting
+      //    operation that represents the REAL process:
+      //      - On full success: ONE `deduct_user_credits` call with the
+      //        full computed cost → 1 process, 1 success, 1 deduction.
+      //      - On failure (no audio at all): ONE `record_tool_outcome`
+      //        error → 1 process, 1 error, 0 deduction.
+      //  * Process count = success_count + error_count (server-side).
+      //  * Credit deduction is gated on real success (pcmBuffers > 0).
+      // Own API mode is untouched (no credits, no logging — preserved).
+      // ----------------------------------------------------------------
       const pcmBuffers: string[] = [];
       let isError = false;
 
@@ -484,7 +502,8 @@ Script Context to Narrate:
             apiType === "own" ? apiKey : undefined,
             performance,
             selectedLanguage,
-            chunkCost,
+            undefined,
+            apiType === "app", // skipCreditDeduction for App API chunks (we deduct once below)
           );
           if (pcm) pcmBuffers.push(pcm);
         } catch (e) {
@@ -544,18 +563,34 @@ Script Context to Narrate:
           setResultSubtitles(srtMock);
           startLiveSubtitles(text, duration);
         }
-        // SURGICAL FIX (Voice analytics):
-        // - Own API mode: do NOT log success (user request — exclude own-API usage from stats).
-        // - App API mode: do NOT double-count. The gemini-tts edge function calls
-        //   deduct_user_credits per chunk, which already increments success_count.
-        //   Logging here would inflate success vs process counts.
+        // SURGICAL FIX (Voice analytics — single accounting per real process):
+        // App API mode: chunks ran with skipCreditDeduction=true, so the
+        // edge function did NOT touch usage_count / success_count / credits.
+        // Now perform exactly ONE deduction = 1 process + 1 success +
+        // 1 credit charge for this entire user request.
+        // Own API mode: no stats, no credits (user preference preserved).
+        if (apiType === "app") {
+          try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              await supabase.rpc("deduct_user_credits", {
+                _user_id: user.id,
+                _tool_id: "voice",
+                _is_own_api: false,
+                _custom_cost: voiceCreditCost ?? 0,
+              });
+            }
+          } catch (logErr) {
+            console.error("[Voice] post-process accounting failed:", logErr);
+          }
+        }
       }
     } catch (error) {
       console.error(error);
-      // SURGICAL FIX: Skip error logging for Own API mode per user request.
-      // App API errors are still tracked server-side via deduct_user_credits (insufficient credits)
-      // and edge function activity logs.
-      if (apiType !== "own") {
+      // SURGICAL FIX: One error log per real process (App API only).
+      // Per-chunk calls were sent with skipCreditDeduction=true, so server
+      // never logged anything — we own the accounting here.
+      if (apiType === "app") {
         recordToolOutcome("voice", "error");
       }
       alert("Generation failed. Please check your API key or Quota.");
