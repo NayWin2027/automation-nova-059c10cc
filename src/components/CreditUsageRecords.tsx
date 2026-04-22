@@ -460,7 +460,8 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         dateKey: toUtcDateKey(row.created_at),
         credits: Number(row?.metadata?.credits_deducted ?? 0),
       }))
-      .filter((row) => row.dateKey && Number.isFinite(row.credits) && row.credits > 0) as NormalizedCreditLog[];
+      .filter((row) => row.dateKey && Number.isFinite(row.credits) && row.credits > 0)
+      .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt)) as NormalizedCreditLog[];
   }, [creditLogRows]);
 
   const approvedOrderNumbers = useMemo(() => {
@@ -524,34 +525,35 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
     return toIsoInstant(profileCreditRow?.credits_started_at) || null;
   }, [profileCreditRow?.credits_started_at]);
 
+  const ledgerSeedInstant = useMemo(() => {
+    const earliestUsageInstant = normalizedCreditLogs[0]?.occurredAt ?? null;
+    const earliestAdditionInstant = additionEvents[0]?.occurredAt ?? null;
+    return [creditStartInstant, earliestUsageInstant, earliestAdditionInstant]
+      .filter((value): value is string => Boolean(value))
+      .sort((a, b) => a.localeCompare(b))[0] ?? null;
+  }, [additionEvents, creditStartInstant, normalizedCreditLogs]);
+
   const seededOriginalAmount = useMemo(() => {
-    if (currentBalance == null || !creditStartInstant) return 0;
-    const usageSinceStart = normalizedCreditLogs
-      .filter((row) => row.occurredAt >= creditStartInstant)
+    if (currentBalance == null || !ledgerSeedInstant) return 0;
+    const usageSinceSeed = normalizedCreditLogs
+      .filter((row) => row.occurredAt >= ledgerSeedInstant)
       .reduce((sum, row) => sum + row.credits, 0);
-    const trackedAdditionsSinceStart = additionEvents
-      .filter((row) => row.occurredAt >= creditStartInstant)
+    const trackedAdditionsSinceSeed = additionEvents
+      .filter((row) => row.occurredAt >= ledgerSeedInstant)
       .reduce((sum, row) => sum + row.amount, 0);
-    return Math.max(currentBalance + usageSinceStart - trackedAdditionsSinceStart, 0);
-  }, [additionEvents, creditStartInstant, currentBalance, normalizedCreditLogs]);
+    return Math.max(currentBalance + usageSinceSeed - trackedAdditionsSinceSeed, 0);
+  }, [additionEvents, currentBalance, ledgerSeedInstant, normalizedCreditLogs]);
 
   const authoritativeAdditionEvents = useMemo<CreditAdditionEvent[]>(() => {
-    if (!creditStartInstant || seededOriginalAmount <= 0) return additionEvents;
-    const hasOpeningOriginal = additionEvents.some(
-      (row) => row.normalizedType === "original" && row.occurredAt >= creditStartInstant
-    );
-    if (hasOpeningOriginal) return additionEvents;
+    if (!ledgerSeedInstant || seededOriginalAmount <= 0) return additionEvents;
     const seededOriginalEvent: CreditAdditionEvent = {
       amount: seededOriginalAmount,
       normalizedType: "original",
-      occurredAt: creditStartInstant,
-      dateKey: toUtcDateKey(creditStartInstant),
+      occurredAt: ledgerSeedInstant,
+      dateKey: toUtcDateKey(ledgerSeedInstant),
     };
-    return [
-      seededOriginalEvent,
-      ...additionEvents,
-    ].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
-  }, [additionEvents, creditStartInstant, seededOriginalAmount]);
+    return [seededOriginalEvent, ...additionEvents].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
+  }, [additionEvents, ledgerSeedInstant, seededOriginalAmount]);
 
   const auditRange = useMemo(() => {
     if (auditScope === "lifetime") {
