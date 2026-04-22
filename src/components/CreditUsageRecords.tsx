@@ -107,8 +107,31 @@ const YEARS: number[] = (() => {
 
 const ALL = "__all__";
 
+// Fallback credit costs (used only if a tool is missing from tool_settings).
+// These mirror current DB defaults so historical rows still resolve correctly.
+const DEFAULT_TOOL_COST: Record<string, number> = {
+  voice: 15,
+  transcribe: 10,
+  translate: 10,
+  "translate-video": 10,
+  "video-recap": 18,
+  "recap-nv": 6,
+  recap: 18,
+  novel: 10,
+  story: 8,
+  thumbnail: 3,
+  srt: 5,
+  creator: 5,
+  "nova-cut-video": 10,
+  "nova-cut": 10,
+  downloader: 5,
+  subgen: 5,
+  transformative: 10,
+};
+
 const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
   const [rows, setRows] = useState<UsageRow[]>([]);
+  const [toolCosts, setToolCosts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<Period>("daily");
@@ -152,6 +175,35 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
     };
   }, [targetUserId]);
 
+  // Fetch tool credit costs once (used to convert deduct_count -> credit quantity).
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from("tool_settings")
+          .select("tool_id,credit_cost");
+        if (!mounted || !data) return;
+        const map: Record<string, number> = {};
+        for (const r of data as Array<{ tool_id: string; credit_cost: number | null }>) {
+          if (r?.tool_id) map[r.tool_id] = Number(r.credit_cost ?? 0);
+        }
+        setToolCosts(map);
+      } catch {
+        // Non-fatal: fall back to DEFAULT_TOOL_COST below.
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const costFor = (toolId: string): number => {
+    if (toolCosts[toolId] != null) return toolCosts[toolId];
+    if (DEFAULT_TOOL_COST[toolId] != null) return DEFAULT_TOOL_COST[toolId];
+    return 10; // last-resort fallback matching DB default
+  };
+
   // Filter rows according to active selectors
   const filteredRows = useMemo(() => {
     return rows.filter((r) => {
@@ -182,34 +234,43 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
   const grouped = useMemo(() => {
     const map = new Map<
       string,
-      { total: { usage: number; success: number; error: number; deduct: number }; tools: Map<string, { usage: number; success: number; error: number; deduct: number }> }
+      {
+        total: { usage: number; success: number; error: number; deduct: number; creditQuantity: number };
+        tools: Map<string, { usage: number; success: number; error: number; deduct: number; creditQuantity: number }>;
+      }
     >();
 
     for (const r of filteredRows) {
       const k = periodKey(r.usage_date, period);
       if (!map.has(k)) {
         map.set(k, {
-          total: { usage: 0, success: 0, error: 0, deduct: 0 },
+          total: { usage: 0, success: 0, error: 0, deduct: 0, creditQuantity: 0 },
           tools: new Map(),
         });
       }
       const bucket = map.get(k)!;
+      const unitCost = costFor(r.tool_id);
+      const rowCredits = (r.deduct_count || 0) * unitCost;
       bucket.total.usage += r.usage_count || 0;
       bucket.total.success += r.success_count || 0;
       bucket.total.error += r.error_count || 0;
       bucket.total.deduct += r.deduct_count || 0;
+      bucket.total.creditQuantity += rowCredits;
 
-      const t = bucket.tools.get(r.tool_id) || { usage: 0, success: 0, error: 0, deduct: 0 };
+      const t =
+        bucket.tools.get(r.tool_id) ||
+        { usage: 0, success: 0, error: 0, deduct: 0, creditQuantity: 0 };
       t.usage += r.usage_count || 0;
       t.success += r.success_count || 0;
       t.error += r.error_count || 0;
       t.deduct += r.deduct_count || 0;
+      t.creditQuantity += rowCredits;
       bucket.tools.set(r.tool_id, t);
     }
 
     // Sort periods desc
     return Array.from(map.entries()).sort((a, b) => (a[0] < b[0] ? 1 : -1));
-  }, [filteredRows, period]);
+  }, [filteredRows, period, toolCosts]);
 
   const grandTotal = useMemo(() => {
     return filteredRows.reduce(
@@ -218,11 +279,12 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         acc.success += r.success_count || 0;
         acc.error += r.error_count || 0;
         acc.deduct += r.deduct_count || 0;
+        acc.creditQuantity += (r.deduct_count || 0) * costFor(r.tool_id);
         return acc;
       },
-      { usage: 0, success: 0, error: 0, deduct: 0 }
+      { usage: 0, success: 0, error: 0, deduct: 0, creditQuantity: 0 }
     );
-  }, [filteredRows]);
+  }, [filteredRows, toolCosts]);
 
   return (
     <div className="space-y-4">
@@ -366,7 +428,13 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
             <Coins className="w-3.5 h-3.5 text-amber-400" />
             <p className="text-2xs font-bold text-amber-400 uppercase tracking-wider">Credits</p>
           </div>
-          <p className="text-2xl font-extrabold text-amber-400 tabular-nums">{grandTotal.deduct}</p>
+          <p className="text-2xl font-extrabold text-amber-400 tabular-nums leading-none">
+            {grandTotal.creditQuantity}
+            <span className="text-2xs font-bold text-amber-400/80 ml-1">CR</span>
+          </p>
+          <p className="text-3xs font-bold text-amber-400/70 mt-0.5 tabular-nums">
+            {grandTotal.deduct} trs
+          </p>
         </Card>
       </div>
 
@@ -405,8 +473,9 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
                 </div>
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30">
                   <Coins className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="text-sm font-extrabold text-amber-400 tabular-nums">{bucket.total.deduct}</span>
+                  <span className="text-sm font-extrabold text-amber-400 tabular-nums">{bucket.total.creditQuantity}</span>
                   <span className="text-2xs font-bold text-amber-400/80 uppercase">CR</span>
+                  <span className="text-3xs font-bold text-amber-400/70 tabular-nums ml-1">· {bucket.total.deduct} trs</span>
                 </div>
               </div>
 
@@ -432,7 +501,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
                     By Tool — Credits Used Per Tool
                   </p>
                   {Array.from(bucket.tools.entries())
-                    .sort((a, b) => b[1].deduct - a[1].deduct || b[1].usage - a[1].usage)
+                    .sort((a, b) => b[1].creditQuantity - a[1].creditQuantity || b[1].deduct - a[1].deduct)
                     .map(([toolId, t]) => (
                       <div
                         key={toolId}
@@ -445,14 +514,17 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
                           </span>
                           <div
                             className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-amber-500/25 to-amber-600/10 border border-amber-500/50 shadow-sm shadow-amber-500/10"
-                            title="Credits deducted for this tool"
+                            title={`${t.creditQuantity} credits deducted across ${t.deduct} transactions (${costFor(toolId)} CR/trs)`}
                           >
                             <Coins className="w-3.5 h-3.5 text-amber-400" />
                             <span className="text-sm font-extrabold text-amber-400 tabular-nums leading-none">
-                              {t.deduct}
+                              {t.creditQuantity}
                             </span>
                             <span className="text-3xs font-bold text-amber-400/90 uppercase tracking-wider">
                               CR
+                            </span>
+                            <span className="text-3xs font-bold text-amber-400/70 tabular-nums ml-1">
+                              · {t.deduct} trs
                             </span>
                           </div>
                         </div>
@@ -484,7 +556,8 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         <span className="text-foreground font-bold">P</span> = Process &nbsp;·&nbsp;
         <span className="text-emerald-400 font-bold">S</span> = Success &nbsp;·&nbsp;
         <span className="text-rose-400 font-bold">E</span> = Error &nbsp;·&nbsp;
-        <span className="text-amber-400 font-bold">Credits</span> = Actual deducted
+        <span className="text-amber-400 font-bold">CR</span> = Credit quantity deducted &nbsp;·&nbsp;
+        <span className="text-amber-400 font-bold">trs</span> = Transactions count
       </p>
     </div>
   );
