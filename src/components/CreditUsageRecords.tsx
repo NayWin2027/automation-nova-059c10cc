@@ -37,6 +37,14 @@ interface UsageRow {
   created_at: string | null;
 }
 
+interface CreditLogRow {
+  tool_name: string;
+  created_at: string;
+  metadata: {
+    credits_deducted?: number | string;
+  } | null;
+}
+
 interface Props {
   /** If provided (admin mode), fetches that user's records. Otherwise fetches own (RLS enforced). */
   targetUserId?: string;
@@ -107,6 +115,8 @@ const YEARS: number[] = (() => {
 
 const ALL = "__all__";
 
+const exactCreditKey = (dateStr: string, toolId: string) => `${dateStr}__${toolId}`;
+
 // Fallback credit costs (used only if a tool is missing from tool_settings).
 // These mirror current DB defaults so historical rows still resolve correctly.
 const DEFAULT_TOOL_COST: Record<string, number> = {
@@ -131,7 +141,9 @@ const DEFAULT_TOOL_COST: Record<string, number> = {
 
 const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
   const [rows, setRows] = useState<UsageRow[]>([]);
+  const [exactCreditsByKey, setExactCreditsByKey] = useState<Record<string, number>>({});
   const [toolCosts, setToolCosts] = useState<Record<string, number>>({});
+  const [currentBalance, setCurrentBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<Period>("daily");
@@ -148,21 +160,52 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
       setLoading(true);
       setError(null);
       try {
+        const effectiveUserId = targetUserId || (await supabase.auth.getUser()).data.user?.id || null;
+
         let query = supabase
           .from("user_tool_usage")
           .select("id,user_id,tool_id,usage_date,usage_count,success_count,error_count,deduct_count,created_at")
           .order("usage_date", { ascending: false })
           .limit(5000);
 
+        let logQuery = supabase
+          .from("activity_logs")
+          .select("tool_name,created_at,metadata")
+          .eq("action", "credit_deduction")
+          .limit(10000);
+
         if (targetUserId) {
           query = query.eq("user_id", targetUserId);
+          logQuery = logQuery.eq("user_id", targetUserId);
         }
         // For non-admin (no targetUserId), RLS limits to own rows automatically.
 
-        const { data, error: qErr } = await query;
+        const [usageResult, logResult, profileResult] = await Promise.all([
+          query,
+          logQuery,
+          effectiveUserId
+            ? supabase.from("profiles").select("credits").eq("user_id", effectiveUserId).maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
+        ]);
+
+        const { data, error: qErr } = usageResult;
         if (qErr) throw qErr;
+        if (logResult.error) throw logResult.error;
+        if (profileResult.error) throw profileResult.error;
         if (!mounted) return;
+
+        const exactMap: Record<string, number> = {};
+        for (const log of (logResult.data || []) as CreditLogRow[]) {
+          const credits = Number(log?.metadata?.credits_deducted ?? 0);
+          if (!Number.isFinite(credits) || credits <= 0) continue;
+          const utcDate = new Date(log.created_at).toISOString().slice(0, 10);
+          const key = exactCreditKey(utcDate, log.tool_name);
+          exactMap[key] = (exactMap[key] || 0) + credits;
+        }
+
         setRows((data || []) as UsageRow[]);
+        setExactCreditsByKey(exactMap);
+        setCurrentBalance(profileResult.data?.credits ?? null);
       } catch (e: any) {
         if (mounted) setError(e?.message || "Failed to load usage records");
       } finally {
@@ -249,8 +292,9 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         });
       }
       const bucket = map.get(k)!;
-      const unitCost = costFor(r.tool_id);
-      const rowCredits = (r.deduct_count || 0) * unitCost;
+      const rowCredits =
+        exactCreditsByKey[exactCreditKey(r.usage_date, r.tool_id)] ??
+        ((r.deduct_count || 0) * costFor(r.tool_id));
       bucket.total.usage += r.usage_count || 0;
       bucket.total.success += r.success_count || 0;
       bucket.total.error += r.error_count || 0;
@@ -270,7 +314,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
 
     // Sort periods desc
     return Array.from(map.entries()).sort((a, b) => (a[0] < b[0] ? 1 : -1));
-  }, [filteredRows, period, toolCosts]);
+  }, [filteredRows, period, exactCreditsByKey, toolCosts]);
 
   const grandTotal = useMemo(() => {
     return filteredRows.reduce(
@@ -279,12 +323,32 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         acc.success += r.success_count || 0;
         acc.error += r.error_count || 0;
         acc.deduct += r.deduct_count || 0;
-        acc.creditQuantity += (r.deduct_count || 0) * costFor(r.tool_id);
+        acc.creditQuantity +=
+          exactCreditsByKey[exactCreditKey(r.usage_date, r.tool_id)] ??
+          ((r.deduct_count || 0) * costFor(r.tool_id));
         return acc;
       },
       { usage: 0, success: 0, error: 0, deduct: 0, creditQuantity: 0 }
     );
-  }, [filteredRows, toolCosts]);
+  }, [filteredRows, exactCreditsByKey, toolCosts]);
+
+  const lifetimeCreditAudit = useMemo(() => {
+    const used = rows.reduce((acc, r) => {
+      return (
+        acc +
+        (exactCreditsByKey[exactCreditKey(r.usage_date, r.tool_id)] ??
+          ((r.deduct_count || 0) * costFor(r.tool_id)))
+      );
+    }, 0);
+
+    const remaining = Math.max(currentBalance ?? 0, 0);
+
+    return {
+      used,
+      remaining,
+      total: used + remaining,
+    };
+  }, [rows, exactCreditsByKey, currentBalance, toolCosts]);
 
   return (
     <div className="space-y-4">
@@ -397,6 +461,38 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
           >
             <BarChart3 className="w-4 h-4 mr-1.5" /> TOTAL
           </Button>
+        </div>
+      </Card>
+
+      {/* Grand Total Summary Cards (filtered) */}
+      <Card className="p-4 bg-card/75 border border-amber-500/25 shadow-lg shadow-amber-500/5">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div>
+            <p className="text-sm font-extrabold text-foreground tracking-wide">ACCOUNT CREDIT AUDIT</p>
+            <p className="text-xs text-muted-foreground">All-time real credit usage + current balance</p>
+          </div>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30">
+            <Coins className="w-3.5 h-3.5 text-amber-400" />
+            <span className="text-sm font-extrabold text-amber-400 tabular-nums">{lifetimeCreditAudit.total}</span>
+            <span className="text-2xs font-bold text-amber-400/80 uppercase">Total</span>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-2.5">
+          <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25">
+            <p className="text-2xs font-bold text-amber-400 uppercase tracking-wider">Usage</p>
+            <p className="text-2xl font-extrabold text-amber-400 tabular-nums">{lifetimeCreditAudit.used}</p>
+          </div>
+          <div className="p-3 rounded-xl bg-primary/10 border border-primary/25">
+            <p className="text-2xs font-bold text-primary uppercase tracking-wider">Remaining</p>
+            <p className="text-2xl font-extrabold text-foreground tabular-nums">{lifetimeCreditAudit.remaining}</p>
+          </div>
+          <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25">
+            <p className="text-2xs font-bold text-emerald-400 uppercase tracking-wider">Check</p>
+            <p className="text-lg font-extrabold text-emerald-400 tabular-nums leading-tight">
+              {lifetimeCreditAudit.used} + {lifetimeCreditAudit.remaining}
+            </p>
+            <p className="text-xs font-bold text-emerald-400/85">= {lifetimeCreditAudit.total}</p>
+          </div>
         </div>
       </Card>
 
@@ -514,7 +610,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
                           </span>
                           <div
                             className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-amber-500/25 to-amber-600/10 border border-amber-500/50 shadow-sm shadow-amber-500/10"
-                            title={`${t.creditQuantity} credits deducted across ${t.deduct} transactions (${costFor(toolId)} CR/trs)`}
+                             title={`${t.creditQuantity} real credits deducted`}
                           >
                             <Coins className="w-3.5 h-3.5 text-amber-400" />
                             <span className="text-sm font-extrabold text-amber-400 tabular-nums leading-none">
