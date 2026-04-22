@@ -407,12 +407,22 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
 
     const remaining = Math.max(currentBalance ?? 0, 0);
 
+    const usedPlusRemaining = used + remaining;
+    const poolTotal = creditPool.total;
+    // Diff = pool - (used + remaining); positive = pool higher; negative = used+remaining higher
+    const diff = poolTotal - usedPlusRemaining;
+    const status: "match" | "mismatch" | "legacy" =
+      !creditPool.hasRecords ? "legacy" : Math.abs(diff) <= 1 ? "match" : "mismatch";
+
     return {
       used,
       remaining,
-      total: used + remaining,
+      total: usedPlusRemaining,
+      poolTotal,
+      diff,
+      status,
     };
-  }, [rows, exactCreditsByKey, currentBalance, toolCosts]);
+  }, [rows, exactCreditsByKey, currentBalance, toolCosts, creditPool]);
 
   return (
     <div className="space-y-4">
