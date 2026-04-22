@@ -460,7 +460,8 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         dateKey: toUtcDateKey(row.created_at),
         credits: Number(row?.metadata?.credits_deducted ?? 0),
       }))
-      .filter((row) => row.dateKey && Number.isFinite(row.credits) && row.credits > 0) as NormalizedCreditLog[];
+      .filter((row) => row.dateKey && Number.isFinite(row.credits) && row.credits > 0)
+      .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt)) as NormalizedCreditLog[];
   }, [creditLogRows]);
 
   const approvedOrderNumbers = useMemo(() => {
