@@ -1,59 +1,96 @@
 
 
-## ပြဿနာ
+## Credit Audit ကို Real Pool နဲ့ ညှိဖို့ Plan
 
-Voice tool မှာ admin နဲ့ user view ကွဲနေတယ်:
-- **Admin မှာ**: "UNDER 20,00 CHARS / 3 CREDITS" အစရှိသည် (DB မှ ပြ — paid values)
-- **User မှာ**: "UNDER 1,500 CHARS / 0 CREDITS (FREE)" (default fallback — free values)
-- **Result**: User တိုင်း voice generation ကို **0 credits** နဲ့ free ရသွားနေတယ်
+### ပြဿနာ
+လောလောဆယ် `Account Credit Audit` card မှာ ပြထားတဲ့ **Total** ဟာ `Used + Remaining` ကိုပေါင်းပြထားရုံပဲ ဖြစ်နေပါတယ်။ User ရဲ့ တကယ့် lifetime credit pool (Original + Top-up + Renew + Bonus + Referral) နဲ့ မချိန်ထားပါဘူး။ ဒါကြောင့် figure က မှန်နေယောင်ဆောင်နေပေမယ့် တကယ်က validate မလုပ်ထားလို့ data က မှန်တယ်လို့ မပြောနိုင်ပါ။
 
-## Root Cause (သိရှိပြီး)
+### ဖြေရှင်းနည်း — Surgical Edit (1 ဖိုင်တည်း)
+**File:** `src/components/CreditUsageRecords.tsx` (ဒီဖိုင်တခုကိုပဲ ထိမယ်)
 
-Migration `20260408165813` က `app_settings` hardening လုပ်တုန်း `voice_settings` ကို public read whitelist ထဲက ပြန်ဖြုတ်ပစ်ထားလို့:
+အောက်ပါ logic တွေပဲ ပြင်မယ်။ တခြား tool, edge function, RLS, deduction logic ဘာတခုမှ မထိပါ။
 
-1. Non-admin users → DB query empty result → `defaultVoiceSettings` (0 credits) fallback
-2. Admin users → `has_role` policy match → real DB values (3, 6, 9, 12 credits)
-3. Credit deduction က tier credit text ကနေ regex နဲ့ ဂဏန်းဆွဲတယ် → "0 Credits (FREE)" → **0 ဖြတ်**
+#### 1. `credit_topups` table ကနေ Lifetime Pool ထုတ်ယူခြင်း
+RLS က ခွင့်ပြုထား:
+- User mode: `Users can view own topups` (auth.uid() = user_id)
+- Admin mode: `Admins can view all topups`
 
-## Surgical Fix
+ဒါကြောင့် security ထိခိုက်စရာမရှိ။ Existing query တွေနဲ့အတူ parallel fetch ထပ်ထည့်မယ်:
 
-**File တစ်ခုတည်း ထိမယ်**: New migration တစ်ခု ဖန်တီးပြီး `voice_settings` ကို public SELECT whitelist ထဲ ပြန်ထည့်မယ်။
-
-```sql
-DROP POLICY IF EXISTS "Anyone can view safe app settings" ON public.app_settings;
-
-CREATE POLICY "Anyone can view safe app settings"
-ON public.app_settings FOR SELECT TO public
-USING (key = ANY (ARRAY[
-  'app_name', 'app_subtitle', 'logo_url', 
-  'favicon_url', 'primary_color', 'accent_color', 
-  'contact_email', 'contact_phone', 'discord_url', 
-  'footer_text',
-  'voice_settings'  -- ← ဒါတစ်ခုပဲ ထပ်ထည့်
-]));
+```typescript
+supabase
+  .from("credit_topups")
+  .select("amount, topup_type")
+  .eq("is_deleted", false)
+  .eq("user_id", effectiveUserId)
 ```
 
-## ဘာကို မထိဘူး (Protected)
+#### 2. Lifetime Pool ကို Type အလိုက် ခွဲတွက်
+```typescript
+const pool = {
+  original: 0,  // Initial purchase (Premium signup)
+  topup:    0,  // Credit top-ups
+  renew:    0,  // Plan renewals
+  bonus:    0,  // Admin bonuses + Referral bonuses
+  total:    0,  // Sum of all above
+};
+```
+(Referral credits က `topup_type='bonus'` အဖြစ် `note` field မှာ "Referral" လို့ tag လုပ်ထားလို့ bonus ထဲ ပါပြီးသား။)
 
-- ❌ `VoicePage.tsx` — code တစ်လုံးမှ မပြင်ဘူး
-- ❌ `defaultVoiceSettings` values — အရှိအတိုင်း
-- ❌ Credit deduction logic — အရှိအတိုင်း
-- ❌ `useCreditDeduction.ts` — မထိဘူး
-- ❌ `preCheckCredits` — မထိဘူး
-- ❌ Transcribe, Recap NV, အခြား tools — မထိဘူး
-- ❌ Other RLS policies (admin-only, access_control) — အရှိအတိုင်း
-- ❌ AV-SYNC-9000-SMOOTH-v4, RECORD-PIPELINE-AUTO-v1, VOICE-GEN-PIPELINE-v2, AUTO-PIPELINE-v2 — touch မလုပ်ဘူး
-- ❌ Upload architecture, edge functions — မထိဘူး
+#### 3. Reconciliation Formula အမှန်
+```
+Total Pool (Original + Top-up + Renew + Bonus) = Used + Remaining
+```
 
-## ဖြစ်လာမယ့် Result
+ပြထားမယ့် UI:
+```
+ACCOUNT CREDIT AUDIT
+─────────────────────────────────────
+Lifetime Pool Breakdown:
+  Original ........... 100 CR
+  Top-up ............. 200 CR
+  Renew .............. 450 CR
+  Bonus/Referral ......50 CR
+  ──────────────────
+  TOTAL POOL ......... 800 CR
 
-Migration apply ပြီးတာနဲ့:
-- User refresh လုပ်တဲ့အခါ DB ကနေ admin set လုပ်ထားတဲ့ values ရတယ်
-- "UNDER 2,000 CHARS / 3 CREDITS", "UNDER 4,000 CHARS / 6 CREDITS"... အစရှိသည်ဖြင့် admin နဲ့ ထပ်တူ ပြမယ်
-- Credit deduction က admin set လုပ်ထားတဲ့ exact values (3, 6, 9, 12 + SRT 2 addon) နဲ့ **ကွက်တိ** ဖြတ်မယ်
-- Visual UI/colors လည်း admin CMS မှာ set လုပ်ထားတဲ့အတိုင်း user မှာ ပြမယ် (footer color, title size, label colors စသည်)
+Reconciliation:
+  Used ........ 446 CR
+  Remaining ....  4 CR
+  ─────────
+  Pool ........ 450 CR
+  
+  Status: ✓ MATCH  (or ⚠ MISMATCH ±N CR)
+```
 
-## Security Implication
+တကယ်လို့ Pool ≠ Used + Remaining ဆိုရင် warning badge နဲ့ exact diff ပြမယ် (data integrity ကို မြင်နိုင်ဖို့)။
 
-`voice_settings` ထဲမှာ public-facing UI labels, colors, tier prices ပဲ ပါတာ၊ secret/sensitive data မပါဘူး။ Pricing info က user တိုင်း Voice page မှာ မြင်ရမှ trigger လုပ်နိုင်တာဆိုတော့ public read က risk မရှိပါဘူး။ (`transcribe_settings`, `plan_settings` ကို တောင် rollback မလုပ်ပါ — user က Voice ပဲ ပြောထားလို့။)
+#### 4. Mismatch ဖြစ်နိုင်တဲ့ Edge Cases
+- Legacy users: `credit_topups` row မရှိပေမယ့် `profiles.credits` က default `100` နဲ့ စထားတာ (handle_new_user trigger). `pool.total = 0` ဖြစ်ပြီး `used + remaining > 0` ဖြစ်တတ်တယ်။ → Warning badge ပြမယ် (false data မဟုတ်ပဲ legacy seed လို့ note ထည့်မယ်)။
+- `credits_started_at` expire ဖြစ်ပြီး credits 0 ပြန်ရှင်းလိုက်တာ (deduct_user_credits မှာ ရှိ): မှန်မှန်ပြသနိုင်အောင် "Expired Reset" indicator ထည့်မယ်။
+
+#### 5. Security
+- RLS အရ user တယောက်က သူ့ topup ကိုပဲ ကြည့်ရ။
+- Admin က `targetUserId` filter သုံးပြီး user တယောက်ချင်းကို ကြည့်ရ။
+- Direct DB write ဘာမှ မရှိ — read-only.
+- Existing `lifetimeCreditAudit` logic ကို ဖျက်မယ်/အစားထိုးမယ်၊ deduction pipeline ဘာမှ မထိပါ။
+
+### Implementation Scope
+**Modified file (1):**
+- `src/components/CreditUsageRecords.tsx`
+  - `useEffect` load function ထဲ `credit_topups` query ထပ်ထည့်
+  - State: `creditPool` (4 types + total) ထပ်ထည့်
+  - `lifetimeCreditAudit` ကို pool-based ဖြစ်အောင် ပြင်ဆင် (used vs pool reconciliation)
+  - UI card: Pool breakdown + Reconciliation status (match/mismatch indicator)
+
+**Untouched (Golden Protection):**
+- `deduct_user_credits` RPC, `handle_credits_started_at` trigger, RLS policies
+- Tool pages အားလုံး (Recap NV, Voice, Translate, Transcribe, etc.)
+- Admin tabs (AdminCreditAgentTab, AdminUsersTab)
+- Edge functions
+
+### ရလဒ်
+- User က သူ့ account credit pool ရဲ့ source အလိုက် real breakdown ကို မြင်ရမယ်။
+- `Original + Top-up + Renew + Bonus + Referral = Used + Remaining` ဆိုတဲ့ formula ကို real-time validate ဖြစ်မယ်။
+- Mismatch ရှိရင် ချက်ခြင်း ထင်ထင်ရှားရှား မြင်ရပြီး data accuracy 100% ဖြစ်မယ်။
 
