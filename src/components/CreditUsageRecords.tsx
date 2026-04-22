@@ -49,6 +49,7 @@ interface TopupRow {
   amount: number;
   topup_type: string;
   note: string | null;
+  created_at: string | null;
 }
 
 interface CreditPool {
