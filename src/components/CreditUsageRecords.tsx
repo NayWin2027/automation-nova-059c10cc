@@ -205,11 +205,18 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         }
         // For non-admin (no targetUserId), RLS limits to own rows automatically.
 
-        const [usageResult, logResult, profileResult] = await Promise.all([
+        const [usageResult, logResult, profileResult, topupResult] = await Promise.all([
           query,
           logQuery,
           effectiveUserId
             ? supabase.from("profiles").select("credits").eq("user_id", effectiveUserId).maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
+          effectiveUserId
+            ? supabase
+                .from("credit_topups")
+                .select("amount,topup_type,note")
+                .eq("is_deleted", false)
+                .eq("user_id", effectiveUserId)
             : Promise.resolve({ data: null, error: null }),
         ]);
 
@@ -217,6 +224,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         if (qErr) throw qErr;
         if (logResult.error) throw logResult.error;
         if (profileResult.error) throw profileResult.error;
+        if (topupResult.error) throw topupResult.error;
         if (!mounted) return;
 
         const exactMap: Record<string, number> = {};
@@ -231,6 +239,37 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         setRows((data || []) as UsageRow[]);
         setExactCreditsByKey(exactMap);
         setCurrentBalance(profileResult.data?.credits ?? null);
+
+        // Aggregate lifetime credit pool by source type
+        const pool: CreditPool = {
+          original: 0,
+          topup: 0,
+          renew: 0,
+          bonus: 0,
+          referral: 0,
+          total: 0,
+          hasRecords: false,
+        };
+        const topups = (topupResult.data || []) as TopupRow[];
+        for (const t of topups) {
+          const amt = Number(t.amount || 0);
+          if (!Number.isFinite(amt) || amt <= 0) continue;
+          pool.hasRecords = true;
+          const type = String(t.topup_type || "").toLowerCase();
+          const note = String(t.note || "").toLowerCase();
+          const isReferral = note.includes("referral") || note.includes("referal");
+          if (type === "original") pool.original += amt;
+          else if (type === "topup") pool.topup += amt;
+          else if (type === "renew") pool.renew += amt;
+          else if (type === "bonus") {
+            if (isReferral) pool.referral += amt;
+            else pool.bonus += amt;
+          } else {
+            pool.bonus += amt;
+          }
+        }
+        pool.total = pool.original + pool.topup + pool.renew + pool.bonus + pool.referral;
+        setCreditPool(pool);
       } catch (e: any) {
         if (mounted) setError(e?.message || "Failed to load usage records");
       } finally {
