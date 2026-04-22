@@ -52,6 +52,15 @@ interface TopupRow {
   created_at: string | null;
 }
 
+interface PaymentOrderRow {
+  order_number: string;
+  order_type: string;
+  admin_credit_amount: number | null;
+  admin_bonus_amount: number | null;
+  approved_at: string | null;
+  created_at: string;
+}
+
 interface CreditPool {
   original: number;
   topup: number;
@@ -141,6 +150,16 @@ type NormalizedTopup = TopupRow & {
   normalizedType: "original" | "topup" | "renew" | "bonus" | "referral";
 };
 
+type CreditBucketEntry = {
+  amount: number;
+  normalizedType: "original" | "topup" | "renew" | "bonus" | "referral";
+};
+
+type CreditAdditionEvent = CreditBucketEntry & {
+  occurredAt: string;
+  dateKey: string | null;
+};
+
 type NormalizedCreditLog = {
   toolName: string;
   dateKey: string | null;
@@ -149,6 +168,13 @@ type NormalizedCreditLog = {
 
 const pad2 = (value: number | string) => String(value).padStart(2, "0");
 
+const toIsoInstant = (value: string | null | undefined) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+};
+
 const toUtcDateKey = (value: string | null | undefined) => {
   if (!value) return null;
   const date = new Date(value);
@@ -156,7 +182,13 @@ const toUtcDateKey = (value: string | null | undefined) => {
   return date.toISOString().slice(0, 10);
 };
 
-const aggregatePool = (entries: NormalizedTopup[]): CreditPool => {
+const extractOrderNumberFromNote = (note: string | null | undefined) => {
+  if (!note) return null;
+  const match = note.match(/\b(?:nw|kys)\d{4,}\b/i);
+  return match?.[0]?.toLowerCase() ?? null;
+};
+
+const aggregatePool = (entries: CreditBucketEntry[]): CreditPool => {
   const pool: CreditPool = {
     original: 0,
     topup: 0,
@@ -190,10 +222,11 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
   const [exactCreditsByKey, setExactCreditsByKey] = useState<Record<string, number>>({});
   const [currentBalance, setCurrentBalance] = useState<number | null>(null);
   const [topupRows, setTopupRows] = useState<TopupRow[]>([]);
+  const [paymentOrderRows, setPaymentOrderRows] = useState<PaymentOrderRow[]>([]);
   const [creditLogRows, setCreditLogRows] = useState<CreditLogRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [period, setPeriod] = useState<Period>("daily");
+  const [period, setPeriod] = useState<Period>("monthly");
   const [view, setView] = useState<ViewMode>("detail");
 
   const now = new Date();
@@ -231,7 +264,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         }
         // For non-admin (no targetUserId), RLS limits to own rows automatically.
 
-        const [usageResult, logResult, profileResult, topupResult] = await Promise.all([
+        const [usageResult, logResult, profileResult, topupResult, paymentOrderResult] = await Promise.all([
           query,
           logQuery,
           effectiveUserId
@@ -243,6 +276,15 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
                 .select("amount,topup_type,note,created_at")
                 .eq("is_deleted", false)
                 .eq("user_id", effectiveUserId)
+                .order("created_at", { ascending: true })
+            : Promise.resolve({ data: null, error: null }),
+          effectiveUserId
+            ? supabase
+                .from("payment_orders")
+                .select("order_number,order_type,admin_credit_amount,admin_bonus_amount,approved_at,created_at")
+                .eq("user_id", effectiveUserId)
+                .eq("status", "approved")
+                .order("approved_at", { ascending: true })
             : Promise.resolve({ data: null, error: null }),
         ]);
 
@@ -251,6 +293,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         if (logResult.error) throw logResult.error;
         if (profileResult.error) throw profileResult.error;
         if (topupResult.error) throw topupResult.error;
+        if (paymentOrderResult.error) throw paymentOrderResult.error;
         if (!mounted) return;
 
         const logRowsRaw = (logResult.data || []) as CreditLogRow[];
@@ -267,6 +310,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         setExactCreditsByKey(exactMap);
         setCurrentBalance(profileResult.data?.credits ?? null);
         setTopupRows((topupResult.data || []) as TopupRow[]);
+        setPaymentOrderRows((paymentOrderResult.data || []) as PaymentOrderRow[]);
         setCreditLogRows(logRowsRaw);
       } catch (e: any) {
         if (mounted) setError(e?.message || "Failed to load usage records");
@@ -389,8 +433,8 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         type === "original" || type === "topup" || type === "renew" || type === "bonus" || type === "referral"
           ? type
           : note.includes("referral") || note.includes("referal")
-          ? "referral"
-          : "bonus";
+            ? "referral"
+            : "bonus";
 
       return {
         ...row,
@@ -409,6 +453,63 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
       }))
       .filter((row) => row.dateKey && Number.isFinite(row.credits) && row.credits > 0) as NormalizedCreditLog[];
   }, [creditLogRows]);
+
+  const approvedOrderNumbers = useMemo(() => {
+    return new Set(
+      paymentOrderRows
+        .map((row) => String(row.order_number || "").trim().toLowerCase())
+        .filter(Boolean)
+    );
+  }, [paymentOrderRows]);
+
+  const paymentOrderEvents = useMemo<CreditAdditionEvent[]>(() => {
+    return paymentOrderRows.flatMap((row) => {
+      const occurredAt = toIsoInstant(row.approved_at || row.created_at) || row.created_at;
+      const dateKey = toUtcDateKey(row.approved_at || row.created_at);
+      const orderType = String(row.order_type || "").toLowerCase();
+      const events: CreditAdditionEvent[] = [];
+      const creditAmount = Number(row.admin_credit_amount || 0);
+      const bonusAmount = Number(row.admin_bonus_amount || 0);
+
+      if (dateKey && Number.isFinite(creditAmount) && creditAmount > 0) {
+        if (orderType === "new_user") {
+          events.push({ amount: creditAmount, normalizedType: "original", occurredAt, dateKey });
+        } else if (orderType === "topup") {
+          events.push({ amount: creditAmount, normalizedType: "topup", occurredAt, dateKey });
+        } else if (orderType === "renew") {
+          events.push({ amount: creditAmount, normalizedType: "renew", occurredAt, dateKey });
+        }
+      }
+
+      if (dateKey && Number.isFinite(bonusAmount) && bonusAmount > 0) {
+        events.push({ amount: bonusAmount, normalizedType: "bonus", occurredAt, dateKey });
+      }
+
+      return events;
+    });
+  }, [paymentOrderRows]);
+
+  const manualTopupEvents = useMemo<CreditAdditionEvent[]>(() => {
+    return normalizedTopups.flatMap((row) => {
+      const amount = Number(row.amount || 0);
+      if (!row.dateKey || !Number.isFinite(amount) || amount <= 0) return [];
+
+      const linkedOrderNumber = extractOrderNumberFromNote(row.note);
+      const isMirroredOrderRow = linkedOrderNumber && approvedOrderNumbers.has(linkedOrderNumber) && row.normalizedType !== "referral";
+      if (isMirroredOrderRow) return [];
+
+      return [{
+        amount,
+        normalizedType: row.normalizedType,
+        occurredAt: toIsoInstant(row.created_at) || row.dateKey,
+        dateKey: row.dateKey,
+      }];
+    });
+  }, [normalizedTopups, approvedOrderNumbers]);
+
+  const additionEvents = useMemo<CreditAdditionEvent[]>(() => {
+    return [...paymentOrderEvents, ...manualTopupEvents].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
+  }, [paymentOrderEvents, manualTopupEvents]);
 
   const auditRange = useMemo(() => {
     if (auditScope === "lifetime") {
@@ -430,40 +531,30 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
     return { start: dayKey, end: dayKey };
   }, [auditScope, period, filterYear, filterMonth, filterDay]);
 
-  const lifetimeAddedTotal = useMemo(() => aggregatePool(normalizedTopups).total, [normalizedTopups]);
-  const lifetimeUsedTotal = useMemo(() => sumCredits(normalizedCreditLogs), [normalizedCreditLogs]);
-
-  const scopedTopups = useMemo(() => {
-    return normalizedTopups.filter((row) => row.dateKey && dateInAuditScope(row.dateKey));
-  }, [normalizedTopups, dateInAuditScope]);
+  const scopedAdditionEvents = useMemo(() => {
+    return additionEvents.filter((row) => row.dateKey && dateInAuditScope(row.dateKey));
+  }, [additionEvents, dateInAuditScope]);
 
   const scopedCreditLogs = useMemo(() => {
     return normalizedCreditLogs.filter((row) => row.dateKey && dateInAuditScope(row.dateKey));
   }, [normalizedCreditLogs, dateInAuditScope]);
 
-  const creditPool = useMemo(() => aggregatePool(scopedTopups), [scopedTopups]);
-
-  const creditsAddedAfterScope = useMemo(() => {
-    if (!auditRange.end) return 0;
-    return aggregatePool(normalizedTopups.filter((row) => row.dateKey && row.dateKey > auditRange.end)).total;
-  }, [normalizedTopups, auditRange.end]);
-
-  const creditsUsedAfterScope = useMemo(() => {
-    if (!auditRange.end) return 0;
-    return sumCredits(normalizedCreditLogs.filter((row) => row.dateKey && row.dateKey > auditRange.end));
-  }, [normalizedCreditLogs, auditRange.end]);
+  const creditPool = useMemo(() => aggregatePool(scopedAdditionEvents), [scopedAdditionEvents]);
 
   const lifetimeCreditAudit = useMemo(() => {
-    const balanceNow = currentBalance ?? 0;
+    const openingAdded = auditRange.start
+      ? aggregatePool(additionEvents.filter((row) => row.dateKey && row.dateKey < auditRange.start)).total
+      : 0;
+    const openingUsed = auditRange.start
+      ? sumCredits(normalizedCreditLogs.filter((row) => row.dateKey && row.dateKey < auditRange.start))
+      : 0;
+    const openingBalance = auditScope === "lifetime" ? 0 : Math.max(openingAdded - openingUsed, 0);
     const addedThisScope = creditPool.total;
     const usedThisScope = sumCredits(scopedCreditLogs);
-    const closingBalance = auditScope === "lifetime"
-      ? balanceNow
-      : balanceNow - creditsAddedAfterScope + creditsUsedAfterScope;
-    const openingBalance = closingBalance - addedThisScope + usedThisScope;
+    const closingBalance = openingBalance + addedThisScope - usedThisScope;
     const totalAvailable = openingBalance + addedThisScope;
     const reconciliationDiff = totalAvailable - (usedThisScope + closingBalance);
-    const untrackedBalance = balanceNow - lifetimeAddedTotal + lifetimeUsedTotal;
+    const liveBalanceDelta = auditScope === "lifetime" && currentBalance != null ? currentBalance - closingBalance : 0;
 
     return {
       addedThisScope,
@@ -472,19 +563,10 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
       closingBalance,
       totalAvailable,
       diff: reconciliationDiff,
-      status: Math.abs(untrackedBalance) <= 1 ? ("balanced" as AuditStatus) : ("untracked" as AuditStatus),
-      untrackedBalance,
+      status: Math.abs(reconciliationDiff) <= 1 && Math.abs(liveBalanceDelta) <= 1 ? ("balanced" as AuditStatus) : ("untracked" as AuditStatus),
+      untrackedBalance: liveBalanceDelta,
     };
-  }, [
-    currentBalance,
-    creditPool.total,
-    scopedCreditLogs,
-    auditScope,
-    creditsAddedAfterScope,
-    creditsUsedAfterScope,
-    lifetimeAddedTotal,
-    lifetimeUsedTotal,
-  ]);
+  }, [auditRange.start, additionEvents, normalizedCreditLogs, auditScope, creditPool.total, scopedCreditLogs, currentBalance]);
 
   return (
     <div className="space-y-4">
