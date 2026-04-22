@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { Coins, Calendar, Hash, Smartphone, Globe, Shield } from 'lucide-react';
+import { Coins, Calendar, Hash, Smartphone, Globe, Shield, BarChart3, ChevronRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 interface DeviceInfo {
   id: string;
@@ -13,6 +14,7 @@ interface DeviceInfo {
 
 const AccountInfoCard: React.FC = () => {
   const { user, profile, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
   const [ipAddress, setIpAddress] = useState<string | null>(null);
   const [accountCreatedAt, setAccountCreatedAt] = useState<string | null>(null);
@@ -176,6 +178,20 @@ const AccountInfoCard: React.FC = () => {
           </div>
         }
       </div>
+
+      <button
+        onClick={() => navigate('/usage-history')}
+        className="w-full p-3 rounded-xl border border-primary/30 bg-card/50 hover:bg-card/70 transition-colors flex items-center justify-between group"
+      >
+        <div className="flex items-center gap-2">
+          <BarChart3 className="w-3.5 h-3.5 text-primary" />
+          <div className="text-left">
+            <p className="text-3xs text-base text-neon-rose">Usage History</p>
+            <p className="text-2xs text-muted-foreground">Daily / Monthly / Yearly records</p>
+          </div>
+        </div>
+        <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+      </button>
     </div>);
 
 };
