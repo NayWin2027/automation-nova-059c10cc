@@ -144,11 +144,21 @@ export async function generateSpeech(
           console.log(`[generateSpeech] Rate limited. Retry ${attempt}/${maxRetries} after ${waitSec}s...`);
           await new Promise(r => setTimeout(r, waitSec * 1000));
 
-          const { data: retryData, error: retryError } = await invokeWithAuthRetry<TTSResponse>("gemini-tts", {
-            text, voiceName, apiKey,
+          const retryBody: Record<string, unknown> = {
+            text,
+            voiceName,
+            apiKey,
             performance: performance || "PROFESSIONAL",
             languageCode: lang,
-          });
+          };
+          if (customCreditCost !== undefined) {
+            retryBody.customCreditCost = customCreditCost;
+          }
+          if (skipCreditDeduction) {
+            retryBody.skipCreditDeduction = true;
+          }
+
+          const { data: retryData, error: retryError } = await invokeWithAuthRetry<TTSResponse>("gemini-tts", retryBody);
 
           if (!retryError && retryData?.audio && !retryData?.useClientTTS) {
             return retryData.audio;
