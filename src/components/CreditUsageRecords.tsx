@@ -456,6 +456,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
     return creditLogRows
       .map((row) => ({
         toolName: row.tool_name,
+        occurredAt: toIsoInstant(row.created_at) || row.created_at,
         dateKey: toUtcDateKey(row.created_at),
         credits: Number(row?.metadata?.credits_deducted ?? 0),
       }))
@@ -518,6 +519,38 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
   const additionEvents = useMemo<CreditAdditionEvent[]>(() => {
     return [...paymentOrderEvents, ...manualTopupEvents].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
   }, [paymentOrderEvents, manualTopupEvents]);
+
+  const creditStartInstant = useMemo(() => {
+    return toIsoInstant(profileCreditRow?.credits_started_at) || null;
+  }, [profileCreditRow?.credits_started_at]);
+
+  const seededOriginalAmount = useMemo(() => {
+    if (currentBalance == null || !creditStartInstant) return 0;
+    const usageSinceStart = normalizedCreditLogs
+      .filter((row) => row.occurredAt >= creditStartInstant)
+      .reduce((sum, row) => sum + row.credits, 0);
+    const trackedAdditionsSinceStart = additionEvents
+      .filter((row) => row.occurredAt >= creditStartInstant)
+      .reduce((sum, row) => sum + row.amount, 0);
+    return Math.max(currentBalance + usageSinceStart - trackedAdditionsSinceStart, 0);
+  }, [additionEvents, creditStartInstant, currentBalance, normalizedCreditLogs]);
+
+  const authoritativeAdditionEvents = useMemo<CreditAdditionEvent[]>(() => {
+    if (!creditStartInstant || seededOriginalAmount <= 0) return additionEvents;
+    const hasOpeningOriginal = additionEvents.some(
+      (row) => row.normalizedType === "original" && row.occurredAt >= creditStartInstant
+    );
+    if (hasOpeningOriginal) return additionEvents;
+    return [
+      {
+        amount: seededOriginalAmount,
+        normalizedType: "original",
+        occurredAt: creditStartInstant,
+        dateKey: toUtcDateKey(creditStartInstant),
+      },
+      ...additionEvents,
+    ].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
+  }, [additionEvents, creditStartInstant, seededOriginalAmount]);
 
   const auditRange = useMemo(() => {
     if (auditScope === "lifetime") {
