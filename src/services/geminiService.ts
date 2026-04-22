@@ -75,7 +75,8 @@ export async function generateSpeech(
   apiKey?: string,
   performance?: string,
   languageCode?: string,
-  customCreditCost?: number
+  customCreditCost?: number,
+  skipCreditDeduction?: boolean
 ): Promise<string | null> {
   try {
     isUsingWebSpeech = false;
@@ -90,6 +91,9 @@ export async function generateSpeech(
     };
     if (customCreditCost !== undefined) {
       body.customCreditCost = customCreditCost;
+    }
+    if (skipCreditDeduction) {
+      body.skipCreditDeduction = true;
     }
 
     const { data, error } = await invokeWithAuthRetry<TTSResponse>("gemini-tts", body);
