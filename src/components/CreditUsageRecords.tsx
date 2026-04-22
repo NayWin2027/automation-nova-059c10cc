@@ -472,7 +472,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
       closingBalance,
       totalAvailable,
       diff: reconciliationDiff,
-      status: "balanced" as AuditStatus,
+      status: Math.abs(untrackedBalance) <= 1 ? ("balanced" as AuditStatus) : ("untracked" as AuditStatus),
       untrackedBalance,
     };
   }, [
@@ -619,24 +619,18 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
                   }`}
             </p>
           </div>
-          {lifetimeCreditAudit.status === "match" && (
+          {lifetimeCreditAudit.status === "balanced" && (
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-2xs font-extrabold text-emerald-400 uppercase tracking-wider">Match</span>
+              <span className="text-2xs font-extrabold text-emerald-400 uppercase tracking-wider">DB Backed</span>
             </div>
           )}
-          {lifetimeCreditAudit.status === "mismatch" && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/15 border border-rose-500/40">
-              <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
-              <span className="text-2xs font-extrabold text-rose-400 uppercase tracking-wider">
-                Diff {lifetimeCreditAudit.diff > 0 ? "+" : ""}{lifetimeCreditAudit.diff}
-              </span>
-            </div>
-          )}
-          {lifetimeCreditAudit.status === "legacy" && (
+          {lifetimeCreditAudit.status === "untracked" && (
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30">
               <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
-              <span className="text-2xs font-extrabold text-amber-400 uppercase tracking-wider">Legacy Seed</span>
+              <span className="text-2xs font-extrabold text-rose-400 uppercase tracking-wider">
+                Carry-over {lifetimeCreditAudit.untrackedBalance > 0 ? "+" : ""}{lifetimeCreditAudit.untrackedBalance}
+              </span>
             </div>
           )}
         </div>
@@ -668,7 +662,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         {/* Lifetime Pool Breakdown */}
         <div className="mb-3 p-3 rounded-xl bg-background/50 border border-border/40">
           <p className="text-2xs font-bold text-muted-foreground uppercase tracking-widest mb-2">
-            {auditScope === "lifetime" ? "Lifetime Pool Breakdown" : "Pool Breakdown (Selected Period)"}
+            {auditScope === "lifetime" ? "Lifetime Pool Breakdown" : "Credits Added In Selected Period"}
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
             <div className="px-2 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-center">
@@ -694,7 +688,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
           </div>
           <div className="mt-2.5 pt-2.5 border-t border-border/30 flex items-center justify-between">
             <span className="text-2xs font-bold text-muted-foreground uppercase tracking-wider">
-              {auditScope === "lifetime" ? "Total Pool (Lifetime)" : "Total Pool (Period)"}
+              {auditScope === "lifetime" ? "Total Pool" : "Total Added"}
             </span>
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30">
               <Coins className="w-3.5 h-3.5 text-amber-400" />
@@ -704,86 +698,46 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-2 gap-2.5">
           <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25">
             <p className="text-2xs font-bold text-amber-400 uppercase tracking-wider">
-              {auditScope === "lifetime" ? "Usage (Lifetime)" : "Usage (Period)"}
+              {auditScope === "lifetime" ? "Opening Balance" : "Opening Balance"}
             </p>
-            <p className="text-2xl font-extrabold text-amber-400 tabular-nums">{lifetimeCreditAudit.used}</p>
+            <p className="text-2xl font-extrabold text-amber-400 tabular-nums">{lifetimeCreditAudit.openingBalance}</p>
           </div>
           <div className="p-3 rounded-xl bg-primary/10 border border-primary/25">
             <p className="text-2xs font-bold text-primary uppercase tracking-wider">
-              {auditScope === "lifetime" ? "Balance" : "Period Net"}
+              {auditScope === "lifetime" ? "Total Added" : "Total Added"}
             </p>
             <p className="text-2xl font-extrabold text-foreground tabular-nums">
-              {auditScope === "lifetime" ? lifetimeCreditAudit.remaining : lifetimeCreditAudit.periodNet}
+              {lifetimeCreditAudit.addedThisScope}
             </p>
-            {auditScope !== "lifetime" && (
-              <p className="text-3xs font-semibold text-muted-foreground/80 leading-tight mt-0.5">
-                Pool − Usage
-              </p>
-            )}
           </div>
-          <div
-            className={`p-3 rounded-xl border ${
-              lifetimeCreditAudit.status === "match"
-                ? "bg-emerald-500/10 border-emerald-500/25"
-                : lifetimeCreditAudit.status === "mismatch"
-                ? "bg-rose-500/10 border-rose-500/30"
-                : "bg-amber-500/10 border-amber-500/25"
-            }`}
-          >
-            <p
-              className={`text-2xs font-bold uppercase tracking-wider ${
-                lifetimeCreditAudit.status === "match"
-                  ? "text-emerald-400"
-                  : lifetimeCreditAudit.status === "mismatch"
-                  ? "text-rose-400"
-                  : "text-amber-400"
-              }`}
-            >
-              {auditScope === "lifetime" ? "Used + Bal" : "Pool vs Used"}
+          <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25">
+            <p className="text-2xs font-bold text-emerald-400 uppercase tracking-wider">Usage</p>
+            <p className="text-2xl font-extrabold text-emerald-400 tabular-nums">{lifetimeCreditAudit.used}</p>
+          </div>
+          <div className="p-3 rounded-xl bg-card/70 border border-border/40">
+            <p className="text-2xs font-bold text-muted-foreground uppercase tracking-wider">
+              {auditScope === "lifetime" ? "Current Balance" : "Closing Balance"}
             </p>
-            <p
-              className={`text-lg font-extrabold tabular-nums leading-tight ${
-                lifetimeCreditAudit.status === "match"
-                  ? "text-emerald-400"
-                  : lifetimeCreditAudit.status === "mismatch"
-                  ? "text-rose-400"
-                  : "text-amber-400"
-              }`}
-            >
-              {auditScope === "lifetime"
-                ? `${lifetimeCreditAudit.used} + ${lifetimeCreditAudit.remaining}`
-                : `${creditPool.total} − ${lifetimeCreditAudit.used}`}
-            </p>
-            <p
-              className={`text-xs font-bold ${
-                lifetimeCreditAudit.status === "match"
-                  ? "text-emerald-400/85"
-                  : lifetimeCreditAudit.status === "mismatch"
-                  ? "text-rose-400/85"
-                  : "text-amber-400/85"
-              }`}
-            >
-              = {auditScope === "lifetime" ? lifetimeCreditAudit.total : lifetimeCreditAudit.periodNet}
-              {auditScope === "lifetime" && creditPool.hasRecords && (
-                <span className="ml-1 opacity-80">/ Pool {creditPool.total}</span>
-              )}
-            </p>
+            <p className="text-2xl font-extrabold text-foreground tabular-nums">{lifetimeCreditAudit.closingBalance}</p>
           </div>
         </div>
 
-        {lifetimeCreditAudit.status === "mismatch" && (
-          <p className="text-3xs font-semibold text-rose-400/85 mt-2.5 leading-snug">
-            {auditScope === "lifetime"
-              ? `⚠ Pool (${creditPool.total}) ≠ Used + Balance (${lifetimeCreditAudit.total}). Possible expired credit reset, manual adjustment, or legacy seed credits.`
-              : `⚠ Period usage (${lifetimeCreditAudit.used}) exceeds period pool (${creditPool.total}) by ${Math.abs(lifetimeCreditAudit.diff)} CR — credits earned in another period were spent here. Switch to Lifetime view for full reconciliation.`}
+        <div className="mt-2.5 p-3 rounded-xl bg-background/50 border border-border/40">
+          <p className="text-2xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Reconciliation</p>
+          <p className="text-sm font-extrabold text-foreground tabular-nums leading-snug">
+            {lifetimeCreditAudit.openingBalance} + {lifetimeCreditAudit.addedThisScope} = {lifetimeCreditAudit.used} + {lifetimeCreditAudit.closingBalance}
           </p>
-        )}
-        {lifetimeCreditAudit.status === "legacy" && (
+          <p className="text-3xs font-semibold text-muted-foreground mt-1">
+            Total Available = <span className="text-foreground font-bold tabular-nums">{lifetimeCreditAudit.totalAvailable}</span> CR
+          </p>
+        </div>
+
+        {lifetimeCreditAudit.status === "untracked" && (
           <p className="text-3xs font-semibold text-amber-400/85 mt-2.5 leading-snug">
-            ℹ No credit_topups records for this scope — account uses default seed credits. Pool tracking starts after the first top-up/renew.
+            ℹ Opening balance includes {lifetimeCreditAudit.untrackedBalance > 0 ? lifetimeCreditAudit.untrackedBalance : Math.abs(lifetimeCreditAudit.untrackedBalance)} CR that are outside the `credit_topups` ledger (older seed/manual credits), so the breakdown above uses database topup records and the reconciliation uses real closing balance.
           </p>
         )}
       </Card>
