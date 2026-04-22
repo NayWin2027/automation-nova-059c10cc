@@ -175,6 +175,35 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
     };
   }, [targetUserId]);
 
+  // Fetch tool credit costs once (used to convert deduct_count -> credit quantity).
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from("tool_settings")
+          .select("tool_id,credit_cost");
+        if (!mounted || !data) return;
+        const map: Record<string, number> = {};
+        for (const r of data as Array<{ tool_id: string; credit_cost: number | null }>) {
+          if (r?.tool_id) map[r.tool_id] = Number(r.credit_cost ?? 0);
+        }
+        setToolCosts(map);
+      } catch {
+        // Non-fatal: fall back to DEFAULT_TOOL_COST below.
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const costFor = (toolId: string): number => {
+    if (toolCosts[toolId] != null) return toolCosts[toolId];
+    if (DEFAULT_TOOL_COST[toolId] != null) return DEFAULT_TOOL_COST[toolId];
+    return 10; // last-resort fallback matching DB default
+  };
+
   // Filter rows according to active selectors
   const filteredRows = useMemo(() => {
     return rows.filter((r) => {
