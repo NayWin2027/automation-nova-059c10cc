@@ -74,7 +74,9 @@ const AdminAgentSalesTab: React.FC = () => {
 
   // Available years from data
   const availableYears = useMemo(() => {
-    const years = new Set(allUsers.map((u) => String(new Date(u.created_at).getFullYear())));
+    const years = new Set<string>(allUsers.map((u) => String(new Date(u.created_at).getFullYear())));
+    // Always include the full selectable range 2025 - 2100 so admins can pick any year
+    for (let y = 2100; y >= 2025; y--) years.add(String(y));
     return Array.from(years).sort((a, b) => b.localeCompare(a));
   }, [allUsers]);
 
