@@ -1,9 +1,26 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Calendar, BarChart3, List, Coins, Activity, AlertCircle, Loader2 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Calendar,
+  BarChart3,
+  List,
+  Coins,
+  Activity,
+  AlertCircle,
+  Loader2,
+  CheckCircle2,
+  XCircle,
+  Zap,
+} from "lucide-react";
 
 type Period = "daily" | "monthly" | "yearly";
 type ViewMode = "detail" | "total";
@@ -46,12 +63,16 @@ const TOOL_LABELS: Record<string, string> = {
 
 const labelTool = (id: string) => TOOL_LABELS[id] || id;
 
+// usage_date is stored as YYYY-MM-DD (DATE type). Parse without UTC shift.
+const parseDateParts = (dateStr: string) => {
+  const [y, m, d] = dateStr.split("-").map((s) => parseInt(s, 10));
+  return { y, m, d };
+};
+
 const periodKey = (dateStr: string, p: Period): string => {
-  const d = new Date(dateStr);
-  if (p === "yearly") return String(d.getUTCFullYear());
-  if (p === "monthly") {
-    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-  }
+  const { y, m, d } = parseDateParts(dateStr);
+  if (p === "yearly") return String(y);
+  if (p === "monthly") return `${y}-${String(m).padStart(2, "0")}`;
   return dateStr; // daily uses YYYY-MM-DD
 };
 
@@ -60,16 +81,31 @@ const periodLabel = (key: string, p: Period): string => {
   if (p === "monthly") {
     const [y, m] = key.split("-");
     return new Date(parseInt(y), parseInt(m) - 1, 1).toLocaleDateString("en-GB", {
-      month: "short",
+      month: "long",
       year: "numeric",
     });
   }
-  return new Date(key).toLocaleDateString("en-GB", {
+  const [y, m, d] = key.split("-");
+  return new Date(parseInt(y), parseInt(m) - 1, parseInt(d)).toLocaleDateString("en-GB", {
+    weekday: "short",
     day: "2-digit",
     month: "short",
     year: "numeric",
   });
 };
+
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+const YEARS: number[] = (() => {
+  const arr: number[] = [];
+  for (let y = 2100; y >= 2025; y--) arr.push(y);
+  return arr;
+})();
+
+const ALL = "__all__";
 
 const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
   const [rows, setRows] = useState<UsageRow[]>([]);
@@ -77,6 +113,11 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<Period>("daily");
   const [view, setView] = useState<ViewMode>("detail");
+
+  const now = new Date();
+  const [filterYear, setFilterYear] = useState<string>(String(now.getFullYear()));
+  const [filterMonth, setFilterMonth] = useState<string>(String(now.getMonth() + 1)); // 1-12
+  const [filterDay, setFilterDay] = useState<string>(ALL); // 1-31 or ALL
 
   useEffect(() => {
     let mounted = true;
@@ -111,6 +152,32 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
     };
   }, [targetUserId]);
 
+  // Filter rows according to active selectors
+  const filteredRows = useMemo(() => {
+    return rows.filter((r) => {
+      const { y, m, d } = parseDateParts(r.usage_date);
+      if (period === "yearly") {
+        return String(y) === filterYear;
+      }
+      if (period === "monthly") {
+        return String(y) === filterYear && String(m) === filterMonth;
+      }
+      // daily
+      if (String(y) !== filterYear) return false;
+      if (String(m) !== filterMonth) return false;
+      if (filterDay !== ALL && String(d) !== filterDay) return false;
+      return true;
+    });
+  }, [rows, period, filterYear, filterMonth, filterDay]);
+
+  // Days in selected month for the day dropdown
+  const daysInMonth = useMemo(() => {
+    const y = parseInt(filterYear, 10);
+    const m = parseInt(filterMonth, 10);
+    if (!y || !m) return 31;
+    return new Date(y, m, 0).getDate();
+  }, [filterYear, filterMonth]);
+
   // Group: period -> tool -> aggregates
   const grouped = useMemo(() => {
     const map = new Map<
@@ -118,7 +185,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
       { total: { usage: number; success: number; error: number; deduct: number }; tools: Map<string, { usage: number; success: number; error: number; deduct: number }> }
     >();
 
-    for (const r of rows) {
+    for (const r of filteredRows) {
       const k = periodKey(r.usage_date, period);
       if (!map.has(k)) {
         map.set(k, {
@@ -142,10 +209,10 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
 
     // Sort periods desc
     return Array.from(map.entries()).sort((a, b) => (a[0] < b[0] ? 1 : -1));
-  }, [rows, period]);
+  }, [filteredRows, period]);
 
   const grandTotal = useMemo(() => {
-    return rows.reduce(
+    return filteredRows.reduce(
       (acc, r) => {
         acc.usage += r.usage_count || 0;
         acc.success += r.success_count || 0;
@@ -155,7 +222,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
       },
       { usage: 0, success: 0, error: 0, deduct: 0 }
     );
-  }, [rows]);
+  }, [filteredRows]);
 
   return (
     <div className="space-y-3">
