@@ -107,8 +107,31 @@ const YEARS: number[] = (() => {
 
 const ALL = "__all__";
 
+// Fallback credit costs (used only if a tool is missing from tool_settings).
+// These mirror current DB defaults so historical rows still resolve correctly.
+const DEFAULT_TOOL_COST: Record<string, number> = {
+  voice: 15,
+  transcribe: 10,
+  translate: 10,
+  "translate-video": 10,
+  "video-recap": 18,
+  "recap-nv": 6,
+  recap: 18,
+  novel: 10,
+  story: 8,
+  thumbnail: 3,
+  srt: 5,
+  creator: 5,
+  "nova-cut-video": 10,
+  "nova-cut": 10,
+  downloader: 5,
+  subgen: 5,
+  transformative: 10,
+};
+
 const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
   const [rows, setRows] = useState<UsageRow[]>([]);
+  const [toolCosts, setToolCosts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<Period>("daily");
