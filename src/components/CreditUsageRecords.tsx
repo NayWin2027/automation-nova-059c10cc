@@ -541,13 +541,14 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
       (row) => row.normalizedType === "original" && row.occurredAt >= creditStartInstant
     );
     if (hasOpeningOriginal) return additionEvents;
+    const seededOriginalEvent: CreditAdditionEvent = {
+      amount: seededOriginalAmount,
+      normalizedType: "original",
+      occurredAt: creditStartInstant,
+      dateKey: toUtcDateKey(creditStartInstant),
+    };
     return [
-      {
-        amount: seededOriginalAmount,
-        normalizedType: "original",
-        occurredAt: creditStartInstant,
-        dateKey: toUtcDateKey(creditStartInstant),
-      },
+      seededOriginalEvent,
       ...additionEvents,
     ].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
   }, [additionEvents, creditStartInstant, seededOriginalAmount]);
@@ -573,8 +574,8 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
   }, [auditScope, period, filterYear, filterMonth, filterDay]);
 
   const scopedAdditionEvents = useMemo(() => {
-    return additionEvents.filter((row) => row.dateKey && dateInAuditScope(row.dateKey));
-  }, [additionEvents, dateInAuditScope]);
+    return authoritativeAdditionEvents.filter((row) => row.dateKey && dateInAuditScope(row.dateKey));
+  }, [authoritativeAdditionEvents, dateInAuditScope]);
 
   const scopedCreditLogs = useMemo(() => {
     return normalizedCreditLogs.filter((row) => row.dateKey && dateInAuditScope(row.dateKey));
@@ -584,7 +585,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
 
   const lifetimeCreditAudit = useMemo(() => {
     const openingAdded = auditRange.start
-      ? aggregatePool(additionEvents.filter((row) => row.dateKey && row.dateKey < auditRange.start)).total
+      ? aggregatePool(authoritativeAdditionEvents.filter((row) => row.dateKey && row.dateKey < auditRange.start)).total
       : 0;
     const openingUsed = auditRange.start
       ? sumCredits(normalizedCreditLogs.filter((row) => row.dateKey && row.dateKey < auditRange.start))
@@ -607,7 +608,18 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
       status: Math.abs(reconciliationDiff) <= 1 && Math.abs(liveBalanceDelta) <= 1 ? ("balanced" as AuditStatus) : ("untracked" as AuditStatus),
       untrackedBalance: liveBalanceDelta,
     };
-  }, [auditRange.start, additionEvents, normalizedCreditLogs, auditScope, creditPool.total, scopedCreditLogs, currentBalance]);
+  }, [auditRange.start, authoritativeAdditionEvents, normalizedCreditLogs, auditScope, creditPool.total, scopedCreditLogs, currentBalance]);
+
+  const visibleCreditPoolEntries = useMemo(
+    () => [
+      { key: "original", label: "Original", value: creditPool.original, className: "bg-amber-500/10 border-amber-500/25 text-amber-400" },
+      { key: "topup", label: "Top-up", value: creditPool.topup, className: "bg-sky-500/10 border-sky-500/25 text-sky-400" },
+      { key: "renew", label: "Renew", value: creditPool.renew, className: "bg-violet-500/10 border-violet-500/25 text-violet-400" },
+      { key: "bonus", label: "Bonus", value: creditPool.bonus, className: "bg-emerald-500/10 border-emerald-500/25 text-emerald-400" },
+      { key: "referral", label: "Referral", value: creditPool.referral, className: "bg-pink-500/10 border-pink-500/25 text-pink-400" },
+    ].filter((entry) => entry.value > 0),
+    [creditPool.bonus, creditPool.original, creditPool.referral, creditPool.renew, creditPool.topup]
+  );
 
   return (
     <div className="space-y-4">
