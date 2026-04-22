@@ -366,23 +366,127 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
     );
   }, [filteredRows, exactCreditsByKey, toolCosts]);
 
+  /**
+   * Scope-aware predicate. Decides if a given UTC date string (YYYY-MM-DD)
+   * falls inside the audit window. When scope is "lifetime", every date matches.
+   * When scope is "current", we mirror the same Year / Month / Day filters
+   * the user picked above so the audit always reflects exactly what they see.
+   */
+  const dateInAuditScope = useMemo(() => {
+    return (dateStr: string) => {
+      if (auditScope === "lifetime") return true;
+      const { y, m, d } = parseDateParts(dateStr);
+      if (period === "yearly") return String(y) === filterYear;
+      if (period === "monthly") return String(y) === filterYear && String(m) === filterMonth;
+      // daily
+      if (String(y) !== filterYear) return false;
+      if (String(m) !== filterMonth) return false;
+      if (filterDay !== ALL && String(d) !== filterDay) return false;
+      return true;
+    };
+  }, [auditScope, period, filterYear, filterMonth, filterDay]);
+
+  /**
+   * Credit pool aggregated for the current audit scope.
+   * Negative amounts (admin reversals) are honored so the math stays accurate.
+   * Referral bonuses are auto-detected via the note field.
+   */
+  const creditPool = useMemo<CreditPool>(() => {
+    const pool: CreditPool = {
+      original: 0,
+      topup: 0,
+      renew: 0,
+      bonus: 0,
+      referral: 0,
+      total: 0,
+      hasRecords: false,
+    };
+    for (const t of topupRows) {
+      const amt = Number(t.amount || 0);
+      if (!Number.isFinite(amt) || amt === 0) continue;
+      const createdAt = t.created_at ? new Date(t.created_at).toISOString().slice(0, 10) : null;
+      if (createdAt && !dateInAuditScope(createdAt)) continue;
+      pool.hasRecords = true;
+      const type = String(t.topup_type || "").toLowerCase();
+      const note = String(t.note || "").toLowerCase();
+      const isReferral = note.includes("referral") || note.includes("referal");
+      if (type === "original") pool.original += amt;
+      else if (type === "topup") pool.topup += amt;
+      else if (type === "renew") pool.renew += amt;
+      else if (type === "bonus") {
+        if (isReferral) pool.referral += amt;
+        else pool.bonus += amt;
+      } else {
+        pool.bonus += amt;
+      }
+    }
+    pool.total = pool.original + pool.topup + pool.renew + pool.bonus + pool.referral;
+    return pool;
+  }, [topupRows, dateInAuditScope]);
+
+  /**
+   * Real credits deducted in the audit scope, sourced directly from
+   * activity_logs (the authoritative ledger). Falls back to deduct_count *
+   * tool_cost only if a row has no log (legacy data).
+   */
+  const scopedUsedCredits = useMemo(() => {
+    if (auditScope === "lifetime") {
+      // Lifetime usage = sum of every credit_deduction log + legacy fallback
+      // for any row that has no matching log entry.
+      let logSum = 0;
+      for (const log of creditLogRows) {
+        const credits = Number(log?.metadata?.credits_deducted ?? 0);
+        if (Number.isFinite(credits) && credits > 0) logSum += credits;
+      }
+      let fallbackSum = 0;
+      for (const r of rows) {
+        const key = exactCreditKey(r.usage_date, r.tool_id);
+        if (exactCreditsByKey[key] != null) continue; // already counted in logSum
+        fallbackSum += (r.deduct_count || 0) * costFor(r.tool_id);
+      }
+      return logSum + fallbackSum;
+    }
+    // Scoped: use activity_logs first (UTC date), fallback to usage rows
+    let logSum = 0;
+    for (const log of creditLogRows) {
+      const credits = Number(log?.metadata?.credits_deducted ?? 0);
+      if (!Number.isFinite(credits) || credits <= 0) continue;
+      const utcDate = new Date(log.created_at).toISOString().slice(0, 10);
+      if (!dateInAuditScope(utcDate)) continue;
+      logSum += credits;
+    }
+    let fallbackSum = 0;
+    for (const r of rows) {
+      if (!dateInAuditScope(r.usage_date)) continue;
+      const key = exactCreditKey(r.usage_date, r.tool_id);
+      if (exactCreditsByKey[key] != null) continue;
+      fallbackSum += (r.deduct_count || 0) * costFor(r.tool_id);
+    }
+    return logSum + fallbackSum;
+  }, [auditScope, creditLogRows, rows, exactCreditsByKey, toolCosts, dateInAuditScope]);
+
   const lifetimeCreditAudit = useMemo(() => {
-    const used = rows.reduce((acc, r) => {
-      return (
-        acc +
-        (exactCreditsByKey[exactCreditKey(r.usage_date, r.tool_id)] ??
-          ((r.deduct_count || 0) * costFor(r.tool_id)))
-      );
-    }, 0);
-
+    const used = scopedUsedCredits;
     const remaining = Math.max(currentBalance ?? 0, 0);
-
-    const usedPlusRemaining = used + remaining;
     const poolTotal = creditPool.total;
-    // Diff = pool - (used + remaining); positive = pool higher; negative = used+remaining higher
+
+    // Reconciliation rule:
+    //   Lifetime scope  → Pool == Used + Remaining (Total Credits - Spent = Balance)
+    //   Period  scope   → Pool == Used + (Pool - Used)  (informational only;
+    //                     "Remaining" reflects credits earned in this period
+    //                     that have not been spent in this period)
+    const usedPlusRemaining = auditScope === "lifetime" ? used + remaining : used;
     const diff = poolTotal - usedPlusRemaining;
     const status: "match" | "mismatch" | "legacy" =
-      !creditPool.hasRecords ? "legacy" : Math.abs(diff) <= 1 ? "match" : "mismatch";
+      !creditPool.hasRecords
+        ? "legacy"
+        : auditScope === "lifetime"
+        ? Math.abs(diff) <= 1
+          ? "match"
+          : "mismatch"
+        : poolTotal >= used - 1
+        ? "match"
+        : "mismatch";
 
     return {
       used,
@@ -391,8 +495,10 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
       poolTotal,
       diff,
       status,
+      // Net for this period = pool earned - credits spent in this period
+      periodNet: poolTotal - used,
     };
-  }, [rows, exactCreditsByKey, currentBalance, toolCosts, creditPool]);
+  }, [scopedUsedCredits, currentBalance, creditPool, auditScope]);
 
   return (
     <div className="space-y-4">
