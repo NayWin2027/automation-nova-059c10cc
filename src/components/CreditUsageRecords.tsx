@@ -473,8 +473,9 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
                 </div>
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30">
                   <Coins className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="text-sm font-extrabold text-amber-400 tabular-nums">{bucket.total.deduct}</span>
+                  <span className="text-sm font-extrabold text-amber-400 tabular-nums">{bucket.total.creditQuantity}</span>
                   <span className="text-2xs font-bold text-amber-400/80 uppercase">CR</span>
+                  <span className="text-3xs font-bold text-amber-400/70 tabular-nums ml-1">· {bucket.total.deduct} trs</span>
                 </div>
               </div>
 
