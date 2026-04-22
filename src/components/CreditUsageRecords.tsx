@@ -188,6 +188,7 @@ const sumCredits = (entries: NormalizedCreditLog[]) =>
 const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
   const [rows, setRows] = useState<UsageRow[]>([]);
   const [exactCreditsByKey, setExactCreditsByKey] = useState<Record<string, number>>({});
+  const [currentBalance, setCurrentBalance] = useState<number | null>(null);
   const [topupRows, setTopupRows] = useState<TopupRow[]>([]);
   const [creditLogRows, setCreditLogRows] = useState<CreditLogRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -230,9 +231,12 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         }
         // For non-admin (no targetUserId), RLS limits to own rows automatically.
 
-        const [usageResult, logResult, topupResult] = await Promise.all([
+        const [usageResult, logResult, profileResult, topupResult] = await Promise.all([
           query,
           logQuery,
+          effectiveUserId
+            ? supabase.from("profiles").select("credits").eq("user_id", effectiveUserId).maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
           effectiveUserId
             ? supabase
                 .from("credit_topups")
@@ -245,6 +249,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         const { data, error: qErr } = usageResult;
         if (qErr) throw qErr;
         if (logResult.error) throw logResult.error;
+        if (profileResult.error) throw profileResult.error;
         if (topupResult.error) throw topupResult.error;
         if (!mounted) return;
 
@@ -260,6 +265,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
 
         setRows((data || []) as UsageRow[]);
         setExactCreditsByKey(exactMap);
+        setCurrentBalance(profileResult.data?.credits ?? null);
         setTopupRows((topupResult.data || []) as TopupRow[]);
         setCreditLogRows(logRowsRaw);
       } catch (e: any) {
@@ -375,119 +381,110 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
     };
   }, [auditScope, period, filterYear, filterMonth, filterDay]);
 
-  /**
-   * Credit pool aggregated for the current audit scope.
-   * Negative amounts (admin reversals) are honored so the math stays accurate.
-   * Referral bonuses are auto-detected via the note field.
-   */
-  const creditPool = useMemo<CreditPool>(() => {
-    const pool: CreditPool = {
-      original: 0,
-      topup: 0,
-      renew: 0,
-      bonus: 0,
-      referral: 0,
-      total: 0,
-      hasRecords: false,
-    };
-    for (const t of topupRows) {
-      const amt = Number(t.amount || 0);
-      if (!Number.isFinite(amt) || amt === 0) continue;
-      const createdAt = t.created_at ? new Date(t.created_at).toISOString().slice(0, 10) : null;
-      if (createdAt && !dateInAuditScope(createdAt)) continue;
-      pool.hasRecords = true;
-      const type = String(t.topup_type || "").toLowerCase();
-      const note = String(t.note || "").toLowerCase();
-      const isReferral = note.includes("referral") || note.includes("referal");
-      if (type === "original") pool.original += amt;
-      else if (type === "topup") pool.topup += amt;
-      else if (type === "renew") pool.renew += amt;
-      else if (type === "bonus") {
-        if (isReferral) pool.referral += amt;
-        else pool.bonus += amt;
-      } else {
-        pool.bonus += amt;
-      }
-    }
-    pool.total = pool.original + pool.topup + pool.renew + pool.bonus + pool.referral;
-    return pool;
-  }, [topupRows, dateInAuditScope]);
+  const normalizedTopups = useMemo<NormalizedTopup[]>(() => {
+    return topupRows.map((row) => {
+      const type = String(row.topup_type || "").toLowerCase();
+      const note = String(row.note || "").toLowerCase();
+      const normalizedType: NormalizedTopup["normalizedType"] =
+        type === "original" || type === "topup" || type === "renew" || type === "bonus" || type === "referral"
+          ? type
+          : note.includes("referral") || note.includes("referal")
+          ? "referral"
+          : "bonus";
 
-  /**
-   * Real credits deducted in the audit scope, sourced directly from
-   * activity_logs (the authoritative ledger). Falls back to deduct_count *
-   * tool_cost only if a row has no log (legacy data).
-   */
-  const scopedUsedCredits = useMemo(() => {
+      return {
+        ...row,
+        dateKey: toUtcDateKey(row.created_at),
+        normalizedType,
+      };
+    });
+  }, [topupRows]);
+
+  const normalizedCreditLogs = useMemo<NormalizedCreditLog[]>(() => {
+    return creditLogRows
+      .map((row) => ({
+        toolName: row.tool_name,
+        dateKey: toUtcDateKey(row.created_at),
+        credits: Number(row?.metadata?.credits_deducted ?? 0),
+      }))
+      .filter((row) => row.dateKey && Number.isFinite(row.credits) && row.credits > 0) as NormalizedCreditLog[];
+  }, [creditLogRows]);
+
+  const auditRange = useMemo(() => {
     if (auditScope === "lifetime") {
-      // Lifetime usage = sum of every credit_deduction log + legacy fallback
-      // for any row that has no matching log entry.
-      let logSum = 0;
-      for (const log of creditLogRows) {
-        const credits = Number(log?.metadata?.credits_deducted ?? 0);
-        if (Number.isFinite(credits) && credits > 0) logSum += credits;
-      }
-      let fallbackSum = 0;
-      for (const r of rows) {
-        const key = exactCreditKey(r.usage_date, r.tool_id);
-        if (exactCreditsByKey[key] != null) continue; // already counted in logSum
-        fallbackSum += (r.deduct_count || 0) * costFor(r.tool_id);
-      }
-      return logSum + fallbackSum;
+      return { start: null as string | null, end: null as string | null };
     }
-    // Scoped: use activity_logs first (UTC date), fallback to usage rows
-    let logSum = 0;
-    for (const log of creditLogRows) {
-      const credits = Number(log?.metadata?.credits_deducted ?? 0);
-      if (!Number.isFinite(credits) || credits <= 0) continue;
-      const utcDate = new Date(log.created_at).toISOString().slice(0, 10);
-      if (!dateInAuditScope(utcDate)) continue;
-      logSum += credits;
+
+    if (period === "yearly") {
+      return { start: `${filterYear}-01-01`, end: `${filterYear}-12-31` };
     }
-    let fallbackSum = 0;
-    for (const r of rows) {
-      if (!dateInAuditScope(r.usage_date)) continue;
-      const key = exactCreditKey(r.usage_date, r.tool_id);
-      if (exactCreditsByKey[key] != null) continue;
-      fallbackSum += (r.deduct_count || 0) * costFor(r.tool_id);
+
+    const monthKey = pad2(filterMonth);
+    const lastDay = pad2(new Date(parseInt(filterYear, 10), parseInt(filterMonth, 10), 0).getDate());
+
+    if (period === "monthly" || filterDay === ALL) {
+      return { start: `${filterYear}-${monthKey}-01`, end: `${filterYear}-${monthKey}-${lastDay}` };
     }
-    return logSum + fallbackSum;
-  }, [auditScope, creditLogRows, rows, exactCreditsByKey, toolCosts, dateInAuditScope]);
+
+    const dayKey = `${filterYear}-${monthKey}-${pad2(filterDay)}`;
+    return { start: dayKey, end: dayKey };
+  }, [auditScope, period, filterYear, filterMonth, filterDay]);
+
+  const lifetimeAddedTotal = useMemo(() => aggregatePool(normalizedTopups).total, [normalizedTopups]);
+  const lifetimeUsedTotal = useMemo(() => sumCredits(normalizedCreditLogs), [normalizedCreditLogs]);
+
+  const scopedTopups = useMemo(() => {
+    return normalizedTopups.filter((row) => row.dateKey && dateInAuditScope(row.dateKey));
+  }, [normalizedTopups, dateInAuditScope]);
+
+  const scopedCreditLogs = useMemo(() => {
+    return normalizedCreditLogs.filter((row) => row.dateKey && dateInAuditScope(row.dateKey));
+  }, [normalizedCreditLogs, dateInAuditScope]);
+
+  const creditPool = useMemo(() => aggregatePool(scopedTopups), [scopedTopups]);
+
+  const creditsAddedAfterScope = useMemo(() => {
+    if (!auditRange.end) return 0;
+    return aggregatePool(normalizedTopups.filter((row) => row.dateKey && row.dateKey > auditRange.end)).total;
+  }, [normalizedTopups, auditRange.end]);
+
+  const creditsUsedAfterScope = useMemo(() => {
+    if (!auditRange.end) return 0;
+    return sumCredits(normalizedCreditLogs.filter((row) => row.dateKey && row.dateKey > auditRange.end));
+  }, [normalizedCreditLogs, auditRange.end]);
 
   const lifetimeCreditAudit = useMemo(() => {
-    const used = scopedUsedCredits;
-    const remaining = Math.max(currentBalance ?? 0, 0);
-    const poolTotal = creditPool.total;
-
-    // Reconciliation rule:
-    //   Lifetime scope  → Pool == Used + Remaining (Total Credits - Spent = Balance)
-    //   Period  scope   → Pool == Used + (Pool - Used)  (informational only;
-    //                     "Remaining" reflects credits earned in this period
-    //                     that have not been spent in this period)
-    const usedPlusRemaining = auditScope === "lifetime" ? used + remaining : used;
-    const diff = poolTotal - usedPlusRemaining;
-    const status: "match" | "mismatch" | "legacy" =
-      !creditPool.hasRecords
-        ? "legacy"
-        : auditScope === "lifetime"
-        ? Math.abs(diff) <= 1
-          ? "match"
-          : "mismatch"
-        : poolTotal >= used - 1
-        ? "match"
-        : "mismatch";
+    const balanceNow = currentBalance ?? 0;
+    const addedThisScope = creditPool.total;
+    const usedThisScope = sumCredits(scopedCreditLogs);
+    const closingBalance = auditScope === "lifetime"
+      ? balanceNow
+      : balanceNow - creditsAddedAfterScope + creditsUsedAfterScope;
+    const openingBalance = closingBalance - addedThisScope + usedThisScope;
+    const totalAvailable = openingBalance + addedThisScope;
+    const reconciliationDiff = totalAvailable - (usedThisScope + closingBalance);
+    const untrackedBalance = balanceNow - lifetimeAddedTotal + lifetimeUsedTotal;
 
     return {
-      used,
-      remaining,
-      total: usedPlusRemaining,
-      poolTotal,
-      diff,
-      status,
-      // Net for this period = pool earned - credits spent in this period
-      periodNet: poolTotal - used,
+      addedThisScope,
+      used: usedThisScope,
+      openingBalance,
+      closingBalance,
+      totalAvailable,
+      diff: reconciliationDiff,
+      status: "balanced" as AuditStatus,
+      untrackedBalance,
     };
-  }, [scopedUsedCredits, currentBalance, creditPool, auditScope]);
+  }, [
+    currentBalance,
+    creditPool.total,
+    scopedCreditLogs,
+    auditScope,
+    creditsAddedAfterScope,
+    creditsUsedAfterScope,
+    lifetimeAddedTotal,
+    lifetimeUsedTotal,
+  ]);
 
   return (
     <div className="space-y-4">
