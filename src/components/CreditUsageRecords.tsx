@@ -292,8 +292,9 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         });
       }
       const bucket = map.get(k)!;
-      const unitCost = costFor(r.tool_id);
-      const rowCredits = (r.deduct_count || 0) * unitCost;
+      const rowCredits =
+        exactCreditsByKey[exactCreditKey(r.usage_date, r.tool_id)] ??
+        ((r.deduct_count || 0) * costFor(r.tool_id));
       bucket.total.usage += r.usage_count || 0;
       bucket.total.success += r.success_count || 0;
       bucket.total.error += r.error_count || 0;
@@ -313,7 +314,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
 
     // Sort periods desc
     return Array.from(map.entries()).sort((a, b) => (a[0] < b[0] ? 1 : -1));
-  }, [filteredRows, period, toolCosts]);
+  }, [filteredRows, period, exactCreditsByKey, toolCosts]);
 
   const grandTotal = useMemo(() => {
     return filteredRows.reduce(
@@ -322,12 +323,14 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         acc.success += r.success_count || 0;
         acc.error += r.error_count || 0;
         acc.deduct += r.deduct_count || 0;
-        acc.creditQuantity += (r.deduct_count || 0) * costFor(r.tool_id);
+        acc.creditQuantity +=
+          exactCreditsByKey[exactCreditKey(r.usage_date, r.tool_id)] ??
+          ((r.deduct_count || 0) * costFor(r.tool_id));
         return acc;
       },
       { usage: 0, success: 0, error: 0, deduct: 0, creditQuantity: 0 }
     );
-  }, [filteredRows, toolCosts]);
+  }, [filteredRows, exactCreditsByKey, toolCosts]);
 
   return (
     <div className="space-y-4">
