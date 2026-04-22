@@ -46,6 +46,7 @@ const PrivacyPage = lazyRetry(() => import("./pages/PrivacyPage"));
 const AboutPage = lazyRetry(() => import("./pages/AboutPage"));
 const NotFound = lazyRetry(() => import("./pages/NotFound"));
 const PlansPage = lazyRetry(() => import("./pages/PlansPage"));
+const UsageHistoryPage = lazyRetry(() => import("./pages/UsageHistoryPage"));
 
 const queryClient = new QueryClient();
 
@@ -82,6 +83,7 @@ const App = () => (
             <Route path="/plans" element={<PlansPage />} />
             {/* User Routes */}
             <Route path="/login" element={<UserLoginPage />} />
+            <Route path="/usage-history" element={<UsageHistoryPage />} />
             {/* Legal Pages */}
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
