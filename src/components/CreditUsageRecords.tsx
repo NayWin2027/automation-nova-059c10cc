@@ -556,7 +556,8 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         <span className="text-foreground font-bold">P</span> = Process &nbsp;·&nbsp;
         <span className="text-emerald-400 font-bold">S</span> = Success &nbsp;·&nbsp;
         <span className="text-rose-400 font-bold">E</span> = Error &nbsp;·&nbsp;
-        <span className="text-amber-400 font-bold">Credits</span> = Actual deducted
+        <span className="text-amber-400 font-bold">CR</span> = Credit quantity deducted &nbsp;·&nbsp;
+        <span className="text-amber-400 font-bold">trs</span> = Transactions count
       </p>
     </div>
   );
