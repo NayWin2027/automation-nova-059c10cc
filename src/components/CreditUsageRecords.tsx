@@ -161,15 +161,8 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
   const [exactCreditsByKey, setExactCreditsByKey] = useState<Record<string, number>>({});
   const [toolCosts, setToolCosts] = useState<Record<string, number>>({});
   const [currentBalance, setCurrentBalance] = useState<number | null>(null);
-  const [creditPool, setCreditPool] = useState<CreditPool>({
-    original: 0,
-    topup: 0,
-    renew: 0,
-    bonus: 0,
-    referral: 0,
-    total: 0,
-    hasRecords: false,
-  });
+  const [topupRows, setTopupRows] = useState<TopupRow[]>([]);
+  const [creditLogRows, setCreditLogRows] = useState<CreditLogRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<Period>("daily");
@@ -179,6 +172,10 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
   const [filterYear, setFilterYear] = useState<string>(String(now.getFullYear()));
   const [filterMonth, setFilterMonth] = useState<string>(String(now.getMonth() + 1)); // 1-12
   const [filterDay, setFilterDay] = useState<string>(ALL); // 1-31 or ALL
+  // Audit scope: which window the Account Credit Audit card aggregates over.
+  // "current" = use the same Period + Year/Month/Day filters above
+  // "lifetime" = aggregate across all time
+  const [auditScope, setAuditScope] = useState<"current" | "lifetime">("current");
 
   useEffect(() => {
     let mounted = true;
