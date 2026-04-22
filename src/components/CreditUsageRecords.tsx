@@ -134,33 +134,60 @@ const ALL = "__all__";
 
 const exactCreditKey = (dateStr: string, toolId: string) => `${dateStr}__${toolId}`;
 
-// Fallback credit costs (used only if a tool is missing from tool_settings).
-// These mirror current DB defaults so historical rows still resolve correctly.
-const DEFAULT_TOOL_COST: Record<string, number> = {
-  voice: 15,
-  transcribe: 10,
-  translate: 10,
-  "translate-video": 10,
-  "video-recap": 18,
-  "recap-nv": 6,
-  recap: 18,
-  novel: 10,
-  story: 8,
-  thumbnail: 3,
-  srt: 5,
-  creator: 5,
-  "nova-cut-video": 10,
-  "nova-cut": 10,
-  downloader: 5,
-  subgen: 5,
-  transformative: 10,
+type AuditStatus = "balanced" | "untracked";
+
+type NormalizedTopup = TopupRow & {
+  dateKey: string | null;
+  normalizedType: "original" | "topup" | "renew" | "bonus" | "referral";
 };
+
+type NormalizedCreditLog = {
+  toolName: string;
+  dateKey: string | null;
+  credits: number;
+};
+
+const pad2 = (value: number | string) => String(value).padStart(2, "0");
+
+const toUtcDateKey = (value: string | null | undefined) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10);
+};
+
+const aggregatePool = (entries: NormalizedTopup[]): CreditPool => {
+  const pool: CreditPool = {
+    original: 0,
+    topup: 0,
+    renew: 0,
+    bonus: 0,
+    referral: 0,
+    total: 0,
+    hasRecords: false,
+  };
+
+  for (const entry of entries) {
+    const amount = Number(entry.amount || 0);
+    if (!Number.isFinite(amount) || amount === 0) continue;
+    pool.hasRecords = true;
+    if (entry.normalizedType === "original") pool.original += amount;
+    else if (entry.normalizedType === "topup") pool.topup += amount;
+    else if (entry.normalizedType === "renew") pool.renew += amount;
+    else if (entry.normalizedType === "referral") pool.referral += amount;
+    else pool.bonus += amount;
+  }
+
+  pool.total = pool.original + pool.topup + pool.renew + pool.bonus + pool.referral;
+  return pool;
+};
+
+const sumCredits = (entries: NormalizedCreditLog[]) =>
+  entries.reduce((sum, entry) => sum + entry.credits, 0);
 
 const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
   const [rows, setRows] = useState<UsageRow[]>([]);
   const [exactCreditsByKey, setExactCreditsByKey] = useState<Record<string, number>>({});
-  const [toolCosts, setToolCosts] = useState<Record<string, number>>({});
-  const [currentBalance, setCurrentBalance] = useState<number | null>(null);
   const [topupRows, setTopupRows] = useState<TopupRow[]>([]);
   const [creditLogRows, setCreditLogRows] = useState<CreditLogRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -203,12 +230,9 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         }
         // For non-admin (no targetUserId), RLS limits to own rows automatically.
 
-        const [usageResult, logResult, profileResult, topupResult] = await Promise.all([
+        const [usageResult, logResult, topupResult] = await Promise.all([
           query,
           logQuery,
-          effectiveUserId
-            ? supabase.from("profiles").select("credits").eq("user_id", effectiveUserId).maybeSingle()
-            : Promise.resolve({ data: null, error: null }),
           effectiveUserId
             ? supabase
                 .from("credit_topups")
@@ -221,7 +245,6 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         const { data, error: qErr } = usageResult;
         if (qErr) throw qErr;
         if (logResult.error) throw logResult.error;
-        if (profileResult.error) throw profileResult.error;
         if (topupResult.error) throw topupResult.error;
         if (!mounted) return;
 
@@ -237,7 +260,6 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
 
         setRows((data || []) as UsageRow[]);
         setExactCreditsByKey(exactMap);
-        setCurrentBalance(profileResult.data?.credits ?? null);
         setTopupRows((topupResult.data || []) as TopupRow[]);
         setCreditLogRows(logRowsRaw);
       } catch (e: any) {
@@ -251,35 +273,6 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
       mounted = false;
     };
   }, [targetUserId]);
-
-  // Fetch tool credit costs once (used to convert deduct_count -> credit quantity).
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const { data } = await supabase
-          .from("tool_settings")
-          .select("tool_id,credit_cost");
-        if (!mounted || !data) return;
-        const map: Record<string, number> = {};
-        for (const r of data as Array<{ tool_id: string; credit_cost: number | null }>) {
-          if (r?.tool_id) map[r.tool_id] = Number(r.credit_cost ?? 0);
-        }
-        setToolCosts(map);
-      } catch {
-        // Non-fatal: fall back to DEFAULT_TOOL_COST below.
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const costFor = (toolId: string): number => {
-    if (toolCosts[toolId] != null) return toolCosts[toolId];
-    if (DEFAULT_TOOL_COST[toolId] != null) return DEFAULT_TOOL_COST[toolId];
-    return 10; // last-resort fallback matching DB default
-  };
 
   // Filter rows according to active selectors
   const filteredRows = useMemo(() => {
@@ -326,9 +319,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         });
       }
       const bucket = map.get(k)!;
-      const rowCredits =
-        exactCreditsByKey[exactCreditKey(r.usage_date, r.tool_id)] ??
-        ((r.deduct_count || 0) * costFor(r.tool_id));
+      const rowCredits = exactCreditsByKey[exactCreditKey(r.usage_date, r.tool_id)] ?? 0;
       bucket.total.usage += r.usage_count || 0;
       bucket.total.success += r.success_count || 0;
       bucket.total.error += r.error_count || 0;
@@ -348,7 +339,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
 
     // Sort periods desc
     return Array.from(map.entries()).sort((a, b) => (a[0] < b[0] ? 1 : -1));
-  }, [filteredRows, period, exactCreditsByKey, toolCosts]);
+  }, [filteredRows, period, exactCreditsByKey]);
 
   const grandTotal = useMemo(() => {
     return filteredRows.reduce(
@@ -357,14 +348,12 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         acc.success += r.success_count || 0;
         acc.error += r.error_count || 0;
         acc.deduct += r.deduct_count || 0;
-        acc.creditQuantity +=
-          exactCreditsByKey[exactCreditKey(r.usage_date, r.tool_id)] ??
-          ((r.deduct_count || 0) * costFor(r.tool_id));
+        acc.creditQuantity += exactCreditsByKey[exactCreditKey(r.usage_date, r.tool_id)] ?? 0;
         return acc;
       },
       { usage: 0, success: 0, error: 0, deduct: 0, creditQuantity: 0 }
     );
-  }, [filteredRows, exactCreditsByKey, toolCosts]);
+  }, [filteredRows, exactCreditsByKey]);
 
   /**
    * Scope-aware predicate. Decides if a given UTC date string (YYYY-MM-DD)
