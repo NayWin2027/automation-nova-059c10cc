@@ -61,6 +61,11 @@ interface PaymentOrderRow {
   created_at: string;
 }
 
+interface ProfileCreditRow {
+  credits: number;
+  credits_started_at: string | null;
+}
+
 interface CreditPool {
   original: number;
   topup: number;
@@ -162,6 +167,7 @@ type CreditAdditionEvent = CreditBucketEntry & {
 
 type NormalizedCreditLog = {
   toolName: string;
+  occurredAt: string;
   dateKey: string | null;
   credits: number;
 };
@@ -221,6 +227,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
   const [rows, setRows] = useState<UsageRow[]>([]);
   const [exactCreditsByKey, setExactCreditsByKey] = useState<Record<string, number>>({});
   const [currentBalance, setCurrentBalance] = useState<number | null>(null);
+  const [profileCreditRow, setProfileCreditRow] = useState<ProfileCreditRow | null>(null);
   const [topupRows, setTopupRows] = useState<TopupRow[]>([]);
   const [paymentOrderRows, setPaymentOrderRows] = useState<PaymentOrderRow[]>([]);
   const [creditLogRows, setCreditLogRows] = useState<CreditLogRow[]>([]);
@@ -268,7 +275,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
           query,
           logQuery,
           effectiveUserId
-            ? supabase.from("profiles").select("credits").eq("user_id", effectiveUserId).maybeSingle()
+            ? supabase.from("profiles").select("credits,credits_started_at").eq("user_id", effectiveUserId).maybeSingle()
             : Promise.resolve({ data: null, error: null }),
           effectiveUserId
             ? supabase
@@ -309,6 +316,7 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
         setRows((data || []) as UsageRow[]);
         setExactCreditsByKey(exactMap);
         setCurrentBalance(profileResult.data?.credits ?? null);
+        setProfileCreditRow((profileResult.data || null) as ProfileCreditRow | null);
         setTopupRows((topupResult.data || []) as TopupRow[]);
         setPaymentOrderRows((paymentOrderResult.data || []) as PaymentOrderRow[]);
         setCreditLogRows(logRowsRaw);
