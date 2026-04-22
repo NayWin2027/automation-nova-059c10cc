@@ -800,26 +800,19 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
             {auditScope === "lifetime" ? "Lifetime Pool Breakdown" : "Credits Added In Selected Period"}
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-            <div className="px-2 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-center">
-              <p className="text-3xs font-bold text-amber-400/80 uppercase">Original</p>
-              <p className="text-base font-extrabold text-amber-400 tabular-nums leading-tight">{creditPool.original}</p>
-            </div>
-            <div className="px-2 py-1.5 rounded-lg bg-sky-500/10 border border-sky-500/25 text-center">
-              <p className="text-3xs font-bold text-sky-400/80 uppercase">Top-up</p>
-              <p className="text-base font-extrabold text-sky-400 tabular-nums leading-tight">{creditPool.topup}</p>
-            </div>
-            <div className="px-2 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/25 text-center">
-              <p className="text-3xs font-bold text-violet-400/80 uppercase">Renew</p>
-              <p className="text-base font-extrabold text-violet-400 tabular-nums leading-tight">{creditPool.renew}</p>
-            </div>
-            <div className="px-2 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-center">
-              <p className="text-3xs font-bold text-emerald-400/80 uppercase">Bonus</p>
-              <p className="text-base font-extrabold text-emerald-400 tabular-nums leading-tight">{creditPool.bonus}</p>
-            </div>
-            <div className="px-2 py-1.5 rounded-lg bg-pink-500/10 border border-pink-500/25 text-center">
-              <p className="text-3xs font-bold text-pink-400/80 uppercase">Referral</p>
-              <p className="text-base font-extrabold text-pink-400 tabular-nums leading-tight">{creditPool.referral}</p>
-            </div>
+            {visibleCreditPoolEntries.length > 0 ? visibleCreditPoolEntries.map((entry) => {
+              const [bgClass, borderClass, textClass] = entry.className.split(" ");
+              return (
+                <div key={entry.key} className={`px-2 py-1.5 rounded-lg border text-center ${bgClass} ${borderClass}`}>
+                  <p className={`text-3xs font-bold uppercase ${textClass}/80`}>{entry.label}</p>
+                  <p className={`text-base font-extrabold tabular-nums leading-tight ${textClass}`}>{entry.value}</p>
+                </div>
+              );
+            }) : (
+              <div className="col-span-2 sm:col-span-5 px-3 py-4 rounded-lg border border-border/30 bg-background/40 text-center">
+                <p className="text-xs font-semibold text-muted-foreground">No real added credits in this period.</p>
+              </div>
+            )}
           </div>
           <div className="mt-2.5 pt-2.5 border-t border-border/30 flex items-center justify-between">
             <span className="text-2xs font-bold text-muted-foreground uppercase tracking-wider">
