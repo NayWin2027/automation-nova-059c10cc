@@ -427,29 +427,49 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
               </div>
 
               {view === "detail" && (
-                <div className="space-y-1.5">
-                  <p className="text-2xs font-bold text-muted-foreground uppercase tracking-wider mb-1">By Tool</p>
+                <div className="space-y-2">
+                  <p className="text-2xs font-bold text-muted-foreground uppercase tracking-wider mb-1">
+                    By Tool — Credits Used Per Tool
+                  </p>
                   {Array.from(bucket.tools.entries())
-                    .sort((a, b) => b[1].usage - a[1].usage)
+                    .sort((a, b) => b[1].deduct - a[1].deduct || b[1].usage - a[1].usage)
                     .map(([toolId, t]) => (
                       <div
                         key={toolId}
-                        className="flex items-center justify-between px-3 py-2 rounded-lg bg-muted/20 border border-border/30"
+                        className="px-3 py-2.5 rounded-xl bg-muted/20 border border-border/40 hover:border-amber-500/40 transition-colors"
                       >
-                        <span className="text-sm font-bold text-foreground">{labelTool(toolId)}</span>
-                        <div className="flex items-center gap-2.5 text-xs">
-                          <span className="text-foreground font-bold tabular-nums" title="Process">
-                            <span className="text-muted-foreground font-normal">P</span> {t.usage}
+                        {/* Top: Tool name + Credit quantity badge */}
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-extrabold text-foreground tracking-wide">
+                            {labelTool(toolId)}
                           </span>
-                          <span className="text-emerald-400 font-bold tabular-nums" title="Success">
-                            <span className="opacity-70 font-normal">S</span> {t.success}
-                          </span>
-                          <span className="text-rose-400 font-bold tabular-nums" title="Error">
-                            <span className="opacity-70 font-normal">E</span> {t.error}
-                          </span>
-                          <span className="flex items-center gap-0.5 text-amber-400 font-extrabold tabular-nums" title="Credits deducted">
-                            <Coins className="w-3 h-3" /> {t.deduct}
-                          </span>
+                          <div
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-amber-500/25 to-amber-600/10 border border-amber-500/50 shadow-sm shadow-amber-500/10"
+                            title="Credits deducted for this tool"
+                          >
+                            <Coins className="w-3.5 h-3.5 text-amber-400" />
+                            <span className="text-sm font-extrabold text-amber-400 tabular-nums leading-none">
+                              {t.deduct}
+                            </span>
+                            <span className="text-3xs font-bold text-amber-400/90 uppercase tracking-wider">
+                              CR
+                            </span>
+                          </div>
+                        </div>
+                        {/* Bottom: Process / Success / Error breakdown */}
+                        <div className="grid grid-cols-3 gap-1.5">
+                          <div className="px-2 py-1 rounded-md bg-primary/10 border border-primary/20 text-center">
+                            <p className="text-3xs font-bold text-primary/80 uppercase leading-tight">Process</p>
+                            <p className="text-sm font-extrabold text-foreground tabular-nums leading-tight">{t.usage}</p>
+                          </div>
+                          <div className="px-2 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-center">
+                            <p className="text-3xs font-bold text-emerald-400/80 uppercase leading-tight">Success</p>
+                            <p className="text-sm font-extrabold text-emerald-400 tabular-nums leading-tight">{t.success}</p>
+                          </div>
+                          <div className="px-2 py-1 rounded-md bg-rose-500/10 border border-rose-500/20 text-center">
+                            <p className="text-3xs font-bold text-rose-400/80 uppercase leading-tight">Error</p>
+                            <p className="text-sm font-extrabold text-rose-400 tabular-nums leading-tight">{t.error}</p>
+                          </div>
                         </div>
                       </div>
                     ))}
