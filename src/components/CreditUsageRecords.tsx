@@ -45,6 +45,22 @@ interface CreditLogRow {
   } | null;
 }
 
+interface TopupRow {
+  amount: number;
+  topup_type: string;
+  note: string | null;
+}
+
+interface CreditPool {
+  original: number;
+  topup: number;
+  renew: number;
+  bonus: number;
+  referral: number;
+  total: number;
+  hasRecords: boolean;
+}
+
 interface Props {
   /** If provided (admin mode), fetches that user's records. Otherwise fetches own (RLS enforced). */
   targetUserId?: string;
@@ -144,6 +160,15 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
   const [exactCreditsByKey, setExactCreditsByKey] = useState<Record<string, number>>({});
   const [toolCosts, setToolCosts] = useState<Record<string, number>>({});
   const [currentBalance, setCurrentBalance] = useState<number | null>(null);
+  const [creditPool, setCreditPool] = useState<CreditPool>({
+    original: 0,
+    topup: 0,
+    renew: 0,
+    bonus: 0,
+    referral: 0,
+    total: 0,
+    hasRecords: false,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<Period>("daily");
