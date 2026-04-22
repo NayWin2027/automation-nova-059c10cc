@@ -37,6 +37,14 @@ interface UsageRow {
   created_at: string | null;
 }
 
+interface CreditLogRow {
+  tool_name: string;
+  created_at: string;
+  metadata: {
+    credits_deducted?: number | string;
+  } | null;
+}
+
 interface Props {
   /** If provided (admin mode), fetches that user's records. Otherwise fetches own (RLS enforced). */
   targetUserId?: string;
@@ -107,6 +115,8 @@ const YEARS: number[] = (() => {
 
 const ALL = "__all__";
 
+const exactCreditKey = (dateStr: string, toolId: string) => `${dateStr}__${toolId}`;
+
 // Fallback credit costs (used only if a tool is missing from tool_settings).
 // These mirror current DB defaults so historical rows still resolve correctly.
 const DEFAULT_TOOL_COST: Record<string, number> = {
@@ -131,7 +141,9 @@ const DEFAULT_TOOL_COST: Record<string, number> = {
 
 const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
   const [rows, setRows] = useState<UsageRow[]>([]);
+  const [exactCreditsByKey, setExactCreditsByKey] = useState<Record<string, number>>({});
   const [toolCosts, setToolCosts] = useState<Record<string, number>>({});
+  const [currentBalance, setCurrentBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<Period>("daily");
@@ -148,21 +160,52 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
       setLoading(true);
       setError(null);
       try {
+        const effectiveUserId = targetUserId || (await supabase.auth.getUser()).data.user?.id || null;
+
         let query = supabase
           .from("user_tool_usage")
           .select("id,user_id,tool_id,usage_date,usage_count,success_count,error_count,deduct_count,created_at")
           .order("usage_date", { ascending: false })
           .limit(5000);
 
+        let logQuery = supabase
+          .from("activity_logs")
+          .select("tool_name,created_at,metadata")
+          .eq("action", "credit_deduction")
+          .limit(10000);
+
         if (targetUserId) {
           query = query.eq("user_id", targetUserId);
+          logQuery = logQuery.eq("user_id", targetUserId);
         }
         // For non-admin (no targetUserId), RLS limits to own rows automatically.
 
-        const { data, error: qErr } = await query;
+        const [usageResult, logResult, profileResult] = await Promise.all([
+          query,
+          logQuery,
+          effectiveUserId
+            ? supabase.from("profiles").select("credits").eq("user_id", effectiveUserId).maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
+        ]);
+
+        const { data, error: qErr } = usageResult;
         if (qErr) throw qErr;
+        if (logResult.error) throw logResult.error;
+        if (profileResult.error) throw profileResult.error;
         if (!mounted) return;
+
+        const exactMap: Record<string, number> = {};
+        for (const log of (logResult.data || []) as CreditLogRow[]) {
+          const credits = Number(log?.metadata?.credits_deducted ?? 0);
+          if (!Number.isFinite(credits) || credits <= 0) continue;
+          const utcDate = new Date(log.created_at).toISOString().slice(0, 10);
+          const key = exactCreditKey(utcDate, log.tool_name);
+          exactMap[key] = (exactMap[key] || 0) + credits;
+        }
+
         setRows((data || []) as UsageRow[]);
+        setExactCreditsByKey(exactMap);
+        setCurrentBalance(profileResult.data?.credits ?? null);
       } catch (e: any) {
         if (mounted) setError(e?.message || "Failed to load usage records");
       } finally {
