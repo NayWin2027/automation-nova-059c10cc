@@ -221,22 +221,32 @@ const NovaCutVideoPage = () => {
         const args: string[] = ["-ss", startSec.toString(), "-i", "input.mp4", "-t", thisDuration.toString()];
 
         if (willReencode) {
-          // Re-encode with ratio change. H.264 + AAC for max compatibility.
+          // Re-encode with ratio change. Tuned for ffmpeg.wasm browser speed:
+          // - ultrafast preset + zerolatency tune + higher CRF
+          // - bilinear scaler (much faster than lanczos) — quality diff is tiny
+          //   at these target sizes
+          // - threads 0 lets ffmpeg use all available worker threads
+          // - audio stream-copied (no re-encode) since ratio change is video-only
+          const fastFilter = videoFilter.replace("flags=lanczos", "flags=bilinear");
           args.push(
             "-vf",
-            videoFilter,
+            fastFilter,
             "-c:v",
             "libx264",
             "-preset",
             "ultrafast",
+            "-tune",
+            "zerolatency",
             "-crf",
-            "23",
+            "28",
             "-pix_fmt",
             "yuv420p",
+            "-threads",
+            "0",
             "-c:a",
-            "aac",
-            "-b:a",
-            "128k",
+            "copy",
+            "-avoid_negative_ts",
+            "make_zero",
             "-movflags",
             "+faststart",
           );
