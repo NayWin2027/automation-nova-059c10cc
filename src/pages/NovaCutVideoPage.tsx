@@ -13,7 +13,7 @@ const FFMPEG_LOAD_TIMEOUT_MS = 45000;
 
 // Aspect ratio options — actually re-encode the video frame to these dimensions.
 // "original" = keep source (fast stream copy). Others = crop + scale (re-encode).
-type RatioId = "original" | "16:9" | "9:16" | "1:1" | "4:5" | "4:3";
+type RatioId = "original" | "16:9" | "9:16" | "1:1" | "4:5" | "3:4";
 
 interface RatioOption {
   id: RatioId;
@@ -35,8 +35,22 @@ const RATIO_OPTIONS: RatioOption[] = [
 // Common video file extensions we accept on the input. FFmpeg.wasm handles
 // decoding for the popular containers/codecs; output stays as MP4 (H.264/AAC).
 const ACCEPTED_VIDEO_EXTS = [
-  ".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi", ".flv",
-  ".wmv", ".3gp", ".3g2", ".mpg", ".mpeg", ".ts", ".mts", ".m2ts", ".ogv",
+  ".mp4",
+  ".mov",
+  ".m4v",
+  ".webm",
+  ".mkv",
+  ".avi",
+  ".flv",
+  ".wmv",
+  ".3gp",
+  ".3g2",
+  ".mpg",
+  ".mpeg",
+  ".ts",
+  ".mts",
+  ".m2ts",
+  ".ogv",
 ];
 const ACCEPTED_VIDEO_ATTR = ["video/*", ...ACCEPTED_VIDEO_EXTS].join(",");
 
@@ -201,14 +215,7 @@ const NovaCutVideoPage = () => {
 
         const outputName = `part_${i}.mp4`;
 
-        const args: string[] = [
-          "-ss",
-          startSec.toString(),
-          "-i",
-          "input.mp4",
-          "-t",
-          thisDuration.toString(),
-        ];
+        const args: string[] = ["-ss", startSec.toString(), "-i", "input.mp4", "-t", thisDuration.toString()];
 
         if (willReencode) {
           // Re-encode with ratio change. H.264 + AAC for max compatibility.
