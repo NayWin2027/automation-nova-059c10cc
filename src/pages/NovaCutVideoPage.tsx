@@ -173,6 +173,23 @@ const NovaCutVideoPage = () => {
 
       const cutParts: CutPart[] = [];
 
+      // Resolve selected ratio target
+      const ratioOpt = RATIO_OPTIONS.find((r) => r.id === selectedRatio) ?? RATIO_OPTIONS[0];
+      const willReencode = ratioOpt.ratio !== null;
+
+      // Build video filter for ratio change (crop center, then scale to target).
+      // Output dims rounded to even numbers (libx264 requirement).
+      let videoFilter = "";
+      if (willReencode && ratioOpt.ratio) {
+        const targetW = Math.round(ratioOpt.targetWidth / 2) * 2;
+        const targetH = Math.round(targetW / ratioOpt.ratio / 2) * 2;
+        // Crop the largest centered region matching target ratio, then scale.
+        videoFilter =
+          `crop='if(gt(iw/ih,${ratioOpt.ratio}),ih*${ratioOpt.ratio},iw)':` +
+          `'if(gt(iw/ih,${ratioOpt.ratio}),ih,iw/${ratioOpt.ratio})',` +
+          `scale=${targetW}:${targetH}:flags=lanczos,setsar=1`;
+      }
+
       for (let i = 0; i < totalParts; i++) {
         const startSec = i * segmentSec;
         const remaining = totalDuration - startSec;
@@ -184,19 +201,43 @@ const NovaCutVideoPage = () => {
 
         const outputName = `part_${i}.mp4`;
 
-        await ffmpeg.exec([
+        const args: string[] = [
           "-ss",
           startSec.toString(),
           "-i",
           "input.mp4",
           "-t",
           thisDuration.toString(),
-          "-c",
-          "copy",
-          "-avoid_negative_ts",
-          "make_zero",
-          outputName,
-        ]);
+        ];
+
+        if (willReencode) {
+          // Re-encode with ratio change. H.264 + AAC for max compatibility.
+          args.push(
+            "-vf",
+            videoFilter,
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+          );
+        } else {
+          // Fast stream copy when keeping original ratio.
+          args.push("-c", "copy", "-avoid_negative_ts", "make_zero");
+        }
+
+        args.push(outputName);
+
+        await ffmpeg.exec(args);
 
         const outputData = await ffmpeg.readFile(outputName);
         if (typeof outputData === "string") {
