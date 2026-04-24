@@ -11,6 +11,41 @@ import { fetchFile, toBlobURL } from "@ffmpeg/util";
 const DURATION_OPTIONS = [1, 2, 3, 4, 5, 6, 7];
 const FFMPEG_LOAD_TIMEOUT_MS = 45000;
 
+// Aspect ratio options — actually re-encode the video frame to these dimensions.
+// "original" = keep source (fast stream copy). Others = crop + scale (re-encode).
+type RatioId = "original" | "16:9" | "9:16" | "1:1" | "4:5" | "4:3";
+
+interface RatioOption {
+  id: RatioId;
+  label: string;
+  ratio: number | null; // width / height; null for original
+  // Output target width (height derived from ratio). Keeps quality reasonable.
+  targetWidth: number;
+}
+
+const RATIO_OPTIONS: RatioOption[] = [
+  { id: "original", label: "Original", ratio: null, targetWidth: 0 },
+  { id: "16:9", label: "16:9 (Landscape)", ratio: 16 / 9, targetWidth: 1280 },
+  { id: "9:16", label: "9:16 (Reels/Shorts)", ratio: 9 / 16, targetWidth: 720 },
+  { id: "1:1", label: "1:1 (Square)", ratio: 1, targetWidth: 1080 },
+  { id: "4:5", label: "4:5 (Portrait)", ratio: 4 / 5, targetWidth: 1080 },
+  { id: "4:3", label: "4:3 (Classic)", ratio: 4 / 3, targetWidth: 1280 },
+];
+
+// Common video file extensions we accept on the input. FFmpeg.wasm handles
+// decoding for the popular containers/codecs; output stays as MP4 (H.264/AAC).
+const ACCEPTED_VIDEO_EXTS = [
+  ".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi", ".flv",
+  ".wmv", ".3gp", ".3g2", ".mpg", ".mpeg", ".ts", ".mts", ".m2ts", ".ogv",
+];
+const ACCEPTED_VIDEO_ATTR = ["video/*", ...ACCEPTED_VIDEO_EXTS].join(",");
+
+const isAcceptedVideoFile = (file: File): boolean => {
+  if (file.type && file.type.startsWith("video/")) return true;
+  const lower = file.name.toLowerCase();
+  return ACCEPTED_VIDEO_EXTS.some((ext) => lower.endsWith(ext));
+};
+
 interface CutPart {
   index: number;
   blob: Blob;
@@ -30,6 +65,7 @@ const NovaCutVideoPage = () => {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string>("");
   const [selectedMinutes, setSelectedMinutes] = useState<number>(1);
+  const [selectedRatio, setSelectedRatio] = useState<RatioId>("original");
   const [progress, setProgress] = useState(0);
   const [progressMsg, setProgressMsg] = useState("");
   const [parts, setParts] = useState<CutPart[]>([]);
@@ -37,8 +73,12 @@ const NovaCutVideoPage = () => {
 
   const handleFileSelect = useCallback(
     (file: File) => {
-      if (!file.type.startsWith("video/")) {
-        toast({ title: "Video ဖိုင်သာ ရွေးပါ", variant: "destructive" });
+      if (!isAcceptedVideoFile(file)) {
+        toast({
+          title: "Video ဖိုင်သာ ရွေးပါ",
+          description: "MP4, MOV, MKV, AVI, WEBM, FLV, WMV, 3GP, MPEG, TS အစရှိသည်တို့ ထောက်ပံ့ပါသည်",
+          variant: "destructive",
+        });
         return;
       }
       setVideoFile(file);
@@ -133,6 +173,23 @@ const NovaCutVideoPage = () => {
 
       const cutParts: CutPart[] = [];
 
+      // Resolve selected ratio target
+      const ratioOpt = RATIO_OPTIONS.find((r) => r.id === selectedRatio) ?? RATIO_OPTIONS[0];
+      const willReencode = ratioOpt.ratio !== null;
+
+      // Build video filter for ratio change (crop center, then scale to target).
+      // Output dims rounded to even numbers (libx264 requirement).
+      let videoFilter = "";
+      if (willReencode && ratioOpt.ratio) {
+        const targetW = Math.round(ratioOpt.targetWidth / 2) * 2;
+        const targetH = Math.round(targetW / ratioOpt.ratio / 2) * 2;
+        // Crop the largest centered region matching target ratio, then scale.
+        videoFilter =
+          `crop='if(gt(iw/ih,${ratioOpt.ratio}),ih*${ratioOpt.ratio},iw)':` +
+          `'if(gt(iw/ih,${ratioOpt.ratio}),ih,iw/${ratioOpt.ratio})',` +
+          `scale=${targetW}:${targetH}:flags=lanczos,setsar=1`;
+      }
+
       for (let i = 0; i < totalParts; i++) {
         const startSec = i * segmentSec;
         const remaining = totalDuration - startSec;
@@ -144,19 +201,43 @@ const NovaCutVideoPage = () => {
 
         const outputName = `part_${i}.mp4`;
 
-        await ffmpeg.exec([
+        const args: string[] = [
           "-ss",
           startSec.toString(),
           "-i",
           "input.mp4",
           "-t",
           thisDuration.toString(),
-          "-c",
-          "copy",
-          "-avoid_negative_ts",
-          "make_zero",
-          outputName,
-        ]);
+        ];
+
+        if (willReencode) {
+          // Re-encode with ratio change. H.264 + AAC for max compatibility.
+          args.push(
+            "-vf",
+            videoFilter,
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+          );
+        } else {
+          // Fast stream copy when keeping original ratio.
+          args.push("-c", "copy", "-avoid_negative_ts", "make_zero");
+        }
+
+        args.push(outputName);
+
+        await ffmpeg.exec(args);
 
         const outputData = await ffmpeg.readFile(outputName);
         if (typeof outputData === "string") {
@@ -228,7 +309,13 @@ const NovaCutVideoPage = () => {
     setParts([]);
     setProgress(0);
     setProgressMsg("");
+    setSelectedRatio("original");
   };
+
+  const previewRatioOpt = RATIO_OPTIONS.find((r) => r.id === selectedRatio) ?? RATIO_OPTIONS[0];
+  const previewAspectStyle: React.CSSProperties = previewRatioOpt.ratio
+    ? { aspectRatio: `${previewRatioOpt.ratio}`, maxHeight: "60vh" }
+    : { maxHeight: "60vh" };
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -260,10 +347,13 @@ const NovaCutVideoPage = () => {
                 <Upload className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
                 <p className="text-foreground font-medium mb-1">Video ဖိုင်ရွေးပါ</p>
                 <p className="text-sm text-muted-foreground">Drag & drop သို့မဟုတ် click နှိပ်ပါ</p>
+                <p className="text-xs text-muted-foreground/70 mt-2">
+                  MP4 · MOV · MKV · AVI · WEBM · FLV · WMV · 3GP · MPEG · TS
+                </p>
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="video/*"
+                  accept={ACCEPTED_VIDEO_ATTR}
                   className="hidden"
                   onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])}
                 />
@@ -272,7 +362,17 @@ const NovaCutVideoPage = () => {
               <div className="space-y-4">
                 {/* Video Preview */}
                 <div className="rounded-2xl overflow-hidden border border-border bg-card">
-                  <video src={videoUrl} controls className="w-full max-h-[300px] object-contain bg-black" />
+                  <div
+                    className="w-full bg-black flex items-center justify-center overflow-hidden"
+                    style={previewAspectStyle}
+                  >
+                    <video
+                      key={selectedRatio}
+                      src={videoUrl}
+                      controls
+                      className={`w-full h-full bg-black ${previewRatioOpt.ratio ? "object-cover" : "object-contain"}`}
+                    />
+                  </div>
                   <div className="p-3 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Film className="w-4 h-4 text-muted-foreground" />
@@ -282,6 +382,31 @@ const NovaCutVideoPage = () => {
                       ပြောင်းရန်
                     </Button>
                   </div>
+                </div>
+
+                {/* Ratio Selector */}
+                <div className="space-y-3">
+                  <p className="text-sm font-medium text-foreground">Video Size Ratio ရွေးပါ</p>
+                  <div className="flex flex-wrap gap-2">
+                    {RATIO_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.id}
+                        onClick={() => setSelectedRatio(opt.id)}
+                        className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                          selectedRatio === opt.id
+                            ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30"
+                            : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  {selectedRatio !== "original" && (
+                    <p className="text-xs text-muted-foreground">
+                      Frame အတိုင်းအတာကို {previewRatioOpt.label} အဖြစ် ပြန်လည် encode လုပ်မည် (ပိုကြာနိုင်)
+                    </p>
+                  )}
                 </div>
 
                 {/* Duration Selector */}
