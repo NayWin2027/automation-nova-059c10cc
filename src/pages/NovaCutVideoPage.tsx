@@ -11,6 +11,41 @@ import { fetchFile, toBlobURL } from "@ffmpeg/util";
 const DURATION_OPTIONS = [1, 2, 3, 4, 5, 6, 7];
 const FFMPEG_LOAD_TIMEOUT_MS = 45000;
 
+// Aspect ratio options — actually re-encode the video frame to these dimensions.
+// "original" = keep source (fast stream copy). Others = crop + scale (re-encode).
+type RatioId = "original" | "16:9" | "9:16" | "1:1" | "4:5" | "4:3";
+
+interface RatioOption {
+  id: RatioId;
+  label: string;
+  ratio: number | null; // width / height; null for original
+  // Output target width (height derived from ratio). Keeps quality reasonable.
+  targetWidth: number;
+}
+
+const RATIO_OPTIONS: RatioOption[] = [
+  { id: "original", label: "Original", ratio: null, targetWidth: 0 },
+  { id: "16:9", label: "16:9 (Landscape)", ratio: 16 / 9, targetWidth: 1280 },
+  { id: "9:16", label: "9:16 (Reels/Shorts)", ratio: 9 / 16, targetWidth: 720 },
+  { id: "1:1", label: "1:1 (Square)", ratio: 1, targetWidth: 1080 },
+  { id: "4:5", label: "4:5 (Portrait)", ratio: 4 / 5, targetWidth: 1080 },
+  { id: "4:3", label: "4:3 (Classic)", ratio: 4 / 3, targetWidth: 1280 },
+];
+
+// Common video file extensions we accept on the input. FFmpeg.wasm handles
+// decoding for the popular containers/codecs; output stays as MP4 (H.264/AAC).
+const ACCEPTED_VIDEO_EXTS = [
+  ".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi", ".flv",
+  ".wmv", ".3gp", ".3g2", ".mpg", ".mpeg", ".ts", ".mts", ".m2ts", ".ogv",
+];
+const ACCEPTED_VIDEO_ATTR = ["video/*", ...ACCEPTED_VIDEO_EXTS].join(",");
+
+const isAcceptedVideoFile = (file: File): boolean => {
+  if (file.type && file.type.startsWith("video/")) return true;
+  const lower = file.name.toLowerCase();
+  return ACCEPTED_VIDEO_EXTS.some((ext) => lower.endsWith(ext));
+};
+
 interface CutPart {
   index: number;
   blob: Blob;
