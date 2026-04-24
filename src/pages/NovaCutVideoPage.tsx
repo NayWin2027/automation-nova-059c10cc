@@ -25,11 +25,14 @@ interface RatioOption {
 
 const RATIO_OPTIONS: RatioOption[] = [
   { id: "original", label: "Original", ratio: null, targetWidth: 0 },
-  { id: "16:9", label: "16:9 (Landscape)", ratio: 16 / 9, targetWidth: 1280 },
-  { id: "9:16", label: "9:16 (Reels/Shorts)", ratio: 9 / 16, targetWidth: 720 },
-  { id: "1:1", label: "1:1 (Square)", ratio: 1, targetWidth: 1080 },
-  { id: "4:5", label: "4:5 (Portrait)", ratio: 4 / 5, targetWidth: 1080 },
-  { id: "4:3", label: "4:3 (Classic)", ratio: 4 / 3, targetWidth: 1280 },
+  // Lower target widths drastically speed up ffmpeg.wasm re-encode in the
+  // browser while staying visually crisp on phones (the main consumption
+  // surface for these ratios).
+  { id: "16:9", label: "16:9 (Landscape)", ratio: 16 / 9, targetWidth: 854 },
+  { id: "9:16", label: "9:16 (Reels/Shorts)", ratio: 9 / 16, targetWidth: 480 },
+  { id: "1:1", label: "1:1 (Square)", ratio: 1, targetWidth: 720 },
+  { id: "4:5", label: "4:5 (Portrait)", ratio: 4 / 5, targetWidth: 720 },
+  { id: "4:3", label: "4:3 (Classic)", ratio: 4 / 3, targetWidth: 854 },
 ];
 
 // Common video file extensions we accept on the input. FFmpeg.wasm handles
