@@ -347,10 +347,13 @@ const NovaCutVideoPage = () => {
                 <Upload className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
                 <p className="text-foreground font-medium mb-1">Video ဖိုင်ရွေးပါ</p>
                 <p className="text-sm text-muted-foreground">Drag & drop သို့မဟုတ် click နှိပ်ပါ</p>
+                <p className="text-xs text-muted-foreground/70 mt-2">
+                  MP4 · MOV · MKV · AVI · WEBM · FLV · WMV · 3GP · MPEG · TS
+                </p>
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="video/*"
+                  accept={ACCEPTED_VIDEO_ATTR}
                   className="hidden"
                   onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])}
                 />
@@ -359,7 +362,17 @@ const NovaCutVideoPage = () => {
               <div className="space-y-4">
                 {/* Video Preview */}
                 <div className="rounded-2xl overflow-hidden border border-border bg-card">
-                  <video src={videoUrl} controls className="w-full max-h-[300px] object-contain bg-black" />
+                  <div
+                    className="w-full bg-black flex items-center justify-center overflow-hidden"
+                    style={previewAspectStyle}
+                  >
+                    <video
+                      key={selectedRatio}
+                      src={videoUrl}
+                      controls
+                      className={`w-full h-full bg-black ${previewRatioOpt.ratio ? "object-cover" : "object-contain"}`}
+                    />
+                  </div>
                   <div className="p-3 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Film className="w-4 h-4 text-muted-foreground" />
@@ -369,6 +382,31 @@ const NovaCutVideoPage = () => {
                       ပြောင်းရန်
                     </Button>
                   </div>
+                </div>
+
+                {/* Ratio Selector */}
+                <div className="space-y-3">
+                  <p className="text-sm font-medium text-foreground">Video Size Ratio ရွေးပါ</p>
+                  <div className="flex flex-wrap gap-2">
+                    {RATIO_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.id}
+                        onClick={() => setSelectedRatio(opt.id)}
+                        className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                          selectedRatio === opt.id
+                            ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30"
+                            : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  {selectedRatio !== "original" && (
+                    <p className="text-xs text-muted-foreground">
+                      Frame အတိုင်းအတာကို {previewRatioOpt.label} အဖြစ် ပြန်လည် encode လုပ်မည် (ပိုကြာနိုင်)
+                    </p>
+                  )}
                 </div>
 
                 {/* Duration Selector */}
