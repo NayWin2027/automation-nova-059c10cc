@@ -13,7 +13,7 @@ const FFMPEG_LOAD_TIMEOUT_MS = 45000;
 
 // Aspect ratio options — actually re-encode the video frame to these dimensions.
 // "original" = keep source (fast stream copy). Others = crop + scale (re-encode).
-type RatioId = "original" | "16:9" | "9:16" | "1:1" | "4:5" | "3:4";
+type RatioId = "original" | "16:9" | "9:16" | "1:1" | "4:5" | "4:3";
 
 interface RatioOption {
   id: RatioId;
