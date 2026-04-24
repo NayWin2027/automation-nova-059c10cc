@@ -309,7 +309,13 @@ const NovaCutVideoPage = () => {
     setParts([]);
     setProgress(0);
     setProgressMsg("");
+    setSelectedRatio("original");
   };
+
+  const previewRatioOpt = RATIO_OPTIONS.find((r) => r.id === selectedRatio) ?? RATIO_OPTIONS[0];
+  const previewAspectStyle: React.CSSProperties = previewRatioOpt.ratio
+    ? { aspectRatio: `${previewRatioOpt.ratio}`, maxHeight: "60vh" }
+    : { maxHeight: "60vh" };
 
   return (
     <div className="min-h-screen bg-background text-foreground">
