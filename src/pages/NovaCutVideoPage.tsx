@@ -65,6 +65,7 @@ const NovaCutVideoPage = () => {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string>("");
   const [selectedMinutes, setSelectedMinutes] = useState<number>(1);
+  const [selectedRatio, setSelectedRatio] = useState<RatioId>("original");
   const [progress, setProgress] = useState(0);
   const [progressMsg, setProgressMsg] = useState("");
   const [parts, setParts] = useState<CutPart[]>([]);
@@ -72,8 +73,12 @@ const NovaCutVideoPage = () => {
 
   const handleFileSelect = useCallback(
     (file: File) => {
-      if (!file.type.startsWith("video/")) {
-        toast({ title: "Video ဖိုင်သာ ရွေးပါ", variant: "destructive" });
+      if (!isAcceptedVideoFile(file)) {
+        toast({
+          title: "Video ဖိုင်သာ ရွေးပါ",
+          description: "MP4, MOV, MKV, AVI, WEBM, FLV, WMV, 3GP, MPEG, TS အစရှိသည်တို့ ထောက်ပံ့ပါသည်",
+          variant: "destructive",
+        });
         return;
       }
       setVideoFile(file);
