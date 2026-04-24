@@ -25,11 +25,14 @@ interface RatioOption {
 
 const RATIO_OPTIONS: RatioOption[] = [
   { id: "original", label: "Original", ratio: null, targetWidth: 0 },
-  { id: "16:9", label: "16:9 (Landscape)", ratio: 16 / 9, targetWidth: 1280 },
-  { id: "9:16", label: "9:16 (Reels/Shorts)", ratio: 9 / 16, targetWidth: 720 },
-  { id: "1:1", label: "1:1 (Square)", ratio: 1, targetWidth: 1080 },
-  { id: "4:5", label: "4:5 (Portrait)", ratio: 4 / 5, targetWidth: 1080 },
-  { id: "4:3", label: "4:3 (Classic)", ratio: 4 / 3, targetWidth: 1280 },
+  // Lower target widths drastically speed up ffmpeg.wasm re-encode in the
+  // browser while staying visually crisp on phones (the main consumption
+  // surface for these ratios).
+  { id: "16:9", label: "16:9 (Landscape)", ratio: 16 / 9, targetWidth: 854 },
+  { id: "9:16", label: "9:16 (Reels/Shorts)", ratio: 9 / 16, targetWidth: 480 },
+  { id: "1:1", label: "1:1 (Square)", ratio: 1, targetWidth: 720 },
+  { id: "4:5", label: "4:5 (Portrait)", ratio: 4 / 5, targetWidth: 720 },
+  { id: "4:3", label: "4:3 (Classic)", ratio: 4 / 3, targetWidth: 854 },
 ];
 
 // Common video file extensions we accept on the input. FFmpeg.wasm handles
@@ -218,22 +221,32 @@ const NovaCutVideoPage = () => {
         const args: string[] = ["-ss", startSec.toString(), "-i", "input.mp4", "-t", thisDuration.toString()];
 
         if (willReencode) {
-          // Re-encode with ratio change. H.264 + AAC for max compatibility.
+          // Re-encode with ratio change. Tuned for ffmpeg.wasm browser speed:
+          // - ultrafast preset + zerolatency tune + higher CRF
+          // - bilinear scaler (much faster than lanczos) — quality diff is tiny
+          //   at these target sizes
+          // - threads 0 lets ffmpeg use all available worker threads
+          // - audio stream-copied (no re-encode) since ratio change is video-only
+          const fastFilter = videoFilter.replace("flags=lanczos", "flags=bilinear");
           args.push(
             "-vf",
-            videoFilter,
+            fastFilter,
             "-c:v",
             "libx264",
             "-preset",
             "ultrafast",
+            "-tune",
+            "zerolatency",
             "-crf",
-            "23",
+            "28",
             "-pix_fmt",
             "yuv420p",
+            "-threads",
+            "0",
             "-c:a",
-            "aac",
-            "-b:a",
-            "128k",
+            "copy",
+            "-avoid_negative_ts",
+            "make_zero",
             "-movflags",
             "+faststart",
           );
