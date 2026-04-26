@@ -187,7 +187,6 @@ Rules:
   } catch (error) {
     console.error("Transcription error:", error);
     const errMsg = error instanceof Error ? error.message : "Unknown error";
-    logToolActivity(user.id, "transformative-transcribe", "error", { error: errMsg });
     return new Response(
       JSON.stringify({ error: errMsg }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

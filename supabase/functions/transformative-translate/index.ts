@@ -199,7 +199,6 @@ Follow Myanmar Sar Dictionary (မြန်မာစာသတ်ပုံကျ�
   } catch (error) {
     console.error("Translation error:", error);
     const errMsg = error instanceof Error ? error.message : "Unknown error";
-    logToolActivity(user.id, "transformative-translate", "error", { error: errMsg });
     return new Response(
       JSON.stringify({ error: errMsg }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
