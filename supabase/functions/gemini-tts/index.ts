@@ -55,15 +55,12 @@ function detectNarrationProfile(text: string, langCode: string): string {
   const has = (...needles: string[]) => needles.some((n) => t.includes(n));
 
   // Burmese cues
-  const my = (text || "");
+  const my = text || "";
   const burmeseHas = (...needles: string[]) => needles.some((n) => my.includes(n));
 
   let category = "general";
 
-  if (
-    has("war", "battle", "military", "soldier", "weapon") ||
-    burmeseHas("စစ်ပွဲ", "တပ်မတော်", "လက်နက်", "စစ်သား")
-  ) {
+  if (has("war", "battle", "military", "soldier", "weapon") || burmeseHas("စစ်ပွဲ", "တပ်မတော်", "လက်နက်", "စစ်သား")) {
     category = "war_news";
   } else if (
     has("breaking news", "report", "according to", "today reported") ||
@@ -85,19 +82,11 @@ function detectNarrationProfile(text: string, langCode: string): string {
     burmeseHas("အချစ်", "ချစ်သူ", "နမ်း", "ရင်ခုန်")
   ) {
     category = "romance";
-  } else if (
-    has("happy", "celebrate", "joy", "laughed", "smiled") ||
-    burmeseHas("ပျော်", "ဝမ်းသာ", "ရယ်", "ပြုံး")
-  ) {
+  } else if (has("happy", "celebrate", "joy", "laughed", "smiled") || burmeseHas("ပျော်", "ဝမ်းသာ", "ရယ်", "ပြုံး")) {
     category = "happy";
-  } else if (
-    has("angry", "rage", "furious", "shouted", "yelled") ||
-    burmeseHas("ဒေါသ", "အော်", "ရန်", "ဒေါသထွက်")
-  ) {
+  } else if (has("angry", "rage", "furious", "shouted", "yelled") || burmeseHas("ဒေါသ", "အော်", "ရန်", "ဒေါသထွက်")) {
     category = "anger";
-  } else if (
-    has("18+", "nsfw", "intimate", "seductive", "sensual")
-  ) {
+  } else if (has("18+", "nsfw", "intimate", "seductive", "sensual")) {
     category = "mature";
   } else if (
     has("explosion", "chase", "fight scene", "action", "gunfire") ||
@@ -109,101 +98,57 @@ function detectNarrationProfile(text: string, langCode: string): string {
     burmeseHas("အစားအစာ", "ဟင်းချက်", "စားသောက်ဆိုင်")
   ) {
     category = "food";
-  } else if (
-    has("travel", "journey", "destination", "vacation", "explore") ||
-    burmeseHas("ခရီးသွား", "လည်ပတ်")
-  ) {
+  } else if (has("travel", "journey", "destination", "vacation", "explore") || burmeseHas("ခရီးသွား", "လည်ပတ်")) {
     category = "travel";
-  } else if (
-    has("recap", "movie", "film", "cinema", "scene") ||
-    burmeseHas("ရုပ်ရှင်", "ဇာတ်ကား", "ဇာတ်လမ်း")
-  ) {
+  } else if (has("recap", "movie", "film", "cinema", "scene") || burmeseHas("ရုပ်ရှင်", "ဇာတ်ကား", "ဇာတ်လမ်း")) {
     category = "movie_recap";
-  } else if (
-    has("technology", "tech", "software", "ai ", "artificial intelligence", "gadget", "app ")
-  ) {
+  } else if (has("technology", "tech", "software", "ai ", "artificial intelligence", "gadget", "app ")) {
     category = "tech";
-  } else if (
-    has("sport", "football", "soccer", "basketball", "match", "game ")
-  ) {
+  } else if (has("sport", "football", "soccer", "basketball", "match", "game ")) {
     category = "sports";
-  } else if (
-    has("science", "research", "physics", "biology", "chemistry", "study found")
-  ) {
+  } else if (has("science", "research", "physics", "biology", "chemistry", "study found")) {
     category = "science";
-  } else if (
-    has("psychology", "mindset", "behavior", "subconscious")
-  ) {
+  } else if (has("psychology", "mindset", "behavior", "subconscious")) {
     category = "psychology";
-  } else if (
-    has("motivation", "success", "goal", "discipline", "habit", "mindset")
-  ) {
+  } else if (has("motivation", "success", "goal", "discipline", "habit", "mindset")) {
     category = "motivation";
-  } else if (
-    has("health", "wellness", "diet", "exercise", "nutrition", "fitness")
-  ) {
+  } else if (has("health", "wellness", "diet", "exercise", "nutrition", "fitness")) {
     category = "health";
-  } else if (
-    has("how to", "tutorial", "guide", "step by step", "explain")
-  ) {
+  } else if (has("how to", "tutorial", "guide", "step by step", "explain")) {
     category = "knowledge";
-  } else if (
-    has("audiobook", "chapter", "novel", "narrator said")
-  ) {
+  } else if (has("audiobook", "chapter", "novel", "narrator said")) {
     category = "audiobook";
-  } else if (
-    has("entertainment", "celebrity", "viral", "trending")
-  ) {
+  } else if (has("entertainment", "celebrity", "viral", "trending")) {
     category = "entertainment";
   }
 
   // Map category → subtle, realistic emotion guidance.
   // KEY RULE: emotion is ALWAYS subtle, professional, never theatrical.
   const map: Record<string, string> = {
-    war_news:
-      "TONE: Serious, composed war/news correspondent. Calm, weighted, factual gravity. No drama.",
-    news:
-      "TONE: Trusted professional news anchor. Clear, neutral, confident. Informative cadence — no excitement spikes.",
+    war_news: "TONE: Serious, composed war/news correspondent. Calm, weighted, factual gravity. No drama.",
+    news: "TONE: Trusted professional news anchor. Clear, neutral, confident. Informative cadence — no excitement spikes.",
     horror:
       "TONE: Hushed, restrained suspense like a real horror storyteller. Subtle tension only — never shouting, never theatrical.",
-    sad:
-      "TONE: Soft, gentle, slightly slower delivery. Quiet empathy. Do NOT cry, do NOT sob, do NOT exaggerate sadness.",
-    romance:
-      "TONE: Warm, intimate, gentle smile in the voice. Soft and sincere — never breathy or performative.",
-    happy:
-      "TONE: Light, naturally pleasant, subtle smile. Do NOT laugh out loud or over-cheer.",
-    anger:
-      "TONE: Controlled firmness, slightly sharper edge. Do NOT yell, do NOT growl, do NOT lose control.",
+    sad: "TONE: Soft, gentle, slightly slower delivery. Quiet empathy. Do NOT cry, do NOT sob, do NOT exaggerate sadness.",
+    romance: "TONE: Warm, intimate, gentle smile in the voice. Soft and sincere — never breathy or performative.",
+    happy: "TONE: Light, naturally pleasant, subtle smile. Do NOT laugh out loud or over-cheer.",
+    anger: "TONE: Controlled firmness, slightly sharper edge. Do NOT yell, do NOT growl, do NOT lose control.",
     mature:
       "TONE: Low, calm, intimate adult narrator voice. Composed and natural — never panting, never moaning, never explicit performance.",
-    action:
-      "TONE: Energetic but composed action narrator. Crisp pace, confident — never breathless or shouting.",
-    food:
-      "TONE: Warm, inviting culinary host. Gentle enthusiasm — never overexcited.",
-    travel:
-      "TONE: Curious, friendly travel host. Relaxed, observational — never theatrical.",
-    movie_recap:
-      "TONE: Confident cinematic recap narrator. Engaging storyteller pacing — never overdramatic.",
-    tech:
-      "TONE: Smart, articulate tech presenter. Clean, modern, slightly upbeat — never robotic.",
-    sports:
-      "TONE: Confident sports presenter. Clear and energetic — never shouting commentary.",
-    science:
-      "TONE: Thoughtful science communicator. Clear, curious, articulate — neutral excitement only.",
-    psychology:
-      "TONE: Calm, reflective, insightful. Steady pace, slight warmth — never lecturing.",
-    motivation:
-      "TONE: Confident, grounded motivational narrator. Inspiring but never preachy or shouting.",
-    health:
-      "TONE: Friendly, trustworthy health presenter. Calm authority — never alarmist.",
-    knowledge:
-      "TONE: Clear, friendly explainer. Patient and articulate — never monotone, never overhyped.",
-    audiobook:
-      "TONE: Refined audiobook narrator. Steady literary pacing, subtle character coloring — never overacted.",
-    entertainment:
-      "TONE: Bright, friendly entertainment host. Naturally upbeat — never shrill.",
-    general:
-      "TONE: Professional, natural narrator. Confident, warm, conversational — never robotic, never theatrical.",
+    action: "TONE: Energetic but composed action narrator. Crisp pace, confident — never breathless or shouting.",
+    food: "TONE: Warm, inviting culinary host. Gentle enthusiasm — never overexcited.",
+    travel: "TONE: Curious, friendly travel host. Relaxed, observational — never theatrical.",
+    movie_recap: "TONE: Confident cinematic recap narrator. Engaging storyteller pacing — never overdramatic.",
+    tech: "TONE: Smart, articulate tech presenter. Clean, modern, slightly upbeat — never robotic.",
+    sports: "TONE: Confident sports presenter. Clear and energetic — never shouting commentary.",
+    science: "TONE: Thoughtful science communicator. Clear, curious, articulate — neutral excitement only.",
+    psychology: "TONE: Calm, reflective, insightful. Steady pace, slight warmth — never lecturing.",
+    motivation: "TONE: Confident, grounded motivational narrator. Inspiring but never preachy or shouting.",
+    health: "TONE: Friendly, trustworthy health presenter. Calm authority — never alarmist.",
+    knowledge: "TONE: Clear, friendly explainer. Patient and articulate — never monotone, never overhyped.",
+    audiobook: "TONE: Refined audiobook narrator. Steady literary pacing, subtle character coloring — never overacted.",
+    entertainment: "TONE: Bright, friendly entertainment host. Naturally upbeat — never shrill.",
+    general: "TONE: Professional, natural narrator. Confident, warm, conversational — never robotic, never theatrical.",
   };
 
   const profile = map[category] || map.general;
@@ -219,15 +164,18 @@ function detectNarrationProfile(text: string, langCode: string): string {
  * Global consistency instruction: enforces SAME narrator identity, SAME loudness,
  * SAME microphone character, and prevents the "voice gets louder/different after 1 minute" drift.
  */
-function buildConsistencyInstruction(): string {
+function buildConsistencyInstruction(voiceName: string): string {
   return (
-    `VOICE CONSISTENCY (CRITICAL):\n` +
-    `- Maintain the EXACT same narrator identity, timbre, gender, age, and accent from start to finish.\n` +
-    `- Maintain the EXACT same loudness/volume from the first second to the last second. Do NOT get louder after 30s/60s/90s.\n` +
-    `- Maintain the EXACT same microphone character (same proximity, same warmth, same presence).\n` +
-    `- Maintain the EXACT same speaking pace and rhythm throughout.\n` +
-    `- Pronunciation MUST stay 100% crisp and clear from beginning to end — no quality degradation, no slurring, no rushing.\n` +
-    `- Do NOT shift into a different persona, different energy, or different emotional baseline mid-script.`
+    `VOICE CONSISTENCY (ABSOLUTE CRITICAL — HIGHEST PRIORITY):\n` +
+    `- You are LOCKED to the "${voiceName}" voice identity. Do NOT deviate from this voice AT ALL.\n` +
+    `- GENDER LOCK: If ${voiceName} is male, every single syllable must sound distinctly MALE — deep, masculine timbre throughout. If ${voiceName} is female, every single syllable must sound distinctly FEMALE. NEVER switch gender mid-speech. NEVER produce ambiguous-gender voice.\n` +
+    `- IDENTITY LOCK: The voice timbre, vocal texture, resonance, pitch range, and vocal character must be IDENTICAL from the first word to the very last word. It must sound like the SAME SINGLE PERSON spoke the entire script in one unbroken session.\n` +
+    `- VOLUME LOCK: Maintain EXACTLY the same loudness/volume level from start to finish. Do NOT get quieter. Do NOT get louder. Do NOT fade. Do NOT drift in volume at any point — not after 30s, not after 60s, not after 90s, NEVER.\n` +
+    `- MICROPHONE LOCK: Same proximity, same warmth, same presence, same room tone from start to finish.\n` +
+    `- PACE LOCK: Same speaking speed and rhythm throughout. No rushing, no slowing down.\n` +
+    `- CLARITY LOCK: Pronunciation MUST stay 100% crisp, clear, and fully articulated from beginning to end. Absolutely NO quality degradation, NO slurring, NO mumbling, NO swallowing syllables, NO trailing off.\n` +
+    `- Do NOT shift into a different persona, different energy level, or different emotional baseline mid-script.\n` +
+    `- ANTI-DRIFT RULE: If you notice your voice changing in any way (pitch, volume, speed, clarity, gender expression), immediately correct back to the original voice established in the first sentence.`
   );
 }
 
@@ -236,13 +184,17 @@ function buildConsistencyInstruction(): string {
  */
 function burmesePronunciationGuard(): string {
   return (
-    `BURMESE PRONUNCIATION GUARD (CRITICAL):\n` +
-    `- Pronounce \u101E (သ) as the proper Burmese fricative /θ/ (like English "th" in "think"). NEVER pronounce it as \u1010 (တ) /t/.\n` +
-    `- \u101E\u102D (သိ) must sound like /θḭ/, NOT \u1010\u102D (တိ) /tḭ/.\n` +
-    `- \u101E\u1030 (သူ) must sound like /θù/, NOT \u1010\u1030 (တူ).\n` +
-    `- Distinguish aspirated vs unaspirated consonants clearly: \u1011 (ထ) vs \u1010 (တ), \u1006 (ဆ) vs \u1005 (စ), \u1015 (ပ) vs \u1016 (ဖ).\n` +
-    `- Keep all syllables fully articulated — do NOT swallow vowels or trail off at end of sentences.\n` +
-    `- Use natural Yangon urban Bamar tones and vowel lengths exactly as a native human speaker.`
+    `BURMESE PRONUNCIATION GUARD (ABSOLUTE CRITICAL — ZERO TOLERANCE FOR ERRORS):\n` +
+    `- MANDATORY: \u101E (သ) = Burmese dental fricative /θ/ (like English "th" in "think"). This is NOT \u1010 (တ). NEVER EVER pronounce သ as တ. They are completely different consonants.\n` +
+    `- MANDATORY: \u101E\u102D (သိ) = /θḭ/. NEVER pronounce as \u1010\u102D (တိ) /tḭ/. "သိ" and "တိ" are different words with different meanings.\n` +
+    `- MANDATORY: \u101E\u1030 (သူ) = /θù/. NEVER pronounce as \u1010\u1030 (တူ).\n` +
+    `- MANDATORY: \u101E\u1031 (သေ) = /θè/. NEVER pronounce as \u1010\u1031 (တေ).\n` +
+    `- MANDATORY: \u101E\u102C (သာ) = /θà/. NEVER pronounce as \u1010\u102C (တာ).\n` +
+    `- MANDATORY: \u101E\u1004\u103A\u1038 (သင်း) NEVER becomes \u1010\u1004\u103A\u1038 (တင်း).\n` +
+    `- Distinguish ALL aspirated vs unaspirated consonants: \u1011 (ထ) ≠ \u1010 (တ), \u1006 (ဆ) ≠ \u1005 (စ), \u1016 (ဖ) ≠ \u1015 (ပ), \u1001 (ခ) ≠ \u1000 (က).\n` +
+    `- Keep ALL syllables fully articulated from start to finish — do NOT swallow vowels, do NOT trail off, do NOT mumble at end of sentences.\n` +
+    `- Every single Burmese syllable must be pronounced with 100% clarity as if each word is being carefully enunciated by a professional Burmese news anchor.\n` +
+    `- Use natural Yangon urban Bamar tones and vowel lengths exactly as a native human speaker. Maintain this pronunciation quality consistently from the first syllable to the very last.`
   );
 }
 
@@ -250,7 +202,7 @@ function burmesePronunciationGuard(): string {
  * Split long text into chunks at sentence/paragraph boundaries for stable long-form generation.
  * Avoids cutting in the middle of a sentence to preserve prosody.
  */
-function splitTextIntoChunks(text: string, targetSize = 1800): string[] {
+function splitTextIntoChunks(text: string, targetSize = 800): string[] {
   if (text.length <= targetSize) return [text];
 
   const chunks: string[] = [];
@@ -338,9 +290,7 @@ function concatPcmBase64(pcmBase64Chunks: string[]): string {
 
     // Emit full 3-byte-aligned WINDOW slices; keep tail (<WINDOW) for next round
     const isLast = c === pcmBase64Chunks.length - 1;
-    const usableEnd = isLast
-      ? buf.length
-      : buf.length - (buf.length % 3); // align so no padding mid-stream
+    const usableEnd = isLast ? buf.length : buf.length - (buf.length % 3); // align so no padding mid-stream
 
     while (cursor + WINDOW <= usableEnd) {
       const slice = buf.subarray(cursor, cursor + WINDOW);
@@ -399,9 +349,7 @@ serve(async (req) => {
 
     // Accept BOTH apiKey and ownApiKey (frontend may send either)
     const userApiKey: string | undefined =
-      (body?.ownApiKey && String(body.ownApiKey).trim()) ||
-      (body?.apiKey && String(body.apiKey).trim()) ||
-      undefined;
+      (body?.ownApiKey && String(body.ownApiKey).trim()) || (body?.apiKey && String(body.apiKey).trim()) || undefined;
 
     // Validate text
     if (!text || typeof text !== "string" || !text.trim()) {
@@ -412,19 +360,29 @@ serve(async (req) => {
     }
 
     if (text.length > MAX_TEXT_LENGTH) {
-      return new Response(
-        JSON.stringify({ error: `Text exceeds maximum length of ${MAX_TEXT_LENGTH} characters` }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      return new Response(JSON.stringify({ error: `Text exceeds maximum length of ${MAX_TEXT_LENGTH} characters` }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Valid Gemini TTS voices (as of 2025)
     const validVoices = [
-      "Puck", "Charon", "Kore", "Fenrir", "Aoede", "Leda", "Orus", "Zephyr",
-      "Altair", "Callirrhoe", "Autonoe", "Enceladus", "Iapetus", "Umbriel", "Algieba",
+      "Puck",
+      "Charon",
+      "Kore",
+      "Fenrir",
+      "Aoede",
+      "Leda",
+      "Orus",
+      "Zephyr",
+      "Altair",
+      "Callirrhoe",
+      "Autonoe",
+      "Enceladus",
+      "Iapetus",
+      "Umbriel",
+      "Algieba",
     ];
 
     let sanitizedVoiceName = "Puck";
@@ -433,8 +391,7 @@ serve(async (req) => {
       sanitizedVoiceName = matchedVoice || "Puck";
     }
 
-    const sanitizedLanguageCode =
-      languageCode && /^[a-z]{2}(-[A-Z]{2})?$/.test(languageCode) ? languageCode : "en-US";
+    const sanitizedLanguageCode = languageCode && /^[a-z]{2}(-[A-Z]{2})?$/.test(languageCode) ? languageCode : "en-US";
 
     // ===== CHECK PROMOTION MODE =====
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -467,9 +424,13 @@ serve(async (req) => {
           const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
             global: { headers: { Authorization: authHeader } },
           });
-          const { data: { user } } = await supabaseClient.auth.getUser();
+          const {
+            data: { user },
+          } = await supabaseClient.auth.getUser();
           if (user) userId = user.id;
-        } catch (_) { /* ignore */ }
+        } catch (_) {
+          /* ignore */
+        }
       }
     } else if (!isOwnApiKey) {
       const authHeader = req.headers.get("Authorization");
@@ -492,7 +453,10 @@ serve(async (req) => {
         global: { headers: { Authorization: authHeader } },
       });
 
-      const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+      const {
+        data: { user },
+        error: authError,
+      } = await supabaseClient.auth.getUser();
       if (authError || !user) {
         return new Response(
           JSON.stringify({
@@ -522,8 +486,7 @@ serve(async (req) => {
         if (customCreditCost !== undefined && customCreditCost !== null) {
           rpcParams._custom_cost = Number(customCreditCost);
         }
-        const { data: creditResult, error: creditError } =
-          await supabaseAdmin.rpc("deduct_user_credits", rpcParams);
+        const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", rpcParams);
 
         if (creditError) {
           console.error("[gemini-tts] Credit check error:", creditError);
@@ -556,7 +519,11 @@ serve(async (req) => {
     const backendKey = userKey
       ? null
       : (() => {
-          try { return getGeminiKey(); } catch { return null; }
+          try {
+            return getGeminiKey();
+          } catch {
+            return null;
+          }
         })();
     const effectiveApiKey = userKey || backendKey;
 
@@ -611,7 +578,7 @@ serve(async (req) => {
       `CRITICAL VOICE STYLE: Speak in natural, modern colloquial ${langCode.toUpperCase()} with 100% authentic native accent and pronunciation.`;
 
     // SHARED across all chunks → keeps narrator identity consistent
-    const consistencyBlock = buildConsistencyInstruction();
+    const consistencyBlock = buildConsistencyInstruction(sanitizedVoiceName);
     const narrationProfile = detectNarrationProfile(text, langCode);
     const burmeseGuard = langCode === "my" ? burmesePronunciationGuard() : "";
 
@@ -631,16 +598,26 @@ serve(async (req) => {
       const continuity =
         totalChunks > 1
           ? `CONTINUITY (chunk ${chunkIndex + 1}/${totalChunks}): This is part of one continuous narration. ` +
-            `Continue with the EXACT same narrator voice, timbre, loudness, pace, and emotional level as if reading without interruption. ` +
-            `Do NOT reset tone, do NOT introduce new energy, do NOT change persona.\n`
+            `Continue with the EXACT same narrator voice ("${sanitizedVoiceName}"), timbre, loudness, pace, and emotional level as if reading without interruption. ` +
+            `Do NOT reset tone, do NOT introduce new energy, do NOT change persona, do NOT change gender expression.\n`
           : "";
+
+      const qualityGuard =
+        `AUDIO QUALITY MAINTENANCE (CRITICAL):\n` +
+        `- Output audio MUST maintain studio-quality clarity from the first second to the last second.\n` +
+        `- Volume level must remain CONSTANT — no fading, no getting quieter, no getting louder.\n` +
+        `- Voice clarity must remain CONSTANT — no degradation, no mumbling, no slurring even at the end.\n` +
+        `- Breathing must remain natural and consistent — same breath pattern throughout.\n` +
+        `- If this is a multi-part narration, treat each part as if you just started fresh but with the SAME voice.\n`;
 
       return (
         `You are a professional voice-over narrator delivering a 100% human-natural performance.\n` +
+        `You are using the "${sanitizedVoiceName}" voice. Stay locked to this voice identity throughout.\n` +
         `${nativeStyleInstruction}\n` +
         (burmeseGuard ? `${burmeseGuard}\n` : "") +
         `${narrationProfile}\n` +
         `${consistencyBlock}\n` +
+        `${qualityGuard}` +
         `${pacingBlock}\n` +
         `${continuity}` +
         `Generate natural, continuous speech AUDIO for the following text.\n` +
@@ -659,12 +636,7 @@ serve(async (req) => {
       },
     });
 
-    const callGeminiTtsOnce = async (
-      voice: string,
-      chunkText: string,
-      chunkIndex: number,
-      totalChunks: number,
-    ) => {
+    const callGeminiTtsOnce = async (voice: string, chunkText: string, chunkIndex: number, totalChunks: number) => {
       const maxAttempts = isUserKey ? 1 : 3;
       let lastStatus = 0;
       let lastBodyText = "";
@@ -672,9 +644,7 @@ serve(async (req) => {
       // For user-supplied keys: try primary 3.1 model first, then transparently
       // fall back to a publicly available TTS model if the user's key cannot
       // access the preview. App-API (backend keys) keep using primary only.
-      const endpointCandidates = isUserKey
-        ? [GEMINI_TTS_API, GEMINI_TTS_API_FALLBACK_USERKEY]
-        : [GEMINI_TTS_API];
+      const endpointCandidates = isUserKey ? [GEMINI_TTS_API, GEMINI_TTS_API_FALLBACK_USERKEY] : [GEMINI_TTS_API];
 
       for (let endpointIdx = 0; endpointIdx < endpointCandidates.length; endpointIdx++) {
         const endpoint = endpointCandidates[endpointIdx];
@@ -721,7 +691,11 @@ serve(async (req) => {
           }
 
           let json: any = null;
-          try { json = JSON.parse(bodyText); } catch { json = null; }
+          try {
+            json = JSON.parse(bodyText);
+          } catch {
+            json = null;
+          }
 
           const part0 = json?.candidates?.[0]?.content?.parts?.[0];
           const audio = part0?.inlineData?.data as string | undefined;
@@ -729,14 +703,9 @@ serve(async (req) => {
 
           // If user key got an empty-audio response from the primary preview model,
           // fall back to the public model rather than returning silence.
-          if (
-            isUserKey &&
-            !audio &&
-            endpointIdx < endpointCandidates.length - 1
-          ) {
+          if (isUserKey && !audio && endpointIdx < endpointCandidates.length - 1) {
             console.warn(
-              `[gemini-tts] User key got empty audio from primary model. ` +
-                `Falling back to public TTS model.`,
+              `[gemini-tts] User key got empty audio from primary model. ` + `Falling back to public TTS model.`,
             );
             lastStatus = 200;
             lastBodyText = bodyText;
@@ -757,7 +726,7 @@ serve(async (req) => {
 
     // ===== GENERATE TTS (single or chunked) =====
     let usedVoice = sanitizedVoiceName;
-    const chunks = splitTextIntoChunks(text, 1800);
+    const chunks = splitTextIntoChunks(text, 800);
     const isLong = chunks.length > 1;
 
     let finalAudio: string | undefined;
@@ -803,8 +772,9 @@ serve(async (req) => {
       // Long-text bounded-concurrency path (max 2 in-flight to avoid worker resource limits)
       console.log(`[gemini-tts] Long text → ${chunks.length} chunks (sentence-aware)`);
       const concurrency = 2;
-      const results: ({ ok: true; audio?: string; mimeType: string } | { ok: false; status: number })[] =
-        new Array(chunks.length);
+      const results: ({ ok: true; audio?: string; mimeType: string } | { ok: false; status: number })[] = new Array(
+        chunks.length,
+      );
 
       let cursor = 0;
       const runWorker = async () => {
@@ -900,9 +870,7 @@ serve(async (req) => {
             const end = parseFloat((idx === segments.length - 1 ? pcmDuration : cur).toFixed(3));
             return { index: idx, start, end };
           });
-          console.log(
-            `[gemini-tts] segmentTimestamps: ${segments.length} segs, dur=${pcmDuration.toFixed(2)}s`,
-          );
+          console.log(`[gemini-tts] segmentTimestamps: ${segments.length} segs, dur=${pcmDuration.toFixed(2)}s`);
         }
       } catch (e) {
         console.error("[gemini-tts] Failed to compute segmentTimestamps:", e);
