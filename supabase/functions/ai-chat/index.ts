@@ -214,7 +214,6 @@ serve(async (req) => {
   } catch (error) {
     console.error("Chat error:", error);
     const errMsg = error instanceof Error ? error.message : "Unknown error";
-    if (user) logToolActivity(user.id, "chat", "error", { error: errMsg });
     return new Response(
       JSON.stringify({ error: errMsg }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

@@ -506,7 +506,7 @@ serve(async (req) => {
     
     if (fileName.startsWith("files/")) {
       try {
-        await waitForFileProcessing(apiKey, fileName);
+        await waitForFileProcessing(apiKey!, fileName);
       } catch (processingError) {
         console.error("File processing failed:", processingError);
         return new Response(
@@ -523,7 +523,7 @@ serve(async (req) => {
     // Transcribe with Gemini
     let transcription: string;
     try {
-      transcription = await transcribeWithGemini(apiKey, fileUri, mimeType, languageName);
+      transcription = await transcribeWithGemini(apiKey!, fileUri, mimeType, languageName);
     } catch (transcribeError) {
       const errorMessage = transcribeError instanceof Error ? transcribeError.message : "Unknown error";
       console.error("Transcription failed:", errorMessage);
@@ -570,8 +570,6 @@ serve(async (req) => {
   } catch (error) {
     console.error("Unexpected transcription error:", error);
     const errMsg = error instanceof Error ? error.message : "Unknown error";
-    logToolActivity(user.id, "transcribe", "error", { error: errMsg });
-    
     return new Response(
       JSON.stringify({ 
         error: "အမျိုးအမည်မသိ အမှား ဖြစ်ပွားပါသည်။ ပြန်စမ်းပါ။",

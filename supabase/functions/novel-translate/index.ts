@@ -369,7 +369,6 @@ TRANSLATION QUALITY:
   } catch (error) {
     console.error('[Novel Translate] Error:', error);
     const errMsg = error instanceof Error ? error.message : 'Translation failed';
-    if (user) logToolActivity(user.id, "novel-translate", "error", { error: errMsg });
     return new Response(
       JSON.stringify({ error: errMsg }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
