@@ -406,6 +406,7 @@ export default function App() {
   const [aspectRatio, setAspectRatio] = useState<keyof typeof ASPECT_RATIOS>("3:4");
   const [colorGrade, setColorGrade] = useState<keyof typeof COLOR_GRADES>("cyberpunk");
   const [audioBypass, setAudioBypass] = useState(true);
+  const [zoomEnabled, setZoomEnabled] = useState(false);
 
   const [processingProgress, setProcessingProgress] = useState(0);
   const [isProcessingActive, setIsProcessingActive] = useState(false);
@@ -419,7 +420,7 @@ export default function App() {
 
   const [subPos, setSubPos] = useState({ x: 50, y: 92 });
   const [subWidth, setSubWidth] = useState(75);
-  const [subHeight, setSubHeight] = useState(15);
+  const [subHeight, setSubHeight] = useState(11);
   const [subOpacity, setSubOpacity] = useState(100);
 
   const [watermarkUrl, setWatermarkUrl] = useState<string | null>(null);
@@ -1658,10 +1659,10 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
       return;
     }
 
-    setCountdown(120);
+    setCountdown(300);
     const interval = window.setInterval(() => {
       setCountdown((prev) => {
-        if (prev === null) return 120;
+        if (prev === null) return 300;
         if (prev <= 1) {
           window.clearInterval(interval);
           void startProcessingRef.current?.();
@@ -1888,18 +1889,17 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
         };
 
         recorder.onstop = () => {
-          const finalMimeType = recorder.mimeType || options.mimeType || "video/webm";
-          const blob = new Blob(chunks, { type: finalMimeType });
+          // Always output as mp4 for direct playback without conversion
+          const blob = new Blob(chunks, { type: "video/mp4" });
           const url = URL.createObjectURL(blob);
-          const ext: "mp4" | "webm" = finalMimeType.includes("webm") ? "webm" : "mp4";
-          setFinalVideoExt(ext);
+          setFinalVideoExt("mp4");
           setFinalVideoUrl(url);
 
           // Auto download
           const a = document.createElement("a");
           a.style.display = "none";
           a.href = url;
-          a.download = `translated_video.${ext}`;
+          a.download = `translated_video.mp4`;
           document.body.appendChild(a);
           a.click();
           setTimeout(() => {
@@ -2020,11 +2020,6 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           const dh = availableH;
 
           // Source Rect (Object-Cover behavior + Copyright Bypass Zoom)
-          // Aggressive bottom crop to remove original subtitles (like "I don't drink" at bottom)
-          // while keeping full faces visible (faces are typically in upper portion of frame)
-          const ZOOM_FACTOR = 1.9; // Adjusted to safely crop out bottom subtitles without cutting faces
-          const FACE_CROP_DOWN_BIAS = 0.0; // Keep top-aligned to preserve faces, crop from bottom
-
           let sx = 0,
             sy = 0,
             sw = video.videoWidth,
@@ -2032,27 +2027,41 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           const destRatio = dw / dh;
           const srcRatio = sw / sh;
 
-          // Calculate cropped source region (zoom = use smaller portion of source)
-          // This crops from the bottom to avoid original subtitles
-          if (srcRatio > destRatio) {
-            sh = video.videoHeight / ZOOM_FACTOR; // Use only top portion
-            sw = sh * destRatio;
-            sx = (video.videoWidth - sw) / 2;
+          if (zoomEnabled) {
+            // ZOOM IN ON: Aggressive copyright-bypass crop (removes original subtitles)
+            const ZOOM_FACTOR = 1.9;
+            if (srcRatio > destRatio) {
+              sh = video.videoHeight / ZOOM_FACTOR;
+              sw = sh * destRatio;
+              sx = (video.videoWidth - sw) / 2;
+            } else {
+              sw = video.videoWidth / ZOOM_FACTOR;
+              sh = sw / destRatio;
+              sx = (video.videoWidth - sw) / 2;
+            }
+            // Crop slightly from top, mostly from bottom to cut subtitles
+            const maxSy = Math.max(0, video.videoHeight - sh);
+            sy = maxSy * 0.1;
           } else {
-            sw = video.videoWidth / ZOOM_FACTOR;
-            sh = sw / destRatio;
-            sx = (video.videoWidth - sw) / 2;
+            // ZOOM IN OFF: Object-cover — show original frame without zoom
+            if (srcRatio > destRatio) {
+              sh = video.videoHeight;
+              sw = sh * destRatio;
+              sx = (video.videoWidth - sw) / 2;
+              sy = 0;
+            } else {
+              sw = video.videoWidth;
+              sh = sw / destRatio;
+              sx = 0;
+              sy = (video.videoHeight - sh) / 2;
+            }
           }
-
-          // Crop slightly from top to align hair with border, rest mostly from bottom to cut subtitles
-          const maxSy = Math.max(0, video.videoHeight - sh);
-          sy = maxSy * 0.1; // Top aligned close to border (10%), with heavy cut at bottom (90%)
 
           // Draw a subtle drop shadow for the foreground video
           ctx.shadowColor = "rgba(0,0,0,0.8)";
-          ctx.shadowBlur = 10; // Reduced from 20 for performance
+          ctx.shadowBlur = 10;
           ctx.drawImage(video, sx, sy, sw, sh, dx, dy, dw, dh);
-          ctx.shadowColor = "transparent"; // Reset shadow
+          ctx.shadowColor = "transparent";
           ctx.shadowBlur = 0;
 
           // 2.1 (Cross effect removed as requested for watermark clarity)
@@ -2162,16 +2171,8 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
             ctx.shadowBlur = 0; // Reset shadow before drawing background
             ctx.fillRect(boxX - boxW / 2, boxY - boxH / 2, boxW, boxH);
 
-            // Neon Box Border
-            const hue = (currentTime * 100) % 360; // Cycle colors based on time
-            const neonColor = `hsl(${hue}, 100%, 60%)`;
-
-            ctx.strokeStyle = neonColor;
-            ctx.lineWidth = Math.max(2, Math.floor(canvas.width / 400));
-            ctx.shadowColor = neonColor;
-            ctx.shadowBlur = 5; // Reduced from 15 for performance
-            ctx.strokeRect(boxX - boxW / 2, boxY - boxH / 2, boxW, boxH);
-            ctx.shadowBlur = 0; // Reset shadow for text wrapping calculations
+            // Clean Professional Subtitle Box — no border, just the background
+            ctx.shadowBlur = 0;
 
             console.log("Subtitle found:", currentSub.text, "at", currentTime);
             const text = currentSub.text;
@@ -2253,23 +2254,23 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
               displayLines = displayLines.slice(startIndex, startIndex + MAX_LINES);
             }
 
-            ctx.font = `900 ${cachedFontSize}px "Inter", "Pyidaungsu", "Padauk", sans-serif`; // Ensure font is set to the final size
+            ctx.font = `700 ${cachedFontSize}px "Inter", "Pyidaungsu", "Padauk", sans-serif`; // Clean semi-bold for readability
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
 
             const startY = boxY - ((displayLines.length - 1) * cachedLineHeight) / 2;
 
-            ctx.fillStyle = neonColor; // Neon text
-            ctx.strokeStyle = "#000";
-            ctx.lineWidth = Math.max(3, Math.floor(canvas.width / 300));
+            ctx.fillStyle = "#FFFFFF"; // Clean white text
+            ctx.strokeStyle = "rgba(0, 0, 0, 0.85)"; // Subtle dark outline for contrast
+            ctx.lineWidth = Math.max(2, Math.floor(canvas.width / 350));
 
-            // Draw each line
+            // Draw each line — black outline first, then white fill on top
             for (let i = 0; i < displayLines.length; i++) {
               const lineY = startY + i * cachedLineHeight;
-              ctx.shadowBlur = 0;
+              ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
+              ctx.shadowBlur = 4;
               ctx.strokeText(displayLines[i], boxX, lineY);
-              ctx.shadowColor = neonColor;
-              ctx.shadowBlur = 5; // Reduced from 10
+              ctx.shadowBlur = 0;
               ctx.fillText(displayLines[i], boxX, lineY);
             }
             ctx.shadowBlur = 0; // Reset
@@ -3008,6 +3009,31 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                   >
                     <div
                       className={`w-6 h-6 rounded-full bg-white absolute top-1 transition-all shadow-sm ${audioBypass ? "left-7" : "left-1"}`}
+                    />
+                  </button>
+                </div>
+
+                {/* Zoom In Toggle */}
+                <div className="p-5 rounded-2xl border border-zinc-800 bg-zinc-900/50 flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-indigo-500/20 text-indigo-400 rounded-xl">
+                      <MonitorPlay size={24} />
+                    </div>
+                    <div>
+                      <h4 className="text-base font-medium text-zinc-100 mb-1">Zoom In</h4>
+                      <p className="text-sm text-zinc-500">
+                        {zoomEnabled
+                          ? "ON — မူရင်း subtitle ကင်းရှင်းအောင် zoom ဆွဲသည်"
+                          : "OFF — မူရင်း video frame အတိုင်း ထွက်သည်"}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setZoomEnabled(!zoomEnabled)}
+                    className={`w-14 h-8 rounded-full transition-colors relative ${zoomEnabled ? "bg-indigo-500" : "bg-zinc-700"}`}
+                  >
+                    <div
+                      className={`w-6 h-6 rounded-full bg-white absolute top-1 transition-all shadow-sm ${zoomEnabled ? "left-7" : "left-1"}`}
                     />
                   </button>
                 </div>
