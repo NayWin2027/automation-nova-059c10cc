@@ -164,18 +164,15 @@ function detectNarrationProfile(text: string, langCode: string): string {
  * Global consistency instruction: enforces SAME narrator identity, SAME loudness,
  * SAME microphone character, and prevents the "voice gets louder/different after 1 minute" drift.
  */
-function buildConsistencyInstruction(voiceName: string): string {
+function buildConsistencyInstruction(): string {
   return (
-    `VOICE CONSISTENCY (ABSOLUTE CRITICAL — HIGHEST PRIORITY):\n` +
-    `- You are LOCKED to the "${voiceName}" voice identity. Do NOT deviate from this voice AT ALL.\n` +
-    `- GENDER LOCK: If ${voiceName} is male, every single syllable must sound distinctly MALE — deep, masculine timbre throughout. If ${voiceName} is female, every single syllable must sound distinctly FEMALE. NEVER switch gender mid-speech. NEVER produce ambiguous-gender voice.\n` +
-    `- IDENTITY LOCK: The voice timbre, vocal texture, resonance, pitch range, and vocal character must be IDENTICAL from the first word to the very last word. It must sound like the SAME SINGLE PERSON spoke the entire script in one unbroken session.\n` +
-    `- VOLUME LOCK: Maintain EXACTLY the same loudness/volume level from start to finish. Do NOT get quieter. Do NOT get louder. Do NOT fade. Do NOT drift in volume at any point — not after 30s, not after 60s, not after 90s, NEVER.\n` +
-    `- MICROPHONE LOCK: Same proximity, same warmth, same presence, same room tone from start to finish.\n` +
-    `- PACE LOCK: Same speaking speed and rhythm throughout. No rushing, no slowing down.\n` +
-    `- CLARITY LOCK: Pronunciation MUST stay 100% crisp, clear, and fully articulated from beginning to end. Absolutely NO quality degradation, NO slurring, NO mumbling, NO swallowing syllables, NO trailing off.\n` +
-    `- Do NOT shift into a different persona, different energy level, or different emotional baseline mid-script.\n` +
-    `- ANTI-DRIFT RULE: If you notice your voice changing in any way (pitch, volume, speed, clarity, gender expression), immediately correct back to the original voice established in the first sentence.`
+    `VOICE CONSISTENCY (CRITICAL):\n` +
+    `- Maintain the EXACT same narrator identity, timbre, gender, age, and accent from start to finish.\n` +
+    `- Maintain the EXACT same loudness/volume from the first second to the last second. Do NOT get louder after 30s/60s/90s.\n` +
+    `- Maintain the EXACT same microphone character (same proximity, same warmth, same presence).\n` +
+    `- Maintain the EXACT same speaking pace and rhythm throughout.\n` +
+    `- Pronunciation MUST stay 100% crisp and clear from beginning to end — no quality degradation, no slurring, no rushing.\n` +
+    `- Do NOT shift into a different persona, different energy, or different emotional baseline mid-script.`
   );
 }
 
@@ -184,17 +181,13 @@ function buildConsistencyInstruction(voiceName: string): string {
  */
 function burmesePronunciationGuard(): string {
   return (
-    `BURMESE PRONUNCIATION GUARD (ABSOLUTE CRITICAL — ZERO TOLERANCE FOR ERRORS):\n` +
-    `- MANDATORY: \u101E (သ) = Burmese dental fricative /θ/ (like English "th" in "think"). This is NOT \u1010 (တ). NEVER EVER pronounce သ as တ. They are completely different consonants.\n` +
-    `- MANDATORY: \u101E\u102D (သိ) = /θḭ/. NEVER pronounce as \u1010\u102D (တိ) /tḭ/. "သိ" and "တိ" are different words with different meanings.\n` +
-    `- MANDATORY: \u101E\u1030 (သူ) = /θù/. NEVER pronounce as \u1010\u1030 (တူ).\n` +
-    `- MANDATORY: \u101E\u1031 (သေ) = /θè/. NEVER pronounce as \u1010\u1031 (တေ).\n` +
-    `- MANDATORY: \u101E\u102C (သာ) = /θà/. NEVER pronounce as \u1010\u102C (တာ).\n` +
-    `- MANDATORY: \u101E\u1004\u103A\u1038 (သင်း) NEVER becomes \u1010\u1004\u103A\u1038 (တင်း).\n` +
-    `- Distinguish ALL aspirated vs unaspirated consonants: \u1011 (ထ) ≠ \u1010 (တ), \u1006 (ဆ) ≠ \u1005 (စ), \u1016 (ဖ) ≠ \u1015 (ပ), \u1001 (ခ) ≠ \u1000 (က).\n` +
-    `- Keep ALL syllables fully articulated from start to finish — do NOT swallow vowels, do NOT trail off, do NOT mumble at end of sentences.\n` +
-    `- Every single Burmese syllable must be pronounced with 100% clarity as if each word is being carefully enunciated by a professional Burmese news anchor.\n` +
-    `- Use natural Yangon urban Bamar tones and vowel lengths exactly as a native human speaker. Maintain this pronunciation quality consistently from the first syllable to the very last.`
+    `BURMESE PRONUNCIATION GUARD (CRITICAL):\n` +
+    `- Pronounce \u101E (သ) as the proper Burmese fricative /θ/ (like English "th" in "think"). NEVER pronounce it as \u1010 (တ) /t/.\n` +
+    `- \u101E\u102D (သိ) must sound like /θḭ/, NOT \u1010\u102D (တိ) /tḭ/.\n` +
+    `- \u101E\u1030 (သူ) must sound like /θù/, NOT \u1010\u1030 (တူ).\n` +
+    `- Distinguish aspirated vs unaspirated consonants clearly: \u1011 (ထ) vs \u1010 (တ), \u1006 (ဆ) vs \u1005 (စ), \u1015 (ပ) vs \u1016 (ဖ).\n` +
+    `- Keep all syllables fully articulated — do NOT swallow vowels or trail off at end of sentences.\n` +
+    `- Use natural Yangon urban Bamar tones and vowel lengths exactly as a native human speaker.`
   );
 }
 
@@ -202,7 +195,7 @@ function burmesePronunciationGuard(): string {
  * Split long text into chunks at sentence/paragraph boundaries for stable long-form generation.
  * Avoids cutting in the middle of a sentence to preserve prosody.
  */
-function splitTextIntoChunks(text: string, targetSize = 800): string[] {
+function splitTextIntoChunks(text: string, targetSize = 1800): string[] {
   if (text.length <= targetSize) return [text];
 
   const chunks: string[] = [];
@@ -578,7 +571,7 @@ serve(async (req) => {
       `CRITICAL VOICE STYLE: Speak in natural, modern colloquial ${langCode.toUpperCase()} with 100% authentic native accent and pronunciation.`;
 
     // SHARED across all chunks → keeps narrator identity consistent
-    const consistencyBlock = buildConsistencyInstruction(sanitizedVoiceName);
+    const consistencyBlock = buildConsistencyInstruction();
     const narrationProfile = detectNarrationProfile(text, langCode);
     const burmeseGuard = langCode === "my" ? burmesePronunciationGuard() : "";
 
@@ -598,26 +591,16 @@ serve(async (req) => {
       const continuity =
         totalChunks > 1
           ? `CONTINUITY (chunk ${chunkIndex + 1}/${totalChunks}): This is part of one continuous narration. ` +
-            `Continue with the EXACT same narrator voice ("${sanitizedVoiceName}"), timbre, loudness, pace, and emotional level as if reading without interruption. ` +
-            `Do NOT reset tone, do NOT introduce new energy, do NOT change persona, do NOT change gender expression.\n`
+            `Continue with the EXACT same narrator voice, timbre, loudness, pace, and emotional level as if reading without interruption. ` +
+            `Do NOT reset tone, do NOT introduce new energy, do NOT change persona.\n`
           : "";
-
-      const qualityGuard =
-        `AUDIO QUALITY MAINTENANCE (CRITICAL):\n` +
-        `- Output audio MUST maintain studio-quality clarity from the first second to the last second.\n` +
-        `- Volume level must remain CONSTANT — no fading, no getting quieter, no getting louder.\n` +
-        `- Voice clarity must remain CONSTANT — no degradation, no mumbling, no slurring even at the end.\n` +
-        `- Breathing must remain natural and consistent — same breath pattern throughout.\n` +
-        `- If this is a multi-part narration, treat each part as if you just started fresh but with the SAME voice.\n`;
 
       return (
         `You are a professional voice-over narrator delivering a 100% human-natural performance.\n` +
-        `You are using the "${sanitizedVoiceName}" voice. Stay locked to this voice identity throughout.\n` +
         `${nativeStyleInstruction}\n` +
         (burmeseGuard ? `${burmeseGuard}\n` : "") +
         `${narrationProfile}\n` +
         `${consistencyBlock}\n` +
-        `${qualityGuard}` +
         `${pacingBlock}\n` +
         `${continuity}` +
         `Generate natural, continuous speech AUDIO for the following text.\n` +
@@ -726,7 +709,7 @@ serve(async (req) => {
 
     // ===== GENERATE TTS (single or chunked) =====
     let usedVoice = sanitizedVoiceName;
-    const chunks = splitTextIntoChunks(text, 800);
+    const chunks = splitTextIntoChunks(text, 1800);
     const isLong = chunks.length > 1;
 
     let finalAudio: string | undefined;
