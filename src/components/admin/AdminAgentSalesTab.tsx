@@ -22,11 +22,6 @@ interface AgentTopupRow {
   created_at: string | null;
 }
 
-interface AgentCreditLogRow {
-  user_id: string;
-  metadata: { credits_deducted?: number | string } | null;
-}
-
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 const AGENT_COLORS = {
@@ -38,7 +33,6 @@ const AGENT_COLORS = {
 const AdminAgentSalesTab: React.FC = () => {
   const [allUsers, setAllUsers] = useState<AgentUser[]>([]);
   const [topupRows, setTopupRows] = useState<AgentTopupRow[]>([]);
-  const [creditLogRows, setCreditLogRows] = useState<AgentCreditLogRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<"monthly" | "yearly">("monthly");
   const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
@@ -58,18 +52,11 @@ const AdminAgentSalesTab: React.FC = () => {
         });
         setAllUsers(agentUsers);
 
-        const [{ data: topupData }, { data: logData }] = await Promise.all([
-          supabase
-            .from("credit_topups")
-            .select("user_id, amount, topup_type, created_at, is_deleted")
-            .eq("is_deleted", false)
-            .order("created_at", { ascending: true }),
-          supabase
-            .from("activity_logs")
-            .select("user_id, metadata")
-            .eq("action", "credit_deduction")
-            .limit(10000),
-        ]);
+        const { data: topupData } = await supabase
+          .from("credit_topups")
+          .select("user_id, amount, topup_type, created_at, is_deleted")
+          .eq("is_deleted", false)
+          .order("created_at", { ascending: true });
 
         setTopupRows(((topupData || []) as any[]).map((t) => ({
           user_id: t.user_id,
@@ -77,7 +64,6 @@ const AdminAgentSalesTab: React.FC = () => {
           topup_type: String(t.topup_type || "topup").toLowerCase(),
           created_at: t.created_at,
         })));
-        setCreditLogRows((logData || []) as AgentCreditLogRow[]);
       }
     } catch (err) {
       console.error("Error fetching agent users:", err);
@@ -154,34 +140,16 @@ const AdminAgentSalesTab: React.FC = () => {
   }, [filteredData]);
 
   const originalCreditMap = useMemo(() => {
-    const deductions = new Map<string, number>();
-    creditLogRows.forEach((row) => {
-      const amount = Number(row?.metadata?.credits_deducted ?? 0);
-      if (Number.isFinite(amount) && amount > 0) {
-        deductions.set(row.user_id, (deductions.get(row.user_id) || 0) + amount);
-      }
-    });
-
-    const nonOriginalAdditions = new Map<string, number>();
-    topupRows.forEach((row) => {
-      if (row.topup_type === "original") return;
-      nonOriginalAdditions.set(row.user_id, (nonOriginalAdditions.get(row.user_id) || 0) + row.amount);
-    });
-
     const map = new Map<string, number>();
     allUsers.forEach((u) => {
       if (!u.user_id) return;
       const firstOriginal = topupRows
         .filter((row) => row.user_id === u.user_id && row.topup_type === "original" && row.amount > 0)
         .sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")))[0];
-      const reconstructedOriginal = Math.max(
-        (Number(u.credits) || 0) + (deductions.get(u.user_id) || 0) - (nonOriginalAdditions.get(u.user_id) || 0),
-        0,
-      );
-      map.set(u.user_id, firstOriginal ? firstOriginal.amount : reconstructedOriginal);
+      if (firstOriginal) map.set(u.user_id, firstOriginal.amount);
     });
     return map;
-  }, [allUsers, creditLogRows, topupRows]);
+  }, [allUsers, topupRows]);
 
   const renderUserList = (users: AgentUser[], agentType: "nw" | "kys" | "numeric", sectionKey: string) => {
     const isExpanded = expandedSections.has(sectionKey);
@@ -220,7 +188,7 @@ const AdminAgentSalesTab: React.FC = () => {
               </TableHeader>
               <TableBody>
                 {users.map((u, idx) => {
-                  const displayAmt = u.user_id ? (originalCreditMap.get(u.user_id) ?? 0) : 0;
+                  const displayAmt = u.user_id ? originalCreditMap.get(u.user_id) : undefined;
                   return (
                   <TableRow key={u.email} className="hover:bg-muted/20">
                     <TableCell className="text-2xs py-1.5 px-3 text-muted-foreground">{idx + 1}</TableCell>
@@ -241,9 +209,9 @@ const AdminAgentSalesTab: React.FC = () => {
                     </TableCell>
                     <TableCell className="text-2xs py-1.5 px-3 text-right">
                       <span className="font-mono font-semibold text-emerald-400">
-                        {displayAmt.toLocaleString()}
+                        {displayAmt != null ? displayAmt.toLocaleString() : "—"}
                       </span>
-                      <span className="text-2xs text-muted-foreground ml-1">cr</span>
+                      {displayAmt != null && <span className="text-2xs text-muted-foreground ml-1">cr</span>}
                     </TableCell>
                   </TableRow>
                   );
