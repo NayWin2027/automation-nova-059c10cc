@@ -25,7 +25,6 @@ const AGENT_COLORS = {
 
 const AdminAgentSalesTab: React.FC = () => {
   const [allUsers, setAllUsers] = useState<AgentUser[]>([]);
-  const [topupMap, setTopupMap] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<"monthly" | "yearly">("monthly");
   const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
@@ -44,20 +43,6 @@ const AdminAgentSalesTab: React.FC = () => {
           return prefix.startsWith("nw") || prefix.startsWith("kys") || /^\d+$/.test(prefix);
         });
         setAllUsers(agentUsers);
-      }
-
-      // Real credit amounts per user from credit_topups (admin RLS allows SELECT)
-      const { data: topupData, error: tErr } = await supabase
-        .from("credit_topups")
-        .select("user_id, amount, is_deleted");
-      if (!tErr && topupData) {
-        const m = new Map<string, number>();
-        (topupData as any[]).forEach((t) => {
-          if (t.is_deleted) return;
-          const uid = t.user_id as string;
-          m.set(uid, (m.get(uid) ?? 0) + (Number(t.amount) || 0));
-        });
-        setTopupMap(m);
       }
     } catch (err) {
       console.error("Error fetching agent users:", err);
@@ -170,9 +155,7 @@ const AdminAgentSalesTab: React.FC = () => {
               </TableHeader>
               <TableBody>
                 {users.map((u, idx) => {
-                  const realAmt = u.user_id ? topupMap.get(u.user_id) : undefined;
-                  const displayAmt = realAmt !== undefined && realAmt > 0 ? realAmt : 450;
-                  const isReal = realAmt !== undefined && realAmt > 0;
+                  const displayAmt = Number(u.credits) || 0;
                   return (
                   <TableRow key={u.email} className="hover:bg-muted/20">
                     <TableCell className="text-2xs py-1.5 px-3 text-muted-foreground">{idx + 1}</TableCell>
@@ -192,7 +175,7 @@ const AdminAgentSalesTab: React.FC = () => {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-2xs py-1.5 px-3 text-right">
-                      <span className={`font-mono font-semibold ${isReal ? "text-emerald-400" : "text-muted-foreground"}`}>
+                      <span className="font-mono font-semibold text-emerald-400">
                         {displayAmt.toLocaleString()}
                       </span>
                       <span className="text-2xs text-muted-foreground ml-1">cr</span>
