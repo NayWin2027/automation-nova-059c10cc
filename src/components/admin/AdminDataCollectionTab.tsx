@@ -31,6 +31,7 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 
 type Period = "daily" | "monthly" | "yearly";
 type AgentKey = "nw" | "kys";
+type AgentFilter = "all" | AgentKey;
 type CategoryKey = "new_users" | "topup" | "renew" | "bonus" | "referral";
 
 interface ProfileRow {
@@ -83,6 +84,7 @@ const AdminDataCollectionTab: React.FC = () => {
   const [selectedYear, setSelectedYear] = useState<string>(String(now.getFullYear()));
   const [selectedMonth, setSelectedMonth] = useState<string>(pad2(now.getMonth() + 1));
   const [selectedDate, setSelectedDate] = useState<string>(todayISO());
+  const [agentFilter, setAgentFilter] = useState<AgentFilter>("all");
 
   const fetchAll = async () => {
     setLoading(true);
@@ -170,6 +172,15 @@ const AdminDataCollectionTab: React.FC = () => {
     return topups.filter((t) => userMap.has(t.user_id) && inPeriod(t.created_at));
   }, [topups, userMap, period, selectedDate, selectedYear, selectedMonth]);
 
+  // user_id -> sum of that user's topup amounts within current period (for New Users "Amt")
+  const newUserAmountMap = useMemo(() => {
+    const m = new Map<string, number>();
+    filteredTopups.forEach((t) => {
+      m.set(t.user_id, (m.get(t.user_id) ?? 0) + (Number(t.amount) || 0));
+    });
+    return m;
+  }, [filteredTopups]);
+
   // Aggregations per agent per category
   type AgentSummary = {
     new_users: { count: number };
@@ -235,7 +246,7 @@ const AdminDataCollectionTab: React.FC = () => {
         date: p.created_at,
         display: p.email.split("@")[0]?.toUpperCase() ?? "—",
         category: "new_users",
-        amount: null,
+        amount: newUserAmountMap.get(p.user_id) ?? 0,
       });
     });
 
@@ -331,6 +342,23 @@ const AdminDataCollectionTab: React.FC = () => {
       <Card className="bg-card/60 border-primary/10">
         <CardContent className="p-3">
           <div className="flex items-center gap-2 flex-wrap">
+            <Select value={agentFilter} onValueChange={(v) => setAgentFilter(v as AgentFilter)}>
+              <SelectTrigger className="w-[170px] h-8 text-xs bg-secondary/30 border-border/50">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">
+                  <div className="flex items-center gap-1.5"><Database className="w-3 h-3" />Total (NW + KYS)</div>
+                </SelectItem>
+                <SelectItem value="nw">
+                  <div className="flex items-center gap-1.5"><TrendingUp className="w-3 h-3 text-blue-400" />NW (Nay Win)</div>
+                </SelectItem>
+                <SelectItem value="kys">
+                  <div className="flex items-center gap-1.5"><TrendingUp className="w-3 h-3 text-emerald-400" />KYS (Ko Ye Swan)</div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+
             <Select value={period} onValueChange={(v) => setPeriod(v as Period)}>
               <SelectTrigger className="w-[120px] h-8 text-xs bg-secondary/30 border-border/50">
                 <SelectValue />
