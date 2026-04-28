@@ -211,7 +211,7 @@ const AdminDataCollectionTab: React.FC = () => {
     filteredNewUsers.forEach((p) => {
       const a = categorize(p.email);
       if (!a) return;
-      agg[a].new_users.count += 1;
+      if (newUserAmountMap.has(p.user_id)) agg[a].new_users.count += 1;
     });
 
     filteredTopups.forEach((t) => {
@@ -230,7 +230,7 @@ const AdminDataCollectionTab: React.FC = () => {
     });
 
     return agg;
-  }, [filteredNewUsers, filteredTopups, userMap]);
+  }, [filteredNewUsers, filteredTopups, newUserAmountMap, userMap]);
 
   // Detail rows per agent (sorted by date)
   const detailRows = (agent: AgentKey) => {
@@ -246,12 +246,13 @@ const AdminDataCollectionTab: React.FC = () => {
     filteredNewUsers.forEach((p) => {
       const a = categorize(p.email);
       if (a !== agent) return;
+      if (!newUserAmountMap.has(p.user_id)) return;
       rows.push({
         key: `nu-${p.user_id}`,
         date: p.created_at,
         display: p.email.split("@")[0]?.toUpperCase() ?? "—",
         category: "new_users",
-        amount: newUserAmountMap.get(p.user_id) ?? 0,
+        amount: newUserAmountMap.get(p.user_id) ?? null,
       });
     });
 
