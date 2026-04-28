@@ -326,7 +326,7 @@ const AdminDataCollectionTab: React.FC = () => {
       newUsers: summary.nw.new_users.count + summary.kys.new_users.count,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [summary]);
+  }, [summary, filteredNewUsers, newUserAmountMap]);
 
   // ---------- UI ----------
   return (
@@ -501,7 +501,7 @@ const AdminDataCollectionTab: React.FC = () => {
                       const count = c === "new_users" ? s.new_users.count : s[c].count;
                       const amount =
                         c === "new_users"
-                          ? // sum of New Users' own topup amounts within this period (from Agents column)
+                          ? // sum of New Users' saved Original credit amounts from credit_topups
                             filteredNewUsers
                               .filter((p) => categorize(p.email) === agent)
                               .reduce((acc, p) => acc + (newUserAmountMap.get(p.user_id) ?? 0), 0)
