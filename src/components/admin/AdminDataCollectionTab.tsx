@@ -432,7 +432,10 @@ const AdminDataCollectionTab: React.FC = () => {
       </Card>
 
       {/* Per-agent summary + detail */}
-      {(["nw", "kys"] as AgentKey[]).map((agent) => {
+      {(agentFilter === "all"
+        ? (["nw", "kys"] as AgentKey[])
+        : [agentFilter as AgentKey]
+      ).map((agent) => {
         const s = summary[agent];
         const t = agentTotal(agent);
         const rows = detailRows(agent);
@@ -487,7 +490,13 @@ const AdminDataCollectionTab: React.FC = () => {
                     {(["new_users", "topup", "renew", "bonus", "referral"] as CategoryKey[]).map((c) => {
                       const meta = CATEGORY_META[c];
                       const count = c === "new_users" ? s.new_users.count : s[c].count;
-                      const amount = c === "new_users" ? null : s[c].amount;
+                      const amount =
+                        c === "new_users"
+                          ? // sum of New Users' own topup amounts within this period (from Agents column)
+                            filteredNewUsers
+                              .filter((p) => categorize(p.email) === agent)
+                              .reduce((acc, p) => acc + (newUserAmountMap.get(p.user_id) ?? 0), 0)
+                          : s[c].amount;
                       return (
                         <TableRow key={c} className="hover:bg-muted/20">
                           <TableCell className={`text-2xs py-1.5 px-3 font-medium ${meta.color}`}>
