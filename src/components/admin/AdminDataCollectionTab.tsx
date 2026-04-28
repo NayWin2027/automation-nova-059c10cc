@@ -22,7 +22,7 @@ import {
  *
  * Real data sources (read-only):
  *   - profiles        → New Users (created_at, agent prefix မှ)
- *   - credit_topups   → Top-Up / Renew / Bonus / Referral (amount + count)
+ *   - credit_topups   → Original / Top-Up / Renew / Bonus / Referral (amount + count)
  *
  * Privacy: user UUID များ မပြ၊ Display ID (NW0001, KYS0023) သာ ပြသည်။
  */
@@ -46,10 +46,6 @@ interface TopupRow {
   amount: number;
   topup_type: string;
   created_at: string;
-}
-interface CreditLogRow {
-  user_id: string;
-  metadata: { credits_deducted?: number | string } | null;
 }
 
 const AGENT_LABEL: Record<AgentKey, string> = {
@@ -83,7 +79,6 @@ const AdminDataCollectionTab: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [topups, setTopups] = useState<TopupRow[]>([]);
-  const [creditLogs, setCreditLogs] = useState<CreditLogRow[]>([]);
 
   const [period, setPeriod] = useState<Period>("monthly");
   const now = new Date();
@@ -128,13 +123,6 @@ const AdminDataCollectionTab: React.FC = () => {
         );
       }
 
-      const { data: logData, error: lErr } = await supabase
-        .from("activity_logs")
-        .select("user_id, metadata")
-        .eq("action", "credit_deduction")
-        .limit(10000);
-      if (lErr) console.error("Error loading credit deduction logs:", lErr);
-      setCreditLogs((logData || []) as CreditLogRow[]);
     } catch (err) {
       console.error("Data collection fetch failed:", err);
     } finally {
@@ -188,33 +176,15 @@ const AdminDataCollectionTab: React.FC = () => {
 
   // user_id -> original credit at account opening (not current remaining balance)
   const newUserAmountMap = useMemo(() => {
-    const deductions = new Map<string, number>();
-    creditLogs.forEach((row) => {
-      const amount = Number(row?.metadata?.credits_deducted ?? 0);
-      if (Number.isFinite(amount) && amount > 0) {
-        deductions.set(row.user_id, (deductions.get(row.user_id) || 0) + amount);
-      }
-    });
-
-    const nonOriginalAdditions = new Map<string, number>();
-    topups.forEach((row) => {
-      if (row.topup_type.toLowerCase() === "original") return;
-      nonOriginalAdditions.set(row.user_id, (nonOriginalAdditions.get(row.user_id) || 0) + row.amount);
-    });
-
     const m = new Map<string, number>();
     profiles.forEach((p) => {
       const firstOriginal = topups
         .filter((row) => row.user_id === p.user_id && row.topup_type.toLowerCase() === "original" && row.amount > 0)
         .sort((a, b) => a.created_at.localeCompare(b.created_at))[0];
-      const reconstructedOriginal = Math.max(
-        (Number(p.credits) || 0) + (deductions.get(p.user_id) || 0) - (nonOriginalAdditions.get(p.user_id) || 0),
-        0,
-      );
-      m.set(p.user_id, firstOriginal ? firstOriginal.amount : reconstructedOriginal);
+      if (firstOriginal) m.set(p.user_id, firstOriginal.amount);
     });
     return m;
-  }, [creditLogs, profiles, topups]);
+  }, [profiles, topups]);
 
   // Aggregations per agent per category
   type AgentSummary = {
