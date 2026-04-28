@@ -288,6 +288,18 @@ serve(async (req) => {
             .update(updateObj)
             .eq('user_id', newUser.user.id);
 
+          if ((Number(credits) || 0) > 0) {
+            await supabaseAdmin
+              .from('credit_topups')
+              .insert({
+                user_id: newUser.user.id,
+                amount: Number(credits) || 0,
+                topup_type: 'original',
+                note: 'Manual new user original credit',
+                created_by: user.id,
+              });
+          }
+
           // SECURITY: Plaintext password storage removed
         }
 
