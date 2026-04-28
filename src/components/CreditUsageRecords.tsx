@@ -500,9 +500,14 @@ const CreditUsageRecords: React.FC<Props> = ({ targetUserId, compact }) => {
   }, [paymentOrderRows]);
 
   const manualTopupEvents = useMemo<CreditAdditionEvent[]>(() => {
+    let originalSeedUsed = false;
     return normalizedTopups.flatMap((row) => {
       const amount = Number(row.amount || 0);
       if (!row.dateKey || !Number.isFinite(amount) || amount <= 0) return [];
+      if (row.normalizedType === "original") {
+        if (originalSeedUsed) return [];
+        originalSeedUsed = true;
+      }
 
       const linkedOrderNumber = extractOrderNumberFromNote(row.note);
       const isMirroredOrderRow = linkedOrderNumber && approvedOrderNumbers.has(linkedOrderNumber) && row.normalizedType !== "referral";
