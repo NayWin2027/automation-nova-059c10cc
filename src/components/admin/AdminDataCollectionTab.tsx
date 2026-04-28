@@ -38,6 +38,7 @@ interface ProfileRow {
   user_id: string;
   email: string;
   created_at: string;
+  credits: number;
 }
 interface TopupRow {
   id: string;
@@ -172,14 +173,14 @@ const AdminDataCollectionTab: React.FC = () => {
     return topups.filter((t) => userMap.has(t.user_id) && inPeriod(t.created_at));
   }, [topups, userMap, period, selectedDate, selectedYear, selectedMonth]);
 
-  // user_id -> sum of that user's topup amounts within current period (for New Users "Amt")
+  // user_id -> real current credit balance from profiles (matches Users column)
   const newUserAmountMap = useMemo(() => {
     const m = new Map<string, number>();
-    filteredTopups.forEach((t) => {
-      m.set(t.user_id, (m.get(t.user_id) ?? 0) + (Number(t.amount) || 0));
+    profiles.forEach((p) => {
+      m.set(p.user_id, Number(p.credits) || 0);
     });
     return m;
-  }, [filteredTopups]);
+  }, [profiles]);
 
   // Aggregations per agent per category
   type AgentSummary = {
@@ -302,7 +303,10 @@ const AdminDataCollectionTab: React.FC = () => {
   // Compute agent totals
   const agentTotal = (a: AgentKey) => {
     const s = summary[a];
-    const totalAmount = s.topup.amount + s.renew.amount + s.bonus.amount + s.referral.amount;
+    const newUserAmount = filteredNewUsers
+      .filter((p) => categorize(p.email) === a)
+      .reduce((acc, p) => acc + (newUserAmountMap.get(p.user_id) ?? 0), 0);
+    const totalAmount = newUserAmount + s.topup.amount + s.renew.amount + s.bonus.amount + s.referral.amount;
     const totalCount =
       s.new_users.count + s.topup.count + s.renew.count + s.bonus.count + s.referral.count;
     return { totalAmount, totalCount };
