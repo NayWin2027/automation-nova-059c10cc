@@ -303,7 +303,10 @@ const AdminDataCollectionTab: React.FC = () => {
   // Compute agent totals
   const agentTotal = (a: AgentKey) => {
     const s = summary[a];
-    const totalAmount = s.topup.amount + s.renew.amount + s.bonus.amount + s.referral.amount;
+    const newUserAmount = filteredNewUsers
+      .filter((p) => categorize(p.email) === a)
+      .reduce((acc, p) => acc + (newUserAmountMap.get(p.user_id) ?? 0), 0);
+    const totalAmount = newUserAmount + s.topup.amount + s.renew.amount + s.bonus.amount + s.referral.amount;
     const totalCount =
       s.new_users.count + s.topup.count + s.renew.count + s.bonus.count + s.referral.count;
     return { totalAmount, totalCount };
