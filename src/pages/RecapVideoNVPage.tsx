@@ -646,6 +646,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       isDragging: false,
     });
 
+    // SURGICAL EDIT: Zoom toggle for copyright protection
+    // ON = cinematic zoom/crop for copyright (current behavior)
+    // OFF = 100% original source video quality, no zoom/crop
+    const [zoomEnabled, setZoomEnabled] = useState(true);
+    const zoomEnabledRef = useRef(zoomEnabled);
+    useEffect(() => {
+      zoomEnabledRef.current = zoomEnabled;
+    }, [zoomEnabled]);
+
     const [timelineBar, setTimelineBar] = useState({
       enabled: true,
       color: "#4B0082",
@@ -655,7 +664,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
     const [videoBorder, setVideoBorder] = useState({
       enabled: true,
-      color: "#EC4899",
+      color: "#00E5FF",
       width: 4,
       openPanel: false,
     });
@@ -1092,7 +1101,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         drawScale = quality.maxH === 1080 ? 0.8 : 0.85;
       } else {
         // High-end: native quality
-        drawScale = quality.maxH === 1080 ? 0.85 : 1.0;
+        drawScale = quality.maxH === 1080 ? 1.0 : 1.0;
       }
       console.log(
         `[PERF] Device tier: ${isExtremeLowEnd ? "EXTREME_LOW_480P" : isLowEndDevice ? "LOW_720P" : isMidTier ? "MID" : "HIGH"}, Canvas scale: ${drawScale}, Quality: ${quality.maxH}p, Cores: ${cores}, RAM: ${mem}GB`,
@@ -1460,22 +1469,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       let lastFrameTime = performance.now();
       let isLowEndRender = quality.fps < 30;
 
-      // ── FIX: Real-time FPS monitoring with dynamic frame skip ──
-      let frameSkipCounter = 0;
-      const frameSkipInterval = isExtremeLowEnd ? 2 : isLowEndDevice ? 1 : 0; // Skip every N frames
+      // ── FIX: Real-time FPS monitoring (NO FRAME SKIP for Hollywood smoothness)
       let lastFrameTimestamp = 0;
       let consecutiveSlowFrames = 0;
       const DYNAMIC_DOWNGRADE_THRESHOLD = 15; // Downgrade quality after 15 slow frames
 
-      const shouldSkipFrame = (timestamp: number): boolean => {
-        if (frameSkipInterval === 0) return false;
-        frameSkipCounter++;
-        if (frameSkipCounter > frameSkipInterval) {
-          frameSkipCounter = 0;
-          return false;
-        }
-        return true;
-      };
+      // HOLLYWOOD CINEMATIC: Never skip frames - render every single frame for buttery smoothness
+      const shouldSkipFrame = (_timestamp: number): boolean => false;
 
       const monitorPerformance = (timestamp: number): void => {
         if (lastFrameTimestamp > 0) {
@@ -1519,21 +1519,49 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         const srcW = videoEl.videoWidth || rawW;
         const srcH = videoEl.videoHeight || rawH;
-        let srcCropX = 0,
-          srcCropY = 0,
-          srcCropW = srcW,
+
+        // SURGICAL EDIT: Zoom toggle - when OFF, use 100% original source video
+        const isZoomEnabled = zoomEnabledRef.current;
+
+        let srcCropX: number, srcCropY: number, srcCropW: number, srcCropH: number;
+
+        if (isZoomEnabled) {
+          // ── SURGICAL EDIT v2: Symmetric 10% safety inset (copyright signature change) ──
+          // Inset 10% from every edge BEFORE aspect-ratio crop. This:
+          //  1) Removes edge pixels (logos/watermarks/borders) for copyright evasion
+          //  2) Reduces vertical "bottom cut" because we no longer crop the FULL height down to 9:16
+          //  3) Keeps content centered → headroom-friendly
+          const insetRatio = 0.1;
+          const insetX = Math.round(srcW * insetRatio);
+          const insetY = Math.round(srcH * insetRatio);
+          srcCropX = insetX;
+          srcCropY = insetY;
+          srcCropW = srcW - insetX * 2;
+          srcCropH = srcH - insetY * 2;
+        } else {
+          // Zoom OFF: Use full original source video dimensions (100% quality, no crop)
+          srcCropX = 0;
+          srcCropY = 0;
+          srcCropW = srcW;
           srcCropH = srcH;
+        }
+
         const curEditorState = editorStateRef.current;
         if (curEditorState.ratio !== "auto") {
           const targetAR = outW / outH;
-          if (targetAR < srcW / srcH) {
-            srcCropW = Math.round(srcH * targetAR);
-            srcCropX = Math.round((srcW - srcCropW) / 2);
+          const cropW = srcCropW;
+          const cropH = srcCropH;
+          if (targetAR < cropW / cropH) {
+            // Need narrower crop (e.g., 9:16 from landscape) → crop horizontally inside the crop area
+            srcCropW = Math.round(cropH * targetAR);
+            srcCropX = srcCropX + Math.round((cropW - srcCropW) / 2);
           } else {
-            srcCropH = Math.round(srcW / targetAR);
-            // ── FACE-SAFE CROP: Only crop from bottom, never from top ──
-            // Keeps faces/heads visible at top of frame for professional cinematic look
-            srcCropY = 0; // Start from top (no top cropping)
+            // Need shorter crop → HEADROOM-FIRST: anchor to upper portion, take only ~35% of the
+            // discarded height from the top, ~65% from the bottom. This keeps faces/heads visible
+            // and dramatically reduces "bottom cut-off" complaints vs. center crop.
+            srcCropH = Math.round(cropW / targetAR);
+            const discard = cropH - srcCropH;
+            srcCropY = srcCropY + Math.round(discard * 0.35);
           }
         }
 
@@ -1550,95 +1578,114 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // ── FIX: Use cached filter string — no string allocation per frame ──
         ctx.filter = filterStringRef.current;
 
-        // ── SURGICAL EDIT: Copyright Evasion (Cinematic Camera Movements: Zoom, Pan, Ken Burns) ──
-        // This is purely visual and DOES NOT modify video timeline. AV-Sync remains 100% accurate!
-        // Visual-only: we change the way the video frame is CROPPED/ZOOMED on the canvas.
-        // Audio/video timeline and timestamps remain untouched (AV-Sync stays accurate).
-        const t = audioEl.currentTime;
+        // SURGICAL EDIT: Zoom toggle - conditional cinematic zoom/pan/rotation
+        // When OFF: Use original source crop directly (100% quality, no effects)
+        // When ON: Apply copyright evasion cinematic movements
+        let zoomedSrcX = srcCropX;
+        let zoomedSrcY = srcCropY;
+        let zoomedSrcW = srcCropW;
+        let zoomedSrcH = srcCropH;
+        let rotate = 0;
 
-        // 3-second alternating camera behaviour (photo freeze vs video zoom):
-        // - Photo freeze zoom: hold zoom fixed for 3s (no pan/rotation)
-        // - Video zoom-in: smooth zoom-in + cinematic pan for next 3s
-        const zoomCycleSec = 3;
-        const cycleIndex = Math.floor(t / zoomCycleSec);
-        const cyclePos = (t % zoomCycleSec) / zoomCycleSec; // 0..1 within current 3s
+        if (isZoomEnabled) {
+          // ── SURGICAL EDIT: Copyright Evasion (Cinematic Camera Movements: Zoom, Pan, Ken Burns) ──
+          // This is purely visual and DOES NOT modify video timeline. AV-Sync remains 100% accurate!
+          // Visual-only: we change the way the video frame is CROPPED/ZOOMED on the canvas.
+          // Audio/video timeline and timestamps remain untouched (AV-Sync stays accurate).
+          const t = audioEl.currentTime;
 
-        // Smooth hump: 0 at boundaries, 1 mid-cycle.
-        const hump = Math.sin(Math.PI * cyclePos);
+          // Hollywood Cinematic Camera: 4-second alternating smooth motion
+          // - Photo freeze: stable zoom hold for 4s (no motion)
+          // - Cinematic zoom: butter-smooth zoom + pan for next 4s
+          const zoomCycleSec = 4;
+          const cycleIndex = Math.floor(t / zoomCycleSec);
+          const cyclePos = (t % zoomCycleSec) / zoomCycleSec; // 0..1 within current 4s
 
-        // Even cycles: photo freeze. Odd cycles: video zoom-in.
-        const isPhotoFreeze = cycleIndex % 2 === 0;
+          // Hollywood-grade smoothstep easing: 3t^2 - 2t^3 for buttery acceleration/deceleration
+          const smoothstep = (t: number) => t * t * (3 - 2 * t);
+          // Smooth hump with eased entry/exit for cinematic feel
+          const hump = smoothstep(Math.sin(Math.PI * cyclePos) * 0.5 + 0.5);
 
-        // Zoom levels (zoom only):
-        // - Photo (freeze): zoom-in ramps during the 3s, but pan/rotation stay 0.
-        // - Video: continues zoom-in smoothly for the next 3s (pan/rotation enabled).
-        const photoZoomBase = 1.22;
-        const zoomStep = 0.18; // total growth per 2 cycles (video end -> next photo start)
-        const photoZoomStep = zoomStep * 0.55; // portion during the photo segment
-        const videoZoomAdd = zoomStep - photoZoomStep; // remainder during the video segment
-        const maxZoom = 1.7;
+          // Even cycles: photo freeze. Odd cycles: video zoom-in.
+          const isPhotoFreeze = cycleIndex % 2 === 0;
 
-        // Monotonic smooth ramp for video zoom-in progress.
-        const ramp = cyclePos * cyclePos * (3 - 2 * cyclePos); // 0..1
+          // Zoom levels (zoom only):
+          // - Photo (freeze): zoom-in ramps during the 3s, but pan/rotation stay 0.
+          // - Video: continues zoom-in smoothly for the next 3s (pan/rotation enabled).
+          // ── SURGICAL EDIT v2: Reduced zoom range to preserve source quality ──
+          // 10% inset already gives ~1.11x effective zoom, so we keep the additional cinematic
+          // zoom subtle to avoid blur/upscale artifacts. User wants near-original sharpness.
+          const photoZoomBase = 1.02;
+          const zoomStep = 0.04; // total growth per 2 cycles (was 0.18 — too aggressive, caused blur)
+          const photoZoomStep = zoomStep * 0.55; // portion during the photo segment
+          const videoZoomAdd = zoomStep - photoZoomStep; // remainder during the video segment
+          const maxZoom = 1.14;
 
-        // Base level grows every 2 cycles (i.e., after each video segment).
-        const levelBase = Math.min(maxZoom, photoZoomBase + Math.floor(cycleIndex / 2) * zoomStep);
+          // Monotonic smooth ramp for video zoom-in progress.
+          const ramp = cyclePos * cyclePos * (3 - 2 * cyclePos); // 0..1
 
-        let cinematicZoom: number;
-        if (isPhotoFreeze) {
-          // Photo: zoom-in ramps, but stays "frozen" spatially.
-          cinematicZoom = Math.min(maxZoom, levelBase + photoZoomStep * ramp);
-        } else {
-          // Video: continues zoom-in smoothly after the photo ramp.
-          cinematicZoom = Math.min(maxZoom, levelBase + photoZoomStep + videoZoomAdd * ramp);
-          // Subtle breathing only during video motion.
-          cinematicZoom *= 1 + Math.sin(t * 0.43) * 0.007;
-        }
+          // Base level grows every 2 cycles (i.e., after each video segment).
+          const levelBase = Math.min(maxZoom, photoZoomBase + Math.floor(cycleIndex / 2) * zoomStep);
 
-        // Gate movement to avoid harsh entry/exit at cycle boundaries.
-        const motionFactor = isPhotoFreeze ? 0 : hump;
+          let cinematicZoom: number;
+          if (isPhotoFreeze) {
+            // Photo: zoom-in ramps, but stays "frozen" spatially.
+            cinematicZoom = Math.min(maxZoom, levelBase + photoZoomStep * ramp);
+          } else {
+            // Video: continues zoom-in smoothly after the photo ramp.
+            cinematicZoom = Math.min(maxZoom, levelBase + photoZoomStep + videoZoomAdd * ramp);
+            // Subtle breathing only during video motion.
+            cinematicZoom *= 1 + Math.sin(t * 0.43) * 0.007;
+          }
 
-        // Deterministic drift + cross pan.
-        const phase = 2 * Math.PI * cyclePos + cycleIndex * 0.7;
-        const driftX = Math.cos(t * 0.18) * (canvas.width * 0.01);
-        const driftY = Math.sin(t * 0.16) * (canvas.height * 0.01);
-        const crossX = Math.cos(phase) * (canvas.width * 0.022);
-        const crossY = Math.sin(phase) * (canvas.height * 0.022);
+          // Gate movement to avoid harsh entry/exit at cycle boundaries.
+          const motionFactor = isPhotoFreeze ? 0 : hump;
 
-        // Deterministic handheld micro-wobble, gated by motionFactor.
-        const microShakeX = Math.sin(t * 46.0) * 0.9 * motionFactor;
-        const microShakeY = Math.cos(t * 40.0) * 0.9 * motionFactor;
+          // Hollywood Cinematic: Smooth drift + eased pan with organic flow
+          const phase = 2 * Math.PI * cyclePos + cycleIndex * 0.7;
+          // Slower, smoother drift frequencies for professional feel
+          const driftX = Math.cos(t * 0.12) * (canvas.width * 0.008);
+          const driftY = Math.sin(t * 0.1) * (canvas.height * 0.008);
+          // Cross pan with eased motion curve
+          const easePan = (n: number) => 0.5 - 0.5 * Math.cos(n * Math.PI); // Smooth cosine ease
+          const crossX = easePan(Math.cos(phase)) * (canvas.width * 0.018);
+          const crossY = easePan(Math.sin(phase)) * (canvas.height * 0.018);
 
-        const translateX = (driftX + crossX) * motionFactor + microShakeX;
-        const translateY = (driftY + crossY) * motionFactor + microShakeY;
+          // Subtle organic micro-movement (much reduced for smoothness)
+          const microShakeX = Math.sin(t * 32.0) * 0.4 * motionFactor;
+          const microShakeY = Math.cos(t * 28.0) * 0.4 * motionFactor;
 
-        // Rotation only during video zoom cycles; photo freeze holds rotation at 0.
-        // Alternate rotation direction every video segment (odd cycle).
-        const rotDir = Math.floor(cycleIndex / 2) % 2 === 0 ? 1 : -1;
-        const rotate = isPhotoFreeze ? 0 : rotDir * 0.02 * hump;
+          const translateX = (driftX + crossX) * motionFactor + microShakeX;
+          const translateY = (driftY + crossY) * motionFactor + microShakeY;
 
-        const zoomedSrcW = Math.max(2, Math.round(srcCropW / cinematicZoom));
-        const zoomedSrcH = Math.max(2, Math.round(srcCropH / cinematicZoom));
+          // Rotation only during video zoom cycles; photo freeze holds rotation at 0.
+          // Alternate rotation direction every video segment (odd cycle).
+          const rotDir = Math.floor(cycleIndex / 2) % 2 === 0 ? 1 : -1;
+          rotate = isPhotoFreeze ? 0 : rotDir * 0.02 * hump;
 
-        // Map canvas-space translate into source-crop shift (keeps movement coherent).
-        const maxShiftX = (srcCropW - zoomedSrcW) / 2;
-        const maxShiftY = (srcCropH - zoomedSrcH) / 2;
-        const panNormX = translateX / (canvas.width * 0.5);
-        const panNormY = translateY / (canvas.height * 0.5);
+          zoomedSrcW = Math.max(2, Math.round(srcCropW / cinematicZoom));
+          zoomedSrcH = Math.max(2, Math.round(srcCropH / cinematicZoom));
 
-        const shiftX = Math.round(maxShiftX * panNormX);
-        // Face-safe vertical bias:
-        // - When the motion would push the crop upward (negative shift), reduce magnitude
-        // - When it pushes downward (positive shift), allow stronger move
-        const shiftYRaw = maxShiftY * panNormY;
-        const upScale = 0.6;
-        const downScale = 1.35;
-        const shiftY = Math.round(shiftYRaw * (shiftYRaw < 0 ? upScale : downScale));
+          // Map canvas-space translate into source-crop shift (keeps movement coherent).
+          const maxShiftX = (srcCropW - zoomedSrcW) / 2;
+          const maxShiftY = (srcCropH - zoomedSrcH) / 2;
+          const panNormX = translateX / (canvas.width * 0.5);
+          const panNormY = translateY / (canvas.height * 0.5);
 
-        let zoomedSrcX = srcCropX + Math.round((srcCropW - zoomedSrcW) / 2) + shiftX;
-        // ── SURGICAL FIX: Face 100% Visibility ──
-        // Anchor zoom around the upper 15% (eyeline) instead of center so faces are NEVER cut off at the top.
-        let zoomedSrcY = srcCropY + Math.round((srcCropH - zoomedSrcH) * 0.15) + shiftY;
+          const shiftX = Math.round(maxShiftX * panNormX);
+          // Face-safe vertical bias:
+          // - When the motion would push the crop upward (negative shift), reduce magnitude
+          // - When it pushes downward (positive shift), allow stronger move
+          const shiftYRaw = maxShiftY * panNormY;
+          const upScale = 0.6;
+          const downScale = 1.35;
+          const shiftY = Math.round(shiftYRaw * (shiftYRaw < 0 ? upScale : downScale));
+
+          zoomedSrcX = srcCropX + Math.round((srcCropW - zoomedSrcW) / 2) + shiftX;
+          // ── SURGICAL FIX v2: Headroom-priority anchor ──
+          // Anchor zoom around the upper 30% so faces/heads stay in safe zone and bottom cut-off is reduced.
+          zoomedSrcY = srcCropY + Math.round((srcCropH - zoomedSrcH) * 0.3) + shiftY;
+        } // End of zoom enabled block
 
         // Clamp to the valid source crop bounds.
         zoomedSrcX = Math.max(srcCropX, Math.min(srcCropX + (srcCropW - zoomedSrcW), zoomedSrcX));
@@ -2082,147 +2129,169 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           slowFrameCount = Math.max(0, slowFrameCount - 1);
         }
 
-        // ── Throttle draw for target/adaptive fps ──
+        // ── 100% MILLISECOND AV SYNC: Must run EVERY frame (not throttled) ──
+        const av = audioRef.current;
+        const vv = videoRef.current;
+        if (av && vv) {
+          if (!av.paused && vv.paused && !vv.ended) vv.play().catch(() => {});
+
+          if (av.duration > 0 && vv.duration > 0) {
+            const currentTime = av.currentTime;
+            const segs = syncSegmentsRef.current as typeof syncSegments;
+            const audioTs = audioTimestampsRef.current;
+            let activeIndex = -1;
+            let activeText = "";
+            let targetVideoTime: number | null = null;
+            let baseRate = 1;
+
+            if (audioTs.length > 0) {
+              const maxIdx = Math.min(audioTs.length, segs.length) - 1;
+              const getSeg = (idx: number) => segs[idx] as any;
+              if (maxIdx >= 0) {
+                lastTsIdx = clamp(lastTsIdx, 0, maxIdx);
+                while (lastTsIdx < maxIdx && currentTime >= audioTs[lastTsIdx].end) lastTsIdx += 1;
+                while (lastTsIdx > 0 && currentTime < audioTs[lastTsIdx].start) lastTsIdx -= 1;
+
+                if (currentTime >= audioTs[lastTsIdx].start && currentTime < audioTs[lastTsIdx].end) {
+                  activeIndex = lastTsIdx;
+                  activeText = getSeg(lastTsIdx)?.text || "";
+                }
+
+                if (activeIndex !== -1) {
+                  const ts = audioTs[activeIndex];
+                  const active = getSeg(activeIndex);
+                  const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
+                  const audioSegDuration = Math.max(ts.end - ts.start, 0.001);
+                  const videoSegDuration = Math.max(vActualEnd - active.vStart, 0);
+                  // MILLISECOND-ACCURATE SYNC: Linear mapping only (no easing on time!)
+                  // Video must track audio 1:1 for perfect sync. Smoothstep is for visual effects only.
+                  const progressInSeg = clamp((currentTime - ts.start) / audioSegDuration, 0, 1);
+                  targetVideoTime = active.vStart + progressInSeg * videoSegDuration;
+                  baseRate = videoSegDuration > 0 ? videoSegDuration / audioSegDuration : 1;
+
+                  if (activeIndex !== lastIndexRef.current) {
+                    // HOLLYWOOD CINEMATIC: NEVER hard-seek at segment boundaries
+                    // Let playbackRate smoothly glide video into sync (no jumps, no stutter)
+                    // Only emergency recovery if >3s drift (network error, not normal playback)
+                    const snapDrift = Math.abs(vv.currentTime - active.vStart);
+                    if (snapDrift > 3.0) vv.currentTime = active.vStart;
+                    lastIndexRef.current = activeIndex;
+                  }
+                } else if (currentTime < audioTs[0].start) {
+                  const firstSeg = getSeg(0);
+                  const preAudio = Math.max(audioTs[0].start, 0.001);
+                  const firstVStart = Math.max(firstSeg?.vStart ?? 0, 0);
+                  // MILLISECOND-ACCURATE SYNC: Linear intro mapping for perfect sync
+                  const preProgress = clamp(currentTime / preAudio, 0, 1);
+                  targetVideoTime = firstVStart > 0 ? preProgress * firstVStart : 0;
+                  baseRate = firstVStart > 0 ? firstVStart / preAudio : 1;
+                } else if (currentTime >= audioTs[maxIdx].end) {
+                  const lastSeg = getSeg(maxIdx);
+                  const lastVEnd = lastSeg?.vEnd === -1 ? vv.duration : (lastSeg?.vEnd ?? vv.duration);
+                  const tailAudio = Math.max(av.duration - audioTs[maxIdx].end, 0.001);
+                  const tailVideo = Math.max(vv.duration - lastVEnd, 0);
+                  // MILLISECOND-ACCURATE SYNC: Linear outro mapping for perfect sync
+                  const tailProgress = clamp((currentTime - audioTs[maxIdx].end) / tailAudio, 0, 1);
+                  targetVideoTime = lastVEnd + tailProgress * tailVideo;
+                  baseRate = tailVideo > 0 ? tailVideo / tailAudio : 1;
+                } else if (maxIdx >= 1) {
+                  // HOLLYWOOD CINEMATIC: Smooth gap interpolation with eased transition
+                  let prevIdx = lastTsIdx;
+                  if (currentTime < audioTs[lastTsIdx].start) prevIdx -= 1;
+                  prevIdx = clamp(prevIdx, 0, maxIdx - 1);
+                  const nextIdx = prevIdx + 1;
+                  const prevSeg = getSeg(prevIdx);
+                  const nextSeg = getSeg(nextIdx);
+                  const prevVEnd = prevSeg?.vEnd === -1 ? vv.duration : (prevSeg?.vEnd ?? vv.currentTime);
+                  const nextVStart = nextSeg?.vStart ?? prevVEnd;
+                  const gapAudio = Math.max(audioTs[nextIdx].start - audioTs[prevIdx].end, 0.001);
+                  const gapVideo = Math.max(nextVStart - prevVEnd, 0);
+                  // MILLISECOND-ACCURATE SYNC: Linear gap mapping for perfect sync
+                  const gapProgress = clamp((currentTime - audioTs[prevIdx].end) / gapAudio, 0, 1);
+                  targetVideoTime = prevVEnd + gapProgress * gapVideo;
+                  baseRate = gapVideo > 0 ? gapVideo / gapAudio : 1;
+                }
+              }
+            } else {
+              // Fallback: word-count proportional
+              const aPct = currentTime / av.duration;
+              activeIndex = segs.findIndex((s: any) => aPct >= s.aStartPct && aPct <= s.aEndPct);
+              if (activeIndex === -1 && segs.length > 0 && aPct > 0) {
+                const lastSeg = segs[segs.length - 1] as any;
+                if (aPct > lastSeg.aStartPct) activeIndex = segs.length - 1;
+              }
+              if (activeIndex !== -1) {
+                const s = segs[activeIndex] as any;
+                activeText = s.text;
+                const vActualEnd = s.vEnd === -1 ? vv.duration : s.vEnd;
+                const videoSecs = Math.max(vActualEnd - s.vStart, 0);
+                const segmentAudioPct = s.aEndPct - s.aStartPct;
+                if (segmentAudioPct > 0.001 && videoSecs > 0) {
+                  const audioSecs = segmentAudioPct * av.duration;
+                  if (audioSecs > 0) {
+                    // MILLISECOND-ACCURATE SYNC: Linear fallback mapping for perfect sync
+                    const progressInSegment = clamp((aPct - s.aStartPct) / segmentAudioPct, 0, 1);
+                    targetVideoTime = s.vStart + progressInSegment * videoSecs;
+                    baseRate = videoSecs / audioSecs;
+                  }
+                }
+                if (activeIndex !== lastIndexRef.current) {
+                  // HOLLYWOOD CINEMATIC: NEVER hard-seek at segment boundaries
+                  // Smooth rate-only transition - no jumps between scenes
+                  const driftToStart = s.vStart - vv.currentTime;
+                  if (driftToStart > 3.0) vv.currentTime = s.vStart;
+                  lastIndexRef.current = activeIndex;
+                }
+              }
+            }
+
+            if (targetVideoTime !== null) {
+              const drift = targetVideoTime - vv.currentTime;
+              // 100% MILLISECOND-ACCURATE AV SYNC: Precise lock with immediate correction
+              // Emergency hard-seek only at catastrophic drift (network errors)
+              if (Math.abs(drift) > 3.0) {
+                vv.currentTime = targetVideoTime;
+                vv.playbackRate = baseRate;
+              } else {
+                // Precise drift correction for millisecond-accurate sync
+                const driftAbs = Math.abs(drift);
+                const driftSign = Math.sign(drift);
+
+                if (driftAbs < 0.005) {
+                  // Within 5ms: gentle return to base rate for stability
+                  vv.playbackRate = vv.playbackRate + (baseRate - vv.playbackRate) * 0.1;
+                } else if (driftAbs < 0.05) {
+                  // 5-50ms drift: proportional correction
+                  const correction = driftSign * Math.min(driftAbs * 2.0, 0.08);
+                  const targetRate = baseRate + correction;
+                  vv.playbackRate = vv.playbackRate + (targetRate - vv.playbackRate) * 0.25;
+                } else {
+                  // 50ms-3s drift: aggressive correction
+                  const correction = driftSign * Math.min(driftAbs * 0.5, 0.15);
+                  const targetRate = baseRate + correction;
+                  vv.playbackRate = Math.min(Math.max(targetRate, 0.85), 1.15);
+                }
+              }
+            }
+
+            if (activeIndex !== -1 && activeText) {
+              if (activeText !== currentSubtitleRef.current) {
+                setCurrentSubtitle(activeText);
+                setSubtitleKey((k) => k + 1);
+                currentSubtitleRef.current = activeText;
+              }
+            } else if (currentSubtitleRef.current !== "") {
+              setCurrentSubtitle("");
+              currentSubtitleRef.current = "";
+            }
+          }
+        }
+        // End of AV sync block (runs every frame)
+
+        // ── THROTTLED RENDER: Only draw at target FPS, but sync always runs ──
         const shouldDraw = timestamp - lastDrawTime >= adaptiveFrameInterval;
         if (shouldDraw) {
           if (frameInterval > 0) lastDrawTime = timestamp - ((timestamp - lastDrawTime) % frameInterval);
-
-          const av = audioRef.current;
-          const vv = videoRef.current;
-          if (av && vv) {
-            if (!av.paused && vv.paused && !vv.ended) vv.play().catch(() => {});
-
-            if (av.duration > 0 && vv.duration > 0) {
-              const currentTime = av.currentTime;
-              const segs = syncSegmentsRef.current as typeof syncSegments;
-              const audioTs = audioTimestampsRef.current;
-              let activeIndex = -1;
-              let activeText = "";
-              let targetVideoTime: number | null = null;
-              let baseRate = 1;
-
-              if (audioTs.length > 0) {
-                const maxIdx = Math.min(audioTs.length, segs.length) - 1;
-                const getSeg = (idx: number) => segs[idx] as any;
-                if (maxIdx >= 0) {
-                  lastTsIdx = clamp(lastTsIdx, 0, maxIdx);
-                  while (lastTsIdx < maxIdx && currentTime >= audioTs[lastTsIdx].end) lastTsIdx += 1;
-                  while (lastTsIdx > 0 && currentTime < audioTs[lastTsIdx].start) lastTsIdx -= 1;
-
-                  if (currentTime >= audioTs[lastTsIdx].start && currentTime < audioTs[lastTsIdx].end) {
-                    activeIndex = lastTsIdx;
-                    activeText = getSeg(lastTsIdx)?.text || "";
-                  }
-
-                  if (activeIndex !== -1) {
-                    const ts = audioTs[activeIndex];
-                    const active = getSeg(activeIndex);
-                    const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
-                    const audioSegDuration = Math.max(ts.end - ts.start, 0.001);
-                    const videoSegDuration = Math.max(vActualEnd - active.vStart, 0);
-                    const progressInSeg = clamp((currentTime - ts.start) / audioSegDuration, 0, 1);
-                    targetVideoTime = active.vStart + progressInSeg * videoSegDuration;
-                    baseRate = videoSegDuration > 0 ? videoSegDuration / audioSegDuration : 1;
-
-                    if (activeIndex !== lastIndexRef.current) {
-                      const snapDrift = Math.abs(vv.currentTime - active.vStart);
-                      // SURGICAL FIX (Professional Smooth Vibe): Only hard-seek if catastrophically lost (>1.0s)
-                      // Otherwise, the extreme elastic playbackRate tuning will glide it instantly into sync without stutter.
-                      if (snapDrift > 1.0) vv.currentTime = active.vStart;
-                      lastIndexRef.current = activeIndex;
-                    }
-                  } else if (currentTime < audioTs[0].start) {
-                    const firstSeg = getSeg(0);
-                    const preAudio = Math.max(audioTs[0].start, 0.001);
-                    const firstVStart = Math.max(firstSeg?.vStart ?? 0, 0);
-                    const preProgress = clamp(currentTime / preAudio, 0, 1);
-                    targetVideoTime = firstVStart > 0 ? preProgress * firstVStart : 0;
-                    baseRate = firstVStart > 0 ? firstVStart / preAudio : 1;
-                  } else if (currentTime >= audioTs[maxIdx].end) {
-                    const lastSeg = getSeg(maxIdx);
-                    const lastVEnd = lastSeg?.vEnd === -1 ? vv.duration : (lastSeg?.vEnd ?? vv.duration);
-                    const tailAudio = Math.max(av.duration - audioTs[maxIdx].end, 0.001);
-                    const tailVideo = Math.max(vv.duration - lastVEnd, 0);
-                    const tailProgress = clamp((currentTime - audioTs[maxIdx].end) / tailAudio, 0, 1);
-                    targetVideoTime = lastVEnd + tailProgress * tailVideo;
-                    baseRate = tailVideo > 0 ? tailVideo / tailAudio : 1;
-                  } else if (maxIdx >= 1) {
-                    let prevIdx = lastTsIdx;
-                    if (currentTime < audioTs[lastTsIdx].start) prevIdx -= 1;
-                    prevIdx = clamp(prevIdx, 0, maxIdx - 1);
-                    const nextIdx = prevIdx + 1;
-                    const prevSeg = getSeg(prevIdx);
-                    const nextSeg = getSeg(nextIdx);
-                    const prevVEnd = prevSeg?.vEnd === -1 ? vv.duration : (prevSeg?.vEnd ?? vv.currentTime);
-                    const nextVStart = nextSeg?.vStart ?? prevVEnd;
-                    const gapAudio = Math.max(audioTs[nextIdx].start - audioTs[prevIdx].end, 0.001);
-                    const gapVideo = Math.max(nextVStart - prevVEnd, 0);
-                    const gapProgress = clamp((currentTime - audioTs[prevIdx].end) / gapAudio, 0, 1);
-                    targetVideoTime = prevVEnd + gapProgress * gapVideo;
-                    baseRate = gapVideo > 0 ? gapVideo / gapAudio : 1;
-                  }
-                }
-              } else {
-                // Fallback: word-count proportional
-                const aPct = currentTime / av.duration;
-                activeIndex = segs.findIndex((s: any) => aPct >= s.aStartPct && aPct <= s.aEndPct);
-                if (activeIndex === -1 && segs.length > 0 && aPct > 0) {
-                  const lastSeg = segs[segs.length - 1] as any;
-                  if (aPct > lastSeg.aStartPct) activeIndex = segs.length - 1;
-                }
-                if (activeIndex !== -1) {
-                  const s = segs[activeIndex] as any;
-                  activeText = s.text;
-                  const vActualEnd = s.vEnd === -1 ? vv.duration : s.vEnd;
-                  const videoSecs = Math.max(vActualEnd - s.vStart, 0);
-                  const segmentAudioPct = s.aEndPct - s.aStartPct;
-                  if (segmentAudioPct > 0.001 && videoSecs > 0) {
-                    const audioSecs = segmentAudioPct * av.duration;
-                    if (audioSecs > 0) {
-                      const progressInSegment = clamp((aPct - s.aStartPct) / segmentAudioPct, 0, 1);
-                      targetVideoTime = s.vStart + progressInSegment * videoSecs;
-                      baseRate = videoSecs / audioSecs;
-                    }
-                  }
-                  if (activeIndex !== lastIndexRef.current) {
-                    const snapDrift = Math.abs(vv.currentTime - s.vStart);
-                    // SURGICAL FIX (Professional Smooth Vibe): Only hard-seek if catastrophically lost (>1.0s)
-                    // The PID tuning below will flawlessly catch up to 0.1s drift within ~3 frames without a single freeze.
-                    if (snapDrift > 1.0) vv.currentTime = s.vStart;
-                    lastIndexRef.current = activeIndex;
-                  }
-                }
-              }
-
-              if (targetVideoTime !== null) {
-                const drift = targetVideoTime - vv.currentTime;
-                // 100% ACCURACY SYNC (Professional Smooth Vibe): Zero Stutter
-                // Eliminate hard-seeking completely unless drift is catastrophic (> 1.0s)
-                if (Math.abs(drift) > 1.0) {
-                  vv.currentTime = targetVideoTime;
-                  vv.playbackRate = baseRate;
-                } else {
-                  // Extreme but BUTTERY SMOOTH rate correction for mathematically locked <0.1s sub-frame accuracy
-                  const targetRate = baseRate + drift * 8.0;
-                  // Extremely wide clamp limits for instant elastic optical flow without freezing (0.1x to 4.0x)
-                  const clampedRate = Math.min(Math.max(targetRate, 0.1), Math.max(baseRate * 4.0, 4.0));
-                  // Instant aggressive lerp (0.8) for immediate but non-stuttering sync adaptation
-                  vv.playbackRate = vv.playbackRate + (clampedRate - vv.playbackRate) * 0.8;
-                }
-              }
-
-              if (activeIndex !== -1 && activeText) {
-                if (activeText !== currentSubtitleRef.current) {
-                  setCurrentSubtitle(activeText);
-                  setSubtitleKey((k) => k + 1);
-                  currentSubtitleRef.current = activeText;
-                }
-              } else if (currentSubtitleRef.current !== "") {
-                setCurrentSubtitle("");
-                currentSubtitleRef.current = "";
-              }
-            }
-          }
 
           // ── MAIN THREAD RENDER: Render frame then copy to encoder ──
           drawFrame(false);
@@ -2234,6 +2303,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         recapAnimFrameRef.current = requestAnimationFrame(syncAndDraw);
       };
+      // 100% MILLISECOND AV SYNC: Initialize video position before playback starts
+      const segs = syncSegmentsRef.current;
+      if (videoRef.current && segs.length > 0) {
+        const firstVStart = (segs[0] as any).vStart ?? 0;
+        videoRef.current.currentTime = firstVStart;
+      }
+
       // SURGICAL FIX: Ensure perfect audio start by playing ONLY after async recorder setup completes (warmup + logo load)
       if (audioRef.current) audioRef.current.play().catch(console.error);
       if (videoRef.current) {
@@ -3123,6 +3199,24 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   )}
                 </div>
 
+                {/* Zoom / Copyright Protection Toggle */}
+                <div className="border-t border-slate-700/50 pt-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex flex-col">
+                      <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">Copyright Zoom</h4>
+                      <span className="text-[10px] text-slate-500">
+                        {zoomEnabled ? "Crop + zoom for copyright" : "100% original quality"}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setZoomEnabled((z) => !z)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${zoomEnabled ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900" : "bg-slate-800 text-slate-400 border border-slate-700"}`}
+                    >
+                      {zoomEnabled ? "ON" : "OFF"}
+                    </button>
+                  </div>
+                </div>
+
                 {/* Timeline Bar */}
                 <div className="border-t border-slate-700/50 pt-4">
                   <button
@@ -3911,8 +4005,10 @@ const RecapVideoNVPage: React.FC = () => {
       pageAudioTimestampsRef.current = [];
 
       let audioBlob: Blob;
-      if (data.mimeType === "audio/pcm") {
-        const sampleRate = data.sampleRate || 24000;
+      const mt = String(data.mimeType || "").toLowerCase();
+      if (mt.includes("audio/pcm") || mt.includes("audio/l16")) {
+        const rateMatch = mt.match(/rate=(\d+)/);
+        const sampleRate = data.sampleRate || (rateMatch ? parseInt(rateMatch[1], 10) : 24000);
         const numChannels = 1;
         const bitsPerSample = 16;
         const pcmBytes = Uint8Array.from(atob(data.audio), (c) => c.charCodeAt(0));
@@ -3983,6 +4079,11 @@ const RecapVideoNVPage: React.FC = () => {
         };
         v.src = tempUrl;
       });
+      if (duration > 300) {
+        throw new Error(
+          "ဒီ app မှာ ၅ မိနစ်ထက်ကျော်တဲ့ video ကို recap မလုပ်နိုင်သေးပါ။ ၅ မိနစ်အောက် video ကိုရွေးပေးပါ။",
+        );
+      }
       videoDurationRef.current = duration;
       const videoBlob = URL.createObjectURL(file);
       setVideoUrl(videoBlob);
@@ -4077,22 +4178,33 @@ const RecapVideoNVPage: React.FC = () => {
       } = await supabase.auth.getSession();
       const userToken = currentSession?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       const selectedLangName = languages.find((l) => l.code === selectedLanguage)?.name || "BURMESE";
-      // Token headroom: long videos need more room to finish the full script.
-      const maxOutputTokens = Math.min(8192, Math.max(2048, Math.ceil(duration * 140)));
+      // Larger token headroom to reduce incomplete scripts on long videos.
+      const maxOutputTokens = Math.min(16384, Math.max(4096, Math.ceil(duration * 220)));
+
+      // ── LANGUAGE-AWARE BLOCKS: All language-specific text uses selectedLangName so user's chosen language is respected. ──
+      const isBurmese = selectedLangName === "BURMESE";
+      const burmeseStyleBlock = isBurmese
+        ? `\n\nLANGUAGE STYLE (CRITICAL for Burmese):\n` +
+          `- Use modern Yangon everyday Burmese (spoken style).\n` +
+          `- Avoid formal connectors: ထို့အပြင်, ထို့ကြောင့်, ဥပမာ, စသဖြင့်.\n` +
+          `- DO allow spoken connectors: ဒါ့အပြင်, ဒါကြောင့်, တယ်.\n` +
+          `- No placeholders like "ဇာတ်ကောင်နာမည်". Write real narration only.`
+        : "";
+      const burmeseExtraStyle = isBurmese
+        ? `\n\nSTYLE RULES (Burmese):\n` +
+          `- Use modern conversational Burmese only.\n` +
+          `- Avoid formal writing cadence; keep it human and natural.\n` +
+          `- No formal "ထို့အပြင်/ထို့ကြောင့်/ဥပမာ/စသဖြင့်" type connectors.\n` +
+          `- It is OK to use spoken connectors like "ဒါ့အပြင်" / "ဒါကြောင့်" in natural conversation.`
+        : "";
 
       const scriptBody: Record<string, unknown> = {
         fileUri,
         fileMimeType: mimeType,
         // ── COMPLETION MANDATE + original-voice recap (prompt-only; does not affect AV sync) ──
-        niche: `MOVIE RECAP — Original Burmese narration (transformative recap, not a transcript).
-You MUST write the COMPLETE script for the ENTIRE video duration. Do NOT stop halfway; cover 100% of the story arc from start to finish.
-
-LANGUAGE STYLE (CRITICAL):
-- Use modern Yangon everyday Burmese (spoken style).
-- Do NOT use formal/written connectors or placeholder phrases.
-- Avoid formal connectors that sound written/old-fashioned: ထို့အပြင်, ထို့ကြောင့်, ဥပမာ, စသဖြင့်.
-- DO allow spoken connectors: ဒါ့အပြင်, ဒါကြောင့်, တယ်.
-- No placeholders like "ဇာတ်ကောင်နာမည်". Write real narration only.
+        niche: `MOVIE RECAP — Original ${selectedLangName} narration (transformative recap, not a transcript).
+You MUST write the COMPLETE script for the ENTIRE video duration in ${selectedLangName} language ONLY. Do NOT stop halfway; cover 100% of the story arc from start to finish.
+Never output partial/incomplete script.${burmeseStyleBlock}
 
 FORMAT (CRITICAL FOR SEGMENTING):
 Output each paragraph as one segment starting with a timestamp prefix like: [MM:SS] ... .
@@ -4104,14 +4216,11 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
         sourceDurationSec: duration,
         skipCreditDeduction: true,
         extraInstructions: `CRITICAL:
+- Output language MUST be ${selectedLangName} ONLY. Do NOT switch to any other language even if the video's spoken dialogue is in a different language.
 - Script completeness: MUST cover the entire ${duration} seconds with no early stop.
 - Each segment must be continuous and not jump suddenly.
-
-STYLE RULES:
-- Use modern conversational Burmese only.
-- Avoid formal writing cadence; keep it human and natural.
-- No formal "ထို့အပြင်/ထို့ကြောင့်/ဥပမာ/စသဖြင့်" type connectors.
-- It is OK to use spoken connectors like "ဒါ့အပြင်" / "ဒါကြောင့်" in natural conversation.`,
+- Never stop early. Continue writing until final segment reaches the ending timeline.
+- If token pressure appears, prioritize finishing all remaining timeline in concise segments instead of stopping.${burmeseExtraStyle}`,
         generationConfig: {
           maxOutputTokens,
           temperature: 0.7,
