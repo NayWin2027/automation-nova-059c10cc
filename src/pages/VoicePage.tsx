@@ -571,7 +571,9 @@ Script Context to Narrate:
         // Own API mode: no stats, no credits (user preference preserved).
         if (apiType === "app") {
           try {
-            const { data: { user } } = await supabase.auth.getUser();
+            const {
+              data: { user },
+            } = await supabase.auth.getUser();
             if (user) {
               await supabase.rpc("deduct_user_credits", {
                 _user_id: user.id,
