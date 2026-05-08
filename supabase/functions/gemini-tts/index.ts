@@ -626,8 +626,12 @@ serve(async (req) => {
 
       // For user-supplied keys: try primary 3.1 model first, then transparently
       // fall back to a publicly available TTS model if the user's key cannot
-      // access the preview. App-API (backend keys) keep using primary only.
-      const endpointCandidates = isUserKey ? [GEMINI_TTS_API, GEMINI_TTS_API_FALLBACK_USERKEY] : [GEMINI_TTS_API];
+      // access the preview.
+      // SURGICAL FIX: App-API (backend keys) ALSO get the fallback model as a
+      // last resort. When all 3 backend keys are exhausted on the 3.1 preview
+      // (separate quota pool), retry the same chunks against gemini-2.5 TTS
+      // with key rotation — restores AI voice instead of robotic Web Speech.
+      const endpointCandidates = [GEMINI_TTS_API, GEMINI_TTS_API_FALLBACK_USERKEY];
 
       for (let endpointIdx = 0; endpointIdx < endpointCandidates.length; endpointIdx++) {
         const endpoint = endpointCandidates[endpointIdx];
@@ -650,6 +654,13 @@ serve(async (req) => {
               lastStatus = 429;
               lastBodyText = bodyText;
               continue;
+            }
+            // All keys exhausted on this endpoint — try next endpoint (fallback model)
+            if (endpointIdx < endpointCandidates.length - 1) {
+              console.warn(`[gemini-tts] All backend keys 429 on primary model. Falling back to gemini-2.5 TTS.`);
+              lastStatus = 429;
+              lastBodyText = bodyText;
+              break; // break attempts → outer loop tries next endpoint
             }
             return { ok: false as const, status: 429, bodyText };
           }
