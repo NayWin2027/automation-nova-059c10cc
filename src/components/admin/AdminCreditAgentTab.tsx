@@ -376,6 +376,18 @@ const AdminCreditAgentTab: React.FC = () => {
             </div>
           </CardContent>
         </Card>
+        <Card className="bg-card/60 border-sky-500/20 shadow-[0_0_15px_rgba(14,165,233,0.08)]">
+          <CardContent className="p-3 text-center">
+            <p className="text-2xs text-muted-foreground mb-1">✨ Original (New Account)</p>
+            <p className="text-xl font-bold text-sky-400">{viewTotals.originalAmount}</p>
+            <p className="text-2xs text-muted-foreground">{viewTotals.originalCount} txns</p>
+            <div className="flex items-center justify-center gap-1.5 mt-1.5">
+              {viewTotals.agentOriginalCount.nw > 0 && <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.nw}`}>NW:{viewTotals.agentOriginal.nw}</Badge>}
+              {viewTotals.agentOriginalCount.kys > 0 && <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.kys}`}>KYS:{viewTotals.agentOriginal.kys}</Badge>}
+              {viewTotals.agentOriginalCount.numeric > 0 && <Badge variant="outline" className={`text-2xs ${AGENT_COLORS.numeric}`}>NUM:{viewTotals.agentOriginal.numeric}</Badge>}
+            </div>
+          </CardContent>
+        </Card>
         <Card className="bg-card/60 border-purple-500/20 shadow-[0_0_15px_rgba(168,85,247,0.08)]">
           <CardContent className="p-3 text-center">
             <p className="text-2xs text-muted-foreground mb-1">🎁 Bonus</p>
@@ -503,6 +515,7 @@ const AdminCreditAgentTab: React.FC = () => {
               </CardHeader>
               <CardContent className="px-4 pb-3">
                 {renderCategorySection(group, "topup", group.key)}
+                {renderCategorySection(group, "original", group.key)}
                 {renderCategorySection(group, "bonus", group.key)}
                 {renderCategorySection(group, "renew", group.key)}
                 {renderCategorySection(group, "referral", group.key)}
