@@ -441,8 +441,10 @@ const VoicePage: React.FC = () => {
         voiceCreditCost = tierCredits + srtAddon;
       }
       // ----------------------------------------------------
-      // SURGICAL EDIT: Gemini 3.1 Flash TTS Preview Upgrade
-      // Addressed: 1 min quality drop (via chunking), pronunciation fixes, dynamic realistic emotions without over-acting.
+      // SURGICAL FIX: keep the client request lightweight.
+      // The gemini-tts function already adds voice/performance instructions server-side.
+      // Do NOT prepend a large prompt here, otherwise even short scripts become
+      // multi-chunk requests and can get stuck on 429 retry delays.
       const rawTextChunks = text.split(/([။၊\n\.\!\?])/);
       const chunks: string[] = [];
       let currentChunk = "";
@@ -455,18 +457,6 @@ const VoicePage: React.FC = () => {
           }
         }
       }
-
-      const genderStr = selectedVoiceObj.gender.includes("FEMALE") ? "FEMALE (မိန်းကလေး)" : "MALE (ယောကျ်ားလေး)";
-      const systemInstruction = `[CRITICAL DIRECTIVES FOR GEMINI 3.1 FLASH TTS PREVIEW:
-1. STRICT VOICE IDENTITY (MANDATORY): You are a explicitly configured ${genderStr} voice named ${actualVoiceValue}. You MUST maintain 100% IDENTICAL vocal characteristics (pitch, timbre, gender) consistently across every sentence. NEVER switch genders. NEVER drift into another person's voice. Remain strictly ${genderStr} and unambiguously clear about your vocal identity from start to finish.
-2. ALPHABET PRONUNCIATION (MANDATORY): You MUST pronounce the Burmese letter "သ" accurately as "Tha" (never "Ta") and "သိ" as "Thi" (never "Ti"). Ensure 100% distinct and articulate human pronunciation. NO robotic sounds.
-3. DYNAMIC NICHE & EMOTION (MANDATORY): Deeply analyze the script's topic and automatically adapt your voice. Matches include: War, News, Romance/Sad (အချစ်၊ အလွမ်း), Crying (ငိုသံ), Happy (ပျော်သံ), Horror (သရဲ ထိတ်လန့်စရာ), Angry (ဒေါသ), 18+ (passionate/intimate), Action (အက်ရှင်), Food, Travel, Movie Recap, Production, Tech, AI, Sports, Science, Psychology, Motivation, Health, Knowledge Sharing, Entertainment, Audio Book, etc. Your tone must strictly reflect the underlying emotion and niche, acting exactly like a native human narrator. 
-4. REALISTIC BALANCE: Avoid over-acting. Keep emotions perfectly natural, realistic, fully professional, and exactly 100% human.
-5. AUDIO STABILITY: Maintain premium, stable audio fidelity and voice volume consistently. Connect this harmoniously with your ongoing narration.]
-
-Script Context to Narrate:
-
-`;
 
       let combinedPcmBase64 = null;
       // SURGICAL FIX (Process/Success/Credit accounting):
@@ -495,9 +485,8 @@ Script Context to Narrate:
 
       for (const chunk of chunks) {
         try {
-          const enhancedText = systemInstruction + chunk;
           const pcm = await generateSpeech(
-            enhancedText,
+            chunk,
             actualVoiceValue,
             apiType === "own" ? apiKey : undefined,
             performance,
