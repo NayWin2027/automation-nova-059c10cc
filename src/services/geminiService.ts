@@ -135,8 +135,14 @@ export async function generateSpeech(
       // If user has Own API key, NEVER fall back to Web Speech (robotic voice)
       // Instead, do aggressive silent retries to get real Gemini TTS audio
       const isOwnKey = !!apiKey?.trim();
+      if (!isOwnKey) {
+        console.log("Using client-side Web Speech API for TTS with language:", lang);
+        isUsingWebSpeech = true;
+        return `WEBSPEECH:${lang}:${text}`;
+      }
+
       const retryDelay = data?.retryAfterSeconds || 30;
-      const maxRetries = isOwnKey ? 5 : 3;
+      const maxRetries = 5;
 
       if (retryDelay > 0 && retryDelay <= 120) {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -172,10 +178,7 @@ export async function generateSpeech(
         throw new Error("API Quota ပြည့်နေပါသည်။ ခဏစောင့်ပြီး ပြန်ကြိုးစားပါ။ Billing enable ထားသော Key သုံးပါ။");
       }
 
-      // App API mode only: fall back to Web Speech
-      console.log("Using client-side Web Speech API for TTS with language:", lang);
-      isUsingWebSpeech = true;
-      return `WEBSPEECH:${lang}:${text}`;
+      throw new Error("API Quota ပြည့်နေပါသည်။ ခဏစောင့်ပြီး ပြန်ကြိုးစားပါ။ Billing enable ထားသော Key သုံးပါ။");
     }
 
     return data?.audio || null;
