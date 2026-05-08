@@ -136,6 +136,8 @@ export async function generateSpeech(
       // Instead, do aggressive silent retries to get real Gemini TTS audio
       const isOwnKey = !!apiKey?.trim();
       if (!isOwnKey) {
+        // SURGICAL REVERT: App API (no own key) — fall back to Web Speech immediately
+        // so short scripts don't hang on long retry loops. Restores prior fast behavior.
         console.log("Using client-side Web Speech API for TTS with language:", lang);
         isUsingWebSpeech = true;
         return `WEBSPEECH:${lang}:${text}`;
