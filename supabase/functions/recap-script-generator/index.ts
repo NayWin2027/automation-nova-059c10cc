@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logToolActivity } from "../_shared/activityLog.ts";
+import { getGeminiKey, rotateKey } from "../_shared/geminiKeys.ts";
 
 import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
 
@@ -168,11 +169,6 @@ serve(async (req) => {
 
     console.log(`[recap-script-generator] Authenticated user: ${user.id}`);
 
-    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-    if (!GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY not configured");
-    }
-
     // ===== PARSE REQUEST =====
     let fileObj: File | null = null;
     let niche = "GENERAL";
@@ -227,7 +223,7 @@ serve(async (req) => {
 
     // Credit deduction moved to AFTER successful script generation (see below)
 
-    const activeApiKey = isOwnApi ? userApiKey! : GEMINI_API_KEY;
+    let activeApiKey = isOwnApi ? userApiKey! : getGeminiKey();
     const nicheLabel = niche || "GENERAL";
     const lang = language || "BURMESE";
     const nicheStyle = nicheStyles[nicheLabel] || nicheStyles["GENERAL"];
@@ -493,6 +489,15 @@ ${transcript}
       // Only retry on 429 (rate limit) or 503 (overloaded)
       if (response.status === 429 || response.status === 503) {
         if (attempt < MAX_RETRIES) {
+          if (response.status === 429 && !isOwnApi) {
+            const nextKey = rotateKey();
+            if (nextKey && nextKey !== activeApiKey) {
+              activeApiKey = nextKey;
+              console.log(`[recap-script-generator] 429 rate limit, rotated App API key (attempt ${attempt + 1}/${MAX_RETRIES + 1})`);
+              continue;
+            }
+          }
+
           // Parse retryDelay from Google's error if available, otherwise exponential backoff
           let waitMs = Math.min(2000 * Math.pow(2, attempt), 30000);
           try {
