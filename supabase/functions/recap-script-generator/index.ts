@@ -489,6 +489,15 @@ ${transcript}
       // Only retry on 429 (rate limit) or 503 (overloaded)
       if (response.status === 429 || response.status === 503) {
         if (attempt < MAX_RETRIES) {
+          if (response.status === 429 && !isOwnApi) {
+            const nextKey = rotateKey();
+            if (nextKey && nextKey !== activeApiKey) {
+              activeApiKey = nextKey;
+              console.log(`[recap-script-generator] 429 rate limit, rotated App API key (attempt ${attempt + 1}/${MAX_RETRIES + 1})`);
+              continue;
+            }
+          }
+
           // Parse retryDelay from Google's error if available, otherwise exponential backoff
           let waitMs = Math.min(2000 * Math.pow(2, attempt), 30000);
           try {
