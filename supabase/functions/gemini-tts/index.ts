@@ -166,13 +166,9 @@ function detectNarrationProfile(text: string, langCode: string): string {
  */
 function buildConsistencyInstruction(): string {
   return (
-    `VOICE CONSISTENCY (CRITICAL):\n` +
-    `- Maintain the EXACT same narrator identity, timbre, gender, age, and accent from start to finish.\n` +
-    `- Maintain the EXACT same loudness/volume from the first second to the last second. Do NOT get louder after 30s/60s/90s.\n` +
-    `- Maintain the EXACT same microphone character (same proximity, same warmth, same presence).\n` +
-    `- Maintain the EXACT same speaking pace and rhythm throughout.\n` +
-    `- Pronunciation MUST stay 100% crisp and clear from beginning to end — no quality degradation, no slurring, no rushing.\n` +
-    `- Do NOT shift into a different persona, different energy, or different emotional baseline mid-script.`
+    `VOICE RULES: Same voice identity, gender, timbre, volume, pace from start to finish. ` +
+    `Male stays male, female stays female. No volume drift, no noise increase, no quality loss. ` +
+    `Every syllable crisp and clear — no slurring, no mumbling, no fading.`
   );
 }
 
@@ -181,13 +177,9 @@ function buildConsistencyInstruction(): string {
  */
 function burmesePronunciationGuard(): string {
   return (
-    `BURMESE PRONUNCIATION GUARD (CRITICAL):\n` +
-    `- Pronounce \u101E (သ) as the proper Burmese fricative /θ/ (like English "th" in "think"). NEVER pronounce it as \u1010 (တ) /t/.\n` +
-    `- \u101E\u102D (သိ) must sound like /θḭ/, NOT \u1010\u102D (တိ) /tḭ/.\n` +
-    `- \u101E\u1030 (သူ) must sound like /θù/, NOT \u1010\u1030 (တူ).\n` +
-    `- Distinguish aspirated vs unaspirated consonants clearly: \u1011 (ထ) vs \u1010 (တ), \u1006 (ဆ) vs \u1005 (စ), \u1015 (ပ) vs \u1016 (ဖ).\n` +
-    `- Keep all syllables fully articulated — do NOT swallow vowels or trail off at end of sentences.\n` +
-    `- Use natural Yangon urban Bamar tones and vowel lengths exactly as a native human speaker.`
+    `BURMESE: Pronounce သ as /θ/ (like "th" in "think"), NEVER as တ /t/. ` +
+    `သိ=/θḭ/ NOT တိ, သူ=/θù/ NOT တူ, သေ=/θè/ NOT တေ. ` +
+    `Distinguish ထ vs တ, ဆ vs စ, ဖ vs ပ, ခ vs က. Articulate every syllable clearly. Natural Yangon Bamar accent.`
   );
 }
 
@@ -195,7 +187,7 @@ function burmesePronunciationGuard(): string {
  * Split long text into chunks at sentence/paragraph boundaries for stable long-form generation.
  * Avoids cutting in the middle of a sentence to preserve prosody.
  */
-function splitTextIntoChunks(text: string, targetSize = 1800): string[] {
+function splitTextIntoChunks(text: string, targetSize = 1400): string[] {
   if (text.length <= targetSize) return [text];
 
   const chunks: string[] = [];
@@ -590,21 +582,19 @@ serve(async (req) => {
     const buildInstruction = (chunkText: string, chunkIndex: number, totalChunks: number) => {
       const continuity =
         totalChunks > 1
-          ? `CONTINUITY (chunk ${chunkIndex + 1}/${totalChunks}): This is part of one continuous narration. ` +
-            `Continue with the EXACT same narrator voice, timbre, loudness, pace, and emotional level as if reading without interruption. ` +
-            `Do NOT reset tone, do NOT introduce new energy, do NOT change persona.\n`
+          ? `[Chunk ${chunkIndex + 1}/${totalChunks}] Continue same voice, same volume, same pace.\n`
           : "";
 
       return (
-        `You are a professional voice-over narrator delivering a 100% human-natural performance.\n` +
+        `You are a professional narrator. Deliver 100% human-natural speech.\n` +
         `${nativeStyleInstruction}\n` +
         (burmeseGuard ? `${burmeseGuard}\n` : "") +
         `${narrationProfile}\n` +
         `${consistencyBlock}\n` +
         `${pacingBlock}\n` +
         `${continuity}` +
-        `Generate natural, continuous speech AUDIO for the following text.\n` +
-        `Language (BCP-47): ${sanitizedLanguageCode}\n\n` +
+        `Read the following text naturally.\n` +
+        `Language: ${sanitizedLanguageCode}\n\n` +
         `TEXT:\n${chunkText}`
       );
     };
@@ -720,7 +710,7 @@ serve(async (req) => {
 
     // ===== GENERATE TTS (single or chunked) =====
     let usedVoice = sanitizedVoiceName;
-    const chunks = splitTextIntoChunks(text, 1800);
+    const chunks = splitTextIntoChunks(text, 1400);
     const isLong = chunks.length > 1;
 
     let finalAudio: string | undefined;
