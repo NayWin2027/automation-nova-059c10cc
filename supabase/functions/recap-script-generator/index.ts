@@ -169,8 +169,6 @@ serve(async (req) => {
 
     console.log(`[recap-script-generator] Authenticated user: ${user.id}`);
 
-    const backendGeminiKey = isOwnApi ? null : getGeminiKey();
-
     // ===== PARSE REQUEST =====
     let fileObj: File | null = null;
     let niche = "GENERAL";
@@ -225,7 +223,7 @@ serve(async (req) => {
 
     // Credit deduction moved to AFTER successful script generation (see below)
 
-    let activeApiKey = isOwnApi ? userApiKey! : backendGeminiKey!;
+    let activeApiKey = isOwnApi ? userApiKey! : getGeminiKey();
     const nicheLabel = niche || "GENERAL";
     const lang = language || "BURMESE";
     const nicheStyle = nicheStyles[nicheLabel] || nicheStyles["GENERAL"];
