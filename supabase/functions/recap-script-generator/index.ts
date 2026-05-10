@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logToolActivity } from "../_shared/activityLog.ts";
+import { getGeminiKey, rotateKey } from "../_shared/geminiKeys.ts";
 
 import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
 
@@ -168,10 +169,7 @@ serve(async (req) => {
 
     console.log(`[recap-script-generator] Authenticated user: ${user.id}`);
 
-    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-    if (!GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY not configured");
-    }
+    const backendGeminiKey = isOwnApi ? null : getGeminiKey();
 
     // ===== PARSE REQUEST =====
     let fileObj: File | null = null;
@@ -227,7 +225,7 @@ serve(async (req) => {
 
     // Credit deduction moved to AFTER successful script generation (see below)
 
-    const activeApiKey = isOwnApi ? userApiKey! : GEMINI_API_KEY;
+    let activeApiKey = isOwnApi ? userApiKey! : backendGeminiKey!;
     const nicheLabel = niche || "GENERAL";
     const lang = language || "BURMESE";
     const nicheStyle = nicheStyles[nicheLabel] || nicheStyles["GENERAL"];
