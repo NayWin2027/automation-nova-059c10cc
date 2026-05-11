@@ -5,6 +5,7 @@ import { AppLogo } from "@/components/AppLogo";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useApiAccess } from "@/hooks/useApiAccess";
 import { preCheckCredits } from "@/utils/creditPreCheck";
+import { toast } from "sonner";
 import { useCreditDeduction } from "@/hooks/useCreditDeduction";
 import { languages } from "@/data/languages";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -3733,15 +3734,20 @@ const RecapVideoNVPage: React.FC = () => {
   const { deductCredits } = useCreditDeduction();
   const didDeductRef = useRef(false);
   const [creditPerMinRate, setCreditPerMinRate] = useState<number>(6);
+  const [serverCreditPerMinRate, setServerCreditPerMinRate] = useState<number>(5);
+  const [renderMode, setRenderMode] = useState<"browser" | "server">("browser");
+  const [deviceTier, setDeviceTier] = useState<"fast" | "slow">("fast");
 
   useEffect(() => {
     const timer = setTimeout(async () => {
       const { data } = await supabase
         .from("tool_settings")
-        .select("credit_cost")
+        .select("credit_cost, server_credit_per_min")
         .eq("tool_id", "recap-nv")
         .maybeSingle();
       if (data?.credit_cost) setCreditPerMinRate(data.credit_cost);
+      if ((data as any)?.server_credit_per_min)
+        setServerCreditPerMinRate((data as any).server_credit_per_min);
     }, 500);
     return () => clearTimeout(timer);
   }, []);
@@ -3787,7 +3793,8 @@ const RecapVideoNVPage: React.FC = () => {
       const totalMinutes = Math.floor(durationSecs / 60);
       const remainingSeconds = durationSecs % 60;
       const billedMinutes = remainingSeconds > 30 ? totalMinutes + 1 : totalMinutes;
-      const customCost = Math.max(1, Math.max(1, billedMinutes) * creditPerMinRate);
+      const perMin = renderMode === "server" ? serverCreditPerMinRate : creditPerMinRate;
+      const customCost = Math.max(1, Math.max(1, billedMinutes) * perMin);
       didDeductRef.current = true;
       try {
         const result = await deductCredits("recap-nv", false, customCost);
@@ -3800,7 +3807,7 @@ const RecapVideoNVPage: React.FC = () => {
         didDeductRef.current = false;
       }
     },
-    [apiMode, deductCredits, creditPerMinRate],
+    [apiMode, deductCredits, creditPerMinRate, serverCreditPerMinRate, renderMode],
   );
 
   // Cleanup expired history on mount
@@ -4291,6 +4298,14 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
   const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      // Server rendering safe gate — backend worker not yet configured.
+      if (renderMode === "server") {
+        toast.error(
+          "Server Rendering မလုပ်ဆောင်နိုင်သေးပါ။ Browser Rendering ကိုသာ ရွေးပေးပါ။ (Google Cloud render worker setup အပြီးတွင် ဖွင့်ပေးပါမည်။)",
+        );
+        e.target.value = "";
+        return;
+      }
       if (apiMode === "app") {
         const hasCredits = await preCheckCredits("recap-nv");
         if (!hasCredits) return;
@@ -4397,6 +4412,60 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
                 <p className="text-xs text-muted-foreground">⚠️ Session ပိတ်ရင် key ပျောက်သွားမည်</p>
               </div>
             )}
+          </div>
+
+          {/* Device Tier + Render Mode */}
+          <div className="space-y-3 p-3 rounded-lg border border-border/60 bg-secondary/30">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-neon-cyan">📱 သင့် Device အမျိုးအစား</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setDeviceTier("fast");
+                    setRenderMode("browser");
+                  }}
+                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${deviceTier === "fast" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
+                >
+                  ⚡ Fast Device
+                  <span className="block text-xs font-normal opacity-70">SD 7/8 Gen, PC, Modern Android</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setDeviceTier("slow");
+                    setRenderMode("server");
+                  }}
+                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${deviceTier === "slow" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
+                >
+                  🐢 Slow / iPhone
+                  <span className="block text-xs font-normal opacity-70">SD 4/6 Gen, iOS, Old Android</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-neon-cyan">⚙️ Render Mode</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setRenderMode("browser")}
+                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${renderMode === "browser" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
+                >
+                  🖥️ Browser Render
+                  <span className="block text-xs font-normal opacity-70">{creditPerMinRate} CR / min</span>
+                </button>
+                <button
+                  onClick={() => setRenderMode("server")}
+                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${renderMode === "server" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
+                >
+                  ☁️ Server Render
+                  <span className="block text-xs font-normal opacity-70">{serverCreditPerMinRate} CR / min</span>
+                </button>
+              </div>
+              {renderMode === "server" && (
+                <p className="text-xs text-amber-400">
+                  ⚠️ Server Rendering setup မပြီးသေးပါ။ ယခုအချိန်တွင် Browser Rendering ကိုသာ အသုံးပြုနိုင်ပါသေးသည်။
+                </p>
+              )}
+            </div>
           </div>
 
           {/* Language */}

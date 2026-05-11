@@ -414,6 +414,7 @@ export type Database = {
           is_enabled: boolean | null
           is_premium: boolean | null
           requires_auth: boolean | null
+          server_credit_per_min: number
           tier_limits: Json | null
           title: string
           tool_id: string
@@ -428,6 +429,7 @@ export type Database = {
           is_enabled?: boolean | null
           is_premium?: boolean | null
           requires_auth?: boolean | null
+          server_credit_per_min?: number
           tier_limits?: Json | null
           title: string
           tool_id: string
@@ -442,6 +444,7 @@ export type Database = {
           is_enabled?: boolean | null
           is_premium?: boolean | null
           requires_auth?: boolean | null
+          server_credit_per_min?: number
           tier_limits?: Json | null
           title?: string
           tool_id?: string
