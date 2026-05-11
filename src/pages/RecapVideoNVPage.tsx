@@ -4414,6 +4414,60 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
             )}
           </div>
 
+          {/* Device Tier + Render Mode */}
+          <div className="space-y-3 p-3 rounded-lg border border-border/60 bg-secondary/30">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-neon-cyan">📱 သင့် Device အမျိုးအစား</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setDeviceTier("fast");
+                    setRenderMode("browser");
+                  }}
+                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${deviceTier === "fast" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
+                >
+                  ⚡ Fast Device
+                  <span className="block text-xs font-normal opacity-70">SD 7/8 Gen, PC, Modern Android</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setDeviceTier("slow");
+                    setRenderMode("server");
+                  }}
+                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${deviceTier === "slow" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
+                >
+                  🐢 Slow / iPhone
+                  <span className="block text-xs font-normal opacity-70">SD 4/6 Gen, iOS, Old Android</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-neon-cyan">⚙️ Render Mode</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setRenderMode("browser")}
+                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${renderMode === "browser" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
+                >
+                  🖥️ Browser Render
+                  <span className="block text-xs font-normal opacity-70">{creditPerMinRate} CR / min</span>
+                </button>
+                <button
+                  onClick={() => setRenderMode("server")}
+                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${renderMode === "server" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
+                >
+                  ☁️ Server Render
+                  <span className="block text-xs font-normal opacity-70">{serverCreditPerMinRate} CR / min</span>
+                </button>
+              </div>
+              {renderMode === "server" && (
+                <p className="text-xs text-amber-400">
+                  ⚠️ Server Rendering setup မပြီးသေးပါ။ ယခုအချိန်တွင် Browser Rendering ကိုသာ အသုံးပြုနိုင်ပါသေးသည်။
+                </p>
+              )}
+            </div>
+          </div>
+
           {/* Language */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-neon-cyan">🌐 ဘာသာစကား (Language)</label>
