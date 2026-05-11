@@ -411,3 +411,53 @@ export function isFFmpegSupported(): boolean {
   // Check for SharedArrayBuffer support (required for ffmpeg.wasm)
   return typeof SharedArrayBuffer !== "undefined";
 }
+
+export async function compressVideoTo720p(
+  videoFile: File | Blob,
+  onProgress?: ProgressCallback
+): Promise<Blob> {
+  if (!ffmpeg || !ffmpegLoaded) {
+    await loadFFmpeg(onProgress);
+  }
+
+  if (!ffmpeg) {
+    throw new Error("FFMPEG not initialized");
+  }
+
+  onProgress?.(10, "Preparing video for 720p compression...");
+
+  const inputData = await fetchFile(videoFile);
+  await ffmpeg.writeFile("input_720.mp4", inputData);
+
+  onProgress?.(20, "Compressing video to 720p...");
+
+  await ffmpeg.exec([
+    "-i", "input_720.mp4",
+    "-vf", "scale=-2:720",
+    "-c:v", "libx264",
+    "-preset", "ultrafast",
+    "-crf", "26",
+    "-c:a", "aac",
+    "-b:a", "128k",
+    "-movflags", "+faststart",
+    "compressed_720.mp4",
+  ]);
+
+  onProgress?.(90, "Finalizing 720p video...");
+
+  const outputData = await ffmpeg.readFile("compressed_720.mp4");
+
+  await ffmpeg.deleteFile("input_720.mp4");
+  await ffmpeg.deleteFile("compressed_720.mp4");
+
+  onProgress?.(100, "720p compression complete!");
+
+  if (typeof outputData === "string") {
+    throw new Error("Unexpected string output from FFMPEG");
+  }
+  const arrayBuffer = outputData.buffer.slice(
+    outputData.byteOffset,
+    outputData.byteOffset + outputData.byteLength,
+  ) as ArrayBuffer;
+  return new Blob([arrayBuffer], { type: "video/mp4" });
+}

@@ -12,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Check, ChevronsUpDown, Sparkles, Download, Palette, Loader2 } from "lucide-react";
 import { GoogleGenAI, Type } from "@google/genai";
+import { compressVideoTo720p, isFFmpegSupported } from "@/services/ffmpegService";
 
 interface RecapSegment {
   timestamp: string;
@@ -4088,7 +4089,32 @@ const RecapVideoNVPage: React.FC = () => {
       const videoBlob = URL.createObjectURL(file);
       setVideoUrl(videoBlob);
 
-      const ext = file.name.split(".").pop()?.toLowerCase() || "";
+      // ── 720p PRE-COMPRESS (surgical addition): shrinks Gemini input ~60-70% ──
+      // Falls back to original file silently if compression fails or unsupported.
+      let uploadFile: File | Blob = file;
+      let uploadFileName = file.name;
+      let uploadFileSize = file.size;
+      const isVideoMime = (file.type || "").startsWith("video/");
+      if (isVideoMime && isFFmpegSupported()) {
+        try {
+          setProgressMsg("🗜️ Video ကို 720p သို့ compress လုပ်နေပါသည်...");
+          const compressed = await compressVideoTo720p(file, (p, stage) => {
+            setProgressMsg(`🗜️ ${stage} ${p}%`);
+          });
+          if (compressed && compressed.size > 0 && compressed.size < file.size) {
+            uploadFile = compressed;
+            uploadFileName = file.name.replace(/\.[^.]+$/, "") + "_720p.mp4";
+            uploadFileSize = compressed.size;
+            console.log(`[Compress720p] ${file.size} → ${compressed.size} bytes`);
+          } else {
+            console.log("[Compress720p] Skipped (no size reduction)");
+          }
+        } catch (compErr) {
+          console.warn("[Compress720p] Failed, using original:", compErr);
+        }
+      }
+
+      const ext = uploadFileName.split(".").pop()?.toLowerCase() || "";
       const mimeMap: Record<string, string> = {
         mp4: "video/mp4",
         webm: "video/webm",
@@ -4101,13 +4127,13 @@ const RecapVideoNVPage: React.FC = () => {
         m4a: "audio/mp4",
         ogg: "audio/ogg",
       };
-      const mimeType = file.type || mimeMap[ext] || "video/mp4";
+      const mimeType = (uploadFile as Blob).type || mimeMap[ext] || "video/mp4";
 
       setProgressMsg("📤 Google AI ဆီ video upload လုပ်နေပါသည်...");
       const initBody: Record<string, unknown> = {
         action: "initUpload",
-        fileName: file.name,
-        fileSize: file.size,
+        fileName: uploadFileName,
+        fileSize: uploadFileSize,
         mimeType,
         useOwnApi: resolvedApiMode === "own",
       };
@@ -4130,12 +4156,12 @@ const RecapVideoNVPage: React.FC = () => {
         throw new Error(initData?.error || initError?.message || "Upload URL ရယူ၍ မအောင်မြင်ပါ");
 
       const CHUNK_SIZE = 8 * 1024 * 1024;
-      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+      const totalChunks = Math.ceil(uploadFileSize / CHUNK_SIZE);
       let fileUri = "";
       for (let i = 0; i < totalChunks; i++) {
         const start = i * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, file.size);
-        const chunk = file.slice(start, end);
+        const end = Math.min(start + CHUNK_SIZE, uploadFileSize);
+        const chunk = uploadFile.slice(start, end);
         const isLastChunk = i === totalChunks - 1;
         const chunkBuf = await chunk.arrayBuffer();
         const chunkHeaders: Record<string, string> = {
@@ -4144,7 +4170,7 @@ const RecapVideoNVPage: React.FC = () => {
           "x-chunk-index": String(i),
           "x-total-chunks": String(totalChunks),
           "x-offset": String(start),
-          "x-total-size": String(file.size),
+          "x-total-size": String(uploadFileSize),
           "x-mime-type": mimeType,
           "x-is-last-chunk": String(isLastChunk),
         };
