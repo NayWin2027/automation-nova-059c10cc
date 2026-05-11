@@ -67,6 +67,7 @@ interface ToolSetting {
   daily_free_limit: number;
   credit_cost: number;
   tier_limits: TierLimits;
+  server_credit_per_min?: number;
 }
 
 const defaultTierLimits: TierLimits = {
@@ -320,6 +321,7 @@ const AdminSettingsTab: React.FC = () => {
       is_premium: tool.is_premium,
       daily_free_limit: tool.daily_free_limit,
       credit_cost: tool.credit_cost,
+      server_credit_per_min: tool.server_credit_per_min ?? 5,
       tier_limits: JSON.parse(JSON.stringify(tool.tier_limits))
     }).
     eq('id', tool.id);
@@ -813,6 +815,18 @@ const AdminSettingsTab: React.FC = () => {
                     min={0} />
 
                       </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-2xs">☁️ Server Render CR / min</Label>
+                      <Input
+                        type="number"
+                        value={tool.server_credit_per_min ?? 5}
+                        onChange={(e) => setToolSettings((prev) =>
+                          prev.map((t) => t.id === tool.id ? { ...t, server_credit_per_min: parseInt(e.target.value) || 0 } : t)
+                        )}
+                        className="h-7 text-xs"
+                        min={0} />
+                      <p className="text-[10px] text-muted-foreground">Server rendering အတွက် တစ်မိနစ်ဖြတ်တဲ့ credit (Recap NV တို့လို server-render tools အတွက်သာ သက်ရောက်)</p>
                     </div>
                     <div className="space-y-1">
                       <Label className="text-2xs">Description</Label>
