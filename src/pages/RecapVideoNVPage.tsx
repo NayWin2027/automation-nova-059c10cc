@@ -4170,7 +4170,7 @@ const RecapVideoNVPage: React.FC = () => {
           "x-chunk-index": String(i),
           "x-total-chunks": String(totalChunks),
           "x-offset": String(start),
-          "x-total-size": String(file.size),
+          "x-total-size": String(uploadFileSize),
           "x-mime-type": mimeType,
           "x-is-last-chunk": String(isLastChunk),
         };
