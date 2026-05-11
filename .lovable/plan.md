@@ -1,36 +1,44 @@
-## အခြေအနေ
+## ပြဿနာ
 
-- Backend က healthy ဖြစ်နေပါတယ်။
-- `GEMINI_API_KEY`, `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3` secrets ၃ ခုလုံးရှိပါတယ်။
-- `recap-script-generator` logs ထဲမှာ key rotation ဖြစ်နေပါတယ်၊ ဒါပေမယ့် Google response က `Your prepayment credits are depleted` ဖြစ်နေတုန်းပါ။
+`recap-script-generator` edge function logs မှာ Google က ပြန်တဲ့ error:
 
-ဒါကြောင့် code error မဟုတ်နိုင်ခြေများပြီး **API key တွေဟာ credit ထည့်ထားတဲ့ Google AI project နဲ့မချိတ်ထားတာ** သို့မဟုတ် **Google billing/prepay credit မ activate သေးတာ** ဖြစ်နိုင်ခြေ အများဆုံးပါ။
+```
+404 — This model models/gemini-2.0-flash is no longer available to new users.
+Please update your code to use a newer model.
+```
 
-## Surgical Plan
+ပြီးခဲ့တဲ့ cost-saving edit မှာ `gemini-2.5-flash` → `gemini-2.0-flash` ပြောင်းခဲ့တာက ပြဿနာဖြစ်စေပါတယ်။ Google က `gemini-2.0-flash` ကို new project/key တွေအတွက် ပိတ်ထားပြီ ဖြစ်တယ်။
 
-1. **Code မထိပါ**
-   - Frontend, Recap NV protected blocks, upload logic, credit logic, database ဘာမှမပြင်ပါ။
+## Surgical Fix (1 line only)
 
-2. **Secrets ၃ ခုကို နောက်တစ်ကြိမ် secure form နဲ့ re-update လုပ်ပါမယ်**
-   - `GEMINI_API_KEY`
-   - `GEMINI_API_KEY_2`
-   - `GEMINI_API_KEY_3`
+**File:** `supabase/functions/recap-script-generator/index.ts`
+**Line:** 10
+**Change:**
 
-3. **အစ်ကိုထည့်မယ့် key တွေကို စစ်ဖို့လိုတဲ့ Google side checklist**
-   - Key ၃ ခုလုံးက **B 1000 ဖြည့်ထားတဲ့ Google AI Studio project တစ်ခုတည်း** ကထုတ်ထားတာဖြစ်ရပါမယ်။
-   - Google AI Studio → API Keys မှာ project name မှန်ရပါမယ်။
-   - Billing/prepay credit active ဖြစ်ပြီး “depleted” မပြနေရပါဘူး။
-   - Key restriction လုပ်ထားရင် Gemini API ကို allow လုပ်ထားရပါမယ်။
+```ts
+// FROM
+const MODEL = "gemini-2.0-flash";
 
-4. **Secrets update ပြီးနောက် logs ပြန်စစ်ပါမယ်**
-   - `recap-script-generator` ကို test run တစ်ခါလုပ်ပြီး Google error ဟောင်း (`prepayment credits are depleted`) ပျောက်/မပျောက် စစ်ပါမယ်။
+// TO
+const MODEL = "gemini-2.5-flash";
+```
 
-## Technical detail
+ပြီးရင် `recap-script-generator` ကို redeploy လုပ်ပါမယ်။
 
-- လက်ရှိ function က key ၃ ခုကို rotate လုပ်နေပြီး `429` တွေ့တိုင်း next key သွားနေပါတယ်။
-- Error wording က rate limit မဟုတ်ဘဲ billing/prepay credit depleted ဖြစ်ပါတယ်။
-- Secret values ကို Lovable ကပြန်မမြင်ရတဲ့အတွက် “key ထည့်တာစာလုံးမှန်/မမှန်” ကို value level တိုက်ရိုက်မကြည့်နိုင်ပါဘူး။ ဒါပေမယ့် logs က key တွေကို Google ကလက်ခံပြီး billing depleted project ဆီရောက်နေကြောင်းပြနေပါတယ်။
+## ထိမယ့် အပိုင်း
 
-## Approval လိုတာ
+- `recap-script-generator/index.ts` — line 10 တစ်ကြောင်းပဲ။
 
-အတည်ပြုရင် secrets ၃ ခုကိုသာ re-update request တင်ပါမယ်။ Code တစ်ကြောင်းမှမထိပါ။
+## မထိတဲ့ အပိုင်း (Golden Protection)
+
+- `RecapVideoNVPage.tsx` ထဲက AV-SYNC-9000-SMOOTH-v4, RECORD-PIPELINE-AUTO-v1, VOICE-GEN-PIPELINE-v2, AUTO-PIPELINE-v2 — လုံး၀မထိ။
+- Upload pipeline (`get-upload-url`, `upload-chunk`) — မထိ။
+- `video-recap`, `creator-ai`, `video-transform-translate`, `novel-translate` စတဲ့ တခြား function တွေ — မထိ။
+- Frontend, credit logic, auth, RLS — မထိ။
+
+## Cost ပေါ် သက်ရောက်မှု
+
+- `gemini-2.5-flash` က `2.0-flash` ထက် ~2-3x ပိုစျေးကြီးပေမယ့် `2.5-pro` ထက်တော့ ~80% သက်သာတုန်းပါပဲ။
+- `video-recap` (video input အဓိက cost) ကတော့ `gemini-2.0-flash` အတိုင်း ဆက်ရှိနေပြီး အဲဒါက ပုံမှန် Google account တွေမှာ အဆင်ပြေ run နေပါတယ် (logs မှာ video-recap က success ဖြစ်နေတယ်)။
+
+အတည်ပြုရင် surgical edit တစ်ကြောင်း + redeploy လုပ်ပါမယ်။
