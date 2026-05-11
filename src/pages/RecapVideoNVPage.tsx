@@ -3733,15 +3733,20 @@ const RecapVideoNVPage: React.FC = () => {
   const { deductCredits } = useCreditDeduction();
   const didDeductRef = useRef(false);
   const [creditPerMinRate, setCreditPerMinRate] = useState<number>(6);
+  const [serverCreditPerMinRate, setServerCreditPerMinRate] = useState<number>(5);
+  const [renderMode, setRenderMode] = useState<"browser" | "server">("browser");
+  const [deviceTier, setDeviceTier] = useState<"fast" | "slow">("fast");
 
   useEffect(() => {
     const timer = setTimeout(async () => {
       const { data } = await supabase
         .from("tool_settings")
-        .select("credit_cost")
+        .select("credit_cost, server_credit_per_min")
         .eq("tool_id", "recap-nv")
         .maybeSingle();
       if (data?.credit_cost) setCreditPerMinRate(data.credit_cost);
+      if ((data as any)?.server_credit_per_min)
+        setServerCreditPerMinRate((data as any).server_credit_per_min);
     }, 500);
     return () => clearTimeout(timer);
   }, []);
@@ -3787,7 +3792,8 @@ const RecapVideoNVPage: React.FC = () => {
       const totalMinutes = Math.floor(durationSecs / 60);
       const remainingSeconds = durationSecs % 60;
       const billedMinutes = remainingSeconds > 30 ? totalMinutes + 1 : totalMinutes;
-      const customCost = Math.max(1, Math.max(1, billedMinutes) * creditPerMinRate);
+      const perMin = renderMode === "server" ? serverCreditPerMinRate : creditPerMinRate;
+      const customCost = Math.max(1, Math.max(1, billedMinutes) * perMin);
       didDeductRef.current = true;
       try {
         const result = await deductCredits("recap-nv", false, customCost);
@@ -3800,7 +3806,7 @@ const RecapVideoNVPage: React.FC = () => {
         didDeductRef.current = false;
       }
     },
-    [apiMode, deductCredits, creditPerMinRate],
+    [apiMode, deductCredits, creditPerMinRate, serverCreditPerMinRate, renderMode],
   );
 
   // Cleanup expired history on mount
