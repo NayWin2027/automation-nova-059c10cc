@@ -132,7 +132,7 @@ serve(async (req) => {
 
       const posterResponse = await geminiRetryFetch(
         (key) =>
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${key}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${key}`,
         { method: "POST", headers: { "Content-Type": "application/json" }, body: posterBody },
       );
 
