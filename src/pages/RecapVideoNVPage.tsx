@@ -4772,6 +4772,7 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
             onUpdateScript={handleUpdateScript}
             onGenerateVoice={handleGenerateVoice}
             onRecapSaved={loadRecapHistory}
+            renderMode={renderMode}
             onVideoReady={handleVideoReady}
             creditPerMinRate={creditPerMinRate}
             audioUrl={audioUrl}
