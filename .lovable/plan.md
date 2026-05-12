@@ -1,51 +1,27 @@
-ပြဿနာက code မဟုတ်ဘူး။ Deploy က default compute service account `971085252759-compute@developer.gserviceaccount.com` ကို သုံးဖို့ ကြိုးစားနေပြီး အဲ့ account မရှိ/permission မပြည့်လို့ကျနေတာပါ။ Screenshot ထဲမှာ `automationnova-render-worker@...` service account ရှိနေပြီးသားမို့ deploy command မှာ အဲ့ service account ကို တိတိကျကျထည့်သုံးပါ။
+စစ်ပြီးသားအခြေအနေအရ project ထဲက `render-worker` folder မှာ `Dockerfile`, `server.js`, `package.json`, `.dockerignore` ရှိနေပါတယ်။ `server.js` syntax နဲ့ `package.json` JSON လည်း OK ဖြစ်ပါတယ်။ ဒါကြောင့် “code မပြည့်စုံလို့” ထက် GitHub ထဲမှာ folder မပါသွားတာ၊ Cloud Shell က မှားတဲ့ directory မှာ deploy လုပ်တာ၊ ဒါမှမဟုတ် Google Cloud build service account/project state ပြဿနာဖြစ်နိုင်ခြေများပါတယ်။
 
-လုပ်ရမယ့်အစီအစဉ်:
+အကောင်အထည်ဖော်မယ့် Plan:
 
-1. Cloud Shell အပေါ်က `Reconnect` ကိုနှိပ်ပါ။
-2. Terminal ပြန်တက်လာရင် အောက်က command block တစ်ခုလုံး paste လုပ်ပါ။
-3. Deploy ပြီးသွားရင် ထွက်လာတဲ့ `Service URL` ကို copy ထားပါ။
-4. Terminal ထဲက `SECRET:` နောက်က hex string ကိုလည်း copy ထားပါ။
+1. `render-worker` deploy package ကို ပိုခိုင်အောင်ပြင်မယ်
+   - `package-lock.json` ကို `render-worker` ထဲမှာ generate/add လုပ်မယ်။
+   - Dockerfile ကို reproducible ဖြစ်အောင် lockfile ရှိရင် `npm ci --omit=dev` သုံးတဲ့ပုံစံပြင်မယ်။
+   - Cloud Build log blank ဖြစ်တဲ့အခါ build step က dependency resolution မှာမတိတ်တဆိတ်ကျအောင် package install ကို deterministic ဖြစ်စေမယ်။
 
-```bash
-PROJECT_ID=project-2c184f5f-ec78-41cd-a7f
-USER_EMAIL=aungthanoo.ato88@gmail.com
-RUNTIME_SA="automationnova-render-worker@${PROJECT_ID}.iam.gserviceaccount.com"
+2. Runtime health/debug visibility ထည့်မယ်
+   - `/healthz` ကို basic OK အပြင် service env readiness ကို မထုတ်ဖော်လွန်ဘဲစစ်နိုင်အောင် `{ ok: true }` ဆက်ထားမယ်။
+   - Boot log မှာ required env missing ဆိုတာ terminal logs မှာရှင်းရှင်းလင်းလင်းပေါ်အောင်ထားမယ်။
+   - Secret value မပေါ်အောင် security မထိခိုက်စေဘဲ diagnostics ပိုကောင်းစေမယ်။
 
-# Project / region set
-gcloud config set project $PROJECT_ID
-gcloud config set run/region asia-southeast1
+3. Deployment instruction ကိုအမှန်ပြင်မယ်
+   - `.lovable/plan.md` နဲ့ `render-worker/README.md` ထဲက command ကို current issue နဲ့ကိုက်အောင် update လုပ်မယ်။
+   - Deploy မလုပ်ခင် `pwd`, `ls -la`, `test -f Dockerfile`, `test -f package.json` စစ်တဲ့ guard commands ထည့်မယ်။
+   - `Account disabled: 281486105845478` က code error မဟုတ်ဘဲ Google Cloud account/service-agent issue ဖြစ်တာကို သီးခြား troubleshooting အဖြစ်ထည့်မယ်။
 
-# ဒီ user ကို runtime service account သုံးခွင့်ပေးမယ်
-gcloud iam service-accounts add-iam-policy-binding $RUNTIME_SA \
-  --member="user:$USER_EMAIL" \
-  --role="roles/iam.serviceAccountUser"
+4. Final copy/paste deploy block ပေးမယ်
+   - Cloud Shell မှာ တစ်ခါတည်း paste လုပ်လို့ရတဲ့ safe command block ထည့်မယ်။
+   - မှားတဲ့ folder ကနေ deploy မလုပ်မိအောင် `~/repo/render-worker` မရှိရင် error ထုတ်ပြီးရပ်အောင်လုပ်မယ်။
+   - `gcloud run deploy render-worker --source .` ကို `Dockerfile` ရှိတဲ့ folder ထဲကနေသာ run ဖြစ်စေမယ်။
 
-# Code folder ထဲဝင်မယ်
-cd ~/repo/render-worker
-
-# Secret အသစ်ထုတ်မယ်
-export RENDER_SECRET=$(openssl rand -hex 32)
-echo "SECRET: $RENDER_SECRET"
-
-# Deploy — default compute SA မသုံးတော့ဘဲ existing automationnova-render-worker SA ကိုသုံးမယ်
-gcloud run deploy render-worker \
-  --source . \
-  --region asia-southeast1 \
-  --allow-unauthenticated \
-  --memory 2Gi \
-  --cpu 2 \
-  --timeout 900 \
-  --concurrency 4 \
-  --max-instances 10 \
-  --service-account="$RUNTIME_SA" \
-  --set-env-vars "RENDER_SHARED_SECRET=$RENDER_SECRET,GCS_BUCKET=automationnova-render-output-2026"
-```
-
-အောင်မြင်ရင် terminal မှာ ဒီလိုမျိုးပေါ်မယ်:
-
-```text
-Service URL: https://render-worker-xxxxx-as.a.run.app
-```
-
-အဲ့ဒါနဲ့ `SECRET:` နှစ်ခုကို ပြန်ပို့ပေးပါ။ မအောင်မြင်သေးရင် error နောက်ဆုံး ၅ ကြောင်းပဲ screenshot ပို့ပါ။
+ထိန်းချုပ်ချက်:
+- App frontend / Recap locked blocks / upload pipeline / auth / credits logic မထိပါ။
+- Render worker deployment files နဲ့ deployment guide သာပြင်ပါမယ်။
