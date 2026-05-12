@@ -1,18 +1,10 @@
-### 1. Project ID & URL များကို Update ပြုလုပ်ခြင်း
-Google Cloud Project ID အဟောင်း (`project-2c184f5f-ec78-41cd-a7f`) နေရာတွင် `automation-nova` အမည်ဖြင့် လည်းကောင်း၊ Service URL အဟောင်း နေရာတွင် အသစ်ဖြစ်သော `https://render-worker-340572358303.asia-southeast1.run.app` ဖြင့် လည်းကောင်း Documentation များနှင့် Configuration ဖိုင်များ (README.md, .lovable/plan.md) အားလုံးတွင် ရှာဖွေပြီး အတိအကျ အစားထိုး ပြောင်းလဲထားပြီးဖြစ်ပါသည်။ 
+ဟုတ်ပါတယ်ဗျ။ အခုဆိုရင် iOS (iPhone, iPad) တွေနဲ့ CPU နိမ့်တဲ့ ဖုန်း/ကွန်ပျူတာတွေမှာပါ Recap Video တွေကို အဆင်ပြေပြေ ထုတ်လို့ရသွားပါပြီ။ 
 
-အခြား Edge Functions များနှင့် App ကုဒ်များ (ဥပမာ GCS Bucket အမည်များ) ထဲတွင် Project ID အဟောင်းကို Hardcode ရေးသားထားခြင်း မရှိကြောင်း သေချာစွာ စစ်ဆေးအတည်ပြုထားပါသည်။ 
+အရင်က Video တွေကို ဖုန်းထဲက Browser (FFmpeg.wasm) ကနေ တိုက်ရိုက် Process လုပ်ရတဲ့အတွက် iOS Safari မှာ Memory မနိုင်တာ၊ CPU နိမ့်တဲ့ ဖုန်းတွေမှာ အကြာကြီးစောင့်ရတာ၊ ပိတ်ကျသွားတာမျိုးတွေ ရှိခဲ့ပါတယ်။
 
-### 2. Secrets များ ထည့်သွင်းခြင်း
-App ဘက်မှနေ၍ Cloud Run Worker သို့ လုံခြုံစွာ လှမ်းခေါ်နိုင်ရန် ယခုပေးထားသော URL နှင့် SECRET ကို Lovable ၏ Secret Manager တွင် ထည့်သွင်းပေးရန် လိုအပ်ပါသည်။
-- `CLOUD_RUN_RENDER_URL` = `https://render-worker-340572358303.asia-southeast1.run.app`
-- `CLOUD_RUN_RENDER_SECRET` = `34e5b7ee1ff08c25d34b0e79e21dc71317f41cb7d9dd508ddbdcb26933cd5a33`
-*(အောက်တွင် ပေါ်လာမည့် Secret Form တွင် ထည့်သွင်းပေးပါရန်)*
+အခု **Server Render Mode (Cloud Run Worker)** ကို အောင်မြင်စွာ ချိတ်ဆက်ပြီးသွားပြီ ဖြစ်တဲ့အတွက် အလုပ်လုပ်ပုံက ဒီလိုပြောင်းသွားပါပြီ-
+1. ပုံတွေ၊ အသံနဲ့ စာတန်းထိုးတွေကို Google Cloud (Server) ပေါ်ကို လှမ်းပို့လိုက်ပါတယ်။
+2. Video ပေါင်းတဲ့ အလုပ် (Heavy FFmpeg Processing) အားလုံးကို ဖုန်းထဲမှာ မလုပ်တော့ဘဲ **Server ရဲ့ CPU နဲ့ RAM တွေသုံးပြီး** အမြန်ဆုံး ပေါင်းပေးသွားပါတယ်။
+3. ပြီးသွားရင်တော့ ပေါင်းပြီးသား Video ကို ဖုန်းထဲကနေ ချက်ချင်း Download ဆွဲလို့ရသွားပါပြီ။
 
-### 3. Server Rendering ကို App တွင် ချိတ်ဆက်ခြင်း (Surgical Edit)
-`src/pages/RecapVideoNVPage.tsx` ဖိုင်အတွင်းတွင် လက်ရှိ ပိတ်ထားသော **"Server Rendering setup မပြီးသေးပါ။"** ဆိုသည့် Safe Gate ကို ဖယ်ရှားပြီး Browser Rendering အစား Cloud Run ရှိ `/render` Endpoint သို့ လှမ်းခေါ်မည့် Polling Logic ကို ထည့်သွင်းပေးမည် ဖြစ်ပါသည်။ 
-
-⚠️ **အရေးကြီးသော ခွင့်ပြုချက်တောင်းခံခြင်း (GOLDEN PROTECTION)** ⚠️
-ယခု Server Rendering Logic ကို App ထဲသို့ ချိတ်ဆက်ရန်အတွက် `RecapVideoNVPage.tsx` အတွင်းရှိ **`AUTO-PIPELINE-v2`** Block ကို အနည်းငယ် ပြင်ဆင်ရမည် ဖြစ်ပါသည်။ သင်ချမှတ်ထားသော Golden Protection Rules အရ ၎င်း Block ကို Explicit Unlock Command မပါဘဲ လုံးဝ (လုံးဝ) ပြင်ဆင်ခွင့် မရှိပါ။ 
-
-ထို့ကြောင့် Plan ကို သဘောတူပြီးပါက **"AUTO-PIPELINE-v2 ကို Unlock လုပ်ရန် ခွင့်ပြုသည်"** ဟူသော Command ကိုပါ တစ်ပါတည်း ပြောကြားပေးပါရန် မေတ္တာရပ်ခံအပ်ပါသည်။ သို့မှသာ ဆက်လက်၍ Code ကို Surgical Edit ပြုလုပ်ပေးနိုင်မည် ဖြစ်ပါသည်။
+ဒါကြောင့် ဖုန်းရဲ့ စွမ်းဆောင်ရည် (CPU/RAM) အပေါ်မှာ မူတည်တော့မှာ မဟုတ်ဘဲ iOS မှာရော၊ Low-end device တွေမှာပါ ချောချောမွေ့မွေ့နဲ့ အလုပ်လုပ်ပေးနိုင်သွားပြီ ဖြစ်ပါတယ်။ စမ်းသပ်ကြည့်လို့ ရပါပြီဗျ၊ တခြား လိုအပ်တာလေးတွေ ရှိရင်လည်း ထပ်ပြောပေးပါ။
