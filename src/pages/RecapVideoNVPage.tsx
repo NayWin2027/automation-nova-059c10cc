@@ -251,6 +251,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     audioTimestampsRef,
     autoStartRecap,
     onAutoStartConsumed,
+    renderMode,
   }) => {
     const [activeTab, setActiveTab] = useState<"script" | "segments">("script");
     const [isRecapPlaying, setIsRecapPlaying] = useState(false);
