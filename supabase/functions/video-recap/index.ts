@@ -947,6 +947,54 @@ serve(async (req) => {
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // ===== CLOUD RUN SERVER RENDER PROXY =====
+    if (action === 'triggerServerRender') {
+      const { audioUrl, imageUrls, subtitles, duration } = body || {};
+      const renderUrl = Deno.env.get("CLOUD_RUN_RENDER_URL");
+      const renderSecret = Deno.env.get("CLOUD_RUN_RENDER_SECRET");
+
+      if (!renderUrl || !renderSecret) {
+        return new Response(
+          JSON.stringify({ error: "Cloud Run render worker secrets are not configured in backend." }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const res = await fetch(`${renderUrl}/render`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Api-Secret': renderSecret
+        },
+        body: JSON.stringify({ audioUrl, imageUrls, subtitles, duration })
+      });
+      const data = await res.json();
+      return new Response(
+        JSON.stringify(data),
+        { status: res.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (action === 'pollServerRender') {
+      const { jobId } = body || {};
+      const renderUrl = Deno.env.get("CLOUD_RUN_RENDER_URL");
+      const renderSecret = Deno.env.get("CLOUD_RUN_RENDER_SECRET");
+      if (!renderUrl || !renderSecret || !jobId) {
+        return new Response(
+          JSON.stringify({ error: "Missing config or jobId" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      const res = await fetch(`${renderUrl}/status/${jobId}`, {
+        headers: { 'X-Api-Secret': renderSecret }
+      });
+      const data = await res.json();
+      return new Response(
+        JSON.stringify(data),
+        { status: res.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
   } catch (error) {
     console.error("Video recap error:", error);
     const errMsg = error instanceof Error ? error.message : "Unknown error";
