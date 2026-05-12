@@ -5,7 +5,7 @@
 ```bash
 set -euo pipefail
 
-PROJECT_ID="project-2c184f5f-ec78-41cd-a7f"
+PROJECT_ID="automation-nova"
 USER_EMAIL="aungthanoo.ato88@gmail.com"
 REGION="asia-southeast1"
 SERVICE_NAME="render-worker"
