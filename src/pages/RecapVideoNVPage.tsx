@@ -4300,14 +4300,6 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
   const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      // Server rendering safe gate — backend worker not yet configured.
-      if (renderMode === "server") {
-        toast.error(
-          "Server Rendering မလုပ်ဆောင်နိုင်သေးပါ။ Browser Rendering ကိုသာ ရွေးပေးပါ။ (Google Cloud render worker setup အပြီးတွင် ဖွင့်ပေးပါမည်။)",
-        );
-        e.target.value = "";
-        return;
-      }
       if (apiMode === "app") {
         const hasCredits = await preCheckCredits("recap-nv");
         if (!hasCredits) return;
@@ -4462,11 +4454,6 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
                   <span className="block text-xs font-normal opacity-70">{serverCreditPerMinRate} CR / min</span>
                 </button>
               </div>
-              {renderMode === "server" && (
-                <p className="text-xs text-amber-400">
-                  ⚠️ Server Rendering setup မပြီးသေးပါ။ ယခုအချိန်တွင် Browser Rendering ကိုသာ အသုံးပြုနိုင်ပါသေးသည်။
-                </p>
-              )}
             </div>
           </div>
 
