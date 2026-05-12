@@ -43,6 +43,7 @@ interface ResultViewProps {
   audioTimestampsRef: React.MutableRefObject<{ index: number; start: number; end: number }[]>;
   autoStartRecap?: boolean;
   onAutoStartConsumed?: () => void;
+  renderMode?: "browser" | "server";
 }
 
 interface LogoSettings {
@@ -250,6 +251,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     audioTimestampsRef,
     autoStartRecap,
     onAutoStartConsumed,
+    renderMode,
   }) => {
     const [activeTab, setActiveTab] = useState<"script" | "segments">("script");
     const [isRecapPlaying, setIsRecapPlaying] = useState(false);
@@ -767,6 +769,105 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     // ── FIX: Auto-start — clearInterval BEFORE setIsRecapPlaying to prevent rAF overlap ──
     useEffect(() => {
       if (!autoStartRecap || !audioUrl || !videoUrl || isRecapPlaying || isRendering || renderedBlobUrl) return;
+
+      if (renderMode === "server") {
+        const processServerRender = async () => {
+          setIsRendering(true);
+          try {
+            // 1. Upload audio
+            const audioBlob = await fetch(audioUrl).then((r) => r.blob());
+            const audioExt = audioBlob.type.includes("mp3") ? "mp3" : "wav";
+            const audioName = `server_render/audio_${Date.now()}.${audioExt}`;
+            await supabase.storage.from("temp-uploads").upload(audioName, audioBlob);
+            const { data: audioSigned, error: auErr } = await supabase.storage.from("temp-uploads").createSignedUrl(audioName, 3600 * 24);
+            if (!audioSigned || auErr) throw new Error("Failed to get audio signed URL");
+
+            // 2. Extract and upload frames
+            const video = document.createElement("video");
+            video.crossOrigin = "anonymous";
+            video.src = videoUrl;
+            await new Promise((resolve) => { video.onloadedmetadata = resolve; });
+            const dur = video.duration || 60;
+            const intervals = [dur * 0.1, dur * 0.3, dur * 0.5, dur * 0.7, dur * 0.9];
+            const signedImageUrls: string[] = [];
+            
+            for (let i = 0; i < intervals.length; i++) {
+              video.currentTime = intervals[i];
+              await new Promise((resolve) => { video.onseeked = resolve; });
+              const canvas = document.createElement("canvas");
+              canvas.width = 1280; canvas.height = 720;
+              const ctx = canvas.getContext("2d");
+              if (ctx) ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+              const blob = await new Promise<Blob>((res) => canvas.toBlob((b) => res(b!), "image/jpeg", 0.9));
+              const imgName = `server_render/frame_${Date.now()}_${i}.jpg`;
+              await supabase.storage.from("temp-uploads").upload(imgName, blob);
+              const { data: imgSigned } = await supabase.storage.from("temp-uploads").createSignedUrl(imgName, 3600 * 24);
+              if (imgSigned) signedImageUrls.push(imgSigned.signedUrl);
+            }
+
+            // 3. Prepare subtitles
+            const subtitles = scriptData.segments.map((seg, idx) => {
+              const ts = audioTimestampsRef.current.find((x) => x.index === idx);
+              return {
+                start: ts ? ts.start : 0,
+                end: ts ? ts.end : 0,
+                text: seg.text
+              };
+            });
+
+            // 4. Call Edge Function to proxy to Cloud Run
+            const { data: jobData, error: jobError } = await supabase.functions.invoke("video-recap", {
+              body: {
+                action: "triggerServerRender",
+                audioUrl: audioSigned.signedUrl,
+                imageUrls: signedImageUrls,
+                subtitles,
+                duration: dur
+              }
+            });
+
+            if (jobError || jobData?.error) throw new Error(jobData?.error || jobError?.message || "Failed to start render job");
+            
+            const jobId = jobData.jobId;
+
+            // 5. Poll status
+            const pollStatus = async () => {
+              const { data: statusData, error: statusErr } = await supabase.functions.invoke("video-recap", {
+                body: { action: "pollServerRender", jobId }
+              });
+              if (statusErr || statusData?.error) {
+                console.error("Poll error:", statusErr || statusData?.error);
+                setTimeout(pollStatus, 5000);
+                return;
+              }
+              
+              if (statusData.state === "done" && statusData.url) {
+                setRenderedBlobUrl(statusData.url);
+                setIsRendering(false);
+                onAutoStartConsumed?.();
+                toast.success("Server Render အောင်မြင်ပါသည်!");
+              } else if (statusData.state === "failed") {
+                setIsRendering(false);
+                onAutoStartConsumed?.();
+                toast.error("Server Render failed: " + (statusData.error || "Unknown"));
+              } else {
+                setTimeout(pollStatus, 5000);
+              }
+            };
+            setTimeout(pollStatus, 5000);
+
+          } catch (err: any) {
+            console.error("Server render error:", err);
+            setIsRendering(false);
+            onAutoStartConsumed?.();
+            toast.error(`Server Render Error: ${err.message}`);
+          }
+        };
+
+        processServerRender();
+        return;
+      }
+
       let attempts = 0;
       const maxAttempts = 60;
       const poll = setInterval(() => {
@@ -4298,14 +4399,6 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
   const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      // Server rendering safe gate — backend worker not yet configured.
-      if (renderMode === "server") {
-        toast.error(
-          "Server Rendering မလုပ်ဆောင်နိုင်သေးပါ။ Browser Rendering ကိုသာ ရွေးပေးပါ။ (Google Cloud render worker setup အပြီးတွင် ဖွင့်ပေးပါမည်။)",
-        );
-        e.target.value = "";
-        return;
-      }
       if (apiMode === "app") {
         const hasCredits = await preCheckCredits("recap-nv");
         if (!hasCredits) return;
@@ -4460,11 +4553,6 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
                   <span className="block text-xs font-normal opacity-70">{serverCreditPerMinRate} CR / min</span>
                 </button>
               </div>
-              {renderMode === "server" && (
-                <p className="text-xs text-amber-400">
-                  ⚠️ Server Rendering setup မပြီးသေးပါ။ ယခုအချိန်တွင် Browser Rendering ကိုသာ အသုံးပြုနိုင်ပါသေးသည်။
-                </p>
-              )}
             </div>
           </div>
 
@@ -4770,6 +4858,7 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
             onUpdateScript={handleUpdateScript}
             onGenerateVoice={handleGenerateVoice}
             onRecapSaved={loadRecapHistory}
+            renderMode={renderMode}
             onVideoReady={handleVideoReady}
             creditPerMinRate={creditPerMinRate}
             audioUrl={audioUrl}
