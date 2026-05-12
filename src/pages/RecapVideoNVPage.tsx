@@ -43,6 +43,7 @@ interface ResultViewProps {
   audioTimestampsRef: React.MutableRefObject<{ index: number; start: number; end: number }[]>;
   autoStartRecap?: boolean;
   onAutoStartConsumed?: () => void;
+  renderMode?: "browser" | "server";
 }
 
 interface LogoSettings {
