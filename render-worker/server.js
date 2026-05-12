@@ -21,9 +21,11 @@ app.use(express.json({ limit: "20mb" }));
 const PORT = process.env.PORT || 8080;
 const SHARED_SECRET = process.env.RENDER_SHARED_SECRET || "";
 const GCS_BUCKET = process.env.GCS_BUCKET || "";
+const STARTED_AT = new Date().toISOString();
 
 if (!SHARED_SECRET) console.warn("[boot] RENDER_SHARED_SECRET not set — refusing all requests");
 if (!GCS_BUCKET) console.warn("[boot] GCS_BUCKET not set — uploads will fail");
+console.log(`[boot] config secret=${SHARED_SECRET ? "set" : "missing"} bucket=${GCS_BUCKET ? "set" : "missing"}`);
 
 const storage = new Storage();
 const bucket = GCS_BUCKET ? storage.bucket(GCS_BUCKET) : null;
@@ -87,7 +89,16 @@ function buildSrt(subs) {
 }
 
 // ── routes ──────────────────────────────────────────────────────────────────
-app.get("/healthz", (_req, res) => res.json({ ok: true }));
+app.get("/healthz", (_req, res) =>
+  res.json({
+    ok: true,
+    startedAt: STARTED_AT,
+    ready: {
+      secret: Boolean(SHARED_SECRET),
+      bucket: Boolean(GCS_BUCKET),
+    },
+  })
+);
 
 app.post("/render", requireSecret, async (req, res) => {
   const { audioUrl, imageUrls, subtitles, duration } = req.body || {};
