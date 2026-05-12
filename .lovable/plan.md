@@ -1,75 +1,18 @@
-စစ်ပြီးသားအဖြေ: `render-worker` folder ထဲမှာ `Dockerfile`, `server.js`, `package.json`, `.dockerignore` ရှိပါတယ်။ အခု `package-lock.json` ပါထည့်ပြီး Docker build ကို deterministic ဖြစ်အောင်ပြင်ထားပါတယ်။ ဒါကြောင့် Build Failed ဖြစ်တာက code မပြည့်စုံလို့ဆိုတာထက် Cloud Shell မှာ folder မှားပြီး deploy လုပ်တာ၊ GitHub ထဲ `render-worker` folder မပါသွားတာ၊ ဒါမှမဟုတ် Google Cloud service account disabled ဖြစ်တာ ဖြစ်နိုင်ခြေများပါတယ်။
+### 1. Project ID & URL များကို Update ပြုလုပ်ခြင်း
+Google Cloud Project ID အဟောင်း (`project-2c184f5f-ec78-41cd-a7f`) နေရာတွင် `automation-nova` အမည်ဖြင့် လည်းကောင်း၊ Service URL အဟောင်း နေရာတွင် အသစ်ဖြစ်သော `https://render-worker-340572358303.asia-southeast1.run.app` ဖြင့် လည်းကောင်း Documentation များနှင့် Configuration ဖိုင်များ (README.md, .lovable/plan.md) အားလုံးတွင် ရှာဖွေပြီး အတိအကျ အစားထိုး ပြောင်းလဲထားပြီးဖြစ်ပါသည်။ 
 
-အခုသုံးရမယ့် command block:
+အခြား Edge Functions များနှင့် App ကုဒ်များ (ဥပမာ GCS Bucket အမည်များ) ထဲတွင် Project ID အဟောင်းကို Hardcode ရေးသားထားခြင်း မရှိကြောင်း သေချာစွာ စစ်ဆေးအတည်ပြုထားပါသည်။ 
 
-```bash
-set -euo pipefail
+### 2. Secrets များ ထည့်သွင်းခြင်း
+App ဘက်မှနေ၍ Cloud Run Worker သို့ လုံခြုံစွာ လှမ်းခေါ်နိုင်ရန် ယခုပေးထားသော URL နှင့် SECRET ကို Lovable ၏ Secret Manager တွင် ထည့်သွင်းပေးရန် လိုအပ်ပါသည်။
+- `CLOUD_RUN_RENDER_URL` = `https://render-worker-340572358303.asia-southeast1.run.app`
+- `CLOUD_RUN_RENDER_SECRET` = `34e5b7ee1ff08c25d34b0e79e21dc71317f41cb7d9dd508ddbdcb26933cd5a33`
+*(အောက်တွင် ပေါ်လာမည့် Secret Form တွင် ထည့်သွင်းပေးပါရန်)*
 
-PROJECT_ID="automation-nova"
-USER_EMAIL="aungthanoo.ato88@gmail.com"
-REGION="asia-southeast1"
-SERVICE_NAME="render-worker"
-BUCKET_NAME="automationnova-render-output-2026"
-RUNTIME_SA="automationnova-render-worker@${PROJECT_ID}.iam.gserviceaccount.com"
-WORKER_DIR="$HOME/repo/render-worker"
+### 3. Server Rendering ကို App တွင် ချိတ်ဆက်ခြင်း (Surgical Edit)
+`src/pages/RecapVideoNVPage.tsx` ဖိုင်အတွင်းတွင် လက်ရှိ ပိတ်ထားသော **"Server Rendering setup မပြီးသေးပါ။"** ဆိုသည့် Safe Gate ကို ဖယ်ရှားပြီး Browser Rendering အစား Cloud Run ရှိ `/render` Endpoint သို့ လှမ်းခေါ်မည့် Polling Logic ကို ထည့်သွင်းပေးမည် ဖြစ်ပါသည်။ 
 
-gcloud config set project "$PROJECT_ID"
-gcloud config set run/region "$REGION"
+⚠️ **အရေးကြီးသော ခွင့်ပြုချက်တောင်းခံခြင်း (GOLDEN PROTECTION)** ⚠️
+ယခု Server Rendering Logic ကို App ထဲသို့ ချိတ်ဆက်ရန်အတွက် `RecapVideoNVPage.tsx` အတွင်းရှိ **`AUTO-PIPELINE-v2`** Block ကို အနည်းငယ် ပြင်ဆင်ရမည် ဖြစ်ပါသည်။ သင်ချမှတ်ထားသော Golden Protection Rules အရ ၎င်း Block ကို Explicit Unlock Command မပါဘဲ လုံးဝ (လုံးဝ) ပြင်ဆင်ခွင့် မရှိပါ။ 
 
-if [ ! -d "$WORKER_DIR" ]; then
-  echo "ERROR: $WORKER_DIR မရှိပါ။ GitHub repo ကို ~/repo ထဲ clone ထားလားစစ်ပါ။"
-  exit 1
-fi
-
-cd "$WORKER_DIR"
-echo "Deploy folder: $(pwd)"
-ls -la
-
-test -f Dockerfile || { echo "ERROR: Dockerfile မတွေ့ပါ။ render-worker folder ထဲမဟုတ်ပါ။"; exit 1; }
-test -f package.json || { echo "ERROR: package.json မတွေ့ပါ။ render-worker folder မပြည့်စုံပါ။"; exit 1; }
-test -f server.js || { echo "ERROR: server.js မတွေ့ပါ။ render-worker folder မပြည့်စုံပါ။"; exit 1; }
-
-npm install --package-lock-only --ignore-scripts
-
-gcloud iam service-accounts add-iam-policy-binding "$RUNTIME_SA" \
-  --member="user:$USER_EMAIL" \
-  --role="roles/iam.serviceAccountUser" || true
-
-export RENDER_SECRET="$(openssl rand -hex 32)"
-echo "SECRET: $RENDER_SECRET"
-
-gcloud run deploy "$SERVICE_NAME" \
-  --source . \
-  --region "$REGION" \
-  --allow-unauthenticated \
-  --memory 2Gi \
-  --cpu 2 \
-  --timeout 900 \
-  --concurrency 4 \
-  --max-instances 10 \
-  --service-account="$RUNTIME_SA" \
-  --set-env-vars "RENDER_SHARED_SECRET=$RENDER_SECRET,GCS_BUCKET=$BUCKET_NAME"
-```
-
-`Account disabled: 281486105845478` ဆိုရင် code error မဟုတ်ပါ။ Google Cloud service account/service agent disabled ဖြစ်တာပါ။ ဒီ command နဲ့ရှာပါ:
-
-```bash
-gcloud iam service-accounts list \
-  --filter="uniqueId=281486105845478" \
-  --format="table(email,disabled,uniqueId)"
-```
-
-Email ထွက်လာရင်:
-
-```bash
-gcloud iam service-accounts enable SERVICE_ACCOUNT_EMAIL_FROM_PREVIOUS_COMMAND
-```
-
-မထွက်လာရင်:
-
-```bash
-gcloud services list --enabled \
-  --filter="cloudbuild.googleapis.com OR run.googleapis.com OR artifactregistry.googleapis.com"
-```
-
-အောင်မြင်ရင် `Service URL` နဲ့ `SECRET:` နှစ်ခုကို ပြန်ပို့ပါ။
+ထို့ကြောင့် Plan ကို သဘောတူပြီးပါက **"AUTO-PIPELINE-v2 ကို Unlock လုပ်ရန် ခွင့်ပြုသည်"** ဟူသော Command ကိုပါ တစ်ပါတည်း ပြောကြားပေးပါရန် မေတ္တာရပ်ခံအပ်ပါသည်။ သို့မှသာ ဆက်လက်၍ Code ကို Surgical Edit ပြုလုပ်ပေးနိုင်မည် ဖြစ်ပါသည်။
