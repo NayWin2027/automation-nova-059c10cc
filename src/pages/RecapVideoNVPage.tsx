@@ -4508,30 +4508,17 @@ const RecapVideoNVPage: React.FC = () => {
 
       setProgressMsg("📤 Google AI ဆီ video upload လုပ်နေပါသည်...");
 
-      let uploadUrl: string;
-
-      if (resolvedOwnKey) {
-        // Own API key style: direct get-upload-url + upload-chunk
-        const { data: urlData, error: urlError } = await supabase.functions.invoke("get-upload-url", {
-          body: { fileName: file.name, fileSize: file.size, mimeType, apiKey: resolvedOwnKey }
-        });
-        if (urlError || urlData?.error || !urlData?.uploadUrl)
-          throw new Error(urlData?.error || urlError?.message || "Upload URL ရယူ၍ မအောင်မြင်ပါ");
-        uploadUrl = urlData.uploadUrl;
-      } else {
-        // App API style: through video-recap
-        const initBody: Record<string, unknown> = {
-          action: "initUpload",
+      const { data: urlData, error: urlError } = await supabase.functions.invoke("get-upload-url", {
+        body: {
           fileName: file.name,
           fileSize: file.size,
           mimeType,
-          useOwnApi: false,
-        };
-        const { data: initData, error: initError } = await supabase.functions.invoke("video-recap", { body: initBody });
-        if (initError || initData?.error || !initData?.uploadUrl)
-          throw new Error(initData?.error || initError?.message || "Upload URL ရယူ၍ မအောင်မြင်ပါ");
-        uploadUrl = initData.uploadUrl;
-      }
+          ...(resolvedOwnKey ? { apiKey: resolvedOwnKey } : {}),
+        },
+      });
+      if (urlError || urlData?.error || !urlData?.uploadUrl)
+        throw new Error(urlData?.error || urlError?.message || "Upload URL ရယူ၍ မအောင်မြင်ပါ");
+      const uploadUrl = urlData.uploadUrl;
 
       const CHUNK_SIZE = 8 * 1024 * 1024;
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
@@ -4543,38 +4530,15 @@ const RecapVideoNVPage: React.FC = () => {
         const isLastChunk = i === totalChunks - 1;
         setProgressMsg(`📤 Uploading... (${i + 1}/${totalChunks})`);
 
-        if (resolvedOwnKey) {
-          // Own API key style: direct upload-chunk
-          const formData = new FormData();
-          formData.append("uploadUrl", uploadUrl);
-          formData.append("offset", String(start));
-          formData.append("command", isLastChunk ? "upload, finalize" : "upload");
-          formData.append("chunk", chunk);
+        const formData = new FormData();
+        formData.append("uploadUrl", uploadUrl);
+        formData.append("offset", String(start));
+        formData.append("command", isLastChunk ? "upload, finalize" : "upload");
+        formData.append("chunk", chunk);
 
-          const { data, error } = await supabase.functions.invoke("upload-chunk", { body: formData });
-          if (error || data?.error) throw new Error(data?.error || error?.message || `Chunk ${i + 1} upload failed`);
-          if (isLastChunk && data?.file?.uri) fileUri = data.file.uri;
-        } else {
-          // App API style: through video-recap
-          const chunkBuf = await chunk.arrayBuffer();
-          const chunkHeaders: Record<string, string> = {
-            "x-recap-action": "uploadChunkBinary",
-            "x-upload-url": uploadUrl,
-            "x-chunk-index": String(i),
-            "x-total-chunks": String(totalChunks),
-            "x-offset": String(start),
-            "x-total-size": String(file.size),
-            "x-mime-type": mimeType,
-            "x-is-last-chunk": String(isLastChunk),
-          };
-
-          const { data, error } = await supabase.functions.invoke("video-recap", {
-            body: chunkBuf,
-            headers: chunkHeaders,
-          });
-          if (error || data?.error) throw new Error(data?.error || error?.message || `Chunk ${i + 1} upload failed`);
-          if (isLastChunk && data?.fileUri) fileUri = data.fileUri;
-        }
+        const { data, error } = await supabase.functions.invoke("upload-chunk", { body: formData });
+        if (error || data?.error) throw new Error(data?.error || error?.message || `Chunk ${i + 1} upload failed`);
+        if (isLastChunk && data?.file?.uri) fileUri = data.file.uri;
       }
       if (!fileUri) throw new Error("File URI ရယူ၍ မအောင်မြင်ပါ");
 
