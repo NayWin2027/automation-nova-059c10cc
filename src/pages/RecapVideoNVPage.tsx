@@ -784,38 +784,86 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             const { data: audioSigned, error: auErr } = await supabase.storage.from("temp-uploads").createSignedUrl(audioName, 3600 * 24);
             if (!audioSigned || auErr) throw new Error("Failed to get audio signed URL");
 
-            // 2. Extract and upload frames
+            // 2. Extract and upload frames (mobile-safe: attach video, wait for decoded data, fallback to dataURL)
             const video = document.createElement("video");
-            
-            // Important for iOS Safari to allow canvas reading and extraction without SecurityError or empty blobs
             video.playsInline = true;
             video.muted = true;
-            
+            video.preload = "auto";
+            video.setAttribute("playsinline", "true");
+            video.setAttribute("webkit-playsinline", "true");
+            video.style.cssText = "position:fixed;left:-2px;top:-2px;width:1px;height:1px;opacity:0;pointer-events:none;";
+            document.body.appendChild(video);
+
+            const waitFor = (eventName: keyof HTMLVideoElementEventMap, timeoutMs = 8000) =>
+              new Promise<void>((resolve, reject) => {
+                const timer = window.setTimeout(() => {
+                  cleanup();
+                  reject(new Error(`Video ${eventName} timeout`));
+                }, timeoutMs);
+                const cleanup = () => {
+                  window.clearTimeout(timer);
+                  video.removeEventListener(eventName, onEvent);
+                  video.removeEventListener("error", onError);
+                };
+                const onEvent = () => {
+                  cleanup();
+                  resolve();
+                };
+                const onError = () => {
+                  cleanup();
+                  reject(new Error("Video frame decoder failed"));
+                };
+                video.addEventListener(eventName, onEvent, { once: true });
+                video.addEventListener("error", onError, { once: true });
+              });
+
             video.src = videoUrl;
-            
-            await new Promise((resolve) => { video.onloadedmetadata = resolve; });
-            const dur = video.duration || 60;
-            const intervals = [dur * 0.1, dur * 0.3, dur * 0.5, dur * 0.7, dur * 0.9];
+            video.load();
+            await waitFor("loadedmetadata");
+            if (video.readyState < 2) await waitFor("loadeddata");
+
+            const fallbackDur = Math.max(...audioTimestampsRef.current.map((x) => x.end || 0), 60);
+            const dur = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : fallbackDur;
+            const intervals = [0.08, 0.28, 0.48, 0.68, 0.88].map((p) => Math.min(Math.max(dur * p, 0.05), Math.max(dur - 0.1, 0.05)));
             const signedImageUrls: string[] = [];
+            let lastFrameError = "";
             
-            for (let i = 0; i < intervals.length; i++) {
-              video.currentTime = intervals[i];
-              await new Promise((resolve) => { video.onseeked = resolve; });
-              const canvas = document.createElement("canvas");
-              canvas.width = 1280; canvas.height = 720;
-              const ctx = canvas.getContext("2d");
-              if (ctx) ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-              
-              const blob = await new Promise<Blob | null>((res) => canvas.toBlob((b) => res(b), "image/jpeg", 0.9));
-              if (blob) {
-                const imgName = `${userId}/frame_${Date.now()}_${i}.jpg`;
-                const { error: upErr } = await supabase.storage.from("temp-uploads").upload(imgName, blob);
-                
-                if (!upErr) {
-                  const { data: imgSigned } = await supabase.storage.from("temp-uploads").createSignedUrl(imgName, 3600 * 24);
-                  if (imgSigned && imgSigned.signedUrl) signedImageUrls.push(imgSigned.signedUrl);
+            try {
+              for (let i = 0; i < intervals.length; i++) {
+                try {
+                  video.currentTime = intervals[i];
+                  await waitFor("seeked", 5000).catch(() => undefined);
+                  await new Promise((resolve) => requestAnimationFrame(resolve));
+                  const sourceW = video.videoWidth || 720;
+                  const sourceH = video.videoHeight || 1280;
+                  const scale = Math.min(1, 720 / Math.max(sourceW, sourceH));
+                  const canvas = document.createElement("canvas");
+                  canvas.width = Math.max(2, Math.round(sourceW * scale));
+                  canvas.height = Math.max(2, Math.round(sourceH * scale));
+                  const ctx = canvas.getContext("2d", { alpha: false });
+                  if (!ctx) throw new Error("Canvas context unavailable");
+                  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                  
+                  let blob = await new Promise<Blob | null>((res) => canvas.toBlob((b) => res(b), "image/jpeg", 0.86));
+                  if (!blob || blob.size === 0) {
+                    blob = await fetch(canvas.toDataURL("image/jpeg", 0.82)).then((r) => r.blob()).catch(() => null);
+                  }
+                  if (!blob || blob.size === 0) throw new Error("Empty frame blob");
+
+                  const imgName = `${userId}/frame_${Date.now()}_${i}.jpg`;
+                  const { error: upErr } = await supabase.storage.from("temp-uploads").upload(imgName, blob, { upsert: true, contentType: "image/jpeg" });
+                  if (upErr) throw upErr;
+                  const { data: imgSigned, error: signErr } = await supabase.storage.from("temp-uploads").createSignedUrl(imgName, 3600 * 24);
+                  if (signErr || !imgSigned?.signedUrl) throw signErr || new Error("Frame signed URL missing");
+                  signedImageUrls.push(imgSigned.signedUrl);
+                } catch (frameErr: any) {
+                  lastFrameError = frameErr?.message || String(frameErr);
                 }
               }
+            } finally {
+              video.removeAttribute("src");
+              video.load();
+              video.remove();
             }
 
             // 3. Prepare subtitles
@@ -829,7 +877,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             });
             
             if (signedImageUrls.length === 0) {
-               throw new Error("ဗီဒီယိုဖိုင်မှ ပုံရိပ်များထုတ်ယူ၍မရပါ။ iOS / Safari တွင် ပြဿနာရှိနိုင်ပါသည်။");
+               throw new Error(`ဗီဒီယိုဖိုင်မှ ပုံရိပ်များထုတ်ယူ၍မရပါ။ ${lastFrameError || "Frame upload failed"}`);
             }
 
             // 4. Call Edge Function to proxy to Cloud Run
