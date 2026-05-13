@@ -775,131 +775,75 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           setIsRendering(true);
           try {
             // 1. Upload audio
-            const { data: { user } } = await supabase.auth.getUser();
+            const {
+              data: { user },
+            } = await supabase.auth.getUser();
             const userId = user?.id || "guest";
             const audioBlob = await fetch(audioUrl).then((r) => r.blob());
             const audioExt = audioBlob.type.includes("mp3") ? "mp3" : "wav";
+            const audioContentType = audioExt === "mp3" ? "audio/mpeg" : "audio/wav";
             const audioName = `${userId}/audio_${Date.now()}.${audioExt}`;
-            await supabase.storage.from("temp-uploads").upload(audioName, audioBlob);
-            const { data: audioSigned, error: auErr } = await supabase.storage.from("temp-uploads").createSignedUrl(audioName, 3600 * 24);
+            await supabase.storage.from("temp-uploads").upload(audioName, audioBlob, { contentType: audioContentType });
+            const { data: audioSigned, error: auErr } = await supabase.storage
+              .from("temp-uploads")
+              .createSignedUrl(audioName, 3600 * 24);
             if (!audioSigned || auErr) throw new Error("Failed to get audio signed URL");
 
-            // 2. Extract and upload frames (mobile-safe: attach video, wait for decoded data, fallback to dataURL)
-            let video: HTMLVideoElement;
-            let usingMainVideo = false;
-            let originalTime = 0;
-
-            if (videoRef.current && videoRef.current.readyState >= 2) {
-              video = videoRef.current;
-              usingMainVideo = true;
-              originalTime = video.currentTime;
-            } else {
-              video = document.createElement("video");
-              video.playsInline = true;
-              video.muted = true;
-              video.preload = "auto";
-              video.setAttribute("playsinline", "true");
-              video.setAttribute("webkit-playsinline", "true");
-              video.style.cssText = "position:fixed;left:-10000px;top:-10000px;width:320px;height:240px;pointer-events:none;z-index:-1;";
-              document.body.appendChild(video);
-            }
-
-            const waitFor = (eventName: keyof HTMLVideoElementEventMap, timeoutMs = 8000) =>
-              new Promise<void>((resolve, reject) => {
-                const timer = window.setTimeout(() => {
-                  cleanup();
-                  reject(new Error(`Video ${eventName} timeout`));
-                }, timeoutMs);
-                const cleanup = () => {
-                  window.clearTimeout(timer);
-                  video.removeEventListener(eventName, onEvent);
-                  video.removeEventListener("error", onError);
-                };
-                const onEvent = () => {
-                  cleanup();
-                  resolve();
-                };
-                const onError = () => {
-                  cleanup();
-                  reject(new Error(`Video frame decoder failed: ${video.error ? video.error.code : 'unknown'}`));
-                };
-                video.addEventListener(eventName, onEvent, { once: true });
-                video.addEventListener("error", onError, { once: true });
-              });
-
-            if (!usingMainVideo) {
-              video.src = videoUrl;
-              video.load();
-              
-              try {
-                await waitFor("loadedmetadata", 10000);
-                if (video.readyState < 2) await waitFor("loadeddata", 10000);
-              } catch (err) {
-                console.warn("Video metadata/data wait failed, trying to proceed anyway:", err);
-              }
-            }
-
-            const fallbackDur = Math.max(...audioTimestampsRef.current.map((x) => x.end || 0), 60);
-            const dur = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : fallbackDur;
-            const intervals = [0.08, 0.28, 0.48, 0.68, 0.88].map((p) => Math.min(Math.max(dur * p, 0.05), Math.max(dur - 0.1, 0.05)));
+            // 2. Extract and upload frames
+            const video = document.createElement("video");
+            video.crossOrigin = "anonymous";
+            video.preload = "metadata";
+            video.src = videoUrl;
+            await new Promise<void>((resolve, reject) => {
+              const timeout = setTimeout(() => reject(new Error("Video metadata load timeout")), 30000);
+              video.onloadedmetadata = () => {
+                clearTimeout(timeout);
+                resolve();
+              };
+              video.onerror = () => {
+                clearTimeout(timeout);
+                reject(new Error("Failed to load video for frame extraction"));
+              };
+            });
+            const dur = video.duration || 60;
+            const intervals = [dur * 0.1, dur * 0.3, dur * 0.5, dur * 0.7, dur * 0.9];
             const signedImageUrls: string[] = [];
-            let lastFrameError = "";
-            
-            const dataURItoBlob = (dataURI: string) => {
-              const byteString = atob(dataURI.split(',')[1]);
-              const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
-              const ab = new ArrayBuffer(byteString.length);
-              const ia = new Uint8Array(ab);
-              for (let i = 0; i < byteString.length; i++) {
-                ia[i] = byteString.charCodeAt(i);
-              }
-              return new Blob([ab], {type: mimeString});
-            };
 
-            try {
-              for (let i = 0; i < intervals.length; i++) {
-                try {
-                  video.currentTime = intervals[i];
-                  await waitFor("seeked", 5000).catch(() => undefined);
-                  await new Promise((resolve) => requestAnimationFrame(resolve));
-                  const sourceW = video.videoWidth || 720;
-                  const sourceH = video.videoHeight || 1280;
-                  const scale = Math.min(1, 720 / Math.max(sourceW, sourceH));
-                  const canvas = document.createElement("canvas");
-                  canvas.width = Math.max(2, Math.round(sourceW * scale));
-                  canvas.height = Math.max(2, Math.round(sourceH * scale));
-                  const ctx = canvas.getContext("2d", { alpha: false });
-                  if (!ctx) throw new Error("Canvas context unavailable");
-                  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                  
-                  let blob = await new Promise<Blob | null>((res) => canvas.toBlob((b) => res(b), "image/jpeg", 0.86));
-                  if (!blob || blob.size === 0) {
-                    try {
-                      blob = dataURItoBlob(canvas.toDataURL("image/jpeg", 0.82));
-                    } catch (e) {
-                      blob = null;
-                    }
-                  }
-                  if (!blob || blob.size === 0) throw new Error("Empty frame blob");
-
-                  const imgName = `${userId}/frame_${Date.now()}_${i}.jpg`;
-                  const { error: upErr } = await supabase.storage.from("temp-uploads").upload(imgName, blob, { upsert: true, contentType: "image/jpeg" });
-                  if (upErr) throw upErr;
-                  const { data: imgSigned, error: signErr } = await supabase.storage.from("temp-uploads").createSignedUrl(imgName, 3600 * 24);
-                  if (signErr || !imgSigned?.signedUrl) throw signErr || new Error("Frame signed URL missing");
-                  signedImageUrls.push(imgSigned.signedUrl);
-                } catch (frameErr: any) {
-                  lastFrameError = frameErr?.message || String(frameErr);
-                }
+            for (let i = 0; i < intervals.length; i++) {
+              video.currentTime = intervals[i];
+              await new Promise((resolve) => {
+                video.onseeked = resolve;
+              });
+              const canvas = document.createElement("canvas");
+              canvas.width = 1280;
+              canvas.height = 720;
+              const ctx = canvas.getContext("2d");
+              if (ctx) ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+              // Try JPEG first, fallback to PNG, fallback to base64 conversion
+              let frameBlob: Blob | null = await new Promise<Blob | null>((res) =>
+                canvas.toBlob((b) => res(b), "image/jpeg", 0.85),
+              );
+              let frameMime = "image/jpeg";
+              let frameExt = "jpg";
+              if (!frameBlob) {
+                frameBlob = await new Promise<Blob | null>((res) => canvas.toBlob((b) => res(b), "image/png"));
+                frameMime = "image/png";
+                frameExt = "png";
               }
-            } finally {
-              if (usingMainVideo) {
-                video.currentTime = originalTime;
-              } else {
-                try { video.removeAttribute("src"); } catch(e){}
-                video.load();
-                video.remove();
+              if (!frameBlob) {
+                // Final fallback: manual base64 → Blob
+                const dataUrl = canvas.toDataURL("image/png");
+                const resp = await fetch(dataUrl);
+                frameBlob = await resp.blob();
+                frameMime = "image/png";
+                frameExt = "png";
               }
+              const imgName = `${userId}/frame_${Date.now()}_${i}.${frameExt}`;
+              await supabase.storage.from("temp-uploads").upload(imgName, frameBlob, { contentType: frameMime });
+              const { data: imgSigned } = await supabase.storage
+                .from("temp-uploads")
+                .createSignedUrl(imgName, 3600 * 24);
+              if (imgSigned) signedImageUrls.push(imgSigned.signedUrl);
             }
 
             // 3. Prepare subtitles
@@ -908,13 +852,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               return {
                 start: ts ? ts.start : 0,
                 end: ts ? ts.end : 0,
-                text: seg.text
+                text: seg.text,
               };
             });
-            
-            if (signedImageUrls.length === 0) {
-               throw new Error(`ဗီဒီယိုဖိုင်မှ ပုံရိပ်များထုတ်ယူ၍မရပါ။ ${lastFrameError || "Frame upload failed"}`);
-            }
 
             // 4. Call Edge Function to proxy to Cloud Run
             const { data: jobData, error: jobError } = await supabase.functions.invoke("video-recap", {
@@ -923,40 +863,66 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 audioUrl: audioSigned.signedUrl,
                 imageUrls: signedImageUrls,
                 subtitles,
-                duration: dur
-              }
+                duration: dur,
+              },
             });
 
-            if (jobError || jobData?.error) throw new Error(jobData?.error || jobError?.message || "Failed to start render job");
-            
+            if (jobError || jobData?.error)
+              throw new Error(jobData?.error || jobError?.message || "Failed to start render job");
+
             const jobId = jobData.jobId;
 
-            // 5. Poll status
+            // 5. Poll status (max ~10 min = 120 polls × 5s)
+            let pollCount = 0;
+            const MAX_POLLS = 120;
             const pollStatus = async () => {
-              const { data: statusData, error: statusErr } = await supabase.functions.invoke("video-recap", {
-                body: { action: "pollServerRender", jobId }
-              });
-              if (statusErr || statusData?.error) {
-                console.error("Poll error:", statusErr || statusData?.error);
-                setTimeout(pollStatus, 5000);
+              pollCount++;
+              if (pollCount > MAX_POLLS) {
+                setIsRendering(false);
+                onAutoStartConsumed?.();
+                toast.error("Server Render timeout — ကြာမြင့်လွန်းပါသည်");
                 return;
               }
-              
-              if (statusData.state === "done" && statusData.url) {
-                setRenderedBlobUrl(statusData.url);
-                setIsRendering(false);
-                onAutoStartConsumed?.();
-                toast.success("Server Render အောင်မြင်ပါသည်!");
-              } else if (statusData.state === "failed") {
-                setIsRendering(false);
-                onAutoStartConsumed?.();
-                toast.error("Server Render failed: " + (statusData.error || "Unknown"));
-              } else {
+              try {
+                const { data: statusData, error: statusErr } = await supabase.functions.invoke("video-recap", {
+                  body: { action: "pollServerRender", jobId },
+                });
+                if (statusErr || statusData?.error) {
+                  console.error("Poll error (attempt " + pollCount + "):", statusErr || statusData?.error);
+                  if (pollCount >= MAX_POLLS) {
+                    setIsRendering(false);
+                    onAutoStartConsumed?.();
+                    toast.error("Server Render poll error: " + (statusData?.error || statusErr?.message || "Unknown"));
+                    return;
+                  }
+                  setTimeout(pollStatus, 5000);
+                  return;
+                }
+
+                if (statusData.state === "done" && statusData.url) {
+                  setRenderedBlobUrl(statusData.url);
+                  setIsRendering(false);
+                  onAutoStartConsumed?.();
+                  toast.success("Server Render အောင်မြင်ပါသည်!");
+                } else if (statusData.state === "failed") {
+                  setIsRendering(false);
+                  onAutoStartConsumed?.();
+                  toast.error("Server Render failed: " + (statusData.error || "Unknown"));
+                } else {
+                  setTimeout(pollStatus, 5000);
+                }
+              } catch (pollErr: any) {
+                console.error("Poll exception (attempt " + pollCount + "):", pollErr);
+                if (pollCount >= MAX_POLLS) {
+                  setIsRendering(false);
+                  onAutoStartConsumed?.();
+                  toast.error("Server Render poll failed: " + pollErr.message);
+                  return;
+                }
                 setTimeout(pollStatus, 5000);
               }
             };
             setTimeout(pollStatus, 5000);
-
           } catch (err: any) {
             console.error("Server render error:", err);
             setIsRendering(false);
@@ -3948,8 +3914,7 @@ const RecapVideoNVPage: React.FC = () => {
         .eq("tool_id", "recap-nv")
         .maybeSingle();
       if (data?.credit_cost) setCreditPerMinRate(data.credit_cost);
-      if ((data as any)?.server_credit_per_min)
-        setServerCreditPerMinRate((data as any).server_credit_per_min);
+      if ((data as any)?.server_credit_per_min) setServerCreditPerMinRate((data as any).server_credit_per_min);
     }, 500);
     return () => clearTimeout(timer);
   }, []);
@@ -4339,16 +4304,28 @@ const RecapVideoNVPage: React.FC = () => {
       const mimeType = (uploadFile as Blob).type || mimeMap[ext] || "video/mp4";
 
       setProgressMsg("📤 Google AI ဆီ video upload လုပ်နေပါသည်...");
-      const uploadUrlBody: Record<string, unknown> = {
+      const initBody: Record<string, unknown> = {
+        action: "initUpload",
         fileName: uploadFileName,
         fileSize: uploadFileSize,
         mimeType,
+        useOwnApi: resolvedApiMode === "own",
       };
-      if (resolvedOwnKey) uploadUrlBody.apiKey = resolvedOwnKey;
+      if (resolvedOwnKey) initBody.ownApiKey = resolvedOwnKey;
 
-      const { data: initData, error: initError } = await supabase.functions.invoke("get-upload-url", {
-        body: uploadUrlBody,
-      });
+      // ── RETRY: initUpload up to 3 times on network failure ──
+      let initData: any = null;
+      let initError: any = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) {
+          setProgressMsg(`📤 Upload retry ${attempt}/2...`);
+          await new Promise((r) => setTimeout(r, 1500 * attempt));
+        }
+        const result = await supabase.functions.invoke("video-recap", { body: initBody });
+        initData = result.data;
+        initError = result.error;
+        if (!initError && !initData?.error && initData?.uploadUrl) break;
+      }
       if (initError || initData?.error || !initData?.uploadUrl)
         throw new Error(initData?.error || initError?.message || "Upload URL ရယူ၍ မအောင်မြင်ပါ");
 
@@ -4358,23 +4335,40 @@ const RecapVideoNVPage: React.FC = () => {
       for (let i = 0; i < totalChunks; i++) {
         const start = i * CHUNK_SIZE;
         const end = Math.min(start + CHUNK_SIZE, uploadFileSize);
-        const chunkBlob = uploadFile.slice(start, end);
+        const chunk = uploadFile.slice(start, end);
         const isLastChunk = i === totalChunks - 1;
-        const command = isLastChunk ? "upload, finalize" : "upload";
-
-        const formData = new FormData();
-        formData.append("uploadUrl", initData.uploadUrl);
-        formData.append("offset", String(start));
-        formData.append("command", command);
-        formData.append("chunk", chunkBlob);
-
+        const chunkBuf = await chunk.arrayBuffer();
+        const chunkHeaders: Record<string, string> = {
+          "x-recap-action": "uploadChunkBinary",
+          "x-upload-url": initData.uploadUrl,
+          "x-chunk-index": String(i),
+          "x-total-chunks": String(totalChunks),
+          "x-offset": String(start),
+          "x-total-size": String(uploadFileSize),
+          "x-mime-type": mimeType,
+          "x-is-last-chunk": String(isLastChunk),
+        };
+        if (resolvedOwnKey) chunkHeaders["x-own-api-key"] = resolvedOwnKey;
         setProgressMsg(`📤 Uploading... (${i + 1}/${totalChunks})`);
 
-        const { data, error } = await supabase.functions.invoke("upload-chunk", {
-          body: formData,
-        });
+        // ── RETRY: each chunk up to 3 times ──
+        let data: any = null;
+        let error: any = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (attempt > 0) {
+            setProgressMsg(`📤 Chunk ${i + 1} retry ${attempt}/2...`);
+            await new Promise((r) => setTimeout(r, 1500 * attempt));
+          }
+          const result = await supabase.functions.invoke("video-recap", {
+            body: chunkBuf,
+            headers: chunkHeaders,
+          });
+          data = result.data;
+          error = result.error;
+          if (!error && !data?.error) break;
+        }
         if (error || data?.error) throw new Error(data?.error || error?.message || `Chunk ${i + 1} upload failed`);
-        if (isLastChunk && data?.file) fileUri = data.file.uri || data.file.name || "";
+        if (isLastChunk && data?.fileUri) fileUri = data.fileUri;
       }
       if (!fileUri) throw new Error("File URI ရယူ၍ မအောင်မြင်ပါ");
 
