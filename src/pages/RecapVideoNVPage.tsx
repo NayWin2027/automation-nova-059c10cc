@@ -798,170 +798,227 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
             // 2. Extract and upload frames
             setServerRenderProgress("Extracting frames... 20%");
-            console.log("[ServerRender] Starting frame extraction, videoUrl type:", videoUrl?.substring(0, 30));
+            const frameErrors: string[] = [];
 
             // Wait for the on-screen video to be ready (up to 15 seconds)
             let frameVideo: HTMLVideoElement | null = null;
             let createdFrameVideo = false;
             if (videoRef.current) {
-              console.log(
-                "[ServerRender] videoRef exists, readyState:",
-                videoRef.current.readyState,
-                "duration:",
-                videoRef.current.duration,
-              );
               for (let waitAttempt = 0; waitAttempt < 30; waitAttempt++) {
                 if (videoRef.current && videoRef.current.readyState >= 2 && videoRef.current.duration > 0) {
                   frameVideo = videoRef.current;
                   frameVideo.pause();
-                  console.log("[ServerRender] Using on-screen video, duration:", frameVideo.duration);
                   break;
                 }
                 await new Promise((r) => setTimeout(r, 500));
               }
-            }
-
-            // Fallback: create a new video element if on-screen video not ready
-            if (!frameVideo) {
-              console.log("[ServerRender] On-screen video not ready, creating new element");
-              const newVideo = document.createElement("video");
-              if (!isLocalSource(videoUrl)) {
-                newVideo.crossOrigin = "anonymous";
-              }
-              newVideo.preload = "auto";
-              newVideo.muted = true;
-              newVideo.playsInline = true;
-              newVideo.src = videoUrl;
-              newVideo.style.cssText =
-                "position:fixed;opacity:0;pointer-events:none;width:1px;height:1px;z-index:-9999";
-              document.body.appendChild(newVideo);
-              createdFrameVideo = true;
-              newVideo.load();
-              await new Promise<void>((resolve, reject) => {
-                const timeout = setTimeout(() => reject(new Error("Video load timeout (30s)")), 30000);
-                newVideo.onloadeddata = () => {
-                  clearTimeout(timeout);
-                  resolve();
-                };
-                newVideo.onerror = (e) => {
-                  clearTimeout(timeout);
-                  reject(new Error("Video load error: " + (newVideo.error?.message || "unknown")));
-                };
-              });
-              frameVideo = newVideo;
-              console.log("[ServerRender] Fallback video loaded, duration:", frameVideo.duration);
-            }
-
-            const dur = frameVideo.duration || 60;
-            const intervals = [dur * 0.1, dur * 0.3, dur * 0.5, dur * 0.7, dur * 0.9];
-            const signedImageUrls: string[] = [];
-
-            for (let i = 0; i < intervals.length; i++) {
-              try {
-                frameVideo.currentTime = intervals[i];
-                setServerRenderProgress(
-                  `Uploading frame ${i + 1}/${intervals.length}... ${20 + Math.round(((i + 1) / intervals.length) * 30)}%`,
+              if (!frameVideo)
+                frameErrors.push(
+                  "On-screen video not ready after 15s (readyState=" + (videoRef.current?.readyState ?? "null") + ")",
                 );
-                await new Promise<void>((resolve) => {
-                  const seekTimeout = setTimeout(() => resolve(), 5000);
-                  frameVideo!.onseeked = () => {
-                    clearTimeout(seekTimeout);
+            } else {
+              frameErrors.push("videoRef is null");
+            }
+
+            // Fallback: create a new video element
+            if (!frameVideo) {
+              try {
+                const newVideo = document.createElement("video");
+                if (!isLocalSource(videoUrl)) {
+                  newVideo.crossOrigin = "anonymous";
+                }
+                newVideo.preload = "auto";
+                newVideo.muted = true;
+                newVideo.playsInline = true;
+                newVideo.src = videoUrl;
+                newVideo.style.cssText =
+                  "position:fixed;opacity:0;pointer-events:none;width:1px;height:1px;z-index:-9999";
+                document.body.appendChild(newVideo);
+                createdFrameVideo = true;
+                newVideo.load();
+                await new Promise<void>((resolve, reject) => {
+                  const timeout = setTimeout(() => reject(new Error("timeout 30s")), 30000);
+                  newVideo.onloadeddata = () => {
+                    clearTimeout(timeout);
                     resolve();
                   };
+                  newVideo.onerror = () => {
+                    clearTimeout(timeout);
+                    reject(new Error(newVideo.error?.message || "load error"));
+                  };
                 });
-
-                const cW = Math.min(frameVideo.videoWidth || 1280, 1280);
-                const cH = Math.min(frameVideo.videoHeight || 720, 720);
-                const canvas = document.createElement("canvas");
-                canvas.width = cW;
-                canvas.height = cH;
-                const ctx = canvas.getContext("2d");
-                if (!ctx) {
-                  console.error(`[ServerRender] Frame ${i}: no canvas context`);
-                  continue;
-                }
-
-                try {
-                  ctx.drawImage(frameVideo, 0, 0, cW, cH);
-                } catch (drawErr) {
-                  console.error(`[ServerRender] Frame ${i}: drawImage failed:`, drawErr);
-                  continue;
-                }
-
-                // Export frame as blob — try multiple methods, catch SecurityError for tainted canvas
-                let frameBlob: Blob | null = null;
-                let frameMime = "image/png";
-                let frameExt = "png";
-
-                try {
-                  frameBlob = await new Promise<Blob | null>((res) => canvas.toBlob((b) => res(b), "image/jpeg", 0.85));
-                  if (frameBlob) {
-                    frameMime = "image/jpeg";
-                    frameExt = "jpg";
-                  }
-                } catch (e) {
-                  console.warn(`[ServerRender] Frame ${i}: JPEG toBlob failed (tainted canvas?)`);
-                }
-
-                if (!frameBlob) {
-                  try {
-                    frameBlob = await new Promise<Blob | null>((res) => canvas.toBlob((b) => res(b), "image/png"));
-                    if (frameBlob) {
-                      frameMime = "image/png";
-                      frameExt = "png";
-                    }
-                  } catch (e) {
-                    console.warn(`[ServerRender] Frame ${i}: PNG toBlob failed`);
-                  }
-                }
-
-                if (!frameBlob) {
-                  try {
-                    const dataUrl = canvas.toDataURL("image/png");
-                    const resp = await fetch(dataUrl);
-                    frameBlob = await resp.blob();
-                    frameMime = "image/png";
-                    frameExt = "png";
-                  } catch (e) {
-                    console.warn(`[ServerRender] Frame ${i}: toDataURL fallback failed (tainted canvas)`);
-                  }
-                }
-
-                if (!frameBlob) {
-                  console.error(`[ServerRender] Frame ${i}: all export methods failed, skipping`);
-                  continue;
-                }
-
-                console.log(`[ServerRender] Frame ${i}: blob created, size=${frameBlob.size}, type=${frameMime}`);
-                const imgName = `${userId}/frame_${Date.now()}_${i}.${frameExt}`;
-                const { error: frameUpErr } = await supabase.storage
-                  .from("temp-uploads")
-                  .upload(imgName, frameBlob, { contentType: frameMime, upsert: true });
-                if (frameUpErr) {
-                  console.error(`[ServerRender] Frame ${i} upload failed:`, frameUpErr.message);
-                  continue;
-                }
-                const { data: imgSigned, error: imgSignErr } = await supabase.storage
-                  .from("temp-uploads")
-                  .createSignedUrl(imgName, 3600 * 24);
-                if (imgSigned?.signedUrl) {
-                  signedImageUrls.push(imgSigned.signedUrl);
-                  console.log(`[ServerRender] Frame ${i} uploaded OK`);
-                } else {
-                  console.error(`[ServerRender] Frame ${i} signed URL failed:`, imgSignErr?.message);
-                }
-              } catch (frameErr: any) {
-                console.error(`[ServerRender] Frame ${i} unexpected error:`, frameErr.message);
-                continue;
+                frameVideo = newVideo;
+              } catch (videoErr: any) {
+                frameErrors.push("Fallback video failed: " + videoErr.message);
               }
             }
-            // Clean up temporary video element if created
+
+            const signedImageUrls: string[] = [];
+
+            if (frameVideo) {
+              const frameDur = frameVideo.duration || 60;
+              const intervals = [frameDur * 0.1, frameDur * 0.3, frameDur * 0.5, frameDur * 0.7, frameDur * 0.9];
+              let canvasTainted = false;
+
+              for (let i = 0; i < intervals.length; i++) {
+                try {
+                  frameVideo.currentTime = intervals[i];
+                  setServerRenderProgress(
+                    `Uploading frame ${i + 1}/${intervals.length}... ${20 + Math.round(((i + 1) / intervals.length) * 30)}%`,
+                  );
+                  await new Promise<void>((resolve) => {
+                    const seekTimeout = setTimeout(() => resolve(), 5000);
+                    frameVideo!.onseeked = () => {
+                      clearTimeout(seekTimeout);
+                      resolve();
+                    };
+                  });
+
+                  const cW = Math.max(frameVideo.videoWidth || 1280, 1);
+                  const cH = Math.max(frameVideo.videoHeight || 720, 1);
+                  const canvas = document.createElement("canvas");
+                  canvas.width = Math.min(cW, 1280);
+                  canvas.height = Math.min(cH, 720);
+                  const ctx = canvas.getContext("2d");
+                  if (!ctx) {
+                    frameErrors.push(`Frame ${i}: no canvas context`);
+                    continue;
+                  }
+
+                  // Try drawing video frame to canvas
+                  let drawOk = false;
+                  try {
+                    ctx.drawImage(frameVideo, 0, 0, canvas.width, canvas.height);
+                    drawOk = true;
+                  } catch (drawErr: any) {
+                    frameErrors.push(`Frame ${i}: drawImage: ${drawErr.message}`);
+                  }
+
+                  // If draw failed or canvas tainted from previous attempt, create placeholder
+                  if (!drawOk || canvasTainted) {
+                    // Create a gradient placeholder image
+                    const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+                    grad.addColorStop(0, "#1a1a2e");
+                    grad.addColorStop(0.5, "#16213e");
+                    grad.addColorStop(1, "#0f3460");
+                    ctx.fillStyle = grad;
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.fillStyle = "#e2e8f0";
+                    ctx.font = "bold 32px sans-serif";
+                    ctx.textAlign = "center";
+                    ctx.fillText("Frame " + (i + 1), canvas.width / 2, canvas.height / 2);
+                  }
+
+                  // Export frame blob — with tainted canvas detection
+                  let frameBlob: Blob | null = null;
+                  let frameMime = "image/png";
+                  let frameExt = "png";
+
+                  try {
+                    frameBlob = await new Promise<Blob | null>((res) =>
+                      canvas.toBlob((b) => res(b), "image/jpeg", 0.85),
+                    );
+                    if (frameBlob && frameBlob.size > 0) {
+                      frameMime = "image/jpeg";
+                      frameExt = "jpg";
+                    } else {
+                      frameBlob = null;
+                    }
+                  } catch (e) {
+                    canvasTainted = true;
+                    frameErrors.push(`Frame ${i}: toBlob JPEG SecurityError (tainted canvas)`);
+                  }
+
+                  if (!frameBlob) {
+                    try {
+                      frameBlob = await new Promise<Blob | null>((res) => canvas.toBlob((b) => res(b), "image/png"));
+                      if (frameBlob && frameBlob.size > 0) {
+                        frameMime = "image/png";
+                        frameExt = "png";
+                      } else {
+                        frameBlob = null;
+                      }
+                    } catch (e) {
+                      canvasTainted = true;
+                    }
+                  }
+
+                  if (!frameBlob) {
+                    try {
+                      const dataUrl = canvas.toDataURL("image/png");
+                      const resp = await fetch(dataUrl);
+                      frameBlob = await resp.blob();
+                      frameMime = "image/png";
+                      frameExt = "png";
+                    } catch (e) {
+                      canvasTainted = true;
+                    }
+                  }
+
+                  // FINAL FALLBACK: if canvas is tainted, create a clean placeholder canvas (no video data)
+                  if (!frameBlob) {
+                    const cleanCanvas = document.createElement("canvas");
+                    cleanCanvas.width = 1280;
+                    cleanCanvas.height = 720;
+                    const cctx = cleanCanvas.getContext("2d");
+                    if (cctx) {
+                      const grad2 = cctx.createLinearGradient(0, 0, 1280, 720);
+                      grad2.addColorStop(0, "#1a1a2e");
+                      grad2.addColorStop(1, "#0f3460");
+                      cctx.fillStyle = grad2;
+                      cctx.fillRect(0, 0, 1280, 720);
+                      cctx.fillStyle = "#ffffff";
+                      cctx.font = "bold 40px sans-serif";
+                      cctx.textAlign = "center";
+                      cctx.fillText("Frame " + (i + 1), 640, 360);
+                    }
+                    frameBlob = await new Promise<Blob | null>((res) => cleanCanvas.toBlob((b) => res(b), "image/png"));
+                    frameMime = "image/png";
+                    frameExt = "png";
+                    frameErrors.push(`Frame ${i}: used placeholder (tainted canvas)`);
+                  }
+
+                  if (!frameBlob) {
+                    frameErrors.push(`Frame ${i}: all methods failed completely`);
+                    continue;
+                  }
+
+                  const imgName = `${userId}/frame_${Date.now()}_${i}.${frameExt}`;
+                  const { error: frameUpErr } = await supabase.storage
+                    .from("temp-uploads")
+                    .upload(imgName, frameBlob, { contentType: frameMime, upsert: true });
+                  if (frameUpErr) {
+                    frameErrors.push(`Frame ${i} upload: ${frameUpErr.message}`);
+                    continue;
+                  }
+                  const { data: imgSigned, error: imgSignErr } = await supabase.storage
+                    .from("temp-uploads")
+                    .createSignedUrl(imgName, 3600 * 24);
+                  if (imgSigned?.signedUrl) {
+                    signedImageUrls.push(imgSigned.signedUrl);
+                  } else {
+                    frameErrors.push(`Frame ${i} signedUrl: ${imgSignErr?.message || "no URL"}`);
+                  }
+                } catch (frameErr: any) {
+                  frameErrors.push(`Frame ${i} error: ${frameErr.message}`);
+                  continue;
+                }
+              }
+            }
+
+            // Clean up
             if (createdFrameVideo && frameVideo?.parentNode) {
               document.body.removeChild(frameVideo);
             }
-            console.log(
-              `[ServerRender] Frame extraction done. ${signedImageUrls.length}/${intervals.length} frames uploaded`,
-            );
+
+            // Validate
+            if (!audioSigned?.signedUrl) throw new Error("Audio signed URL is missing");
+            if (signedImageUrls.length === 0) {
+              throw new Error("Frame extraction failed ⚠️\n" + frameErrors.join("\n"));
+            }
+            if (frameErrors.length > 0) {
+              console.warn("[ServerRender] Frame warnings:", frameErrors);
+            }
 
             // 3. Prepare subtitles
             const subtitles = scriptData.segments.map((seg, idx) => {
@@ -972,11 +1029,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 text: seg.text,
               };
             });
-
-            // Validate before calling edge function
-            if (!audioSigned?.signedUrl) throw new Error("Audio signed URL is missing");
-            if (signedImageUrls.length === 0)
-              throw new Error("No frames were uploaded successfully — frame extraction failed");
+            const dur = frameVideo?.duration || 60;
 
             setServerRenderProgress("Sending to server... 55%");
             // 4. Call Edge Function to proxy to Cloud Run
