@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logToolActivity } from "../_shared/activityLog.ts";
+import { geminiRetryFetch } from "../_shared/geminiKeys.ts";
 
 import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
 
@@ -284,22 +285,26 @@ serve(async (req) => {
 
       console.log(`Initiating upload for file: ${sanitizedFileName}, size: ${fileSize}`);
 
-      const initResponse = await fetch(
-        `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${apiKeyToUse}`,
-        {
-          method: 'POST',
-          headers: {
-            'X-Goog-Upload-Protocol': 'resumable',
-            'X-Goog-Upload-Command': 'start',
-            'X-Goog-Upload-Header-Content-Length': String(fileSize),
-            'X-Goog-Upload-Header-Content-Type': mimeType || 'video/mp4',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            file: { display_name: sanitizedFileName }
-          })
-        }
-      );
+      const uploadInitOptions = {
+        method: 'POST',
+        headers: {
+          'X-Goog-Upload-Protocol': 'resumable',
+          'X-Goog-Upload-Command': 'start',
+          'X-Goog-Upload-Header-Content-Length': String(fileSize),
+          'X-Goog-Upload-Header-Content-Type': mimeType || 'video/mp4',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          file: { display_name: sanitizedFileName }
+        })
+      };
+
+      const initResponse = isOwnApiKey
+        ? await fetch(`https://generativelanguage.googleapis.com/upload/v1beta/files?key=${apiKeyToUse}`, uploadInitOptions)
+        : await geminiRetryFetch(
+            (key) => `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${key}`,
+            uploadInitOptions,
+          );
 
       if (!initResponse.ok) {
         const errText = await initResponse.text();
