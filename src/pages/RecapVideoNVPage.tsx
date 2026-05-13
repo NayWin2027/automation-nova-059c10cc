@@ -785,14 +785,24 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             if (!audioSigned || auErr) throw new Error("Failed to get audio signed URL");
 
             // 2. Extract and upload frames (mobile-safe: attach video, wait for decoded data, fallback to dataURL)
-            const video = document.createElement("video");
-            video.playsInline = true;
-            video.muted = true;
-            video.preload = "auto";
-            video.setAttribute("playsinline", "true");
-            video.setAttribute("webkit-playsinline", "true");
-            video.style.cssText = "position:fixed;left:-2px;top:-2px;width:1px;height:1px;opacity:0;pointer-events:none;";
-            document.body.appendChild(video);
+            let video: HTMLVideoElement;
+            let usingMainVideo = false;
+            let originalTime = 0;
+
+            if (videoRef.current && videoRef.current.readyState >= 2) {
+              video = videoRef.current;
+              usingMainVideo = true;
+              originalTime = video.currentTime;
+            } else {
+              video = document.createElement("video");
+              video.playsInline = true;
+              video.muted = true;
+              video.preload = "auto";
+              video.setAttribute("playsinline", "true");
+              video.setAttribute("webkit-playsinline", "true");
+              video.style.cssText = "position:fixed;left:-10000px;top:-10000px;width:320px;height:240px;pointer-events:none;z-index:-1;";
+              document.body.appendChild(video);
+            }
 
             const waitFor = (eventName: keyof HTMLVideoElementEventMap, timeoutMs = 8000) =>
               new Promise<void>((resolve, reject) => {
@@ -811,16 +821,23 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 };
                 const onError = () => {
                   cleanup();
-                  reject(new Error("Video frame decoder failed"));
+                  reject(new Error(`Video frame decoder failed: ${video.error ? video.error.code : 'unknown'}`));
                 };
                 video.addEventListener(eventName, onEvent, { once: true });
                 video.addEventListener("error", onError, { once: true });
               });
 
-            video.src = videoUrl;
-            video.load();
-            await waitFor("loadedmetadata");
-            if (video.readyState < 2) await waitFor("loadeddata");
+            if (!usingMainVideo) {
+              video.src = videoUrl;
+              video.load();
+              
+              try {
+                await waitFor("loadedmetadata", 10000);
+                if (video.readyState < 2) await waitFor("loadeddata", 10000);
+              } catch (err) {
+                console.warn("Video metadata/data wait failed, trying to proceed anyway:", err);
+              }
+            }
 
             const fallbackDur = Math.max(...audioTimestampsRef.current.map((x) => x.end || 0), 60);
             const dur = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : fallbackDur;
@@ -828,6 +845,17 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             const signedImageUrls: string[] = [];
             let lastFrameError = "";
             
+            const dataURItoBlob = (dataURI: string) => {
+              const byteString = atob(dataURI.split(',')[1]);
+              const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
+              const ab = new ArrayBuffer(byteString.length);
+              const ia = new Uint8Array(ab);
+              for (let i = 0; i < byteString.length; i++) {
+                ia[i] = byteString.charCodeAt(i);
+              }
+              return new Blob([ab], {type: mimeString});
+            };
+
             try {
               for (let i = 0; i < intervals.length; i++) {
                 try {
@@ -846,7 +874,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   
                   let blob = await new Promise<Blob | null>((res) => canvas.toBlob((b) => res(b), "image/jpeg", 0.86));
                   if (!blob || blob.size === 0) {
-                    blob = await fetch(canvas.toDataURL("image/jpeg", 0.82)).then((r) => r.blob()).catch(() => null);
+                    try {
+                      blob = dataURItoBlob(canvas.toDataURL("image/jpeg", 0.82));
+                    } catch (e) {
+                      blob = null;
+                    }
                   }
                   if (!blob || blob.size === 0) throw new Error("Empty frame blob");
 
@@ -861,9 +893,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 }
               }
             } finally {
-              video.removeAttribute("src");
-              video.load();
-              video.remove();
+              if (usingMainVideo) {
+                video.currentTime = originalTime;
+              } else {
+                try { video.removeAttribute("src"); } catch(e){}
+                video.load();
+                video.remove();
+              }
             }
 
             // 3. Prepare subtitles
