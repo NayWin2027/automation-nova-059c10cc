@@ -843,7 +843,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               const { data: imgSigned } = await supabase.storage
                 .from("temp-uploads")
                 .createSignedUrl(imgName, 3600 * 24);
-              if (imgSigned) signedImageUrls.push(imgSigned.signedUrl);
+              if (imgSigned?.signedUrl) {
+                signedImageUrls.push(imgSigned.signedUrl);
+              } else {
+                // Surgical fallback: server render only needs a fetchable image URL.
+                // If temporary storage signing fails on mobile, keep rendering alive with the in-memory frame.
+                signedImageUrls.push(canvas.toDataURL("image/jpeg", 0.85));
+              }
             }
 
             // 3. Prepare subtitles
