@@ -983,10 +983,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     continue;
                   }
 
-                  const imgName = `${userId}/frame_${Date.now()}_${i}.${frameExt}`;
+                  const imgName = `${userId}/frame_${Date.now()}_${i}.bin`;
                   const { error: frameUpErr } = await supabase.storage
                     .from("temp-uploads")
-                    .upload(imgName, frameBlob, { contentType: frameMime, upsert: true });
+                    .upload(imgName, frameBlob, { contentType: "application/octet-stream", upsert: true });
                   if (frameUpErr) {
                     frameErrors.push(`Frame ${i} upload: ${frameUpErr.message}`);
                     continue;
