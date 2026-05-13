@@ -786,8 +786,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
             // 2. Extract and upload frames
             const video = document.createElement("video");
-            video.crossOrigin = "anonymous";
+            
+            // Important for iOS Safari to allow canvas reading and extraction without SecurityError or empty blobs
+            video.playsInline = true;
+            video.muted = true;
+            
             video.src = videoUrl;
+            
             await new Promise((resolve) => { video.onloadedmetadata = resolve; });
             const dur = video.duration || 60;
             const intervals = [dur * 0.1, dur * 0.3, dur * 0.5, dur * 0.7, dur * 0.9];
@@ -800,11 +805,17 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               canvas.width = 1280; canvas.height = 720;
               const ctx = canvas.getContext("2d");
               if (ctx) ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-              const blob = await new Promise<Blob>((res) => canvas.toBlob((b) => res(b!), "image/jpeg", 0.9));
-              const imgName = `${userId}/frame_${Date.now()}_${i}.jpg`;
-              await supabase.storage.from("temp-uploads").upload(imgName, blob);
-              const { data: imgSigned } = await supabase.storage.from("temp-uploads").createSignedUrl(imgName, 3600 * 24);
-              if (imgSigned) signedImageUrls.push(imgSigned.signedUrl);
+              
+              const blob = await new Promise<Blob | null>((res) => canvas.toBlob((b) => res(b), "image/jpeg", 0.9));
+              if (blob) {
+                const imgName = `${userId}/frame_${Date.now()}_${i}.jpg`;
+                const { error: upErr } = await supabase.storage.from("temp-uploads").upload(imgName, blob);
+                
+                if (!upErr) {
+                  const { data: imgSigned } = await supabase.storage.from("temp-uploads").createSignedUrl(imgName, 3600 * 24);
+                  if (imgSigned && imgSigned.signedUrl) signedImageUrls.push(imgSigned.signedUrl);
+                }
+              }
             }
 
             // 3. Prepare subtitles
@@ -816,6 +827,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 text: seg.text
               };
             });
+            
+            if (signedImageUrls.length === 0) {
+               throw new Error("ဗီဒီယိုဖိုင်မှ ပုံရိပ်များထုတ်ယူ၍မရပါ။ iOS / Safari တွင် ပြဿနာရှိနိုင်ပါသည်။");
+            }
 
             // 4. Call Edge Function to proxy to Cloud Run
             const { data: jobData, error: jobError } = await supabase.functions.invoke("video-recap", {
