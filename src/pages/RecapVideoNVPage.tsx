@@ -4516,19 +4516,7 @@ const RecapVideoNVPage: React.FC = () => {
       };
       if (resolvedOwnKey) initBody.ownApiKey = resolvedOwnKey;
 
-      // ── RETRY: initUpload up to 3 times on network failure ──
-      let initData: any = null;
-      let initError: any = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        if (attempt > 0) {
-          setProgressMsg(`📤 Upload retry ${attempt}/2...`);
-          await new Promise((r) => setTimeout(r, 1500 * attempt));
-        }
-        const result = await supabase.functions.invoke("video-recap", { body: initBody });
-        initData = result.data;
-        initError = result.error;
-        if (!initError && !initData?.error && initData?.uploadUrl) break;
-      }
+      const { data: initData, error: initError } = await supabase.functions.invoke("video-recap", { body: initBody });
       if (initError || initData?.error || !initData?.uploadUrl)
         throw new Error(initData?.error || initError?.message || "Upload URL ရယူ၍ မအောင်မြင်ပါ");
 
@@ -4554,22 +4542,10 @@ const RecapVideoNVPage: React.FC = () => {
         if (resolvedOwnKey) chunkHeaders["x-own-api-key"] = resolvedOwnKey;
         setProgressMsg(`📤 Uploading... (${i + 1}/${totalChunks})`);
 
-        // ── RETRY: each chunk up to 3 times ──
-        let data: any = null;
-        let error: any = null;
-        for (let attempt = 0; attempt < 3; attempt++) {
-          if (attempt > 0) {
-            setProgressMsg(`📤 Chunk ${i + 1} retry ${attempt}/2...`);
-            await new Promise((r) => setTimeout(r, 1500 * attempt));
-          }
-          const result = await supabase.functions.invoke("video-recap", {
-            body: chunkBuf,
-            headers: chunkHeaders,
-          });
-          data = result.data;
-          error = result.error;
-          if (!error && !data?.error) break;
-        }
+        const { data, error } = await supabase.functions.invoke("video-recap", {
+          body: chunkBuf,
+          headers: chunkHeaders,
+        });
         if (error || data?.error) throw new Error(data?.error || error?.message || `Chunk ${i + 1} upload failed`);
         if (isLastChunk && data?.fileUri) fileUri = data.fileUri;
       }
