@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
+import { getGeminiKey, rotateKey } from "../_shared/geminiKeys.ts";
 
 const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1beta/files";
 
@@ -43,31 +44,55 @@ serve(async (req) => {
       );
     }
 
-    // Use user's own API key or server key
-    const activeKey = apiKey || Deno.env.get("GEMINI_API_KEY");
-    if (!activeKey) {
+    // Use user's own API key, or rotate backend keys for App API mode.
+    let startResponse: Response | null = null;
+    if (apiKey) {
+      startResponse = await fetch(`${GOOGLE_FILES_API}?key=${apiKey}`, {
+        method: "POST",
+        headers: {
+          "X-Goog-Upload-Protocol": "resumable",
+          "X-Goog-Upload-Command": "start",
+          "X-Goog-Upload-Header-Content-Length": fileSize.toString(),
+          "X-Goog-Upload-Header-Content-Type": mimeType,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          file: {
+            display_name: fileName.replace(/[\/\\:*?"<>|]/g, "_").substring(0, 255),
+          },
+        }),
+      });
+    } else {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const activeKey = attempt === 0 ? getGeminiKey() : rotateKey();
+        if (!activeKey) break;
+        startResponse = await fetch(`${GOOGLE_FILES_API}?key=${activeKey}`, {
+          method: "POST",
+          headers: {
+            "X-Goog-Upload-Protocol": "resumable",
+            "X-Goog-Upload-Command": "start",
+            "X-Goog-Upload-Header-Content-Length": fileSize.toString(),
+            "X-Goog-Upload-Header-Content-Type": mimeType,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            file: {
+              display_name: fileName.replace(/[\/\\:*?"<>|]/g, "_").substring(0, 255),
+            },
+          }),
+        });
+        if (startResponse.ok) break;
+        const probeText = await startResponse.clone().text();
+        if (!(startResponse.status === 429 || probeText.includes("CONSUMER_SUSPENDED") || probeText.includes("RESOURCE_EXHAUSTED"))) break;
+      }
+    }
+
+    if (!startResponse) {
       return new Response(
         JSON.stringify({ error: "No API key available" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    // Request resumable upload URL from Google Files API
-    const startResponse = await fetch(`${GOOGLE_FILES_API}?key=${activeKey}`, {
-      method: "POST",
-      headers: {
-        "X-Goog-Upload-Protocol": "resumable",
-        "X-Goog-Upload-Command": "start",
-        "X-Goog-Upload-Header-Content-Length": fileSize.toString(),
-        "X-Goog-Upload-Header-Content-Type": mimeType,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        file: {
-          display_name: fileName.replace(/[\/\\:*?"<>|]/g, "_").substring(0, 255),
-        },
-      }),
-    });
 
     if (!startResponse.ok) {
       const errorText = await startResponse.text();
