@@ -775,9 +775,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           setIsRendering(true);
           try {
             // 1. Upload audio
+            const { data: { user } } = await supabase.auth.getUser();
+            const userId = user?.id || "guest";
             const audioBlob = await fetch(audioUrl).then((r) => r.blob());
             const audioExt = audioBlob.type.includes("mp3") ? "mp3" : "wav";
-            const audioName = `server_render/audio_${Date.now()}.${audioExt}`;
+            const audioName = `${userId}/audio_${Date.now()}.${audioExt}`;
             await supabase.storage.from("temp-uploads").upload(audioName, audioBlob);
             const { data: audioSigned, error: auErr } = await supabase.storage.from("temp-uploads").createSignedUrl(audioName, 3600 * 24);
             if (!audioSigned || auErr) throw new Error("Failed to get audio signed URL");
@@ -799,7 +801,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               const ctx = canvas.getContext("2d");
               if (ctx) ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
               const blob = await new Promise<Blob>((res) => canvas.toBlob((b) => res(b!), "image/jpeg", 0.9));
-              const imgName = `server_render/frame_${Date.now()}_${i}.jpg`;
+              const imgName = `${userId}/frame_${Date.now()}_${i}.jpg`;
               await supabase.storage.from("temp-uploads").upload(imgName, blob);
               const { data: imgSigned } = await supabase.storage.from("temp-uploads").createSignedUrl(imgName, 3600 * 24);
               if (imgSigned) signedImageUrls.push(imgSigned.signedUrl);
