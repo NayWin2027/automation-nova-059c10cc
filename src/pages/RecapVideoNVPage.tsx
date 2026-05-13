@@ -4303,28 +4303,16 @@ const RecapVideoNVPage: React.FC = () => {
       const mimeType = (uploadFile as Blob).type || mimeMap[ext] || "video/mp4";
 
       setProgressMsg("📤 Google AI ဆီ video upload လုပ်နေပါသည်...");
-      const initBody: Record<string, unknown> = {
-        action: "initUpload",
+      const uploadUrlBody: Record<string, unknown> = {
         fileName: uploadFileName,
         fileSize: uploadFileSize,
         mimeType,
-        useOwnApi: resolvedApiMode === "own",
       };
-      if (resolvedOwnKey) initBody.ownApiKey = resolvedOwnKey;
+      if (resolvedOwnKey) uploadUrlBody.apiKey = resolvedOwnKey;
 
-      // ── RETRY: initUpload up to 3 times on network failure ──
-      let initData: any = null;
-      let initError: any = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        if (attempt > 0) {
-          setProgressMsg(`📤 Upload retry ${attempt}/2...`);
-          await new Promise((r) => setTimeout(r, 1500 * attempt));
-        }
-        const result = await supabase.functions.invoke("video-recap", { body: initBody });
-        initData = result.data;
-        initError = result.error;
-        if (!initError && !initData?.error && initData?.uploadUrl) break;
-      }
+      const { data: initData, error: initError } = await supabase.functions.invoke("get-upload-url", {
+        body: uploadUrlBody,
+      });
       if (initError || initData?.error || !initData?.uploadUrl)
         throw new Error(initData?.error || initError?.message || "Upload URL ရယူ၍ မအောင်မြင်ပါ");
 
@@ -4334,40 +4322,23 @@ const RecapVideoNVPage: React.FC = () => {
       for (let i = 0; i < totalChunks; i++) {
         const start = i * CHUNK_SIZE;
         const end = Math.min(start + CHUNK_SIZE, uploadFileSize);
-        const chunk = uploadFile.slice(start, end);
+        const chunkBlob = uploadFile.slice(start, end);
         const isLastChunk = i === totalChunks - 1;
-        const chunkBuf = await chunk.arrayBuffer();
-        const chunkHeaders: Record<string, string> = {
-          "x-recap-action": "uploadChunkBinary",
-          "x-upload-url": initData.uploadUrl,
-          "x-chunk-index": String(i),
-          "x-total-chunks": String(totalChunks),
-          "x-offset": String(start),
-          "x-total-size": String(uploadFileSize),
-          "x-mime-type": mimeType,
-          "x-is-last-chunk": String(isLastChunk),
-        };
-        if (resolvedOwnKey) chunkHeaders["x-own-api-key"] = resolvedOwnKey;
+        const command = isLastChunk ? "upload, finalize" : "upload";
+
+        const formData = new FormData();
+        formData.append("uploadUrl", initData.uploadUrl);
+        formData.append("offset", String(start));
+        formData.append("command", command);
+        formData.append("chunk", chunkBlob);
+
         setProgressMsg(`📤 Uploading... (${i + 1}/${totalChunks})`);
 
-        // ── RETRY: each chunk up to 3 times ──
-        let data: any = null;
-        let error: any = null;
-        for (let attempt = 0; attempt < 3; attempt++) {
-          if (attempt > 0) {
-            setProgressMsg(`📤 Chunk ${i + 1} retry ${attempt}/2...`);
-            await new Promise((r) => setTimeout(r, 1500 * attempt));
-          }
-          const result = await supabase.functions.invoke("video-recap", {
-            body: chunkBuf,
-            headers: chunkHeaders,
-          });
-          data = result.data;
-          error = result.error;
-          if (!error && !data?.error) break;
-        }
+        const { data, error } = await supabase.functions.invoke("upload-chunk", {
+          body: formData,
+        });
         if (error || data?.error) throw new Error(data?.error || error?.message || `Chunk ${i + 1} upload failed`);
-        if (isLastChunk && data?.fileUri) fileUri = data.fileUri;
+        if (isLastChunk && data?.file) fileUri = data.file.uri || data.file.name || "";
       }
       if (!fileUri) throw new Error("File URI ရယူ၍ မအောင်မြင်ပါ");
 
