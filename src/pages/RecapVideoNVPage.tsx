@@ -796,40 +796,63 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             if (!audioSigned?.signedUrl || auErr)
               throw new Error("Failed to get audio signed URL: " + (auErr?.message || "No URL returned"));
 
-            // 2. Extract and upload frames
+            // 2. Extract and upload frames using the already-loaded video on screen
             setServerRenderProgress("Extracting frames... 20%");
-            const video = document.createElement("video");
-            video.crossOrigin = "anonymous";
-            video.preload = "metadata";
-            video.src = videoUrl;
-            await new Promise<void>((resolve, reject) => {
-              const timeout = setTimeout(() => reject(new Error("Video metadata load timeout")), 30000);
-              video.onloadedmetadata = () => {
-                clearTimeout(timeout);
-                resolve();
-              };
-              video.onerror = () => {
-                clearTimeout(timeout);
-                reject(new Error("Failed to load video for frame extraction"));
-              };
-            });
-            const dur = video.duration || 60;
+            let frameVideo: HTMLVideoElement;
+            let createdFrameVideo = false;
+            if (videoRef.current && videoRef.current.readyState >= 2 && videoRef.current.duration > 0) {
+              // Use the already-loaded video element (best for blob URLs, no CORS issues)
+              frameVideo = videoRef.current;
+              frameVideo.pause();
+            } else {
+              // Fallback: create new video element
+              frameVideo = document.createElement("video");
+              if (!isLocalSource(videoUrl)) {
+                frameVideo.crossOrigin = "anonymous";
+              }
+              frameVideo.preload = "auto";
+              frameVideo.muted = true;
+              frameVideo.playsInline = true;
+              frameVideo.src = videoUrl;
+              // Some mobile browsers need element in DOM to load
+              frameVideo.style.cssText =
+                "position:fixed;opacity:0;pointer-events:none;width:1px;height:1px;z-index:-9999";
+              document.body.appendChild(frameVideo);
+              createdFrameVideo = true;
+              frameVideo.load();
+              await new Promise<void>((resolve, reject) => {
+                const timeout = setTimeout(() => reject(new Error("Video metadata load timeout")), 30000);
+                frameVideo.onloadeddata = () => {
+                  clearTimeout(timeout);
+                  resolve();
+                };
+                frameVideo.onerror = () => {
+                  clearTimeout(timeout);
+                  reject(new Error("Failed to load video for frame extraction"));
+                };
+              });
+            }
+            const dur = frameVideo.duration || 60;
             const intervals = [dur * 0.1, dur * 0.3, dur * 0.5, dur * 0.7, dur * 0.9];
             const signedImageUrls: string[] = [];
 
             for (let i = 0; i < intervals.length; i++) {
-              video.currentTime = intervals[i];
+              frameVideo.currentTime = intervals[i];
               setServerRenderProgress(
                 `Uploading frame ${i + 1}/${intervals.length}... ${20 + Math.round(((i + 1) / intervals.length) * 30)}%`,
               );
-              await new Promise((resolve) => {
-                video.onseeked = resolve;
+              await new Promise<void>((resolve) => {
+                const seekTimeout = setTimeout(() => resolve(), 5000); // 5s seek timeout fallback
+                frameVideo.onseeked = () => {
+                  clearTimeout(seekTimeout);
+                  resolve();
+                };
               });
               const canvas = document.createElement("canvas");
-              canvas.width = 1280;
-              canvas.height = 720;
+              canvas.width = Math.min(frameVideo.videoWidth || 1280, 1280);
+              canvas.height = Math.min(frameVideo.videoHeight || 720, 720);
               const ctx = canvas.getContext("2d");
-              if (ctx) ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+              if (ctx) ctx.drawImage(frameVideo, 0, 0, canvas.width, canvas.height);
               // Try JPEG first, fallback to PNG, fallback to base64 conversion
               let frameBlob: Blob | null = await new Promise<Blob | null>((res) =>
                 canvas.toBlob((b) => res(b), "image/jpeg", 0.85),
@@ -866,6 +889,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 console.error(`Frame ${i} signed URL failed:`, imgSignErr?.message);
               }
             }
+            // Clean up temporary video element if created
+            if (createdFrameVideo && frameVideo.parentNode) {
+              document.body.removeChild(frameVideo);
+            }
 
             // 3. Prepare subtitles
             const subtitles = scriptData.segments.map((seg, idx) => {
@@ -901,6 +928,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
             // 5. Poll status (max ~10 min = 120 polls × 5s)
             setServerRenderProgress("Server rendering... 60%");
+
+            // Start voiceover preview playback (like browser rendering)
+            if (audioRef.current && videoRef.current) {
+              videoRef.current.currentTime = 0;
+              videoRef.current.muted = true;
+              videoRef.current.play().catch(() => {});
+              audioRef.current.currentTime = 0;
+              audioRef.current.play().catch(() => {});
+            }
             let pollCount = 0;
             const MAX_POLLS = 120;
             const pollStatus = async () => {
@@ -909,6 +945,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               setServerRenderProgress(`Server rendering... ${progressPct}%`);
               if (pollCount > MAX_POLLS) {
                 setIsRendering(false);
+                if (audioRef.current) {
+                  audioRef.current.pause();
+                  audioRef.current.currentTime = 0;
+                }
                 onAutoStartConsumed?.();
                 toast.error("Server Render timeout — ကြာမြင့်လွန်းပါသည်");
                 return;
@@ -921,6 +961,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   console.error("Poll error (attempt " + pollCount + "):", statusErr || statusData?.error);
                   if (pollCount >= MAX_POLLS) {
                     setIsRendering(false);
+                    if (audioRef.current) {
+                      audioRef.current.pause();
+                      audioRef.current.currentTime = 0;
+                    }
                     onAutoStartConsumed?.();
                     toast.error("Server Render poll error: " + (statusData?.error || statusErr?.message || "Unknown"));
                     return;
@@ -933,10 +977,18 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   setRenderedBlobUrl(statusData.url);
                   setIsRendering(false);
                   setServerRenderProgress("Done! 100%");
+                  if (audioRef.current) {
+                    audioRef.current.pause();
+                    audioRef.current.currentTime = 0;
+                  }
                   onAutoStartConsumed?.();
                   toast.success("Server Render အောင်မြင်ပါသည်!");
                 } else if (statusData.state === "failed") {
                   setIsRendering(false);
+                  if (audioRef.current) {
+                    audioRef.current.pause();
+                    audioRef.current.currentTime = 0;
+                  }
                   onAutoStartConsumed?.();
                   toast.error("Server Render failed: " + (statusData.error || "Unknown"));
                 } else {
@@ -946,6 +998,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 console.error("Poll exception (attempt " + pollCount + "):", pollErr);
                 if (pollCount >= MAX_POLLS) {
                   setIsRendering(false);
+                  if (audioRef.current) {
+                    audioRef.current.pause();
+                    audioRef.current.currentTime = 0;
+                  }
                   onAutoStartConsumed?.();
                   toast.error("Server Render poll failed: " + pollErr.message);
                   return;
@@ -957,6 +1013,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           } catch (err: any) {
             console.error("Server render error:", err);
             setIsRendering(false);
+            if (audioRef.current) {
+              audioRef.current.pause();
+              audioRef.current.currentTime = 0;
+            }
             onAutoStartConsumed?.();
             toast.error(`Server Render Error: ${err.message}`);
           }
