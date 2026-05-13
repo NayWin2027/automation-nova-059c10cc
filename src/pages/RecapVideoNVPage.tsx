@@ -4508,14 +4508,18 @@ const RecapVideoNVPage: React.FC = () => {
 
       setProgressMsg("📤 Google AI ဆီ video upload လုပ်နေပါသည်...");
 
-      const { data: urlData, error: urlError } = await supabase.functions.invoke("get-upload-url", {
-        body: {
-          fileName: file.name,
-          fileSize: file.size,
-          mimeType,
-          ...(resolvedOwnKey ? { apiKey: resolvedOwnKey } : {}),
+      const { data: urlData, error: urlError } = await supabase.functions.invoke(
+        resolvedOwnKey ? "get-upload-url" : "video-recap",
+        {
+          body: {
+            ...(resolvedOwnKey ? {} : { action: "initUpload" }),
+            fileName: file.name,
+            fileSize: file.size,
+            mimeType,
+            ...(resolvedOwnKey ? { apiKey: resolvedOwnKey } : {}),
+          },
         },
-      });
+      );
       if (urlError || urlData?.error || !urlData?.uploadUrl)
         throw new Error(urlData?.error || urlError?.message || "Upload URL ရယူ၍ မအောင်မြင်ပါ");
       const uploadUrl = urlData.uploadUrl;
