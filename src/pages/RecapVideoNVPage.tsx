@@ -791,7 +791,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             video.preload = "auto";
             video.setAttribute("playsinline", "true");
             video.setAttribute("webkit-playsinline", "true");
-            video.style.cssText = "position:fixed;left:-2px;top:-2px;width:1px;height:1px;opacity:0;pointer-events:none;";
+            // Make it a reasonable size but hidden far away so hardware decoders don't fail
+            video.style.cssText = "position:fixed;left:-10000px;top:-10000px;width:320px;height:240px;pointer-events:none;z-index:-1;";
             document.body.appendChild(video);
 
             const waitFor = (eventName: keyof HTMLVideoElementEventMap, timeoutMs = 8000) =>
@@ -811,7 +812,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 };
                 const onError = () => {
                   cleanup();
-                  reject(new Error("Video frame decoder failed"));
+                  reject(new Error(`Video frame decoder failed: ${video.error ? video.error.code : 'unknown'}`));
                 };
                 video.addEventListener(eventName, onEvent, { once: true });
                 video.addEventListener("error", onError, { once: true });
@@ -819,8 +820,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
             video.src = videoUrl;
             video.load();
-            await waitFor("loadedmetadata");
-            if (video.readyState < 2) await waitFor("loadeddata");
+            
+            try {
+              await waitFor("loadedmetadata", 10000);
+              if (video.readyState < 2) await waitFor("loadeddata", 10000);
+            } catch (err) {
+              console.warn("Video metadata/data wait failed, trying to proceed anyway:", err);
+            }
 
             const fallbackDur = Math.max(...audioTimestampsRef.current.map((x) => x.end || 0), 60);
             const dur = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : fallbackDur;
@@ -861,7 +867,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 }
               }
             } finally {
-              video.removeAttribute("src");
+              try { video.removeAttribute("src"); } catch(e){}
               video.load();
               video.remove();
             }
