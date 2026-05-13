@@ -178,32 +178,39 @@ async function renderJob(jobId, { audioUrl, imageUrls, subtitles, duration }) {
       "-i", audioPath,
       "-vf", vfChain,
       "-c:v", "libx264",
-      "-preset", "veryfast",
-      "-crf", "23",
+      "-preset", "ultrafast",
+      "-crf", "25",
       "-pix_fmt", "yuv420p",
       "-c:a", "aac",
       "-b:a", "192k",
       "-shortest",
       "-movflags", "+faststart",
-      "-r", "30",
+      "-r", "24",
       outPath,
     ]);
 
-    // 6) upload to GCS
+    // 6) upload to GCS — fall back to inline data URL if IAM permission missing
     const objectName = `renders/${jobId}.mp4`;
-    await bucket.upload(outPath, {
-      destination: objectName,
-      metadata: { contentType: "video/mp4", cacheControl: "public, max-age=86400" },
-    });
+    let finalUrl = null;
+    try {
+      await bucket.upload(outPath, {
+        destination: objectName,
+        metadata: { contentType: "video/mp4", cacheControl: "public, max-age=86400" },
+      });
+      const [signedUrl] = await bucket.file(objectName).getSignedUrl({
+        action: "read",
+        expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
+      });
+      finalUrl = signedUrl;
+      console.log(`[job ${jobId}] uploaded → ${objectName}`);
+    } catch (gcsErr) {
+      console.warn(`[job ${jobId}] GCS upload failed, using inline fallback:`, gcsErr.message || gcsErr);
+      const buf = await fsp.readFile(outPath);
+      finalUrl = `data:video/mp4;base64,${buf.toString("base64")}`;
+    }
 
-    // 7) signed URL (7 days)
-    const [signedUrl] = await bucket.file(objectName).getSignedUrl({
-      action: "read",
-      expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
-    });
-
-    JOBS.set(jobId, { state: "done", url: signedUrl, startedAt: Date.now() });
-    console.log(`[job ${jobId}] done → ${objectName}`);
+    JOBS.set(jobId, { state: "done", url: finalUrl, startedAt: Date.now() });
+    console.log(`[job ${jobId}] done`);
   } finally {
     // cleanup workdir
     fsp.rm(work, { recursive: true, force: true }).catch(() => {});

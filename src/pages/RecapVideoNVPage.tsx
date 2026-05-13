@@ -1060,7 +1060,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               audioRef.current.play().catch(() => {});
             }
             let pollCount = 0;
-            const MAX_POLLS = 120;
+            const MAX_POLLS = 360;
             const pollStatus = async () => {
               pollCount++;
               const progressPct = Math.min(60 + Math.round((pollCount / MAX_POLLS) * 39), 99);
