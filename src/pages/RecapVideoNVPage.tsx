@@ -13,7 +13,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Check, ChevronsUpDown, Sparkles, Download, Palette, Loader2 } from "lucide-react";
 import { GoogleGenAI, Type } from "@google/genai";
-import { compressVideoTo720p, isFFmpegSupported } from "@/services/ffmpegService";
 
 interface RecapSegment {
   timestamp: string;
