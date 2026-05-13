@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logToolActivity } from "../_shared/activityLog.ts";
+import { getGeminiKey, rotateKey } from "../_shared/geminiKeys.ts";
 
 import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
 
@@ -284,22 +285,40 @@ serve(async (req) => {
 
       console.log(`Initiating upload for file: ${sanitizedFileName}, size: ${fileSize}`);
 
-      const initResponse = await fetch(
-        `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${apiKeyToUse}`,
-        {
-          method: 'POST',
-          headers: {
-            'X-Goog-Upload-Protocol': 'resumable',
-            'X-Goog-Upload-Command': 'start',
-            'X-Goog-Upload-Header-Content-Length': String(fileSize),
-            'X-Goog-Upload-Header-Content-Type': mimeType || 'video/mp4',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            file: { display_name: sanitizedFileName }
-          })
+      const uploadInitOptions = {
+        method: 'POST',
+        headers: {
+          'X-Goog-Upload-Protocol': 'resumable',
+          'X-Goog-Upload-Command': 'start',
+          'X-Goog-Upload-Header-Content-Length': String(fileSize),
+          'X-Goog-Upload-Header-Content-Type': mimeType || 'video/mp4',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          file: { display_name: sanitizedFileName }
+        })
+      };
+
+      let initResponse: Response | null = null;
+      if (isOwnApiKey) {
+        initResponse = await fetch(`https://generativelanguage.googleapis.com/upload/v1beta/files?key=${apiKeyToUse}`, uploadInitOptions);
+      } else {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const key = attempt === 0 ? getGeminiKey() : rotateKey();
+          if (!key) break;
+          initResponse = await fetch(`https://generativelanguage.googleapis.com/upload/v1beta/files?key=${key}`, uploadInitOptions);
+          if (initResponse.ok) break;
+          const probeText = await initResponse.clone().text();
+          if (!(probeText.includes('CONSUMER_SUSPENDED') || probeText.includes('RESOURCE_EXHAUSTED') || initResponse.status === 429)) break;
         }
-      );
+      }
+
+      if (!initResponse) {
+        return new Response(
+          JSON.stringify({ error: "Backend API key not configured" }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
       if (!initResponse.ok) {
         const errText = await initResponse.text();
