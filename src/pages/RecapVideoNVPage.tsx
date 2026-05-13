@@ -259,6 +259,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const [subtitleKey, setSubtitleKey] = useState(0);
     const [isRendering, setIsRendering] = useState(false);
     const [renderedBlobUrl, setRenderedBlobUrl] = useState<string | null>(null);
+    const [serverRenderProgress, setServerRenderProgress] = useState<string>("");
     const subNeonHueRef = useRef(0);
     const [exportQuality, setExportQuality] = useState<string>("720p");
 
@@ -773,6 +774,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       if (renderMode === "server") {
         const processServerRender = async () => {
           setIsRendering(true);
+          setServerRenderProgress("Preparing... 0%");
           try {
             // 1. Upload audio
             const {
@@ -780,16 +782,22 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             } = await supabase.auth.getUser();
             const userId = user?.id || "guest";
             const audioBlob = await fetch(audioUrl).then((r) => r.blob());
+            setServerRenderProgress("Uploading audio... 10%");
             const audioExt = audioBlob.type.includes("mp3") ? "mp3" : "wav";
             const audioContentType = audioExt === "mp3" ? "audio/mpeg" : "audio/wav";
             const audioName = `${userId}/audio_${Date.now()}.${audioExt}`;
-            await supabase.storage.from("temp-uploads").upload(audioName, audioBlob, { contentType: audioContentType });
+            const { error: audioUpErr } = await supabase.storage
+              .from("temp-uploads")
+              .upload(audioName, audioBlob, { contentType: audioContentType, upsert: true });
+            if (audioUpErr) throw new Error("Audio upload failed: " + audioUpErr.message);
             const { data: audioSigned, error: auErr } = await supabase.storage
               .from("temp-uploads")
               .createSignedUrl(audioName, 3600 * 24);
-            if (!audioSigned || auErr) throw new Error("Failed to get audio signed URL");
+            if (!audioSigned?.signedUrl || auErr)
+              throw new Error("Failed to get audio signed URL: " + (auErr?.message || "No URL returned"));
 
             // 2. Extract and upload frames
+            setServerRenderProgress("Extracting frames... 20%");
             const video = document.createElement("video");
             video.crossOrigin = "anonymous";
             video.preload = "metadata";
@@ -811,6 +819,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
             for (let i = 0; i < intervals.length; i++) {
               video.currentTime = intervals[i];
+              setServerRenderProgress(
+                `Uploading frame ${i + 1}/${intervals.length}... ${20 + Math.round(((i + 1) / intervals.length) * 30)}%`,
+              );
               await new Promise((resolve) => {
                 video.onseeked = resolve;
               });
@@ -839,16 +850,20 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 frameExt = "png";
               }
               const imgName = `${userId}/frame_${Date.now()}_${i}.${frameExt}`;
-              await supabase.storage.from("temp-uploads").upload(imgName, frameBlob, { contentType: frameMime });
-              const { data: imgSigned } = await supabase.storage
+              const { error: frameUpErr } = await supabase.storage
+                .from("temp-uploads")
+                .upload(imgName, frameBlob, { contentType: frameMime, upsert: true });
+              if (frameUpErr) {
+                console.error(`Frame ${i} upload failed:`, frameUpErr.message);
+                continue; // skip this frame, try others
+              }
+              const { data: imgSigned, error: imgSignErr } = await supabase.storage
                 .from("temp-uploads")
                 .createSignedUrl(imgName, 3600 * 24);
               if (imgSigned?.signedUrl) {
                 signedImageUrls.push(imgSigned.signedUrl);
               } else {
-                // Surgical fallback: server render only needs a fetchable image URL.
-                // If temporary storage signing fails on mobile, keep rendering alive with the in-memory frame.
-                signedImageUrls.push(canvas.toDataURL("image/jpeg", 0.85));
+                console.error(`Frame ${i} signed URL failed:`, imgSignErr?.message);
               }
             }
 
@@ -862,6 +877,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               };
             });
 
+            // Validate before calling edge function
+            if (!audioSigned?.signedUrl) throw new Error("Audio signed URL is missing");
+            if (signedImageUrls.length === 0)
+              throw new Error("No frames were uploaded successfully — frame extraction failed");
+
+            setServerRenderProgress("Sending to server... 55%");
             // 4. Call Edge Function to proxy to Cloud Run
             const { data: jobData, error: jobError } = await supabase.functions.invoke("video-recap", {
               body: {
@@ -879,10 +900,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             const jobId = jobData.jobId;
 
             // 5. Poll status (max ~10 min = 120 polls × 5s)
+            setServerRenderProgress("Server rendering... 60%");
             let pollCount = 0;
             const MAX_POLLS = 120;
             const pollStatus = async () => {
               pollCount++;
+              const progressPct = Math.min(60 + Math.round((pollCount / MAX_POLLS) * 39), 99);
+              setServerRenderProgress(`Server rendering... ${progressPct}%`);
               if (pollCount > MAX_POLLS) {
                 setIsRendering(false);
                 onAutoStartConsumed?.();
@@ -908,6 +932,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 if (statusData.state === "done" && statusData.url) {
                   setRenderedBlobUrl(statusData.url);
                   setIsRendering(false);
+                  setServerRenderProgress("Done! 100%");
                   onAutoStartConsumed?.();
                   toast.success("Server Render အောင်မြင်ပါသည်!");
                 } else if (statusData.state === "failed") {
@@ -2743,6 +2768,22 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   <span className="text-rose-400 font-bold text-[10px] tracking-wider">REC</span>
                 </div>
               )}
+              {isRendering && renderMode === "server" && (
+                <div className="absolute bottom-3 left-3 right-3 z-50">
+                  <div className="bg-black/70 backdrop-blur-sm rounded-lg px-3 py-2 border border-cyan-500/30">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-cyan-400 font-bold text-[10px] tracking-wider">☁️ SERVER RENDER</span>
+                      <span className="text-cyan-300 font-mono text-[11px]">{serverRenderProgress}</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-cyan-500 to-emerald-400 rounded-full transition-all duration-700 ease-out"
+                        style={{ width: `${parseInt(serverRenderProgress.match(/\d+/)?.[0] || "0")}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div
                 ref={containerRef}
@@ -2857,7 +2898,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     src={videoUrl}
                     className="w-full h-full"
                     style={videoStyles}
-                    muted={isRecapPlaying}
+                    muted={isRecapPlaying || isRendering}
                     controls={!isRendering && !isRecapPlaying}
                     playsInline
                     autoPlay
