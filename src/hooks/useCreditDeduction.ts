@@ -12,6 +12,7 @@ interface ToolSetting {
 interface CreditDeductionResult {
   success: boolean;
   newBalance?: number;
+  deducted?: number;
   error?: string;
 }
 
@@ -142,7 +143,7 @@ export function useCreditDeduction() {
         description: `${result.deducted || creditCost} credits ဖြတ်ပြီး၊ ကျန် ${newBalance} credits`,
       });
 
-      return { success: true, newBalance };
+      return { success: true, newBalance, deducted: result.deducted || 0 };
 
     } catch (error) {
       console.error('Credit deduction error:', error);
