@@ -265,7 +265,55 @@ const AdminDailyUsageTab: React.FC = () => {
     return tool;
   };
 
-  const filteredData = usageData.filter(
+  // Merge base tool_id rows (e.g. "recap-nv") into matching variant rows
+  // (e.g. "recap-nv:app:browser") for the same user/date. The DB function
+  // deduct_user_credits writes deduct_count to the base tool_id, while
+  // trackToolVariant writes usage to the variant — so without merging the
+  // admin UI shows split rows where the variant appears to have deduct=0.
+  const mergedUsageData: DailyUsage[] = (() => {
+    const variantsByKey = new Map<string, DailyUsage[]>(); // key: `${user_id}|${base}`
+    const bases: DailyUsage[] = [];
+    const variants: DailyUsage[] = [];
+    for (const row of usageData) {
+      if (row.tool_id.includes(":")) {
+        variants.push(row);
+        const base = row.tool_id.split(":")[0];
+        const key = `${row.user_id}|${base}`;
+        const list = variantsByKey.get(key) || [];
+        list.push(row);
+        variantsByKey.set(key, list);
+      } else {
+        bases.push(row);
+      }
+    }
+    const consumedBaseIds = new Set<string>();
+    for (const base of bases) {
+      const key = `${base.user_id}|${base.tool_id}`;
+      const matches = variantsByKey.get(key);
+      if (!matches || matches.length === 0) continue;
+      // Prefer the "app" variant (credits only deduct on app mode); fall back to first.
+      const target = matches.find((v) => v.tool_id.split(":")[1] === "app") || matches[0];
+      target.deduct_count = (target.deduct_count || 0) + (base.deduct_count || 0);
+      // If the base row recorded extra usage/success/error not already on variants,
+      // fold the difference in so totals stay accurate.
+      const variantUsageSum = matches.reduce((s, v) => s + (v.usage_count || 0), 0);
+      const variantSuccessSum = matches.reduce((s, v) => s + (v.success_count || 0), 0);
+      const variantErrorSum = matches.reduce((s, v) => s + (v.error_count || 0), 0);
+      const extraUsage = Math.max(0, (base.usage_count || 0) - variantUsageSum);
+      const extraSuccess = Math.max(0, (base.success_count || 0) - variantSuccessSum);
+      const extraError = Math.max(0, (base.error_count || 0) - variantErrorSum);
+      target.usage_count = (target.usage_count || 0) + extraUsage;
+      target.success_count = (target.success_count || 0) + extraSuccess;
+      target.error_count = (target.error_count || 0) + extraError;
+      consumedBaseIds.add(base.id);
+    }
+    return [
+      ...variants,
+      ...bases.filter((b) => !consumedBaseIds.has(b.id)),
+    ].sort((a, b) => (b.usage_count || 0) - (a.usage_count || 0));
+  })();
+
+  const filteredData = mergedUsageData.filter(
     (usage) => {
       const userInfo = getProfileInfo(usage.user_id);
       return usage.tool_id.toLowerCase().includes(search.toLowerCase()) ||
