@@ -4172,7 +4172,10 @@ const RecapVideoNVPage: React.FC = () => {
       if (didDeductRef.current) return;
       // Track per-variant usage (APP/OWN x BROWSER/SERVER) for admin Daily Records
       void trackToolVariant("recap-nv", apiMode, renderMode, "success");
-      if (apiMode === "own") return;
+      if (apiMode === "own") {
+        didDeductRef.current = true;
+        return;
+      }
       try {
         const { data: appSettings } = await supabase
           .from("app_settings")
