@@ -27,6 +27,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useApiAccess } from "@/hooks/useApiAccess";
 import { preCheckCredits } from "@/utils/creditPreCheck";
+import { trackToolVariant } from "@/utils/trackToolVariant";
 import { useCreditDeduction } from "@/hooks/useCreditDeduction";
 import { GoogleGenAI } from "@google/genai";
 
@@ -394,7 +395,7 @@ export default function App() {
   const [movieTitle, setMovieTitle] = useState("");
 
   // API mode: "app" = server-side edge function, "own" = client-side with user's key
-  const [apiMode, setApiMode] = useState<"app" | "own">("app");
+  const [apiMode, setApiMode] = useState<"app" | "own">("own");
   const [ownApiKey, setOwnApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
 
@@ -460,8 +461,12 @@ export default function App() {
   // Set default API mode based on access permissions
   useEffect(() => {
     if (!accessLoading) {
-      if (!appApiAllowed && ownApiAllowed) {
+      // Default to OWN API whenever it's allowed (user preference),
+      // fall back to APP only if OWN isn't permitted.
+      if (ownApiAllowed) {
         setApiMode("own");
+      } else if (appApiAllowed) {
+        setApiMode("app");
       } else if (defaultApiMode) {
         setApiMode(defaultApiMode as "app" | "own");
       }
@@ -1906,6 +1911,10 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
             document.body.removeChild(a);
           }, 100);
 
+          // === Track per-variant usage (APP/OWN, browser-render only here) ===
+          if (!didDeductRef.current) {
+            void trackToolVariant("video-transform", apiMode, "browser", "success");
+          }
           // === CREDIT DEDUCTION: 6CR/min with 30s threshold (skip for Own API) ===
           if (!didDeductRef.current && apiMode !== "own") {
             const exactDurationSecs = video.duration || 0;
