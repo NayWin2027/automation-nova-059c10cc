@@ -283,6 +283,13 @@ const AdminDailyUsageTab: React.FC = () => {
         bases.push(row);
       }
     }
+    for (const base of bases) {
+      const matches = variantsByKey.get(`${base.user_id}|${base.tool_id}`);
+      const appVariant = matches?.find((v) => v.tool_id.split(":")[1] === "app");
+      if (appVariant && (base.deduct_count || 0) > (appVariant.deduct_count || 0)) {
+        appVariant.deduct_count = base.deduct_count || 0;
+      }
+    }
     return [
       ...variants,
       ...bases.filter((b) => !variantsByKey.has(`${b.user_id}|${b.tool_id}`)),
