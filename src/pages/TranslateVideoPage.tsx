@@ -1940,7 +1940,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                   console.error("[CREDIT] Video deduction FAILED:", result.error);
                   didDeductRef.current = false;
                 } else {
-                  void trackToolVariant("video-transform", apiMode, "browser", "success", true);
+                  void trackToolVariant("video-transform", apiMode, "browser", "success", (result.deducted || 0) > 0);
                 }
               })
               .catch((err) => {
