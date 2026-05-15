@@ -253,6 +253,18 @@ const AdminDailyUsageTab: React.FC = () => {
     return "bg-muted text-muted-foreground";
   };
 
+  // Format variant tool_id like "recap-nv:own:server" -> "recap-nv · OWN API (SERVER RENDER)"
+  const formatToolLabel = (tool: string): string => {
+    const parts = tool.split(":");
+    if (parts.length === 3) {
+      const [base, mode, render] = parts;
+      const modeLabel = mode === "own" ? "OWN API" : "APP API";
+      const renderLabel = render === "server" ? "SERVER RENDER" : "BROWSER RENDER";
+      return `${base} · ${modeLabel} (${renderLabel})`;
+    }
+    return tool;
+  };
+
   const filteredData = usageData.filter(
     (usage) => {
       const userInfo = getProfileInfo(usage.user_id);
@@ -483,7 +495,7 @@ const AdminDailyUsageTab: React.FC = () => {
                         </TableCell>
                         <TableCell>
                           <Badge className={`${getToolBadgeClass(usage.tool_id)} text-2xs`}>
-                            {usage.tool_id}
+                            {formatToolLabel(usage.tool_id)}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-center">
