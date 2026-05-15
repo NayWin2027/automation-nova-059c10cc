@@ -1914,6 +1914,9 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
           // === Track per-variant usage (APP/OWN, browser-render only here) ===
           if (!didDeductRef.current) {
             void trackToolVariant("video-transform", apiMode, "browser", "success");
+            if (apiMode === "own") {
+              didDeductRef.current = true;
+            }
           }
           // === CREDIT DEDUCTION: 6CR/min with 30s threshold (skip for Own API) ===
           if (!didDeductRef.current && apiMode !== "own") {
