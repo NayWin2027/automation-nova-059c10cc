@@ -5,6 +5,7 @@ import { AppLogo } from "@/components/AppLogo";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useApiAccess } from "@/hooks/useApiAccess";
 import { preCheckCredits } from "@/utils/creditPreCheck";
+import { trackToolVariant } from "@/utils/trackToolVariant";
 import { toast } from "sonner";
 import { useCreditDeduction } from "@/hooks/useCreditDeduction";
 import { languages } from "@/data/languages";
@@ -4162,13 +4163,15 @@ const RecapVideoNVPage: React.FC = () => {
   const [selectedLanguage, setSelectedLanguage] = useState("my-MM");
   const [selectedVoice, setSelectedVoice] = useState("Charon");
   const [langPopoverOpen, setLangPopoverOpen] = useState(false);
-  const [apiMode, setApiMode] = useState<"app" | "own">("app");
+  const [apiMode, setApiMode] = useState<"app" | "own">("own");
   const [ownApiKey, setOwnApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
 
   const handleVideoReady = useCallback(
     async (outputDurationSecs: number) => {
       if (didDeductRef.current) return;
+      // Track per-variant usage (APP/OWN x BROWSER/SERVER) for admin Daily Records
+      void trackToolVariant("recap-nv", apiMode, renderMode, "success");
       if (apiMode === "own") return;
       try {
         const { data: appSettings } = await supabase
