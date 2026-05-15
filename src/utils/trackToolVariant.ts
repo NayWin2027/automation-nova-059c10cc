@@ -11,6 +11,7 @@ export async function trackToolVariant(
   apiMode: "app" | "own",
   renderMode: "browser" | "server",
   outcome: "success" | "error" = "success",
+  deducted: boolean = false,
 ): Promise<void> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -20,7 +21,7 @@ export async function trackToolVariant(
 
     const { data: existing } = await supabase
       .from("user_tool_usage")
-      .select("id, usage_count, success_count, error_count")
+      .select("id, usage_count, success_count, error_count, deduct_count")
       .eq("user_id", user.id)
       .eq("tool_id", variantId)
       .eq("usage_date", today)
@@ -33,6 +34,7 @@ export async function trackToolVariant(
           usage_count: (existing.usage_count || 0) + 1,
           success_count: (existing.success_count || 0) + (outcome === "success" ? 1 : 0),
           error_count: (existing.error_count || 0) + (outcome === "error" ? 1 : 0),
+          deduct_count: (existing.deduct_count || 0) + (deducted ? 1 : 0),
         })
         .eq("id", existing.id);
     } else {
@@ -43,7 +45,7 @@ export async function trackToolVariant(
         usage_count: 1,
         success_count: outcome === "success" ? 1 : 0,
         error_count: outcome === "error" ? 1 : 0,
-        deduct_count: 0,
+        deduct_count: deducted ? 1 : 0,
       });
     }
   } catch (_) {

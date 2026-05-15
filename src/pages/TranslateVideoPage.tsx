@@ -1913,8 +1913,8 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
 
           // === Track per-variant usage (APP/OWN, browser-render only here) ===
           if (!didDeductRef.current) {
-            void trackToolVariant("video-transform", apiMode, "browser", "success");
             if (apiMode === "own") {
+              void trackToolVariant("video-transform", apiMode, "browser", "success", false);
               didDeductRef.current = true;
             }
           }
@@ -1939,6 +1939,8 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                 if (!result.success) {
                   console.error("[CREDIT] Video deduction FAILED:", result.error);
                   didDeductRef.current = false;
+                } else {
+                  void trackToolVariant("video-transform", apiMode, "browser", "success", (result.deducted || 0) > 0);
                 }
               })
               .catch((err) => {

@@ -265,11 +265,8 @@ const AdminDailyUsageTab: React.FC = () => {
     return tool;
   };
 
-  // Merge base tool_id rows (e.g. "recap-nv") into matching variant rows
-  // (e.g. "recap-nv:app:browser") for the same user/date. The DB function
-  // deduct_user_credits writes deduct_count to the base tool_id, while
-  // trackToolVariant writes usage to the variant — so without merging the
-  // admin UI shows split rows where the variant appears to have deduct=0.
+  // Prefer explicit APP/OWN variant rows for Recap NV / Translate Video.
+  // Old base rows are kept only when no variant exists, so totals don't double count.
   const mergedUsageData: DailyUsage[] = (() => {
     const variantsByKey = new Map<string, DailyUsage[]>(); // key: `${user_id}|${base}`
     const bases: DailyUsage[] = [];
@@ -286,30 +283,16 @@ const AdminDailyUsageTab: React.FC = () => {
         bases.push(row);
       }
     }
-    const consumedBaseIds = new Set<string>();
     for (const base of bases) {
-      const key = `${base.user_id}|${base.tool_id}`;
-      const matches = variantsByKey.get(key);
-      if (!matches || matches.length === 0) continue;
-      // Prefer the "app" variant (credits only deduct on app mode); fall back to first.
-      const target = matches.find((v) => v.tool_id.split(":")[1] === "app") || matches[0];
-      target.deduct_count = (target.deduct_count || 0) + (base.deduct_count || 0);
-      // If the base row recorded extra usage/success/error not already on variants,
-      // fold the difference in so totals stay accurate.
-      const variantUsageSum = matches.reduce((s, v) => s + (v.usage_count || 0), 0);
-      const variantSuccessSum = matches.reduce((s, v) => s + (v.success_count || 0), 0);
-      const variantErrorSum = matches.reduce((s, v) => s + (v.error_count || 0), 0);
-      const extraUsage = Math.max(0, (base.usage_count || 0) - variantUsageSum);
-      const extraSuccess = Math.max(0, (base.success_count || 0) - variantSuccessSum);
-      const extraError = Math.max(0, (base.error_count || 0) - variantErrorSum);
-      target.usage_count = (target.usage_count || 0) + extraUsage;
-      target.success_count = (target.success_count || 0) + extraSuccess;
-      target.error_count = (target.error_count || 0) + extraError;
-      consumedBaseIds.add(base.id);
+      const matches = variantsByKey.get(`${base.user_id}|${base.tool_id}`);
+      const appVariant = matches?.find((v) => v.tool_id.split(":")[1] === "app");
+      if (appVariant && (base.deduct_count || 0) > (appVariant.deduct_count || 0)) {
+        appVariant.deduct_count = base.deduct_count || 0;
+      }
     }
     return [
       ...variants,
-      ...bases.filter((b) => !consumedBaseIds.has(b.id)),
+      ...bases.filter((b) => !variantsByKey.has(`${b.user_id}|${b.tool_id}`)),
     ].sort((a, b) => (b.usage_count || 0) - (a.usage_count || 0));
   })();
 
@@ -323,17 +306,17 @@ const AdminDailyUsageTab: React.FC = () => {
   );
 
   // Calculate daily stats
-  const totalUsesToday = usageData.reduce((sum, u) => sum + u.usage_count, 0);
-  const totalSuccess = usageData.reduce((sum, u) => sum + (u.success_count || 0), 0);
-  const totalErrors = usageData.reduce((sum, u) => sum + (u.error_count || 0), 0);
-  const totalDeducts = usageData.reduce((sum, u) => sum + (u.deduct_count || 0), 0);
-  const uniqueUsers = new Set(usageData.map(u => u.user_id)).size;
-  const topTool = usageData.length > 0 
-    ? usageData.reduce((prev, curr) => prev.usage_count > curr.usage_count ? prev : curr).tool_id
+  const totalUsesToday = mergedUsageData.reduce((sum, u) => sum + u.usage_count, 0);
+  const totalSuccess = mergedUsageData.reduce((sum, u) => sum + (u.success_count || 0), 0);
+  const totalErrors = mergedUsageData.reduce((sum, u) => sum + (u.error_count || 0), 0);
+  const totalDeducts = mergedUsageData.reduce((sum, u) => sum + (u.deduct_count || 0), 0);
+  const uniqueUsers = new Set(mergedUsageData.map(u => u.user_id)).size;
+  const topTool = mergedUsageData.length > 0 
+    ? mergedUsageData.reduce((prev, curr) => prev.usage_count > curr.usage_count ? prev : curr).tool_id
     : "-";
 
   // Group by tool for summary
-  const toolSummary = usageData.reduce((acc, usage) => {
+  const toolSummary = mergedUsageData.reduce((acc, usage) => {
     acc[usage.tool_id] = (acc[usage.tool_id] || 0) + usage.usage_count;
     return acc;
   }, {} as Record<string, number>);
@@ -397,7 +380,7 @@ const AdminDailyUsageTab: React.FC = () => {
               <TrendingUp className="w-4 h-4 text-amber-500" />
               <span className="text-2xs text-muted-foreground">Top Tool</span>
             </div>
-            <p className="text-sm font-bold capitalize">{topTool}</p>
+            <p className="text-sm font-bold capitalize">{formatToolLabel(topTool)}</p>
           </CardContent>
         </Card>
       </div>
@@ -411,7 +394,7 @@ const AdminDailyUsageTab: React.FC = () => {
               className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary/50 border border-border/50"
             >
               <Zap className="w-3 h-3 text-primary" />
-              <span className="text-2xs font-medium capitalize">{tool}</span>
+              <span className="text-2xs font-medium capitalize">{formatToolLabel(tool)}</span>
               <Badge variant="secondary" className="text-3xs px-1.5 py-0">
                 {count}
               </Badge>
