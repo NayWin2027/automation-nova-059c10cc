@@ -4170,9 +4170,9 @@ const RecapVideoNVPage: React.FC = () => {
   const handleVideoReady = useCallback(
     async (outputDurationSecs: number) => {
       if (didDeductRef.current) return;
-      // Track per-variant usage (APP/OWN x BROWSER/SERVER) for admin Daily Records
-      void trackToolVariant("recap-nv", apiMode, renderMode, "success");
       if (apiMode === "own") {
+        // Track per-variant usage (APP/OWN x BROWSER/SERVER) for admin Daily Records
+        void trackToolVariant("recap-nv", apiMode, renderMode, "success", false);
         didDeductRef.current = true;
         return;
       }
@@ -4202,6 +4202,8 @@ const RecapVideoNVPage: React.FC = () => {
         if (!result.success) {
           console.error("[CREDIT] Deduction FAILED:", result.error);
           didDeductRef.current = false;
+        } else {
+          void trackToolVariant("recap-nv", apiMode, renderMode, "success", true);
         }
       } catch (err) {
         console.error("[CREDIT] ERROR:", err);
