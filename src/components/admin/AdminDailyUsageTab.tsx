@@ -380,7 +380,7 @@ const AdminDailyUsageTab: React.FC = () => {
               <TrendingUp className="w-4 h-4 text-amber-500" />
               <span className="text-2xs text-muted-foreground">Top Tool</span>
             </div>
-            <p className="text-sm font-bold capitalize">{topTool}</p>
+            <p className="text-sm font-bold capitalize">{formatToolLabel(topTool)}</p>
           </CardContent>
         </Card>
       </div>
@@ -394,7 +394,7 @@ const AdminDailyUsageTab: React.FC = () => {
               className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary/50 border border-border/50"
             >
               <Zap className="w-3 h-3 text-primary" />
-              <span className="text-2xs font-medium capitalize">{tool}</span>
+              <span className="text-2xs font-medium capitalize">{formatToolLabel(tool)}</span>
               <Badge variant="secondary" className="text-3xs px-1.5 py-0">
                 {count}
               </Badge>
