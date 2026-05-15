@@ -150,27 +150,8 @@ async function renderJob(jobId, { audioUrl, imageUrls, subtitles, duration }) {
       })
     );
 
-    // 2b) PRE-SCALE every image to 1080x1920 ONCE (parallel, max 4 at a time)
-    // This is the biggest win: avoids ffmpeg scaling huge source images on every output frame.
-    const localImages = [];
-    const SCALE_CONCURRENCY = 4;
-    for (let i = 0; i < rawImages.length; i += SCALE_CONCURRENCY) {
-      const batch = rawImages.slice(i, i + SCALE_CONCURRENCY);
-      const scaled = await Promise.all(
-        batch.map(async (src, k) => {
-          const idx = i + k;
-          const dst = path.join(work, `img_${String(idx).padStart(4, "0")}.jpg`);
-          await runFfmpeg([
-            "-y", "-i", src,
-            "-vf", "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black",
-            "-q:v", "3",
-            dst,
-          ]);
-          return dst;
-        })
-      );
-      localImages.push(...scaled);
-    }
+    // Use original images at original resolution — no pre-scaling.
+    const localImages = rawImages;
 
     // 3) build slideshow concat list — even split across duration
     const totalDur = Number(duration) || 60;
@@ -191,7 +172,7 @@ async function renderJob(jobId, { audioUrl, imageUrls, subtitles, duration }) {
       subFilter = `,subtitles='${srtPath.replace(/'/g, "\\'")}':force_style='FontName=Noto Sans,FontSize=20,Outline=2,Shadow=1,MarginV=40'`;
     }
 
-    // 5) ffmpeg compose — images already 1080x1920, so no scale/pad needed in main pass
+    // 5) ffmpeg compose — keep ORIGINAL resolution and framerate; speed up via ultrafast + 8 threads
     const outPath = path.join(work, "out.mp4");
     const vfChain = `format=yuv420p${subFilter}`;
 
@@ -202,15 +183,12 @@ async function renderJob(jobId, { audioUrl, imageUrls, subtitles, duration }) {
       "-vf", vfChain,
       "-c:v", "libx264",
       "-preset", "ultrafast",
-      "-tune", "stillimage",
-      "-threads", "0",
-      "-crf", "28",
+      "-threads", "8",
       "-pix_fmt", "yuv420p",
       "-c:a", "aac",
-      "-b:a", "128k",
+      "-b:a", "192k",
       "-shortest",
       "-movflags", "+faststart",
-      "-r", "15",
       outPath,
     ]);
 
