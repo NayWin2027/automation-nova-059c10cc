@@ -97,14 +97,20 @@ app.get("/healthz", (_req, res) =>
       secret: Boolean(SHARED_SECRET),
       bucket: Boolean(GCS_BUCKET),
     },
-  })
+  }),
 );
 
 app.post("/render", requireSecret, async (req, res) => {
-  const { audioUrl, imageUrls, subtitles, duration } = req.body || {};
+  const body = req.body || {};
+  const { audioUrl, imageUrls, videoUrl } = body;
 
-  if (!audioUrl || !Array.isArray(imageUrls) || imageUrls.length === 0) {
-    return res.status(400).json({ error: "audioUrl and imageUrls[] required" });
+  if (!audioUrl) {
+    return res.status(400).json({ error: "audioUrl required" });
+  }
+  const hasVideo = typeof videoUrl === "string" && videoUrl.length > 0;
+  const hasImages = Array.isArray(imageUrls) && imageUrls.length > 0;
+  if (!hasVideo && !hasImages) {
+    return res.status(400).json({ error: "videoUrl or imageUrls[] required" });
   }
   if (!bucket) {
     return res.status(500).json({ error: "GCS_BUCKET not configured" });
@@ -114,7 +120,7 @@ app.post("/render", requireSecret, async (req, res) => {
   JOBS.set(jobId, { state: "queued", startedAt: Date.now() });
 
   // Fire-and-forget; client polls /status/:jobId
-  renderJob(jobId, { audioUrl, imageUrls, subtitles, duration }).catch((err) => {
+  renderJob(jobId, body).catch((err) => {
     console.error(`[job ${jobId}] failed:`, err);
     JOBS.set(jobId, { state: "failed", error: String(err.message || err), startedAt: Date.now() });
   });
@@ -129,11 +135,17 @@ app.get("/status/:jobId", requireSecret, (req, res) => {
 });
 
 // ── worker ──────────────────────────────────────────────────────────────────
-async function renderJob(jobId, { audioUrl, imageUrls, subtitles, duration }) {
-  JOBS.set(jobId, { state: "processing", startedAt: Date.now() });
+async function renderJob(jobId, opts) {
+  const { audioUrl, imageUrls, videoUrl, subtitles, duration } = opts || {};
+  JOBS.set(jobId, { state: "processing", progress: 5, startedAt: Date.now() });
+
+  const useVideoPath = typeof videoUrl === "string" && videoUrl.length > 0;
+  if (useVideoPath) {
+    return renderJobFromVideo(jobId, opts);
+  }
 
   const work = await fsp.mkdtemp(path.join(os.tmpdir(), `job-${jobId}-`));
-  console.log(`[job ${jobId}] workdir=${work} images=${imageUrls.length}`);
+  console.log(`[job ${jobId}] slideshow workdir=${work} images=${imageUrls.length}`);
 
   try {
     // 1) download audio
@@ -147,7 +159,7 @@ async function renderJob(jobId, { audioUrl, imageUrls, subtitles, duration }) {
         const p = path.join(work, `raw_${String(i).padStart(4, "0")}.${ext}`);
         await downloadTo(url, p);
         return p;
-      })
+      }),
     );
 
     // Use original images at original resolution — no pre-scaling.
@@ -161,7 +173,10 @@ async function renderJob(jobId, { audioUrl, imageUrls, subtitles, duration }) {
       .join("\n");
     // ffmpeg concat demuxer requires last file repeated without duration
     const concatPath = path.join(work, "concat.txt");
-    await fsp.writeFile(concatPath, `${concatList}\nfile '${localImages[localImages.length - 1].replace(/'/g, "'\\''")}'\n`);
+    await fsp.writeFile(
+      concatPath,
+      `${concatList}\nfile '${localImages[localImages.length - 1].replace(/'/g, "'\\''")}'\n`,
+    );
 
     // 4) optional subtitles
     let subFilter = "";
@@ -176,21 +191,39 @@ async function renderJob(jobId, { audioUrl, imageUrls, subtitles, duration }) {
     const outPath = path.join(work, "out.mp4");
     const vfChain = `format=yuv420p${subFilter}`;
 
-    await runFfmpeg([
+    const preset = opts.encodePreset || opts.renderPreset || "ultrafast";
+    const ffmpegArgs = [
       "-y",
-      "-f", "concat", "-safe", "0", "-i", concatPath,
-      "-i", audioPath,
-      "-vf", vfChain,
-      "-c:v", "libx264",
-      "-preset", "ultrafast",
-      "-threads", "8",
-      "-pix_fmt", "yuv420p",
-      "-c:a", "aac",
-      "-b:a", "192k",
+      "-f",
+      "concat",
+      "-safe",
+      "0",
+      "-i",
+      concatPath,
+      "-i",
+      audioPath,
+      "-vf",
+      vfChain,
+      "-c:v",
+      "libx264",
+      "-preset",
+      preset,
+      "-threads",
+      "0",
+      "-pix_fmt",
+      "yuv420p",
+      "-c:a",
+      "aac",
+      "-b:a",
+      "192k",
       "-shortest",
-      "-movflags", "+faststart",
+      "-movflags",
+      "+faststart",
       outPath,
-    ]);
+    ];
+    if (opts.bitrate)
+      ffmpegArgs.splice(ffmpegArgs.indexOf("-preset") + 2, 0, "-b:v", `${Math.round(Number(opts.bitrate) / 1000)}k`);
+    await runFfmpeg(ffmpegArgs);
 
     // 6) upload to GCS — fall back to inline data URL if IAM permission missing
     const objectName = `renders/${jobId}.mp4`;
@@ -212,10 +245,114 @@ async function renderJob(jobId, { audioUrl, imageUrls, subtitles, duration }) {
       finalUrl = `data:video/mp4;base64,${buf.toString("base64")}`;
     }
 
-    JOBS.set(jobId, { state: "done", url: finalUrl, startedAt: Date.now() });
+    JOBS.set(jobId, { state: "done", url: finalUrl, progress: 100, startedAt: Date.now() });
     console.log(`[job ${jobId}] done`);
   } finally {
     // cleanup workdir
+    fsp.rm(work, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+/** Ultra-fast path: source video + narration audio + subtitles (no slideshow). */
+async function renderJobFromVideo(jobId, opts) {
+  const { audioUrl, videoUrl, subtitles, duration, fps, maxW, maxH, bitrate, encodePreset, renderPreset } = opts || {};
+
+  const work = await fsp.mkdtemp(path.join(os.tmpdir(), `job-${jobId}-`));
+  console.log(`[job ${jobId}] video-path workdir=${work}`);
+
+  try {
+    JOBS.set(jobId, { state: "processing", progress: 15, startedAt: Date.now() });
+
+    const audioPath = path.join(work, "audio.mp3");
+    const videoPath = path.join(work, "source.mp4");
+    await Promise.all([downloadTo(audioUrl, audioPath), downloadTo(videoUrl, videoPath)]);
+
+    JOBS.set(jobId, { state: "processing", progress: 35, startedAt: Date.now() });
+
+    let subFilter = "";
+    if (Array.isArray(subtitles) && subtitles.length > 0) {
+      const srtPath = path.join(work, "subs.srt");
+      await fsp.writeFile(srtPath, buildSrt(subtitles), "utf8");
+      subFilter = `,subtitles='${srtPath.replace(/'/g, "\\'")}':force_style='FontName=Noto Sans,FontSize=20,Outline=2,Shadow=1,MarginV=40'`;
+    }
+
+    const vfParts = [];
+    const capW = Number(maxW) || 0;
+    const capH = Number(maxH) || 0;
+    if (capW > 0 && capH > 0) {
+      vfParts.push(`scale='min(iw,${capW})':'min(ih,${capH})':force_original_aspect_ratio=decrease`);
+    }
+    vfParts.push(`format=yuv420p${subFilter}`);
+    const vfChain = vfParts.join(",");
+
+    const outPath = path.join(work, "out.mp4");
+    const preset = encodePreset || renderPreset || "ultrafast";
+    const ffmpegArgs = [
+      "-y",
+      "-i",
+      videoPath,
+      "-i",
+      audioPath,
+      "-vf",
+      vfChain,
+      "-map",
+      "0:v:0",
+      "-map",
+      "1:a:0",
+      "-c:v",
+      "libx264",
+      "-preset",
+      preset,
+      "-threads",
+      "0",
+      "-pix_fmt",
+      "yuv420p",
+      "-c:a",
+      "aac",
+      "-b:a",
+      "192k",
+      "-shortest",
+      "-movflags",
+      "+faststart",
+      outPath,
+    ];
+    if (bitrate) {
+      const brK = Math.max(500, Math.round(Number(bitrate) / 1000));
+      const presetIdx = ffmpegArgs.indexOf("-preset");
+      ffmpegArgs.splice(presetIdx + 2, 0, "-b:v", `${brK}k`);
+    }
+    if (fps && Number(fps) > 0) {
+      const cvIdx = ffmpegArgs.indexOf("-c:v");
+      ffmpegArgs.splice(cvIdx, 0, "-r", String(Math.round(Number(fps))));
+    }
+
+    JOBS.set(jobId, { state: "processing", progress: 55, startedAt: Date.now() });
+    await runFfmpeg(ffmpegArgs);
+
+    JOBS.set(jobId, { state: "processing", progress: 85, startedAt: Date.now() });
+
+    const objectName = `renders/${jobId}.mp4`;
+    let finalUrl = null;
+    try {
+      await bucket.upload(outPath, {
+        destination: objectName,
+        metadata: { contentType: "video/mp4", cacheControl: "public, max-age=86400" },
+      });
+      const [signedUrl] = await bucket.file(objectName).getSignedUrl({
+        action: "read",
+        expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
+      });
+      finalUrl = signedUrl;
+      console.log(`[job ${jobId}] uploaded → ${objectName}`);
+    } catch (gcsErr) {
+      console.warn(`[job ${jobId}] GCS upload failed, using inline fallback:`, gcsErr.message || gcsErr);
+      const buf = await fsp.readFile(outPath);
+      finalUrl = `data:video/mp4;base64,${buf.toString("base64")}`;
+    }
+
+    JOBS.set(jobId, { state: "done", url: finalUrl, progress: 100, startedAt: Date.now() });
+    console.log(`[job ${jobId}] video-path done`);
+  } finally {
     fsp.rm(work, { recursive: true, force: true }).catch(() => {});
   }
 }
