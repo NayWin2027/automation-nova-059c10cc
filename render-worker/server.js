@@ -68,6 +68,29 @@ function runFfmpeg(args) {
   });
 }
 
+// ffmpeg runner with live progress callback (parses "time=HH:MM:SS.xx" from stderr)
+function runFfmpegProgress(args, totalSec, onProgress) {
+  return new Promise((resolve, reject) => {
+    const p = spawn("ffmpeg", args, { stdio: ["ignore", "pipe", "pipe"] });
+    let tail = "";
+    p.stderr.on("data", (d) => {
+      const s = d.toString();
+      tail = (tail + s).slice(-4000);
+      const m = s.match(/time=(\d+):(\d+):(\d+(?:\.\d+)?)/);
+      if (m && totalSec > 0 && typeof onProgress === "function") {
+        const cur = (+m[1]) * 3600 + (+m[2]) * 60 + parseFloat(m[3]);
+        const pct = Math.max(0, Math.min(1, cur / totalSec));
+        try { onProgress(pct); } catch {}
+      }
+    });
+    p.on("error", reject);
+    p.on("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`ffmpeg exit ${code}: ${tail.slice(-2000)}`));
+    });
+  });
+}
+
 function escapeForSrt(s) {
   return String(s ?? "").replace(/\r/g, "");
 }
