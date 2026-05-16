@@ -819,62 +819,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               setServerRenderProgress("Video uploaded... 40%");
             } catch (videoErr: any) {
               throw new Error("Video upload error: " + videoErr.message);
-            }                      frameMime = "image/png";
-                      frameExt = "png";
-                    } catch (e) {
-                      canvasTainted = true;
-                    }
-                  }
-
-                  // FINAL FALLBACK: if canvas is tainted, create a clean placeholder canvas (no video data)
-                  if (!frameBlob) {
-                    const cleanCanvas = document.createElement("canvas");
-                    cleanCanvas.width = 1280;
-                    cleanCanvas.height = 720;
-                    const cctx = cleanCanvas.getContext("2d");
-                    if (cctx) {
-                      const grad2 = cctx.createLinearGradient(0, 0, 1280, 720);
-                      grad2.addColorStop(0, "#1a1a2e");
-                      grad2.addColorStop(1, "#0f3460");
-                      cctx.fillStyle = grad2;
-                      cctx.fillRect(0, 0, 1280, 720);
-                      cctx.fillStyle = "#ffffff";
-                      cctx.font = "bold 40px sans-serif";
-                      cctx.textAlign = "center";
-                      cctx.fillText("Frame " + (i + 1), 640, 360);
-                    }
-                    frameBlob = await new Promise<Blob | null>((res) => cleanCanvas.toBlob((b) => res(b), "image/png"));
-                    frameMime = "image/png";
-                    frameExt = "png";
-                    frameErrors.push(`Frame ${i}: used placeholder (tainted canvas)`);
-                  }
-
-                  if (!frameBlob) {
-                    frameErrors.push(`Frame ${i}: all methods failed completely`);
-                    continue;
-                  }
-
-                  const imgName = `${userId}/frame_${Date.now()}_${i}.bin`;
-                  const { error: frameUpErr } = await supabase.storage
-                    .from("temp-uploads")
-                    .upload(imgName, frameBlob, { contentType: "application/octet-stream", upsert: true });
-                  if (frameUpErr) {
-                    frameErrors.push(`Frame ${i} upload: ${frameUpErr.message}`);
-                    continue;
-                  }
-                  const { data: imgSigned, error: imgSignErr } = await supabase.storage
-                    .from("temp-uploads")
-                    .createSignedUrl(imgName, 3600 * 24);
-                  if (imgSigned?.signedUrl) {
-                    signedImageUrls.push(imgSigned.signedUrl);
-                  } else {
-                    frameErrors.push(`Frame ${i} signedUrl: ${imgSignErr?.message || "no URL"}`);
-                  }
-                } catch (frameErr: any) {
-                  frameErrors.push(`Frame ${i} error: ${frameErr.message}`);
-                  continue;
-                }
-              }
             }
 
             // 3. Prepare subtitles
