@@ -10,19 +10,21 @@ const MAX_BASE64_SIZE = 52428800; // 50MB
 const MAX_URL_LENGTH = 2048;
 
 function cleanNarrationText(input: string): string {
-  return String(input || "")
-    // remove timestamps
-    .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, "")
-    .replace(/\[[^\]]*\d[^\]]*\]/g, "")
-    // remove markdown / symbols
-    .replace(/```[\s\S]*?```/g, "")
-    .replace(/[•●◆▶➡️]+/g, " ")
-    .replace(/[#*_`>|]+/g, " ")
-    // remove common filler phrases
-    .replace(/\b(In\s+this\s+video|Today\s+we\s+will|Let\s+us\s+analyze)\b/gi, "")
-    .replace(/ဒီ\s*ဗီဒီယို\s*ကို\s*လေ့လာပြီး\s*ပြောပြမယ်/gi, "")
-    .replace(/\s{2,}/g, " ")
-    .trim();
+  return (
+    String(input || "")
+      // remove timestamps
+      .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, "")
+      .replace(/\[[^\]]*\d[^\]]*\]/g, "")
+      // remove markdown / symbols
+      .replace(/```[\s\S]*?```/g, "")
+      .replace(/[•●◆▶➡️]+/g, " ")
+      .replace(/[#*_`>|]+/g, " ")
+      // remove common filler phrases
+      .replace(/\b(In\s+this\s+video|Today\s+we\s+will|Let\s+us\s+analyze)\b/gi, "")
+      .replace(/ဒီ\s*ဗီဒီယို\s*ကို\s*လေ့လာပြီး\s*ပြောပြမယ်/gi, "")
+      .replace(/\s{2,}/g, " ")
+      .trim()
+  );
 }
 
 function normalizeRecapJson(raw: string): string | null {
@@ -43,7 +45,8 @@ function normalizeRecapJson(raw: string): string | null {
     const normalized = arr
       .map((s: any, idx: number) => {
         const timeRaw = s?.time;
-        const time = typeof timeRaw === "number" && Number.isFinite(timeRaw) ? Math.max(0, Math.floor(timeRaw)) : idx * 6;
+        const time =
+          typeof timeRaw === "number" && Number.isFinite(timeRaw) ? Math.max(0, Math.floor(timeRaw)) : idx * 6;
         const text = cleanNarrationText(s?.text);
         return { time, text };
       })
@@ -57,7 +60,8 @@ function normalizeRecapJson(raw: string): string | null {
 }
 
 // ===== SCENE DETECTION PROMPT =====
-const getSceneDetectionPrompt = () => `You are a professional video editor AI. Analyze this video and detect all distinct SCENES/SEGMENTS.
+const getSceneDetectionPrompt =
+  () => `You are a professional video editor AI. Analyze this video and detect all distinct SCENES/SEGMENTS.
 
 For each scene, identify:
 1. START timestamp (in seconds from 0)
@@ -81,14 +85,15 @@ RULES:
 
 // ===== PREMIUM TRANSFORMATIVE SYSTEM PROMPT WITH SCENE AWARENESS =====
 const getSystemPrompt = (targetLang: string, scenes?: any[]) => {
-  const sceneContext = scenes && scenes.length > 0 
-    ? `\n\nDETECTED VIDEO SCENES (use these timestamps to match your narration):
-${scenes.map((s, i) => `Scene ${i + 1}: ${s.start}s-${s.end}s → "${s.topic}" (${s.description})`).join('\n')}
+  const sceneContext =
+    scenes && scenes.length > 0
+      ? `\n\nDETECTED VIDEO SCENES (use these timestamps to match your narration):
+${scenes.map((s, i) => `Scene ${i + 1}: ${s.start}s-${s.end}s → "${s.topic}" (${s.description})`).join("\n")}
 
 CRITICAL: Your script segments MUST reference these scene timestamps! 
 - When writing about a topic, use the "time" that matches the scene showing that topic
 - Example: If scene at 8-15s shows "house exterior", your segment about houses should have "time": 8`
-    : '';
+      : "";
 
   return `You are a world-class professional VIDEO RECAP STORYTELLER and narrator.
 
@@ -183,25 +188,28 @@ serve(async (req) => {
     // ===== AUTHENTICATION =====
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Authentication required" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Authentication required" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    
+
     const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } }
+      global: { headers: { Authorization: authHeader } },
     });
 
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseClient.auth.getUser();
     if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Invalid or expired token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Invalid or expired token" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     console.log(`[video-recap] Authenticated user: ${user.id}`);
@@ -223,32 +231,43 @@ serve(async (req) => {
       action = req.headers.get("x-recap-action");
     }
 
-    const { videoUrl, useOwnApi, apiKey, ownApiKey, targetLang, fileName, fileSize, mimeType, fileUri, confirmSuccess } = body;
+    const {
+      videoUrl,
+      useOwnApi,
+      apiKey,
+      ownApiKey,
+      targetLang,
+      fileName,
+      fileSize,
+      mimeType,
+      fileUri,
+      confirmSuccess,
+    } = body;
     const headerOwnApiKey = req.headers.get("x-own-api-key");
-    
+
     const BACKEND_GEMINI_KEY = Deno.env.get("GEMINI_API_KEY");
     // Support own key from header + both body field names so Own API mode behaves like App mode across all Recap NV call paths.
-    const resolvedOwnKey = (typeof headerOwnApiKey === "string" && headerOwnApiKey.trim())
-      || (typeof ownApiKey === "string" && ownApiKey.trim())
-      || (typeof apiKey === "string" && apiKey.trim())
-      || '';
+    const resolvedOwnKey =
+      (typeof headerOwnApiKey === "string" && headerOwnApiKey.trim()) ||
+      (typeof ownApiKey === "string" && ownApiKey.trim()) ||
+      (typeof apiKey === "string" && apiKey.trim()) ||
+      "";
     const isOwnApiKey = useOwnApi && !!resolvedOwnKey;
 
     // ===== CREDIT DEDUCTION: Only on confirmSuccess =====
     if (confirmSuccess === true) {
       // If using own API key, skip credit deduction but still return success
       if (isOwnApiKey) {
-        return new Response(
-          JSON.stringify({ success: true, message: "Own API key used, no credits deducted" }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ success: true, message: "Own API key used, no credits deducted" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
       const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-      
+
       const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", {
         _user_id: user.id,
         _tool_id: "video-recap",
-        _is_own_api: false
+        _is_own_api: false,
       });
 
       if (creditError) {
@@ -259,124 +278,138 @@ serve(async (req) => {
 
       return new Response(
         JSON.stringify({ success: true, message: "Credits deducted", balance: creditResult?.balance }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
     // Handle different actions
-    if (action === 'initUpload') {
+    if (action === "initUpload") {
       // ===== INPUT VALIDATION for initUpload =====
       if (!fileName || typeof fileName !== "string") {
-        return new Response(
-          JSON.stringify({ error: "File name is required" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "File name is required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       const sanitizedFileName = fileName.replace(/[\/\\:*?"<>|]/g, "_").substring(0, 255);
       const apiKeyToUse = isOwnApiKey ? resolvedOwnKey : BACKEND_GEMINI_KEY;
-      
+
       if (!apiKeyToUse) {
-        return new Response(
-          JSON.stringify({ error: "Backend API key not configured" }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Backend API key not configured" }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       console.log(`Initiating upload for file: ${sanitizedFileName}, size: ${fileSize}`);
 
       const uploadInitOptions = {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'X-Goog-Upload-Protocol': 'resumable',
-          'X-Goog-Upload-Command': 'start',
-          'X-Goog-Upload-Header-Content-Length': String(fileSize),
-          'X-Goog-Upload-Header-Content-Type': mimeType || 'video/mp4',
-          'Content-Type': 'application/json',
+          "X-Goog-Upload-Protocol": "resumable",
+          "X-Goog-Upload-Command": "start",
+          "X-Goog-Upload-Header-Content-Length": String(fileSize),
+          "X-Goog-Upload-Header-Content-Type": mimeType || "video/mp4",
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          file: { display_name: sanitizedFileName }
-        })
+          file: { display_name: sanitizedFileName },
+        }),
       };
 
       let initResponse: Response | null = null;
       if (isOwnApiKey) {
-        initResponse = await fetch(`https://generativelanguage.googleapis.com/upload/v1beta/files?key=${apiKeyToUse}`, uploadInitOptions);
+        initResponse = await fetch(
+          `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${apiKeyToUse}`,
+          uploadInitOptions,
+        );
       } else {
         for (let attempt = 0; attempt < 3; attempt++) {
           const key = attempt === 0 ? getGeminiKey() : rotateKey();
           if (!key) break;
-          initResponse = await fetch(`https://generativelanguage.googleapis.com/upload/v1beta/files?key=${key}`, uploadInitOptions);
+          initResponse = await fetch(
+            `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${key}`,
+            uploadInitOptions,
+          );
           if (initResponse.ok) break;
           const probeText = await initResponse.clone().text();
-          if (!(probeText.includes('CONSUMER_SUSPENDED') || probeText.includes('RESOURCE_EXHAUSTED') || initResponse.status === 429)) break;
+          if (
+            !(
+              probeText.includes("CONSUMER_SUSPENDED") ||
+              probeText.includes("RESOURCE_EXHAUSTED") ||
+              initResponse.status === 429
+            )
+          )
+            break;
         }
       }
 
       if (!initResponse) {
-        return new Response(
-          JSON.stringify({ error: "Backend API key not configured" }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Backend API key not configured" }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       if (!initResponse.ok) {
         const errText = await initResponse.text();
         console.error("Upload init failed:", errText);
-        
-        if (initResponse.status === 429 || errText.includes('RESOURCE_EXHAUSTED')) {
+
+        if (initResponse.status === 429 || errText.includes("RESOURCE_EXHAUSTED")) {
           return new Response(
             JSON.stringify({
               error: "API quota ကုန်သွားပါပြီ။ ခဏစောင့်ပါ။",
               retryable: true,
-              retryAfterSeconds: 30
+              retryAfterSeconds: 30,
             }),
-            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
-        
-        return new Response(
-          JSON.stringify({ error: `Upload init failed` }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+
+        return new Response(JSON.stringify({ error: `Upload init failed` }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
-      const uploadUrl = initResponse.headers.get('X-Goog-Upload-URL');
-      
+      const uploadUrl = initResponse.headers.get("X-Goog-Upload-URL");
+
       if (!uploadUrl) {
-        return new Response(
-          JSON.stringify({ error: "No upload URL returned from Google" }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "No upload URL returned from Google" }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
-      return new Response(
-        JSON.stringify({ uploadUrl }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ uploadUrl }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // NEW: Handle chunk upload through backend (CORS-safe)
     // Google requires 8MB chunk granularity for resumable uploads
-    if (action === 'uploadChunk') {
+    if (action === "uploadChunk") {
       const { uploadUrl: chunkUploadUrl, chunkData, chunkIndex, totalChunks, offset, totalSize, isLastChunk } = body;
-      
+
       if (!chunkUploadUrl || !chunkData) {
-        return new Response(
-          JSON.stringify({ error: "Upload URL and chunk data required" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Upload URL and chunk data required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       // 8MB binary = ~11MB base64, allow up to 12MB base64 string
       if (chunkData.length > 12 * 1024 * 1024) {
-        return new Response(
-          JSON.stringify({ error: "Chunk too large. Max 8MB binary per chunk." }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Chunk too large. Max 8MB binary per chunk." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
-      console.log(`Uploading chunk ${chunkIndex + 1}/${totalChunks}, offset: ${offset}, base64Len: ${chunkData.length}`);
+      console.log(
+        `Uploading chunk ${chunkIndex + 1}/${totalChunks}, offset: ${offset}, base64Len: ${chunkData.length}`,
+      );
 
       // Decode base64 chunk to binary
       let binaryChunk: Uint8Array;
@@ -389,43 +422,43 @@ serve(async (req) => {
         console.log(`Decoded to ${binaryChunk.length} bytes`);
       } catch (decodeErr) {
         console.error("Base64 decode failed:", decodeErr);
-        return new Response(
-          JSON.stringify({ error: "Invalid chunk data encoding" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Invalid chunk data encoding" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
-      
-      const uploadCommand = isLastChunk ? 'upload, finalize' : 'upload';
-      
+
+      const uploadCommand = isLastChunk ? "upload, finalize" : "upload";
+
       const chunkResponse = await fetch(chunkUploadUrl, {
-        method: 'PUT',
+        method: "PUT",
         headers: {
-          'Content-Type': mimeType || 'video/mp4',
-          'X-Goog-Upload-Offset': String(offset),
-          'X-Goog-Upload-Command': uploadCommand,
+          "Content-Type": mimeType || "video/mp4",
+          "X-Goog-Upload-Offset": String(offset),
+          "X-Goog-Upload-Command": uploadCommand,
         },
-        body: binaryChunk.buffer as ArrayBuffer
+        body: binaryChunk.buffer as ArrayBuffer,
       });
 
       if (!chunkResponse.ok) {
         const errText = await chunkResponse.text();
         console.error(`Chunk ${chunkIndex + 1} upload failed:`, errText);
-        
-        if (chunkResponse.status === 429 || errText.includes('RESOURCE_EXHAUSTED')) {
+
+        if (chunkResponse.status === 429 || errText.includes("RESOURCE_EXHAUSTED")) {
           return new Response(
             JSON.stringify({
               error: "API quota ကုန်သွားပါပြီ။ ခဏစောင့်ပါ။",
               retryable: true,
-              retryAfterSeconds: 30
+              retryAfterSeconds: 30,
             }),
-            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
-        
-        return new Response(
-          JSON.stringify({ error: `Chunk upload failed` }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+
+        return new Response(JSON.stringify({ error: `Chunk upload failed` }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       // If last chunk, parse the response to get file URI
@@ -434,26 +467,24 @@ serve(async (req) => {
           const uploadResult = await chunkResponse.json();
           const fileUri = uploadResult.file?.uri;
           const uploadedFileName = uploadResult.file?.name;
-          
+
           console.log(`Upload complete! File URI: ${fileUri}`);
-          
-          return new Response(
-            JSON.stringify({ success: true, fileUri, fileName: uploadedFileName }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+
+          return new Response(JSON.stringify({ success: true, fileUri, fileName: uploadedFileName }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
         } catch (parseErr) {
           console.error("Failed to parse upload result:", parseErr);
-          return new Response(
-            JSON.stringify({ error: "Failed to get file URI after upload" }),
-            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+          return new Response(JSON.stringify({ error: "Failed to get file URI after upload" }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
         }
       }
 
-      return new Response(
-        JSON.stringify({ success: true, chunkIndex }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ success: true, chunkIndex }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // NEW (2026): Upload chunk via raw binary body to avoid base64 decoding memory spikes.
@@ -461,29 +492,29 @@ serve(async (req) => {
     //   Content-Type: application/octet-stream
     //   x-recap-action: uploadChunkBinary
     //   x-upload-url, x-offset, x-mime-type, x-is-last-chunk, x-chunk-index, x-total-chunks, x-total-size
-    if (action === 'uploadChunkBinary') {
-      const chunkUploadUrl = req.headers.get('x-upload-url');
-      const offsetStr = req.headers.get('x-offset');
-      const isLastChunk = (req.headers.get('x-is-last-chunk') || '').toLowerCase() === 'true';
-      const chunkIndexStr = req.headers.get('x-chunk-index') || '0';
-      const totalChunksStr = req.headers.get('x-total-chunks') || '0';
-      const mimeTypeHdr = req.headers.get('x-mime-type') || 'video/mp4';
+    if (action === "uploadChunkBinary") {
+      const chunkUploadUrl = req.headers.get("x-upload-url");
+      const offsetStr = req.headers.get("x-offset");
+      const isLastChunk = (req.headers.get("x-is-last-chunk") || "").toLowerCase() === "true";
+      const chunkIndexStr = req.headers.get("x-chunk-index") || "0";
+      const totalChunksStr = req.headers.get("x-total-chunks") || "0";
+      const mimeTypeHdr = req.headers.get("x-mime-type") || "video/mp4";
 
       if (!chunkUploadUrl || !offsetStr) {
-        return new Response(
-          JSON.stringify({ error: 'Upload URL and offset required' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return new Response(JSON.stringify({ error: "Upload URL and offset required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       const offset = Number(offsetStr);
       const chunkIndex = Number(chunkIndexStr);
       const totalChunks = Number(totalChunksStr);
       if (!Number.isFinite(offset) || offset < 0) {
-        return new Response(
-          JSON.stringify({ error: 'Invalid offset' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return new Response(JSON.stringify({ error: "Invalid offset" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       // Read raw bytes
@@ -492,32 +523,32 @@ serve(async (req) => {
         const buf = await req.arrayBuffer();
         binaryChunk = new Uint8Array(buf);
       } catch (e) {
-        console.error('[uploadChunkBinary] Failed to read body:', e);
-        return new Response(
-          JSON.stringify({ error: 'Failed to read chunk body' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        console.error("[uploadChunkBinary] Failed to read body:", e);
+        return new Response(JSON.stringify({ error: "Failed to read chunk body" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       console.log(
-        `Uploading chunk(binary) ${chunkIndex + 1}/${totalChunks || '?'}, offset: ${offset}, bytes: ${binaryChunk.length}`
+        `Uploading chunk(binary) ${chunkIndex + 1}/${totalChunks || "?"}, offset: ${offset}, bytes: ${binaryChunk.length}`,
       );
 
       // Guardrail: avoid accidental huge bodies
       if (binaryChunk.length > 9 * 1024 * 1024) {
-        return new Response(
-          JSON.stringify({ error: 'Chunk too large. Max 9MB.' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return new Response(JSON.stringify({ error: "Chunk too large. Max 9MB." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
-      const uploadCommand = isLastChunk ? 'upload, finalize' : 'upload';
+      const uploadCommand = isLastChunk ? "upload, finalize" : "upload";
       const chunkResponse = await fetch(chunkUploadUrl, {
-        method: 'PUT',
+        method: "PUT",
         headers: {
-          'Content-Type': mimeTypeHdr,
-          'X-Goog-Upload-Offset': String(offset),
-          'X-Goog-Upload-Command': uploadCommand,
+          "Content-Type": mimeTypeHdr,
+          "X-Goog-Upload-Offset": String(offset),
+          "X-Goog-Upload-Command": uploadCommand,
         },
         body: binaryChunk.buffer as ArrayBuffer,
       });
@@ -526,21 +557,21 @@ serve(async (req) => {
         const errText = await chunkResponse.text();
         console.error(`[uploadChunkBinary] Chunk upload failed:`, errText);
 
-        if (chunkResponse.status === 429 || errText.includes('RESOURCE_EXHAUSTED')) {
+        if (chunkResponse.status === 429 || errText.includes("RESOURCE_EXHAUSTED")) {
           return new Response(
             JSON.stringify({
-              error: 'API quota ကုန်သွားပါပြီ။ ခဏစောင့်ပါ။',
+              error: "API quota ကုန်သွားပါပြီ။ ခဏစောင့်ပါ။",
               retryable: true,
               retryAfterSeconds: 30,
             }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
 
-        return new Response(
-          JSON.stringify({ error: 'Chunk upload failed' }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return new Response(JSON.stringify({ error: "Chunk upload failed" }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       if (isLastChunk) {
@@ -550,39 +581,37 @@ serve(async (req) => {
           const uploadedFileName = uploadResult.file?.name;
 
           console.log(`Upload complete! File URI: ${newFileUri}`);
-          return new Response(
-            JSON.stringify({ success: true, fileUri: newFileUri, fileName: uploadedFileName }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          return new Response(JSON.stringify({ success: true, fileUri: newFileUri, fileName: uploadedFileName }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
         } catch (e) {
-          console.error('[uploadChunkBinary] Failed to parse upload result:', e);
-          return new Response(
-            JSON.stringify({ error: 'Failed to get file URI after upload' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          console.error("[uploadChunkBinary] Failed to parse upload result:", e);
+          return new Response(JSON.stringify({ error: "Failed to get file URI after upload" }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
         }
       }
 
-      return new Response(
-        JSON.stringify({ success: true, chunkIndex }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ success: true, chunkIndex }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    if (action === 'analyzeFile') {
+    if (action === "analyzeFile") {
       // ===== INPUT VALIDATION for analyzeFile =====
       if (!fileUri || typeof fileUri !== "string") {
-        return new Response(
-          JSON.stringify({ error: "File URI is required" }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "File URI is required" }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       if (!BACKEND_GEMINI_KEY) {
-        return new Response(
-          JSON.stringify({ error: "Backend API key not configured" }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Backend API key not configured" }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       console.log(`Analyzing file: ${fileUri}`);
@@ -593,55 +622,61 @@ serve(async (req) => {
         const maxAttempts = 60;
         while (attempts < maxAttempts) {
           const statusResponse = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${BACKEND_GEMINI_KEY}`
+            `https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${BACKEND_GEMINI_KEY}`,
           );
           if (statusResponse.ok) {
             const statusData = await statusResponse.json();
             console.log(`File status: ${statusData.state}`);
-            if (statusData.state === 'ACTIVE') {
+            if (statusData.state === "ACTIVE") {
               break;
             }
-            if (statusData.state === 'FAILED') {
-              return new Response(
-                JSON.stringify({ error: "File processing failed on Google servers" }),
-                { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-              );
+            if (statusData.state === "FAILED") {
+              return new Response(JSON.stringify({ error: "File processing failed on Google servers" }), {
+                status: 200,
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              });
             }
           }
-          await new Promise(r => setTimeout(r, 1000));
+          await new Promise((r) => setTimeout(r, 1000));
           attempts++;
         }
         if (attempts >= maxAttempts) {
-          return new Response(
-            JSON.stringify({ error: "File processing timeout" }),
-            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+          return new Response(JSON.stringify({ error: "File processing timeout" }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
         }
       }
 
       // ===== SINGLE-STEP: GENERATE SCRIPT (scene detection merged into prompt for speed) =====
       console.log("[video-recap] Generating recap script (single-pass)...");
-      const systemPrompt = getSystemPrompt(targetLang || 'Burmese');
-      
+      const systemPrompt = getSystemPrompt(targetLang || "Burmese");
+
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${BACKEND_GEMINI_KEY}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            contents: [{
-              role: "user",
-              parts: [
-                { fileData: { mimeType: "video/mp4", fileUri: fileUri } },
-                { text: systemPrompt + "\n\nAnalyze this video and create a recap script. WATCH the video carefully, identify characters by their ROLE/RELATIONSHIP/NAME (never generic gender), and ensure each segment's 'time' points to where that content is VISUALLY SHOWN. Return ONLY the JSON array." }
-              ]
-            }],
+            contents: [
+              {
+                role: "user",
+                parts: [
+                  { fileData: { mimeType: "video/mp4", fileUri: fileUri } },
+                  {
+                    text:
+                      systemPrompt +
+                      "\n\nAnalyze this video and create a recap script. WATCH the video carefully, identify characters by their ROLE/RELATIONSHIP/NAME (never generic gender), and ensure each segment's 'time' points to where that content is VISUALLY SHOWN. Return ONLY the JSON array.",
+                  },
+                ],
+              },
+            ],
             generationConfig: {
               temperature: 0.7,
               maxOutputTokens: 8192,
             },
           }),
-        }
+        },
       );
 
       if (!response.ok) {
@@ -654,108 +689,144 @@ serve(async (req) => {
               recap: null,
               error: "API quota ကုန်သွားပါပြီ။ ခဏစောင့်ပါ။",
               retryable: true,
-              retryAfterSeconds: 30
+              retryAfterSeconds: 30,
             }),
-            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
 
-        return new Response(
-          JSON.stringify({ error: "Gemini API error" }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Gemini API error" }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       const data = await response.json();
       let recap = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      
+
       // Clean up JSON response
-      recap = recap.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      recap = recap
+        .replace(/```json\n?/g, "")
+        .replace(/```\n?/g, "")
+        .trim();
       const normalized = normalizeRecapJson(recap);
 
       if (!normalized) {
         return new Response(
           JSON.stringify({ error: "AI script format မမှန်ပါ (JSON array မဟုတ်ပါ)။ ထပ်ကြိုးစားပါ။" }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
-      return new Response(
-        JSON.stringify({ recap: normalized }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ recap: normalized }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // ===== CLOUD RUN SERVER RENDER PROXY =====
-    if (action === 'triggerServerRender') {
-      const { audioUrl, imageUrls, subtitles, duration } = body || {};
+    if (action === "triggerServerRender") {
+      const {
+        audioUrl,
+        imageUrls,
+        subtitles,
+        duration,
+        videoUrl,
+        sourceFileUri,
+        fps,
+        maxW,
+        maxH,
+        bitrate,
+        fastMode,
+        ultraFast,
+        preferVideoPath,
+        renderPreset,
+        encodePreset,
+      } = body || {};
       const renderUrl = Deno.env.get("CLOUD_RUN_RENDER_URL");
       const renderSecret = Deno.env.get("CLOUD_RUN_RENDER_SECRET");
 
       if (!renderUrl || !renderSecret) {
         return new Response(
           JSON.stringify({ error: "Cloud Run render worker secrets are not configured in backend." }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
+      const renderPayload: Record<string, unknown> = {
+        audioUrl,
+        subtitles,
+        duration,
+      };
+      if (videoUrl) renderPayload.videoUrl = videoUrl;
+      if (sourceFileUri) renderPayload.sourceFileUri = sourceFileUri;
+      if (Array.isArray(imageUrls) && imageUrls.length > 0) renderPayload.imageUrls = imageUrls;
+      if (fps != null) renderPayload.fps = fps;
+      if (maxW != null) renderPayload.maxW = maxW;
+      if (maxH != null) renderPayload.maxH = maxH;
+      if (bitrate != null) renderPayload.bitrate = bitrate;
+      if (fastMode) renderPayload.fastMode = true;
+      if (ultraFast) renderPayload.ultraFast = true;
+      if (preferVideoPath) renderPayload.preferVideoPath = true;
+      if (renderPreset) renderPayload.renderPreset = renderPreset;
+      if (encodePreset) renderPayload.encodePreset = encodePreset;
+
       const res = await fetch(`${renderUrl}/render`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'X-Api-Secret': renderSecret
+          "Content-Type": "application/json",
+          "X-Api-Secret": renderSecret,
         },
-        body: JSON.stringify({ audioUrl, imageUrls, subtitles, duration })
+        body: JSON.stringify(renderPayload),
       });
       const data = await res.json();
-      return new Response(
-        JSON.stringify(data),
-        { status: res.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify(data), {
+        status: res.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    if (action === 'pollServerRender') {
+    if (action === "pollServerRender") {
       const { jobId } = body || {};
       const renderUrl = Deno.env.get("CLOUD_RUN_RENDER_URL");
       const renderSecret = Deno.env.get("CLOUD_RUN_RENDER_SECRET");
       if (!renderUrl || !renderSecret || !jobId) {
-        return new Response(
-          JSON.stringify({ error: "Missing config or jobId" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Missing config or jobId" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
       const res = await fetch(`${renderUrl}/status/${jobId}`, {
-        headers: { 'X-Api-Secret': renderSecret }
+        headers: { "X-Api-Secret": renderSecret },
       });
       const data = await res.json();
-      return new Response(
-        JSON.stringify(data),
-        { status: res.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify(data), {
+        status: res.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Default: Handle base64 video data
     // ===== INPUT VALIDATION =====
     if (!videoUrl) {
-      return new Response(
-        JSON.stringify({ error: "Video URL is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Video URL is required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Validate URL
     if (!videoUrl.startsWith("data:") && !videoUrl.startsWith("http://") && !videoUrl.startsWith("https://")) {
-      return new Response(
-        JSON.stringify({ error: "Invalid video URL format" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Invalid video URL format" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     if (!videoUrl.startsWith("data:") && videoUrl.length > MAX_URL_LENGTH) {
-      return new Response(
-        JSON.stringify({ error: "URL too long" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "URL too long" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Validate base64 size
@@ -764,40 +835,46 @@ serve(async (req) => {
       if (base64Part) {
         const estimatedSize = (base64Part.length * 3) / 4;
         if (estimatedSize > MAX_BASE64_SIZE) {
-          return new Response(
-            JSON.stringify({ error: "Video file too large (max 50MB)" }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+          return new Response(JSON.stringify({ error: "Video file too large (max 50MB)" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
         }
       }
     }
 
     const isBase64 = videoUrl.startsWith("data:");
-    const systemPrompt = getSystemPrompt(targetLang || 'Burmese');
+    const systemPrompt = getSystemPrompt(targetLang || "Burmese");
 
     let response;
 
     if (isOwnApiKey) {
       console.log("Using Own API Key for video recap");
-      
+
       let parts: any[] = [];
-      
+
       if (isBase64) {
         const matches = videoUrl.match(/^data:([^;]+);base64,(.+)$/);
         if (matches) {
           const mimeType = matches[1];
           const base64Data = matches[2];
-          
+
           parts = [
             { inlineData: { mimeType, data: base64Data } },
-            { text: systemPrompt + "\n\nAnalyze this video and create a recap script. WATCH carefully, identify characters by ROLE/RELATIONSHIP/NAME (never generic gender), ensure each 'time' points to where that content is VISUALLY SHOWN. Return ONLY the JSON array." }
+            {
+              text:
+                systemPrompt +
+                "\n\nAnalyze this video and create a recap script. WATCH carefully, identify characters by ROLE/RELATIONSHIP/NAME (never generic gender), ensure each 'time' points to where that content is VISUALLY SHOWN. Return ONLY the JSON array.",
+            },
           ];
         } else {
           throw new Error("Invalid base64 video format");
         }
       } else {
         parts = [
-          { text: `${systemPrompt}\n\nAnalyze and create a premium transformative recap for this video URL: ${videoUrl}. Return ONLY the JSON array.` }
+          {
+            text: `${systemPrompt}\n\nAnalyze and create a premium transformative recap for this video URL: ${videoUrl}. Return ONLY the JSON array.`,
+          },
         ];
       }
 
@@ -810,7 +887,7 @@ serve(async (req) => {
             contents: [{ role: "user", parts }],
             generationConfig: { temperature: 0.7, maxOutputTokens: 8192 },
           }),
-        }
+        },
       );
 
       if (!response.ok) {
@@ -824,7 +901,7 @@ serve(async (req) => {
               error: "ဗီဒီယိုဖိုင်ကြီးလွန်းသည်။ Files API သုံးပါ။",
               retryable: false,
             }),
-            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
 
@@ -839,48 +916,54 @@ serve(async (req) => {
               retryable: !isHardQuota,
               retryAfterSeconds: isHardQuota ? null : 30,
             }),
-            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
 
-        return new Response(
-          JSON.stringify({ error: "Gemini API error" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Gemini API error" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       const data = await response.json();
       let recap = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      recap = recap.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      recap = recap
+        .replace(/```json\n?/g, "")
+        .replace(/```\n?/g, "")
+        .trim();
 
       const normalized = normalizeRecapJson(recap);
       if (!normalized) {
         return new Response(
           JSON.stringify({ error: "AI script format မမှန်ပါ (JSON array မဟုတ်ပါ)။ ထပ်ကြိုးစားပါ။" }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
-      return new Response(
-        JSON.stringify({ recap: normalized }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ recap: normalized }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     } else {
       // App Mode - use backend GEMINI_API_KEY
       if (isBase64 && BACKEND_GEMINI_KEY) {
         console.log("App Mode: Processing video with backend GEMINI_API_KEY");
-        
+
         const matches = videoUrl.match(/^data:([^;]+);base64,(.+)$/);
         if (!matches) {
           throw new Error("Invalid base64 video format");
         }
-        
+
         const contentMimeType = matches[1];
         const base64Data = matches[2];
-        
+
         const parts = [
           { inlineData: { mimeType: contentMimeType, data: base64Data } },
-          { text: systemPrompt + "\n\nAnalyze this video, detect its content type, and create a premium transformative recap script. Return ONLY the JSON array." }
+          {
+            text:
+              systemPrompt +
+              "\n\nAnalyze this video, detect its content type, and create a premium transformative recap script. Return ONLY the JSON array.",
+          },
         ];
 
         response = await fetch(
@@ -892,63 +975,65 @@ serve(async (req) => {
               contents: [{ role: "user", parts }],
               generationConfig: { temperature: 0.7, maxOutputTokens: 8192 },
             }),
-          }
+          },
         );
 
         if (!response.ok) {
           const errorText = await response.text();
           console.error("Backend Gemini API error:", errorText);
-          
+
           if (errorText.includes("INVALID_ARGUMENT") || errorText.includes("too large")) {
             return new Response(
-              JSON.stringify({ 
+              JSON.stringify({
                 recap: null,
                 error: "ဗီဒီယိုဖိုင်ကြီးလွန်းသည်။ Files API သုံးပါ။",
-                retryable: false
+                retryable: false,
               }),
-              { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
             );
           }
-          
+
           if (response.status === 429 || errorText.includes("RESOURCE_EXHAUSTED")) {
             return new Response(
-              JSON.stringify({ 
+              JSON.stringify({
                 recap: null,
                 error: "API quota ကုန်သွားပါပြီ။ ခဏစောင့်ပါ။",
                 retryable: true,
-                retryAfterSeconds: 30
+                retryAfterSeconds: 30,
               }),
-              { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
             );
           }
-          
+
           return new Response(
-            JSON.stringify({ 
+            JSON.stringify({
               recap: null,
               error: "Video analysis failed. ထပ်ကြိုးစားပါ။",
               retryable: true,
-              retryAfterSeconds: 10
+              retryAfterSeconds: 10,
             }),
-            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
 
         const data = await response.json();
         let recap = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        recap = recap.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        recap = recap
+          .replace(/```json\n?/g, "")
+          .replace(/```\n?/g, "")
+          .trim();
 
         const normalized = normalizeRecapJson(recap);
         if (!normalized) {
           return new Response(
             JSON.stringify({ error: "AI script format မမှန်ပါ (JSON array မဟုတ်ပါ)။ ထပ်ကြိုးစားပါ။" }),
-            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
 
-        return new Response(
-          JSON.stringify({ recap: normalized }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ recap: normalized }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       // Fallback: use GEMINI_API_KEY for URL-only mode
@@ -965,16 +1050,24 @@ serve(async (req) => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             system_instruction: { parts: [{ text: systemPrompt }] },
-            contents: [{ parts: [{ text: `Analyze and create a premium transformative recap for this video: ${videoUrl}. Return ONLY the JSON array.` }] }],
+            contents: [
+              {
+                parts: [
+                  {
+                    text: `Analyze and create a premium transformative recap for this video: ${videoUrl}. Return ONLY the JSON array.`,
+                  },
+                ],
+              },
+            ],
             generationConfig: { temperature: 0.7, maxOutputTokens: 8192 },
           }),
-        }
+        },
       );
 
       if (!response.ok) {
         const errorText = await response.text();
         console.error("Gemini API error (URL fallback):", response.status, errorText);
-        
+
         if (response.status === 429 || errorText.includes("RESOURCE_EXHAUSTED")) {
           return new Response(
             JSON.stringify({
@@ -983,7 +1076,7 @@ serve(async (req) => {
               retryable: true,
               retryAfterSeconds: 30,
             }),
-            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
         return new Response(
@@ -993,34 +1086,35 @@ serve(async (req) => {
             retryable: true,
             retryAfterSeconds: 10,
           }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
       const data = await response.json();
       let recap = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      recap = recap.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      recap = recap
+        .replace(/```json\n?/g, "")
+        .replace(/```\n?/g, "")
+        .trim();
 
       const normalized = normalizeRecapJson(recap);
       if (!normalized) {
         return new Response(
           JSON.stringify({ error: "AI script format မမှန်ပါ (JSON array မဟုတ်ပါ)။ ထပ်ကြိုးစားပါ။" }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
-      return new Response(
-        JSON.stringify({ recap: normalized }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ recap: normalized }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
-
   } catch (error) {
     console.error("Video recap error:", error);
     const errMsg = error instanceof Error ? error.message : "Unknown error";
-    return new Response(
-      JSON.stringify({ error: errMsg }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: errMsg }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
