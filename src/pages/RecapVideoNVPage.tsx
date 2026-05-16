@@ -796,159 +796,30 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             if (!audioSigned?.signedUrl || auErr)
               throw new Error("Failed to get audio signed URL: " + (auErr?.message || "No URL returned"));
 
-            // 2. Extract and upload frames
-            setServerRenderProgress("Extracting frames... 20%");
-            const frameErrors: string[] = [];
+            // 2. Upload video file directly — no frame extraction needed
+            // Server FFmpeg will process the original video file directly
+            setServerRenderProgress("Uploading video... 20%");
 
-            // Wait for the on-screen video to be ready (up to 15 seconds)
-            let frameVideo: HTMLVideoElement | null = null;
-            let createdFrameVideo = false;
-            if (videoRef.current) {
-              for (let waitAttempt = 0; waitAttempt < 30; waitAttempt++) {
-                if (videoRef.current && videoRef.current.readyState >= 2 && videoRef.current.duration > 0) {
-                  frameVideo = videoRef.current;
-                  frameVideo.pause();
-                  break;
-                }
-                await new Promise((r) => setTimeout(r, 500));
-              }
-              if (!frameVideo)
-                frameErrors.push(
-                  "On-screen video not ready after 15s (readyState=" + (videoRef.current?.readyState ?? "null") + ")",
-                );
-            } else {
-              frameErrors.push("videoRef is null");
-            }
-
-            // Fallback: create a new video element
-            if (!frameVideo) {
-              try {
-                const newVideo = document.createElement("video");
-                if (!isLocalSource(videoUrl)) {
-                  newVideo.crossOrigin = "anonymous";
-                }
-                newVideo.preload = "auto";
-                newVideo.muted = true;
-                newVideo.playsInline = true;
-                newVideo.src = videoUrl;
-                newVideo.style.cssText =
-                  "position:fixed;opacity:0;pointer-events:none;width:1px;height:1px;z-index:-9999";
-                document.body.appendChild(newVideo);
-                createdFrameVideo = true;
-                newVideo.load();
-                await new Promise<void>((resolve, reject) => {
-                  const timeout = setTimeout(() => reject(new Error("timeout 30s")), 30000);
-                  newVideo.onloadeddata = () => {
-                    clearTimeout(timeout);
-                    resolve();
-                  };
-                  newVideo.onerror = () => {
-                    clearTimeout(timeout);
-                    reject(new Error(newVideo.error?.message || "load error"));
-                  };
-                });
-                frameVideo = newVideo;
-              } catch (videoErr: any) {
-                frameErrors.push("Fallback video failed: " + videoErr.message);
-              }
-            }
-
-            const signedImageUrls: string[] = [];
-
-            if (frameVideo) {
-              const frameDur = frameVideo.duration || 60;
-              const intervals = [frameDur * 0.1, frameDur * 0.3, frameDur * 0.5, frameDur * 0.7, frameDur * 0.9];
-              let canvasTainted = false;
-
-              for (let i = 0; i < intervals.length; i++) {
-                try {
-                  frameVideo.currentTime = intervals[i];
-                  setServerRenderProgress(
-                    `Uploading frame ${i + 1}/${intervals.length}... ${20 + Math.round(((i + 1) / intervals.length) * 30)}%`,
-                  );
-                  await new Promise<void>((resolve) => {
-                    const seekTimeout = setTimeout(() => resolve(), 5000);
-                    frameVideo!.onseeked = () => {
-                      clearTimeout(seekTimeout);
-                      resolve();
-                    };
-                  });
-
-                  const cW = Math.max(frameVideo.videoWidth || 1280, 1);
-                  const cH = Math.max(frameVideo.videoHeight || 720, 1);
-                  const canvas = document.createElement("canvas");
-                  canvas.width = Math.min(cW, 1280);
-                  canvas.height = Math.min(cH, 720);
-                  const ctx = canvas.getContext("2d");
-                  if (!ctx) {
-                    frameErrors.push(`Frame ${i}: no canvas context`);
-                    continue;
-                  }
-
-                  // Try drawing video frame to canvas
-                  let drawOk = false;
-                  try {
-                    ctx.drawImage(frameVideo, 0, 0, canvas.width, canvas.height);
-                    drawOk = true;
-                  } catch (drawErr: any) {
-                    frameErrors.push(`Frame ${i}: drawImage: ${drawErr.message}`);
-                  }
-
-                  // If draw failed or canvas tainted from previous attempt, create placeholder
-                  if (!drawOk || canvasTainted) {
-                    // Create a gradient placeholder image
-                    const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-                    grad.addColorStop(0, "#1a1a2e");
-                    grad.addColorStop(0.5, "#16213e");
-                    grad.addColorStop(1, "#0f3460");
-                    ctx.fillStyle = grad;
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
-                    ctx.fillStyle = "#e2e8f0";
-                    ctx.font = "bold 32px sans-serif";
-                    ctx.textAlign = "center";
-                    ctx.fillText("Frame " + (i + 1), canvas.width / 2, canvas.height / 2);
-                  }
-
-                  // Export frame blob — with tainted canvas detection
-                  let frameBlob: Blob | null = null;
-                  let frameMime = "image/png";
-                  let frameExt = "png";
-
-                  try {
-                    frameBlob = await new Promise<Blob | null>((res) =>
-                      canvas.toBlob((b) => res(b), "image/jpeg", 0.85),
-                    );
-                    if (frameBlob && frameBlob.size > 0) {
-                      frameMime = "image/jpeg";
-                      frameExt = "jpg";
-                    } else {
-                      frameBlob = null;
-                    }
-                  } catch (e) {
-                    canvasTainted = true;
-                    frameErrors.push(`Frame ${i}: toBlob JPEG SecurityError (tainted canvas)`);
-                  }
-
-                  if (!frameBlob) {
-                    try {
-                      frameBlob = await new Promise<Blob | null>((res) => canvas.toBlob((b) => res(b), "image/png"));
-                      if (frameBlob && frameBlob.size > 0) {
-                        frameMime = "image/png";
-                        frameExt = "png";
-                      } else {
-                        frameBlob = null;
-                      }
-                    } catch (e) {
-                      canvasTainted = true;
-                    }
-                  }
-
-                  if (!frameBlob) {
-                    try {
-                      const dataUrl = canvas.toDataURL("image/png");
-                      const resp = await fetch(dataUrl);
-                      frameBlob = await resp.blob();
-                      frameMime = "image/png";
+            let videoSignedUrl = "";
+            try {
+              // Fetch video blob from URL
+              const videoResp = await fetch(videoUrl);
+              const videoBlob = await videoResp.blob();
+              const videoExt = videoBlob.type.includes("mp4") ? "mp4" : videoBlob.type.includes("webm") ? "webm" : "mp4";
+              const videoName = `${userId}/video_${Date.now()}.${videoExt}`;
+              const { error: videoUpErr } = await supabase.storage
+                .from("temp-uploads")
+                .upload(videoName, videoBlob, { contentType: videoBlob.type || "video/mp4", upsert: true });
+              if (videoUpErr) throw new Error("Video upload failed: " + videoUpErr.message);
+              const { data: videoSigned, error: vsErr } = await supabase.storage
+                .from("temp-uploads")
+                .createSignedUrl(videoName, 3600 * 24);
+              if (!videoSigned?.signedUrl || vsErr) throw new Error("Video signed URL failed");
+              videoSignedUrl = videoSigned.signedUrl;
+              setServerRenderProgress("Video uploaded... 40%");
+            } catch (videoErr: any) {
+              throw new Error("Video upload error: " + videoErr.message);
+            }                      frameMime = "image/png";
                       frameExt = "png";
                     } catch (e) {
                       canvasTainted = true;
@@ -1006,20 +877,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               }
             }
 
-            // Clean up
-            if (createdFrameVideo && frameVideo?.parentNode) {
-              document.body.removeChild(frameVideo);
-            }
-
-            // Validate
-            if (!audioSigned?.signedUrl) throw new Error("Audio signed URL is missing");
-            if (signedImageUrls.length === 0) {
-              throw new Error("Frame extraction failed ⚠️\n" + frameErrors.join("\n"));
-            }
-            if (frameErrors.length > 0) {
-              console.warn("[ServerRender] Frame warnings:", frameErrors);
-            }
-
             // 3. Prepare subtitles
             const subtitles = scriptData.segments.map((seg, idx) => {
               const ts = audioTimestampsRef.current.find((x) => x.index === idx);
@@ -1029,7 +886,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 text: seg.text,
               };
             });
-            const dur = frameVideo?.duration || 60;
+            const dur = videoRef.current?.duration || audioRef.current?.duration || 60;
 
             setServerRenderProgress("Sending to server... 55%");
             // 4. Call Edge Function to proxy to Cloud Run
@@ -1037,7 +894,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               body: {
                 action: "triggerServerRender",
                 audioUrl: audioSigned.signedUrl,
-                imageUrls: signedImageUrls,
+                videoUrl: videoSignedUrl,
                 subtitles,
                 duration: dur,
               },
@@ -1096,7 +953,26 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 }
 
                 if (statusData.state === "done" && statusData.url) {
-                  setRenderedBlobUrl(statusData.url);
+                  // ── Download from signed URL ──
+                  setServerRenderProgress("Downloading result... 98%");
+                  try {
+                    const mp4Resp = await fetch(statusData.url);
+                    const mp4Blob = await mp4Resp.blob();
+                    const mp4Url = URL.createObjectURL(new Blob([mp4Blob], { type: "video/mp4" }));
+
+                    // Auto download
+                    const a = document.createElement("a");
+                    a.href = mp4Url;
+                    a.download = `recap_${scriptData.title.replace(/\s+/g, "_")}_${Date.now()}.mp4`;
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(() => { if (a.parentNode) document.body.removeChild(a); }, 2000);
+
+                    setRenderedBlobUrl(mp4Url);
+                  } catch (dlErr: any) {
+                    // Fallback: use URL directly
+                    setRenderedBlobUrl(statusData.url);
+                  }
                   setIsRendering(false);
                   setServerRenderProgress("Done! 100%");
                   if (audioRef.current) {
