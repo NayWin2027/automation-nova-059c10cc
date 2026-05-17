@@ -778,9 +778,15 @@ serve(async (req) => {
         },
         body: JSON.stringify(renderPayload),
       });
-      const data = await res.json();
+      const rawText = await res.text();
+      let data: any;
+      try { data = JSON.parse(rawText); } catch { data = { error: rawText || `Render worker HTTP ${res.status}` }; }
+      if (!res.ok && !data?.error) {
+        data = { error: `Render worker HTTP ${res.status}: ${rawText?.slice(0, 500) || "no body"}` };
+      }
+      // Always return 200 so supabase-js surfaces the real error body to the client
       return new Response(JSON.stringify(data), {
-        status: res.status,
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -798,9 +804,14 @@ serve(async (req) => {
       const res = await fetch(`${renderUrl}/status/${jobId}`, {
         headers: { "X-Api-Secret": renderSecret },
       });
-      const data = await res.json();
+      const rawText = await res.text();
+      let data: any;
+      try { data = JSON.parse(rawText); } catch { data = { error: rawText || `Status HTTP ${res.status}` }; }
+      if (!res.ok && !data?.error) {
+        data = { error: `Status HTTP ${res.status}: ${rawText?.slice(0, 500) || "no body"}` };
+      }
       return new Response(JSON.stringify(data), {
-        status: res.status,
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
