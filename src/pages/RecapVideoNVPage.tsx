@@ -838,7 +838,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 : Promise.resolve<string | null>(null);
 
             const [audioSignedUrl, signedSourceVideoUrl] = await Promise.all([audioUploadP, videoUploadP]);
-            const useFastVideoPath = !!(signedSourceVideoUrl || sourceFileUri);
+            // Cloud Run worker can only download via HTTP(S). A Google Files API `sourceFileUri`
+            // is NOT downloadable by the worker, so we MUST fall back to frame extraction
+            // when no signed source video URL is available.
+            const useFastVideoPath = !!signedSourceVideoUrl;
 
             // 2. Frame fallback only when no full video path (YouTube / upload failed)
             setServerRenderProgress(useFastVideoPath ? "Assets ready... 45%" : "Extracting frames... 20%");
