@@ -2986,7 +2986,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 </div>
 
                 {/* Blur Box Layer */}
-                {blurSettings.enabled && (
+                {!isRenderingRef.current && (
                   <div
                     ref={blurBoxRef}
                     onMouseDown={handleBlurDragStart}
@@ -3009,7 +3009,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       transition: "border-color 0.1s, box-shadow 0.1s",
                     }}
                   >
-                    {!isRenderingRef.current && (currentSubtitle || scriptData.segments[0]?.text) && (
+                    {(currentSubtitle || scriptData.segments[0]?.text || "Subtitle") && (
                       <div
                         className="absolute inset-0 flex items-center justify-center pointer-events-none"
                         style={{ backgroundColor: subSettings.bgColor, borderRadius: "inherit", padding: "4% 4%" }}
@@ -3030,7 +3030,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                             animation: "subtitlePopin 0.25s cubic-bezier(0.22,1,0.36,1) both",
                           }}
                         >
-                          {currentSubtitle || scriptData.segments[0]?.text}
+                          {currentSubtitle || scriptData.segments[0]?.text || "Subtitle"}
                         </div>
                       </div>
                     )}
