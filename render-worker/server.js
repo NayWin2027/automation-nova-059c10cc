@@ -68,29 +68,6 @@ function runFfmpeg(args) {
   });
 }
 
-// ffmpeg runner with live progress callback (parses "time=HH:MM:SS.xx" from stderr)
-function runFfmpegProgress(args, totalSec, onProgress) {
-  return new Promise((resolve, reject) => {
-    const p = spawn("ffmpeg", args, { stdio: ["ignore", "pipe", "pipe"] });
-    let tail = "";
-    p.stderr.on("data", (d) => {
-      const s = d.toString();
-      tail = (tail + s).slice(-4000);
-      const m = s.match(/time=(\d+):(\d+):(\d+(?:\.\d+)?)/);
-      if (m && totalSec > 0 && typeof onProgress === "function") {
-        const cur = (+m[1]) * 3600 + (+m[2]) * 60 + parseFloat(m[3]);
-        const pct = Math.max(0, Math.min(1, cur / totalSec));
-        try { onProgress(pct); } catch {}
-      }
-    });
-    p.on("error", reject);
-    p.on("close", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`ffmpeg exit ${code}: ${tail.slice(-2000)}`));
-    });
-  });
-}
-
 function escapeForSrt(s) {
   return String(s ?? "").replace(/\r/g, "");
 }
@@ -109,6 +86,26 @@ function buildSrt(subs) {
   return subs
     .map((c, i) => `${i + 1}\n${secToSrtTs(c.start)} --> ${secToSrtTs(c.end)}\n${escapeForSrt(c.text)}\n`)
     .join("\n");
+}
+
+function subsForRange(subs, segStart, segEnd) {
+  return subs
+    .filter((s) => s.end > segStart && s.start < segEnd)
+    .map((s) => ({
+      start: Math.max(0, s.start - segStart),
+      end: Math.min(segEnd - segStart, s.end - segStart),
+      text: s.text,
+    }));
+}
+
+function effectiveCaps(maxW, maxH, isFast) {
+  let w = Number(maxW) > 0 ? Number(maxW) : 0;
+  let h = Number(maxH) > 0 ? Number(maxH) : 0;
+  if (isFast) {
+    if (!w || w > 1280) w = 1280;
+    if (!h || h > 720) h = 720;
+  }
+  return { w, h };
 }
 
 // ── routes ──────────────────────────────────────────────────────────────────
@@ -210,9 +207,14 @@ async function renderJob(jobId, opts) {
       subFilter = `,subtitles='${srtPath.replace(/'/g, "\\'")}':force_style='FontName=Noto Sans,FontSize=20,Outline=2,Shadow=1,MarginV=40'`;
     }
 
-    // 5) ffmpeg compose — keep ORIGINAL resolution and framerate; speed up via ultrafast + 8 threads
+    // 5) ffmpeg compose — ultrafast; cap resolution when fastMode to avoid full-res slideshow encode
     const outPath = path.join(work, "out.mp4");
-    const vfChain = `format=yuv420p${subFilter}`;
+    const isFastSlideshow = Boolean(opts.ultraFast || opts.fastMode);
+    const capW = Number(opts.maxW) > 0 ? Number(opts.maxW) : isFastSlideshow ? 1280 : 0;
+    const capH = Number(opts.maxH) > 0 ? Number(opts.maxH) : isFastSlideshow ? 720 : 0;
+    const scalePart =
+      capW > 0 && capH > 0 ? `scale='min(iw,${capW})':'min(ih,${capH})':force_original_aspect_ratio=decrease,` : "";
+    const vfChain = `${scalePart}format=yuv420p${subFilter}`;
 
     const preset = opts.encodePreset || opts.renderPreset || "ultrafast";
     const ffmpegArgs = [
@@ -276,61 +278,66 @@ async function renderJob(jobId, opts) {
   }
 }
 
-/** Ultra-fast path: source video + narration audio + subtitles (no slideshow). */
+/** Ultra-fast path: source video + narration audio (+ optional subtitles). */
 async function renderJobFromVideo(jobId, opts) {
-  const { audioUrl, videoUrl, subtitles, duration, fps, maxW, maxH, bitrate, encodePreset, renderPreset } = opts || {};
+  const { audioUrl, videoUrl, subtitles, fps, maxW, maxH, bitrate, encodePreset, renderPreset, ultraFast, fastMode } =
+    opts || {};
 
   const work = await fsp.mkdtemp(path.join(os.tmpdir(), `job-${jobId}-`));
-  console.log(`[job ${jobId}] video-path workdir=${work}`);
+  const isFast = Boolean(ultraFast || fastMode);
+  console.log(`[job ${jobId}] video-path workdir=${work} fast=${isFast}`);
 
   try {
-    JOBS.set(jobId, { state: "processing", progress: 15, startedAt: Date.now() });
+    JOBS.set(jobId, { state: "processing", progress: 12, startedAt: Date.now() });
 
     const audioPath = path.join(work, "audio.mp3");
     const videoPath = path.join(work, "source.mp4");
     await Promise.all([downloadTo(audioUrl, audioPath), downloadTo(videoUrl, videoPath)]);
 
-    JOBS.set(jobId, { state: "processing", progress: 35, startedAt: Date.now() });
+    JOBS.set(jobId, { state: "processing", progress: 38, startedAt: Date.now() });
 
-    const hasSubs = Array.isArray(subtitles) && subtitles.length > 0;
-    const capW = Number(maxW) || 0;
-    const capH = Number(maxH) || 0;
+    const hasSubtitles = Array.isArray(subtitles) && subtitles.length > 0;
+    const { w: capW, h: capH } = effectiveCaps(maxW, maxH, isFast);
     const needsScale = capW > 0 && capH > 0;
     const needsFps = fps && Number(fps) > 0;
-    const needsReencode = hasSubs || needsScale || needsFps;
+    const canStreamCopy = !hasSubtitles && !needsScale && !needsFps;
+    const totalDur = Number(opts.duration) || 0;
+    const useParallel = isFast && totalDur > 90 && hasSubtitles && !canStreamCopy;
+
+    let subFilter = "";
+    if (hasSubtitles) {
+      const srtPath = path.join(work, "subs.srt");
+      await fsp.writeFile(srtPath, buildSrt(subtitles), "utf8");
+      subFilter = `,subtitles='${srtPath.replace(/'/g, "\\'")}':force_style='FontName=Noto Sans,FontSize=20,Outline=2,Shadow=1,MarginV=40'`;
+    }
 
     const outPath = path.join(work, "out.mp4");
-    const totalSec = Number(duration) || 0;
-    const setProg = (pct) => {
-      const p = Math.round(40 + pct * 50); // 40 → 90
-      JOBS.set(jobId, { state: "processing", progress: p, startedAt: Date.now() });
-    };
-
     let ffmpegArgs;
-    if (!needsReencode) {
-      // ⚡ Stream-copy fast path: ~50–100× faster than re-encode.
-      // Just remux original video with the new narration audio.
+
+    if (canStreamCopy) {
+      console.log(`[job ${jobId}] STREAM COPY (video copy + new audio)`);
       ffmpegArgs = [
         "-y",
-        "-i", videoPath,
-        "-i", audioPath,
-        "-map", "0:v:0",
-        "-map", "1:a:0",
-        "-c:v", "copy",
-        "-c:a", "aac",
-        "-b:a", "192k",
+        "-i",
+        videoPath,
+        "-i",
+        audioPath,
+        "-map",
+        "0:v:0",
+        "-map",
+        "1:a:0",
+        "-c:v",
+        "copy",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
         "-shortest",
-        "-movflags", "+faststart",
+        "-movflags",
+        "+faststart",
         outPath,
       ];
-      console.log(`[job ${jobId}] stream-copy fast path (no re-encode)`);
     } else {
-      let subFilter = "";
-      if (hasSubs) {
-        const srtPath = path.join(work, "subs.srt");
-        await fsp.writeFile(srtPath, buildSrt(subtitles), "utf8");
-        subFilter = `,subtitles='${srtPath.replace(/'/g, "\\'")}':force_style='FontName=Noto Sans,FontSize=20,Outline=2,Shadow=1,MarginV=40'`;
-      }
       const vfParts = [];
       if (needsScale) {
         vfParts.push(`scale='min(iw,${capW})':'min(ih,${capH})':force_original_aspect_ratio=decrease`);
@@ -338,40 +345,154 @@ async function renderJobFromVideo(jobId, opts) {
       vfParts.push(`format=yuv420p${subFilter}`);
       const vfChain = vfParts.join(",");
       const preset = encodePreset || renderPreset || "ultrafast";
+      const crf = isFast ? "30" : "28";
       ffmpegArgs = [
         "-y",
-        "-i", videoPath,
-        "-i", audioPath,
-        "-vf", vfChain,
-        "-map", "0:v:0",
-        "-map", "1:a:0",
-        "-c:v", "libx264",
-        "-preset", preset,
-        "-tune", "fastdecode",
-        "-threads", "0",
-        "-x264-params", "sliced-threads=1:rc-lookahead=10:ref=1:bframes=0",
-        "-pix_fmt", "yuv420p",
-        "-c:a", "aac",
-        "-b:a", "192k",
+        "-i",
+        videoPath,
+        "-i",
+        audioPath,
+        "-vf",
+        vfChain,
+        "-map",
+        "0:v:0",
+        "-map",
+        "1:a:0",
+        "-c:v",
+        "libx264",
+        "-preset",
+        preset,
+        "-tune",
+        "fastdecode",
+        "-crf",
+        crf,
+        "-threads",
+        "0",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
         "-shortest",
-        "-movflags", "+faststart",
+        "-movflags",
+        "+faststart",
         outPath,
       ];
       if (bitrate) {
         const brK = Math.max(500, Math.round(Number(bitrate) / 1000));
+        const crfIdx = ffmpegArgs.indexOf("-crf");
+        if (crfIdx !== -1) ffmpegArgs.splice(crfIdx, 2);
         const presetIdx = ffmpegArgs.indexOf("-preset");
-        ffmpegArgs.splice(presetIdx + 2, 0, "-b:v", `${brK}k`);
+        ffmpegArgs.splice(
+          presetIdx + 2,
+          0,
+          "-b:v",
+          `${brK}k`,
+          "-maxrate",
+          `${Math.round(brK * 1.5)}k`,
+          "-bufsize",
+          `${brK * 2}k`,
+        );
       }
       if (needsFps) {
         const cvIdx = ffmpegArgs.indexOf("-c:v");
         ffmpegArgs.splice(cvIdx, 0, "-r", String(Math.round(Number(fps))));
       }
-      console.log(`[job ${jobId}] re-encode path subs=${hasSubs} scale=${needsScale} fps=${needsFps}`);
     }
 
-    JOBS.set(jobId, { state: "processing", progress: 40, startedAt: Date.now() });
-    await runFfmpegProgress(ffmpegArgs, totalSec, setProg);
-    JOBS.set(jobId, { state: "processing", progress: 92, startedAt: Date.now() });
+    JOBS.set(jobId, { state: "processing", progress: 55, startedAt: Date.now() });
+
+    if (useParallel) {
+      const segDur = Math.min(30, Math.max(15, Math.ceil(totalDur / 8)));
+      const numSegs = Math.ceil(totalDur / segDur);
+      const preset = encodePreset || renderPreset || "ultrafast";
+      const segPaths = await Promise.all(
+        Array.from({ length: numSegs }, async (_, i) => {
+          const segStart = i * segDur;
+          const segEnd = Math.min(totalDur, segStart + segDur);
+          const segDurActual = segEnd - segStart;
+          const segOut = path.join(work, `seg_${String(i).padStart(4, "0")}.mp4`);
+          let segSubFilter = "";
+          if (hasSubtitles) {
+            const segSubs = subsForRange(subtitles, segStart, segEnd);
+            if (segSubs.length > 0) {
+              const srtPath = path.join(work, `subs_${i}.srt`);
+              await fsp.writeFile(srtPath, buildSrt(segSubs), "utf8");
+              segSubFilter = `,subtitles='${srtPath.replace(/'/g, "\\'")}':force_style='FontName=Noto Sans,FontSize=20,Outline=2,Shadow=1,MarginV=40'`;
+            }
+          }
+          const vfParts = [];
+          if (needsScale) {
+            vfParts.push(`scale='min(iw,${capW})':'min(ih,${capH})':force_original_aspect_ratio=decrease`);
+          }
+          vfParts.push(`format=yuv420p${segSubFilter}`);
+          const segArgs = [
+            "-y",
+            "-ss",
+            String(segStart),
+            "-t",
+            String(segDurActual),
+            "-i",
+            videoPath,
+            "-ss",
+            String(segStart),
+            "-t",
+            String(segDurActual),
+            "-i",
+            audioPath,
+            "-vf",
+            vfParts.join(","),
+            "-map",
+            "0:v:0",
+            "-map",
+            "1:a:0",
+            "-c:v",
+            "libx264",
+            "-preset",
+            preset,
+            "-tune",
+            "fastdecode",
+            "-crf",
+            "30",
+            "-threads",
+            "0",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            "-movflags",
+            "+faststart",
+            segOut,
+          ];
+          await runFfmpeg(segArgs);
+          return segOut;
+        }),
+      );
+      const concatPath = path.join(work, "segments.txt");
+      await fsp.writeFile(concatPath, segPaths.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join("\n") + "\n");
+      await runFfmpeg([
+        "-y",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        concatPath,
+        "-c",
+        "copy",
+        "-movflags",
+        "+faststart",
+        outPath,
+      ]);
+      console.log(`[job ${jobId}] parallel segments=${numSegs} segDur=${segDur}`);
+    } else {
+      await runFfmpeg(ffmpegArgs);
+    }
+
+    JOBS.set(jobId, { state: "processing", progress: 85, startedAt: Date.now() });
 
     const objectName = `renders/${jobId}.mp4`;
     let finalUrl = null;
