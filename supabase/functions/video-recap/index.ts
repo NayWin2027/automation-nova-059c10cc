@@ -759,7 +759,11 @@ serve(async (req) => {
       };
       if (videoUrl) renderPayload.videoUrl = videoUrl;
       if (sourceFileUri) renderPayload.sourceFileUri = sourceFileUri;
-      if (Array.isArray(imageUrls) && imageUrls.length > 0) renderPayload.imageUrls = imageUrls;
+      // Prefer full-video path: skip slideshow frames when client sends both
+      const skipSlideshow = Boolean(videoUrl && preferVideoPath);
+      if (!skipSlideshow && Array.isArray(imageUrls) && imageUrls.length > 0) {
+        renderPayload.imageUrls = imageUrls;
+      }
       if (fps != null) renderPayload.fps = fps;
       if (maxW != null) renderPayload.maxW = maxW;
       if (maxH != null) renderPayload.maxH = maxH;
@@ -778,15 +782,9 @@ serve(async (req) => {
         },
         body: JSON.stringify(renderPayload),
       });
-      const rawText = await res.text();
-      let data: any;
-      try { data = JSON.parse(rawText); } catch { data = { error: rawText || `Render worker HTTP ${res.status}` }; }
-      if (!res.ok && !data?.error) {
-        data = { error: `Render worker HTTP ${res.status}: ${rawText?.slice(0, 500) || "no body"}` };
-      }
-      // Always return 200 so supabase-js surfaces the real error body to the client
+      const data = await res.json();
       return new Response(JSON.stringify(data), {
-        status: 200,
+        status: res.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -804,14 +802,9 @@ serve(async (req) => {
       const res = await fetch(`${renderUrl}/status/${jobId}`, {
         headers: { "X-Api-Secret": renderSecret },
       });
-      const rawText = await res.text();
-      let data: any;
-      try { data = JSON.parse(rawText); } catch { data = { error: rawText || `Status HTTP ${res.status}` }; }
-      if (!res.ok && !data?.error) {
-        data = { error: `Status HTTP ${res.status}: ${rawText?.slice(0, 500) || "no body"}` };
-      }
+      const data = await res.json();
       return new Response(JSON.stringify(data), {
-        status: 200,
+        status: res.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
