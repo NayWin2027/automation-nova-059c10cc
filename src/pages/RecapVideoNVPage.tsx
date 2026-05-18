@@ -3052,7 +3052,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       height: `${blurSettings.height}%`,
                       backdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
                       WebkitBackdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
-                      border: "2px solid rgba(255,255,255,0.3)",
+                       border: "none",
                       boxShadow: "none",
                       touchAction: "none",
                       boxSizing: "border-box",
