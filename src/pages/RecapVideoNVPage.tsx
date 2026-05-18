@@ -624,7 +624,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       url: null,
       size: 15,
       isCircle: true,
-      spin: true,
+      spin: false,
       neonColor: "#00E5FF",
       x: 88,
       y: 8,
@@ -665,14 +665,14 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     }, [zoomEnabled]);
 
     const [timelineBar, setTimelineBar] = useState({
-      enabled: true,
+      enabled: false,
       color: "#4B0082",
       thickness: 1,
       openPanel: false,
     });
 
     const [videoBorder, setVideoBorder] = useState({
-      enabled: true,
+      enabled: false,
       color: "#00E5FF",
       width: 4,
       openPanel: false,
@@ -3026,8 +3026,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     <div
                       className={`relative w-full aspect-square ${logo.isCircle ? "rounded-full" : "rounded-none"} overflow-hidden`}
                       style={{
-                        boxShadow: `0 0 20px ${logo.neonColor}, 0 0 40px ${logo.neonColor}, 0 0 60px ${logo.neonColor}55`,
-                        border: `2.5px solid ${logo.neonColor}`,
+                        boxShadow: "none",
+                        border: "none",
                       }}
                     >
                       <img
