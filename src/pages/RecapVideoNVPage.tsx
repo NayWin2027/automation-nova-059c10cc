@@ -633,8 +633,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const [subSettings, setSubSettings] = useState<SubtitleSettings>({
       x: 50,
       y: 85,
-      textColor: "#FACC15",
-      bgColor: "rgba(30,30,30,0.55)",
+      textColor: "#FFFFFF",
+      bgColor: "rgba(15,15,15,0.68)",
       borderColor: "#FF69B4",
       fontSize: 15,
       scale: 1,
@@ -2208,43 +2208,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           ctx.restore();
         }
 
-        // Blur box
-        if (blurSettings.enabled) {
-          const curBlur = blurSettingsRef.current;
-          const blurW = canvas.width * (curBlur.width / 100);
-          const blurH = canvas.height * (curBlur.height / 100);
-          const blurX = canvas.width * (curBlur.x / 100) - blurW / 2;
-          const blurY = canvas.height * (curBlur.y / 100) - blurH / 2;
-          const blurClampedX = Math.max(0, Math.min(canvas.width - blurW, blurX));
-          const blurClampedY = Math.max(0, Math.min(canvas.height - blurH, blurY));
-          const blurAmount = Math.round((curBlur.opacity / 100) * 20);
-
-          if (isLowEndRender) {
-            ctx.save();
-            ctx.fillStyle = "rgba(0,0,0,0.45)";
-            ctx.fillRect(blurClampedX, blurClampedY, blurW, blurH);
-            ctx.restore();
-          } else {
-            // ── FIX: Resize offscreen canvas only when settings changed (blurCacheValidRef) ──
-            const fxW = Math.max(2, Math.round(blurW));
-            const fxH = Math.max(2, Math.round(blurH));
-            if (!blurCacheValidRef.current || blurFxCanvas.width !== fxW || blurFxCanvas.height !== fxH) {
-              blurFxCanvas.width = fxW;
-              blurFxCanvas.height = fxH;
-              blurCacheValidRef.current = true;
-            }
-            blurFxCtx.save();
-            blurFxCtx.clearRect(0, 0, fxW, fxH);
-            blurFxCtx.filter = `blur(${Math.max(1, blurAmount)}px)`;
-            blurFxCtx.drawImage(canvas, blurClampedX, blurClampedY, blurW, blurH, 0, 0, fxW, fxH);
-            blurFxCtx.restore();
-            ctx.save();
-            ctx.drawImage(blurFxCanvas, 0, 0, fxW, fxH, blurClampedX, blurClampedY, blurW, blurH);
-            ctx.fillStyle = "rgba(0,0,0,0.14)";
-            ctx.fillRect(blurClampedX, blurClampedY, blurW, blurH);
-            ctx.restore();
-          }
-        }
+        // Blur box effect disabled — subtitle background is drawn below without blur/border.
 
         // Subtitles on canvas
         const subText = currentSubtitleRef.current;
@@ -3034,8 +2998,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       transform: "translate(-50%, -50%)",
                       width: `${blurSettings.width}%`,
                       height: `${blurSettings.height}%`,
-                      backdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
-                      WebkitBackdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
+                      backdropFilter: "none",
+                      WebkitBackdropFilter: "none",
                        border: "none",
                       boxShadow: "none",
                       touchAction: "none",
