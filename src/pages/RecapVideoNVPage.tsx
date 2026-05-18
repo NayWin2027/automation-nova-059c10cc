@@ -2401,12 +2401,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
           const strokeScale = 1;
           const glowScale = 1;
-          // ── BOX BORDER: Premium Neon glow on subtitle background box ──
+          // ── BOX BORDER: Plain border without neon glow ──
           ctx.lineJoin = "miter";
-          ctx.strokeStyle = neonBase;
-          ctx.shadowColor = neonBase; // Neon glow effect restored
-          ctx.shadowBlur = isLowEndRender ? 8 : Math.max(20, fontSize * 1.2); // Vibrant glow
-          ctx.lineWidth = Math.max(1.5, fontSize * 0.015) * strokeScale; // Thinner, more elegant border
+          ctx.strokeStyle = "#ffffff";
+          ctx.shadowColor = "transparent";
+          ctx.shadowBlur = 0;
+          ctx.lineWidth = Math.max(1.5, fontSize * 0.015) * strokeScale;
           ctx.stroke();
 
           if (subSettings.tripleStroke) {
@@ -2415,10 +2415,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             ctx.strokeStyle = "rgba(0,0,0,0.85)";
             ctx.lineWidth = Math.max(0.8, fontSize * 0.04) * strokeScale;
             ctx.stroke();
-            ctx.strokeStyle = neonBright;
-            // Premium vibrant inner glow - brighter and more saturated
-            ctx.shadowBlur = isLowEndRender ? 6 : Math.max(22, fontSize * 1.0) * glowScale;
-            ctx.shadowColor = neonBright;
+            ctx.strokeStyle = "#ffffff";
+            ctx.shadowBlur = 0;
+            ctx.shadowColor = "transparent";
             ctx.lineWidth = Math.max(0.8, fontSize * 0.015) * strokeScale;
             ctx.stroke();
           }
