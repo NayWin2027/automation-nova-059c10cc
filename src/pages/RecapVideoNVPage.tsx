@@ -634,7 +634,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       x: 50,
       y: 85,
       textColor: "#FACC15",
-      bgColor: "rgba(230,230,230,0.35)",
+      bgColor: "rgba(30,30,30,0.55)",
       borderColor: "#FF69B4",
       fontSize: 15,
       scale: 1,
@@ -2401,27 +2401,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
           const strokeScale = 1;
           const glowScale = 1;
-          // ── BOX BORDER: Plain border without neon glow ──
-          ctx.lineJoin = "miter";
-          ctx.strokeStyle = "#ffffff";
+          // ── BOX BORDER: Fully removed (no stroke) ──
           ctx.shadowColor = "transparent";
           ctx.shadowBlur = 0;
-          ctx.lineWidth = Math.max(1.5, fontSize * 0.015) * strokeScale;
-          ctx.stroke();
-
-          if (subSettings.tripleStroke) {
-            ctx.shadowBlur = 0;
-            ctx.shadowColor = "transparent";
-            ctx.strokeStyle = "rgba(0,0,0,0.85)";
-            ctx.lineWidth = Math.max(0.8, fontSize * 0.04) * strokeScale;
-            ctx.stroke();
-            ctx.strokeStyle = "#ffffff";
-            ctx.shadowBlur = 0;
-            ctx.shadowColor = "transparent";
-            ctx.lineWidth = Math.max(0.8, fontSize * 0.015) * strokeScale;
-            ctx.stroke();
-          }
-          ctx.shadowBlur = 0;
+          void strokeScale;
+          void glowScale;
 
           // ── TEXT RENDERING: Clean text without glow effects ──
           const startY = subCY - totalTextH / 2 + lineHeight / 2;
