@@ -634,7 +634,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       x: 50,
       y: 85,
       textColor: "#FACC15",
-      bgColor: "rgba(0,0,0,0.6)",
+      bgColor: "rgba(230,230,230,0.35)",
       borderColor: "#FF69B4",
       fontSize: 15,
       scale: 1,
@@ -2451,19 +2451,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         }
 
         // Logo
-        if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
-          const logoSize = canvas.width * (logo.size / 100);
-          const logoCX = canvas.width * (logo.x / 100);
-          const logoCY = canvas.height * (logo.y / 100);
-          ctx.save();
-          ctx.translate(logoCX, logoCY);
-          ctx.strokeStyle = "rgba(255,255,255,0.5)";
-          ctx.lineWidth = logoSize * 0.025;
-          ctx.beginPath();
-          ctx.arc(0, 0, logoSize / 2 + logoSize * 0.02, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.restore();
-          ctx.save();
+         if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
+           const logoSize = canvas.width * (logo.size / 100);
+           const logoCX = canvas.width * (logo.x / 100);
+           const logoCY = canvas.height * (logo.y / 100);
+           ctx.save();
           ctx.translate(logoCX, logoCY);
           ctx.shadowColor = "transparent";
           ctx.shadowBlur = 0;
@@ -3060,7 +3052,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       height: `${blurSettings.height}%`,
                       backdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
                       WebkitBackdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
-                      border: "2px solid rgba(255,255,255,0.3)",
+                       border: "none",
                       boxShadow: "none",
                       touchAction: "none",
                       boxSizing: "border-box",
