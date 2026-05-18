@@ -2401,12 +2401,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
           const strokeScale = 1;
           const glowScale = 1;
-          // ── BOX BORDER: Premium Neon glow on subtitle background box ──
+          // ── BOX BORDER: Plain border without neon glow ──
           ctx.lineJoin = "miter";
-          ctx.strokeStyle = neonBase;
-          ctx.shadowColor = neonBase; // Neon glow effect restored
-          ctx.shadowBlur = isLowEndRender ? 8 : Math.max(20, fontSize * 1.2); // Vibrant glow
-          ctx.lineWidth = Math.max(1.5, fontSize * 0.015) * strokeScale; // Thinner, more elegant border
+          ctx.strokeStyle = "#ffffff";
+          ctx.shadowColor = "transparent";
+          ctx.shadowBlur = 0;
+          ctx.lineWidth = Math.max(1.5, fontSize * 0.015) * strokeScale;
           ctx.stroke();
 
           if (subSettings.tripleStroke) {
@@ -2415,10 +2415,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             ctx.strokeStyle = "rgba(0,0,0,0.85)";
             ctx.lineWidth = Math.max(0.8, fontSize * 0.04) * strokeScale;
             ctx.stroke();
-            ctx.strokeStyle = neonBright;
-            // Premium vibrant inner glow - brighter and more saturated
-            ctx.shadowBlur = isLowEndRender ? 6 : Math.max(22, fontSize * 1.0) * glowScale;
-            ctx.shadowColor = neonBright;
+            ctx.strokeStyle = "#ffffff";
+            ctx.shadowBlur = 0;
+            ctx.shadowColor = "transparent";
             ctx.lineWidth = Math.max(0.8, fontSize * 0.015) * strokeScale;
             ctx.stroke();
           }
@@ -2478,17 +2477,17 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           ctx.restore();
         }
 
-        // ── FIX: DOM neon style write — throttled to every 3 frames, skip during recording ──
+        // ── FIX: DOM neon style write — DISABLED to reduce CPU/GPU load ──
+        // All neon glow effects have been removed from the subtitle renderer.
+        // Keeping the hue counter alive for any future re-enable, but skipping DOM writes.
         neonFrameCount++;
         let nextHue = subNeonHueRef.current + 0.8;
-        // User requested NO green: skip from 60 (Yellow/Gold) to 190 (Cyan/Blue)
         if (nextHue > 60 && nextHue < 190) nextHue = 190;
         if (nextHue >= 360) nextHue = 0;
         subNeonHueRef.current = nextHue;
 
-        if (!isRenderingRef.current && neonFrameCount % 3 === 0) {
-          containerRef.current?.style.setProperty("--neon-hue", `hsl(${subNeonHueRef.current}, 100%, 50%)`);
-        }
+        // DOM neon hue update disabled — no more --neon-hue CSS variable writes
+        void neonFrameCount;
       };
 
       // ── FIX: Single unified rAF loop — syncLoop + drawFrame in ONE rAF callback ──
@@ -3061,8 +3060,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       height: `${blurSettings.height}%`,
                       backdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
                       WebkitBackdropFilter: `blur(${Math.round(blurSettings.opacity / 5)}px)`,
-                      border: `2px solid var(--neon-hue, hsl(180,100%,75%))`,
-                      boxShadow: `0 0 30px var(--neon-hue, hsl(180,100%,75%)), 0 0 60px color-mix(in srgb, var(--neon-hue, hsl(180,100%,75%)) 80%, transparent), 0 0 90px color-mix(in srgb, var(--neon-hue, hsl(180,100%,75%)) 50%, transparent), inset 0 0 20px color-mix(in srgb, var(--neon-hue, hsl(180,100%,75%)) 40%, transparent)`,
+                      border: "2px solid rgba(255,255,255,0.3)",
+                      boxShadow: "none",
                       touchAction: "none",
                       boxSizing: "border-box",
                       overflow: "hidden",
@@ -3083,7 +3082,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                             fontFamily: subSettings.fontFamily,
                             fontSize: `clamp(8px, ${subSettings.fontSize}px, 100%)`,
                             lineHeight: 1.4,
-                            textShadow: `0 0 12px var(--neon-hue, hsl(180,100%,75%)), 0 0 24px var(--neon-hue, hsl(180,100%,75%)), 0 1px 4px rgba(0,0,0,0.9)`,
+                            textShadow: `0 1px 4px rgba(0,0,0,0.9)`,
                             wordBreak: "break-word",
                             overflowWrap: "break-word",
                             overflow: "visible",
@@ -3148,7 +3147,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                           ? `${Math.min(100, (audioRef.current.currentTime / audioRef.current.duration) * 100)}%`
                           : "0%",
                         backgroundColor: timelineBar.color,
-                        boxShadow: `0 0 ${timelineBar.thickness * 2}px ${timelineBar.color}`,
+                        boxShadow: "none",
                       }}
                     />
                   </div>
