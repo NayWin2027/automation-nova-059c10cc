@@ -1840,46 +1840,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         }
       }
 
-      // Pre-compute fixed canvas font size once per recording session
+      // Pre-compute canvas subtitle font size from the preview slider so REC and output match
       fixedCanvasFontSizeRef.current = (() => {
-        if (blurSettings.enabled) {
-          const bW = canvas.width * (blurSettings.width / 100);
-          const bH = canvas.height * (blurSettings.height / 100);
-          const padX = bW * 0.04;
-          const padY = bH * 0.08;
-          const maxTW = bW - padX * 2;
-          const maxTH = bH - padY * 2;
-          const longestText = scriptData.segments.reduce(
-            (best, seg) => (seg.text.length > best.length ? seg.text : best),
-            "",
-          );
-          const tc = document.createElement("canvas").getContext("2d")!;
-          let fs = Math.round(bH * 0.35);
-          const MAX_LINES_PER_PAGE = 3;
-          while (fs >= 8) {
-            tc.font = `bold ${fs}px ${subSettings.fontFamily}`;
-            const lh = fs * 1.4;
-            const words = longestText.split(" ");
-            const lines: string[] = [];
-            let cur = "";
-            for (const w of words) {
-              const tl = cur ? `${cur} ${w}` : w;
-              if (tc.measureText(tl).width > maxTW && cur) {
-                lines.push(cur);
-                cur = w;
-              } else cur = tl;
-            }
-            if (cur) lines.push(cur);
-            const linesToFit = Math.min(lines.length, MAX_LINES_PER_PAGE);
-            if (linesToFit * lh <= maxTH) break;
-            fs--;
-          }
-          return Math.max(fs, 8);
-        } else {
-          const previewH = containerRef.current?.offsetHeight || 450;
-          const fraction = subSettings.fontSize / previewH;
-          return Math.max(8, Math.round(canvas.height * fraction));
-        }
+        const previewH = containerRef.current?.offsetHeight || 450;
+        const fraction = subSettings.fontSize / previewH;
+        return Math.max(8, Math.round(canvas.height * fraction));
       })();
 
       logoAngleRef.current = 0;
@@ -2348,7 +2313,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           }
 
           const totalTextH = displayLines.length * lineHeight;
-          ctx.fillStyle = subSettings.bgColor;
+          const bgAlpha = Math.max(0.08, Math.min(0.68, blurSettingsRef.current.opacity / 100));
+          ctx.fillStyle = `rgba(245,245,245,${bgAlpha})`;
           ctx.shadowColor = "transparent";
           ctx.shadowBlur = 0;
           ctx.beginPath();
@@ -2371,14 +2337,17 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           void strokeScale;
           void glowScale;
 
-          // ── TEXT RENDERING: Clean text without glow effects ──
+          // ── TEXT RENDERING: Match REC preview clarity/size in the final canvas ──
           const startY = subCY - totalTextH / 2 + lineHeight / 2;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-          ctx.shadowColor = "transparent";
-          ctx.shadowBlur = 0;
+          ctx.shadowColor = "rgba(0,0,0,0.9)";
+          ctx.shadowBlur = Math.max(3, fontSize * 0.08);
           ctx.shadowOffsetX = 0;
-          ctx.shadowOffsetY = 0;
+          ctx.shadowOffsetY = Math.max(1, fontSize * 0.025);
+          ctx.strokeStyle = "rgba(0,0,0,0.85)";
+          ctx.lineJoin = "round";
+          ctx.lineWidth = Math.max(2, fontSize * 0.08);
 
           // Layer final: Clean bright text on top
           // ── BONUS: Beautiful text color options (change hex code to switch) ──
@@ -2393,7 +2362,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           // #40E0D0 = Turquoise (ရေနုရောင်)
           ctx.fillStyle = subSettings.textColor;
           displayLines.forEach((line, i) => {
-            ctx.fillText(line, subCX, startY + i * lineHeight, maxTextWidth);
+            ctx.strokeText(line, subCX, startY + i * lineHeight);
+            ctx.fillText(line, subCX, startY + i * lineHeight);
           });
           ctx.restore();
         }
