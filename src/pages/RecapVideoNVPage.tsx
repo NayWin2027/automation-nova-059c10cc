@@ -634,7 +634,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       x: 50,
       y: 85,
       textColor: "#00FF88",
-      bgColor: "rgba(15,15,15,0.68)",
+      bgColor: "rgba(0,0,0,0.6)",
       borderColor: "#FF69B4",
       fontSize: 15,
       scale: 1,
