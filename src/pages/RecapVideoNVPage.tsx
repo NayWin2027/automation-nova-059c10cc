@@ -650,7 +650,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       x: 50,
       y: 88,
       width: 84,
-      height: 15,
+      height: 11,
       opacity: 90,
       isDragging: false,
     });
