@@ -633,7 +633,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const [subSettings, setSubSettings] = useState<SubtitleSettings>({
       x: 50,
       y: 85,
-      textColor: "#FFFFFF",
+      textColor: "#00FF88",
       bgColor: "rgba(15,15,15,0.68)",
       borderColor: "#FF69B4",
       fontSize: 15,
