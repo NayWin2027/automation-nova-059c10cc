@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
+import { getGeminiKey } from "../_shared/geminiKeys.ts";
 
 const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1beta/files";
 
@@ -43,8 +44,11 @@ serve(async (req) => {
       );
     }
 
-    // Use user's own API key or server key
-    const activeKey = apiKey || Deno.env.get("GEMINI_API_KEY");
+    // Use user's own API key or rotate through script-pool keys
+    let activeKey: string | null = apiKey || null;
+    if (!activeKey) {
+      try { activeKey = getGeminiKey("script"); } catch { activeKey = null; }
+    }
     if (!activeKey) {
       return new Response(
         JSON.stringify({ error: "No API key available" }),
