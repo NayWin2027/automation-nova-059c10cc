@@ -656,15 +656,14 @@ serve(async (req) => {
           }
 
           if (!resp.ok) {
-            // For user keys: if primary preview model is not accessible to this key,
+            // If primary preview model is not accessible to this key (user OR backend),
             // silently retry the same request against the public fallback model.
             if (
-              isUserKey &&
               endpointIdx < endpointCandidates.length - 1 &&
               USERKEY_MODEL_FALLBACK_STATUSES.has(resp.status)
             ) {
               console.warn(
-                `[gemini-tts] User key cannot access primary model (status=${resp.status}). ` +
+                `[gemini-tts] ${isUserKey ? "User" : "Backend"} key cannot access primary model (status=${resp.status}). ` +
                   `Falling back to public TTS model.`,
               );
               lastStatus = resp.status;
