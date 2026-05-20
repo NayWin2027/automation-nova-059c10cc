@@ -26,6 +26,17 @@ const GEMINI_TTS_API_FALLBACK_USERKEY =
 // (allowlist / not-found / unsupported-modality style failures).
 const USERKEY_MODEL_FALLBACK_STATUSES = new Set<number>([400, 403, 404]);
 
+function isRateLimitResponse(status: number, bodyText: string): boolean {
+  const lower = (bodyText || "").toLowerCase();
+  return (
+    status === 429 ||
+    lower.includes("resource_exhausted") ||
+    lower.includes("rate limit") ||
+    lower.includes("quota") ||
+    lower.includes("too many requests")
+  );
+}
+
 /**
  * Case-insensitive Linear16 / PCM mime detection.
  * Handles "audio/L16", "audio/l16", "audio/L16;codec=pcm;rate=24000", "audio/pcm", etc.
