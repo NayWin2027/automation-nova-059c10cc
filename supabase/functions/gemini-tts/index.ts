@@ -26,6 +26,17 @@ const GEMINI_TTS_API_FALLBACK_USERKEY =
 // (allowlist / not-found / unsupported-modality style failures).
 const USERKEY_MODEL_FALLBACK_STATUSES = new Set<number>([400, 403, 404]);
 
+function isRateLimitResponse(status: number, bodyText: string): boolean {
+  const lower = (bodyText || "").toLowerCase();
+  return (
+    status === 429 ||
+    lower.includes("resource_exhausted") ||
+    lower.includes("rate limit") ||
+    lower.includes("quota") ||
+    lower.includes("too many requests")
+  );
+}
+
 /**
  * Case-insensitive Linear16 / PCM mime detection.
  * Handles "audio/L16", "audio/l16", "audio/L16;codec=pcm;rate=24000", "audio/pcm", etc.
@@ -636,19 +647,19 @@ serve(async (req) => {
 
           const bodyText = await resp.text();
 
-          if (resp.status === 429 && !isUserKey) {
-            console.warn(`[gemini-tts] 429 rate limit, rotating key (attempt ${attempt + 1}/${maxAttempts})`);
+          if (isRateLimitResponse(resp.status, bodyText) && !isUserKey) {
+            console.warn(`[gemini-tts] TTS quota/rate limit, rotating key (attempt ${attempt + 1}/${maxAttempts}, status=${resp.status})`);
             const nextKey = rotateKey();
             if (nextKey && nextKey !== currentApiKey) {
               currentApiKey = nextKey;
-              lastStatus = 429;
+              lastStatus = resp.status || 429;
               lastBodyText = bodyText;
               continue;
             }
             // All keys exhausted on this endpoint — try next endpoint (fallback model)
             if (endpointIdx < endpointCandidates.length - 1) {
-              console.warn(`[gemini-tts] All backend keys 429 on primary model. Falling back to gemini-2.5 TTS.`);
-              lastStatus = 429;
+              console.warn(`[gemini-tts] All backend keys rate-limited on primary model. Falling back to gemini-2.5 TTS.`);
+              lastStatus = resp.status || 429;
               lastBodyText = bodyText;
               break; // break attempts → outer loop tries next endpoint
             }
