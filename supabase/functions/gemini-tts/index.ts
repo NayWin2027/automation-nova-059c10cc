@@ -647,19 +647,19 @@ serve(async (req) => {
 
           const bodyText = await resp.text();
 
-          if (resp.status === 429 && !isUserKey) {
-            console.warn(`[gemini-tts] 429 rate limit, rotating key (attempt ${attempt + 1}/${maxAttempts})`);
+          if (isRateLimitResponse(resp.status, bodyText) && !isUserKey) {
+            console.warn(`[gemini-tts] TTS quota/rate limit, rotating key (attempt ${attempt + 1}/${maxAttempts}, status=${resp.status})`);
             const nextKey = rotateKey();
             if (nextKey && nextKey !== currentApiKey) {
               currentApiKey = nextKey;
-              lastStatus = 429;
+              lastStatus = resp.status || 429;
               lastBodyText = bodyText;
               continue;
             }
             // All keys exhausted on this endpoint — try next endpoint (fallback model)
             if (endpointIdx < endpointCandidates.length - 1) {
-              console.warn(`[gemini-tts] All backend keys 429 on primary model. Falling back to gemini-2.5 TTS.`);
-              lastStatus = 429;
+              console.warn(`[gemini-tts] All backend keys rate-limited on primary model. Falling back to gemini-2.5 TTS.`);
+              lastStatus = resp.status || 429;
               lastBodyText = bodyText;
               break; // break attempts → outer loop tries next endpoint
             }
