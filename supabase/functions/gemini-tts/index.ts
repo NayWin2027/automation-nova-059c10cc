@@ -505,7 +505,7 @@ serve(async (req) => {
       ? null
       : (() => {
           try {
-            return getGeminiKey();
+            return getGeminiKey("tts");
           } catch {
             return null;
           }
