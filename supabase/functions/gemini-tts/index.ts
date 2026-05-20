@@ -638,7 +638,7 @@ serve(async (req) => {
 
           if (resp.status === 429 && !isUserKey) {
             console.warn(`[gemini-tts] 429 rate limit, rotating key (attempt ${attempt + 1}/${maxAttempts})`);
-            const nextKey = rotateKey();
+            const nextKey = rotateKey("tts");
             if (nextKey && nextKey !== currentApiKey) {
               currentApiKey = nextKey;
               lastStatus = 429;
