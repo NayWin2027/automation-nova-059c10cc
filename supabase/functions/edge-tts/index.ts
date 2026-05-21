@@ -99,8 +99,8 @@ Deno.serve(async (req) => {
     const volume: string = (body.volume ?? "+0%").toString();
     const skipCreditDeduction: boolean = body.skipCreditDeduction === true;
 
-    if (!text || text.length > 5000) {
-      return new Response(JSON.stringify({ error: "Text must be 1–5000 chars" }), {
+    if (!text || text.length > 10000) {
+      return new Response(JSON.stringify({ error: "Text must be 1–10000 chars" }), {
         status: 400, headers: { ...cors, "Content-Type": "application/json" },
       });
     }
