@@ -132,7 +132,7 @@ const VoicePage: React.FC = () => {
   } = useApiAccess();
 
   const [text, setText] = useState("");
-  const [voiceName, setVoiceName] = useState("PUCK");
+  const [voiceName, setVoiceName] = useState("THIHA ⭐");
   const [loading, setLoading] = useState(false);
 
   // Page stability hook - prevents crashes during processing on desktop
