@@ -281,12 +281,14 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - Identify the subject matter, the niche, and the story being told through visuals/actions/music
 - Write a complete, engaging narration script based on your visual/audio analysis
 
-SCRIPT LENGTH RULE (CRITICAL — HARD LIMIT):
-- The narration script MUST be EXACTLY 70% of the original source duration when read aloud — NEVER longer, NEVER shorter
-- For example: a 3-minute video → script ~2 min; a 10-minute video → script ~7 min; a 30-minute video → script ~21 min
-- Estimate: ~150 words per minute of narration. A 10-min video = ~1050 words MAX
-- NEVER exceed this 70% word count. If too long, cut the least important filler details first
-- Every sentence must earn its place — no padding, no repetition, no over-explanation
+SCRIPT LENGTH RULE (CRITICAL — FULL 100% COVERAGE, START TO END):
+- The narration script MUST cover the ENTIRE source video from the very first second to the very last second — 100% complete, NEVER stopping halfway
+- Length target: ~100% of the original source duration when read aloud (≈150 words per minute of narration)
+- For example: a 3-minute video → ~450 words; a 10-minute video → ~1500 words; a 30-minute video → ~4500 words
+- You MUST keep writing all the way until the END of the source — do NOT stop early, do NOT summarize the ending in one line, do NOT cut off mid-story
+- The FINAL paragraph MUST correspond to the FINAL scene of the source video (its timecode should be near the source's ending)
+- Every important beat from beginning, middle, AND end must appear — no part of the video may be skipped or left out
+- Avoid padding/repetition, but DO write enough paragraphs to truly cover the full duration end-to-end
 
 VIRAL HOOK RULE (MANDATORY — FIRST 3 SECONDS):
 - The VERY FIRST sentence MUST be a 3-second viral hook designed to stop the scroll instantly
