@@ -130,6 +130,14 @@ const defaultTools = [
   route: "/voice"
 },
 {
+  id: "edge-tts",
+  icon: Volume2,
+  title: "Edge TTS - မြန်မာ",
+  description: "Thiha + Nilar အသံဖြင့် မြန်မာ TTS (Free)။",
+  gradient: "emerald" as const,
+  route: "/edge-tts"
+},
+{
   id: "creator",
   icon: PenTool,
   title: "Creator",
