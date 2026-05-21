@@ -361,6 +361,8 @@ const VoicePage: React.FC = () => {
   };
 
   const voices = [
+    { name: "THIHA ⭐", gender: "MALE ♂", value: "edge:my-MM-ThihaNeural", color: "from-emerald-500 to-teal-700" },
+    { name: "NILAR ⭐", gender: "FEMALE ♀", value: "edge:my-MM-NilarNeural", color: "from-pink-500 to-rose-600" },
     { name: "PUCK", gender: "MALE ♂", value: "Puck", color: "from-orange-500 to-amber-600" },
     { name: "KORE", gender: "FEMALE ♀", value: "Kore", color: "from-pink-500 to-rose-600" },
     { name: "CHARON", gender: "MALE ♂", value: "Charon", color: "from-slate-600 to-slate-800" },
@@ -483,6 +485,36 @@ const VoicePage: React.FC = () => {
       const pcmBuffers: string[] = [];
       let isError = false;
 
+      // Edge-TTS branch (Microsoft Burmese — Thiha/Nilar). Free upstream, single call
+      // (no chunking). Returns MP3 base64; playPCM auto-decodes via decodeAudioData,
+      // and the download path auto-detects MP3 magic bytes — so the rest of the pipeline
+      // is untouched. Credit accounting still runs once below (same as Gemini path).
+      if (actualVoiceValue.startsWith("edge:")) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          const edgeRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/edge-tts`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+            },
+            body: JSON.stringify({
+              text,
+              voice: actualVoiceValue.slice("edge:".length),
+              skipCreditDeduction: true,
+            }),
+          });
+          const edgeData = await edgeRes.json();
+          if (!edgeRes.ok || !edgeData?.audio) {
+            throw new Error(edgeData?.error || "Edge-TTS failed");
+          }
+          pcmBuffers.push(edgeData.audio as string);
+        } catch (e) {
+          console.error("Edge-TTS error", e);
+          isError = true;
+        }
+      } else {
       for (const chunk of chunks) {
         try {
           const pcm = await generateSpeech(
@@ -499,6 +531,7 @@ const VoicePage: React.FC = () => {
           console.error("Chunk generation error", e);
           isError = true;
         }
+      }
       }
 
       if (pcmBuffers.length > 0) {
