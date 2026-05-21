@@ -19,7 +19,7 @@ const VOICES = [
 const EdgeTtsPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { loading: authLoading } = useAuthGuard({ requireAuth: true });
+  const { isLoading: authLoading } = useAuthGuard("edge-tts");
 
   const [text, setText] = useState("");
   const [voice, setVoice] = useState(VOICES[0].id);
