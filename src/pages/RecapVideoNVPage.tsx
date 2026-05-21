@@ -3172,7 +3172,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                               // SURGICAL EDIT: Smooth fade+slide-up professional transition
                               animation: "subFadeSlide 0.18s cubic-bezier(0.22,1,0.36,1) both",
                             };
-                          })()
+                          })()}
                         >
                           {currentSubtitle || scriptData.segments[0]?.text || "Subtitle"}
                         </div>
