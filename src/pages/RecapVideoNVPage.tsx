@@ -100,16 +100,17 @@ const COLOR_GRADE_PRESETS: Record<
   string,
   { contrast: number; brightness: number; saturate: number; hue: number; sepia?: number; label: string; emoji: string }
 > = {
-  OFF: { contrast: 100, brightness: 100, saturate: 100, hue: 0, label: "Off", emoji: "⚫" },
-  CINEMATIC: { contrast: 120, brightness: 90, saturate: 65, hue: 5, label: "Cinematic", emoji: "🎬" },
-  VINTAGE: { contrast: 108, brightness: 95, saturate: 60, hue: 12, sepia: 30, label: "Vintage", emoji: "📷" },
-  COOL: { contrast: 110, brightness: 97, saturate: 90, hue: -25, label: "Cool", emoji: "🧊" },
-  WARM: { contrast: 112, brightness: 108, saturate: 120, hue: 18, label: "Warm", emoji: "🔥" },
-  TEAL: { contrast: 118, brightness: 93, saturate: 125, hue: -35, label: "Teal & Orange", emoji: "🌊" },
-  PINK: { contrast: 108, brightness: 105, saturate: 130, hue: 330, label: "Pink", emoji: "🌸" },
-  NEON: { contrast: 125, brightness: 108, saturate: 160, hue: 8, label: "Neon", emoji: "⚡" },
-  NOIR: { contrast: 130, brightness: 82, saturate: 15, hue: 0, label: "Noir", emoji: "🎭" },
-  GOLDEN: { contrast: 115, brightness: 112, saturate: 135, hue: 22, label: "Golden Hour", emoji: "🌅" },
+  // SURGICAL EDIT: Brightness +10 across all presets — fixes user complaint of too-dark output
+  OFF:      { contrast: 100, brightness: 110, saturate: 100, hue: 0,   label: "Off",          emoji: "⚫" },
+  CINEMATIC:{ contrast: 120, brightness: 100, saturate: 65,  hue: 5,   label: "Cinematic",     emoji: "🎬" },
+  VINTAGE:  { contrast: 108, brightness: 105, saturate: 60,  hue: 12,  sepia: 30, label: "Vintage", emoji: "📷" },
+  COOL:     { contrast: 110, brightness: 107, saturate: 90,  hue: -25, label: "Cool",           emoji: "🧊" },
+  WARM:     { contrast: 112, brightness: 118, saturate: 120, hue: 18,  label: "Warm",           emoji: "🔥" },
+  TEAL:     { contrast: 118, brightness: 103, saturate: 125, hue: -35, label: "Teal & Orange",  emoji: "🌊" },
+  PINK:     { contrast: 108, brightness: 115, saturate: 130, hue: 330, label: "Pink",           emoji: "🌸" },
+  NEON:     { contrast: 125, brightness: 118, saturate: 160, hue: 8,   label: "Neon",           emoji: "⚡" },
+  NOIR:     { contrast: 130, brightness: 92,  saturate: 15,  hue: 0,   label: "Noir",           emoji: "🎭" },
+  GOLDEN:   { contrast: 115, brightness: 122, saturate: 135, hue: 22,  label: "Golden Hour",    emoji: "🌅" },
 };
 
 const EXPORT_QUALITY_OPTIONS: Record<
@@ -702,6 +703,21 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       fontFamily: "'PannYeat', 'Aka02', 'Aka07', 'PhanTee', 'KoZ033', sans-serif",
     });
 
+    // SURGICAL EDIT: Audio speed rate state (0.5x – 2.0x)
+    const [audioSpeedRate, setAudioSpeedRate] = useState<number>(1.0);
+
+    // SURGICAL EDIT: Freeze/Motion mode state
+    // ON  = 3s freeze zoom-in → 3s normal motion, alternating
+    // OFF = 100% normal speed, no zoom/crop
+    const [freezeMode, setFreezeMode] = useState<boolean>(false);
+    const freezeModeRef = useRef(freezeMode);
+    useEffect(() => { freezeModeRef.current = freezeMode; }, [freezeMode]);
+
+    // Apply audioSpeedRate to audio element whenever it changes
+    useEffect(() => {
+      if (audioRef.current) audioRef.current.playbackRate = audioSpeedRate;
+    }, [audioSpeedRate]);
+
     const COLOR_SWATCHES = [
       "#00E5FF",
       "#F43F5E",
@@ -743,6 +759,25 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       lastPage: number;
       lastDisplayLines: string[];
     } | null>(null);
+
+    // SURGICAL EDIT: Subtitle fade-in timer ref for smooth canvas transition
+    const subFadeStartRef = useRef<number>(0);
+
+    // SURGICAL EDIT: Inject subFadeSlide keyframe once — professional broadcast fade+slide-up
+    useEffect(() => {
+      const styleId = "sub-fade-slide-kf";
+      if (!document.getElementById(styleId)) {
+        const style = document.createElement("style");
+        style.id = styleId;
+        style.textContent = `
+          @keyframes subFadeSlide {
+            from { opacity: 0; transform: translateY(6px); }
+            to   { opacity: 1; transform: translateY(0px); }
+          }
+        `;
+        document.head.appendChild(style);
+      }
+    }, []);
 
     // ── FIX: Recompute filter string only when grade or bypass changes — not per frame ──
     useEffect(() => {
@@ -2000,97 +2035,89 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           // Audio/video timeline and timestamps remain untouched (AV-Sync stays accurate).
           const t = audioEl.currentTime;
 
-          // Hollywood Cinematic Camera: 4-second alternating smooth motion
-          // - Photo freeze: stable zoom hold for 4s (no motion)
-          // - Cinematic zoom: butter-smooth zoom + pan for next 4s
-          const zoomCycleSec = 4;
-          const cycleIndex = Math.floor(t / zoomCycleSec);
-          const cyclePos = (t % zoomCycleSec) / zoomCycleSec; // 0..1 within current 4s
+          if (freezeModeRef.current) {
+            // ── FREEZE/MOTION MODE: 3s freeze zoom-in → 3s normal motion, alternating ──
+            const FREEZE_SEC = 3;
+            const MOTION_SEC = 3;
+            const CYCLE_SEC = FREEZE_SEC + MOTION_SEC;
+            const cyclePos = t % CYCLE_SEC;
+            const isFreezeCycle = cyclePos < FREEZE_SEC;
+            const ramp = isFreezeCycle
+              ? cyclePos / FREEZE_SEC           // 0→1 during freeze
+              : (cyclePos - FREEZE_SEC) / MOTION_SEC; // 0→1 during motion
+            const smoothRamp = ramp * ramp * (3 - 2 * ramp); // smoothstep
 
-          // Hollywood-grade smoothstep easing: 3t^2 - 2t^3 for buttery acceleration/deceleration
-          const smoothstep = (t: number) => t * t * (3 - 2 * t);
-          // Smooth hump with eased entry/exit for cinematic feel
-          const hump = smoothstep(Math.sin(Math.PI * cyclePos) * 0.5 + 0.5);
-
-          // Even cycles: photo freeze. Odd cycles: video zoom-in.
-          const isPhotoFreeze = cycleIndex % 2 === 0;
-
-          // Zoom levels (zoom only):
-          // - Photo (freeze): zoom-in ramps during the 3s, but pan/rotation stay 0.
-          // - Video: continues zoom-in smoothly for the next 3s (pan/rotation enabled).
-          // ── SURGICAL EDIT v2: Reduced zoom range to preserve source quality ──
-          // 10% inset already gives ~1.11x effective zoom, so we keep the additional cinematic
-          // zoom subtle to avoid blur/upscale artifacts. User wants near-original sharpness.
-          const photoZoomBase = 1.02;
-          const zoomStep = 0.04; // total growth per 2 cycles (was 0.18 — too aggressive, caused blur)
-          const photoZoomStep = zoomStep * 0.55; // portion during the photo segment
-          const videoZoomAdd = zoomStep - photoZoomStep; // remainder during the video segment
-          const maxZoom = 1.14;
-
-          // Monotonic smooth ramp for video zoom-in progress.
-          const ramp = cyclePos * cyclePos * (3 - 2 * cyclePos); // 0..1
-
-          // Base level grows every 2 cycles (i.e., after each video segment).
-          const levelBase = Math.min(maxZoom, photoZoomBase + Math.floor(cycleIndex / 2) * zoomStep);
-
-          let cinematicZoom: number;
-          if (isPhotoFreeze) {
-            // Photo: zoom-in ramps, but stays "frozen" spatially.
-            cinematicZoom = Math.min(maxZoom, levelBase + photoZoomStep * ramp);
+            if (isFreezeCycle) {
+              // FREEZE phase: hold video at freeze-start frame, zoom in slowly
+              const freezeZoom = 1.0 + 0.08 * smoothRamp; // gentle 1.0 → 1.08x zoom
+              zoomedSrcW = Math.max(2, Math.round(srcCropW / freezeZoom));
+              zoomedSrcH = Math.max(2, Math.round(srcCropH / freezeZoom));
+              // Center-anchor zoom (face safe upper-30% bias)
+              zoomedSrcX = srcCropX + Math.round((srcCropW - zoomedSrcW) / 2);
+              zoomedSrcY = srcCropY + Math.round((srcCropH - zoomedSrcH) * 0.3);
+              // Freeze frame: hold video at the moment freeze started
+              videoEl.pause();
+            } else {
+              // MOTION phase: normal speed, subtle pan
+              if (videoEl.paused && !videoEl.ended) videoEl.play().catch(() => {});
+              const motionZoom = 1.02 + 0.02 * smoothRamp;
+              zoomedSrcW = Math.max(2, Math.round(srcCropW / motionZoom));
+              zoomedSrcH = Math.max(2, Math.round(srcCropH / motionZoom));
+              const panX = Math.cos(t * 0.15) * (srcCropW * 0.01) * smoothRamp;
+              const panY = Math.sin(t * 0.12) * (srcCropH * 0.01) * smoothRamp;
+              zoomedSrcX = srcCropX + Math.round((srcCropW - zoomedSrcW) / 2 + panX);
+              zoomedSrcY = srcCropY + Math.round((srcCropH - zoomedSrcH) * 0.3 + panY);
+            }
           } else {
-            // Video: continues zoom-in smoothly after the photo ramp.
-            cinematicZoom = Math.min(maxZoom, levelBase + photoZoomStep + videoZoomAdd * ramp);
-            // Subtle breathing only during video motion.
-            cinematicZoom *= 1 + Math.sin(t * 0.43) * 0.007;
+            // ── ORIGINAL cinematic zoom/pan/Ken Burns (unchanged) ──
+            // Hollywood Cinematic Camera: 4-second alternating smooth motion
+            const zoomCycleSec = 4;
+            const cycleIndex = Math.floor(t / zoomCycleSec);
+            const cyclePos = (t % zoomCycleSec) / zoomCycleSec;
+            const smoothstep = (t: number) => t * t * (3 - 2 * t);
+            const hump = smoothstep(Math.sin(Math.PI * cyclePos) * 0.5 + 0.5);
+            const isPhotoFreeze = cycleIndex % 2 === 0;
+            const photoZoomBase = 1.02;
+            const zoomStep = 0.04;
+            const photoZoomStep = zoomStep * 0.55;
+            const videoZoomAdd = zoomStep - photoZoomStep;
+            const maxZoom = 1.14;
+            const ramp = cyclePos * cyclePos * (3 - 2 * cyclePos);
+            const levelBase = Math.min(maxZoom, photoZoomBase + Math.floor(cycleIndex / 2) * zoomStep);
+            let cinematicZoom: number;
+            if (isPhotoFreeze) {
+              cinematicZoom = Math.min(maxZoom, levelBase + photoZoomStep * ramp);
+            } else {
+              cinematicZoom = Math.min(maxZoom, levelBase + photoZoomStep + videoZoomAdd * ramp);
+              cinematicZoom *= 1 + Math.sin(t * 0.43) * 0.007;
+            }
+            const motionFactor = isPhotoFreeze ? 0 : hump;
+            const phase = 2 * Math.PI * cyclePos + cycleIndex * 0.7;
+            const driftX = Math.cos(t * 0.12) * (canvas.width * 0.008);
+            const driftY = Math.sin(t * 0.1) * (canvas.height * 0.008);
+            const easePan = (n: number) => 0.5 - 0.5 * Math.cos(n * Math.PI);
+            const crossX = easePan(Math.cos(phase)) * (canvas.width * 0.018);
+            const crossY = easePan(Math.sin(phase)) * (canvas.height * 0.018);
+            const microShakeX = Math.sin(t * 32.0) * 0.4 * motionFactor;
+            const microShakeY = Math.cos(t * 28.0) * 0.4 * motionFactor;
+            const translateX = (driftX + crossX) * motionFactor + microShakeX;
+            const translateY = (driftY + crossY) * motionFactor + microShakeY;
+            const rotDir = Math.floor(cycleIndex / 2) % 2 === 0 ? 1 : -1;
+            rotate = isPhotoFreeze ? 0 : rotDir * 0.02 * hump;
+            zoomedSrcW = Math.max(2, Math.round(srcCropW / cinematicZoom));
+            zoomedSrcH = Math.max(2, Math.round(srcCropH / cinematicZoom));
+            const maxShiftX = (srcCropW - zoomedSrcW) / 2;
+            const maxShiftY = (srcCropH - zoomedSrcH) / 2;
+            const panNormX = translateX / (canvas.width * 0.5);
+            const panNormY = translateY / (canvas.height * 0.5);
+            const shiftX = Math.round(maxShiftX * panNormX);
+            const shiftYRaw = maxShiftY * panNormY;
+            const upScale = 0.6;
+            const downScale = 1.35;
+            const shiftY = Math.round(shiftYRaw * (shiftYRaw < 0 ? upScale : downScale));
+            zoomedSrcX = srcCropX + Math.round((srcCropW - zoomedSrcW) / 2) + shiftX;
+            zoomedSrcY = srcCropY + Math.round((srcCropH - zoomedSrcH) * 0.3) + shiftY;
           }
-
-          // Gate movement to avoid harsh entry/exit at cycle boundaries.
-          const motionFactor = isPhotoFreeze ? 0 : hump;
-
-          // Hollywood Cinematic: Smooth drift + eased pan with organic flow
-          const phase = 2 * Math.PI * cyclePos + cycleIndex * 0.7;
-          // Slower, smoother drift frequencies for professional feel
-          const driftX = Math.cos(t * 0.12) * (canvas.width * 0.008);
-          const driftY = Math.sin(t * 0.1) * (canvas.height * 0.008);
-          // Cross pan with eased motion curve
-          const easePan = (n: number) => 0.5 - 0.5 * Math.cos(n * Math.PI); // Smooth cosine ease
-          const crossX = easePan(Math.cos(phase)) * (canvas.width * 0.018);
-          const crossY = easePan(Math.sin(phase)) * (canvas.height * 0.018);
-
-          // Subtle organic micro-movement (much reduced for smoothness)
-          const microShakeX = Math.sin(t * 32.0) * 0.4 * motionFactor;
-          const microShakeY = Math.cos(t * 28.0) * 0.4 * motionFactor;
-
-          const translateX = (driftX + crossX) * motionFactor + microShakeX;
-          const translateY = (driftY + crossY) * motionFactor + microShakeY;
-
-          // Rotation only during video zoom cycles; photo freeze holds rotation at 0.
-          // Alternate rotation direction every video segment (odd cycle).
-          const rotDir = Math.floor(cycleIndex / 2) % 2 === 0 ? 1 : -1;
-          rotate = isPhotoFreeze ? 0 : rotDir * 0.02 * hump;
-
-          zoomedSrcW = Math.max(2, Math.round(srcCropW / cinematicZoom));
-          zoomedSrcH = Math.max(2, Math.round(srcCropH / cinematicZoom));
-
-          // Map canvas-space translate into source-crop shift (keeps movement coherent).
-          const maxShiftX = (srcCropW - zoomedSrcW) / 2;
-          const maxShiftY = (srcCropH - zoomedSrcH) / 2;
-          const panNormX = translateX / (canvas.width * 0.5);
-          const panNormY = translateY / (canvas.height * 0.5);
-
-          const shiftX = Math.round(maxShiftX * panNormX);
-          // Face-safe vertical bias:
-          // - When the motion would push the crop upward (negative shift), reduce magnitude
-          // - When it pushes downward (positive shift), allow stronger move
-          const shiftYRaw = maxShiftY * panNormY;
-          const upScale = 0.6;
-          const downScale = 1.35;
-          const shiftY = Math.round(shiftYRaw * (shiftYRaw < 0 ? upScale : downScale));
-
-          zoomedSrcX = srcCropX + Math.round((srcCropW - zoomedSrcW) / 2) + shiftX;
-          // ── SURGICAL FIX v2: Headroom-priority anchor ──
-          // Anchor zoom around the upper 30% so faces/heads stay in safe zone and bottom cut-off is reduced.
-          zoomedSrcY = srcCropY + Math.round((srcCropH - zoomedSrcH) * 0.3) + shiftY;
         } // End of zoom enabled block
 
         // Clamp to the valid source crop bounds.
@@ -2337,8 +2364,53 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           }
 
           const totalTextH = displayLines.length * lineHeight;
-          // SURGICAL EDIT: Solid background box REMOVED — premium no-bg subtitle style
-          // (Previously drew a filled rect here with bgAlpha)
+
+          // SURGICAL EDIT: Subtle semi-transparent pill background (reference screenshot style)
+          // ခပ်ပါးပါးလေး rgba(0,0,0,0.30) — readable on bright video without heavy box
+          ctx.save();
+          ctx.shadowColor = "transparent";
+          ctx.shadowBlur = 0;
+          const pillPadX = fontSize * 0.55;
+          const pillPadY = fontSize * 0.22;
+          const pillW = boxW * 0.96;
+          const pillH = totalTextH + pillPadY * 2;
+          const pillX = subCX - pillW / 2;
+          const pillY = subCY - totalTextH / 2 - pillPadY;
+          const pillR = Math.min(pillH / 2, fontSize * 0.45); // rounded corners
+
+          // SURGICAL EDIT: Fade-in alpha for smooth professional transition
+          const fadeElapsed = performance.now() - subFadeStartRef.current;
+          const FADE_MS = 180;
+          const fadeAlpha = Math.min(1, fadeElapsed / FADE_MS);
+
+          ctx.fillStyle = `rgba(0,0,0,${0.30 * fadeAlpha})`;
+          ctx.beginPath();
+          ctx.moveTo(pillX + pillR, pillY);
+          ctx.lineTo(pillX + pillW - pillR, pillY);
+          ctx.quadraticCurveTo(pillX + pillW, pillY, pillX + pillW, pillY + pillR);
+          ctx.lineTo(pillX + pillW, pillY + pillH - pillR);
+          ctx.quadraticCurveTo(pillX + pillW, pillY + pillH, pillX + pillW - pillR, pillY + pillH);
+          ctx.lineTo(pillX + pillR, pillY + pillH);
+          ctx.quadraticCurveTo(pillX, pillY + pillH, pillX, pillY + pillH - pillR);
+          ctx.lineTo(pillX, pillY + pillR);
+          ctx.quadraticCurveTo(pillX, pillY, pillX + pillR, pillY);
+          ctx.closePath();
+          ctx.fill();
+
+          // SURGICAL EDIT: Clip text to pill boundary — text NEVER overflows box
+          ctx.beginPath();
+          ctx.moveTo(pillX + pillR, pillY);
+          ctx.lineTo(pillX + pillW - pillR, pillY);
+          ctx.quadraticCurveTo(pillX + pillW, pillY, pillX + pillW, pillY + pillR);
+          ctx.lineTo(pillX + pillW, pillY + pillH - pillR);
+          ctx.quadraticCurveTo(pillX + pillW, pillY + pillH, pillX + pillW - pillR, pillY + pillH);
+          ctx.lineTo(pillX + pillR, pillY + pillH);
+          ctx.quadraticCurveTo(pillX, pillY + pillH, pillX, pillY + pillH - pillR);
+          ctx.lineTo(pillX, pillY + pillR);
+          ctx.quadraticCurveTo(pillX, pillY, pillX + pillR, pillY);
+          ctx.closePath();
+          ctx.clip();
+          void pillPadX;
 
           // Premium Neon Vibe: Use override color or animated hue
           const neonHue = subNeonHueRef.current;
@@ -2398,11 +2470,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           // #FFD700 = Gold (ရွှေအဝါ)
           // #FF6B6B = Coral Red (ပန်းရောင်သုပ်)
           // #40E0D0 = Turquoise (ရေနုရောင်)
+          ctx.globalAlpha = fadeAlpha;
           ctx.fillStyle = subSettings.textColor;
           displayLines.forEach((line, i) => {
             ctx.strokeText(line, subCX, startY + i * lineHeight);
             ctx.fillText(line, subCX, startY + i * lineHeight);
           });
+          ctx.globalAlpha = 1.0;
           ctx.restore();
         }
 
@@ -2669,6 +2743,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 setCurrentSubtitle(activeText);
                 setSubtitleKey((k) => k + 1);
                 currentSubtitleRef.current = activeText;
+                // SURGICAL EDIT: Reset fade timer on subtitle change for smooth transition
+                subFadeStartRef.current = performance.now();
               }
             } else if (currentSubtitleRef.current !== "") {
               setCurrentSubtitle("");
@@ -3046,8 +3122,22 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     {(currentSubtitle || scriptData.segments[0]?.text || "Subtitle") && (
                       <div
                         className="absolute inset-0 flex items-center justify-center pointer-events-none"
-                        style={{ backgroundColor: "transparent", borderRadius: "inherit", padding: "4% 4%" }}
+                        style={{
+                          backgroundColor: "transparent",
+                          borderRadius: "inherit",
+                          padding: "4% 4%",
+                        }}
                       >
+                        {/* SURGICAL EDIT: Subtle pill bg wrapper — reference screenshot style */}
+                        <div
+                          style={{
+                            backgroundColor: "rgba(0,0,0,0.30)",
+                            borderRadius: "999px",
+                            padding: "3px 14px 5px 14px",
+                            display: "inline-block",
+                            maxWidth: "100%",
+                          }}
+                        >
                         <div
                           key={subtitleKey}
                           className="w-full text-center font-bold"
@@ -3076,13 +3166,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                               paintOrder: "stroke fill",
                               wordBreak: "break-word" as const,
                               overflowWrap: "break-word" as const,
-                              overflow: "visible" as const,
+                              // SURGICAL EDIT: Clip text inside pill — no overflow
+                              overflow: "hidden" as const,
                               whiteSpace: "normal" as const,
-                              animation: "subtitlePopin 0.25s cubic-bezier(0.22,1,0.36,1) both",
+                              // SURGICAL EDIT: Smooth fade+slide-up professional transition
+                              animation: "subFadeSlide 0.18s cubic-bezier(0.22,1,0.36,1) both",
                             };
-                          })()}
+                          })()
                         >
                           {currentSubtitle || scriptData.segments[0]?.text || "Subtitle"}
+                        </div>
                         </div>
                       </div>
                     )}
@@ -3763,6 +3856,63 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       </p>
                     </div>
                   )}
+                </div>
+
+                {/* SURGICAL EDIT: Freeze / Motion Mode Toggle */}
+                <div className="border-t border-slate-700/50 pt-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex flex-col">
+                      <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">⏸ Freeze / Motion</h4>
+                      <span className="text-[10px] text-slate-500">
+                        {freezeMode
+                          ? "3s freeze zoom-in → 3s normal motion (alternating)"
+                          : "Normal speed · no freeze · no zoom"}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setFreezeMode((f) => !f)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                        freezeMode
+                          ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900"
+                          : "bg-slate-800 text-slate-400 border border-slate-700"
+                      }`}
+                    >
+                      {freezeMode ? "ON" : "OFF"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* SURGICAL EDIT: Audio Speed Control */}
+                <div className="border-t border-slate-700/50 pt-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">🎚️ Audio Speed</h4>
+                    <span className="text-xs text-amber-400 font-bold">{audioSpeedRate.toFixed(2)}x</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0.5}
+                    max={2.0}
+                    step={0.05}
+                    value={audioSpeedRate}
+                    onChange={(e) => setAudioSpeedRate(Number(e.target.value))}
+                    className="accent-amber-500 h-1 bg-slate-700 rounded-lg w-full mb-2"
+                  />
+                  {/* Speed Preset Buttons */}
+                  <div className="flex gap-1.5 justify-between">
+                    {[0.75, 1.0, 1.25, 1.5, 1.75].map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setAudioSpeedRate(s)}
+                        className={`flex-1 py-1 rounded-lg text-[10px] font-semibold transition-all ${
+                          audioSpeedRate === s
+                            ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900"
+                            : "bg-slate-800 text-slate-400 border border-slate-700"
+                        }`}
+                      >
+                        {s}x
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Zoom / Copyright Protection Toggle */}
