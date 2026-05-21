@@ -9,11 +9,34 @@ const ALLOWED_VOICES = new Set([
   "my-MM-NilarNeural",
 ]);
 
+// SURGICAL: Make Burmese Edge TTS sound natural (human-like, not robotic).
+// Burmese uses ၊ (comma) and ။ (full stop). Microsoft Edge TTS does NOT detect
+// these as sentence/phrase boundaries, which is the #1 cause of the "flat robot"
+// cadence. Converting them to "," and "." gives the neural engine the prosody
+// cues it needs to breathe, pause, rise, and fall like a real human narrator.
+function humanizeBurmese(text: string): string {
+  return text
+    // Normalize Burmese punctuation -> ASCII so prosody engine reacts
+    .replace(/\s*။\s*/g, ". ")
+    .replace(/\s*၊\s*/g, ", ")
+    // Collapse excessive whitespace
+    .replace(/[ \t]+/g, " ")
+    // Add a soft pause after closing quotes / parentheses
+    .replace(/([”"\)])\s*/g, "$1, ")
+    // Ensure space after sentence-ending punctuation
+    .replace(/([.!?])(?=\S)/g, "$1 ")
+    // Clean any doubled punctuation we may have created
+    .replace(/,\s*,/g, ",")
+    .replace(/\.\s*\./g, ".")
+    .trim();
+}
+
 async function synthesize(text: string, voice: string, rate: string, pitch: string, volume: string): Promise<Uint8Array> {
   // Microsoft recently requires WebSocket headers/cookies that Deno's native
   // browser-style WebSocket cannot set. The maintained server-side client uses
   // npm ws and sends those headers correctly, fixing the protocol error.
-  const communicate = new Communicate(text, { voice, rate, pitch, volume, connectionTimeout: 30000 });
+  const speakText = humanizeBurmese(text);
+  const communicate = new Communicate(speakText, { voice, rate, pitch, volume, connectionTimeout: 30000 });
   const chunks: Uint8Array[] = [];
 
   for await (const chunk of communicate.stream()) {
@@ -68,8 +91,11 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const text: string = (body.text ?? "").toString().trim();
     const voice: string = (body.voice ?? "my-MM-ThihaNeural").toString();
-    const rate: string = (body.rate ?? "+0%").toString();
-    const pitch: string = (body.pitch ?? "+0Hz").toString();
+    // SURGICAL: defaults tuned for natural Burmese human cadence
+    // -8% rate = slightly slower (less rushed/robotic)
+    // -2Hz pitch = warmer, more conversational tone
+    const rate: string = (body.rate ?? "-8%").toString();
+    const pitch: string = (body.pitch ?? "-2Hz").toString();
     const volume: string = (body.volume ?? "+0%").toString();
     const skipCreditDeduction: boolean = body.skipCreditDeduction === true;
 

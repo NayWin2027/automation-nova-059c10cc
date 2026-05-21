@@ -84,39 +84,11 @@ function getMimeType(file: File): string {
   return mimeMap[ext || ""] || "audio/mpeg";
 }
 
-function enforceScriptCoverage70(script: string, sourceDurationSec?: number | null): string {
-  if (!sourceDurationSec || !Number.isFinite(sourceDurationSec) || sourceDurationSec <= 0) {
-    return script;
-  }
-
-  const targetWords = Math.max(30, Math.floor((sourceDurationSec / 60) * 150 * 0.7));
-  const normalized = script.replace(/\r\n/g, "\n").trim();
-  if (!normalized) return script;
-
-  const words = normalized.split(/\s+/).filter(Boolean);
-  if (words.length <= targetWords) return normalized;
-
-  const paragraphs = normalized.split(/\n+/).map((p) => p.trim()).filter(Boolean);
-  const kept: string[] = [];
-  let used = 0;
-
-  for (const paragraph of paragraphs) {
-    const pWords = paragraph.split(/\s+/).filter(Boolean);
-    if (used + pWords.length <= targetWords) {
-      kept.push(paragraph);
-      used += pWords.length;
-      continue;
-    }
-
-    const remaining = targetWords - used;
-    if (remaining > 0) {
-      kept.push(pWords.slice(0, remaining).join(" "));
-    }
-    break;
-  }
-
-  const trimmed = kept.join("\n\n").trim();
-  return trimmed || words.slice(0, targetWords).join(" ");
+function enforceScriptCoverage70(script: string, _sourceDurationSec?: number | null): string {
+  // SURGICAL CHANGE: Disabled 70% truncation. User requires 100% full-video coverage
+  // from start to end. The model is now instructed (see prompt) to produce a complete
+  // narration matching the full source duration without being cut short.
+  return script.replace(/\r\n/g, "\n").trim() || script;
 }
 
 // Niche-specific style instructions
@@ -309,12 +281,14 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - Identify the subject matter, the niche, and the story being told through visuals/actions/music
 - Write a complete, engaging narration script based on your visual/audio analysis
 
-SCRIPT LENGTH RULE (CRITICAL — HARD LIMIT):
-- The narration script MUST be EXACTLY 70% of the original source duration when read aloud — NEVER longer, NEVER shorter
-- For example: a 3-minute video → script ~2 min; a 10-minute video → script ~7 min; a 30-minute video → script ~21 min
-- Estimate: ~150 words per minute of narration. A 10-min video = ~1050 words MAX
-- NEVER exceed this 70% word count. If too long, cut the least important filler details first
-- Every sentence must earn its place — no padding, no repetition, no over-explanation
+SCRIPT LENGTH RULE (CRITICAL — FULL 100% COVERAGE, START TO END):
+- The narration script MUST cover the ENTIRE source video from the very first second to the very last second — 100% complete, NEVER stopping halfway
+- Length target: ~100% of the original source duration when read aloud (≈150 words per minute of narration)
+- For example: a 3-minute video → ~450 words; a 10-minute video → ~1500 words; a 30-minute video → ~4500 words
+- You MUST keep writing all the way until the END of the source — do NOT stop early, do NOT summarize the ending in one line, do NOT cut off mid-story
+- The FINAL paragraph MUST correspond to the FINAL scene of the source video (its timecode should be near the source's ending)
+- Every important beat from beginning, middle, AND end must appear — no part of the video may be skipped or left out
+- Avoid padding/repetition, but DO write enough paragraphs to truly cover the full duration end-to-end
 
 VIRAL HOOK RULE (MANDATORY — FIRST 3 SECONDS):
 - The VERY FIRST sentence MUST be a 3-second viral hook designed to stop the scroll instantly
