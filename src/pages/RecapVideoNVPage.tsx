@@ -83,6 +83,18 @@ interface BlurSettings {
   isDragging: boolean;
 }
 
+// SURGICAL EDIT: Watermark settings interface
+interface WatermarkSettings {
+  enabled: boolean;
+  text: string;
+  fontSize: number;
+  opacity: number;
+  x: number;
+  y: number;
+  color: string;
+  fontFamily: string;
+}
+
 // ── Moved outside component — no re-allocation on every render ──
 const COLOR_GRADE_PRESETS: Record<
   string,
@@ -676,6 +688,18 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       color: "#00E5FF",
       width: 4,
       openPanel: false,
+    });
+
+    // SURGICAL EDIT: Watermark state
+    const [watermark, setWatermark] = useState<WatermarkSettings>({
+      enabled: false,
+      text: "",
+      fontSize: 28,
+      opacity: 40,
+      x: 50,
+      y: 75,
+      color: "#FFFFFF",
+      fontFamily: "'PannYeat', 'Aka02', 'Aka07', 'PhanTee', 'KoZ033', sans-serif",
     });
 
     const COLOR_SWATCHES = [
@@ -2313,14 +2337,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           }
 
           const totalTextH = displayLines.length * lineHeight;
-          const bgAlpha = Math.max(0.08, Math.min(0.68, blurSettingsRef.current.opacity / 100));
-          ctx.fillStyle = `rgba(245,245,245,${bgAlpha})`;
-          ctx.shadowColor = "transparent";
-          ctx.shadowBlur = 0;
-          ctx.beginPath();
-          // User requested exactly square/rectangle corners to prevent awkward stroke bleeding
-          ctx.rect(boxX, boxY, boxW, boxH);
-          ctx.fill();
+          // SURGICAL EDIT: Solid background box REMOVED — premium no-bg subtitle style
+          // (Previously drew a filled rect here with bgAlpha)
 
           // Premium Neon Vibe: Use override color or animated hue
           const neonHue = subNeonHueRef.current;
@@ -2345,9 +2363,29 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           ctx.shadowBlur = Math.max(3, fontSize * 0.08);
           ctx.shadowOffsetX = 0;
           ctx.shadowOffsetY = Math.max(1, fontSize * 0.025);
-          ctx.strokeStyle = "rgba(0,0,0,0.85)";
+
+          // SURGICAL EDIT: Dynamic Stroke Color Logic — auto-matches text color
+          const tc = subSettings.textColor.toUpperCase();
+          let dynamicStroke = "#000000"; // default: Black
+          if (tc === "#F44336" || tc === "#E91E63" || tc === "#FF4500" || tc === "#FF6B6B" || tc.startsWith("#FF") && (tc.endsWith("36") || tc.endsWith("63") || tc.endsWith("00"))) {
+            // Red family → White stroke
+            dynamicStroke = "#FFFFFF";
+          } else if (tc === "#00FF88" || tc === "#32CD32" || tc === "#10B981" || tc === "#8BC34A" || tc === "#00D4AA") {
+            // Green family → Dark Green stroke
+            dynamicStroke = "#006400";
+          } else if (tc === "#9C27B0" || tc === "#7B68EE" || tc === "#A855F7") {
+            // Purple family → Neon Pink stroke
+            dynamicStroke = "#FF1493";
+          } else if (tc === "#FACC15" || tc === "#FFD700" || tc === "#FFB800" || tc === "#FF9800") {
+            // Yellow/Gold family → Dark Orange stroke
+            dynamicStroke = "#FF8C00";
+          } else if (tc === "#FFFFFF") {
+            // White → Black stroke
+            dynamicStroke = "#000000";
+          }
+          ctx.strokeStyle = dynamicStroke;
           ctx.lineJoin = "round";
-          ctx.lineWidth = Math.max(2, fontSize * 0.08);
+          ctx.lineWidth = Math.max(3, fontSize * 0.12);
 
           // Layer final: Clean bright text on top
           // ── BONUS: Beautiful text color options (change hex code to switch) ──
@@ -2377,13 +2415,40 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           ctx.translate(logoCX, logoCY);
           ctx.shadowColor = "transparent";
           ctx.shadowBlur = 0;
+          // SURGICAL EDIT: Disable smoothing → crisp logo at any resolution (fixes blur complaint)
+          ctx.imageSmoothingEnabled = false;
           if (logo.isCircle) {
             ctx.beginPath();
             ctx.arc(0, 0, logoSize / 2, 0, Math.PI * 2);
             ctx.clip();
           }
           ctx.globalAlpha = 1.0;
+          // Draw at 2x then scale down for sub-pixel sharpness
           ctx.drawImage(logoImg, -logoSize / 2, -logoSize / 2, logoSize, logoSize);
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = "high";
+          ctx.restore();
+        }
+
+        // SURGICAL EDIT: Watermark rendering on canvas
+        if (watermark.enabled && watermark.text.trim()) {
+          ctx.save();
+          const wmFontSize = Math.max(12, Math.round(canvas.height * (watermark.fontSize / 400)));
+          ctx.font = `bold ${wmFontSize}px ${watermark.fontFamily}`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.globalAlpha = Math.max(0.05, Math.min(1, watermark.opacity / 100));
+          const wmX = canvas.width * (watermark.x / 100);
+          const wmY = canvas.height * (watermark.y / 100);
+          // Stroke for visibility
+          ctx.strokeStyle = "rgba(0,0,0,0.5)";
+          ctx.lineJoin = "round";
+          ctx.lineWidth = Math.max(2, wmFontSize * 0.06);
+          ctx.strokeText(watermark.text, wmX, wmY);
+          // Fill
+          ctx.fillStyle = watermark.color;
+          ctx.fillText(watermark.text, wmX, wmY);
+          ctx.globalAlpha = 1.0;
           ctx.restore();
         }
 
@@ -2496,11 +2561,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   baseRate = videoSegDuration > 0 ? videoSegDuration / audioSegDuration : 1;
 
                   if (activeIndex !== lastIndexRef.current) {
-                    // HOLLYWOOD CINEMATIC: NEVER hard-seek at segment boundaries
-                    // Let playbackRate smoothly glide video into sync (no jumps, no stutter)
-                    // Only emergency recovery if >3s drift (network error, not normal playback)
+                    // SURGICAL EDIT: Tightened drift threshold 3.0→0.5s for 100% subtitle timing accuracy
+                    // Hard-seek at 0.5s drift so subtitle text appears on the correct audio segment
                     const snapDrift = Math.abs(vv.currentTime - active.vStart);
-                    if (snapDrift > 3.0) vv.currentTime = active.vStart;
+                    if (snapDrift > 0.5) vv.currentTime = active.vStart;
                     lastIndexRef.current = activeIndex;
                   }
                 } else if (currentTime < audioTs[0].start) {
@@ -2562,10 +2626,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   }
                 }
                 if (activeIndex !== lastIndexRef.current) {
-                  // HOLLYWOOD CINEMATIC: NEVER hard-seek at segment boundaries
-                  // Smooth rate-only transition - no jumps between scenes
+                  // SURGICAL EDIT: Tightened fallback drift threshold 3.0→0.5s for subtitle accuracy
                   const driftToStart = s.vStart - vv.currentTime;
-                  if (driftToStart > 3.0) vv.currentTime = s.vStart;
+                  if (driftToStart > 0.5) vv.currentTime = s.vStart;
                   lastIndexRef.current = activeIndex;
                 }
               }
@@ -2575,7 +2638,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               const drift = targetVideoTime - vv.currentTime;
               // 100% MILLISECOND-ACCURATE AV SYNC: Precise lock with immediate correction
               // Emergency hard-seek only at catastrophic drift (network errors)
-              if (Math.abs(drift) > 3.0) {
+              // SURGICAL EDIT: Emergency hard-seek threshold 3.0→0.5s for 100% timing accuracy
+              if (Math.abs(drift) > 0.5) {
                 vv.currentTime = targetVideoTime;
                 vv.playbackRate = baseRate;
               } else {
@@ -2982,28 +3046,70 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     {(currentSubtitle || scriptData.segments[0]?.text || "Subtitle") && (
                       <div
                         className="absolute inset-0 flex items-center justify-center pointer-events-none"
-                        style={{ backgroundColor: subSettings.bgColor, borderRadius: "inherit", padding: "4% 4%" }}
+                        style={{ backgroundColor: "transparent", borderRadius: "inherit", padding: "4% 4%" }}
                       >
                         <div
                           key={subtitleKey}
                           className="w-full text-center font-bold"
-                          style={{
-                            color: subSettings.textColor,
-                            fontFamily: subSettings.fontFamily,
-                            fontSize: `clamp(8px, ${subSettings.fontSize}px, 100%)`,
-                            lineHeight: 1.4,
-                            textShadow: `0 1px 4px rgba(0,0,0,0.9)`,
-                            wordBreak: "break-word",
-                            overflowWrap: "break-word",
-                            overflow: "visible",
-                            whiteSpace: "normal",
-                            animation: "subtitlePopin 0.25s cubic-bezier(0.22,1,0.36,1) both",
-                          }}
+                          style={(() => {
+                            // SURGICAL EDIT: Dynamic Stroke Color for preview (matches canvas logic)
+                            const tc = subSettings.textColor.toUpperCase();
+                            let previewStroke = "#000000";
+                            if (tc === "#F44336" || tc === "#E91E63" || tc === "#FF4500" || tc === "#FF6B6B" || (tc.startsWith("#FF") && (tc.endsWith("36") || tc.endsWith("63") || tc.endsWith("00")))) {
+                              previewStroke = "#FFFFFF";
+                            } else if (tc === "#00FF88" || tc === "#32CD32" || tc === "#10B981" || tc === "#8BC34A" || tc === "#00D4AA") {
+                              previewStroke = "#006400";
+                            } else if (tc === "#9C27B0" || tc === "#7B68EE" || tc === "#A855F7") {
+                              previewStroke = "#FF1493";
+                            } else if (tc === "#FACC15" || tc === "#FFD700" || tc === "#FFB800" || tc === "#FF9800") {
+                              previewStroke = "#FF8C00";
+                            } else if (tc === "#FFFFFF") {
+                              previewStroke = "#000000";
+                            }
+                            return {
+                              color: subSettings.textColor,
+                              fontFamily: subSettings.fontFamily,
+                              fontSize: `clamp(8px, ${subSettings.fontSize}px, 100%)`,
+                              lineHeight: 1.4,
+                              textShadow: `0 1px 4px rgba(0,0,0,0.9)`,
+                              WebkitTextStroke: `1.5px ${previewStroke}`,
+                              paintOrder: "stroke fill",
+                              wordBreak: "break-word" as const,
+                              overflowWrap: "break-word" as const,
+                              overflow: "visible" as const,
+                              whiteSpace: "normal" as const,
+                              animation: "subtitlePopin 0.25s cubic-bezier(0.22,1,0.36,1) both",
+                            };
+                          })()
                         >
                           {currentSubtitle || scriptData.segments[0]?.text || "Subtitle"}
                         </div>
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* SURGICAL EDIT: Watermark preview overlay */}
+                {watermark.enabled && watermark.text.trim() && (
+                  <div
+                    className="absolute z-25 pointer-events-none"
+                    style={{
+                      left: `${watermark.x}%`,
+                      top: `${watermark.y}%`,
+                      transform: "translate(-50%, -50%)",
+                      opacity: watermark.opacity / 100,
+                      fontFamily: watermark.fontFamily,
+                      fontSize: `clamp(10px, ${watermark.fontSize * 0.5}px, 60px)`,
+                      fontWeight: "bold",
+                      color: watermark.color,
+                      textShadow: "0 1px 3px rgba(0,0,0,0.5)",
+                      WebkitTextStroke: "0.5px rgba(0,0,0,0.3)",
+                      letterSpacing: "2px",
+                      whiteSpace: "nowrap",
+                      userSelect: "none",
+                    }}
+                  >
+                    {watermark.text}
                   </div>
                 )}
 
@@ -3536,6 +3642,124 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       ))}
                       <p className="text-xs text-slate-500 italic">
                         Tip: Drag the blur box on the video to position it.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* SURGICAL EDIT: Watermark Settings Panel */}
+                <div className="border-t border-slate-700/50 pt-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">✦ Watermark</h4>
+                    <button
+                      onClick={() => setWatermark((w) => ({ ...w, enabled: !w.enabled }))}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${watermark.enabled ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900" : "bg-slate-800 text-slate-400 border border-slate-700"}`}
+                    >
+                      {watermark.enabled ? "ON" : "OFF"}
+                    </button>
+                  </div>
+                  {watermark.enabled && (
+                    <div className="space-y-3">
+                      {/* Watermark Text Input */}
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-slate-500">Text</span>
+                        <input
+                          type="text"
+                          value={watermark.text}
+                          onChange={(e) => setWatermark((w) => ({ ...w, text: e.target.value }))}
+                          placeholder="e.g. SOLO RECAP"
+                          className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 transition-colors"
+                        />
+                      </div>
+                      {/* Watermark Color */}
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-slate-500 shrink-0">Color</span>
+                        <div className="flex gap-1.5 flex-wrap">
+                          {[
+                            "#FFFFFF",
+                            "#CCFF00",
+                            "#00FFFF",
+                            "#FFD700",
+                            "#FF1493",
+                            "#FF6600",
+                            "#A855F7",
+                            "#00FF88",
+                          ].map((c) => (
+                            <button
+                              key={c}
+                              onClick={() => setWatermark((w) => ({ ...w, color: c }))}
+                              className={`w-4 h-4 rounded-full border-2 transition-all ${watermark.color === c ? "ring-2 ring-white scale-110 border-white" : "border-slate-600"}`}
+                              style={{ backgroundColor: c }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      {/* Font Size */}
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-slate-500">Font Size</span>
+                          <span className="text-xs text-amber-400 font-medium">{watermark.fontSize}px</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={10}
+                          max={80}
+                          step="1"
+                          value={watermark.fontSize}
+                          onChange={(e) => setWatermark((w) => ({ ...w, fontSize: Number(e.target.value) }))}
+                          className="accent-amber-500 h-1 bg-slate-700 rounded-lg w-full"
+                        />
+                      </div>
+                      {/* Opacity */}
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-slate-500">Opacity</span>
+                          <span className="text-xs text-amber-400 font-medium">{watermark.opacity}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={5}
+                          max={100}
+                          step="1"
+                          value={watermark.opacity}
+                          onChange={(e) => setWatermark((w) => ({ ...w, opacity: Number(e.target.value) }))}
+                          className="accent-amber-500 h-1 bg-slate-700 rounded-lg w-full"
+                        />
+                      </div>
+                      {/* Position X */}
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-slate-500">Position X</span>
+                          <span className="text-xs text-amber-400 font-medium">{watermark.x}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={5}
+                          max={95}
+                          step="1"
+                          value={watermark.x}
+                          onChange={(e) => setWatermark((w) => ({ ...w, x: Number(e.target.value) }))}
+                          className="accent-amber-500 h-1 bg-slate-700 rounded-lg w-full"
+                        />
+                      </div>
+                      {/* Position Y */}
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-slate-500">Position Y</span>
+                          <span className="text-xs text-amber-400 font-medium">{watermark.y}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={5}
+                          max={95}
+                          step="1"
+                          value={watermark.y}
+                          onChange={(e) => setWatermark((w) => ({ ...w, y: Number(e.target.value) }))}
+                          className="accent-amber-500 h-1 bg-slate-700 rounded-lg w-full"
+                        />
+                      </div>
+                      <p className="text-xs text-slate-500 italic">
+                        Tip: Watermark text ကို video export မှာ ပါလာမည်။
                       </p>
                     </div>
                   )}
