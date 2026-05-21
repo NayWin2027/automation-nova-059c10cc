@@ -4,42 +4,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Communicate } from "npm:edge-tts-universal@1.4.0";
 import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
 
-const TRUSTED_CLIENT_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
-const WSS_URL = `wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=${TRUSTED_CLIENT_TOKEN}`;
-const SEC_MS_GEC_VERSION = "1-130.0.2849.68";
-
 const ALLOWED_VOICES = new Set([
   "my-MM-ThihaNeural",
   "my-MM-NilarNeural",
 ]);
-
-function escapeXml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
-
-async function computeSecMsGec(): Promise<string> {
-  // Windows file-time ticks (100ns since 1601-01-01), rounded to 5-min boundary
-  const ticks = BigInt(Math.floor(Date.now() / 1000) + 11644473600) * 10000000n;
-  const rounded = ticks - (ticks % 3000000000n);
-  const str = `${rounded.toString()}${TRUSTED_CLIENT_TOKEN}`;
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
-  return Array.from(new Uint8Array(buf))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("")
-    .toUpperCase();
-}
-
-function buildSSML(text: string, voice: string, rate: string, pitch: string, volume: string): string {
-  return `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='my-MM'>` +
-    `<voice name='${voice}'>` +
-    `<prosody pitch='${pitch}' rate='${rate}' volume='${volume}'>${escapeXml(text)}</prosody>` +
-    `</voice></speak>`;
-}
 
 async function synthesize(text: string, voice: string, rate: string, pitch: string, volume: string): Promise<Uint8Array> {
   // Microsoft recently requires WebSocket headers/cookies that Deno's native
