@@ -4967,29 +4967,37 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
                     headers.Authorization = `Bearer ${session.access_token}`;
                   }
 
-                  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gemini-tts`, {
+                  const isEdgePreview = typeof selectedVoice === "string" && selectedVoice.startsWith("edge:");
+                  const previewFn = isEdgePreview ? "edge-tts" : "gemini-tts";
+                  const previewBody = isEdgePreview
+                    ? {
+                        text: "Automation Nova မှ ကြိုဆိုပါတယ်",
+                        voice: selectedVoice.slice("edge:".length),
+                        skipCreditDeduction: true,
+                      }
+                    : {
+                        text: "Automation Nova မှ ကြိုဆိုပါတယ်",
+                        voiceName: selectedVoice,
+                        languageCode: "my",
+                        skipCreditDeduction: true,
+                        nativeVoiceInstructions:
+                          "You MUST speak in 100% authentic native Burmese (ဗမာစကား) with a modern Yangon-standard accent. " +
+                          "Speak exactly like a real native Burmese person in their 20s-30s speaking naturally in everyday modern Burmese. " +
+                          "DO NOT mix any Chinese tone, Kachin accent, Shan accent, European accent, or any ethnic minority accent whatsoever. " +
+                          "Pure ဗမာလေသံစစ်စစ် only — natural, fluent, warm, and confident modern Burmese speaking voice. " +
+                          "Match the quality of Google Producer AI's Burmese human voice output — indistinguishable from a real Burmese human speaker.",
+                        voiceConfig: {
+                          speakingStyle: "natural_conversational",
+                          pronunciationStrictness: "native_only",
+                          accentPurity: 100,
+                          targetQuality: "producer_ai_level",
+                        },
+                      };
+                  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${previewFn}`, {
                     method: "POST",
                     headers,
-                    body: JSON.stringify({
-                      text: "Automation Nova မှ ကြိုဆိုပါတယ်",
-                      voiceName: selectedVoice,
-                      languageCode: "my",
-                      skipCreditDeduction: true,
-                      nativeVoiceInstructions:
-                        "You MUST speak in 100% authentic native Burmese (ဗမာစကား) with a modern Yangon-standard accent. " +
-                        "Speak exactly like a real native Burmese person in their 20s-30s speaking naturally in everyday modern Burmese. " +
-                        "DO NOT mix any Chinese tone, Kachin accent, Shan accent, European accent, or any ethnic minority accent whatsoever. " +
-                        "Pure ဗမာလေသံစစ်စစ် only — natural, fluent, warm, and confident modern Burmese speaking voice. " +
-                        "Match the quality of Google Producer AI's Burmese human voice output — indistinguishable from a real Burmese human speaker.",
-                      voiceConfig: {
-                        speakingStyle: "natural_conversational",
-                        pronunciationStrictness: "native_only",
-                        accentPurity: 100,
-                        targetQuality: "producer_ai_level",
-                      },
-                    }),
+                    body: JSON.stringify(previewBody),
                   });
-                  // ↑ replaced below: support Edge-TTS preview for Thiha/Nilar
 
                   const data = await res.json();
                   if (!res.ok || !data.audio) {
