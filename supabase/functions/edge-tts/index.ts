@@ -1,7 +1,6 @@
 // Microsoft Edge TTS proxy — Burmese voices (Thiha + Nilar)
 // Surgical, isolated function. Does not touch existing TTS / Recap pipelines.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { WebSocket } from "npm:ws@8.18.0";
 import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
 
 const TRUSTED_CLIENT_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
@@ -44,14 +43,8 @@ function buildSSML(text: string, voice: string, rate: string, pitch: string, vol
 function synthesize(text: string, voice: string, rate: string, pitch: string, volume: string, secMsGec: string): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
     const requestId = crypto.randomUUID().replace(/-/g, "");
-    const ws = new WebSocket(`${WSS_URL}&Sec-MS-GEC=${secMsGec}&Sec-MS-GEC-Version=${SEC_MS_GEC_VERSION}&ConnectionId=${requestId}`, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0",
-        "Origin": "chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold",
-        "Pragma": "no-cache",
-        "Cache-Control": "no-cache",
-      },
-    });
+    const ws = new WebSocket(`${WSS_URL}&Sec-MS-GEC=${secMsGec}&Sec-MS-GEC-Version=${SEC_MS_GEC_VERSION}&ConnectionId=${requestId}`);
+    ws.binaryType = "arraybuffer";
 
     const chunks: Uint8Array[] = [];
     const timeout = setTimeout(() => {
@@ -59,7 +52,7 @@ function synthesize(text: string, voice: string, rate: string, pitch: string, vo
       reject(new Error("TTS timeout (30s)"));
     }, 30000);
 
-    ws.on("open", () => {
+    ws.onopen = () => {
       const now = new Date().toISOString();
       const config = `X-Timestamp:${now}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n` +
         `{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}`;
@@ -68,18 +61,18 @@ function synthesize(text: string, voice: string, rate: string, pitch: string, vo
       const ssml = buildSSML(text, voice, rate, pitch, volume);
       const ssmlMsg = `X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${now}Z\r\nPath:ssml\r\n\r\n${ssml}`;
       ws.send(ssmlMsg);
-    });
+    };
 
-    ws.on("message", (data: Buffer, isBinary: boolean) => {
-      if (isBinary) {
-        const arr = new Uint8Array(data);
+    ws.onmessage = (ev: MessageEvent) => {
+      const payload = ev.data;
+      if (payload instanceof ArrayBuffer) {
+        const arr = new Uint8Array(payload);
         // Binary frame: 2-byte big-endian header length, then header text, then audio bytes
         const headerLen = (arr[0] << 8) | arr[1];
         const audio = arr.slice(2 + headerLen);
         if (audio.length > 0) chunks.push(audio);
-      } else {
-        const text = data.toString("utf-8");
-        if (text.includes("Path:turn.end")) {
+      } else if (typeof payload === "string") {
+        if (payload.includes("Path:turn.end")) {
           clearTimeout(timeout);
           try { ws.close(); } catch (_) { /* noop */ }
           const total = chunks.reduce((s, c) => s + c.length, 0);
@@ -89,19 +82,19 @@ function synthesize(text: string, voice: string, rate: string, pitch: string, vo
           resolve(out);
         }
       }
-    });
+    };
 
-    ws.on("error", (err: Error) => {
+    ws.onerror = (ev: Event) => {
       clearTimeout(timeout);
-      reject(err);
-    });
+      reject(new Error("WebSocket error: " + ((ev as ErrorEvent)?.message ?? "unknown")));
+    };
 
-    ws.on("close", (_code: number, _reason: Buffer) => {
+    ws.onclose = () => {
       if (chunks.length === 0) {
         clearTimeout(timeout);
         reject(new Error("WebSocket closed before audio received"));
       }
-    });
+    };
   });
 }
 
