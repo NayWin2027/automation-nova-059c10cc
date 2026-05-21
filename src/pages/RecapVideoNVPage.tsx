@@ -4347,14 +4347,26 @@ const RecapVideoNVPage: React.FC = () => {
       if (useOwnKey) bodyPayload.ownApiKey = useOwnKey;
       if (segsForSync && segsForSync.length > 0) bodyPayload.segments = segsForSync;
 
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gemini-tts`, {
+      // Edge-TTS branch: Microsoft Burmese neural voices (Thiha/Nilar). Free upstream,
+      // bypass gemini-tts and call edge-tts function. Credit is still deducted via the
+      // existing Recap NV accounting path — pass skipCreditDeduction=true to the function.
+      const isEdgeVoice = typeof selectedVoice === "string" && selectedVoice.startsWith("edge:");
+      const ttsFnName = isEdgeVoice ? "edge-tts" : "gemini-tts";
+      const ttsBody = isEdgeVoice
+        ? {
+            text: speechTextForAPI,
+            voice: selectedVoice.slice("edge:".length),
+            skipCreditDeduction: true,
+          }
+        : bodyPayload;
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${ttsFnName}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
           Authorization: `Bearer ${userToken}`,
         },
-        body: JSON.stringify(bodyPayload),
+        body: JSON.stringify(ttsBody),
       });
       const data = await response.json();
       if (data.useClientTTS || !data.audio) throw new Error(data.message || data.error || "TTS generation failed");
@@ -4977,6 +4989,7 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
                       },
                     }),
                   });
+                  // ↑ replaced below: support Edge-TTS preview for Thiha/Nilar
 
                   const data = await res.json();
                   if (!res.ok || !data.audio) {
