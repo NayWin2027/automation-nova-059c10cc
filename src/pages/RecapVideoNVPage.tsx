@@ -3080,7 +3080,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                               whiteSpace: "normal" as const,
                               animation: "subtitlePopin 0.25s cubic-bezier(0.22,1,0.36,1) both",
                             };
-                          })()
+                          })()}
                         >
                           {currentSubtitle || scriptData.segments[0]?.text || "Subtitle"}
                         </div>
