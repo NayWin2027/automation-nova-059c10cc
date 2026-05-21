@@ -4108,7 +4108,7 @@ const RecapVideoNVPage: React.FC = () => {
   const [recapHistory, setRecapHistory] = useState<RecapHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState("my-MM");
-  const [selectedVoice, setSelectedVoice] = useState("Thiha (Burmese Native — Male)");
+  const [selectedVoice, setSelectedVoice] = useState("edge:my-MM-ThihaNeural");
   const [langPopoverOpen, setLangPopoverOpen] = useState(false);
   const [apiMode, setApiMode] = useState<"app" | "own">("own");
   const [ownApiKey, setOwnApiKey] = useState("");
