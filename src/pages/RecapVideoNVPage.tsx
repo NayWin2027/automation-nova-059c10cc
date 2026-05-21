@@ -4029,6 +4029,8 @@ interface RecapHistoryItem {
 }
 
 const VOICE_OPTIONS = [
+  { value: "edge:my-MM-ThihaNeural", label: "⭐ Thiha (Burmese Native — Male)", gender: "Male" },
+  { value: "edge:my-MM-NilarNeural", label: "⭐ Nilar (Burmese Native — Female)", gender: "Female" },
   { value: "Zephyr", label: "Zephyr (Female)", gender: "Female" },
   { value: "Puck", label: "Puck (Male)", gender: "Male" },
   { value: "Charon", label: "Charon (Male)", gender: "Male" },

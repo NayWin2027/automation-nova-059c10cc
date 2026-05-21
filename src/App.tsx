@@ -35,9 +35,6 @@ const TutorialVideosPage = lazyRetry(() => import("./pages/TutorialVideosPage"))
 const NovaCutVideoPage = lazyRetry(() => import("./pages/NovaCutVideoPage"));
 const TranslateVideoPage = lazyRetry(() => import("./pages/TranslateVideoPage"));
 const OrderFormPage = lazyRetry(() => import("./pages/OrderFormPage"));
-const EdgeTtsPage = lazyRetry(() => import("./pages/EdgeTtsPage"));
-
-
 const AdminDashboardPage = lazyRetry(() => import("./pages/AdminDashboardPage"));
 const AdminRoute = lazyRetry(() => import("./components/AdminRoute"));
 const AdminLoginPage = lazyRetry(() => import("./pages/AdminLoginPage"));
@@ -68,7 +65,6 @@ const App = () => (
             <Route path="/recap" element={<RecapVideoPage />} />
             <Route path="/recap-nv" element={<RecapVideoNVPage />} />
             <Route path="/voice" element={<VoicePage />} />
-            <Route path="/edge-tts" element={<EdgeTtsPage />} />
             <Route path="/creator" element={<CreatorPage />} />
             <Route path="/story" element={<StoryCreatorPage />} />
             <Route path="/novel" element={<NovelTransPage />} />

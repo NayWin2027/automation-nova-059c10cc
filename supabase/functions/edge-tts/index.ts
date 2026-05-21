@@ -147,6 +147,7 @@ Deno.serve(async (req) => {
     const rate: string = (body.rate ?? "+0%").toString();
     const pitch: string = (body.pitch ?? "+0Hz").toString();
     const volume: string = (body.volume ?? "+0%").toString();
+    const skipCreditDeduction: boolean = body.skipCreditDeduction === true;
 
     if (!text || text.length > 5000) {
       return new Response(JSON.stringify({ error: "Text must be 1–5000 chars" }), {
@@ -159,23 +160,27 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Credit deduction via RPC (App API mode only — Edge-TTS is free upstream)
-    const adminClient = createClient(supabaseUrl, serviceKey);
-    const { data: rpcResult, error: rpcErr } = await adminClient.rpc("deduct_user_credits", {
-      _user_id: user.id,
-      _tool_id: "edge-tts",
-      _is_own_api: false,
-    });
-    if (rpcErr) {
-      return new Response(JSON.stringify({ error: rpcErr.message }), {
-        status: 500, headers: { ...cors, "Content-Type": "application/json" },
+    // Credit deduction via RPC — skipped when caller (Voice/Recap NV) handles billing itself.
+    let rpcResult: any = null;
+    if (!skipCreditDeduction) {
+      const adminClient = createClient(supabaseUrl, serviceKey);
+      const { data, error: rpcErr } = await adminClient.rpc("deduct_user_credits", {
+        _user_id: user.id,
+        _tool_id: "edge-tts",
+        _is_own_api: false,
       });
-    }
-    if (!(rpcResult as any)?.success) {
-      const r = rpcResult as any;
-      return new Response(JSON.stringify({ error: r?.error || "Credit check failed", errorCode: r?.errorCode, balance: r?.balance }), {
-        status: 402, headers: { ...cors, "Content-Type": "application/json" },
-      });
+      if (rpcErr) {
+        return new Response(JSON.stringify({ error: rpcErr.message }), {
+          status: 500, headers: { ...cors, "Content-Type": "application/json" },
+        });
+      }
+      if (!(data as any)?.success) {
+        const r = data as any;
+        return new Response(JSON.stringify({ error: r?.error || "Credit check failed", errorCode: r?.errorCode, balance: r?.balance }), {
+          status: 402, headers: { ...cors, "Content-Type": "application/json" },
+        });
+      }
+      rpcResult = data;
     }
 
     const secMsGec = await computeSecMsGec();
@@ -184,7 +189,9 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({
       success: true,
       audioBase64: toBase64(audio),
+      audio: toBase64(audio),
       mimeType: "audio/mpeg",
+      sampleRate: 24000,
       balance: (rpcResult as any)?.balance,
       deducted: (rpcResult as any)?.deducted,
     }), { status: 200, headers: { ...cors, "Content-Type": "application/json" } });
