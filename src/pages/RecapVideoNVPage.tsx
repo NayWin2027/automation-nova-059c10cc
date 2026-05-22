@@ -100,8 +100,8 @@ const COLOR_GRADE_PRESETS: Record<
   string,
   { contrast: number; brightness: number; saturate: number; hue: number; sepia?: number; label: string; emoji: string }
 > = {
-  // SURGICAL EDIT: Brightness +10 across all presets — fixes user complaint of too-dark output
-  OFF: { contrast: 100, brightness: 110, saturate: 100, hue: 0, label: "Off", emoji: "⚫" },
+  // SURGICAL EDIT: OFF = true original source colors — no adjustments whatsoever
+  OFF: { contrast: 100, brightness: 100, saturate: 100, hue: 0, label: "Off", emoji: "⚫" },
   CINEMATIC: { contrast: 120, brightness: 100, saturate: 65, hue: 5, label: "Cinematic", emoji: "🎬" },
   VINTAGE: { contrast: 108, brightness: 105, saturate: 60, hue: 12, sepia: 30, label: "Vintage", emoji: "📷" },
   COOL: { contrast: 110, brightness: 107, saturate: 90, hue: -25, label: "Cool", emoji: "🧊" },
@@ -790,12 +790,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       const bypassBoost = editorState.bypass
         ? { contrast: 15, brightness: 5, saturate: 15, hue: 5 }
         : { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
-      const contrast = g.contrast + bypassBoost.contrast + 5;
-      const brightness = g.brightness + bypassBoost.brightness + 5;
-      const saturate = g.saturate + bypassBoost.saturate + 8;
-      const hue = g.hue + bypassBoost.hue;
-      const sepia = g.sepia || 0;
-      filterStringRef.current = `contrast(${contrast}%) brightness(${brightness}%) saturate(${saturate}%) hue-rotate(${hue}deg) sepia(${sepia}%)`;
+      // SURGICAL EDIT: When OFF, output exactly original — skip bonus adjustments
+      const isOff = editorState.colorGrade === "OFF" && !editorState.bypass;
+      const contrast = isOff ? 100 : g.contrast + bypassBoost.contrast + 5;
+      const brightness = isOff ? 100 : g.brightness + bypassBoost.brightness + 5;
+      const saturate = isOff ? 100 : g.saturate + bypassBoost.saturate + 8;
+      const hue = isOff ? 0 : g.hue + bypassBoost.hue;
+      const sepia = isOff ? 0 : g.sepia || 0;
+      filterStringRef.current = isOff
+        ? "none"
+        : `contrast(${contrast}%) brightness(${brightness}%) saturate(${saturate}%) hue-rotate(${hue}deg) sepia(${sepia}%)`;
     }, [editorState.colorGrade, editorState.bypass]);
 
     // ── FIX: Invalidate blur canvas cache when blur settings change ──
@@ -2078,65 +2082,44 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
           if (freezeModeRef.current) {
             // ── SURGICAL EDIT: Professional Ken Burns Keyframe Freeze/Motion ──
-            // FREEZE: 5s slow gradual zoom-in (keyframe ease-out), video at near-zero speed
-            // MOTION: 5s normal playback with gentle pan, smooth transition — NO stutter
+            // FREEZE: 5s freeze frame + slow zoom-in, MOTION: 5s normal playback + pan
             const FREEZE_SEC = 5;
             const MOTION_SEC = 5;
             const CYCLE_SEC = FREEZE_SEC + MOTION_SEC;
             const cyclePos = t % CYCLE_SEC;
             const isFreezeCycle = cyclePos < FREEZE_SEC;
 
-            // Cross-fade easing at transition boundaries (0.4s blend zone)
-            const BLEND_SEC = 0.4;
-
             if (isFreezeCycle) {
-              // ── FREEZE PHASE: Ken Burns slow zoom-in (keyframe ease-out) ──
+              // ── FREEZE PHASE: pause video + Ken Burns slow zoom-in ──
               const freezeProgress = cyclePos / FREEZE_SEC; // 0→1 over 5 seconds
-              // Cubic ease-out for very slow start, gradual acceleration — professional Ken Burns feel
-              const easeOut = 1 - Math.pow(1 - freezeProgress, 3);
-              const freezeZoom = 1.0 + 0.12 * easeOut; // gentle 1.0 → 1.12x over 5 seconds
+              const easeOut = 1 - Math.pow(1 - freezeProgress, 3); // cubic ease-out
+              const freezeZoom = 1.0 + 0.12 * easeOut; // 1.0 → 1.12x gradual
 
               zoomedSrcW = Math.max(2, Math.round(srcCropW / freezeZoom));
               zoomedSrcH = Math.max(2, Math.round(srcCropH / freezeZoom));
-              // Center-anchor zoom with upper-30% face-safe bias
               zoomedSrcX = srcCropX + Math.round((srcCropW - zoomedSrcW) / 2);
               zoomedSrcY = srcCropY + Math.round((srcCropH - zoomedSrcH) * 0.3);
 
-              // SURGICAL EDIT: Instead of pause/play (causes stutter), use near-zero playbackRate
-              // This keeps the video decoder active — no warm-up hitch on resume
+              // SURGICAL EDIT: Pause video to truly freeze the frame
               if (!videoEl.paused && !videoEl.ended) {
-                videoEl.playbackRate = 0.01; // virtually frozen but decoder stays warm
-              }
-
-              // Blend zone at end of freeze: start easing video speed back up
-              if (cyclePos > FREEZE_SEC - BLEND_SEC) {
-                const blendProgress = (cyclePos - (FREEZE_SEC - BLEND_SEC)) / BLEND_SEC;
-                const easeIn = blendProgress * blendProgress; // quadratic ease-in
-                videoEl.playbackRate = 0.01 + (1.0 - 0.01) * easeIn;
+                videoEl.pause();
               }
             } else {
-              // ── MOTION PHASE: normal speed, subtle Ken Burns pan ──
+              // ── MOTION PHASE: resume video + subtle Ken Burns pan ──
               const motionProgress = (cyclePos - FREEZE_SEC) / MOTION_SEC; // 0→1
 
-              // Ensure video is playing at normal speed
-              if (videoEl.paused && !videoEl.ended) videoEl.play().catch(() => {});
-
-              // Blend zone at start of motion: smooth speed ramp from freeze
-              if (motionProgress < BLEND_SEC / MOTION_SEC) {
-                const blendProgress = motionProgress / (BLEND_SEC / MOTION_SEC);
-                const easeIn = blendProgress * blendProgress;
-                videoEl.playbackRate = 0.01 + (1.0 - 0.01) * easeIn;
-              } else {
+              // SURGICAL EDIT: Smooth resume — set playbackRate BEFORE play() to prevent stutter
+              if (videoEl.paused && !videoEl.ended) {
                 videoEl.playbackRate = 1.0;
+                videoEl.play().catch(() => {});
               }
 
-              // Zoom continues from where freeze ended (1.12x), gently settles back
+              // Zoom settles back from freeze level
               const smoothMotion = motionProgress * motionProgress * (3 - 2 * motionProgress);
-              const motionZoom = 1.12 - 0.1 * smoothMotion; // 1.12x → 1.02x (settle back)
+              const motionZoom = 1.12 - 0.1 * smoothMotion; // 1.12x → 1.02x
 
               zoomedSrcW = Math.max(2, Math.round(srcCropW / motionZoom));
               zoomedSrcH = Math.max(2, Math.round(srcCropH / motionZoom));
-              // Gentle sinusoidal pan during motion for cinematic feel
               const panX = Math.cos(t * 0.1) * (srcCropW * 0.008) * smoothMotion;
               const panY = Math.sin(t * 0.08) * (srcCropH * 0.006) * smoothMotion;
               zoomedSrcX = srcCropX + Math.round((srcCropW - zoomedSrcW) / 2 + panX);
@@ -2352,7 +2335,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               } else currentLine = testLine;
             }
             if (currentLine) fittedLines.push(currentLine);
-            const MAX_L = 3;
+            // SURGICAL EDIT: Modern subtitle — 1 line at a time for engaging reading
+            const MAX_L = 1;
             const tPages = Math.ceil(fittedLines.length / MAX_L);
             cachedPageCharCounts = [];
             cachedTotalChars = 0;
@@ -2374,7 +2358,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             };
           }
 
-          const MAX_LINES = 3;
+          // SURGICAL EDIT: Modern subtitle — show 1 line at a time (modern style)
+          const MAX_LINES = 1;
           let displayLines = fittedLines;
           if (fittedLines.length > MAX_LINES) {
             const totalPages = Math.ceil(fittedLines.length / MAX_LINES);
@@ -2727,35 +2712,41 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             }
 
             if (targetVideoTime !== null) {
-              const drift = targetVideoTime - vv.currentTime;
-              // 100% MILLISECOND-ACCURATE AV SYNC: Precise lock with immediate correction
-              // Emergency hard-seek only at catastrophic drift (network errors)
-              // SURGICAL EDIT: Emergency hard-seek threshold 3.0→0.5s for 100% timing accuracy
-              if (Math.abs(drift) > 0.5) {
-                vv.currentTime = targetVideoTime;
-                // SURGICAL EDIT: Scale video rate by audioSpeedRate for actual speed effect on output
-                vv.playbackRate = baseRate * audioSpeedRate;
+              // SURGICAL EDIT: Skip AV sync override when freeze mode has paused the video
+              // Without this guard, AV sync would set playbackRate every frame and undo freeze's pause()
+              if (freezeModeRef.current && vv.paused) {
+                // Freeze is active and video is paused — do NOT adjust playbackRate or seek
               } else {
-                // Precise drift correction for millisecond-accurate sync
-                const driftAbs = Math.abs(drift);
-                const driftSign = Math.sign(drift);
-
-                if (driftAbs < 0.005) {
-                  // Within 5ms: gentle return to base rate for stability
-                  const scaledBase = baseRate * audioSpeedRate;
-                  vv.playbackRate = vv.playbackRate + (scaledBase - vv.playbackRate) * 0.1;
-                } else if (driftAbs < 0.05) {
-                  // 5-50ms drift: proportional correction
-                  const correction = driftSign * Math.min(driftAbs * 2.0, 0.08);
-                  const targetRate = baseRate * audioSpeedRate + correction;
-                  vv.playbackRate = vv.playbackRate + (targetRate - vv.playbackRate) * 0.25;
+                const drift = targetVideoTime - vv.currentTime;
+                // 100% MILLISECOND-ACCURATE AV SYNC: Precise lock with immediate correction
+                // Emergency hard-seek only at catastrophic drift (network errors)
+                // SURGICAL EDIT: Emergency hard-seek threshold 3.0→0.5s for 100% timing accuracy
+                if (Math.abs(drift) > 0.5) {
+                  vv.currentTime = targetVideoTime;
+                  // SURGICAL EDIT: Scale video rate by audioSpeedRate for actual speed effect on output
+                  vv.playbackRate = baseRate * audioSpeedRate;
                 } else {
-                  // 50ms-3s drift: aggressive correction
-                  const correction = driftSign * Math.min(driftAbs * 0.5, 0.15);
-                  const targetRate = baseRate * audioSpeedRate + correction;
-                  vv.playbackRate = Math.min(Math.max(targetRate, 0.5), 4.5);
+                  // Precise drift correction for millisecond-accurate sync
+                  const driftAbs = Math.abs(drift);
+                  const driftSign = Math.sign(drift);
+
+                  if (driftAbs < 0.005) {
+                    // Within 5ms: gentle return to base rate for stability
+                    const scaledBase = baseRate * audioSpeedRate;
+                    vv.playbackRate = vv.playbackRate + (scaledBase - vv.playbackRate) * 0.1;
+                  } else if (driftAbs < 0.05) {
+                    // 5-50ms drift: proportional correction
+                    const correction = driftSign * Math.min(driftAbs * 2.0, 0.08);
+                    const targetRate = baseRate * audioSpeedRate + correction;
+                    vv.playbackRate = vv.playbackRate + (targetRate - vv.playbackRate) * 0.25;
+                  } else {
+                    // 50ms-3s drift: aggressive correction
+                    const correction = driftSign * Math.min(driftAbs * 0.5, 0.15);
+                    const targetRate = baseRate * audioSpeedRate + correction;
+                    vv.playbackRate = Math.min(Math.max(targetRate, 0.5), 4.5);
+                  }
                 }
-              }
+              } // end freeze guard else
             }
 
             if (activeIndex !== -1 && activeText) {
@@ -4986,15 +4977,17 @@ Keep: The character being sick, arriving at the hospital, and receiving treatmen
 Remove: Changing clothes, walking to the car, driving scenes, waiting scenes, and unnecessary travel shots.
 
 INSTRUCTIONS:
-- Keep the entire story from beginning to ending (Chronological order).
-- Remove unnecessary long scenes, silence, slow walking, repetitive actions, filler moments, and unimportant dialogues.
-- Focus on: Main plot points, character introductions, important conflicts, twists, emotional/shocking moments, and the conclusion.
-- Shorten conversations while keeping the original meaning and storytelling quality.
-- Make scene jumps and cuts feel natural, smooth, and easy to understand.
+- Keep ONLY the key plot points in chronological order. CUT everything else ruthlessly.
+- AGGRESSIVELY remove: unnecessary scenes, silence, slow walking, repetitive actions, filler moments, unimportant dialogues, transition scenes, travel montages, and any scene that does NOT advance the main plot.
+- Focus on: Main plot twists, key character moments, critical conflicts, shocking reveals, and the conclusion.
+- Shorten conversations to their essential meaning — do NOT include full back-and-forth dialogues.
+- Skip over setup/buildup scenes and jump straight to the payoff.
 
-PACING & DURATION RULE:
-- Dynamically adjust the output duration based on the input video length: if the source video is short (e.g., under 10 minutes), the recap should be logically shorter and highly compressed (e.g., 3-5 minutes); if the source is a full-length movie, keep the recap around 10-20 minutes.
-- Avoid dragging, stretching, or looping footage just to meet a specific time target.
+PACING & DURATION RULE (CRITICAL):
+- The recap MUST be significantly SHORTER than the original video. Target 40-65% of the original duration.
+- If source is 10 minutes, recap should be 3-5 minutes. If source is 2 hours, recap should be 15-25 minutes MAX.
+- If you include everything from start to finish without cutting, you have FAILED as a recap editor.
+- The viewer should feel like they watched a fast, exciting, condensed version — NOT the full video.
 
 IMPORTANT:
 Do NOT summarize using text only.
@@ -5015,18 +5008,17 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
         skipCreditDeduction: true,
         extraInstructions: `CRITICAL:
 - Output language MUST be ${selectedLangName} ONLY. Do NOT switch to any other language even if the video's spoken dialogue is in a different language.
-- Script completeness: MUST cover the entire ${duration} seconds with no early stop.
-- Each segment must be continuous and not jump suddenly.
-- Never stop early. Continue writing until final segment reaches the ending timeline.
-- If token pressure appears, prioritize finishing all remaining timeline in concise segments instead of stopping.
+- Script must cover the story arc from beginning to end, BUT must be HEAVILY CONDENSED (30-50% of original duration).
+- Each segment must flow smoothly into the next.
+- If token pressure appears, condense remaining story into brief segments instead of stopping.
 
-INTELLIGENT EDITING RULES (for script generation):
-- Keep the important story moments, but remove unnecessary transition actions, filler activities, and dead air between them.
-- Remove unnecessary long scenes, silence, slow walking, repetitive actions, filler moments, and unimportant dialogues.
-- Focus on: Main plot points, character introductions, important conflicts, twists, emotional/shocking moments, and the conclusion.
-- Shorten conversations while keeping the original meaning and storytelling quality.
-- Make scene jumps and cuts feel natural, smooth, and easy to understand.
-- Dynamically adjust the output duration based on the input video length.
+AGGRESSIVE CUTTING RULES (CRITICAL — this is a RECAP, not a retelling):
+- CUT all scenes that do NOT directly advance the main plot. Be ruthless.
+- CUT: travel/walking scenes, eating scenes, sleeping scenes, getting dressed, waiting, filler conversations, repetitive arguments, scenery shots, and any slow-paced moments.
+- KEEP ONLY: Plot twists, reveals, conflicts, character-defining moments, shocking scenes, and the resolution.
+- If a scene can be summarized in one sentence instead of described in detail, use one sentence.
+- The output MUST be significantly SHORTER than the source video. If it is the same length or longer, you have failed.
+- Think like a professional YouTube recap editor: fast, engaging, essential moments only.
 - Do NOT randomly cut scenes. Intelligently compress the narrative while preserving a professional complete story experience.
 
 STORYTELLING FLOW (CRITICAL — eliminates dead air):
