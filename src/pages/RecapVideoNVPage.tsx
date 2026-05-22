@@ -2182,11 +2182,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           const isFreezeCycle = cyclePos < FREEZE_SEC;
 
           if (isFreezeCycle) {
-            // FREEZE PHASE: pause video + very slow zoom-in (1.0 → 1.04x)
+            // FREEZE PHASE: pause video + visible slow Ken Burns zoom-in (1.0 → 1.18x)
             const freezeProgress = cyclePos / FREEZE_SEC;
-            const easeOut = 1 - Math.pow(1 - freezeProgress, 3); // cubic ease-out
-            // SURGICAL FIX: 1.12 → 1.04x — much slower, more gradual cinematic zoom
-            const freezeZoom = 1.0 + 0.04 * easeOut;
+            // Cubic ease-in: starts very slow, accelerates — cinematic pull
+            const easeIn = freezeProgress * freezeProgress * freezeProgress;
+            // SURGICAL FIX: 1.18x — clearly visible zoom, professional Ken Burns
+            const freezeZoom = 1.0 + 0.18 * easeIn;
 
             zoomedSrcW = Math.max(2, Math.round(srcCropW / freezeZoom));
             zoomedSrcH = Math.max(2, Math.round(srcCropH / freezeZoom));
@@ -2195,20 +2196,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
             if (!videoEl.paused && !videoEl.ended) videoEl.pause();
           } else {
-            // MOTION PHASE: resume normal speed + gentle pan
-            const motionProgress = (cyclePos - FREEZE_SEC) / MOTION_SEC;
+            // MOTION PHASE: resume normal speed, NO zoom — just pure normal playback
             if (videoEl.paused && !videoEl.ended) {
               videoEl.playbackRate = 1.0;
               videoEl.play().catch(() => {});
             }
-            const smoothMotion = motionProgress * motionProgress * (3 - 2 * motionProgress);
-            const motionZoom = 1.04 - 0.02 * smoothMotion; // gently unzoom to 1.02x
-            zoomedSrcW = Math.max(2, Math.round(srcCropW / motionZoom));
-            zoomedSrcH = Math.max(2, Math.round(srcCropH / motionZoom));
-            const panX = Math.cos(t * 0.1) * (srcCropW * 0.006) * smoothMotion;
-            const panY = Math.sin(t * 0.08) * (srcCropH * 0.005) * smoothMotion;
-            zoomedSrcX = srcCropX + Math.round((srcCropW - zoomedSrcW) / 2 + panX);
-            zoomedSrcY = srcCropY + Math.round((srcCropH - zoomedSrcH) * 0.3 + panY);
+            // SURGICAL FIX: No zoom/pan in motion phase — show original frame as-is
+            // zoomedSrc* stay at srcCrop* defaults (set above)
           }
         } else if (isZoomEnabled) {
           // ── Original cinematic zoom/pan/Ken Burns (only when Zoom ON and Freeze OFF) ──
@@ -5301,92 +5295,108 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
       setScriptData({ title: file.name.replace(/\.[^.]+$/, ""), full_script: scriptText, segments });
       setProgressMsg("📝 Script generated! Now generating AI voice...");
 
-      // ── FEATURE: AI Hook Detector — async, non-blocking ──
-      // Calls Gemini to find the most dramatic/shocking segment for cinematic intro overlay
-      (async () => {
+      // ── FEATURE: AI Hook Detector — LOCAL SCORING (no API needed, 100% reliable) ──
+      // Scores each segment by emotional intensity, punctuation, story position, sentence length
+      (() => {
         try {
-          const apiKey = (import.meta.env.VITE_GEMINI_API_KEY as string) || "";
-          if (!apiKey || segments.length < 2) return;
-          const segList = segments.map((s, i) => `[${i}] ${s.text}`).join("\n");
-          const hookResp = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                contents: [
-                  {
-                    parts: [
-                      {
-                        text: `You are a professional YouTube movie recap editor. Analyze these recap script segments and identify the SINGLE most dramatic, shocking, or emotionally intense segment that would make the best HOOK for the first 4 seconds of the video intro.\n\nSegments:\n${segList}\n\nRespond ONLY with valid JSON, nothing else: {"index": <number>, "hookTitle": "<dramatic title max 7 words>"}`,
-                      },
-                    ],
-                  },
-                ],
-                generationConfig: { temperature: 0.2, maxOutputTokens: 80 },
-              }),
-            },
-          );
-          if (!hookResp.ok) return;
-          const hookData = await hookResp.json();
-          const hookText = hookData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-          const match = hookText.match(/\{[\s\S]*?\}/);
-          if (match) {
-            const parsed = JSON.parse(match[0]);
-            if (typeof parsed.index === "number" && parsed.index >= 0 && parsed.index < segments.length) {
-              console.log(`[HOOK DETECTOR] Segment ${parsed.index}: "${(parsed.hookTitle || "").trim()}"`);
-            }
+          if (segments.length < 2) return;
+          const highEmotionKw = [
+            "die",
+            "death",
+            "kill",
+            "murder",
+            "betray",
+            "reveal",
+            "secret",
+            "truth",
+            "shock",
+            "sacrifice",
+            "love",
+            "hate",
+            "destroy",
+            "end",
+            "သေ",
+            "ဆုံး",
+            "ဖော်ထုတ်",
+            "လျှို့ဝှက်",
+            "裏切",
+            "殺",
+          ];
+          const midEmotionKw = [
+            "cry",
+            "tears",
+            "fight",
+            "escape",
+            "run",
+            "hide",
+            "angry",
+            "pain",
+            "broken",
+            "alone",
+            "lost",
+            "ငို",
+            "ထွက်ပြေး",
+            "ဒဏ်ရာ",
+          ];
+          const scores = segments.map((seg: RecapSegment, i: number) => {
+            const t = seg.text.toLowerCase();
+            let score = 0;
+            score += highEmotionKw.filter((w) => t.includes(w)).length * 3;
+            score += midEmotionKw.filter((w) => t.includes(w)).length * 1.5;
+            // Punctuation drama (!?)
+            score += (seg.text.match(/[!?]/g) || []).length * 0.8;
+            // Story position bonus: climax usually at 50-80% of story
+            const pos = i / segments.length;
+            if (pos >= 0.5 && pos <= 0.8) score += 2.5;
+            // Short dramatic sentences score higher
+            if (seg.text.length < 100) score += 0.5;
+            return score;
+          });
+          const maxScore = Math.max(...scores);
+          if (maxScore > 0) {
+            const hookIdx = scores.indexOf(maxScore);
+            hookSegmentIdxRef.current = hookIdx;
+            // Generate hook title from the segment text (first 7 words)
+            const words = segments[hookIdx].text.trim().split(/\s+/);
+            hookTitleRef.current = words.slice(0, 7).join(" ") + (words.length > 7 ? "..." : "");
+            console.log(`[HOOK LOCAL] Segment ${hookIdx}: "${hookTitleRef.current}" (score: ${maxScore})`);
           }
         } catch (e) {
-          console.warn("[HOOK DETECTOR] Failed (non-critical):", e);
+          console.warn("[HOOK LOCAL] Failed:", e);
         }
       })();
       // ── BONUS: YouTube SEO Metadata Generator (async, non-blocking) ──
       (async () => {
         try {
-          const apiKey = (import.meta.env.VITE_GEMINI_API_KEY as string) || "";
-          if (!apiKey || !scriptText) return;
-          const excerpt = scriptText.substring(0, 3000);
-          const metaResp = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                contents: [
-                  {
-                    parts: [
-                      {
-                        text: `You are a viral YouTube SEO expert. Based on this movie recap script, generate:
-1. A viral YouTube title (max 70 chars, shocking/curiosity-driven, in Myanmar language if script is Myanmar)
-2. A YouTube description (150-200 words, with hook opening, story teaser, call-to-action, in script language)
-3. 15 relevant hashtags (mix of Myanmar + English, trending, in #hashtag format)
-
-Script excerpt:
-${excerpt}
-
-Respond ONLY with valid JSON:
-{"title": "...", "description": "...", "hashtags": "#tag1 #tag2 ..."}`,
-                      },
-                    ],
-                  },
-                ],
-                generationConfig: { temperature: 0.4, maxOutputTokens: 600 },
-              }),
+          if (!scriptText) return;
+          const excerpt = scriptText.substring(0, 2500);
+          const seoPrompt = `You are a viral YouTube SEO expert. Based on this movie recap script, generate:\n1. A viral YouTube title (max 70 chars, shocking/curiosity-driven, match the script language)\n2. A YouTube description (150-200 words, hook opening + story teaser + call-to-action, match script language)\n3. 15 relevant hashtags (mix local + English, in #hashtag format)\n\nScript:\n${excerpt}\n\nRespond ONLY with valid JSON: {"title": "...", "description": "...", "hashtags": "#tag1 #tag2 ..."}`;
+          const seoResp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recap-script-generator`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              Authorization: `Bearer ${userToken}`,
             },
-          );
-          if (!metaResp.ok) return;
-          const metaData = await metaResp.json();
-          const metaText = metaData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-          const metaMatch = metaText.match(/\{[\s\S]*?\}/);
-          if (metaMatch) {
-            const parsed = JSON.parse(metaMatch[0]);
+            body: JSON.stringify({
+              seoMode: true,
+              seoPrompt,
+              generationConfig: { temperature: 0.4, maxOutputTokens: 700 },
+            }),
+          });
+          if (!seoResp.ok) return;
+          const seoData = await seoResp.json();
+          const rawText = seoData?.script || seoData?.result || seoData?.text || "";
+          const seoMatch = rawText.match(/\{[\s\S]*\}/);
+          if (seoMatch) {
+            const parsed = JSON.parse(seoMatch[0]);
             if (parsed.title && parsed.description && parsed.hashtags) {
-              console.log("[YT METADATA] Generated:", parsed.title);
+              setYoutubeMetadata({ title: parsed.title, description: parsed.description, hashtags: parsed.hashtags });
+              console.log("[YT SEO] Generated:", parsed.title);
             }
           }
         } catch (e) {
-          console.warn("[YT METADATA] Failed (non-critical):", e);
+          console.warn("[YT SEO] Failed (non-critical):", e);
         }
       })();
       const scriptTextForTTS = scriptText.replace(/\[.*?\]\s*/g, "");
