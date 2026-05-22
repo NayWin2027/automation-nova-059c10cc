@@ -5071,14 +5071,12 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
   const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      if (apiMode === "app") {
-        const hasCredits = await preCheckCredits("recap-nv");
-        if (!hasCredits) return;
-      }
-      didDeductRef.current = false;
+      // SURGICAL EDIT: Only store file, do NOT auto-start pipeline
+      // User must click Generate button to start
       setVideoFile(file);
       videoFileRef.current = file;
-      startAutoPipeline(file);
+      setProgressMsg("✅ Video ရွေးပြီးပါပြီ။ Generate ခလုတ်နှိပ်ပါ။");
+      setStatus("idle");
     }
   };
 
@@ -5135,8 +5133,7 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
             </button>
           </div>
           <p className="text-neon-cyan text-lg">
-            ငါးမိနစ်အောက် Video တစ်ခုကို upload လုပ်လိုက်ရုံနဲ့ လူကဘာမှလုပ်စရာမလိုတော့ပဲ AI ကနေ RecapVideoကို Auto
-            download အထိအစဆုံး လုပ်ပေးသွားပါလိမ့်မယ်
+            Video upload လုပ်ပြီး Generate နှိပ်လိုက်ရုံနဲ့ AI ကနေ Recap Video ကို အစအဆုံး လုပ်ပေးသွားပါလိမ့်မယ်
           </p>
           <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl"></p>
 
@@ -5524,6 +5521,25 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
               className="w-full text-sm text-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-primary file:text-primary-foreground file:font-semibold file:cursor-pointer hover:file:opacity-90 disabled:opacity-50"
             />
           </div>
+
+          {/* SURGICAL EDIT: Generate Recap Button — user must click to start pipeline */}
+          {videoFile && status !== "processing" && !audioUrl && (
+            <button
+              onClick={async () => {
+                if (!videoFile) return;
+                if (apiMode === "app") {
+                  const hasCredits = await preCheckCredits("recap-nv");
+                  if (!hasCredits) return;
+                }
+                didDeductRef.current = false;
+                startAutoPipeline(videoFile);
+              }}
+              className="w-full py-3.5 px-6 bg-gradient-to-r from-purple-600 via-violet-600 to-pink-600 text-white font-bold text-lg rounded-xl shadow-[0_0_20px_rgba(139,92,246,0.5)] hover:shadow-[0_0_30px_rgba(139,92,246,0.8)] hover:-translate-y-0.5 transition-all duration-300 border border-violet-400/30 flex items-center justify-center gap-2"
+            >
+              <span className="text-2xl">🚀</span>
+              <span>Generate Recap</span>
+            </button>
+          )}
 
           {progressMsg && (
             <div
