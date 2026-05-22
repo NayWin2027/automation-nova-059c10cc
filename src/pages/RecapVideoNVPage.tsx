@@ -275,6 +275,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const [currentSubtitle, setCurrentSubtitle] = useState("");
     const [subtitleKey, setSubtitleKey] = useState(0);
     const [isRendering, setIsRendering] = useState(false);
+    // ── FEATURE: AI Hook Detector state ──
+    const hookSegmentIdxRef = useRef<number>(-1);
+    const hookTitleRef = useRef<string>("");
+    const recStartTimeRef = useRef<number>(0); // Recording start timestamp for hook overlay timing
     const [renderedBlobUrl, setRenderedBlobUrl] = useState<string | null>(null);
     const [serverRenderProgress, setServerRenderProgress] = useState<string>("");
     const subNeonHueRef = useRef(0);
@@ -671,7 +675,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     // SURGICAL EDIT: Zoom toggle for copyright protection
     // ON = cinematic zoom/crop for copyright (current behavior)
     // OFF = 100% original source video quality, no zoom/crop
-    const [zoomEnabled, setZoomEnabled] = useState(true);
+    // SURGICAL EDIT: Copyright Zoom OFF by default (user preference)
+    const [zoomEnabled, setZoomEnabled] = useState(false);
     const zoomEnabledRef = useRef(zoomEnabled);
     useEffect(() => {
       zoomEnabledRef.current = zoomEnabled;
@@ -767,6 +772,24 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
     // SURGICAL EDIT: Subtitle fade-in timer ref for smooth canvas transition
     const subFadeStartRef = useRef<number>(0);
+    // SURGICAL EDIT: Scene cut flash — professional dip-to-dark at each hard cut
+    const segCutTimeRef = useRef<number>(0);
+    // SURGICAL EDIT: Prevent re-seeking while HTML5 seek is still in progress (async)
+    const seekPendingRef = useRef<boolean>(false);
+    // SURGICAL EDIT: Track whether we're in active segment (true) or between segments (false)
+    const videoInSegmentRef = useRef<boolean>(false);
+    // ── BONUS: Scene-Aware Dynamic Color Grade — track current segment pacing type ──
+    const segPacingTypeRef = useRef<"action" | "emotional" | "exposition">("exposition");
+    // ── BONUS: Mid-Video Retention Teaser (28% mark) ──
+    const midTeaserStartRef = useRef<number>(0);
+    const midTeaserShownRef = useRef<boolean>(false);
+    // ── BONUS: YouTube SEO Metadata (Gemini-generated) ──
+    const [youtubeMetadata, setYoutubeMetadata] = React.useState<{
+      title: string;
+      description: string;
+      hashtags: string;
+    } | null>(null);
+    const [copiedField, setCopiedField] = React.useState<string>("");
 
     // SURGICAL EDIT: Inject subFadeSlide keyframe once — professional broadcast fade+slide-up
     useEffect(() => {
@@ -1294,6 +1317,59 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const syncSegmentsRef = useRef<ReturnType<typeof Array.prototype.map>>([]);
 
     const syncSegments = useMemo(() => {
+      // ── FEATURE: Pacing Intelligence — classify segment type for dynamic duration cap ──
+      const classifyPacing = (text: string): "action" | "emotional" | "exposition" => {
+        const t = text.toLowerCase();
+        const actionKw = [
+          "fight",
+          "run",
+          "attack",
+          "explode",
+          "chase",
+          "shoot",
+          "kill",
+          "battle",
+          "escape",
+          "dash",
+          "race",
+          "punch",
+          "stab",
+          "crash",
+          "flee",
+          "ထိုး",
+          "ပြေး",
+          "တိုက်",
+          "ပေါက်",
+          "ဆဲခြုပ်",
+          "ပအု့ပ်ထွက်",
+        ];
+        const emotionalKw = [
+          "cry",
+          "tear",
+          "love",
+          "death",
+          "die",
+          "heart",
+          "pain",
+          "grief",
+          "shock",
+          "reveal",
+          "confess",
+          "betray",
+          "sacrifice",
+          "သေ",
+          "မျက်ရည်",
+          "ခှစ်",
+          "နာကျင်",
+          "လေ့လွန်",
+          "သေဆုး",
+          "မာလား",
+        ];
+        if (actionKw.some((w) => t.includes(w))) return "action";
+        if (emotionalKw.some((w) => t.includes(w))) return "emotional";
+        return "exposition";
+      };
+
       const getWordCount = (text: string) => {
         const words = text.trim().split(/\s+/).filter(Boolean);
         return words.reduce((acc, w) => acc + 1 + (w.length >= 4 ? 0.2 : 0), 0);
@@ -1304,7 +1380,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         const segWords = getWordCount(seg.text);
         const startWords = wordCursor;
         wordCursor += segWords;
-        const vStart = parseTime(seg.timestamp);
+        // ── FEATURE: Smart Frame Offset (+0.3s) — skip scene transition flash frames ──
+        const rawVStart = parseTime(seg.timestamp);
+        const vStart = rawVStart > 0.3 ? rawVStart + 0.3 : rawVStart;
         const nextSeg = scriptData.segments[i + 1];
         let vEnd: number;
         if (!nextSeg) {
@@ -1317,6 +1395,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             const estimatedClipSec = Math.max((segWords / 150) * 60, 3);
             vEnd = vStart + estimatedClipSec;
           }
+        }
+        // ── FEATURE: Pacing Intelligence — cap vEnd based on scene type ──
+        if (vEnd !== -1) {
+          const pacing = classifyPacing(seg.text);
+          const maxDur = pacing === "action" ? 2.5 : pacing === "emotional" ? 5.0 : 3.5;
+          if (vEnd - vStart > maxDur) vEnd = vStart + maxDur;
         }
         return {
           vStart,
@@ -1907,6 +1991,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
       setIsRendering(true);
       isRenderingRef.current = true;
+      // ── FEATURE: Track recording start time for hook intro overlay ──
+      recStartTimeRef.current = performance.now();
+      // ── BONUS FIX: Reset mid-video teaser so it fires on every recording ──
+      midTeaserShownRef.current = false;
+      midTeaserStartRef.current = 0;
       recorder.start(250);
       // Pre-load logo
       let logoImg: HTMLImageElement | null = null;
@@ -2062,120 +2151,115 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         }
 
         // ── FIX: Use cached filter string — no string allocation per frame ──
-        ctx.filter = filterStringRef.current;
+        // ── BONUS: Scene-Aware Dynamic Color Grade — blend base filter with scene-type modifier ──
+        const sceneType = segPacingTypeRef.current;
+        if (sceneType === "action") {
+          // Action: higher contrast + cool blue tint (intensity, urgency)
+          ctx.filter = filterStringRef.current + " contrast(118%) hue-rotate(-8deg) saturate(115%)";
+        } else if (sceneType === "emotional") {
+          // Emotional: warm amber + slight dim (drama, feeling)
+          ctx.filter = filterStringRef.current + " sepia(18%) brightness(96%) saturate(90%)";
+        } else {
+          ctx.filter = filterStringRef.current;
+        }
 
         // SURGICAL EDIT: Zoom toggle - conditional cinematic zoom/pan/rotation
-        // When OFF: Use original source crop directly (100% quality, no effects)
-        // When ON: Apply copyright evasion cinematic movements
+        // Freeze mode is INDEPENDENT of zoom toggle — it works even when zoom is OFF
         let zoomedSrcX = srcCropX;
         let zoomedSrcY = srcCropY;
         let zoomedSrcW = srcCropW;
         let zoomedSrcH = srcCropH;
         let rotate = 0;
 
-        if (isZoomEnabled) {
-          // ── SURGICAL EDIT: Copyright Evasion (Cinematic Camera Movements: Zoom, Pan, Ken Burns) ──
-          // This is purely visual and DOES NOT modify video timeline. AV-Sync remains 100% accurate!
-          // Visual-only: we change the way the video frame is CROPPED/ZOOMED on the canvas.
-          // Audio/video timeline and timestamps remain untouched (AV-Sync stays accurate).
+        // SURGICAL FIX: Freeze/Motion mode runs independently of isZoomEnabled
+        // Previously was nested inside isZoomEnabled — now runs always when freezeMode is ON
+        if (freezeModeRef.current) {
           const t = audioEl.currentTime;
+          const FREEZE_SEC = 5;
+          const MOTION_SEC = 5;
+          const CYCLE_SEC = FREEZE_SEC + MOTION_SEC;
+          const cyclePos = t % CYCLE_SEC;
+          const isFreezeCycle = cyclePos < FREEZE_SEC;
 
-          if (freezeModeRef.current) {
-            // ── SURGICAL EDIT: Professional Ken Burns Keyframe Freeze/Motion ──
-            // FREEZE: 5s freeze frame + slow zoom-in, MOTION: 5s normal playback + pan
-            const FREEZE_SEC = 5;
-            const MOTION_SEC = 5;
-            const CYCLE_SEC = FREEZE_SEC + MOTION_SEC;
-            const cyclePos = t % CYCLE_SEC;
-            const isFreezeCycle = cyclePos < FREEZE_SEC;
+          if (isFreezeCycle) {
+            // FREEZE PHASE: pause video + very slow zoom-in (1.0 → 1.04x)
+            const freezeProgress = cyclePos / FREEZE_SEC;
+            const easeOut = 1 - Math.pow(1 - freezeProgress, 3); // cubic ease-out
+            // SURGICAL FIX: 1.12 → 1.04x — much slower, more gradual cinematic zoom
+            const freezeZoom = 1.0 + 0.04 * easeOut;
 
-            if (isFreezeCycle) {
-              // ── FREEZE PHASE: pause video + Ken Burns slow zoom-in ──
-              const freezeProgress = cyclePos / FREEZE_SEC; // 0→1 over 5 seconds
-              const easeOut = 1 - Math.pow(1 - freezeProgress, 3); // cubic ease-out
-              const freezeZoom = 1.0 + 0.12 * easeOut; // 1.0 → 1.12x gradual
+            zoomedSrcW = Math.max(2, Math.round(srcCropW / freezeZoom));
+            zoomedSrcH = Math.max(2, Math.round(srcCropH / freezeZoom));
+            zoomedSrcX = srcCropX + Math.round((srcCropW - zoomedSrcW) / 2);
+            zoomedSrcY = srcCropY + Math.round((srcCropH - zoomedSrcH) * 0.3);
 
-              zoomedSrcW = Math.max(2, Math.round(srcCropW / freezeZoom));
-              zoomedSrcH = Math.max(2, Math.round(srcCropH / freezeZoom));
-              zoomedSrcX = srcCropX + Math.round((srcCropW - zoomedSrcW) / 2);
-              zoomedSrcY = srcCropY + Math.round((srcCropH - zoomedSrcH) * 0.3);
-
-              // SURGICAL EDIT: Pause video to truly freeze the frame
-              if (!videoEl.paused && !videoEl.ended) {
-                videoEl.pause();
-              }
-            } else {
-              // ── MOTION PHASE: resume video + subtle Ken Burns pan ──
-              const motionProgress = (cyclePos - FREEZE_SEC) / MOTION_SEC; // 0→1
-
-              // SURGICAL EDIT: Smooth resume — set playbackRate BEFORE play() to prevent stutter
-              if (videoEl.paused && !videoEl.ended) {
-                videoEl.playbackRate = 1.0;
-                videoEl.play().catch(() => {});
-              }
-
-              // Zoom settles back from freeze level
-              const smoothMotion = motionProgress * motionProgress * (3 - 2 * motionProgress);
-              const motionZoom = 1.12 - 0.1 * smoothMotion; // 1.12x → 1.02x
-
-              zoomedSrcW = Math.max(2, Math.round(srcCropW / motionZoom));
-              zoomedSrcH = Math.max(2, Math.round(srcCropH / motionZoom));
-              const panX = Math.cos(t * 0.1) * (srcCropW * 0.008) * smoothMotion;
-              const panY = Math.sin(t * 0.08) * (srcCropH * 0.006) * smoothMotion;
-              zoomedSrcX = srcCropX + Math.round((srcCropW - zoomedSrcW) / 2 + panX);
-              zoomedSrcY = srcCropY + Math.round((srcCropH - zoomedSrcH) * 0.3 + panY);
-            }
+            if (!videoEl.paused && !videoEl.ended) videoEl.pause();
           } else {
-            // ── ORIGINAL cinematic zoom/pan/Ken Burns (unchanged) ──
-            // Hollywood Cinematic Camera: 4-second alternating smooth motion
-            const zoomCycleSec = 4;
-            const cycleIndex = Math.floor(t / zoomCycleSec);
-            const cyclePos = (t % zoomCycleSec) / zoomCycleSec;
-            const smoothstep = (t: number) => t * t * (3 - 2 * t);
-            const hump = smoothstep(Math.sin(Math.PI * cyclePos) * 0.5 + 0.5);
-            const isPhotoFreeze = cycleIndex % 2 === 0;
-            const photoZoomBase = 1.02;
-            const zoomStep = 0.04;
-            const photoZoomStep = zoomStep * 0.55;
-            const videoZoomAdd = zoomStep - photoZoomStep;
-            const maxZoom = 1.14;
-            const ramp = cyclePos * cyclePos * (3 - 2 * cyclePos);
-            const levelBase = Math.min(maxZoom, photoZoomBase + Math.floor(cycleIndex / 2) * zoomStep);
-            let cinematicZoom: number;
-            if (isPhotoFreeze) {
-              cinematicZoom = Math.min(maxZoom, levelBase + photoZoomStep * ramp);
-            } else {
-              cinematicZoom = Math.min(maxZoom, levelBase + photoZoomStep + videoZoomAdd * ramp);
-              cinematicZoom *= 1 + Math.sin(t * 0.43) * 0.007;
+            // MOTION PHASE: resume normal speed + gentle pan
+            const motionProgress = (cyclePos - FREEZE_SEC) / MOTION_SEC;
+            if (videoEl.paused && !videoEl.ended) {
+              videoEl.playbackRate = 1.0;
+              videoEl.play().catch(() => {});
             }
-            const motionFactor = isPhotoFreeze ? 0 : hump;
-            const phase = 2 * Math.PI * cyclePos + cycleIndex * 0.7;
-            const driftX = Math.cos(t * 0.12) * (canvas.width * 0.008);
-            const driftY = Math.sin(t * 0.1) * (canvas.height * 0.008);
-            const easePan = (n: number) => 0.5 - 0.5 * Math.cos(n * Math.PI);
-            const crossX = easePan(Math.cos(phase)) * (canvas.width * 0.018);
-            const crossY = easePan(Math.sin(phase)) * (canvas.height * 0.018);
-            const microShakeX = Math.sin(t * 32.0) * 0.4 * motionFactor;
-            const microShakeY = Math.cos(t * 28.0) * 0.4 * motionFactor;
-            const translateX = (driftX + crossX) * motionFactor + microShakeX;
-            const translateY = (driftY + crossY) * motionFactor + microShakeY;
-            const rotDir = Math.floor(cycleIndex / 2) % 2 === 0 ? 1 : -1;
-            rotate = isPhotoFreeze ? 0 : rotDir * 0.02 * hump;
-            zoomedSrcW = Math.max(2, Math.round(srcCropW / cinematicZoom));
-            zoomedSrcH = Math.max(2, Math.round(srcCropH / cinematicZoom));
-            const maxShiftX = (srcCropW - zoomedSrcW) / 2;
-            const maxShiftY = (srcCropH - zoomedSrcH) / 2;
-            const panNormX = translateX / (canvas.width * 0.5);
-            const panNormY = translateY / (canvas.height * 0.5);
-            const shiftX = Math.round(maxShiftX * panNormX);
-            const shiftYRaw = maxShiftY * panNormY;
-            const upScale = 0.6;
-            const downScale = 1.35;
-            const shiftY = Math.round(shiftYRaw * (shiftYRaw < 0 ? upScale : downScale));
-            zoomedSrcX = srcCropX + Math.round((srcCropW - zoomedSrcW) / 2) + shiftX;
-            zoomedSrcY = srcCropY + Math.round((srcCropH - zoomedSrcH) * 0.3) + shiftY;
+            const smoothMotion = motionProgress * motionProgress * (3 - 2 * motionProgress);
+            const motionZoom = 1.04 - 0.02 * smoothMotion; // gently unzoom to 1.02x
+            zoomedSrcW = Math.max(2, Math.round(srcCropW / motionZoom));
+            zoomedSrcH = Math.max(2, Math.round(srcCropH / motionZoom));
+            const panX = Math.cos(t * 0.1) * (srcCropW * 0.006) * smoothMotion;
+            const panY = Math.sin(t * 0.08) * (srcCropH * 0.005) * smoothMotion;
+            zoomedSrcX = srcCropX + Math.round((srcCropW - zoomedSrcW) / 2 + panX);
+            zoomedSrcY = srcCropY + Math.round((srcCropH - zoomedSrcH) * 0.3 + panY);
           }
-        } // End of zoom enabled block
+        } else if (isZoomEnabled) {
+          // ── Original cinematic zoom/pan/Ken Burns (only when Zoom ON and Freeze OFF) ──
+          const t = audioEl.currentTime;
+          const zoomCycleSec = 4;
+          const cycleIndex = Math.floor(t / zoomCycleSec);
+          const cyclePos = (t % zoomCycleSec) / zoomCycleSec;
+          const smoothstep = (st: number) => st * st * (3 - 2 * st);
+          const hump = smoothstep(Math.sin(Math.PI * cyclePos) * 0.5 + 0.5);
+          const isPhotoFreeze = cycleIndex % 2 === 0;
+          const photoZoomBase = 1.02;
+          const zoomStep = 0.04;
+          const photoZoomStep = zoomStep * 0.55;
+          const videoZoomAdd = zoomStep - photoZoomStep;
+          const maxZoom = 1.14;
+          const ramp = cyclePos * cyclePos * (3 - 2 * cyclePos);
+          const levelBase = Math.min(maxZoom, photoZoomBase + Math.floor(cycleIndex / 2) * zoomStep);
+          let cinematicZoom: number;
+          if (isPhotoFreeze) {
+            cinematicZoom = Math.min(maxZoom, levelBase + photoZoomStep * ramp);
+          } else {
+            cinematicZoom = Math.min(maxZoom, levelBase + photoZoomStep + videoZoomAdd * ramp);
+            cinematicZoom *= 1 + Math.sin(t * 0.43) * 0.007;
+          }
+          const motionFactor = isPhotoFreeze ? 0 : hump;
+          const phase = 2 * Math.PI * cyclePos + cycleIndex * 0.7;
+          const driftX = Math.cos(t * 0.12) * (canvas.width * 0.008);
+          const driftY = Math.sin(t * 0.1) * (canvas.height * 0.008);
+          const easePan = (n: number) => 0.5 - 0.5 * Math.cos(n * Math.PI);
+          const crossX = easePan(Math.cos(phase)) * (canvas.width * 0.018);
+          const crossY = easePan(Math.sin(phase)) * (canvas.height * 0.018);
+          const microShakeX = Math.sin(t * 32.0) * 0.4 * motionFactor;
+          const microShakeY = Math.cos(t * 28.0) * 0.4 * motionFactor;
+          const translateX = (driftX + crossX) * motionFactor + microShakeX;
+          const translateY = (driftY + crossY) * motionFactor + microShakeY;
+          const rotDir = Math.floor(cycleIndex / 2) % 2 === 0 ? 1 : -1;
+          rotate = isPhotoFreeze ? 0 : rotDir * 0.02 * hump;
+          zoomedSrcW = Math.max(2, Math.round(srcCropW / cinematicZoom));
+          zoomedSrcH = Math.max(2, Math.round(srcCropH / cinematicZoom));
+          const maxShiftX = (srcCropW - zoomedSrcW) / 2;
+          const maxShiftY = (srcCropH - zoomedSrcH) / 2;
+          const panNormX = translateX / (canvas.width * 0.5);
+          const panNormY = translateY / (canvas.height * 0.5);
+          const shiftX = Math.round(maxShiftX * panNormX);
+          const shiftYRaw = maxShiftY * panNormY;
+          const upScale = 0.6;
+          const downScale = 1.35;
+          const shiftY = Math.round(shiftYRaw * (shiftYRaw < 0 ? upScale : downScale));
+          zoomedSrcX = srcCropX + Math.round((srcCropW - zoomedSrcW) / 2) + shiftX;
+          zoomedSrcY = srcCropY + Math.round((srcCropH - zoomedSrcH) * 0.3) + shiftY;
+        } // End of zoom/freeze block
 
         // Clamp to the valid source crop bounds.
         zoomedSrcX = Math.max(srcCropX, Math.min(srcCropX + (srcCropW - zoomedSrcW), zoomedSrcX));
@@ -2197,7 +2281,116 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           ctx.drawImage(videoEl, zoomedSrcX, zoomedSrcY, zoomedSrcW, zoomedSrcH, 0, 0, canvas.width, canvas.height);
           ctx.restore();
 
-          // ── TRANSFORMATIVE LAYER: Cinematic Vignette (Subtle Luminance Alteration) ──
+          // ── FEATURE: Professional scene-cut dip-to-dark overlay (YouTube recap style) ──
+          const CUT_FADE_MS = 120;
+          const cutAge = performance.now() - segCutTimeRef.current;
+          if (cutAge < CUT_FADE_MS && segCutTimeRef.current > 0) {
+            const fadeRatio = 1.0 - cutAge / CUT_FADE_MS;
+            const eased = fadeRatio * fadeRatio;
+            ctx.save();
+            ctx.globalAlpha = eased * 0.7;
+            ctx.fillStyle = "#000000";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.restore();
+          }
+
+          // ── FEATURE: AI Hook Intro — cinematic title card overlay for first 4s of recording ──
+          // Shows most dramatic scene title + film strip effect at recording start
+          const HOOK_DURATION_MS = 4000;
+          const recAge = recStartTimeRef.current > 0 ? performance.now() - recStartTimeRef.current : Infinity;
+          const hookIdx = hookSegmentIdxRef.current;
+          const hookTitle = hookTitleRef.current;
+          if (recAge < HOOK_DURATION_MS && hookIdx >= 0 && hookTitle) {
+            const hookFade = recAge < 400 ? recAge / 400 : recAge > 3200 ? 1 - (recAge - 3200) / 800 : 1;
+            const easedFade = hookFade * hookFade * (3 - 2 * hookFade);
+            ctx.save();
+            // Dark gradient overlay
+            const hGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            hGrad.addColorStop(0, `rgba(0,0,0,${0.72 * easedFade})`);
+            hGrad.addColorStop(0.45, `rgba(0,0,0,${0.45 * easedFade})`);
+            hGrad.addColorStop(1, `rgba(0,0,0,${0.82 * easedFade})`);
+            ctx.fillStyle = hGrad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Decorative accent line
+            const lineY = canvas.height * 0.38;
+            ctx.globalAlpha = 0.7 * easedFade;
+            ctx.strokeStyle = "#FACC15";
+            ctx.lineWidth = Math.max(1, canvas.width * 0.002);
+            ctx.beginPath();
+            ctx.moveTo(canvas.width * 0.08, lineY);
+            ctx.lineTo(canvas.width * 0.92, lineY);
+            ctx.stroke();
+
+            // Hook title text
+            const titleFontSize = Math.max(18, Math.round(canvas.height * 0.058));
+            ctx.globalAlpha = easedFade;
+            ctx.font = `900 ${titleFontSize}px 'PannYeat','Aka02','Aka07',sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.shadowColor = "rgba(0,0,0,0.95)";
+            ctx.shadowBlur = titleFontSize * 0.4;
+            ctx.shadowOffsetY = titleFontSize * 0.04;
+            ctx.strokeStyle = "#000000";
+            ctx.lineWidth = Math.max(2, titleFontSize * 0.08);
+            ctx.lineJoin = "round";
+            const titleY = canvas.height * 0.44;
+            ctx.strokeText(hookTitle, canvas.width / 2, titleY);
+            ctx.fillStyle = "#FACC15";
+            ctx.fillText(hookTitle, canvas.width / 2, titleY);
+
+            // "Watch Full Story" sub-label
+            const subFontSize = Math.max(11, Math.round(canvas.height * 0.028));
+            ctx.font = `600 ${subFontSize}px 'PannYeat','Aka02','Aka07',sans-serif`;
+            ctx.shadowBlur = subFontSize * 0.3;
+            ctx.strokeStyle = "#000";
+            ctx.lineWidth = Math.max(1, subFontSize * 0.1);
+            ctx.strokeText("▼ Full Story Below ▼", canvas.width / 2, titleY + titleFontSize * 1.6);
+            ctx.fillStyle = "rgba(255,255,255,0.88)";
+            ctx.fillText("▼ Full Story Below ▼", canvas.width / 2, titleY + titleFontSize * 1.6);
+
+            ctx.restore();
+          }
+
+          // ── BONUS: Mid-Video Retention Teaser overlay (YouTube retention trick at 28% mark) ──
+          const TEASER_MS = 2500;
+          const teaserAge = midTeaserStartRef.current > 0 ? performance.now() - midTeaserStartRef.current : Infinity;
+          if (teaserAge < TEASER_MS) {
+            const tf = teaserAge < 350 ? teaserAge / 350 : teaserAge > 2000 ? 1 - (teaserAge - 2000) / 500 : 1;
+            const tEased = tf * tf * (3 - 2 * tf);
+            ctx.save();
+            // Bottom gradient panel
+            const tGrad = ctx.createLinearGradient(0, canvas.height * 0.72, 0, canvas.height);
+            tGrad.addColorStop(0, `rgba(0,0,0,0)`);
+            tGrad.addColorStop(1, `rgba(10,10,30,${0.88 * tEased})`);
+            ctx.fillStyle = tGrad;
+            ctx.fillRect(0, canvas.height * 0.72, canvas.width, canvas.height * 0.28);
+            // Accent bar
+            ctx.globalAlpha = 0.9 * tEased;
+            ctx.fillStyle = "#EF4444";
+            ctx.fillRect(
+              canvas.width * 0.08,
+              canvas.height * 0.8,
+              canvas.width * 0.84,
+              Math.max(2, canvas.height * 0.004),
+            );
+            // Teaser text
+            const tFontSize = Math.max(14, Math.round(canvas.height * 0.042));
+            ctx.globalAlpha = tEased;
+            ctx.font = `800 ${tFontSize}px 'PannYeat','Aka02','Aka07',sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.shadowColor = "rgba(0,0,0,0.95)";
+            ctx.shadowBlur = tFontSize * 0.5;
+            ctx.strokeStyle = "#000";
+            ctx.lineWidth = Math.max(1, tFontSize * 0.09);
+            ctx.lineJoin = "round";
+            const tY = canvas.height * 0.88;
+            ctx.strokeText("🔥 Coming Up... 🔥", canvas.width / 2, tY);
+            ctx.fillStyle = "#FFFFFF";
+            ctx.fillText("🔥 Coming Up... 🔥", canvas.width / 2, tY);
+            ctx.restore();
+          }
           // Changes overall frame luminance signature to confuse Content ID algorithms.
           // Skip expensive gradient effects on extreme low-end devices
           if (!isExtremeLowEnd) {
@@ -2601,18 +2794,17 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         const av = audioRef.current;
         const vv = videoRef.current;
         if (av && vv) {
-          if (!av.paused && vv.paused && !vv.ended) vv.play().catch(() => {});
-
           if (av.duration > 0 && vv.duration > 0) {
             const currentTime = av.currentTime;
             const segs = syncSegmentsRef.current as typeof syncSegments;
             const audioTs = audioTimestampsRef.current;
             let activeIndex = -1;
             let activeText = "";
-            let targetVideoTime: number | null = null;
-            let baseRate = 1;
 
             if (audioTs.length > 0) {
+              // ── TRUE RECAP HARD-CUT SYNC ──
+              // No more playbackRate manipulation. Each segment plays at 1.0x normal speed.
+              // On segment change: hard-seek video to vStart. Between segments: hold video.
               const maxIdx = Math.min(audioTs.length, segs.length) - 1;
               const getSeg = (idx: number) => segs[idx] as any;
               if (maxIdx >= 0) {
@@ -2626,61 +2818,51 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 }
 
                 if (activeIndex !== -1) {
-                  const ts = audioTs[activeIndex];
                   const active = getSeg(activeIndex);
                   const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
-                  const audioSegDuration = Math.max(ts.end - ts.start, 0.001);
-                  const videoSegDuration = Math.max(vActualEnd - active.vStart, 0);
-                  // MILLISECOND-ACCURATE SYNC: Linear mapping only (no easing on time!)
-                  // Video must track audio 1:1 for perfect sync. Smoothstep is for visual effects only.
-                  const progressInSeg = clamp((currentTime - ts.start) / audioSegDuration, 0, 1);
-                  targetVideoTime = active.vStart + progressInSeg * videoSegDuration;
-                  baseRate = videoSegDuration > 0 ? videoSegDuration / audioSegDuration : 1;
 
                   if (activeIndex !== lastIndexRef.current) {
-                    // SURGICAL EDIT: Tightened drift threshold 3.0→0.5s for 100% subtitle timing accuracy
-                    // Hard-seek at 0.5s drift so subtitle text appears on the correct audio segment
-                    const snapDrift = Math.abs(vv.currentTime - active.vStart);
-                    if (snapDrift > 0.5) vv.currentTime = active.vStart;
+                    // TRUE RECAP: Hard cut — seek ONCE to segment start
+                    // seekPendingRef prevents re-seeking every frame during async HTML5 seek
                     lastIndexRef.current = activeIndex;
+                    videoInSegmentRef.current = true;
+                    segCutTimeRef.current = performance.now(); // trigger canvas dip-to-dark
+                    seekPendingRef.current = true;
+
+                    const onSeeked = () => {
+                      seekPendingRef.current = false;
+                      // Play only after seek complete — no race condition
+                      if (!vv.ended && !freezeModeRef.current) {
+                        vv.playbackRate = 1.0;
+                        vv.play().catch(() => {});
+                      }
+                      vv.removeEventListener("seeked", onSeeked);
+                    };
+                    vv.addEventListener("seeked", onSeeked);
+                    vv.currentTime = active.vStart;
+                  } else if (!seekPendingRef.current) {
+                    // Seek complete — normal playing state
+                    if (!freezeModeRef.current) {
+                      // Clamp: stop video at segment end (no overrun)
+                      if (vActualEnd > 0 && vv.currentTime >= vActualEnd - 0.05) {
+                        if (!vv.paused) vv.pause();
+                      } else if (vv.paused && !vv.ended) {
+                        // Resume if unintentionally paused
+                        vv.playbackRate = 1.0;
+                        vv.play().catch(() => {});
+                      }
+                    }
                   }
-                } else if (currentTime < audioTs[0].start) {
-                  const firstSeg = getSeg(0);
-                  const preAudio = Math.max(audioTs[0].start, 0.001);
-                  const firstVStart = Math.max(firstSeg?.vStart ?? 0, 0);
-                  // MILLISECOND-ACCURATE SYNC: Linear intro mapping for perfect sync
-                  const preProgress = clamp(currentTime / preAudio, 0, 1);
-                  targetVideoTime = firstVStart > 0 ? preProgress * firstVStart : 0;
-                  baseRate = firstVStart > 0 ? firstVStart / preAudio : 1;
-                } else if (currentTime >= audioTs[maxIdx].end) {
-                  const lastSeg = getSeg(maxIdx);
-                  const lastVEnd = lastSeg?.vEnd === -1 ? vv.duration : (lastSeg?.vEnd ?? vv.duration);
-                  const tailAudio = Math.max(av.duration - audioTs[maxIdx].end, 0.001);
-                  const tailVideo = Math.max(vv.duration - lastVEnd, 0);
-                  // MILLISECOND-ACCURATE SYNC: Linear outro mapping for perfect sync
-                  const tailProgress = clamp((currentTime - audioTs[maxIdx].end) / tailAudio, 0, 1);
-                  targetVideoTime = lastVEnd + tailProgress * tailVideo;
-                  baseRate = tailVideo > 0 ? tailVideo / tailAudio : 1;
-                } else if (maxIdx >= 1) {
-                  // HOLLYWOOD CINEMATIC: Smooth gap interpolation with eased transition
-                  let prevIdx = lastTsIdx;
-                  if (currentTime < audioTs[lastTsIdx].start) prevIdx -= 1;
-                  prevIdx = clamp(prevIdx, 0, maxIdx - 1);
-                  const nextIdx = prevIdx + 1;
-                  const prevSeg = getSeg(prevIdx);
-                  const nextSeg = getSeg(nextIdx);
-                  const prevVEnd = prevSeg?.vEnd === -1 ? vv.duration : (prevSeg?.vEnd ?? vv.currentTime);
-                  const nextVStart = nextSeg?.vStart ?? prevVEnd;
-                  const gapAudio = Math.max(audioTs[nextIdx].start - audioTs[prevIdx].end, 0.001);
-                  const gapVideo = Math.max(nextVStart - prevVEnd, 0);
-                  // MILLISECOND-ACCURATE SYNC: Linear gap mapping for perfect sync
-                  const gapProgress = clamp((currentTime - audioTs[prevIdx].end) / gapAudio, 0, 1);
-                  targetVideoTime = prevVEnd + gapProgress * gapVideo;
-                  baseRate = gapVideo > 0 ? gapVideo / gapAudio : 1;
+                } else {
+                  // Between segments — pause video ONCE (not every frame)
+                  if (videoInSegmentRef.current) {
+                    videoInSegmentRef.current = false;
+                    if (!vv.paused) vv.pause();
+                  }
                 }
               }
             } else {
-              // Fallback: word-count proportional
+              // Fallback: word-count proportional (no timestamps available)
               const aPct = currentTime / av.duration;
               activeIndex = segs.findIndex((s: any) => aPct >= s.aStartPct && aPct <= s.aEndPct);
               if (activeIndex === -1 && segs.length > 0 && aPct > 0) {
@@ -2690,63 +2872,20 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               if (activeIndex !== -1) {
                 const s = segs[activeIndex] as any;
                 activeText = s.text;
-                const vActualEnd = s.vEnd === -1 ? vv.duration : s.vEnd;
-                const videoSecs = Math.max(vActualEnd - s.vStart, 0);
-                const segmentAudioPct = s.aEndPct - s.aStartPct;
-                if (segmentAudioPct > 0.001 && videoSecs > 0) {
-                  const audioSecs = segmentAudioPct * av.duration;
-                  if (audioSecs > 0) {
-                    // MILLISECOND-ACCURATE SYNC: Linear fallback mapping for perfect sync
-                    const progressInSegment = clamp((aPct - s.aStartPct) / segmentAudioPct, 0, 1);
-                    targetVideoTime = s.vStart + progressInSegment * videoSecs;
-                    baseRate = videoSecs / audioSecs;
-                  }
-                }
                 if (activeIndex !== lastIndexRef.current) {
-                  // SURGICAL EDIT: Tightened fallback drift threshold 3.0→0.5s for subtitle accuracy
-                  const driftToStart = s.vStart - vv.currentTime;
-                  if (driftToStart > 0.5) vv.currentTime = s.vStart;
+                  // Hard cut fallback
+                  vv.currentTime = s.vStart;
+                  vv.playbackRate = 1.0;
                   lastIndexRef.current = activeIndex;
                 }
-              }
-            }
-
-            if (targetVideoTime !== null) {
-              // SURGICAL EDIT: Skip AV sync override when freeze mode has paused the video
-              // Without this guard, AV sync would set playbackRate every frame and undo freeze's pause()
-              if (freezeModeRef.current && vv.paused) {
-                // Freeze is active and video is paused — do NOT adjust playbackRate or seek
-              } else {
-                const drift = targetVideoTime - vv.currentTime;
-                // 100% MILLISECOND-ACCURATE AV SYNC: Precise lock with immediate correction
-                // Emergency hard-seek only at catastrophic drift (network errors)
-                // SURGICAL EDIT: Emergency hard-seek threshold 3.0→0.5s for 100% timing accuracy
-                if (Math.abs(drift) > 0.5) {
-                  vv.currentTime = targetVideoTime;
-                  // SURGICAL EDIT: Scale video rate by audioSpeedRate for actual speed effect on output
-                  vv.playbackRate = baseRate * audioSpeedRate;
-                } else {
-                  // Precise drift correction for millisecond-accurate sync
-                  const driftAbs = Math.abs(drift);
-                  const driftSign = Math.sign(drift);
-
-                  if (driftAbs < 0.005) {
-                    // Within 5ms: gentle return to base rate for stability
-                    const scaledBase = baseRate * audioSpeedRate;
-                    vv.playbackRate = vv.playbackRate + (scaledBase - vv.playbackRate) * 0.1;
-                  } else if (driftAbs < 0.05) {
-                    // 5-50ms drift: proportional correction
-                    const correction = driftSign * Math.min(driftAbs * 2.0, 0.08);
-                    const targetRate = baseRate * audioSpeedRate + correction;
-                    vv.playbackRate = vv.playbackRate + (targetRate - vv.playbackRate) * 0.25;
-                  } else {
-                    // 50ms-3s drift: aggressive correction
-                    const correction = driftSign * Math.min(driftAbs * 0.5, 0.15);
-                    const targetRate = baseRate * audioSpeedRate + correction;
-                    vv.playbackRate = Math.min(Math.max(targetRate, 0.5), 4.5);
-                  }
+                if (!vv.paused && !vv.ended) {
+                  // playing normally
+                } else if (vv.paused && !vv.ended) {
+                  vv.play().catch(() => {});
                 }
-              } // end freeze guard else
+              } else {
+                if (!vv.paused) vv.pause();
+              }
             }
 
             if (activeIndex !== -1 && activeText) {
@@ -2756,6 +2895,45 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 currentSubtitleRef.current = activeText;
                 // SURGICAL EDIT: Reset fade timer on subtitle change for smooth transition
                 subFadeStartRef.current = performance.now();
+                // ── BONUS: Update scene pacing type for dynamic color grade ──
+                const t = activeText.toLowerCase();
+                const isActionSeg = [
+                  "fight",
+                  "run",
+                  "attack",
+                  "explode",
+                  "chase",
+                  "shoot",
+                  "kill",
+                  "battle",
+                  "escape",
+                  "ထိုး",
+                  "ပြေး",
+                  "တိုက်",
+                ].some((w) => t.includes(w));
+                const isEmotionalSeg = [
+                  "cry",
+                  "tear",
+                  "love",
+                  "death",
+                  "die",
+                  "heart",
+                  "pain",
+                  "grief",
+                  "shock",
+                  "reveal",
+                  "သေ",
+                  "မျက်ရည်",
+                  "ခှစ်",
+                  "နာကျင်",
+                ].some((w) => t.includes(w));
+                segPacingTypeRef.current = isActionSeg ? "action" : isEmotionalSeg ? "emotional" : "exposition";
+              }
+              // ── BONUS: Mid-Video Retention Teaser — trigger at 28% of audio duration ──
+              const av28 = audioRef.current;
+              if (av28 && av28.duration > 0 && !midTeaserShownRef.current && av28.currentTime / av28.duration >= 0.28) {
+                midTeaserShownRef.current = true;
+                midTeaserStartRef.current = performance.now();
               }
             } else if (currentSubtitleRef.current !== "") {
               setCurrentSubtitle("");
@@ -3358,6 +3536,73 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 </button>
 
                 {/* Cinematic movie poster generation removed. */}
+
+                {/* ── BONUS: YouTube SEO Metadata Panel — shown after video generation ── */}
+                {youtubeMetadata && (
+                  <div className="mt-4 w-full max-w-lg">
+                    <div className="bg-gradient-to-br from-red-950/60 to-slate-900/90 border border-red-500/30 rounded-2xl p-4 space-y-3 shadow-xl">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-lg">🎯</span>
+                        <h4 className="text-sm font-bold text-red-400 uppercase tracking-wider">
+                          YouTube SEO Metadata — Ready to Copy
+                        </h4>
+                      </div>
+                      {/* Title */}
+                      <div className="bg-slate-900/70 rounded-xl p-3 border border-slate-700/50">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-semibold text-slate-400 uppercase">📌 Title</span>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(youtubeMetadata.title);
+                              setCopiedField("title");
+                              setTimeout(() => setCopiedField(""), 2000);
+                            }}
+                            className={`text-xs px-2 py-0.5 rounded-lg font-bold transition-all ${copiedField === "title" ? "bg-green-500 text-white" : "bg-slate-700 hover:bg-red-600 text-slate-300"}`}
+                          >
+                            {copiedField === "title" ? "✅ Copied!" : "Copy"}
+                          </button>
+                        </div>
+                        <p className="text-sm text-white font-semibold leading-snug">{youtubeMetadata.title}</p>
+                      </div>
+                      {/* Description */}
+                      <div className="bg-slate-900/70 rounded-xl p-3 border border-slate-700/50">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-semibold text-slate-400 uppercase">📝 Description</span>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(youtubeMetadata.description);
+                              setCopiedField("desc");
+                              setTimeout(() => setCopiedField(""), 2000);
+                            }}
+                            className={`text-xs px-2 py-0.5 rounded-lg font-bold transition-all ${copiedField === "desc" ? "bg-green-500 text-white" : "bg-slate-700 hover:bg-red-600 text-slate-300"}`}
+                          >
+                            {copiedField === "desc" ? "✅ Copied!" : "Copy"}
+                          </button>
+                        </div>
+                        <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap">
+                          {youtubeMetadata.description}
+                        </p>
+                      </div>
+                      {/* Hashtags */}
+                      <div className="bg-slate-900/70 rounded-xl p-3 border border-slate-700/50">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-semibold text-slate-400 uppercase"># Hashtags</span>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(youtubeMetadata.hashtags);
+                              setCopiedField("tags");
+                              setTimeout(() => setCopiedField(""), 2000);
+                            }}
+                            className={`text-xs px-2 py-0.5 rounded-lg font-bold transition-all ${copiedField === "tags" ? "bg-green-500 text-white" : "bg-slate-700 hover:bg-red-600 text-slate-300"}`}
+                          >
+                            {copiedField === "tags" ? "✅ Copied!" : "Copy"}
+                          </button>
+                        </div>
+                        <p className="text-xs text-blue-300 leading-relaxed">{youtubeMetadata.hashtags}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -5055,6 +5300,98 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
       const segments = scriptToSegments(scriptText, duration);
       setScriptData({ title: file.name.replace(/\.[^.]+$/, ""), full_script: scriptText, segments });
       setProgressMsg("📝 Script generated! Now generating AI voice...");
+
+      // ── FEATURE: AI Hook Detector — async, non-blocking ──
+      // Calls Gemini to find the most dramatic/shocking segment for cinematic intro overlay
+      (async () => {
+        try {
+          const apiKey = (import.meta.env.VITE_GEMINI_API_KEY as string) || "";
+          if (!apiKey || segments.length < 2) return;
+          const segList = segments.map((s, i) => `[${i}] ${s.text}`).join("\n");
+          const hookResp = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [
+                  {
+                    parts: [
+                      {
+                        text: `You are a professional YouTube movie recap editor. Analyze these recap script segments and identify the SINGLE most dramatic, shocking, or emotionally intense segment that would make the best HOOK for the first 4 seconds of the video intro.\n\nSegments:\n${segList}\n\nRespond ONLY with valid JSON, nothing else: {"index": <number>, "hookTitle": "<dramatic title max 7 words>"}`,
+                      },
+                    ],
+                  },
+                ],
+                generationConfig: { temperature: 0.2, maxOutputTokens: 80 },
+              }),
+            },
+          );
+          if (!hookResp.ok) return;
+          const hookData = await hookResp.json();
+          const hookText = hookData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          const match = hookText.match(/\{[\s\S]*?\}/);
+          if (match) {
+            const parsed = JSON.parse(match[0]);
+            if (typeof parsed.index === "number" && parsed.index >= 0 && parsed.index < segments.length) {
+              hookSegmentIdxRef.current = parsed.index;
+              hookTitleRef.current = (parsed.hookTitle || "").trim();
+              console.log(`[HOOK DETECTOR] Segment ${parsed.index}: "${hookTitleRef.current}"`);
+            }
+          }
+        } catch (e) {
+          console.warn("[HOOK DETECTOR] Failed (non-critical):", e);
+        }
+      })();
+      // ── BONUS: YouTube SEO Metadata Generator (async, non-blocking) ──
+      (async () => {
+        try {
+          const apiKey = (import.meta.env.VITE_GEMINI_API_KEY as string) || "";
+          if (!apiKey || !scriptText) return;
+          const excerpt = scriptText.substring(0, 3000);
+          const metaResp = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [
+                  {
+                    parts: [
+                      {
+                        text: `You are a viral YouTube SEO expert. Based on this movie recap script, generate:
+1. A viral YouTube title (max 70 chars, shocking/curiosity-driven, in Myanmar language if script is Myanmar)
+2. A YouTube description (150-200 words, with hook opening, story teaser, call-to-action, in script language)
+3. 15 relevant hashtags (mix of Myanmar + English, trending, in #hashtag format)
+
+Script excerpt:
+${excerpt}
+
+Respond ONLY with valid JSON:
+{"title": "...", "description": "...", "hashtags": "#tag1 #tag2 ..."}`,
+                      },
+                    ],
+                  },
+                ],
+                generationConfig: { temperature: 0.4, maxOutputTokens: 600 },
+              }),
+            },
+          );
+          if (!metaResp.ok) return;
+          const metaData = await metaResp.json();
+          const metaText = metaData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          const metaMatch = metaText.match(/\{[\s\S]*?\}/);
+          if (metaMatch) {
+            const parsed = JSON.parse(metaMatch[0]);
+            if (parsed.title && parsed.description && parsed.hashtags) {
+              setYoutubeMetadata({ title: parsed.title, description: parsed.description, hashtags: parsed.hashtags });
+              console.log("[YT METADATA] Generated:", parsed.title);
+            }
+          }
+        } catch (e) {
+          console.warn("[YT METADATA] Failed (non-critical):", e);
+        }
+      })();
       const scriptTextForTTS = scriptText.replace(/\[.*?\]\s*/g, "");
       await generateVoice(
         scriptTextForTTS,
