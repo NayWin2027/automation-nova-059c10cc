@@ -101,16 +101,16 @@ const COLOR_GRADE_PRESETS: Record<
   { contrast: number; brightness: number; saturate: number; hue: number; sepia?: number; label: string; emoji: string }
 > = {
   // SURGICAL EDIT: Brightness +10 across all presets — fixes user complaint of too-dark output
-  OFF:      { contrast: 100, brightness: 110, saturate: 100, hue: 0,   label: "Off",          emoji: "⚫" },
-  CINEMATIC:{ contrast: 120, brightness: 100, saturate: 65,  hue: 5,   label: "Cinematic",     emoji: "🎬" },
-  VINTAGE:  { contrast: 108, brightness: 105, saturate: 60,  hue: 12,  sepia: 30, label: "Vintage", emoji: "📷" },
-  COOL:     { contrast: 110, brightness: 107, saturate: 90,  hue: -25, label: "Cool",           emoji: "🧊" },
-  WARM:     { contrast: 112, brightness: 118, saturate: 120, hue: 18,  label: "Warm",           emoji: "🔥" },
-  TEAL:     { contrast: 118, brightness: 103, saturate: 125, hue: -35, label: "Teal & Orange",  emoji: "🌊" },
-  PINK:     { contrast: 108, brightness: 115, saturate: 130, hue: 330, label: "Pink",           emoji: "🌸" },
-  NEON:     { contrast: 125, brightness: 118, saturate: 160, hue: 8,   label: "Neon",           emoji: "⚡" },
-  NOIR:     { contrast: 130, brightness: 92,  saturate: 15,  hue: 0,   label: "Noir",           emoji: "🎭" },
-  GOLDEN:   { contrast: 115, brightness: 122, saturate: 135, hue: 22,  label: "Golden Hour",    emoji: "🌅" },
+  OFF: { contrast: 100, brightness: 110, saturate: 100, hue: 0, label: "Off", emoji: "⚫" },
+  CINEMATIC: { contrast: 120, brightness: 100, saturate: 65, hue: 5, label: "Cinematic", emoji: "🎬" },
+  VINTAGE: { contrast: 108, brightness: 105, saturate: 60, hue: 12, sepia: 30, label: "Vintage", emoji: "📷" },
+  COOL: { contrast: 110, brightness: 107, saturate: 90, hue: -25, label: "Cool", emoji: "🧊" },
+  WARM: { contrast: 112, brightness: 118, saturate: 120, hue: 18, label: "Warm", emoji: "🔥" },
+  TEAL: { contrast: 118, brightness: 103, saturate: 125, hue: -35, label: "Teal & Orange", emoji: "🌊" },
+  PINK: { contrast: 108, brightness: 115, saturate: 130, hue: 330, label: "Pink", emoji: "🌸" },
+  NEON: { contrast: 125, brightness: 118, saturate: 160, hue: 8, label: "Neon", emoji: "⚡" },
+  NOIR: { contrast: 130, brightness: 92, saturate: 15, hue: 0, label: "Noir", emoji: "🎭" },
+  GOLDEN: { contrast: 115, brightness: 122, saturate: 135, hue: 22, label: "Golden Hour", emoji: "🌅" },
 };
 
 const EXPORT_QUALITY_OPTIONS: Record<
@@ -703,15 +703,17 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       fontFamily: "'PannYeat', 'Aka02', 'Aka07', 'PhanTee', 'KoZ033', sans-serif",
     });
 
-    // SURGICAL EDIT: Audio speed rate state (0.5x – 2.0x)
+    // SURGICAL EDIT: Audio speed rate state (0.5x – 4.0x)
     const [audioSpeedRate, setAudioSpeedRate] = useState<number>(1.0);
 
     // SURGICAL EDIT: Freeze/Motion mode state
-    // ON  = 3s freeze zoom-in → 3s normal motion, alternating
+    // ON  = 3s Ken Burns freeze zoom-in → 5s smooth motion (alternating)
     // OFF = 100% normal speed, no zoom/crop
     const [freezeMode, setFreezeMode] = useState<boolean>(false);
     const freezeModeRef = useRef(freezeMode);
-    useEffect(() => { freezeModeRef.current = freezeMode; }, [freezeMode]);
+    useEffect(() => {
+      freezeModeRef.current = freezeMode;
+    }, [freezeMode]);
 
     // Apply audioSpeedRate to audio element whenever it changes
     useEffect(() => {
@@ -732,6 +734,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
     const [isDraggingSub, setIsDraggingSub] = useState(false);
     const [isDraggingBlur, setIsDraggingBlur] = useState(false);
+    // SURGICAL EDIT: Blur box touch/drag resize state
+    const [isResizingBlur, setIsResizingBlur] = useState(false);
+    const blurResizeStartRef = useRef<{ startX: number; startY: number; startW: number; startH: number } | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const blurBoxRef = useRef<HTMLDivElement>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -1412,7 +1417,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     };
 
     const handleDragMove = (e: React.MouseEvent | React.TouchEvent) => {
-      if (!isDraggingSub && !isDraggingBlur) return;
+      // SURGICAL EDIT: also handle blur resize during move
+      if (!isDraggingSub && !isDraggingBlur && !isResizingBlur) return;
       const activeContainer = containerRef.current;
       if (!activeContainer) return;
       e.preventDefault();
@@ -1426,6 +1432,19 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // ── FIX: write to ref only — no setState, no re-render during drag ──
       if (isDraggingSub) {
         dragSubPosRef.current = { x, y };
+      } else if (isResizingBlur && blurResizeStartRef.current) {
+        // SURGICAL EDIT: Compute new width/height from drag delta
+        const rs = blurResizeStartRef.current;
+        const deltaX = x - rs.startX;
+        const deltaY = y - rs.startY;
+        const newW = Math.max(5, Math.min(100, rs.startW + deltaX * 2));
+        const newH = Math.max(5, Math.min(100, rs.startH + deltaY * 2));
+        // Direct DOM update for smooth resize
+        if (blurBoxRef.current) {
+          blurBoxRef.current.style.width = `${newW}%`;
+          blurBoxRef.current.style.height = `${newH}%`;
+        }
+        blurResizeStartRef.current = { ...rs, startW: newW, startH: newH, startX: x, startY: y };
       } else if (isDraggingBlur) {
         dragBlurPosRef.current = { x, y };
         // ── FIX: Direct DOM update for smooth blur box dragging ──
@@ -1444,13 +1463,35 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       if (isDraggingBlur) {
         setBlurSettings((prev) => ({ ...prev, x: dragBlurPosRef.current.x, y: dragBlurPosRef.current.y }));
       }
+      // SURGICAL EDIT: Commit blur resize to state on drag end
+      if (isResizingBlur && blurResizeStartRef.current) {
+        const rs = blurResizeStartRef.current;
+        setBlurSettings((prev) => ({ ...prev, width: Math.round(rs.startW), height: Math.round(rs.startH) }));
+      }
       setIsDraggingSub(false);
       setIsDraggingBlur(false);
+      setIsResizingBlur(false);
+      blurResizeStartRef.current = null;
     };
 
     const handleBlurDragStart = (e: React.MouseEvent | React.TouchEvent) => {
       e.stopPropagation();
       setIsDraggingBlur(true);
+    };
+
+    // SURGICAL EDIT: Blur box resize via touch/drag on corner handles
+    const handleBlurResizeStart = (e: React.MouseEvent | React.TouchEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      const activeContainer = containerRef.current;
+      if (!activeContainer) return;
+      const container = activeContainer.getBoundingClientRect();
+      const clientX = "touches" in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+      const clientY = "touches" in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+      const x = ((clientX - container.left) / container.width) * 100;
+      const y = ((clientY - container.top) / container.height) * 100;
+      blurResizeStartRef.current = { startX: x, startY: y, startW: blurSettings.width, startH: blurSettings.height };
+      setIsResizingBlur(true);
     };
 
     const LOGO_POSITIONS: Record<string, { x: number; y: number; label: string }> = {
@@ -2036,35 +2077,68 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           const t = audioEl.currentTime;
 
           if (freezeModeRef.current) {
-            // ── FREEZE/MOTION MODE: 3s freeze zoom-in → 3s normal motion, alternating ──
-            const FREEZE_SEC = 3;
-            const MOTION_SEC = 3;
+            // ── SURGICAL EDIT: Professional Ken Burns Keyframe Freeze/Motion ──
+            // FREEZE: 5s slow gradual zoom-in (keyframe ease-out), video at near-zero speed
+            // MOTION: 5s normal playback with gentle pan, smooth transition — NO stutter
+            const FREEZE_SEC = 5;
+            const MOTION_SEC = 5;
             const CYCLE_SEC = FREEZE_SEC + MOTION_SEC;
             const cyclePos = t % CYCLE_SEC;
             const isFreezeCycle = cyclePos < FREEZE_SEC;
-            const ramp = isFreezeCycle
-              ? cyclePos / FREEZE_SEC           // 0→1 during freeze
-              : (cyclePos - FREEZE_SEC) / MOTION_SEC; // 0→1 during motion
-            const smoothRamp = ramp * ramp * (3 - 2 * ramp); // smoothstep
+
+            // Cross-fade easing at transition boundaries (0.4s blend zone)
+            const BLEND_SEC = 0.4;
 
             if (isFreezeCycle) {
-              // FREEZE phase: hold video at freeze-start frame, zoom in slowly
-              const freezeZoom = 1.0 + 0.08 * smoothRamp; // gentle 1.0 → 1.08x zoom
+              // ── FREEZE PHASE: Ken Burns slow zoom-in (keyframe ease-out) ──
+              const freezeProgress = cyclePos / FREEZE_SEC; // 0→1 over 5 seconds
+              // Cubic ease-out for very slow start, gradual acceleration — professional Ken Burns feel
+              const easeOut = 1 - Math.pow(1 - freezeProgress, 3);
+              const freezeZoom = 1.0 + 0.12 * easeOut; // gentle 1.0 → 1.12x over 5 seconds
+
               zoomedSrcW = Math.max(2, Math.round(srcCropW / freezeZoom));
               zoomedSrcH = Math.max(2, Math.round(srcCropH / freezeZoom));
-              // Center-anchor zoom (face safe upper-30% bias)
+              // Center-anchor zoom with upper-30% face-safe bias
               zoomedSrcX = srcCropX + Math.round((srcCropW - zoomedSrcW) / 2);
               zoomedSrcY = srcCropY + Math.round((srcCropH - zoomedSrcH) * 0.3);
-              // Freeze frame: hold video at the moment freeze started
-              videoEl.pause();
+
+              // SURGICAL EDIT: Instead of pause/play (causes stutter), use near-zero playbackRate
+              // This keeps the video decoder active — no warm-up hitch on resume
+              if (!videoEl.paused && !videoEl.ended) {
+                videoEl.playbackRate = 0.01; // virtually frozen but decoder stays warm
+              }
+
+              // Blend zone at end of freeze: start easing video speed back up
+              if (cyclePos > FREEZE_SEC - BLEND_SEC) {
+                const blendProgress = (cyclePos - (FREEZE_SEC - BLEND_SEC)) / BLEND_SEC;
+                const easeIn = blendProgress * blendProgress; // quadratic ease-in
+                videoEl.playbackRate = 0.01 + (1.0 - 0.01) * easeIn;
+              }
             } else {
-              // MOTION phase: normal speed, subtle pan
+              // ── MOTION PHASE: normal speed, subtle Ken Burns pan ──
+              const motionProgress = (cyclePos - FREEZE_SEC) / MOTION_SEC; // 0→1
+
+              // Ensure video is playing at normal speed
               if (videoEl.paused && !videoEl.ended) videoEl.play().catch(() => {});
-              const motionZoom = 1.02 + 0.02 * smoothRamp;
+
+              // Blend zone at start of motion: smooth speed ramp from freeze
+              if (motionProgress < BLEND_SEC / MOTION_SEC) {
+                const blendProgress = motionProgress / (BLEND_SEC / MOTION_SEC);
+                const easeIn = blendProgress * blendProgress;
+                videoEl.playbackRate = 0.01 + (1.0 - 0.01) * easeIn;
+              } else {
+                videoEl.playbackRate = 1.0;
+              }
+
+              // Zoom continues from where freeze ended (1.12x), gently settles back
+              const smoothMotion = motionProgress * motionProgress * (3 - 2 * motionProgress);
+              const motionZoom = 1.12 - 0.1 * smoothMotion; // 1.12x → 1.02x (settle back)
+
               zoomedSrcW = Math.max(2, Math.round(srcCropW / motionZoom));
               zoomedSrcH = Math.max(2, Math.round(srcCropH / motionZoom));
-              const panX = Math.cos(t * 0.15) * (srcCropW * 0.01) * smoothRamp;
-              const panY = Math.sin(t * 0.12) * (srcCropH * 0.01) * smoothRamp;
+              // Gentle sinusoidal pan during motion for cinematic feel
+              const panX = Math.cos(t * 0.1) * (srcCropW * 0.008) * smoothMotion;
+              const panY = Math.sin(t * 0.08) * (srcCropH * 0.006) * smoothMotion;
               zoomedSrcX = srcCropX + Math.round((srcCropW - zoomedSrcW) / 2 + panX);
               zoomedSrcY = srcCropY + Math.round((srcCropH - zoomedSrcH) * 0.3 + panY);
             }
@@ -2224,55 +2298,34 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           ctx.restore();
         }
 
-        // Blur box effect disabled — subtitle background is drawn below without blur/border.
+        // SURGICAL EDIT: Draw blur box effect at blur region position (separate from subtitle)
+        if (blurSettings.enabled) {
+          ctx.save();
+          const curBlur = blurSettingsRef.current;
+          const blurW = canvas.width * (curBlur.width / 100);
+          const blurH = canvas.height * (curBlur.height / 100);
+          const blurX = canvas.width * (curBlur.x / 100) - blurW / 2;
+          const blurY = canvas.height * (curBlur.y / 100) - blurH / 2;
+          // Draw semi-transparent darkened region to simulate blur in canvas output
+          ctx.fillStyle = `rgba(0,0,0,${Math.max(0.15, blurSettings.opacity / 200)})`;
+          ctx.beginPath();
+          ctx.roundRect(blurX, blurY, blurW, blurH, 6);
+          ctx.fill();
+          ctx.restore();
+        }
 
-        // Subtitles on canvas
+        // SURGICAL EDIT: Subtitles on canvas — rendered at subSettings.x/y, NO background box
         const subText = currentSubtitleRef.current;
-        if (subText && blurSettings.enabled) {
+        if (subText) {
           ctx.save();
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
 
-          let boxX: number, boxY: number, boxW: number, boxH: number;
-          let subCX: number, subCY: number;
-          if (blurSettings.enabled) {
-            const curBlur = blurSettingsRef.current;
-            boxW = canvas.width * (curBlur.width / 100);
-            boxH = canvas.height * (curBlur.height / 100);
-            boxX = canvas.width * (curBlur.x / 100) - boxW / 2;
-            boxY = canvas.height * (curBlur.y / 100) - boxH / 2;
-            subCX = boxX + boxW / 2;
-            subCY = boxY + boxH / 2;
-          } else {
-            const previewH = containerRef.current?.offsetHeight || 450;
-            const fontSizeFraction = subSettings.fontSize / previewH;
-            const baseFontSize = Math.round(canvas.height * fontSizeFraction);
-            const maxTextW = canvas.width * (subSettings.maxWidth / 100);
-            subCX = canvas.width / 2;
-            subCY = canvas.height * 0.88;
-            ctx.font = `bold ${baseFontSize}px ${subSettings.fontFamily}`;
-            const words2 = subText.split(" ");
-            const lines2: string[] = [];
-            let cl2 = "";
-            for (const w of words2) {
-              const tl = cl2 ? `${cl2} ${w}` : w;
-              if (ctx.measureText(tl).width > maxTextW - baseFontSize * 0.6 && cl2) {
-                lines2.push(cl2);
-                cl2 = w;
-              } else cl2 = tl;
-            }
-            if (cl2) lines2.push(cl2);
-            const lineH2 = baseFontSize * 1.45;
-            const longestW2 = Math.max(...lines2.map((l) => ctx.measureText(l).width));
-            boxW = longestW2 + baseFontSize * 0.8;
-            boxH = lines2.length * lineH2 + baseFontSize * 0.5;
-            boxX = subCX - boxW / 2;
-            boxY = subCY - boxH / 2;
-          }
-
-          const innerPadX = boxW * 0.04;
-          const maxTextWidth = boxW - innerPadX * 2;
-          const fontSize = fixedCanvasFontSizeRef.current || Math.max(8, Math.round(boxH * 0.18));
+          // Subtitle position from user drag (subSettings.x/y), NOT from blur box
+          const subCX = canvas.width * (subSettings.x / 100);
+          const subCY = canvas.height * (subSettings.y / 100);
+          const maxTextWidth = canvas.width * (subSettings.maxWidth / 100);
+          const fontSize = fixedCanvasFontSizeRef.current || Math.max(8, Math.round(canvas.height * 0.04));
           ctx.font = `bold ${fontSize}px ${subSettings.fontFamily}`;
           const lineHeight = fontSize * 1.4;
 
@@ -2365,52 +2418,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
           const totalTextH = displayLines.length * lineHeight;
 
-          // SURGICAL EDIT: Subtle semi-transparent pill background (reference screenshot style)
-          // ခပ်ပါးပါးလေး rgba(0,0,0,0.30) — readable on bright video without heavy box
-          ctx.save();
-          ctx.shadowColor = "transparent";
-          ctx.shadowBlur = 0;
-          const pillPadX = fontSize * 0.55;
-          const pillPadY = fontSize * 0.22;
-          const pillW = boxW * 0.96;
-          const pillH = totalTextH + pillPadY * 2;
-          const pillX = subCX - pillW / 2;
-          const pillY = subCY - totalTextH / 2 - pillPadY;
-          const pillR = Math.min(pillH / 2, fontSize * 0.45); // rounded corners
-
-          // SURGICAL EDIT: Fade-in alpha for smooth professional transition
+          // SURGICAL EDIT: NO pill background — clean text only, matching preview
+          // Fade-in alpha for smooth professional transition
           const fadeElapsed = performance.now() - subFadeStartRef.current;
           const FADE_MS = 180;
           const fadeAlpha = Math.min(1, fadeElapsed / FADE_MS);
-
-          ctx.fillStyle = `rgba(0,0,0,${0.30 * fadeAlpha})`;
-          ctx.beginPath();
-          ctx.moveTo(pillX + pillR, pillY);
-          ctx.lineTo(pillX + pillW - pillR, pillY);
-          ctx.quadraticCurveTo(pillX + pillW, pillY, pillX + pillW, pillY + pillR);
-          ctx.lineTo(pillX + pillW, pillY + pillH - pillR);
-          ctx.quadraticCurveTo(pillX + pillW, pillY + pillH, pillX + pillW - pillR, pillY + pillH);
-          ctx.lineTo(pillX + pillR, pillY + pillH);
-          ctx.quadraticCurveTo(pillX, pillY + pillH, pillX, pillY + pillH - pillR);
-          ctx.lineTo(pillX, pillY + pillR);
-          ctx.quadraticCurveTo(pillX, pillY, pillX + pillR, pillY);
-          ctx.closePath();
-          ctx.fill();
-
-          // SURGICAL EDIT: Clip text to pill boundary — text NEVER overflows box
-          ctx.beginPath();
-          ctx.moveTo(pillX + pillR, pillY);
-          ctx.lineTo(pillX + pillW - pillR, pillY);
-          ctx.quadraticCurveTo(pillX + pillW, pillY, pillX + pillW, pillY + pillR);
-          ctx.lineTo(pillX + pillW, pillY + pillH - pillR);
-          ctx.quadraticCurveTo(pillX + pillW, pillY + pillH, pillX + pillW - pillR, pillY + pillH);
-          ctx.lineTo(pillX + pillR, pillY + pillH);
-          ctx.quadraticCurveTo(pillX, pillY + pillH, pillX, pillY + pillH - pillR);
-          ctx.lineTo(pillX, pillY + pillR);
-          ctx.quadraticCurveTo(pillX, pillY, pillX + pillR, pillY);
-          ctx.closePath();
-          ctx.clip();
-          void pillPadX;
 
           // Premium Neon Vibe: Use override color or animated hue
           const neonHue = subNeonHueRef.current;
@@ -2439,7 +2451,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           // SURGICAL EDIT: Dynamic Stroke Color Logic — auto-matches text color
           const tc = subSettings.textColor.toUpperCase();
           let dynamicStroke = "#000000"; // default: Black
-          if (tc === "#F44336" || tc === "#E91E63" || tc === "#FF4500" || tc === "#FF6B6B" || tc.startsWith("#FF") && (tc.endsWith("36") || tc.endsWith("63") || tc.endsWith("00"))) {
+          if (
+            tc === "#F44336" ||
+            tc === "#E91E63" ||
+            tc === "#FF4500" ||
+            tc === "#FF6B6B" ||
+            (tc.startsWith("#FF") && (tc.endsWith("36") || tc.endsWith("63") || tc.endsWith("00")))
+          ) {
             // Red family → White stroke
             dynamicStroke = "#FFFFFF";
           } else if (tc === "#00FF88" || tc === "#32CD32" || tc === "#10B981" || tc === "#8BC34A" || tc === "#00D4AA") {
@@ -2715,7 +2733,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               // SURGICAL EDIT: Emergency hard-seek threshold 3.0→0.5s for 100% timing accuracy
               if (Math.abs(drift) > 0.5) {
                 vv.currentTime = targetVideoTime;
-                vv.playbackRate = baseRate;
+                // SURGICAL EDIT: Scale video rate by audioSpeedRate for actual speed effect on output
+                vv.playbackRate = baseRate * audioSpeedRate;
               } else {
                 // Precise drift correction for millisecond-accurate sync
                 const driftAbs = Math.abs(drift);
@@ -2723,17 +2742,18 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
                 if (driftAbs < 0.005) {
                   // Within 5ms: gentle return to base rate for stability
-                  vv.playbackRate = vv.playbackRate + (baseRate - vv.playbackRate) * 0.1;
+                  const scaledBase = baseRate * audioSpeedRate;
+                  vv.playbackRate = vv.playbackRate + (scaledBase - vv.playbackRate) * 0.1;
                 } else if (driftAbs < 0.05) {
                   // 5-50ms drift: proportional correction
                   const correction = driftSign * Math.min(driftAbs * 2.0, 0.08);
-                  const targetRate = baseRate + correction;
+                  const targetRate = baseRate * audioSpeedRate + correction;
                   vv.playbackRate = vv.playbackRate + (targetRate - vv.playbackRate) * 0.25;
                 } else {
                   // 50ms-3s drift: aggressive correction
                   const correction = driftSign * Math.min(driftAbs * 0.5, 0.15);
-                  const targetRate = baseRate + correction;
-                  vv.playbackRate = Math.min(Math.max(targetRate, 0.85), 1.15);
+                  const targetRate = baseRate * audioSpeedRate + correction;
+                  vv.playbackRate = Math.min(Math.max(targetRate, 0.5), 4.5);
                 }
               }
             }
@@ -2777,7 +2797,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       }
 
       // SURGICAL FIX: Ensure perfect audio start by playing ONLY after async recorder setup completes (warmup + logo load)
-      if (audioRef.current) audioRef.current.play().catch(console.error);
+      // SURGICAL EDIT: Apply audioSpeedRate at recording start for actual effect on output
+      if (audioRef.current) {
+        audioRef.current.playbackRate = audioSpeedRate;
+        audioRef.current.play().catch(console.error);
+      }
       if (videoRef.current) {
         videoRef.current.play().catch((err) => {
           // SURGICAL IOS FIX: Safely bypass the WebKit muted autoplay bug.
@@ -3095,90 +3119,122 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   )}
                 </div>
 
-                {/* Blur Box Layer */}
-                {!isRenderingRef.current && (
+                {/* SURGICAL EDIT: Blur Box Layer — pure blur region, NO subtitle inside */}
+                {!isRenderingRef.current && blurSettings.enabled && (
                   <div
                     ref={blurBoxRef}
                     onMouseDown={handleBlurDragStart}
                     onTouchStart={handleBlurDragStart}
-                    className="absolute z-20 cursor-move flex items-center justify-center"
+                    className="absolute z-20 cursor-move"
                     style={{
                       left: `${blurSettings.x}%`,
                       top: `${blurSettings.y}%`,
                       transform: "translate(-50%, -50%)",
                       width: `${blurSettings.width}%`,
                       height: `${blurSettings.height}%`,
-                      backdropFilter: "none",
-                      WebkitBackdropFilter: "none",
-                      border: "none",
-                      boxShadow: "none",
+                      backdropFilter: `blur(${Math.max(2, blurSettings.opacity / 5)}px)`,
+                      WebkitBackdropFilter: `blur(${Math.max(2, blurSettings.opacity / 5)}px)`,
+                      backgroundColor: `rgba(0,0,0,${blurSettings.opacity / 200})`,
+                      border: "1.5px dashed rgba(255,255,255,0.35)",
                       touchAction: "none",
                       boxSizing: "border-box",
-                      overflow: "hidden",
                       borderRadius: "6px",
                       transition: "border-color 0.1s, box-shadow 0.1s",
                     }}
                   >
-                    {(currentSubtitle || scriptData.segments[0]?.text || "Subtitle") && (
+                    {/* SURGICAL EDIT: Corner resize handles for touch/drag resize */}
+                    {[
+                      { cursor: "nwse-resize", top: "-4px", left: "-4px", right: "auto", bottom: "auto" },
+                      { cursor: "nesw-resize", top: "-4px", left: "auto", right: "-4px", bottom: "auto" },
+                      { cursor: "nesw-resize", top: "auto", left: "-4px", right: "auto", bottom: "-4px" },
+                      { cursor: "nwse-resize", top: "auto", left: "auto", right: "-4px", bottom: "-4px" },
+                    ].map((pos, idx) => (
                       <div
-                        className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                        key={idx}
+                        onMouseDown={handleBlurResizeStart}
+                        onTouchStart={handleBlurResizeStart}
                         style={{
-                          backgroundColor: "transparent",
-                          borderRadius: "inherit",
-                          padding: "4% 4%",
+                          position: "absolute",
+                          width: "14px",
+                          height: "14px",
+                          backgroundColor: "rgba(255,255,255,0.8)",
+                          border: "2px solid rgba(0,150,255,0.9)",
+                          borderRadius: "3px",
+                          cursor: pos.cursor,
+                          touchAction: "none",
+                          top: pos.top,
+                          left: pos.left,
+                          right: pos.right,
+                          bottom: pos.bottom,
+                          zIndex: 30,
                         }}
-                      >
-                        {/* SURGICAL EDIT: Subtle pill bg wrapper — reference screenshot style */}
-                        <div
-                          style={{
-                            backgroundColor: "rgba(0,0,0,0.30)",
-                            borderRadius: "999px",
-                            padding: "3px 14px 5px 14px",
-                            display: "inline-block",
-                            maxWidth: "100%",
-                          }}
-                        >
-                        <div
-                          key={subtitleKey}
-                          className="w-full text-center font-bold"
-                          style={(() => {
-                            // SURGICAL EDIT: Dynamic Stroke Color for preview (matches canvas logic)
-                            const tc = subSettings.textColor.toUpperCase();
-                            let previewStroke = "#000000";
-                            if (tc === "#F44336" || tc === "#E91E63" || tc === "#FF4500" || tc === "#FF6B6B" || (tc.startsWith("#FF") && (tc.endsWith("36") || tc.endsWith("63") || tc.endsWith("00")))) {
-                              previewStroke = "#FFFFFF";
-                            } else if (tc === "#00FF88" || tc === "#32CD32" || tc === "#10B981" || tc === "#8BC34A" || tc === "#00D4AA") {
-                              previewStroke = "#006400";
-                            } else if (tc === "#9C27B0" || tc === "#7B68EE" || tc === "#A855F7") {
-                              previewStroke = "#FF1493";
-                            } else if (tc === "#FACC15" || tc === "#FFD700" || tc === "#FFB800" || tc === "#FF9800") {
-                              previewStroke = "#FF8C00";
-                            } else if (tc === "#FFFFFF") {
-                              previewStroke = "#000000";
-                            }
-                            return {
-                              color: subSettings.textColor,
-                              fontFamily: subSettings.fontFamily,
-                              fontSize: `clamp(8px, ${subSettings.fontSize}px, 100%)`,
-                              lineHeight: 1.4,
-                              textShadow: `0 1px 4px rgba(0,0,0,0.9)`,
-                              WebkitTextStroke: `1.5px ${previewStroke}`,
-                              paintOrder: "stroke fill",
-                              wordBreak: "break-word" as const,
-                              overflowWrap: "break-word" as const,
-                              // SURGICAL EDIT: Clip text inside pill — no overflow
-                              overflow: "hidden" as const,
-                              whiteSpace: "normal" as const,
-                              // SURGICAL EDIT: Smooth fade+slide-up professional transition
-                              animation: "subFadeSlide 0.18s cubic-bezier(0.22,1,0.36,1) both",
-                            };
-                          })()}
-                        >
-                          {currentSubtitle || scriptData.segments[0]?.text || "Subtitle"}
-                        </div>
-                        </div>
-                      </div>
-                    )}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {/* SURGICAL EDIT: Subtitle Text — separate draggable overlay, NO background box */}
+                {!isRenderingRef.current && (currentSubtitle || scriptData.segments[0]?.text) && (
+                  <div
+                    onMouseDown={handleDragStart}
+                    onTouchStart={handleDragStart}
+                    className="absolute z-25 cursor-move select-none"
+                    style={{
+                      left: `${subSettings.x}%`,
+                      top: `${subSettings.y}%`,
+                      transform: "translate(-50%, -50%)",
+                      maxWidth: `${subSettings.maxWidth}%`,
+                      touchAction: "none",
+                      pointerEvents: "auto",
+                    }}
+                  >
+                    <div
+                      key={subtitleKey}
+                      className="text-center font-bold"
+                      style={(() => {
+                        // SURGICAL EDIT: Dynamic Stroke Color for preview (matches canvas logic)
+                        const tc = subSettings.textColor.toUpperCase();
+                        let previewStroke = "#000000";
+                        if (
+                          tc === "#F44336" ||
+                          tc === "#E91E63" ||
+                          tc === "#FF4500" ||
+                          tc === "#FF6B6B" ||
+                          (tc.startsWith("#FF") && (tc.endsWith("36") || tc.endsWith("63") || tc.endsWith("00")))
+                        ) {
+                          previewStroke = "#FFFFFF";
+                        } else if (
+                          tc === "#00FF88" ||
+                          tc === "#32CD32" ||
+                          tc === "#10B981" ||
+                          tc === "#8BC34A" ||
+                          tc === "#00D4AA"
+                        ) {
+                          previewStroke = "#006400";
+                        } else if (tc === "#9C27B0" || tc === "#7B68EE" || tc === "#A855F7") {
+                          previewStroke = "#FF1493";
+                        } else if (tc === "#FACC15" || tc === "#FFD700" || tc === "#FFB800" || tc === "#FF9800") {
+                          previewStroke = "#FF8C00";
+                        } else if (tc === "#FFFFFF") {
+                          previewStroke = "#000000";
+                        }
+                        return {
+                          color: subSettings.textColor,
+                          fontFamily: subSettings.fontFamily,
+                          fontSize: `clamp(8px, ${subSettings.fontSize}px, 100%)`,
+                          lineHeight: 1.4,
+                          textShadow: `0 2px 8px rgba(0,0,0,0.95), 0 0px 2px rgba(0,0,0,0.8)`,
+                          WebkitTextStroke: `1.5px ${previewStroke}`,
+                          paintOrder: "stroke fill",
+                          wordBreak: "break-word" as const,
+                          overflowWrap: "break-word" as const,
+                          // SURGICAL EDIT: Smooth fade+slide-up professional transition
+                          animation: "subFadeSlide 0.18s cubic-bezier(0.22,1,0.36,1) both",
+                        };
+                      })()}
+                    >
+                      {currentSubtitle || scriptData.segments[0]?.text}
+                    </div>
                   </div>
                 )}
 
@@ -3694,7 +3750,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     </div>
 
                     <p className="text-xs text-slate-500 italic">
-                      Tip: Blur Region ON ထားရင် subtitle blur box ထဲ ပေါ်မည်။
+                      Tip: Blur Region ON ထားရင် video ပေါ်မှာ blur box ပေါ်မည်။ Sub text သီးခြားပေါ်မည်။
                     </p>
                   </div>
                 </div>
@@ -3734,7 +3790,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                         </div>
                       ))}
                       <p className="text-xs text-slate-500 italic">
-                        Tip: Drag the blur box on the video to position it.
+                        Tip: Drag to move, pull corners to resize the blur box.
                       </p>
                     </div>
                   )}
@@ -3768,23 +3824,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       <div className="flex items-center gap-3">
                         <span className="text-xs text-slate-500 shrink-0">Color</span>
                         <div className="flex gap-1.5 flex-wrap">
-                          {[
-                            "#FFFFFF",
-                            "#CCFF00",
-                            "#00FFFF",
-                            "#FFD700",
-                            "#FF1493",
-                            "#FF6600",
-                            "#A855F7",
-                            "#00FF88",
-                          ].map((c) => (
-                            <button
-                              key={c}
-                              onClick={() => setWatermark((w) => ({ ...w, color: c }))}
-                              className={`w-4 h-4 rounded-full border-2 transition-all ${watermark.color === c ? "ring-2 ring-white scale-110 border-white" : "border-slate-600"}`}
-                              style={{ backgroundColor: c }}
-                            />
-                          ))}
+                          {["#FFFFFF", "#CCFF00", "#00FFFF", "#FFD700", "#FF1493", "#FF6600", "#A855F7", "#00FF88"].map(
+                            (c) => (
+                              <button
+                                key={c}
+                                onClick={() => setWatermark((w) => ({ ...w, color: c }))}
+                                className={`w-4 h-4 rounded-full border-2 transition-all ${watermark.color === c ? "ring-2 ring-white scale-110 border-white" : "border-slate-600"}`}
+                                style={{ backgroundColor: c }}
+                              />
+                            ),
+                          )}
                         </div>
                       </div>
                       {/* Font Size */}
@@ -3851,9 +3900,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                           className="accent-amber-500 h-1 bg-slate-700 rounded-lg w-full"
                         />
                       </div>
-                      <p className="text-xs text-slate-500 italic">
-                        Tip: Watermark text ကို video export မှာ ပါလာမည်။
-                      </p>
+                      <p className="text-xs text-slate-500 italic">Tip: Watermark text ကို video export မှာ ပါလာမည်။</p>
                     </div>
                   )}
                 </div>
@@ -3865,7 +3912,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">⏸ Freeze / Motion</h4>
                       <span className="text-[10px] text-slate-500">
                         {freezeMode
-                          ? "3s freeze zoom-in → 3s normal motion (alternating)"
+                          ? "5s Ken Burns zoom-in → 5s smooth motion (pro)"
                           : "Normal speed · no freeze · no zoom"}
                       </span>
                     </div>
@@ -3891,7 +3938,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   <input
                     type="range"
                     min={0.5}
-                    max={2.0}
+                    max={4.0}
                     step={0.05}
                     value={audioSpeedRate}
                     onChange={(e) => setAudioSpeedRate(Number(e.target.value))}
@@ -3899,7 +3946,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   />
                   {/* Speed Preset Buttons */}
                   <div className="flex gap-1.5 justify-between">
-                    {[0.75, 1.0, 1.25, 1.5, 1.75].map((s) => (
+                    {[1.0, 1.5, 2.0, 3.0, 4.0].map((s) => (
                       <button
                         key={s}
                         onClick={() => setAudioSpeedRate(s)}
@@ -4704,14 +4751,17 @@ const RecapVideoNVPage: React.FC = () => {
         nativeVoiceInstructions:
           nativeInstructions +
           " CRITICAL: You MUST narrate the COMPLETE text from BEGINNING to END without skipping any part. Start from the very first word and continue to the very last word. Do NOT truncate or summarize.",
-        // ── PACING & EMOTION: natural continuous pacing, professional storyteller, contextual realistic emotion ──
+        // ── PACING & EMOTION: compelling continuous storytelling, zero dead air, international recap channel quality ──
         styleInstructions:
           nativeInstructions +
-          ` PROFESSIONAL STORYTELLING: Speak like a real Yangon human narrator with natural flow. ` +
-          ` Automatically adapt emotional tone to match the context and mood of the script. ` +
+          ` CINEMATIC STORYTELLING VOICE: You are the voice of a world-class movie recap channel. ` +
+          ` Your voice must be GRIPPING, COMPELLING, and CONTINUOUS — like MrBallen, Daniel Gonzalez, or StoryRecapped narrators. ` +
+          ` NEVER leave dead air or long pauses between sentences. Each sentence must flow IMMEDIATELY into the next with momentum. ` +
+          ` Build tension, suspense, and curiosity in your voice. Make the listener NEED to hear what happens next. ` +
+          ` Automatically adapt emotional intensity to match the scene: whisper for horror, urgency for action, warmth for romance, shock for twists. ` +
           (voiceMode === "modern"
-            ? ` Pace: lively and engaging, but still natural. Allow micro-pauses at natural sentence boundaries. Let there be light, realistic breathing. Avoid robotic cadence.`
-            : ` Pace: conversational and clear (not forced-fast). Include realistic pauses and light breaths at clause ends. Avoid robotic cadence; sound human.`),
+            ? ` Pace: FAST and high-energy like a thriller narrator. Sentences connect rapidly with NO gaps. Only allow the tiniest breath at major story beats. Sound urgent, exciting, and unrelenting. Keep the audience on the edge of their seat.`
+            : ` Pace: Confident, clear, and steadily flowing like a professional documentary narrator. Sentences connect smoothly with minimal pauses. Sound authoritative and engaging. Never drag or slow down between sentences.`),
         voiceConfig: {
           speakingStyle: "natural_conversational",
           pronunciationStrictness: "native_only",
@@ -4918,9 +4968,40 @@ const RecapVideoNVPage: React.FC = () => {
       const scriptBody: Record<string, unknown> = {
         fileUri,
         fileMimeType: mimeType,
-        // ── COMPLETION MANDATE + original-voice recap (prompt-only; does not affect AV sync) ──
-        niche: `MOVIE RECAP — Original ${selectedLangName} narration (transformative recap, not a transcript).
-You MUST write the COMPLETE script for the ENTIRE video duration in ${selectedLangName} language ONLY. Do NOT stop halfway; cover 100% of the story arc from start to finish.
+        // ── INTELLIGENT RECAP EDITOR PROMPT (surgical edit — comprehensive recap instructions) ──
+        niche: `You are an intelligent and professional movie recap editor.
+
+Your task is to analyze the uploaded movie/video and create a condensed, fast-paced recap version like YouTube movie recap channels. Do NOT simply speed up or use only the first part. You must understand the FULL STORY.
+
+CRITICAL STORYTELLING RULE:
+Write the narration script as ONE CONTINUOUS GRIPPING STORY. Every sentence must hook into the next — create momentum, tension, and curiosity.
+Do NOT write isolated disconnected paragraphs. Each segment must END with a hook or transition that PULLS the listener into the next segment.
+Examples of good transitions: "But what she didn't know was..." / "And that's when everything changed." / "Just when he thought it was over..."
+The narration must feel like a non-stop thriller story, NOT a boring lecture or news report.
+
+IMPORTANT EDITING RULE:
+Keep the important story moments, but remove unnecessary transition actions, filler activities, and dead air between them.
+Example: If a character is sick and goes to the hospital,
+Keep: The character being sick, arriving at the hospital, and receiving treatment.
+Remove: Changing clothes, walking to the car, driving scenes, waiting scenes, and unnecessary travel shots.
+
+INSTRUCTIONS:
+- Keep the entire story from beginning to ending (Chronological order).
+- Remove unnecessary long scenes, silence, slow walking, repetitive actions, filler moments, and unimportant dialogues.
+- Focus on: Main plot points, character introductions, important conflicts, twists, emotional/shocking moments, and the conclusion.
+- Shorten conversations while keeping the original meaning and storytelling quality.
+- Make scene jumps and cuts feel natural, smooth, and easy to understand.
+
+PACING & DURATION RULE:
+- Dynamically adjust the output duration based on the input video length: if the source video is short (e.g., under 10 minutes), the recap should be logically shorter and highly compressed (e.g., 3-5 minutes); if the source is a full-length movie, keep the recap around 10-20 minutes.
+- Avoid dragging, stretching, or looping footage just to meet a specific time target.
+
+IMPORTANT:
+Do NOT summarize using text only.
+Do NOT randomly cut scenes.
+Actually edit the video by intelligently compressing the narrative while preserving a professional complete story experience.
+
+LANGUAGE: Write the COMPLETE script in ${selectedLangName} language ONLY. Do NOT stop halfway; cover 100% of the story arc from start to finish.
 Never output partial/incomplete script.${burmeseStyleBlock}
 
 FORMAT (CRITICAL FOR SEGMENTING):
@@ -4937,7 +5018,23 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
 - Script completeness: MUST cover the entire ${duration} seconds with no early stop.
 - Each segment must be continuous and not jump suddenly.
 - Never stop early. Continue writing until final segment reaches the ending timeline.
-- If token pressure appears, prioritize finishing all remaining timeline in concise segments instead of stopping.${burmeseExtraStyle}`,
+- If token pressure appears, prioritize finishing all remaining timeline in concise segments instead of stopping.
+
+INTELLIGENT EDITING RULES (for script generation):
+- Keep the important story moments, but remove unnecessary transition actions, filler activities, and dead air between them.
+- Remove unnecessary long scenes, silence, slow walking, repetitive actions, filler moments, and unimportant dialogues.
+- Focus on: Main plot points, character introductions, important conflicts, twists, emotional/shocking moments, and the conclusion.
+- Shorten conversations while keeping the original meaning and storytelling quality.
+- Make scene jumps and cuts feel natural, smooth, and easy to understand.
+- Dynamically adjust the output duration based on the input video length.
+- Do NOT randomly cut scenes. Intelligently compress the narrative while preserving a professional complete story experience.
+
+STORYTELLING FLOW (CRITICAL — eliminates dead air):
+- Write narration as a CONTINUOUS FLOWING STORY. Never write isolated disconnected paragraphs.
+- Each segment MUST end with a hook or transition line that creates MOMENTUM into the next segment.
+- Use cliffhanger-style transitions: "But that was just the beginning..." / "And then, everything went wrong."
+- Keep sentence density HIGH. No filler words, no unnecessary repetition, no padding.
+- When the TTS reads this script, there should be ZERO moments where the audience wants to skip.${burmeseExtraStyle}`,
         generationConfig: {
           maxOutputTokens,
           temperature: 0.7,
