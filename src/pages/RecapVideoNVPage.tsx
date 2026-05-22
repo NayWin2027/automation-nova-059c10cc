@@ -2843,6 +2843,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     if (!vv.paused) vv.pause();
                   }
                 }
+                }
             } else {
               // Fallback: word-count proportional (no timestamps available)
               const aPct = currentTime / av.duration;
