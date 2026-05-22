@@ -5075,7 +5075,11 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
       // User must click Generate button to start
       setVideoFile(file);
       videoFileRef.current = file;
-      setProgressMsg("✅ Video ရွေးပြီးပါပြီ။ Generate ခလုတ်နှိပ်ပါ။");
+      // SURGICAL EDIT: Create videoUrl immediately so all settings UI appears
+      // User can configure settings before clicking Generate
+      const blobUrl = URL.createObjectURL(file);
+      setVideoUrl(blobUrl);
+      setProgressMsg("✅ Video ရွေးပြီးပါပြီ။ Setting များ ချိန်ပြီး Generate ခလုတ်နှိပ်ပါ။");
       setStatus("idle");
     }
   };
