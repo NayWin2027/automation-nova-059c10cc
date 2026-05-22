@@ -1,54 +1,33 @@
 ## Goal
-Edge-TTS (Microsoft) ကို voice generation အတွက် ထည့်ပေးမယ်။ Burmese (Thiha, Nilar) voice တွေ ရအောင်ထည့်ပေးမယ်။ Google Cloud / VoxCPM အကုန် မထိဘူး။
+Microsoft Edge TTS မှာ **Multilingual v2** အသံ `it-IT-GiuseppeMultilingualNeural` ကို ထပ်ထည့်ပြီး **default** အဖြစ် သတ်မှတ်မယ်။ မြန်မာစာသား input ကို သူ့အသံနဲ့ သဘာဝကျကျ ထွက်အောင် configure လုပ်မယ်။ Google TTS / ရှိပြီးသား Edge voices (Thiha, Nilar) တို့ကို **ဘာမှ မထိ**။
 
-## Background
-Microsoft Edge-TTS မှာ Burmese (my-MM) အတွက် ၂ voice ပဲ ရှိတယ်:
-- **`my-MM-ThihaNeural`** (Male) — "Thiha"
-- **`my-MM-NilarNeural`** (Female) — "Nilar"
+## Voice name confirmation
+User က `it-IT-GiuseppeNeural` လို့ ပြောထားပေမယ့်၊ Microsoft Multilingual v2 (multi-language support ပါတဲ့ ဗားရှင်း) ရဲ့ တရားဝင်နာမည်က **`it-IT-GiuseppeMultilingualNeural`** ဖြစ်တယ်။ ဒီ voice သာ မြန်မာစာ အပါအဝင် 70+ language ကို ထောက်ပံ့တာ။ `it-IT-GiuseppeNeural` (non-multilingual) က Italian တင်ပဲ ထွက်တာဖြစ်လို့ မြန်မာစာ မရဘူး။ ဒါကြောင့် **Multilingual variant** ကို သုံးမယ်။
 
-API key မလို၊ ၁၀၀% free၊ unlimited။ Edge browser ရဲ့ TTS endpoint ကို WebSocket နဲ့ ခေါ်ပြီး MP3 ပြန်ရတယ်။
+## Surgical edits (၂ ဖိုင်တည်း၊ အကြောင်းအချို့လိုင်းတည်း)
 
-## Plan — Surgical, Edge-TTS တင်
+### 1. `supabase/functions/edge-tts/index.ts` — 2 surgical changes
+- `ALLOWED_VOICES` Set ထဲ `"it-IT-GiuseppeMultilingualNeural"` တစ်ကြောင်း ထပ်ထည့်
+- Default voice ကို `"my-MM-ThihaNeural"` ကနေ `"it-IT-GiuseppeMultilingualNeural"` ပြောင်း (line 93 — `body.voice ?? ...` fallback)
+- `humanizeBurmese()` text-normalization က မြန်မာ punctuation (၊ ။) ကို ASCII (, .) ပြောင်းတဲ့ logic ရှိပြီးသား ဖြစ်လို့ multilingual voice က မြန်မာစာကို prosody မှန်မှန်နဲ့ ထွက်လာမယ်။ ထပ်ပြင်စရာ မလို။
 
-### 1. New Edge Function: `supabase/functions/edge-tts/index.ts` (NEW file only)
-- POST `{ text, voice, rate?, pitch? }` လက်ခံမယ်
-- Auth verify (existing `_shared/auth.ts` pattern)
-- Credit deduct (Voice tool ID နဲ့ existing `deduct_user_credits` RPC)
-- Microsoft Edge TTS WebSocket (`wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1`) ကို ခေါ်မယ်
-- SSML build → MP3 binary ပြန်ပေး (base64 encoded JSON response)
-- Default voice: `my-MM-ThihaNeural`
-- CORS shared helper သုံး
+### 2. `src/pages/VoicePage.tsx` — 1 surgical change (line 363-365 voice array ထဲ)
+- Voices array ရဲ့ **အပေါ်ဆုံး (index 0)** မှာ entry အသစ်တစ်ခု ထပ်ထည့်:
+  ```
+  { name: "GIUSEPPE ⭐ (MULTILINGUAL)", gender: "MALE ♂", value: "edge:it-IT-GiuseppeMultilingualNeural", color: "from-amber-500 to-orange-700" }
+  ```
+- ဒါက default selection အဖြစ် ပထမဆုံး ပေါ်လာမယ်။ Thiha / Nilar တို့ နဲ့ ကျန် voices အားလုံး မထိ၊ မဖျက်။
 
-### 2. New page: `src/pages/EdgeTtsPage.tsx` (NEW file only)
-Existing `VoicePage.tsx` ပုံစံအတိုင်း minimal version:
-- Text input (Burmese)
-- Voice selector: Thiha (Male) / Nilar (Female)
-- Rate slider (-50% to +50%), Pitch slider (-50Hz to +50Hz)
-- Generate button → calls `edge-tts` edge function
-- Audio player + download (.mp3)
-- Uses `useAuthGuard`, `useCreditDeduction`, `preCheckCredits` (existing patterns)
+### 3. RecapVideoNVPage.tsx default voice
+- User က Voice tool အကြောင်းပဲ ပြောထားလို့ RecapVideoNV ထဲက default Thiha ကို **မထိ**။
+- လိုအပ်ရင် ဒုတိယ message မှာ ပြန်ပြောပါ။
 
-### 3. Route + nav (surgical 2-line additions)
-- `src/App.tsx` — `<Route path="/edge-tts" element={<EdgeTtsPage />} />` တစ်ကြောင်းထည့်
-- `src/pages/Index.tsx` — Tool card တစ်ခုထည့် (existing card pattern follow)
-
-### 4. Tool settings row (migration)
-- `tool_settings` table မှာ `tool_id = 'edge-tts'` row တစ်ခု insert (credit_cost: 5၊ title: "Edge TTS - မြန်မာအသံ")
-
-## NOT touched (locked / protected)
-- `RecapVideoNVPage.tsx` အကုန် (4 protected blocks)
-- `gemini-tts` edge function
-- Existing `VoicePage.tsx`
-- VoxCPM worker files (voxcpm-worker/ folder အတိုင်းထား)
-- Upload pipeline, credit/auth logic, admin code
-
-## Technical Notes
-- Edge-TTS WebSocket ကို Deno runtime မှာ native WebSocket API နဲ့ ခေါ်လို့ရတယ်
-- DRM token အလို မရှိ၊ free public endpoint
-- Response: audio binary chunks (MP3) → concat → base64 → JSON return
-- Client side base64 → Blob → audio.src
+## NOT touched (locked)
+- `RecapVideoNVPage.tsx` ၄ protected blocks အကုန်
+- `gemini-tts/` edge function (Google TTS)
+- Existing Thiha + Nilar voices (entries + ALLOWED_VOICES ထဲ ဆက်ရှိ)
+- VoxCPM worker, upload pipeline, credit / auth logic
+- ကျန် voices array entries 19+ ခု
 
 ## Timeline
-~10 minutes total. No external deployment needed (edge function auto-deploys)။
-
-## Approve လုပ်ပြီးတာနဲ့ Build mode ပြောင်းပြီး တန်းလုပ်ပေးမယ်။
+~2 minutes. Edge function auto-deploys ဖြစ်ပါတယ်။ Approve ပေးတာနဲ့ build mode ပြောင်းပြီး တန်းလုပ်မယ်။
