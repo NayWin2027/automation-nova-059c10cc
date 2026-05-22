@@ -5334,9 +5334,7 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
           if (match) {
             const parsed = JSON.parse(match[0]);
             if (typeof parsed.index === "number" && parsed.index >= 0 && parsed.index < segments.length) {
-              hookSegmentIdxRef.current = parsed.index;
-              hookTitleRef.current = (parsed.hookTitle || "").trim();
-              console.log(`[HOOK DETECTOR] Segment ${parsed.index}: "${hookTitleRef.current}"`);
+              console.log(`[HOOK DETECTOR] Segment ${parsed.index}: "${(parsed.hookTitle || "").trim()}"`);
             }
           }
         } catch (e) {
@@ -5384,7 +5382,6 @@ Respond ONLY with valid JSON:
           if (metaMatch) {
             const parsed = JSON.parse(metaMatch[0]);
             if (parsed.title && parsed.description && parsed.hashtags) {
-              setYoutubeMetadata({ title: parsed.title, description: parsed.description, hashtags: parsed.hashtags });
               console.log("[YT METADATA] Generated:", parsed.title);
             }
           }
