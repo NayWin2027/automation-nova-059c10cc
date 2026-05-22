@@ -2843,7 +2843,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     if (!vv.paused) vv.pause();
                   }
                 }
-                }
             } else {
               // Fallback: word-count proportional (no timestamps available)
               const aPct = currentTime / av.duration;
@@ -2869,6 +2868,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               } else {
                 if (!vv.paused) vv.pause();
               }
+            }
             }
 
             if (activeIndex !== -1 && activeText) {
