@@ -4403,6 +4403,7 @@ interface RecapHistoryItem {
 }
 
 const VOICE_OPTIONS = [
+  { value: "edge:it-IT-GiuseppeMultilingualNeural", label: "⭐ Giuseppe (Multilingual v2 — Male)", gender: "Male" },
   { value: "edge:my-MM-ThihaNeural", label: "⭐ Thiha (Burmese Native — Male)", gender: "Male" },
   { value: "edge:my-MM-NilarNeural", label: "⭐ Nilar (Burmese Native — Female)", gender: "Female" },
   { value: "Zephyr", label: "Zephyr (Female)", gender: "Female" },
