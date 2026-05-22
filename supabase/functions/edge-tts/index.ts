@@ -7,6 +7,7 @@ import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts"
 const ALLOWED_VOICES = new Set([
   "my-MM-ThihaNeural",
   "my-MM-NilarNeural",
+  "it-IT-GiuseppeMultilingualNeural",
 ]);
 
 // SURGICAL: Make Burmese Edge TTS sound natural (human-like, not robotic).
@@ -90,7 +91,7 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const text: string = (body.text ?? "").toString().trim();
-    const voice: string = (body.voice ?? "my-MM-ThihaNeural").toString();
+    const voice: string = (body.voice ?? "it-IT-GiuseppeMultilingualNeural").toString();
     // SURGICAL: defaults tuned for natural Burmese human cadence
     // -8% rate = slightly slower (less rushed/robotic)
     // -2Hz pitch = warmer, more conversational tone
