@@ -361,6 +361,7 @@ const VoicePage: React.FC = () => {
   };
 
   const voices = [
+    { name: "GIUSEPPE ⭐ (MULTILINGUAL)", gender: "MALE ♂", value: "edge:it-IT-GiuseppeMultilingualNeural", color: "from-amber-500 to-orange-700" },
     { name: "THIHA ⭐", gender: "MALE ♂", value: "edge:my-MM-ThihaNeural", color: "from-emerald-500 to-teal-700" },
     { name: "NILAR ⭐", gender: "FEMALE ♀", value: "edge:my-MM-NilarNeural", color: "from-pink-500 to-rose-600" },
     { name: "PUCK", gender: "MALE ♂", value: "Puck", color: "from-orange-500 to-amber-600" },
