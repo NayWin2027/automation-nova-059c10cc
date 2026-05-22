@@ -5355,11 +5355,9 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
           const maxScore = Math.max(...scores);
           if (maxScore > 0) {
             const hookIdx = scores.indexOf(maxScore);
-            hookSegmentIdxRef.current = hookIdx;
-            // Generate hook title from the segment text (first 7 words)
             const words = segments[hookIdx].text.trim().split(/\s+/);
-            hookTitleRef.current = words.slice(0, 7).join(" ") + (words.length > 7 ? "..." : "");
-            console.log(`[HOOK LOCAL] Segment ${hookIdx}: "${hookTitleRef.current}" (score: ${maxScore})`);
+            const hookTitle = words.slice(0, 7).join(" ") + (words.length > 7 ? "..." : "");
+            console.log(`[HOOK LOCAL] Segment ${hookIdx}: "${hookTitle}" (score: ${maxScore})`);
           }
         } catch (e) {
           console.warn("[HOOK LOCAL] Failed:", e);
@@ -5391,7 +5389,6 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
           if (seoMatch) {
             const parsed = JSON.parse(seoMatch[0]);
             if (parsed.title && parsed.description && parsed.hashtags) {
-              setYoutubeMetadata({ title: parsed.title, description: parsed.description, hashtags: parsed.hashtags });
               console.log("[YT SEO] Generated:", parsed.title);
             }
           }
