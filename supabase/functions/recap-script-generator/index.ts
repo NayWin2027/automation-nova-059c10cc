@@ -355,7 +355,7 @@ STRUCTURE:
     // ===== BUILD GEMINI REQUEST =====
     let contentParts: any[] = [];
 
-    if (fileObj || fileUri) {
+    if (fileObj || fileUri || fileData) {
       // File analysis mode - either direct upload or pre-uploaded fileUri
       let resolvedFileUri = fileUri;
       let resolvedMimeType = fileMimeType || "video/mp4";
@@ -449,7 +449,9 @@ OUTPUT FORMAT:
 ⚠️ MANDATORY: Every word of your output (except [MM:SS] timecodes) MUST be in ${lang}. If you write even one word in Burmese/Myanmar and ${lang} is NOT "BURMESE", your output is REJECTED.`;
       contentParts = [
         { text: userPrompt },
-        { file_data: { mime_type: resolvedMimeType, file_uri: resolvedFileUri } },
+        fileData
+          ? { inline_data: { mime_type: resolvedMimeType, data: fileData } }
+          : { file_data: { mime_type: resolvedMimeType, file_uri: resolvedFileUri } },
       ];
     } else if (transcript) {
       // Legacy transcript mode (kept for backward compatibility)
