@@ -3749,7 +3749,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                           onClick={() => setLogo((l) => ({ ...l, spin: !l.spin }))}
                           className={`flex-1 text-xs py-1.5 rounded-lg border transition-all ${logo.spin ? "bg-slate-800 border-amber-400 text-amber-400" : "border-slate-700 text-slate-500 hover:text-slate-300"}`}
                         >
-                          Spin: {logo.spin ? "OFF" : "OFF"}
+                          Spin: {logo.spin ? "ON" : "OFF"}
                         </button>
                       </div>
                       <div className="flex items-center gap-2">
