@@ -395,6 +395,10 @@ export default function TranscriptionView() {
         setGeneratedScript(data.script);
         toast.success("Script အောင်မြင်စွာ ထွက်လာပါပြီ!");
         recordToolOutcome('transcribe', 'success');
+        // ===== CLIENT-SIDE CREDIT DEDUCTION (only after confirmed success) =====
+        if (apiType === "app" && tierCredits !== undefined) {
+          await deductCredits("narration-script", false, tierCredits);
+        }
       } else {
         toast.error("Script generation failed.");
         recordToolOutcome('transcribe', 'error');
