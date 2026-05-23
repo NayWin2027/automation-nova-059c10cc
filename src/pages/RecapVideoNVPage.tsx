@@ -4192,8 +4192,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       onClick={() => {
                         setFreezeMode((f) => {
                           const next = !f;
-                          // ── FIX: when turning OFF freeze, immediately resume video ──
                           if (!next) {
+                            // ── FIX: set ref immediately so rAF loop sees it this frame ──
+                            freezeModeRef.current = false;
                             const vv = videoRef.current;
                             if (vv && vv.paused && !vv.ended) {
                               vv.playbackRate = 1.0;
