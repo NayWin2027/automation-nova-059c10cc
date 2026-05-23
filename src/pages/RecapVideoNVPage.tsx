@@ -5134,7 +5134,7 @@ const RecapVideoNVPage: React.FC = () => {
           `- It is OK to use spoken connectors like "ဒါ့အပြင်" / "ဒါကြောင့်" in natural conversation.`
         : "";
 
-      const fileData = file.size <= 20 * 1024 * 1024
+      const fileData = file.size <= 14 * 1024 * 1024
         ? await new Promise<string>((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = () => resolve(String(reader.result || "").split(",")[1] || "");
