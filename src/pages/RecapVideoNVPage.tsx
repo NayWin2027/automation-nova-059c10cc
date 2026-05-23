@@ -709,7 +709,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     });
 
     // SURGICAL EDIT: Audio speed rate state (0.5x – 4.0x)
-    const [audioSpeedRate, setAudioSpeedRate] = useState<number>(1.0);
+    const [audioSpeedRate, setAudioSpeedRate] = useState<number>(1.4);
 
     // SURGICAL EDIT: Freeze/Motion mode state
     // ON  = 5s Ken Burns freeze zoom-in → 15s smooth motion (alternating)
@@ -3750,7 +3750,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                           onClick={() => setLogo((l) => ({ ...l, spin: !l.spin }))}
                           className={`flex-1 text-xs py-1.5 rounded-lg border transition-all ${logo.spin ? "bg-slate-800 border-amber-400 text-amber-400" : "border-slate-700 text-slate-500 hover:text-slate-300"}`}
                         >
-                          Spin: {logo.spin ? "ON" : "OFF"}
+                          Spin: {logo.spin ? "OFF" : "OFF"}
                         </button>
                       </div>
                       <div className="flex items-center gap-2">
