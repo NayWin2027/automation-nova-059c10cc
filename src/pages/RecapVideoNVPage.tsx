@@ -712,7 +712,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const [audioSpeedRate, setAudioSpeedRate] = useState<number>(1.0);
 
     // SURGICAL EDIT: Freeze/Motion mode state
-    // ON  = 5s Ken Burns freeze zoom-in → 8s smooth motion (alternating)
+    // ON  = 5s Ken Burns freeze zoom-in → 15s smooth motion (alternating)
     // OFF = 100% normal speed, no zoom/crop
     const [freezeMode, setFreezeMode] = useState<boolean>(false);
     const freezeModeRef = useRef(freezeMode);
