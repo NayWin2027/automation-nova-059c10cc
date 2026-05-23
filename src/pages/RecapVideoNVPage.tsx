@@ -716,9 +716,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     // OFF = 100% normal speed, no zoom/crop
     const [freezeMode, setFreezeMode] = useState<boolean>(false);
     const freezeModeRef = useRef(freezeMode);
-    useEffect(() => {
-      freezeModeRef.current = freezeMode;
-    }, [freezeMode]);
+    // ── Direct sync — no useEffect delay ──
+    freezeModeRef.current = freezeMode;
 
     // Apply audioSpeedRate to audio element whenever it changes
     useEffect(() => {
