@@ -384,7 +384,21 @@ STRUCTURE:
         const fName = resolvedFileUri.includes("/") ? resolvedFileUri.split("/").slice(-2).join("/") : resolvedFileUri;
         if (fName.startsWith("files/")) {
           try {
-            await waitForFileProcessing(activeApiKey, fName);
+            // Build fallback key list from the script pool — the file may have been
+            // uploaded by a sibling function using a different key in the same pool.
+            const fallbackKeys: string[] = isOwnApi ? [] : [
+              Deno.env.get("GEMINI_SCRIPT_KEY_1") || "",
+              Deno.env.get("GEMINI_SCRIPT_KEY_2") || "",
+              Deno.env.get("GEMINI_SCRIPT_KEY_3") || "",
+              Deno.env.get("GEMINI_API_KEY") || "",
+              Deno.env.get("GEMINI_API_KEY_2") || "",
+              Deno.env.get("GEMINI_API_KEY_3") || "",
+            ].filter(Boolean);
+            const matchedKey = await waitForFileProcessing(activeApiKey, fName, fallbackKeys);
+            if (matchedKey && matchedKey !== activeApiKey) {
+              console.log(`[recap-script-generator] Adopting matched key for file ownership`);
+              activeApiKey = matchedKey;
+            }
           } catch (processingError) {
             console.error("File processing failed:", processingError);
             return new Response(
