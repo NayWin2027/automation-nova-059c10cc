@@ -64,6 +64,7 @@ async function waitForFileProcessing(apiKey: string, fileName: string, fallbackK
   const candidates = [apiKey, ...fallbackKeys.filter(k => k && k !== apiKey)];
   let activeKey = apiKey;
   let probed = false;
+  let failedStreak = 0;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     if (!probed) {
@@ -77,7 +78,14 @@ async function waitForFileProcessing(apiKey: string, fileName: string, fallbackK
           const fileInfo = await r.json();
           console.log(`File state: ${fileInfo.state}, key matched on attempt ${attempt + 1}`);
           if (fileInfo.state === "ACTIVE") { probed = true; return activeKey; }
-          if (fileInfo.state === "FAILED") throw new Error("File processing failed");
+          if (fileInfo.state === "FAILED") {
+            failedStreak++;
+            if (failedStreak >= 3) throw new Error("File processing failed");
+            probed = true;
+            await new Promise(r => setTimeout(r, delay));
+            break;
+          }
+          failedStreak = 0;
         } else {
           try { await r.body?.cancel(); } catch {}
         }
@@ -101,7 +109,13 @@ async function waitForFileProcessing(apiKey: string, fileName: string, fallbackK
     const fileInfo = await response.json();
     console.log(`File state: ${fileInfo.state}, attempt ${attempt + 1}`);
     if (fileInfo.state === "ACTIVE") return activeKey;
-    if (fileInfo.state === "FAILED") throw new Error("File processing failed");
+    if (fileInfo.state === "FAILED") {
+      failedStreak++;
+      if (failedStreak >= 3) throw new Error("File processing failed");
+      await new Promise(r => setTimeout(r, delay));
+      continue;
+    }
+    failedStreak = 0;
     await new Promise(r => setTimeout(r, delay));
   }
   throw new Error("File processing timeout");
