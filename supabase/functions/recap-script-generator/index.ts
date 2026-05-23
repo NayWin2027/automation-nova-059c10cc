@@ -418,7 +418,7 @@ STRUCTURE:
           } catch (processingError) {
             console.error("File processing failed:", processingError);
             return new Response(
-              JSON.stringify({ error: "ဖိုင် processing မအောင်မြင်ပါ။ ပြန်စမ်းပါ။" }),
+              JSON.stringify({ error: "Google video processing service က ဒီ ဖိုင်ကို လက်မခံပါ။ ဖိုင်ကို ပြန် upload လုပ်ပြီး ထပ်ကြိုးစားပါ။" }),
               { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
           }
