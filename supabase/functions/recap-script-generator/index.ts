@@ -482,7 +482,7 @@ ${transcript}
       contentParts = [{ text: userPrompt }];
     }
 
-    console.log(`[recap-script-generator] Sending to Gemini (${fileObj ? 'file mode' : 'transcript mode'})...`);
+    console.log(`[recap-script-generator] Sending to Gemini (${fileObj || fileUri || fileData ? 'file mode' : 'transcript mode'})...`);
 
     // Retry logic for Gemini API (handles 429 rate limits & 503 overloaded)
     const MAX_RETRIES = 4;
