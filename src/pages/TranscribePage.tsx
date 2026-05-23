@@ -377,6 +377,7 @@ export default function TranscriptionView() {
             language: selectedLanguage,
             apiKey: ownApiKey || undefined,
             customCreditCost: tierCredits !== undefined && apiType === "app" ? tierCredits : undefined,
+            skipCreditDeduction: true,
           }),
           signal: scriptController.signal,
         }
