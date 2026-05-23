@@ -5134,8 +5134,17 @@ const RecapVideoNVPage: React.FC = () => {
           `- It is OK to use spoken connectors like "ဒါ့အပြင်" / "ဒါကြောင့်" in natural conversation.`
         : "";
 
+      const fileData = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || "").split(",")[1] || "");
+        reader.onerror = () => reject(new Error("File data ဖတ်၍ မအောင်မြင်ပါ"));
+        reader.readAsDataURL(file);
+      });
+      if (!fileData) throw new Error("File data ဖတ်၍ မအောင်မြင်ပါ");
+
       const scriptBody: Record<string, unknown> = {
         fileUri,
+        fileData,
         fileMimeType: mimeType,
         // ── INTELLIGENT RECAP EDITOR PROMPT (surgical edit — comprehensive recap instructions) ──
         niche: `You are an intelligent and professional movie recap editor.
