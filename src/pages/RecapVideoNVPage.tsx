@@ -2175,24 +2175,25 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // Previously was nested inside isZoomEnabled — now runs always when freezeMode is ON
         if (freezeModeRef.current) {
           const t = audioEl.currentTime;
-          const FREEZE_SEC = 5;
+          const FREEZE_SEC = 7;
           const MOTION_SEC = 8;
           const CYCLE_SEC = FREEZE_SEC + MOTION_SEC;
           const cyclePos = t % CYCLE_SEC;
           const isFreezeCycle = cyclePos < FREEZE_SEC;
 
           if (isFreezeCycle) {
-            // FREEZE PHASE: pause video + visible slow Ken Burns zoom-in (1.0 → 1.08x)
+            // FREEZE PHASE: pause video + very slow subtle professional zoom-in
             const freezeProgress = cyclePos / FREEZE_SEC;
-            // Cubic ease-in: starts very slow, accelerates — cinematic pull
-            const easeIn = freezeProgress * freezeProgress * freezeProgress;
-            // SURGICAL FIX: 1.08x — clearly visible zoom, professional Ken Burns
-            const freezeZoom = 1.0 + 0.08 * easeIn;
+            // Smooth ease-in-out: starts and ends slowly — cinematic, not jarring
+            const eased =
+              freezeProgress < 0.5 ? 2 * freezeProgress * freezeProgress : 1 - Math.pow(-2 * freezeProgress + 2, 2) / 2;
+            // ── SUBTLE: 4% max zoom — professional, not exaggerated ──
+            const freezeZoom = 1.0 + 0.04 * eased;
 
             zoomedSrcW = Math.max(2, Math.round(srcCropW / freezeZoom));
             zoomedSrcH = Math.max(2, Math.round(srcCropH / freezeZoom));
             zoomedSrcX = srcCropX + Math.round((srcCropW - zoomedSrcW) / 2);
-            zoomedSrcY = srcCropY + Math.round((srcCropH - zoomedSrcH) * 0.1); // SURGICAL: 0.3→0.1 = professional headroom (small gap above head)
+            zoomedSrcY = srcCropY + Math.round((srcCropH - zoomedSrcH) * 0.1);
 
             if (!videoEl.paused && !videoEl.ended) videoEl.pause();
           } else {
@@ -4188,7 +4189,20 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       </span>
                     </div>
                     <button
-                      onClick={() => setFreezeMode((f) => !f)}
+                      onClick={() => {
+                        setFreezeMode((f) => {
+                          const next = !f;
+                          // ── FIX: when turning OFF freeze, immediately resume video ──
+                          if (!next) {
+                            const vv = videoRef.current;
+                            if (vv && vv.paused && !vv.ended) {
+                              vv.playbackRate = 1.0;
+                              vv.play().catch(() => {});
+                            }
+                          }
+                          return next;
+                        });
+                      }}
                       className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
                         freezeMode
                           ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900"
