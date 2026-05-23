@@ -283,6 +283,122 @@ serve(async (req) => {
     }
 
     // Handle different actions
+    if (action === "downloadPlatformVideo") {
+      // SURGICAL ADD: Download YouTube/TikTok/Instagram/Facebook videos via Cobalt API.
+      const platformUrl: string | undefined = body?.platformUrl;
+      if (!platformUrl || typeof platformUrl !== "string") {
+        return new Response(JSON.stringify({ error: "platformUrl is required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Try multiple public Cobalt instances for resilience (TikTok/IG often block one IP).
+      const cobaltInstances = [
+        "https://api.cobalt.tools",
+        "https://co.wuk.sh",
+        "https://cobalt-api.kwiatekmiki.com",
+        "https://api.dl.khusrav.uz",
+      ];
+
+      let mediaUrl: string | null = null;
+      let mediaFileName = "platform_video.mp4";
+      let lastErr = "";
+
+      for (const base of cobaltInstances) {
+        try {
+          const resp = await fetch(`${base}/`, {
+            method: "POST",
+            headers: {
+              "Accept": "application/json",
+              "Content-Type": "application/json",
+              "User-Agent": "Mozilla/5.0 (compatible; RecapNV/1.0)",
+            },
+            body: JSON.stringify({
+              url: platformUrl,
+              videoQuality: "720",
+              filenameStyle: "basic",
+              downloadMode: "auto",
+            }),
+          });
+          const txt = await resp.text();
+          let data: any = null;
+          try { data = JSON.parse(txt); } catch { /* not json */ }
+          if (!data) { lastErr = `${base}: non-json ${resp.status}`; continue; }
+          if (data.status === "tunnel" || data.status === "redirect") {
+            mediaUrl = data.url;
+            if (data.filename) mediaFileName = String(data.filename).replace(/[\/\\:*?"<>|]/g, "_").slice(0, 200);
+            break;
+          }
+          if (data.status === "picker" && Array.isArray(data.picker) && data.picker[0]?.url) {
+            mediaUrl = data.picker[0].url;
+            break;
+          }
+          lastErr = `${base}: ${data.status || "unknown"} ${data.error?.code || data.text || ""}`;
+        } catch (e: any) {
+          lastErr = `${base}: ${e?.message || "fetch failed"}`;
+        }
+      }
+
+      if (!mediaUrl) {
+        return new Response(
+          JSON.stringify({
+            error:
+              "Platform video download မအောင်မြင်ပါ။ Link ကို စစ်ပါ၊ သို့မဟုတ် video file ကို direct upload လုပ်ပါ။ (" +
+              lastErr +
+              ")",
+          }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      // Stream the video from the tunnel/CDN URL through the edge function so the client
+      // bypasses CORS restrictions and gets a stable blob.
+      try {
+        const videoResp = await fetch(mediaUrl, {
+          headers: { "User-Agent": "Mozilla/5.0" },
+        });
+        if (!videoResp.ok) {
+          return new Response(
+            JSON.stringify({ error: `Video stream fetch failed: ${videoResp.status}` }),
+            { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+        const arrayBuf = await videoResp.arrayBuffer();
+        const mimeType = videoResp.headers.get("content-type") || "video/mp4";
+
+        // Encode to base64 in chunks (avoid call-stack overflow on large files).
+        const bytes = new Uint8Array(arrayBuf);
+        let binary = "";
+        const chunkSize = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+          binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunkSize)) as any);
+        }
+        const base64 = btoa(binary);
+        const dataUrl = `data:${mimeType};base64,${base64}`;
+
+        if (!/\.(mp4|webm|mov|mkv)$/i.test(mediaFileName)) {
+          const ext = mimeType.split("/")[1] || "mp4";
+          mediaFileName = `platform_video.${ext}`;
+        }
+
+        return new Response(
+          JSON.stringify({
+            videoUrl: dataUrl,
+            fileName: mediaFileName,
+            fileSize: bytes.length,
+            mimeType,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      } catch (e: any) {
+        return new Response(
+          JSON.stringify({ error: `Video proxy failed: ${e?.message || "unknown"}` }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
+
     if (action === "initUpload") {
       // ===== INPUT VALIDATION for initUpload =====
       if (!fileName || typeof fileName !== "string") {
