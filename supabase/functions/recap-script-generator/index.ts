@@ -54,19 +54,53 @@ async function uploadToGoogleFiles(apiKey: string, fileBytes: Uint8Array, mimeTy
   return uploadResult.file?.uri || uploadResult.file?.name;
 }
 
-async function waitForFileProcessing(apiKey: string, fileName: string): Promise<void> {
+async function waitForFileProcessing(apiKey: string, fileName: string, fallbackKeys: string[] = []): Promise<string> {
   const maxAttempts = 150;
   const delay = 2000;
 
+  // Try all candidate keys (the file was uploaded with ONE key in the script pool,
+  // but this function may have been cold-started with a different key from the pool).
+  // We probe each key until one returns a non-404/403 response.
+  const candidates = [apiKey, ...fallbackKeys.filter(k => k && k !== apiKey)];
+  let activeKey = apiKey;
+  let probed = false;
+
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${apiKey}`);
+    if (!probed) {
+      let found = false;
+      for (const k of candidates) {
+        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${k}`);
+        if (r.status === 404 || r.status === 403) { try { await r.body?.cancel(); } catch {} continue; }
+        activeKey = k;
+        found = true;
+        if (r.ok) {
+          const fileInfo = await r.json();
+          console.log(`File state: ${fileInfo.state}, key matched on attempt ${attempt + 1}`);
+          if (fileInfo.state === "ACTIVE") { probed = true; return activeKey; }
+          if (fileInfo.state === "FAILED") throw new Error("File processing failed");
+        } else {
+          try { await r.body?.cancel(); } catch {}
+        }
+        break;
+      }
+      probed = found;
+      if (!found) {
+        // None of the keys can see the file yet — it may still be appearing. Wait and retry.
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      await new Promise(r => setTimeout(r, delay));
+      continue;
+    }
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${activeKey}`);
     if (!response.ok) {
       await new Promise(r => setTimeout(r, delay));
       continue;
     }
     const fileInfo = await response.json();
     console.log(`File state: ${fileInfo.state}, attempt ${attempt + 1}`);
-    if (fileInfo.state === "ACTIVE") return;
+    if (fileInfo.state === "ACTIVE") return activeKey;
     if (fileInfo.state === "FAILED") throw new Error("File processing failed");
     await new Promise(r => setTimeout(r, delay));
   }
@@ -350,7 +384,21 @@ STRUCTURE:
         const fName = resolvedFileUri.includes("/") ? resolvedFileUri.split("/").slice(-2).join("/") : resolvedFileUri;
         if (fName.startsWith("files/")) {
           try {
-            await waitForFileProcessing(activeApiKey, fName);
+            // Build fallback key list from the script pool — the file may have been
+            // uploaded by a sibling function using a different key in the same pool.
+            const fallbackKeys: string[] = isOwnApi ? [] : [
+              Deno.env.get("GEMINI_SCRIPT_KEY_1") || "",
+              Deno.env.get("GEMINI_SCRIPT_KEY_2") || "",
+              Deno.env.get("GEMINI_SCRIPT_KEY_3") || "",
+              Deno.env.get("GEMINI_API_KEY") || "",
+              Deno.env.get("GEMINI_API_KEY_2") || "",
+              Deno.env.get("GEMINI_API_KEY_3") || "",
+            ].filter(Boolean);
+            const matchedKey = await waitForFileProcessing(activeApiKey, fName, fallbackKeys);
+            if (matchedKey && matchedKey !== activeApiKey) {
+              console.log(`[recap-script-generator] Adopting matched key for file ownership`);
+              activeApiKey = matchedKey;
+            }
           } catch (processingError) {
             console.error("File processing failed:", processingError);
             return new Response(
