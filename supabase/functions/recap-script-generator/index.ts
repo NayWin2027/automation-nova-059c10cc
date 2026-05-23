@@ -186,6 +186,7 @@ serve(async (req) => {
     let userApiKey: string | null = null;
     let fileUri: string | null = null;
     let fileMimeType: string | null = null;
+    let fileData: string | null = null;
     let sourceDurationSec: number | null = null;
 
     const contentType = req.headers.get("content-type") || "";
@@ -209,6 +210,7 @@ serve(async (req) => {
       transcript = body.transcript || null;
       fileUri = body.fileUri || null;
       fileMimeType = body.fileMimeType || null;
+      fileData = body.fileData || body.inlineFileData || null;
       niche = body.niche || "GENERAL";
       language = body.language || "BURMESE";
       if (body.customCreditCost !== undefined) customCreditCost = Number(body.customCreditCost);
@@ -220,7 +222,7 @@ serve(async (req) => {
       if (Number.isFinite(parsedDuration) && parsedDuration > 0) sourceDurationSec = parsedDuration;
     }
 
-    if (!fileObj && !transcript && !fileUri) {
+    if (!fileObj && !transcript && !fileUri && !fileData) {
       return new Response(
         JSON.stringify({ error: "No file, fileUri, or transcript provided" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -353,7 +355,7 @@ STRUCTURE:
     // ===== BUILD GEMINI REQUEST =====
     let contentParts: any[] = [];
 
-    if (fileObj || fileUri) {
+    if (fileObj || fileUri || fileData) {
       // File analysis mode - either direct upload or pre-uploaded fileUri
       let resolvedFileUri = fileUri;
       let resolvedMimeType = fileMimeType || "video/mp4";
@@ -380,7 +382,7 @@ STRUCTURE:
       }
 
       // Wait for file processing if needed
-      if (resolvedFileUri) {
+      if (resolvedFileUri && !fileData) {
         const fName = resolvedFileUri.includes("/") ? resolvedFileUri.split("/").slice(-2).join("/") : resolvedFileUri;
         if (fName.startsWith("files/")) {
           try {
@@ -447,7 +449,9 @@ OUTPUT FORMAT:
 ⚠️ MANDATORY: Every word of your output (except [MM:SS] timecodes) MUST be in ${lang}. If you write even one word in Burmese/Myanmar and ${lang} is NOT "BURMESE", your output is REJECTED.`;
       contentParts = [
         { text: userPrompt },
-        { file_data: { mime_type: resolvedMimeType, file_uri: resolvedFileUri } },
+        fileData
+          ? { inline_data: { mime_type: resolvedMimeType, data: fileData } }
+          : { file_data: { mime_type: resolvedMimeType, file_uri: resolvedFileUri } },
       ];
     } else if (transcript) {
       // Legacy transcript mode (kept for backward compatibility)
@@ -478,7 +482,7 @@ ${transcript}
       contentParts = [{ text: userPrompt }];
     }
 
-    console.log(`[recap-script-generator] Sending to Gemini (${fileObj ? 'file mode' : 'transcript mode'})...`);
+    console.log(`[recap-script-generator] Sending to Gemini (${fileObj || fileUri || fileData ? 'file mode' : 'transcript mode'})...`);
 
     // Retry logic for Gemini API (handles 429 rate limits & 503 overloaded)
     const MAX_RETRIES = 4;
