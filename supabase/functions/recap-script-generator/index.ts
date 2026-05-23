@@ -382,7 +382,7 @@ STRUCTURE:
       }
 
       // Wait for file processing if needed
-      if (resolvedFileUri) {
+      if (resolvedFileUri && !fileData) {
         const fName = resolvedFileUri.includes("/") ? resolvedFileUri.split("/").slice(-2).join("/") : resolvedFileUri;
         if (fName.startsWith("files/")) {
           try {
