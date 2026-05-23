@@ -2181,18 +2181,23 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           const isFreezeCycle = cyclePos < FREEZE_SEC;
 
           if (isFreezeCycle) {
-            // FREEZE PHASE: pause video + very slow subtle professional zoom-in
+            // FREEZE PHASE: pause video + EXTREMELY subtle slow professional zoom-in + gentle pan
             const freezeProgress = cyclePos / FREEZE_SEC;
             // Smooth ease-in-out: starts and ends slowly — cinematic, not jarring
             const eased =
               freezeProgress < 0.5 ? 2 * freezeProgress * freezeProgress : 1 - Math.pow(-2 * freezeProgress + 2, 2) / 2;
-            // ── SUBTLE: 4% max zoom — professional, not exaggerated ──
-            const freezeZoom = 1.0 + 0.04 * eased;
+            // ── SURGICAL EDIT: 1.5% MAX ZOOM ONLY! Extremely subtle, professional vibe, no jarring look ──
+            const freezeZoom = 1.0 + 0.015 * eased;
+
+            // Extremely subtle gentle pan to add professional flow
+            const t = audioEl.currentTime;
+            const panX = Math.sin(t * 0.05) * (srcCropW * 0.003);
+            const panY = Math.cos(t * 0.04) * (srcCropH * 0.003);
 
             zoomedSrcW = Math.max(2, Math.round(srcCropW / freezeZoom));
             zoomedSrcH = Math.max(2, Math.round(srcCropH / freezeZoom));
-            zoomedSrcX = srcCropX + Math.round((srcCropW - zoomedSrcW) / 2);
-            zoomedSrcY = srcCropY + Math.round((srcCropH - zoomedSrcH) * 0.1);
+            zoomedSrcX = srcCropX + Math.round((srcCropW - zoomedSrcW) / 2) + Math.round(panX);
+            zoomedSrcY = srcCropY + Math.round((srcCropH - zoomedSrcH) * 0.1) + Math.round(panY);
 
             if (!videoEl.paused && !videoEl.ended) videoEl.pause();
           } else {
@@ -2866,10 +2871,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
                     const onSeeked = () => {
                       seekPendingRef.current = false;
-                      // Play only after seek complete — no race condition
-                      if (!vv.ended && !freezeModeRef.current) {
-                        vv.playbackRate = 1.0;
-                        vv.play().catch(() => {});
+                      // Always play video when freezeMode is OFF
+                      if (!vv.ended) {
+                        if (!freezeModeRef.current) {
+                          vv.playbackRate = 1.0;
+                          vv.play().catch(() => {});
+                        }
                       }
                       vv.removeEventListener("seeked", onSeeked);
                     };
@@ -2878,19 +2885,24 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   } else if (!seekPendingRef.current) {
                     // Seek complete — normal playing state
                     if (!freezeModeRef.current) {
-                      // Clamp: stop video at segment end (no overrun)
+                      // When freezeMode is OFF: never pause, just keep playing
+                      if (vv.paused && !vv.ended) {
+                        vv.playbackRate = 1.0;
+                        vv.play().catch(() => {});
+                      }
+                    } else {
+                      // Only when freezeMode is ON: clamp at segment end
                       if (vActualEnd > 0 && vv.currentTime >= vActualEnd - 0.05) {
                         if (!vv.paused) vv.pause();
                       } else if (vv.paused && !vv.ended) {
-                        // Resume if unintentionally paused
                         vv.playbackRate = 1.0;
                         vv.play().catch(() => {});
                       }
                     }
                   }
                 } else {
-                  // Between segments — pause video ONCE (not every frame)
-                  if (videoInSegmentRef.current) {
+                  // Between segments — only pause if freezeMode is ON
+                  if (freezeModeRef.current && videoInSegmentRef.current) {
                     videoInSegmentRef.current = false;
                     if (!vv.paused) vv.pause();
                   }
