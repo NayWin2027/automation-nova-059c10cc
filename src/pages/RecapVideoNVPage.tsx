@@ -2176,18 +2176,18 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         if (freezeModeRef.current) {
           const t = audioEl.currentTime;
           const FREEZE_SEC = 5;
-          const MOTION_SEC = 5;
+          const MOTION_SEC = 8;
           const CYCLE_SEC = FREEZE_SEC + MOTION_SEC;
           const cyclePos = t % CYCLE_SEC;
           const isFreezeCycle = cyclePos < FREEZE_SEC;
 
           if (isFreezeCycle) {
-            // FREEZE PHASE: pause video + visible slow Ken Burns zoom-in (1.0 → 1.18x)
+            // FREEZE PHASE: pause video + visible slow Ken Burns zoom-in (1.0 → 1.5x)
             const freezeProgress = cyclePos / FREEZE_SEC;
             // Cubic ease-in: starts very slow, accelerates — cinematic pull
             const easeIn = freezeProgress * freezeProgress * freezeProgress;
-            // SURGICAL FIX: 1.18x — clearly visible zoom, professional Ken Burns
-            const freezeZoom = 1.0 + 0.18 * easeIn;
+            // SURGICAL FIX: 1.08x — clearly visible zoom, professional Ken Burns
+            const freezeZoom = 1.0 + 0.08 * easeIn;
 
             zoomedSrcW = Math.max(2, Math.round(srcCropW / freezeZoom));
             zoomedSrcH = Math.max(2, Math.round(srcCropH / freezeZoom));
