@@ -122,6 +122,7 @@ export default function TranscriptionView() {
   // API Mode States
   const [apiType, setApiType] = useState<"app" | "own">("app");
   const { apiKey, setApiKey } = useSecureApiKey("master_transcribe_api_key");
+  const { deductCredits } = useCreditDeduction();
 
   // Admin CMS States
   const [isAdmin, setIsAdmin] = useState(false);
