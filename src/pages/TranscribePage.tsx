@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { preCheckCredits } from "@/utils/creditPreCheck";
 import { recordToolOutcome } from "@/utils/toolOutcome";
+import { useCreditDeduction } from "@/hooks/useCreditDeduction";
 
 // ============ ADMIN CMS TYPES ============
 interface TranscribeSettings {
