@@ -2182,7 +2182,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           const isFreezeCycle = cyclePos < FREEZE_SEC;
 
           if (isFreezeCycle) {
-            // FREEZE PHASE: pause video + visible slow Ken Burns zoom-in (1.0 → 1.5x)
+            // FREEZE PHASE: pause video + visible slow Ken Burns zoom-in (1.0 → 1.08x)
             const freezeProgress = cyclePos / FREEZE_SEC;
             // Cubic ease-in: starts very slow, accelerates — cinematic pull
             const easeIn = freezeProgress * freezeProgress * freezeProgress;
