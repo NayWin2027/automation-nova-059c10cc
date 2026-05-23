@@ -186,6 +186,7 @@ serve(async (req) => {
     let userApiKey: string | null = null;
     let fileUri: string | null = null;
     let fileMimeType: string | null = null;
+    let fileData: string | null = null;
     let sourceDurationSec: number | null = null;
 
     const contentType = req.headers.get("content-type") || "";
@@ -209,6 +210,7 @@ serve(async (req) => {
       transcript = body.transcript || null;
       fileUri = body.fileUri || null;
       fileMimeType = body.fileMimeType || null;
+      fileData = body.fileData || body.inlineFileData || null;
       niche = body.niche || "GENERAL";
       language = body.language || "BURMESE";
       if (body.customCreditCost !== undefined) customCreditCost = Number(body.customCreditCost);
@@ -220,7 +222,7 @@ serve(async (req) => {
       if (Number.isFinite(parsedDuration) && parsedDuration > 0) sourceDurationSec = parsedDuration;
     }
 
-    if (!fileObj && !transcript && !fileUri) {
+    if (!fileObj && !transcript && !fileUri && !fileData) {
       return new Response(
         JSON.stringify({ error: "No file, fileUri, or transcript provided" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
