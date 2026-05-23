@@ -634,7 +634,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       ratio: "3/4" as "auto" | "16/9" | "9/16" | "1/1" | "4/3" | "3/4",
       flip: true,
       bypass: true,
-      colorGrade: "PINK" as string,
+      colorGrade: "OFF" as string,
     });
 
     const [logo, setLogo] = useState<LogoSettings>({
@@ -1934,7 +1934,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // ── Revoke download URL after delay to ensure download completes ──
         setTimeout(() => {
           URL.revokeObjectURL(url);
-        }, 300000); // 5 minutes instead of 10 seconds
+        }, 1800000); // 30 minutes instead of 5 minutes
 
         setRenderedBlobUrl(url);
         console.log("[DOWNLOAD] Auto-download triggered successfully");
@@ -5171,9 +5171,9 @@ const RecapVideoNVPage: React.FC = () => {
         };
         v.src = tempUrl;
       });
-      if (duration > 300) {
+      if (duration > 1800) {
         throw new Error(
-          "ဒီ app မှာ ၅ မိနစ်ထက်ကျော်တဲ့ video ကို recap မလုပ်နိုင်သေးပါ။ ၅ မိနစ်အောက် video ကိုရွေးပေးပါ။",
+          "ဒီ app မှာ 30 မိနစ်ထက်ကျော်တဲ့ video ကို recap မလုပ်နိုင်သေးပါ။ 30 မိနစ်အောက် video ကိုရွေးပေးပါ။",
         );
       }
       videoDurationRef.current = duration;
