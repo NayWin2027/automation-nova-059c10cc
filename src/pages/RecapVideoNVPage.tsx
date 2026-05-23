@@ -4818,6 +4818,7 @@ const RecapVideoNVPage: React.FC = () => {
   const [status, setStatus] = useState<ProcessingStatus>("idle");
   const [progressMsg, setProgressMsg] = useState("");
   const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoLink, setVideoLink] = useState<string>("");
   const videoDurationRef = useRef<number>(0);
   const sourceFileUriRef = useRef<string | null>(null);
   const videoFileRef = useRef<File | null>(null);
@@ -6003,17 +6004,112 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
             />
           </div>
 
+          {/* Video Link Input */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-neon-cyan">
+              Video Link (YouTube, TikTok, Instagram, Facebook)
+            </label>
+            <input
+              type="text"
+              value={videoLink}
+              onChange={(e) => setVideoLink(e.target.value)}
+              placeholder="https://youtube.com/watch?v=..."
+              disabled={status === "processing"}
+              className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+            />
+          </div>
+
           {/* SURGICAL EDIT: Generate Recap Button — user must click to start pipeline */}
-          {videoFile && status !== "processing" && !audioUrl && (
+          {(videoFile || videoLink) && status !== "processing" && !audioUrl && (
             <button
               onClick={async () => {
-                if (!videoFile) return;
+                if (!videoFile && !videoLink) return;
                 if (apiMode === "app") {
                   const hasCredits = await preCheckCredits("recap-nv");
                   if (!hasCredits) return;
                 }
                 didDeductRef.current = false;
-                startAutoPipeline(videoFile);
+
+                if (videoFile) {
+                  startAutoPipeline(videoFile);
+                } else if (videoLink) {
+                  // Handle both direct video links AND platform links (YouTube/TikTok/Instagram/Facebook)
+                  setStatus("processing");
+                  setProgressMsg("🎬 Video link ကိုလေ့လာနေပါသည်...");
+                  try {
+                    // Check if it's a platform URL (YouTube/TikTok/Instagram/Facebook)
+                    const isPlatformUrl =
+                      /(youtube\.com|youtu\.be|tiktok\.com|instagram\.com|facebook\.com|fb\.watch)/i.test(videoLink);
+
+                    if (isPlatformUrl) {
+                      // Handle platform URLs by sending to edge function (yt-dlp)
+                      setProgressMsg("📥 Platform video ကို download လုပ်နေပါသည်...");
+
+                      // Call edge function to download platform video
+                      const { data: downloadData, error: downloadError } = await supabase.functions.invoke(
+                        "video-recap",
+                        {
+                          body: {
+                            action: "downloadPlatformVideo",
+                            platformUrl: videoLink,
+                          },
+                        },
+                      );
+
+                      if (
+                        downloadError ||
+                        !downloadData?.videoUrl ||
+                        !downloadData?.fileName ||
+                        !downloadData?.fileSize ||
+                        !downloadData?.mimeType
+                      ) {
+                        throw new Error(
+                          downloadData?.error || downloadError?.message || "Platform video download failed",
+                        );
+                      }
+
+                      // Now fetch the downloaded video URL from edge function
+                      const response = await fetch(downloadData.videoUrl);
+                      if (!response.ok) throw new Error("Downloaded video ကို fetch လုပ်လို့မရပါဘူး။");
+                      const blob = await response.blob();
+                      const file = new File([blob], downloadData.fileName, { type: downloadData.mimeType });
+                      setVideoFile(file);
+                      videoFileRef.current = file;
+                      // Set videoUrl to preview it
+                      const blobUrl = URL.createObjectURL(file);
+                      setVideoUrl(blobUrl);
+                      startAutoPipeline(file);
+                    } else {
+                      // Handle direct video links (mp4/webm/mov etc.)
+                      // First validate it's a direct video URL
+                      const isDirectVideo =
+                        /\.(mp4|webm|mov|avi|mkv)$/i.test(videoLink) ||
+                        videoLink.includes("video") ||
+                        videoLink.startsWith("blob:");
+                      if (!isDirectVideo) {
+                        throw new Error(
+                          "Direct video link (mp4/webm/mov) သို့မဟုတ် YouTube/TikTok/Instagram/Facebook link ကိုသာ လက်ခံပါတယ်။",
+                        );
+                      }
+                      // Fetch direct video as blob
+                      const response = await fetch(videoLink);
+                      if (!response.ok) throw new Error("Video link ကို fetch လုပ်လို့မရပါဘူး။");
+                      const blob = await response.blob();
+                      const file = new File([blob], `video_from_link.${blob.type.split("/")[1] || "mp4"}`, {
+                        type: blob.type,
+                      });
+                      setVideoFile(file);
+                      videoFileRef.current = file;
+                      // Set videoUrl to preview it
+                      const blobUrl = URL.createObjectURL(file);
+                      setVideoUrl(blobUrl);
+                      startAutoPipeline(file);
+                    }
+                  } catch (err: any) {
+                    setStatus("error");
+                    setProgressMsg(`❌ Error: ${err.message}`);
+                  }
+                }
               }}
               className="w-full py-3.5 px-6 bg-gradient-to-r from-purple-600 via-violet-600 to-pink-600 text-white font-bold text-lg rounded-xl shadow-[0_0_20px_rgba(139,92,246,0.5)] hover:shadow-[0_0_30px_rgba(139,92,246,0.8)] hover:-translate-y-0.5 transition-all duration-300 border border-violet-400/30 flex items-center justify-center gap-2"
             >
