@@ -712,7 +712,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const [audioSpeedRate, setAudioSpeedRate] = useState<number>(1.0);
 
     // SURGICAL EDIT: Freeze/Motion mode state
-    // ON  = 3s Ken Burns freeze zoom-in → 5s smooth motion (alternating)
+    // ON  = 5s Ken Burns freeze zoom-in → 8s smooth motion (alternating)
     // OFF = 100% normal speed, no zoom/crop
     const [freezeMode, setFreezeMode] = useState<boolean>(false);
     const freezeModeRef = useRef(freezeMode);
@@ -784,7 +784,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const midTeaserStartRef = useRef<number>(0);
     const midTeaserShownRef = useRef<boolean>(false);
     // ── BONUS: YouTube SEO Metadata (Gemini-generated) ──
-    const [youtubeMetadata, setYoutubeMetadata] = React.useState<{ title: string; description: string; hashtags: string } | null>(null);
+    const [youtubeMetadata, setYoutubeMetadata] = React.useState<{
+      title: string;
+      description: string;
+      hashtags: string;
+    } | null>(null);
     const [copiedField, setCopiedField] = React.useState<string>("");
 
     // SURGICAL EDIT: Inject subFadeSlide keyframe once — professional broadcast fade+slide-up
@@ -1316,10 +1320,53 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // ── FEATURE: Pacing Intelligence — classify segment type for dynamic duration cap ──
       const classifyPacing = (text: string): "action" | "emotional" | "exposition" => {
         const t = text.toLowerCase();
-        const actionKw = ["fight", "run", "attack", "explode", "chase", "shoot", "kill", "battle", "escape", "dash", "race", "punch", "stab", "crash", "flee", "ထိုး", "ပြေး", "တိုက်", "ပေါက်", "ဆဲခြုပ်", "ပအု့ပ်ထွက်"];
-        const emotionalKw = ["cry", "tear", "love", "death", "die", "heart", "pain", "grief", "shock", "reveal", "confess", "betray", "sacrifice", "သေ", "မျက်ရည်", "ခှစ်", "နာကျင်", "လေ့လွန်", "သေဆုး", "မာလား"];
-        if (actionKw.some(w => t.includes(w))) return "action";
-        if (emotionalKw.some(w => t.includes(w))) return "emotional";
+        const actionKw = [
+          "fight",
+          "run",
+          "attack",
+          "explode",
+          "chase",
+          "shoot",
+          "kill",
+          "battle",
+          "escape",
+          "dash",
+          "race",
+          "punch",
+          "stab",
+          "crash",
+          "flee",
+          "ထိုး",
+          "ပြေး",
+          "တိုက်",
+          "ပေါက်",
+          "ဆဲခြုပ်",
+          "ပအု့ပ်ထွက်",
+        ];
+        const emotionalKw = [
+          "cry",
+          "tear",
+          "love",
+          "death",
+          "die",
+          "heart",
+          "pain",
+          "grief",
+          "shock",
+          "reveal",
+          "confess",
+          "betray",
+          "sacrifice",
+          "သေ",
+          "မျက်ရည်",
+          "ခှစ်",
+          "နာကျင်",
+          "လေ့လွန်",
+          "သေဆုး",
+          "မာလား",
+        ];
+        if (actionKw.some((w) => t.includes(w))) return "action";
+        if (emotionalKw.some((w) => t.includes(w))) return "emotional";
         return "exposition";
       };
 
@@ -2208,7 +2255,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           zoomedSrcY = srcCropY + Math.round((srcCropH - zoomedSrcH) * 0.3) + shiftY;
         } // End of zoom/freeze block
 
-
         // Clamp to the valid source crop bounds.
         zoomedSrcX = Math.max(srcCropX, Math.min(srcCropX + (srcCropW - zoomedSrcW), zoomedSrcX));
         zoomedSrcY = Math.max(srcCropY, Math.min(srcCropY + (srcCropH - zoomedSrcH), zoomedSrcY));
@@ -2233,7 +2279,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           const CUT_FADE_MS = 120;
           const cutAge = performance.now() - segCutTimeRef.current;
           if (cutAge < CUT_FADE_MS && segCutTimeRef.current > 0) {
-            const fadeRatio = 1.0 - (cutAge / CUT_FADE_MS);
+            const fadeRatio = 1.0 - cutAge / CUT_FADE_MS;
             const eased = fadeRatio * fadeRatio;
             ctx.save();
             ctx.globalAlpha = eased * 0.7;
@@ -2316,7 +2362,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             // Accent bar
             ctx.globalAlpha = 0.9 * tEased;
             ctx.fillStyle = "#EF4444";
-            ctx.fillRect(canvas.width * 0.08, canvas.height * 0.80, canvas.width * 0.84, Math.max(2, canvas.height * 0.004));
+            ctx.fillRect(
+              canvas.width * 0.08,
+              canvas.height * 0.8,
+              canvas.width * 0.84,
+              Math.max(2, canvas.height * 0.004),
+            );
             // Teaser text
             const tFontSize = Math.max(14, Math.round(canvas.height * 0.042));
             ctx.globalAlpha = tEased;
@@ -2761,7 +2812,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   seekPendingRef.current = true;
                   const onHookSeeked = () => {
                     seekPendingRef.current = false;
-                    if (!vv.ended) { vv.playbackRate = 1.0; vv.play().catch(() => {}); }
+                    if (!vv.ended) {
+                      vv.playbackRate = 1.0;
+                      vv.play().catch(() => {});
+                    }
                     vv.removeEventListener("seeked", onHookSeeked);
                   };
                   vv.addEventListener("seeked", onHookSeeked);
@@ -2782,7 +2836,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               if (recAgeSync >= HOOK_SYNC_MS && recAgeSync < HOOK_SYNC_MS + 200 && lastIndexRef.current >= 0) {
                 lastIndexRef.current = -1; // Reset so first real segment gets a clean hard seek
               }
-
 
               // ── TRUE RECAP HARD-CUT SYNC ──
               // No more playbackRate manipulation. Each segment plays at 1.0x normal speed.
@@ -2835,7 +2888,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       }
                     }
                   }
-
                 } else {
                   // Between segments — pause video ONCE (not every frame)
                   if (videoInSegmentRef.current) {
@@ -2843,32 +2895,32 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     if (!vv.paused) vv.pause();
                   }
                 }
-            } else {
-              // Fallback: word-count proportional (no timestamps available)
-              const aPct = currentTime / av.duration;
-              activeIndex = segs.findIndex((s: any) => aPct >= s.aStartPct && aPct <= s.aEndPct);
-              if (activeIndex === -1 && segs.length > 0 && aPct > 0) {
-                const lastSeg = segs[segs.length - 1] as any;
-                if (aPct > lastSeg.aStartPct) activeIndex = segs.length - 1;
-              }
-              if (activeIndex !== -1) {
-                const s = segs[activeIndex] as any;
-                activeText = s.text;
-                if (activeIndex !== lastIndexRef.current) {
-                  // Hard cut fallback
-                  vv.currentTime = s.vStart;
-                  vv.playbackRate = 1.0;
-                  lastIndexRef.current = activeIndex;
-                }
-                if (!vv.paused && !vv.ended) {
-                  // playing normally
-                } else if (vv.paused && !vv.ended) {
-                  vv.play().catch(() => {});
-                }
               } else {
-                if (!vv.paused) vv.pause();
+                // Fallback: word-count proportional (no timestamps available)
+                const aPct = currentTime / av.duration;
+                activeIndex = segs.findIndex((s: any) => aPct >= s.aStartPct && aPct <= s.aEndPct);
+                if (activeIndex === -1 && segs.length > 0 && aPct > 0) {
+                  const lastSeg = segs[segs.length - 1] as any;
+                  if (aPct > lastSeg.aStartPct) activeIndex = segs.length - 1;
+                }
+                if (activeIndex !== -1) {
+                  const s = segs[activeIndex] as any;
+                  activeText = s.text;
+                  if (activeIndex !== lastIndexRef.current) {
+                    // Hard cut fallback
+                    vv.currentTime = s.vStart;
+                    vv.playbackRate = 1.0;
+                    lastIndexRef.current = activeIndex;
+                  }
+                  if (!vv.paused && !vv.ended) {
+                    // playing normally
+                  } else if (vv.paused && !vv.ended) {
+                    vv.play().catch(() => {});
+                  }
+                } else {
+                  if (!vv.paused) vv.pause();
+                }
               }
-            }
             }
 
             if (activeIndex !== -1 && activeText) {
@@ -2880,8 +2932,36 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 subFadeStartRef.current = performance.now();
                 // ── BONUS: Update scene pacing type for dynamic color grade ──
                 const t = activeText.toLowerCase();
-                const isActionSeg = ["fight","run","attack","explode","chase","shoot","kill","battle","escape","ထိုး","ပြေး","တိုက်"].some(w => t.includes(w));
-                const isEmotionalSeg = ["cry","tear","love","death","die","heart","pain","grief","shock","reveal","သေ","မျက်ရည်","ခှစ်","နာကျင်"].some(w => t.includes(w));
+                const isActionSeg = [
+                  "fight",
+                  "run",
+                  "attack",
+                  "explode",
+                  "chase",
+                  "shoot",
+                  "kill",
+                  "battle",
+                  "escape",
+                  "ထိုး",
+                  "ပြေး",
+                  "တိုက်",
+                ].some((w) => t.includes(w));
+                const isEmotionalSeg = [
+                  "cry",
+                  "tear",
+                  "love",
+                  "death",
+                  "die",
+                  "heart",
+                  "pain",
+                  "grief",
+                  "shock",
+                  "reveal",
+                  "သေ",
+                  "မျက်ရည်",
+                  "ခှစ်",
+                  "နာကျင်",
+                ].some((w) => t.includes(w));
                 segPacingTypeRef.current = isActionSeg ? "action" : isEmotionalSeg ? "emotional" : "exposition";
               }
               // ── BONUS: Mid-Video Retention Teaser — trigger at 28% of audio duration ──
@@ -3498,16 +3578,24 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     <div className="bg-gradient-to-br from-red-950/60 to-slate-900/90 border border-red-500/30 rounded-2xl p-4 space-y-3 shadow-xl">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-lg">🎯</span>
-                        <h4 className="text-sm font-bold text-red-400 uppercase tracking-wider">YouTube SEO Metadata — Ready to Copy</h4>
+                        <h4 className="text-sm font-bold text-red-400 uppercase tracking-wider">
+                          YouTube SEO Metadata — Ready to Copy
+                        </h4>
                       </div>
                       {/* Title */}
                       <div className="bg-slate-900/70 rounded-xl p-3 border border-slate-700/50">
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-xs font-semibold text-slate-400 uppercase">📌 Title</span>
                           <button
-                            onClick={() => { navigator.clipboard.writeText(youtubeMetadata.title); setCopiedField("title"); setTimeout(() => setCopiedField(""), 2000); }}
+                            onClick={() => {
+                              navigator.clipboard.writeText(youtubeMetadata.title);
+                              setCopiedField("title");
+                              setTimeout(() => setCopiedField(""), 2000);
+                            }}
                             className={`text-xs px-2 py-0.5 rounded-lg font-bold transition-all ${copiedField === "title" ? "bg-green-500 text-white" : "bg-slate-700 hover:bg-red-600 text-slate-300"}`}
-                          >{copiedField === "title" ? "✅ Copied!" : "Copy"}</button>
+                          >
+                            {copiedField === "title" ? "✅ Copied!" : "Copy"}
+                          </button>
                         </div>
                         <p className="text-sm text-white font-semibold leading-snug">{youtubeMetadata.title}</p>
                       </div>
@@ -3516,20 +3604,34 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-xs font-semibold text-slate-400 uppercase">📝 Description</span>
                           <button
-                            onClick={() => { navigator.clipboard.writeText(youtubeMetadata.description); setCopiedField("desc"); setTimeout(() => setCopiedField(""), 2000); }}
+                            onClick={() => {
+                              navigator.clipboard.writeText(youtubeMetadata.description);
+                              setCopiedField("desc");
+                              setTimeout(() => setCopiedField(""), 2000);
+                            }}
                             className={`text-xs px-2 py-0.5 rounded-lg font-bold transition-all ${copiedField === "desc" ? "bg-green-500 text-white" : "bg-slate-700 hover:bg-red-600 text-slate-300"}`}
-                          >{copiedField === "desc" ? "✅ Copied!" : "Copy"}</button>
+                          >
+                            {copiedField === "desc" ? "✅ Copied!" : "Copy"}
+                          </button>
                         </div>
-                        <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap">{youtubeMetadata.description}</p>
+                        <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap">
+                          {youtubeMetadata.description}
+                        </p>
                       </div>
                       {/* Hashtags */}
                       <div className="bg-slate-900/70 rounded-xl p-3 border border-slate-700/50">
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-xs font-semibold text-slate-400 uppercase"># Hashtags</span>
                           <button
-                            onClick={() => { navigator.clipboard.writeText(youtubeMetadata.hashtags); setCopiedField("tags"); setTimeout(() => setCopiedField(""), 2000); }}
+                            onClick={() => {
+                              navigator.clipboard.writeText(youtubeMetadata.hashtags);
+                              setCopiedField("tags");
+                              setTimeout(() => setCopiedField(""), 2000);
+                            }}
                             className={`text-xs px-2 py-0.5 rounded-lg font-bold transition-all ${copiedField === "tags" ? "bg-green-500 text-white" : "bg-slate-700 hover:bg-red-600 text-slate-300"}`}
-                          >{copiedField === "tags" ? "✅ Copied!" : "Copy"}</button>
+                          >
+                            {copiedField === "tags" ? "✅ Copied!" : "Copy"}
+                          </button>
                         </div>
                         <p className="text-xs text-blue-300 leading-relaxed">{youtubeMetadata.hashtags}</p>
                       </div>
@@ -5134,14 +5236,15 @@ const RecapVideoNVPage: React.FC = () => {
           `- It is OK to use spoken connectors like "ဒါ့အပြင်" / "ဒါကြောင့်" in natural conversation.`
         : "";
 
-      const fileData = file.size <= 19 * 1024 * 1024
-        ? await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(String(reader.result || "").split(",")[1] || "");
-            reader.onerror = () => reject(new Error("File data ဖတ်၍ မအောင်မြင်ပါ"));
-            reader.readAsDataURL(file);
-          })
-        : "";
+      const fileData =
+        file.size <= 19 * 1024 * 1024
+          ? await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(String(reader.result || "").split(",")[1] || "");
+              reader.onerror = () => reject(new Error("File data ဖတ်၍ မအောင်မြင်ပါ"));
+              reader.readAsDataURL(file);
+            })
+          : "";
 
       const scriptBody: Record<string, unknown> = {
         fileUri,
@@ -5250,17 +5353,92 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
         try {
           if (segments.length < 2) return;
           // TIER 1: Ultra-high drama (×5) — twists, reveals, deaths, betrayals
-          const ultraKw = ["died","killed","murdered","betrayed","revealed","secret","truth","lied","shot","stabbed","exploded","shocked","twist","discovered","exposed","confessed","သေသွားပြီ","ဆုံးသွားပြီ","ဖော်ထုတ်လိုက်ပြီ","လျှို့ဝှက်ချက်","သစ္စာဖောက်","ထွင်းကိုက်","သတ်လိုက်","ဆိုးတဲ့လျှို့ဝှက်"];
+          const ultraKw = [
+            "died",
+            "killed",
+            "murdered",
+            "betrayed",
+            "revealed",
+            "secret",
+            "truth",
+            "lied",
+            "shot",
+            "stabbed",
+            "exploded",
+            "shocked",
+            "twist",
+            "discovered",
+            "exposed",
+            "confessed",
+            "သေသွားပြီ",
+            "ဆုံးသွားပြီ",
+            "ဖော်ထုတ်လိုက်ပြီ",
+            "လျှို့ဝှက်ချက်",
+            "သစ္စာဖောက်",
+            "ထွင်းကိုက်",
+            "သတ်လိုက်",
+            "ဆိုးတဲ့လျှို့ဝှက်",
+          ];
           // TIER 2: High drama (×3)
-          const highKw = ["die","death","kill","betray","reveal","secret","murder","destroy","lose","sacrifice","hurt","cry","tears","love","hate","truth","lied","alone","broken","end","last","သေ","ငို","ဆုံး","ဖျက်ဆီး","ပြတ်","နောက်ဆုံး","မျက်ရည်","ချစ်","မုန်း"];
+          const highKw = [
+            "die",
+            "death",
+            "kill",
+            "betray",
+            "reveal",
+            "secret",
+            "murder",
+            "destroy",
+            "lose",
+            "sacrifice",
+            "hurt",
+            "cry",
+            "tears",
+            "love",
+            "hate",
+            "truth",
+            "lied",
+            "alone",
+            "broken",
+            "end",
+            "last",
+            "သေ",
+            "ငို",
+            "ဆုံး",
+            "ဖျက်ဆီး",
+            "ပြတ်",
+            "နောက်ဆုံး",
+            "မျက်ရည်",
+            "ချစ်",
+            "မုန်း",
+          ];
           // TIER 3: Medium drama (×1.5)
-          const midKw = ["fight","escape","run","hide","angry","pain","panic","trap","danger","afraid","forced","ငိုကြွေး","ပြေး","ဝှက်","ကြောက်","အတင်းအကျပ်","ဒဏ်ရာ","အန္တရာယ်"];
+          const midKw = [
+            "fight",
+            "escape",
+            "run",
+            "hide",
+            "angry",
+            "pain",
+            "panic",
+            "trap",
+            "danger",
+            "afraid",
+            "forced",
+            "ငိုကြွေး",
+            "ပြေး",
+            "ဝှက်",
+            "ကြောက်",
+            "အတင်းအကျပ်",
+            "ဒဏ်ရာ",
+            "အန္တရာယ်",
+          ];
           const scores = segments.map((seg: RecapSegment, i: number) => {
             const t = seg.text.toLowerCase();
             let score = 0;
-            score += ultraKw.filter(w => t.includes(w)).length * 5;
-            score += highKw.filter(w => t.includes(w)).length * 3;
-            score += midKw.filter(w => t.includes(w)).length * 1.5;
+            score += ultraKw.filter((w) => t.includes(w)).length * 5;
+            score += highKw.filter((w) => t.includes(w)).length * 3;
+            score += midKw.filter((w) => t.includes(w)).length * 1.5;
             // Punctuation drama (! and ?)
             score += (seg.text.match(/[!?]/g) || []).length * 1.0;
             // Story position: climax zone 55-85% of story = peak drama
@@ -5268,7 +5446,7 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
             if (pos >= 0.55 && pos <= 0.85) score += 3.0;
             else if (pos >= 0.4 && pos < 0.55) score += 1.5;
             // Penalty: intro segments (first 20%) — rarely viral
-            if (pos < 0.20) score -= 2.0;
+            if (pos < 0.2) score -= 2.0;
             // Short punchy sentences (under 90 chars) — more impactful
             if (seg.text.length < 90) score += 0.8;
             // Sentence density: more punctuation = richer scene
@@ -5279,8 +5457,14 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
           if (maxScore > 0) {
             const hookIdx = scores.indexOf(maxScore);
             // Extract hook title: use the most impactful sentence from the segment
-            const sentences = segments[hookIdx].text.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 10);
-            const bestSentence = sentences.reduce((best, s) => s.length < 80 && s.length > best.length ? s : best, sentences[0] || segments[hookIdx].text);
+            const sentences = segments[hookIdx].text
+              .split(/[.!?]+/)
+              .map((s) => s.trim())
+              .filter((s) => s.length > 10);
+            const bestSentence = sentences.reduce(
+              (best, s) => (s.length < 80 && s.length > best.length ? s : best),
+              sentences[0] || segments[hookIdx].text,
+            );
             const words = bestSentence.trim().split(/\s+/);
             const hookTitle = words.slice(0, 8).join(" ") + (words.length > 8 ? "..." : "");
             console.log(`[HOOK SCORER] Seg ${hookIdx} score=${maxScore.toFixed(1)}: "${hookTitle}"`);
@@ -5295,18 +5479,19 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
           if (!scriptText) return;
           const excerpt = scriptText.substring(0, 2500);
           const seoPrompt = `You are a viral YouTube SEO expert. Based on this movie recap script, generate:\n1. A viral YouTube title (max 70 chars, shocking/curiosity-driven, match the script language)\n2. A YouTube description (150-200 words, hook opening + story teaser + call-to-action, match script language)\n3. 15 relevant hashtags (mix local + English, in #hashtag format)\n\nScript:\n${excerpt}\n\nRespond ONLY with valid JSON: {"title": "...", "description": "...", "hashtags": "#tag1 #tag2 ..."}`;
-          const seoResp = await fetch(
-            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recap-script-generator`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-                Authorization: `Bearer ${userToken}`,
-              },
-              body: JSON.stringify({ seoMode: true, seoPrompt, generationConfig: { temperature: 0.4, maxOutputTokens: 700 } }),
-            }
-          );
+          const seoResp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recap-script-generator`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              Authorization: `Bearer ${userToken}`,
+            },
+            body: JSON.stringify({
+              seoMode: true,
+              seoPrompt,
+              generationConfig: { temperature: 0.4, maxOutputTokens: 700 },
+            }),
+          });
           if (!seoResp.ok) return;
           const seoData = await seoResp.json();
           const rawText = seoData?.script || seoData?.result || seoData?.text || "";
