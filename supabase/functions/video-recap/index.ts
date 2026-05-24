@@ -329,6 +329,31 @@ serve(async (req) => {
         }
       }
 
+      // ---- Instagram fallback: snapsave-style scraper (free, no key) ----
+      if (!mediaUrl && isInstagram) {
+        try {
+          const r = await fetch("https://api.snapsave.app/instagram", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "User-Agent": "Mozilla/5.0",
+              "Origin": "https://snapsave.app",
+              "Referer": "https://snapsave.app/",
+            },
+            body: JSON.stringify({ url: platformUrl }),
+          });
+          const d = await r.json().catch(() => null);
+          const u =
+            d?.data?.url ||
+            d?.url ||
+            (Array.isArray(d?.data?.medias) && d.data.medias.find((m: any) => /mp4/i.test(m?.type || m?.ext || ""))?.url);
+          if (u) mediaUrl = u;
+          else lastErr = `snapsave-ig: ${d?.message || r.status}`;
+        } catch (e: any) {
+          lastErr = `snapsave-ig: ${e?.message || "fetch failed"}`;
+        }
+      }
+
       // ---- YouTube via Piped API (public, no key) ----
       if (!mediaUrl && isYouTube) {
         const ytMatch = platformUrl.match(/(?:v=|youtu\.be\/|shorts\/)([A-Za-z0-9_-]{11})/);
@@ -339,6 +364,8 @@ serve(async (req) => {
             "https://pipedapi.adminforge.de",
             "https://api.piped.yt",
             "https://pipedapi.r4fo.com",
+            "https://pipedapi.leptons.xyz",
+            "https://pipedapi.drgns.space",
           ];
           for (const base of pipedInstances) {
             try {
@@ -361,12 +388,44 @@ serve(async (req) => {
               lastErr = `${base}: ${e?.message || "fetch failed"}`;
             }
           }
+
+          // YouTube fallback: Invidious instances (return formatStreams with muxed mp4).
+          if (!mediaUrl) {
+            const invidiousInstances = [
+              "https://invidious.nerdvpn.de",
+              "https://invidious.privacyredirect.com",
+              "https://yewtu.be",
+              "https://invidious.f5.si",
+              "https://invidious.protokolla.fi",
+            ];
+            for (const base of invidiousInstances) {
+              try {
+                const r = await fetch(`${base}/api/v1/videos/${vid}`, {
+                  headers: { "User-Agent": "Mozilla/5.0" },
+                });
+                if (!r.ok) { lastErr = `${base}: ${r.status}`; continue; }
+                const d = await r.json();
+                const muxed =
+                  (d.formatStreams || []).find((s: any) => /mp4/i.test(s.container || s.type || "") && (s.qualityLabel || "").includes("720")) ||
+                  (d.formatStreams || []).find((s: any) => /mp4/i.test(s.container || s.type || "")) ||
+                  (d.formatStreams || [])[0];
+                if (muxed?.url) {
+                  mediaUrl = muxed.url;
+                  if (d.title) mediaFileName = String(d.title).replace(/[\/\\:*?"<>|]/g, "_").slice(0, 80) + ".mp4";
+                  break;
+                }
+                lastErr = `${base}: no formatStreams`;
+              } catch (e: any) {
+                lastErr = `${base}: ${e?.message || "fetch failed"}`;
+              }
+            }
+          }
         } else {
           lastErr = "Invalid YouTube URL";
         }
       }
 
-      // ---- Facebook fallback via snapany-style (best-effort) ----
+      // ---- Facebook via snapany (free) ----
       if (!mediaUrl && isFacebook) {
         try {
           const r = await fetch("https://snapany.com/api/v1/extract", {
@@ -385,6 +444,51 @@ serve(async (req) => {
           else lastErr = `snapany: ${d?.message || r.status}`;
         } catch (e: any) {
           lastErr = `snapany: ${e?.message || "fetch failed"}`;
+        }
+      }
+
+      // ---- Facebook fallback: getfvid-style scraper ----
+      if (!mediaUrl && isFacebook) {
+        try {
+          const r = await fetch("https://getfvid.com/downloader", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+              "User-Agent": "Mozilla/5.0",
+              "Referer": "https://getfvid.com/",
+            },
+            body: `url=${encodeURIComponent(platformUrl)}`,
+          });
+          const html = await r.text();
+          const m =
+            html.match(/href="(https:\/\/[^"]+\.mp4[^"]*)"[^>]*>\s*Download in HD/i) ||
+            html.match(/href="(https:\/\/[^"]+\.mp4[^"]*)"/i);
+          if (m?.[1]) mediaUrl = m[1].replace(/&amp;/g, "&");
+          else lastErr = `getfvid: no mp4 link`;
+        } catch (e: any) {
+          lastErr = `getfvid: ${e?.message || "fetch failed"}`;
+        }
+      }
+
+      // ---- Universal fallback for any other video link: try snapany (supports many sites) ----
+      if (!mediaUrl && !isTikTok && !isInstagram && !isYouTube && !isFacebook) {
+        try {
+          const r = await fetch("https://snapany.com/api/v1/extract", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "User-Agent": "Mozilla/5.0",
+              "Origin": "https://snapany.com",
+              "Referer": "https://snapany.com/",
+            },
+            body: JSON.stringify({ link: platformUrl }),
+          });
+          const d = await r.json().catch(() => null);
+          const u = d?.medias?.find((m: any) => m.media_type === "video")?.resource_url;
+          if (u) mediaUrl = u;
+          else lastErr = `snapany-generic: ${d?.message || r.status}`;
+        } catch (e: any) {
+          lastErr = `snapany-generic: ${e?.message || "fetch failed"}`;
         }
       }
 
