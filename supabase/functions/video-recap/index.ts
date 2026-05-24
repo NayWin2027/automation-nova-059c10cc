@@ -284,7 +284,8 @@ serve(async (req) => {
 
     // Handle different actions
     if (action === "downloadPlatformVideo") {
-      // SURGICAL ADD: Download YouTube/TikTok/Instagram/Facebook videos via Cobalt API.
+      // SURGICAL ADD: Download YouTube/TikTok/Instagram/Facebook videos.
+      // Strategy: detect platform → use the most reliable free API for each.
       const platformUrl: string | undefined = body?.platformUrl;
       if (!platformUrl || typeof platformUrl !== "string") {
         return new Response(JSON.stringify({ error: "platformUrl is required" }), {
@@ -293,50 +294,97 @@ serve(async (req) => {
         });
       }
 
-      // Try multiple public Cobalt instances for resilience (TikTok/IG often block one IP).
-      const cobaltInstances = [
-        "https://api.cobalt.tools",
-        "https://co.wuk.sh",
-        "https://cobalt-api.kwiatekmiki.com",
-        "https://api.dl.khusrav.uz",
-      ];
-
       let mediaUrl: string | null = null;
       let mediaFileName = "platform_video.mp4";
       let lastErr = "";
 
-      for (const base of cobaltInstances) {
+      const isTikTok = /tiktok\.com|vt\.tiktok|vm\.tiktok/i.test(platformUrl);
+      const isInstagram = /instagram\.com/i.test(platformUrl);
+      const isFacebook = /facebook\.com|fb\.watch/i.test(platformUrl);
+      const isYouTube = /youtube\.com|youtu\.be/i.test(platformUrl);
+
+      // ---- TikTok / Instagram via tikwm.com (free, reliable, no key) ----
+      if (isTikTok || isInstagram) {
         try {
-          const resp = await fetch(`${base}/`, {
+          const resp = await fetch("https://tikwm.com/api/", {
             method: "POST",
             headers: {
               "Accept": "application/json",
-              "Content-Type": "application/json",
-              "User-Agent": "Mozilla/5.0 (compatible; RecapNV/1.0)",
+              "Content-Type": "application/x-www-form-urlencoded",
+              "User-Agent": "Mozilla/5.0 (Linux; Android 13) RecapNV/1.0",
             },
-            body: JSON.stringify({
-              url: platformUrl,
-              videoQuality: "720",
-              filenameStyle: "basic",
-              downloadMode: "auto",
-            }),
+            body: `url=${encodeURIComponent(platformUrl)}&hd=1`,
           });
-          const txt = await resp.text();
-          let data: any = null;
-          try { data = JSON.parse(txt); } catch { /* not json */ }
-          if (!data) { lastErr = `${base}: non-json ${resp.status}`; continue; }
-          if (data.status === "tunnel" || data.status === "redirect") {
-            mediaUrl = data.url;
-            if (data.filename) mediaFileName = String(data.filename).replace(/[\/\\:*?"<>|]/g, "_").slice(0, 200);
-            break;
+          const data = await resp.json().catch(() => null);
+          if (data?.code === 0 && data?.data) {
+            mediaUrl = data.data.hdplay || data.data.play || data.data.wmplay || null;
+            if (data.data.title) {
+              mediaFileName = String(data.data.title).replace(/[\/\\:*?"<>|]/g, "_").slice(0, 80) + ".mp4";
+            }
+          } else {
+            lastErr = `tikwm: ${data?.msg || resp.status}`;
           }
-          if (data.status === "picker" && Array.isArray(data.picker) && data.picker[0]?.url) {
-            mediaUrl = data.picker[0].url;
-            break;
-          }
-          lastErr = `${base}: ${data.status || "unknown"} ${data.error?.code || data.text || ""}`;
         } catch (e: any) {
-          lastErr = `${base}: ${e?.message || "fetch failed"}`;
+          lastErr = `tikwm: ${e?.message || "fetch failed"}`;
+        }
+      }
+
+      // ---- YouTube via Piped API (public, no key) ----
+      if (!mediaUrl && isYouTube) {
+        const ytMatch = platformUrl.match(/(?:v=|youtu\.be\/|shorts\/)([A-Za-z0-9_-]{11})/);
+        const vid = ytMatch?.[1];
+        if (vid) {
+          const pipedInstances = [
+            "https://pipedapi.kavin.rocks",
+            "https://pipedapi.adminforge.de",
+            "https://api.piped.yt",
+            "https://pipedapi.r4fo.com",
+          ];
+          for (const base of pipedInstances) {
+            try {
+              const r = await fetch(`${base}/streams/${vid}`, {
+                headers: { "User-Agent": "Mozilla/5.0" },
+              });
+              if (!r.ok) { lastErr = `${base}: ${r.status}`; continue; }
+              const d = await r.json();
+              // Find a video stream that contains both audio+video (mp4, ≤720p).
+              const muxed = (d.videoStreams || []).find((s: any) =>
+                s.videoOnly === false && /mp4/i.test(s.mimeType || s.format || "") && (s.quality || "").includes("720"),
+              ) || (d.videoStreams || []).find((s: any) => s.videoOnly === false);
+              if (muxed?.url) {
+                mediaUrl = muxed.url;
+                if (d.title) mediaFileName = String(d.title).replace(/[\/\\:*?"<>|]/g, "_").slice(0, 80) + ".mp4";
+                break;
+              }
+              lastErr = `${base}: no muxed stream`;
+            } catch (e: any) {
+              lastErr = `${base}: ${e?.message || "fetch failed"}`;
+            }
+          }
+        } else {
+          lastErr = "Invalid YouTube URL";
+        }
+      }
+
+      // ---- Facebook fallback via snapany-style (best-effort) ----
+      if (!mediaUrl && isFacebook) {
+        try {
+          const r = await fetch("https://snapany.com/api/v1/extract", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "User-Agent": "Mozilla/5.0",
+              "Origin": "https://snapany.com",
+              "Referer": "https://snapany.com/",
+            },
+            body: JSON.stringify({ link: platformUrl }),
+          });
+          const d = await r.json().catch(() => null);
+          const u = d?.medias?.find((m: any) => m.media_type === "video")?.resource_url;
+          if (u) mediaUrl = u;
+          else lastErr = `snapany: ${d?.message || r.status}`;
+        } catch (e: any) {
+          lastErr = `snapany: ${e?.message || "fetch failed"}`;
         }
       }
 
