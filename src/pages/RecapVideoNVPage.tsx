@@ -271,7 +271,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     videoFileRef,
   }) => {
     const [activeTab, setActiveTab] = useState<"script" | "segments">("script");
-    const [selectedNiche, setSelectedNiche] = useState<string>("movie");
     const [isRecapPlaying, setIsRecapPlaying] = useState(false);
     const [currentSubtitle, setCurrentSubtitle] = useState("");
     const [subtitleKey, setSubtitleKey] = useState(0);
@@ -5233,11 +5232,18 @@ const RecapVideoNVPage: React.FC = () => {
   };
 
   const generateVoice = async (scriptText: string, useOwnKey?: string, segsForSync?: { text: string }[]) => {
-    // Voice naturalness: keep Burmese punctuation so TTS can insert realistic micro-pauses.
-    let speechTextForAPI = scriptText.replace(/\[.*?\]\s*/g, "");
+    // If segments order for sync is provided (e.g., hook-first reorder), build the
+    // TTS input from those segments so the voice matches the video+subtitles order.
+    let speechTextForAPI = "";
+    if (segsForSync && segsForSync.length > 0) {
+      speechTextForAPI = segsForSync.map((s) => String(s.text).trim()).join("\n\n");
+    } else {
+      // Voice naturalness: keep Burmese punctuation so TTS can insert realistic micro-pauses.
+      speechTextForAPI = scriptText.replace(/\[.*?\]\s*/g, "");
+    }
     if (voiceMode === "normal") {
       // Remove mainly English punctuation, but keep Burmese "။" / "၊".
-      speechTextForAPI = speechTextForAPI.replace(/[.,!?;:"'()\[\]{}\-_\n\r]/g, " ").replace(/\s+/g, " ");
+      speechTextForAPI = speechTextForAPI.replace(/[.,!?;:\"'()\[\]{}\-_\n\r]/g, " ").replace(/\s+/g, " ");
     }
 
     setStatus("processing");
@@ -5382,9 +5388,71 @@ const RecapVideoNVPage: React.FC = () => {
         audioBlob = await audioFetchResp.blob();
       }
       const url = URL.createObjectURL(audioBlob);
+
+      // Measure actual audio duration in-browser and compute per-segment timings
+      try {
+        const measureAudioDuration = (blobUrl: string) =>
+          new Promise<number>((resolve) => {
+            const a = new Audio();
+            a.preload = "metadata";
+            a.src = blobUrl;
+            const cleanup = () => {
+              a.src = "";
+              resolve(0);
+            };
+            a.onloadedmetadata = () => {
+              const d = a.duration || 0;
+              a.src = "";
+              resolve(d);
+            };
+            a.onerror = cleanup;
+          });
+
+        const totalDuration = await measureAudioDuration(url);
+
+        if (segsForSync && segsForSync.length > 0 && totalDuration > 0) {
+          // Compute word-weighted durations for higher accuracy than naive API estimates
+          const wc = segsForSync.map((s) => {
+            const n = String(s.text || "")
+              .trim()
+              .split(/\s+/)
+              .filter(Boolean).length;
+            return Math.max(1, n);
+          });
+          const totalWords = wc.reduce((a, b) => a + b, 0) || 1;
+          let cursor = 0;
+          const updatedSegments = segsForSync.map((s, i) => {
+            const segDur = (wc[i] / totalWords) * totalDuration;
+            const start = cursor;
+            const end = cursor + segDur;
+            cursor = end;
+            const mins = Math.floor(start / 60);
+            const secs = Math.floor(start % 60);
+            const timestamp = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+            return { timestamp, text: String(s.text || "").trim() };
+          });
+
+          // Update UI script segments (surgical: replace only segments)
+          setScriptData((prev) => ({ ...prev, segments: updatedSegments }));
+
+          // Populate page audio timestamps (precise floats) for playback sync
+          pageAudioTimestampsRef.current = [];
+          let c = 0;
+          for (let i = 0; i < wc.length; i++) {
+            const segDur = (wc[i] / totalWords) * totalDuration;
+            const start = c;
+            const end = c + segDur;
+            pageAudioTimestampsRef.current.push({ index: i, start, end });
+            c = end;
+          }
+        }
+      } catch (e) {
+        console.warn("[AUDIO MEASURE] failed to measure audio duration:", e);
+      }
+
       setAudioUrl(url);
       setStatus("done");
-      setProgressMsg("✅ Video Editing အလိုအလျောက်စတင်ပါမည်...");
+      setProgressMsg("✅ Video Editing အလိုအလောက်စတင်ပါမည်...");
       setAutoStartRecap(true);
     } catch (err: any) {
       console.error("TTS error:", err);
@@ -5875,15 +5943,27 @@ Last segment: reaches close to the end of the video.
         }
       })();
 
-      // ── SURGICAL EDIT: Reorder segments to put the HOOK FIRST (for first 5 seconds) ──
-      if (hookSegment && hookIndex > 0) {
-        // Create a new array with hook first, then the rest of the segments (without the hook)
-        const newSegments = [
-          { ...hookSegment, start: 0 }, // Set hook's start time to 0
-          ...segments.filter((_, i) => i !== hookIndex),
-        ];
-        segments = newSegments;
-        console.log("[HOOK REORDER] Hook segment moved to first position!");
+      // ── SURGICAL EDIT: Duplicate HOOK — place a copy at start AND keep original place ──
+      // Also sanitize timestamps to MM:SS (no milliseconds) and strip any in-text timecodes
+      if (hookSegment && hookIndex >= 0) {
+        const duplicatedHook = { ...hookSegment, timestamp: "00:00" };
+        const newSegments = [duplicatedHook, ...segments];
+
+        // Sanitize each segment: remove bracketed timecodes from text and normalize timestamp to MM:SS
+        const sanitized = newSegments.map((s) => {
+          const rawText = String(s.text || "");
+          const cleanText = rawText.replace(/\[.*?\]\s*/g, "").trim();
+          const secs = parseTime(String(s.timestamp || "00:00")) || 0;
+          const mins = Math.floor(secs / 60);
+          const sec = Math.floor(secs % 60);
+          const timestamp = `${String(mins).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+          return { ...s, text: cleanText, timestamp };
+        });
+
+        segments = sanitized;
+        console.log(
+          "[HOOK DUPLICATE] Hook duplicated to start and original kept in-place. Timestamps sanitized to MM:SS and subtitle text cleaned.",
+        );
       }
 
       setScriptData({ title: file.name.replace(/\.[^.]+$/, ""), full_script: scriptText, segments });
