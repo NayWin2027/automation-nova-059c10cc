@@ -46,8 +46,6 @@ interface ResultViewProps {
   renderMode?: "browser" | "server";
   sourceFileUriRef?: React.MutableRefObject<string | null>;
   videoFileRef?: React.MutableRefObject<File | null>;
-  selectedNiche: string;
-  onSelectedNicheChange: (niche: string) => void;
 }
 
 interface LogoSettings {
@@ -252,14 +250,6 @@ const fixWebmDuration = (buffer: ArrayBuffer, durationMs: number): ArrayBuffer |
   return result.buffer;
 };
 
-const parseTime = (t: string) => {
-  if (!t) return 0;
-  const parts = t.split(":").map(Number);
-  if (parts.length === 2) return (parts[0] || 0) * 60 + (parts[1] || 0);
-  if (parts.length === 3) return (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
-  return 0;
-};
-
 export const ResultView: React.FC<ResultViewProps> = React.memo(
   ({
     scriptData,
@@ -279,8 +269,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     renderMode,
     sourceFileUriRef,
     videoFileRef,
-    selectedNiche,
-    onSelectedNicheChange,
   }) => {
     const [activeTab, setActiveTab] = useState<"script" | "segments">("script");
     const [isRecapPlaying, setIsRecapPlaying] = useState(false);
@@ -293,8 +281,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const recStartTimeRef = useRef<number>(0); // Recording start timestamp for hook overlay timing
     const [renderedBlobUrl, setRenderedBlobUrl] = useState<string | null>(null);
     const [serverRenderProgress, setServerRenderProgress] = useState<string>("");
-    const [localRecProgress, setLocalRecProgress] = useState<number>(0);
-    const localRecProgressRef = useRef<number>(0);
     const subNeonHueRef = useRef(0);
     const [exportQuality, setExportQuality] = useState<string>("720p");
 
@@ -1393,9 +1379,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         const segWords = getWordCount(seg.text);
         const startWords = wordCursor;
         wordCursor += segWords;
+        // ── FEATURE: Smart Frame Offset (+0.3s) — skip scene transition flash frames ──
         const rawVStart = parseTime(seg.timestamp);
-        // Use exact timestamp from script — no artificial offset to preserve timing accuracy
-        const vStart = rawVStart;
+        const vStart = rawVStart > 0.3 ? rawVStart + 0.3 : rawVStart;
         const nextSeg = scriptData.segments[i + 1];
         let vEnd: number;
         if (!nextSeg) {
@@ -2809,31 +2795,25 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         if (av && vv) {
           if (av.duration > 0 && vv.duration > 0) {
             const currentTime = av.currentTime;
-            // Update local recording progress (throttled to prevent too many re-renders)
-            const progress = Math.min(100, Math.max(0, (currentTime / av.duration) * 100));
-            // Only update if progress changes by more than 0.5%
-            if (Math.abs(progress - localRecProgressRef.current) > 0.5) {
-              localRecProgressRef.current = progress;
-              setLocalRecProgress(progress);
-            }
             const segs = syncSegmentsRef.current as typeof syncSegments;
             const audioTs = audioTimestampsRef.current;
             let activeIndex = -1;
             let activeText = "";
 
-            // ── 100% ACCURATE AV SYNC + HOOK PHASE ──
-            const HOOK_DURATION_MS = 4000;
+            // ── HOOK PHASE AV SYNC OVERRIDE ──
+            // During first 4s of recording, show hook segment's VIDEO (not segment 0)
+            // This ensures hook overlay text MATCHES the actual dramatic video scene
+            const HOOK_SYNC_MS = 4000;
             const recAgeSync = recStartTimeRef.current > 0 ? performance.now() - recStartTimeRef.current : Infinity;
             const hookIdx = hookSegmentIdxRef.current;
-            const isHookPhase = recAgeSync < HOOK_DURATION_MS && hookIdx >= 0 && segs.length > hookIdx;
+            const isHookPhase = recAgeSync < HOOK_SYNC_MS && hookIdx >= 0 && segs.length > hookIdx;
 
             if (isHookPhase) {
-              // Hook phase: Play hook segment's video, audio stays at 0 (overlay is shown)
+              // Override: seek video to hook segment's vStart — show the dramatic scene
               const hookSeg = segs[hookIdx] as any;
               if (hookSeg) {
                 const hookVEnd = hookSeg.vEnd === -1 ? vv.duration : hookSeg.vEnd;
-                // Seek video to hook start if needed
-                if (!seekPendingRef.current && Math.abs(vv.currentTime - hookSeg.vStart) > 0.1) {
+                if (!seekPendingRef.current && Math.abs(vv.currentTime - hookSeg.vStart) > 0.8) {
                   seekPendingRef.current = true;
                   const onHookSeeked = () => {
                     seekPendingRef.current = false;
@@ -2846,23 +2826,25 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   vv.addEventListener("seeked", onHookSeeked);
                   vv.currentTime = hookSeg.vStart;
                 } else if (!seekPendingRef.current) {
-                  // Loop the hook segment video
+                  // Clamp at hook segment end — hold last frame if overrun
                   if (hookVEnd > 0 && vv.currentTime >= hookVEnd - 0.05) {
-                    vv.currentTime = hookSeg.vStart;
+                    if (!vv.paused) vv.pause();
                   } else if (vv.paused && !vv.ended) {
                     vv.playbackRate = 1.0;
                     vv.play().catch(() => {});
                   }
                 }
-                // Subtitle handled by hook overlay
-                activeText = "";
               }
+              // Skip normal sync during hook phase — subtitle handled by canvas overlay
             } else {
-              // After hook phase: RESET lastIndex for clean sync
-              if (lastIndexRef.current >= 0) {
-                lastIndexRef.current = -1;
+              // ── After hook phase: force clean resync to segment 0 ──
+              if (recAgeSync >= HOOK_SYNC_MS && recAgeSync < HOOK_SYNC_MS + 200 && lastIndexRef.current >= 0) {
+                lastIndexRef.current = -1; // Reset so first real segment gets a clean hard seek
               }
-              // Perfect sync of audio & video
+
+              // ── TRUE RECAP HARD-CUT SYNC ──
+              // No more playbackRate manipulation. Each segment plays at 1.0x normal speed.
+              // On segment change: hard-seek video to vStart. Between segments: hold video.
               const maxIdx = Math.min(audioTs.length, segs.length) - 1;
               const getSeg = (idx: number) => segs[idx] as any;
               if (maxIdx >= 0) {
@@ -2880,31 +2862,36 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
 
                   if (activeIndex !== lastIndexRef.current) {
-                    // Hard cut — seek ONCE to segment start
+                    // TRUE RECAP: Hard cut — seek ONCE to segment start
+                    // seekPendingRef prevents re-seeking every frame during async HTML5 seek
                     lastIndexRef.current = activeIndex;
                     videoInSegmentRef.current = true;
-                    segCutTimeRef.current = performance.now();
+                    segCutTimeRef.current = performance.now(); // trigger canvas dip-to-dark
                     seekPendingRef.current = true;
 
                     const onSeeked = () => {
                       seekPendingRef.current = false;
-                      if (!vv.ended && !freezeModeRef.current) {
-                        vv.playbackRate = 1.0;
-                        vv.play().catch(() => {});
+                      // Always play video when freezeMode is OFF
+                      if (!vv.ended) {
+                        if (!freezeModeRef.current) {
+                          vv.playbackRate = 1.0;
+                          vv.play().catch(() => {});
+                        }
                       }
                       vv.removeEventListener("seeked", onSeeked);
                     };
                     vv.addEventListener("seeked", onSeeked);
                     vv.currentTime = active.vStart;
                   } else if (!seekPendingRef.current) {
-                    // Normal playing — NO PAUSING when freezeMode is OFF
+                    // Seek complete — normal playing state
                     if (!freezeModeRef.current) {
+                      // When freezeMode is OFF: never pause, just keep playing
                       if (vv.paused && !vv.ended) {
                         vv.playbackRate = 1.0;
                         vv.play().catch(() => {});
                       }
                     } else {
-                      // Only pause at segment end if freezeMode is ON
+                      // Only when freezeMode is ON: clamp at segment end
                       if (vActualEnd > 0 && vv.currentTime >= vActualEnd - 0.05) {
                         if (!vv.paused) vv.pause();
                       } else if (vv.paused && !vv.ended) {
@@ -2919,6 +2906,31 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     videoInSegmentRef.current = false;
                     if (!vv.paused) vv.pause();
                   }
+                }
+              } else {
+                // Fallback: word-count proportional (no timestamps available)
+                const aPct = currentTime / av.duration;
+                activeIndex = segs.findIndex((s: any) => aPct >= s.aStartPct && aPct <= s.aEndPct);
+                if (activeIndex === -1 && segs.length > 0 && aPct > 0) {
+                  const lastSeg = segs[segs.length - 1] as any;
+                  if (aPct > lastSeg.aStartPct) activeIndex = segs.length - 1;
+                }
+                if (activeIndex !== -1) {
+                  const s = segs[activeIndex] as any;
+                  activeText = s.text;
+                  if (activeIndex !== lastIndexRef.current) {
+                    // Hard cut fallback
+                    vv.currentTime = s.vStart;
+                    vv.playbackRate = 1.0;
+                    lastIndexRef.current = activeIndex;
+                  }
+                  if (!vv.paused && !vv.ended) {
+                    // playing normally
+                  } else if (vv.paused && !vv.ended) {
+                    vv.play().catch(() => {});
+                  }
+                } else {
+                  if (!vv.paused) vv.pause();
                 }
               }
             }
@@ -2993,31 +3005,30 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         recapAnimFrameRef.current = requestAnimationFrame(syncAndDraw);
       };
-      // 100% MILLISECOND AV SYNC: Initialize both audio and video to 0
-      if (audioRef.current) {
-        audioRef.current.currentTime = 0;
-      }
-      if (videoRef.current) {
-        videoRef.current.currentTime = 0;
+      // 100% MILLISECOND AV SYNC: Initialize video position before playback starts
+      const segs = syncSegmentsRef.current;
+      if (videoRef.current && segs.length > 0) {
+        const firstVStart = (segs[0] as any).vStart ?? 0;
+        videoRef.current.currentTime = firstVStart;
       }
 
-      // SURGICAL FIX: Play audio and video at EXACTLY the same time!
-      const playBoth = async () => {
-        if (audioRef.current && videoRef.current) {
-          audioRef.current.playbackRate = audioSpeedRate;
-          // Wait for both to be ready, then play together
-          await Promise.all([
-            audioRef.current.play().catch(console.error),
-            videoRef.current.play().catch((err) => {
-              console.warn("[RECORDING] iOS Video reload...", err);
-              videoRef.current!.muted = true;
-              videoRef.current!.load();
-              return videoRef.current!.play().catch(console.error);
-            }),
-          ]);
-        }
-      };
-      playBoth();
+      // SURGICAL FIX: Ensure perfect audio start by playing ONLY after async recorder setup completes (warmup + logo load)
+      // SURGICAL EDIT: Apply audioSpeedRate at recording start for actual effect on output
+      if (audioRef.current) {
+        audioRef.current.playbackRate = audioSpeedRate;
+        audioRef.current.play().catch(console.error);
+      }
+      if (videoRef.current) {
+        videoRef.current.play().catch((err) => {
+          // SURGICAL IOS FIX: Safely bypass the WebKit muted autoplay bug.
+          // If iOS drops the gesture token due to heavy network awaits and permanently freezes the decoder,
+          // reloading the explicitly muted video seamlessly restarts the hardware pipeline.
+          console.warn("[RECORDING] iOS Video freeze detected, applying safe hardware reload...", err);
+          videoRef.current!.muted = true;
+          videoRef.current!.load();
+          videoRef.current!.play().catch(console.error);
+        });
+      }
 
       recapAnimFrameRef.current = requestAnimationFrame(syncAndDraw);
     };
@@ -3026,10 +3037,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     // Previously: syncLoop rAF + setTimeout(startRecapRecording) ran TWO separate rAF loops.
     // Now: startRecapRecording owns the single rAF loop (syncAndDraw) that handles both sync + draw.
     useEffect(() => {
-      // Reset progress when playback/recording starts
-      setLocalRecProgress(0);
-      localRecProgressRef.current = 0;
-
       if (!isRecapPlaying || isYouTube) return;
 
       const a = audioRef.current;
@@ -3085,60 +3092,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       };
     }, [isRecapPlaying, isYouTube]);
 
-    // Reset progress when rendering starts
-    useEffect(() => {
-      if (isRendering) {
-        setLocalRecProgress(0);
-        localRecProgressRef.current = 0;
-      }
-    }, [isRendering]);
-
-    // PREVIEW SUBTITLE SYNC: Keep subtitles in sync with audio when preview playback (not recording)
-    useEffect(() => {
-      const a = audioRef.current;
-      if (!a || isRecapPlaying) return;
-
-      const updateSubtitle = () => {
-        if (!audioTimestampsRef.current || audioTimestampsRef.current.length === 0) return;
-        const currentTime = a.currentTime;
-        const ts = audioTimestampsRef.current;
-        const segs = scriptData.segments;
-        let activeText = "";
-
-        // Update progress in preview mode
-        if (a.duration > 0) {
-          const progress = Math.min(100, Math.max(0, (currentTime / a.duration) * 100));
-          if (Math.abs(progress - localRecProgressRef.current) > 0.5) {
-            localRecProgressRef.current = progress;
-            setLocalRecProgress(progress);
-          }
-        }
-
-        for (let i = 0; i < ts.length; i++) {
-          if (currentTime >= ts[i].start && currentTime < ts[i].end) {
-            activeText = segs[i]?.text || "";
-            break;
-          }
-        }
-        if (activeText !== currentSubtitleRef.current) {
-          setCurrentSubtitle(activeText);
-          setSubtitleKey((k) => k + 1);
-          currentSubtitleRef.current = activeText;
-          subFadeStartRef.current = performance.now();
-        } else if (!activeText && currentSubtitleRef.current !== "") {
-          setCurrentSubtitle("");
-          currentSubtitleRef.current = "";
-        }
-      };
-
-      a.addEventListener("timeupdate", updateSubtitle);
-      updateSubtitle();
-
-      return () => {
-        a.removeEventListener("timeupdate", updateSubtitle);
-      };
-    }, [audioUrl, scriptData.segments]);
-
     // Video styles
     const activeGrade = COLOR_GRADE_PRESETS[editorState.colorGrade] || COLOR_GRADE_PRESETS["OFF"];
     const bypassBoostCSS = editorState.bypass
@@ -3177,12 +3130,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             ref={audioRef}
             src={audioUrl}
             crossOrigin={isLocalSource(audioUrl) ? undefined : "anonymous"}
-            style={
-              isRecapPlaying
-                ? { position: "absolute", opacity: 0, pointerEvents: "none" }
-                : { position: "absolute", opacity: 1, pointerEvents: "auto", top: "10px", right: "10px", zIndex: 100 }
-            }
-            controls={!isRecapPlaying}
+            style={{ position: "absolute", opacity: 0, pointerEvents: "none" }}
             onLoadedMetadata={() => {
               const audioEl = audioRef.current;
               const realDuration = audioEl?.duration;
@@ -3190,29 +3138,38 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               const segs = syncSegmentsRef.current;
               if (!segs || segs.length === 0) return;
 
-              // ── 100% ACCURATE CLIENT-SIDE TIMESTAMP CALCULATION ──
-              // Uses word-based calculation with sentence pause detection for perfect timing
-              const countWords = (text: string): number => {
-                if (!text) return 1;
-                const burmeseChars = (text.match(/[\u1000-\u109F]/g) || []).length;
-                const otherWords = text.split(/\s+/).filter((w) => w.length > 0 && !/[\u1000-\u109F]/.test(w)).length;
-                return Math.max(1, burmeseChars + otherWords * 5);
+              // ── CLIENT-SIDE TIMESTAMP CALCULATION ──
+              // API timestamps are word-count estimation (~80-85%) — always recalculate.
+              // Uses char weight + sentence-end pause bonus for better accuracy.
+              const countWeight = (text: string): number => {
+                const cleaned = (text || "").replace(/\s+/g, "");
+                let weight = 0;
+                for (let i = 0; i < cleaned.length; i++) {
+                  const code = cleaned.charCodeAt(i);
+                  if ((code >= 0x1000 && code <= 0x109f) || (code >= 0x4e00 && code <= 0x9fff)) {
+                    weight += 1.6;
+                  } else {
+                    weight += 1;
+                  }
+                }
+                return Math.max(weight, 1);
               };
               const pauseBonus = (text: string): number => {
                 const last = (text || "").trimEnd().slice(-1);
-                if (".!?။".includes(last)) return 0.3;
-                if (",;:".includes(last)) return 0.1;
+                if (".!?။".includes(last)) return 0.15;
+                if (",;:".includes(last)) return 0.05;
                 return 0;
               };
-              const wordCounts = segs.map((s: any) => countWords(s.text));
-              const totalWords = wordCounts.reduce((sum: number, wc: number) => sum + wc, 0);
+              const avgSegDur = realDuration / segs.length;
+              const weights = segs.map((s: any) => countWeight(s.text) + pauseBonus(s.text) * avgSegDur);
+              const totalWeight = weights.reduce((sum: number, w: number) => sum + w, 0);
               let cursor = 0;
               audioTimestampsRef.current = segs.map((seg: any, idx: number) => {
-                const pct = totalWords > 0 ? wordCounts[idx] / totalWords : 1 / segs.length;
-                const start = cursor;
-                cursor += pct * realDuration + pauseBonus(seg.text);
-                const end = idx === segs.length - 1 ? realDuration : cursor - pauseBonus(seg.text);
-                return { index: idx, start: parseFloat(start.toFixed(3)), end: parseFloat(end.toFixed(3)) };
+                const pct = totalWeight > 0 ? weights[idx] / totalWeight : 1 / segs.length;
+                const start = parseFloat(cursor.toFixed(4));
+                cursor += pct * realDuration;
+                const end = parseFloat((idx === segs.length - 1 ? realDuration : cursor).toFixed(4));
+                return { index: idx, start, end };
               });
             }}
           />
@@ -3305,52 +3262,29 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
             <div className="flex flex-col items-center justify-center w-full bg-black rounded-xl border border-slate-700/50 overflow-hidden shadow-2xl relative p-2 md:p-4">
               {isRecapPlaying && !isRendering && (
-                <div className="absolute top-3 left-3 z-50 flex items-center gap-2 bg-gradient-to-r from-amber-500/30 to-orange-500/30 px-3 py-1.5 rounded-full border border-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.2)]">
-                  <div className="w-2.5 h-2.5 bg-amber-500 rounded-full animate-pulse"></div>
-                  <span className="text-amber-400 font-black text-[11px] tracking-[0.15em]">RECAP PLAYBACK</span>
+                <div className="absolute top-3 left-3 z-50 flex items-center gap-2 bg-amber-500/30 px-2.5 py-1 rounded-full border border-amber-500/40">
+                  <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                  <span className="text-amber-400 font-bold text-[10px] tracking-wider">RECAP</span>
                 </div>
               )}
               {isRendering && (
-                <div className="absolute top-3 right-3 z-50 flex items-center gap-2 bg-gradient-to-r from-rose-500/25 to-pink-500/25 px-3 py-1.5 rounded-full border border-rose-500/50 shadow-[0_0_20px_rgba(244,63,94,0.2)]">
-                  <div className="w-2.5 h-2.5 bg-rose-500 rounded-full animate-pulse"></div>
-                  <span className="text-rose-400 font-black text-[11px] tracking-[0.15em]">RECORDING</span>
+                <div className="absolute top-3 right-3 z-50 flex items-center gap-2 bg-rose-500/20 px-2.5 py-1 rounded-full border border-rose-500/40">
+                  <div className="w-2 h-2 bg-rose-500 rounded-full"></div>
+                  <span className="text-rose-400 font-bold text-[10px] tracking-wider">REC</span>
                 </div>
               )}
-              {/* PREMIUM PROGRESS INDICATOR */}
-              {(isRecapPlaying || isRendering) && (
+              {isRendering && renderMode === "server" && (
                 <div className="absolute bottom-3 left-3 right-3 z-50">
-                  <div className="bg-black/80 backdrop-blur-md rounded-xl px-4 py-3 border-2 border-purple-500/30 shadow-[0_0_30px_rgba(168,85,247,0.3)]">
-                    <div className="flex items-center justify-between mb-2">
-                      {renderMode === "server" && isRendering ? (
-                        <span className="text-purple-400 font-black text-xs tracking-[0.2em] uppercase">
-                          ☁️ SERVER RENDER
-                        </span>
-                      ) : (
-                        <span className="text-purple-400 font-black text-xs tracking-[0.2em] uppercase">
-                          🎬 LOCAL PROCESSING
-                        </span>
-                      )}
-                      <span className="text-white font-mono font-bold text-sm">
-                        {renderMode === "server" && isRendering
-                          ? serverRenderProgress
-                          : `${Math.round(localRecProgress)}%`}
-                      </span>
+                  <div className="bg-black/70 backdrop-blur-sm rounded-lg px-3 py-2 border border-cyan-500/30">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-cyan-400 font-bold text-[10px] tracking-wider">☁️ SERVER RENDER</span>
+                      <span className="text-cyan-300 font-mono text-[11px]">{serverRenderProgress}</span>
                     </div>
-                    <div className="w-full h-2.5 bg-gradient-to-r from-slate-800 to-slate-900 rounded-full overflow-hidden shadow-inner">
+                    <div className="w-full h-1.5 bg-gray-700 rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-purple-500 via-pink-500 to-amber-500 rounded-full transition-all duration-300 ease-out shadow-[0_0_15px_rgba(168,85,247,0.6)]"
-                        style={{
-                          width: `${
-                            renderMode === "server" && isRendering
-                              ? parseInt(serverRenderProgress.match(/\d+/)?.[0] || "0")
-                              : localRecProgress
-                          }%`,
-                        }}
+                        className="h-full bg-gradient-to-r from-cyan-500 to-emerald-400 rounded-full transition-all duration-700 ease-out"
+                        style={{ width: `${parseInt(serverRenderProgress.match(/\d+/)?.[0] || "0")}%` }}
                       />
-                    </div>
-                    <div className="flex justify-between mt-1.5">
-                      <span className="text-slate-500 font-mono text-[10px]">0%</span>
-                      <span className="text-slate-500 font-mono text-[10px]">100%</span>
                     </div>
                   </div>
                 </div>
@@ -3795,151 +3729,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                         </button>
                       ))}
                     </div>
-                  </div>
-
-                  <div className="mt-3">
-                    <p className="text-xs text-slate-500 mb-2">🎯 Content Niche (Billion-View Style)</p>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <button className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-semibold border border-slate-700 bg-slate-800 text-slate-200 hover:border-slate-500 transition-all shadow-sm">
-                          <span>
-                            {(() => {
-                              const niches = [
-                                { key: "movie", label: "🎬 Movie Recap", desc: "Mystery-driven, shocking twists" },
-                                {
-                                  key: "entertainment",
-                                  label: "🎭 Entertainment",
-                                  desc: "Celebrity gossip, drama, fun",
-                                },
-                                { key: "cooking", label: "👨‍🍳 Cooking", desc: "Satisfying, mouth-watering" },
-                                { key: "weird", label: "🤪 Weird/Interesting", desc: "Curiosity, mind-blowing facts" },
-                                {
-                                  key: "engineering",
-                                  label: "⚙️ Engineering",
-                                  desc: "How it's made, technical marvels",
-                                },
-                                {
-                                  key: "production",
-                                  label: "🏭 Production",
-                                  desc: "Factory processes, satisfying builds",
-                                },
-                                {
-                                  key: "agriculture",
-                                  label: "🌾 Agriculture",
-                                  desc: "Farming, harvest, nature's cycle",
-                                },
-                                {
-                                  key: "health",
-                                  label: "🏥 Health & Wellness",
-                                  desc: "Life-changing tips, science-backed",
-                                },
-                                { key: "history", label: "📜 History", desc: "Epic stories, forgotten secrets" },
-                                { key: "tech", label: "💻 Tech & Gadgets", desc: "Future tech, innovations, reviews" },
-                                { key: "animals", label: "🐾 Animals", desc: "Cute, wild, amazing animal moments" },
-                                { key: "universe", label: "🌌 Universe/Space", desc: "Mind-blowing cosmic facts" },
-                                { key: "ai", label: "🤖 AI & Future", desc: "Artificial intelligence, what's next" },
-                                {
-                                  key: "financial",
-                                  label: "💰 Financial/Money",
-                                  desc: "Wealth building, smart strategies",
-                                },
-                                { key: "animation", label: "🎨 Animation", desc: "Creative stories, visual magic" },
-                                {
-                                  key: "automobile",
-                                  label: "🚗 Automobile",
-                                  desc: "Cars, supercars, engineering feats",
-                                },
-                                { key: "news", label: "📰 News/Politics", desc: "CNN/BBC dramatic style" },
-                                { key: "food", label: "🍔 Food/Travel", desc: "Sensory, vibrant energy" },
-                                { key: "docu", label: "🔬 Documentary", desc: "Insightful, curiosity-driven" },
-                                { key: "motivation", label: "💪 Motivation", desc: "Powerful, emotional speeches" },
-                              ];
-                              const found = niches.find((n) => n.key === selectedNiche);
-                              return found ? found.label : "🎬 Movie Recap";
-                            })()}
-                          </span>
-                          <ChevronsUpDown className="h-4 w-4 text-slate-400" />
-                        </button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[320px] p-0 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl">
-                        <Command className="bg-transparent">
-                          <CommandInput
-                            placeholder="ရှာရန် niche ရိုက်ထည့်ပါ..."
-                            className="text-sm text-slate-200 placeholder:text-slate-500 border-b border-slate-700"
-                          />
-                          <CommandList className="max-h-[300px] overflow-y-auto">
-                            <CommandEmpty className="py-6 text-center text-sm text-slate-500">
-                              Niche မတွေ့ရှိပါ
-                            </CommandEmpty>
-                            <CommandGroup className="p-1">
-                              {[
-                                { key: "movie", label: "🎬 Movie Recap", desc: "Mystery-driven, shocking twists" },
-                                {
-                                  key: "entertainment",
-                                  label: "🎭 Entertainment",
-                                  desc: "Celebrity gossip, drama, fun",
-                                },
-                                { key: "cooking", label: "👨‍🍳 Cooking", desc: "Satisfying, mouth-watering" },
-                                { key: "weird", label: "🤪 Weird/Interesting", desc: "Curiosity, mind-blowing facts" },
-                                {
-                                  key: "engineering",
-                                  label: "⚙️ Engineering",
-                                  desc: "How it's made, technical marvels",
-                                },
-                                {
-                                  key: "production",
-                                  label: "🏭 Production",
-                                  desc: "Factory processes, satisfying builds",
-                                },
-                                {
-                                  key: "agriculture",
-                                  label: "🌾 Agriculture",
-                                  desc: "Farming, harvest, nature's cycle",
-                                },
-                                {
-                                  key: "health",
-                                  label: "🏥 Health & Wellness",
-                                  desc: "Life-changing tips, science-backed",
-                                },
-                                { key: "history", label: "📜 History", desc: "Epic stories, forgotten secrets" },
-                                { key: "tech", label: "💻 Tech & Gadgets", desc: "Future tech, innovations, reviews" },
-                                { key: "animals", label: "🐾 Animals", desc: "Cute, wild, amazing animal moments" },
-                                { key: "universe", label: "🌌 Universe/Space", desc: "Mind-blowing cosmic facts" },
-                                { key: "ai", label: "🤖 AI & Future", desc: "Artificial intelligence, what's next" },
-                                {
-                                  key: "financial",
-                                  label: "💰 Financial/Money",
-                                  desc: "Wealth building, smart strategies",
-                                },
-                                { key: "animation", label: "🎨 Animation", desc: "Creative stories, visual magic" },
-                                {
-                                  key: "automobile",
-                                  label: "🚗 Automobile",
-                                  desc: "Cars, supercars, engineering feats",
-                                },
-                                { key: "news", label: "📰 News/Politics", desc: "CNN/BBC dramatic style" },
-                                { key: "food", label: "🍔 Food/Travel", desc: "Sensory, vibrant energy" },
-                                { key: "docu", label: "🔬 Documentary", desc: "Insightful, curiosity-driven" },
-                                { key: "motivation", label: "💪 Motivation", desc: "Powerful, emotional speeches" },
-                              ].map((niche) => (
-                                <CommandItem
-                                  key={niche.key}
-                                  value={niche.key}
-                                  onSelect={() => onSelectedNicheChange(niche.key)}
-                                  className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm cursor-pointer transition-all ${selectedNiche === niche.key ? "bg-gradient-to-r from-purple-600/20 to-pink-600/20 text-white border border-purple-500/50" : "text-slate-300 hover:bg-slate-800"}`}
-                                >
-                                  <div className="flex flex-col items-start gap-0.5">
-                                    <span className="font-semibold">{niche.label}</span>
-                                    <span className="text-[10px] text-slate-500">{niche.desc}</span>
-                                  </div>
-                                  {selectedNiche === niche.key && <Check className="h-4 w-4 text-purple-400" />}
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
                   </div>
                 </div>
 
@@ -4958,10 +4747,6 @@ interface RecapHistoryItem {
 }
 
 const VOICE_OPTIONS = [
-  { value: "edge:en-US-GuyNeural", label: "⭐ Guy (English US — Male)", gender: "Male" },
-  { value: "edge:en-US-AriaNeural", label: "⭐ Aria (English US — Female)", gender: "Female" },
-  { value: "edge:en-GB-SoniaNeural", label: "⭐ Sonia (English UK — Female)", gender: "Female" },
-  { value: "edge:en-GB-RyanNeural", label: "⭐ Ryan (English UK — Male)", gender: "Male" },
   { value: "edge:it-IT-GiuseppeMultilingualNeural", label: "⭐ Giuseppe (Multilingual v2 — Male)", gender: "Male" },
   { value: "edge:my-MM-ThihaNeural", label: "⭐ Thiha (Burmese Native — Male)", gender: "Male" },
   { value: "edge:my-MM-NilarNeural", label: "⭐ Nilar (Burmese Native — Female)", gender: "Female" },
@@ -5034,7 +4819,6 @@ const RecapVideoNVPage: React.FC = () => {
   const [progressMsg, setProgressMsg] = useState("");
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoLink, setVideoLink] = useState<string>("");
-  const [selectedNiche, setSelectedNiche] = useState<string>("movie");
   const videoDurationRef = useRef<number>(0);
   const sourceFileUriRef = useRef<string | null>(null);
   const videoFileRef = useRef<File | null>(null);
@@ -5212,18 +4996,11 @@ const RecapVideoNVPage: React.FC = () => {
   };
 
   const generateVoice = async (scriptText: string, useOwnKey?: string, segsForSync?: { text: string }[]) => {
-    // If segments order for sync is provided (e.g., hook-first reorder), build the
-    // TTS input from those segments so the voice matches the video+subtitles order.
-    let speechTextForAPI = "";
-    if (segsForSync && segsForSync.length > 0) {
-      speechTextForAPI = segsForSync.map((s) => String(s.text).trim()).join("\n\n");
-    } else {
-      // Voice naturalness: keep Burmese punctuation so TTS can insert realistic micro-pauses.
-      speechTextForAPI = scriptText.replace(/\[.*?\]\s*/g, "");
-    }
+    // Voice naturalness: keep Burmese punctuation so TTS can insert realistic micro-pauses.
+    let speechTextForAPI = scriptText.replace(/\[.*?\]\s*/g, "");
     if (voiceMode === "normal") {
       // Remove mainly English punctuation, but keep Burmese "။" / "၊".
-      speechTextForAPI = speechTextForAPI.replace(/[.,!?;:\"'()\[\]{}\-_\n\r]/g, " ").replace(/\s+/g, " ");
+      speechTextForAPI = speechTextForAPI.replace(/[.,!?;:"'()\[\]{}\-_\n\r]/g, " ").replace(/\s+/g, " ");
     }
 
     setStatus("processing");
@@ -5293,31 +5070,18 @@ const RecapVideoNVPage: React.FC = () => {
       if (useOwnKey) bodyPayload.ownApiKey = useOwnKey;
       if (segsForSync && segsForSync.length > 0) bodyPayload.segments = segsForSync;
 
-      // Edge-TTS branch: Microsoft neural voices (edge:...). Prefer a voice matching
-      // the selected language when possible to avoid mismatched pronunciations (e.g. Italian voice reading English words).
+      // Edge-TTS branch: Microsoft Burmese neural voices (Thiha/Nilar). Free upstream,
+      // bypass gemini-tts and call edge-tts function. Credit is still deducted via the
+      // existing Recap NV accounting path — pass skipCreditDeduction=true to the function.
       const isEdgeVoice = typeof selectedVoice === "string" && selectedVoice.startsWith("edge:");
       const ttsFnName = isEdgeVoice ? "edge-tts" : "gemini-tts";
-      let ttsBody: Record<string, unknown>;
-      if (isEdgeVoice) {
-        const baseVoice = selectedVoice.slice("edge:".length);
-        const voiceLang = baseVoice.split("-")[0] || "";
-        let chosenVoice = baseVoice;
-        // langCode is taken from selectedLanguage earlier (e.g. 'my' from 'my-MM')
-        if (voiceLang && voiceLang !== langCode) {
-          // Try to find a voice option that matches the selected language
-          const pref = VOICE_OPTIONS.find(
-            (v) => v.value.startsWith(`edge:${selectedLanguage}`) || v.value.startsWith(`edge:${langCode}-`),
-          );
-          if (pref) chosenVoice = pref.value.slice("edge:".length);
-        }
-        ttsBody = {
-          text: speechTextForAPI,
-          voice: chosenVoice,
-          skipCreditDeduction: true,
-        };
-      } else {
-        ttsBody = bodyPayload;
-      }
+      const ttsBody = isEdgeVoice
+        ? {
+            text: speechTextForAPI,
+            voice: selectedVoice.slice("edge:".length),
+            skipCreditDeduction: true,
+          }
+        : bodyPayload;
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${ttsFnName}`, {
         method: "POST",
         headers: {
@@ -5341,8 +5105,11 @@ const RecapVideoNVPage: React.FC = () => {
         const numChannels = 1;
         const bitsPerSample = 16;
         const pcmBytes = Uint8Array.from(atob(data.audio), (c) => c.charCodeAt(0));
-        // Use raw PCM bytes directly (no silence padding) to preserve exact timing
-        const dataLength = pcmBytes.length;
+        // Add 200ms silence padding at the start to prevent browser clipping
+        const silenceSamples = Math.round(sampleRate * 0.2);
+        const silenceBytes = silenceSamples * numChannels * (bitsPerSample / 8);
+        const silencePad = new Uint8Array(silenceBytes); // zeros = silence
+        const dataLength = silenceBytes + pcmBytes.length;
         const headerSize = 44;
         const wav = new Uint8Array(headerSize + dataLength);
         const view = new DataView(wav.buffer);
@@ -5359,7 +5126,8 @@ const RecapVideoNVPage: React.FC = () => {
         view.setUint16(34, bitsPerSample, true);
         wav.set([0x64, 0x61, 0x74, 0x61], 36);
         view.setUint32(40, dataLength, true);
-        wav.set(pcmBytes, headerSize);
+        wav.set(silencePad, headerSize);
+        wav.set(pcmBytes, headerSize + silenceBytes);
         audioBlob = new Blob([wav], { type: "audio/wav" });
       } else {
         const mimeForAudio = data.mimeType || "audio/mpeg";
@@ -5368,71 +5136,9 @@ const RecapVideoNVPage: React.FC = () => {
         audioBlob = await audioFetchResp.blob();
       }
       const url = URL.createObjectURL(audioBlob);
-
-      // Measure actual audio duration in-browser and compute per-segment timings
-      try {
-        const measureAudioDuration = (blobUrl: string) =>
-          new Promise<number>((resolve) => {
-            const a = new Audio();
-            a.preload = "metadata";
-            a.src = blobUrl;
-            const cleanup = () => {
-              a.src = "";
-              resolve(0);
-            };
-            a.onloadedmetadata = () => {
-              const d = a.duration || 0;
-              a.src = "";
-              resolve(d);
-            };
-            a.onerror = cleanup;
-          });
-
-        const totalDuration = await measureAudioDuration(url);
-
-        if (segsForSync && segsForSync.length > 0 && totalDuration > 0) {
-          // Compute word-weighted durations for higher accuracy than naive API estimates
-          const wc = segsForSync.map((s) => {
-            const n = String(s.text || "")
-              .trim()
-              .split(/\s+/)
-              .filter(Boolean).length;
-            return Math.max(1, n);
-          });
-          const totalWords = wc.reduce((a, b) => a + b, 0) || 1;
-          let cursor = 0;
-          const updatedSegments = segsForSync.map((s, i) => {
-            const segDur = (wc[i] / totalWords) * totalDuration;
-            const start = cursor;
-            const end = cursor + segDur;
-            cursor = end;
-            const mins = Math.floor(start / 60);
-            const secs = Math.floor(start % 60);
-            const timestamp = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-            return { timestamp, text: String(s.text || "").trim() };
-          });
-
-          // Update UI script segments (surgical: replace only segments)
-          setScriptData((prev) => ({ ...prev, segments: updatedSegments }));
-
-          // Populate page audio timestamps (precise floats) for playback sync
-          pageAudioTimestampsRef.current = [];
-          let c = 0;
-          for (let i = 0; i < wc.length; i++) {
-            const segDur = (wc[i] / totalWords) * totalDuration;
-            const start = c;
-            const end = c + segDur;
-            pageAudioTimestampsRef.current.push({ index: i, start, end });
-            c = end;
-          }
-        }
-      } catch (e) {
-        console.warn("[AUDIO MEASURE] failed to measure audio duration:", e);
-      }
-
       setAudioUrl(url);
       setStatus("done");
-      setProgressMsg("✅ Video Editing အလိုအလောက်စတင်ပါမည်...");
+      setProgressMsg("✅ Video Editing အလိုအလျောက်စတင်ပါမည်...");
       setAutoStartRecap(true);
     } catch (err: any) {
       console.error("TTS error:", err);
@@ -5567,204 +5273,77 @@ const RecapVideoNVPage: React.FC = () => {
             })
           : "";
 
-      const nichePrompts = {
-        movie: `You are a top-tier, billion-view YouTube movie recap writer.
-
-===== MOVIE RECAP STYLE =====
-**Shocking Hook First (First 5 seconds):**
-- START WITH A SHOCKING SCENE FROM THE MIDDLE OR END — a huge mystery, a shocking reveal, or a devastating twist.
-- Make the viewer immediately ask: "Wait, what? How did that happen?"
-
-**Mystery-Driven Buildup:**
-- Jump back to the beginning, but keep adding little mysteries and teasers every few sentences.
-- Examples: "But keep your eye on that character — they're hiding something huge." / "You won't believe what's about to happen next."
-
-**Step-by-Step Tension Escalation:**
-- As conflicts get worse, make sentences shorter, more dramatic, and faster-paced.
-- Build the tension higher and higher with every segment.
-
-**Ultimate Climax Peak:**
-- End with the biggest twist, the most shocking reveal, or the most emotional moment — hit the viewer like a truck!
-
-**Ruthless Cutting Rules:**
-- REMOVE: traveling, changing clothes, waiting, eating, sleeping, walking scenes, filler conversations, anything that doesn't advance the main plot.
-- KEEP ONLY: plot twists, reveals, conflicts, shocking moments, emotional beats, and the resolution.
-
-**Duration Guidelines (Critical):**
-- Original 30 min → Recap 10-15 min (max 18 min)
-- Original <15 min → Recap 5-8 min
-- Original <10 min → Recap 4-6 min
-- Original <5 min → Recap 2-3 min
-- NO REPEATING TEXT, NO PADDING TO FILL TIME.`,
-        entertainment: `You are a charismatic entertainment gossip YouTuber with millions of subscribers.
-
-===== ENTERTAINMENT STYLE =====
-**Tone:** Fun, dramatic, gossipy, energetic, like spilling tea with friends.
-**Focus:** Celebrity drama, surprising moments, shocking reveals, viral moments, behind-the-scenes secrets.
-**Keep sentences conversational and exciting — make viewers feel like they're in on the secret!
-**CUT:** boring red carpet walks, generic interviews, slow parts — only the juiciest moments!`,
-        cooking: `You are a satisfying, mouth-watering cooking content creator.
-
-===== COOKING STYLE =====
-**Tone:** Satisfying, sensory, mouth-watering, calm but engaging.
-**Focus:** ASMR moments, satisfying textures, beautiful plating, secret tips, the final reveal of the finished dish.
-**CUT:** long prep, washing dishes, messy parts (unless it's part of the fun!).
-**Emphasize:** the most satisfying parts — cheese pulls, crispy textures, perfect slices, vibrant colors!`,
-        weird: `You are a mind-blowing "wait, that's weird" content creator.
-
-===== WEIRD/INTERESTING STYLE =====
-**Tone:** Curious, shocked, fascinated, making the viewer go "WHAT?!"
-**Focus:** Unusual facts, strange phenomena, surprising statistics, "you won't believe this" moments, things that make people stop scrolling.
-**Keep asking rhetorical questions:** "Can you believe this?" / "Wait, why would anyone do that?" / "You've never seen anything like this!"
-**Make every sentence a surprise!`,
-        engineering: `You are a fascinating engineering/DIY content creator.
-
-===== ENGINEERING STYLE =====
-**Tone:** Impressed, curious, informative, showing "how it's done".
-**Focus:** Clever solutions, satisfying builds, technical marvels, problem-solving, "aha!" moments.
-**Explain things simply, but make them sound amazing — highlight the ingenuity!
-**CUT:** long boring setup, repetitive parts — only the key steps and the final result!`,
-        production: `You are a satisfying factory/production content creator.
-
-===== PRODUCTION STYLE =====
-**Tone:** Satisfying, calming, mesmerizing, ASMR-adjacent.
-**Focus:** Satisfying machine movements, perfect repetition, satisfying transformations, "how it's made" magic.
-**Emphasize the most satisfying parts: perfect cuts, smooth assembly, satisfying packaging!
-**Keep it calm, but make viewers feel like they're watching something incredible!`,
-        agriculture: `You are a peaceful, fascinating agriculture/farming content creator.
-
-===== AGRICULTURE STYLE =====
-**Tone:** Peaceful, respectful of nature, fascinating, showing the cycle of life.
-**Focus:** Satisfying harvests, growth timelapses, beautiful farm landscapes, clever farming techniques, the connection between humans and nature.
-**Highlight the most satisfying parts: harvesting, planting, beautiful crops, happy animals!
-**Keep it calm and respectful, but also fascinating!`,
-        health: `You are a trusted, life-changing health & wellness content creator.
-
-===== HEALTH & WELLNESS STYLE =====
-**Tone:** Trustworthy, encouraging, science-backed, life-changing.
-**Focus:** Actionable tips, surprising science, "you've been doing it wrong" moments, before/after transformations, life hacks that actually work.
-**Make every tip sound like it could change someone's life!
-**Keep it encouraging, not preachy — make viewers want to take action immediately!`,
-        history: `You are an epic history storyteller like MrBallen or Lemmino.
-
-===== HISTORY STYLE =====
-**Tone:** Epic, mysterious, storytelling, like telling a campfire story.
-**Start with a hook:** "You won't believe what historians just found..." / "This secret was hidden for 1000 years..."
-**Build mystery and tension:** Ask questions, reveal clues slowly, make the viewer desperate to know the answer.
-**Focus:** Forgotten secrets, epic battles, mysterious events, amazing discoveries, "wait, that really happened?!" moments.
-**Make history sound like a thriller!`,
-        tech: `You are an exciting tech/gadget reviewer like Marques Brownlee (MKBHD).
-
-===== TECH & GADGETS STYLE =====
-**Tone:** Excited, knowledgeable, fair, showing genuine enthusiasm for cool tech.
-**Focus:** New innovations, surprising features, "wait, it can do THAT?!" moments, honest reviews, future tech possibilities.
-**Highlight the most impressive parts: speed, design, unique features, how it changes the game!
-**Keep it knowledgeable but accessible — make everyone excited about tech!`,
-        animals: `You are a loving, fascinating animal content creator.
-
-===== ANIMALS STYLE =====
-**Tone:** Loving, fascinated, excited, wholesome, sometimes funny.
-**Focus:** Cute moments, amazing animal behaviors, surprising facts, heartwarming interactions, "did you know animals can do this?!" moments.
-**Emphasize the emotion: cute, funny, amazing, heartwarming!
-**Make viewers go "aww" or "wow" with every sentence!`,
-        universe: `You are a mind-blowing space/universe narrator like Kurzgesagt.
-
-===== UNIVERSE/SPACE STYLE =====
-**Tone:** Mind-blowing, awe-inspiring, making people feel tiny in the best way.
-**Start with a perspective-shattering hook:** "If you think Earth is big, wait until you see this..." / "This fact will change how you see the universe forever..."
-**Focus:** Mind-blowing facts, cosmic scale, amazing phenomena, "wait, that's impossible?!" moments, the beauty and mystery of space.
-**Make every fact sound like it's blowing your mind!
-**Use comparisons to help people grasp the scale: "It's like a billion Earths fitting inside..."`,
-        ai: `You are a forward-thinking AI & future tech content creator.
-
-===== AI & FUTURE STYLE =====
-**Tone:** Excited, forward-thinking, a little bit mysterious, showing what's coming next.
-**Focus:** New AI breakthroughs, "AI can do WHAT now?!" moments, future possibilities, how AI is changing the world, surprising use cases.
-**Start with a hook about the future: "The future is here, and it's crazier than you think..." / "This AI just changed everything..."
-**Make people excited (and a little scared) about what's coming!`,
-        financial: `You are a trusted, smart financial educator like Graham Stephan.
-
-===== FINANCIAL/MONEY STYLE =====
-**Tone:** Smart, trustworthy, actionable, making money feel achievable.
-**Focus:** Smart strategies, "I wish I knew this earlier" moments, surprising statistics, actionable steps, how ordinary people are building wealth.
-**Keep it practical and actionable — every tip should be something viewers can actually do!
-**Make money feel like a game you can win, not something scary!`,
-        animation: `You are a creative, magical animation storyteller.
-
-===== ANIMATION STYLE =====
-**Tone:** Creative, magical, storytelling, appreciating the art of animation.
-**Focus:** Beautiful visuals, clever storytelling, emotional moments, "how did they animate that?!" moments, the magic of the story.
-**Highlight the artistry: character design, backgrounds, animation techniques, emotional beats!
-**Make viewers feel like they're watching something truly special!`,
-        automobile: `You are an excited, knowledgeable car enthusiast like Top Gear.
-
-===== AUTOMOBILE STYLE =====
-**Tone:** Excited, passionate, knowledgeable, having fun with cars.
-**Focus:** Impressive specs, amazing design, "listen to that engine!" moments, surprising features, the feeling of driving something special.
-**Emphasize the excitement: speed, sound, design, what makes this car special!
-**Make even non-car people get excited about automobiles!`,
-        news: `You are a world-class breaking news anchor (CNN/BBC style but MORE DRAMATIC).
-
-===== NEWS/POLITICS STYLE =====
-**Tone:** Powerful, authoritative, urgent, dramatic, high-stakes.
-**Focus:** Big strategies, hidden motives, immediate consequences, global impact.
-**NO BORING DETAILS — only the most shocking, game-changing moments.
-**Keep sentences short, punchy, and dramatic — like breaking news alerts.`,
-        food: `You are a vibrant, energetic food/travel vlogger with millions of subscribers.
-
-===== FOOD/TRAVEL STYLE =====
-**Tone:** Exciting, sensory, enthusiastic, lively.
-**Focus:** Secret techniques, unique methods, amazing results, sensory experiences (taste, smell, sight).
-**CUT:** washing dishes, long stirring, long traveling, boring prep.
-**KEEP ONLY:** the interesting, surprising, and delicious parts!`,
-        docu: `You are a fascinating, mind-blowing documentary narrator.
-
-===== DOCUMENTARY STYLE =====
-**Tone:** Curious, fascinating, informative, mind-blowing.
-**If the video has no speech:** describe what's happening and why it's amazing — keep asking "What is this? Why is this incredible?" the whole time.
-**Focus:** unique processes, surprising facts, amazing data, "wait, really?!" moments.`,
-        motivation: `You are a world-famous motivational speaker who changes lives.
-
-===== MOTIVATION STYLE =====
-**Tone:** Powerful, emotional, high-energy, life-changing.
-**Use short, punchy, philosophical sentences that make people want to take action immediately.
-**Every line should hit hard and inspire!`,
-      };
-
-      const selectedNichePrompt = nichePrompts[selectedNiche as keyof typeof nichePrompts] || nichePrompts.movie;
-
       const scriptBody: Record<string, unknown> = {
         fileUri,
         fileMimeType: mimeType,
-        // ── BILLION-VIEW YOUTUBE SCRIPT GENERATOR (surgical edit) ──
-        niche: `You are a TOP-TIER, BILLION-VIEW YouTube script writer.
+        // ── INTELLIGENT RECAP EDITOR PROMPT (surgical edit — comprehensive recap instructions) ──
+        niche: `You are an intelligent and professional movie recap editor.
 
-${selectedNichePrompt}
+Your task is to analyze the uploaded movie/video and create a condensed, fast-paced recap version like YouTube movie recap channels. Do NOT simply speed up or use only the first part. You must understand the FULL STORY.
 
-===== GLOBAL RULES FOR ALL NICHES =====
-**HOOK IN FIRST 5 SECONDS:** The very first sentence MUST grab attention immediately — no slow starts!
-**CONTINUOUS FLOW:** Write the script as ONE continuous, gripping story. No disconnected paragraphs.
-**EVERY SEGMENT ENDS WITH A HOOK:** Each part must end with a line that makes the viewer NEED to hear the next part (e.g., "But that was just the beginning..." / "And then everything changed...").
-**SHORT, CONVERSATIONAL SENTENCES:** No long paragraphs, no book-like language — talk like a real person!
-**NO FILLER:** No repeating text, no padding to make it longer — only the good stuff!
+CRITICAL STORYTELLING RULE:
+Write the narration script as ONE CONTINUOUS GRIPPING STORY. Every sentence must hook into the next — create momentum, tension, and curiosity.
+Do NOT write isolated disconnected paragraphs. Each segment must END with a hook or transition that PULLS the listener into the next segment.
+Examples of good transitions: "But what she didn't know was..." / "And that's when everything changed." / "Just when he thought it was over..."
+The narration must feel like a non-stop thriller story, NOT a boring lecture or news report.
 
-**LANGUAGE:** Write the COMPLETE script in ${selectedLangName} ONLY. Cover 100% of the story from start to finish. No partial scripts!${burmeseStyleBlock}
+IMPORTANT EDITING RULE:
+Keep the important story moments, but remove unnecessary transition actions, filler activities, and dead air between them.
+Example: If a character is sick and goes to the hospital,
+Keep: The character being sick, arriving at the hospital, and receiving treatment.
+Remove: Changing clothes, walking to the car, driving scenes, waiting scenes, and unnecessary travel shots.
 
-**FORMAT (CRITICAL):**
-Output each paragraph as one segment starting with [MM:SS] prefix.
-First segment: [00:00]
-Last segment: reaches close to the end of the video.
+INSTRUCTIONS:
+- Keep ONLY the key plot points in chronological order. CUT everything else ruthlessly.
+- AGGRESSIVELY remove: unnecessary scenes, silence, slow walking, repetitive actions, filler moments, unimportant dialogues, transition scenes, travel montages, and any scene that does NOT advance the main plot.
+- Focus on: Main plot twists, key character moments, critical conflicts, shocking reveals, and the conclusion.
+- Shorten conversations to their essential meaning — do NOT include full back-and-forth dialogues.
+- Skip over setup/buildup scenes and jump straight to the payoff.
 
-**ORIGINALITY:** Use your own words — DO NOT copy exact dialogue or subtitles!`,
+PACING & DURATION RULE (CRITICAL):
+- The recap MUST be significantly SHORTER than the original video. Target 40-65% of the original duration.
+- If source is 10 minutes, recap should be 3-5 minutes. If source is 2 hours, recap should be 15-25 minutes MAX.
+- If you include everything from start to finish without cutting, you have FAILED as a recap editor.
+- The viewer should feel like they watched a fast, exciting, condensed version — NOT the full video.
+
+IMPORTANT:
+Do NOT summarize using text only.
+Do NOT randomly cut scenes.
+Actually edit the video by intelligently compressing the narrative while preserving a professional complete story experience.
+
+LANGUAGE: Write the COMPLETE script in ${selectedLangName} language ONLY. Do NOT stop halfway; cover 100% of the story arc from start to finish.
+Never output partial/incomplete script.${burmeseStyleBlock}
+
+FORMAT (CRITICAL FOR SEGMENTING):
+Output each paragraph as one segment starting with a timestamp prefix like: [MM:SS] ... .
+The first segment should start at [00:00]. The last segment must reach close to the end of the full duration.
+
+ORIGINALITY:
+Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle text.`,
         language: selectedLangName,
         sourceDurationSec: duration,
         skipCreditDeduction: true,
-        extraInstructions: `CRITICAL EXTRA REMINDERS:
-- Output language: ${selectedLangName} ONLY — NO other languages!
-- Follow the niche-specific instructions above perfectly!
-- Script must be COMPLETE (cover 100% of the story arc), but also HEAVILY CONDENSED!
-- NO FILLER, NO REPEATING, NO PADDING!
-- Every segment must end with a hook that makes people want to keep watching!${burmeseExtraStyle}`,
+        extraInstructions: `CRITICAL:
+- Output language MUST be ${selectedLangName} ONLY. Do NOT switch to any other language even if the video's spoken dialogue is in a different language.
+- Script must cover the story arc from beginning to end, BUT must be HEAVILY CONDENSED (30-50% of original duration).
+- Each segment must flow smoothly into the next.
+- If token pressure appears, condense remaining story into brief segments instead of stopping.
+
+AGGRESSIVE CUTTING RULES (CRITICAL — this is a RECAP, not a retelling):
+- CUT all scenes that do NOT directly advance the main plot. Be ruthless.
+- CUT: travel/walking scenes, eating scenes, sleeping scenes, getting dressed, waiting, filler conversations, repetitive arguments, scenery shots, and any slow-paced moments.
+- KEEP ONLY: Plot twists, reveals, conflicts, character-defining moments, shocking scenes, and the resolution.
+- If a scene can be summarized in one sentence instead of described in detail, use one sentence.
+- The output MUST be significantly SHORTER than the source video. If it is the same length or longer, you have failed.
+- Think like a professional YouTube recap editor: fast, engaging, essential moments only.
+- Do NOT randomly cut scenes. Intelligently compress the narrative while preserving a professional complete story experience.
+
+STORYTELLING FLOW (CRITICAL — eliminates dead air):
+- Write narration as a CONTINUOUS FLOWING STORY. Never write isolated disconnected paragraphs.
+- Each segment MUST end with a hook or transition line that creates MOMENTUM into the next segment.
+- Use cliffhanger-style transitions: "But that was just the beginning..." / "And then, everything went wrong."
+- Keep sentence density HIGH. No filler words, no unnecessary repetition, no padding.
+- When the TTS reads this script, there should be ZERO moments where the audience wants to skip.${burmeseExtraStyle}`,
         generationConfig: {
           maxOutputTokens,
           temperature: 0.7,
@@ -5791,9 +5370,9 @@ Last segment: reaches close to the end of the video.
       const scriptText = scriptResult.script || "";
       if (!scriptText || scriptText.trim().length < 10) throw new Error("AI script generation returned empty result");
 
-      let segments = scriptToSegments(scriptText, duration);
-      let hookSegment: RecapSegment | null = null;
-      let hookIndex = -1;
+      const segments = scriptToSegments(scriptText, duration);
+      setScriptData({ title: file.name.replace(/\.[^.]+$/, ""), full_script: scriptText, segments });
+      setProgressMsg("📝 Script generated! Now generating AI voice...");
 
       // ── FEATURE: AI Hook Detector — LOCAL SCORING (no API, 100% reliable) ──
       // Finds the most viral/dramatic segment: highest emotional intensity + climax position
@@ -5903,51 +5482,24 @@ Last segment: reaches close to the end of the video.
           });
           const maxScore = Math.max(...scores);
           if (maxScore > 0) {
-            hookIndex = scores.indexOf(maxScore);
-            hookSegment = segments[hookIndex];
+            const hookIdx = scores.indexOf(maxScore);
             // Extract hook title: use the most impactful sentence from the segment
-            const sentences = hookSegment.text
+            const sentences = segments[hookIdx].text
               .split(/[.!?]+/)
               .map((s) => s.trim())
               .filter((s) => s.length > 10);
             const bestSentence = sentences.reduce(
               (best, s) => (s.length < 80 && s.length > best.length ? s : best),
-              sentences[0] || hookSegment.text,
+              sentences[0] || segments[hookIdx].text,
             );
             const words = bestSentence.trim().split(/\s+/);
             const hookTitle = words.slice(0, 8).join(" ") + (words.length > 8 ? "..." : "");
-            console.log(`[HOOK SCORER] Seg ${hookIndex} score=${maxScore.toFixed(1)}: "${hookTitle}"`);
+            console.log(`[HOOK SCORER] Seg ${hookIdx} score=${maxScore.toFixed(1)}: "${hookTitle}"`);
           }
         } catch (e) {
           console.warn("[HOOK LOCAL] Failed:", e);
         }
       })();
-
-      // ── SURGICAL EDIT: Duplicate HOOK — place a copy at start AND keep original place ──
-      // Also sanitize timestamps to MM:SS (no milliseconds) and strip any in-text timecodes
-      if (hookSegment && hookIndex >= 0) {
-        const duplicatedHook = { ...hookSegment, timestamp: "00:00" };
-        const newSegments = [duplicatedHook, ...segments];
-
-        // Sanitize each segment: remove bracketed timecodes from text and normalize timestamp to MM:SS
-        const sanitized = newSegments.map((s) => {
-          const rawText = String(s.text || "");
-          const cleanText = rawText.replace(/\[.*?\]\s*/g, "").trim();
-          const secs = parseTime(String(s.timestamp || "00:00")) || 0;
-          const mins = Math.floor(secs / 60);
-          const sec = Math.floor(secs % 60);
-          const timestamp = `${String(mins).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
-          return { ...s, text: cleanText, timestamp };
-        });
-
-        segments = sanitized;
-        console.log(
-          "[HOOK DUPLICATE] Hook duplicated to start and original kept in-place. Timestamps sanitized to MM:SS and subtitle text cleaned.",
-        );
-      }
-
-      setScriptData({ title: file.name.replace(/\.[^.]+$/, ""), full_script: scriptText, segments });
-      setProgressMsg("📝 Script generated! Now generating AI voice...");
       // ── BONUS: YouTube SEO Metadata Generator (async, non-blocking) ──
       (async () => {
         try {
@@ -6594,8 +6146,6 @@ Last segment: reaches close to the end of the video.
             onVoiceModeChange={setVoiceMode}
             sourceFileUriRef={sourceFileUriRef}
             videoFileRef={videoFileRef}
-            selectedNiche={selectedNiche}
-            onSelectedNicheChange={setSelectedNiche}
           />
         )}
 
