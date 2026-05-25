@@ -285,7 +285,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const localRecProgressRef = useRef<number>(0);
     const subNeonHueRef = useRef(0);
     const [exportQuality, setExportQuality] = useState<string>("720p");
-    const [selectedNiche, setSelectedNiche] = useState<string>("movie");
 
     // Cinematic movie poster generation removed (feature disabled).
 
@@ -2810,136 +2809,62 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             let activeIndex = -1;
             let activeText = "";
 
-            // ── HOOK PHASE AV SYNC OVERRIDE ──
-            // During first 4s of recording, show hook segment's VIDEO (not segment 0)
-            // This ensures hook overlay text MATCHES the actual dramatic video scene
-            const HOOK_SYNC_MS = 4000;
-            const recAgeSync = recStartTimeRef.current > 0 ? performance.now() - recStartTimeRef.current : Infinity;
-            const hookIdx = hookSegmentIdxRef.current;
-            const isHookPhase = recAgeSync < HOOK_SYNC_MS && hookIdx >= 0 && segs.length > hookIdx;
+            // ── 100% ACCURATE AV SYNC ── NO HOOK OVERRIDE ──
+            // Audio and video both start at 0 and stay perfectly in sync!
+            const maxIdx = Math.min(audioTs.length, segs.length) - 1;
+            const getSeg = (idx: number) => segs[idx] as any;
+            if (maxIdx >= 0) {
+              lastTsIdx = clamp(lastTsIdx, 0, maxIdx);
+              while (lastTsIdx < maxIdx && currentTime >= audioTs[lastTsIdx].end) lastTsIdx += 1;
+              while (lastTsIdx > 0 && currentTime < audioTs[lastTsIdx].start) lastTsIdx -= 1;
 
-            if (isHookPhase) {
-              // Override: seek video to hook segment's vStart — show the dramatic scene
-              const hookSeg = segs[hookIdx] as any;
-              if (hookSeg) {
-                const hookVEnd = hookSeg.vEnd === -1 ? vv.duration : hookSeg.vEnd;
-                if (!seekPendingRef.current && Math.abs(vv.currentTime - hookSeg.vStart) > 0.8) {
+              if (currentTime >= audioTs[lastTsIdx].start && currentTime < audioTs[lastTsIdx].end) {
+                activeIndex = lastTsIdx;
+                activeText = getSeg(lastTsIdx)?.text || "";
+              }
+
+              if (activeIndex !== -1) {
+                const active = getSeg(activeIndex);
+                const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
+
+                if (activeIndex !== lastIndexRef.current) {
+                  // Hard cut — seek ONCE to segment start (no multiple seeks!)
+                  lastIndexRef.current = activeIndex;
+                  videoInSegmentRef.current = true;
+                  segCutTimeRef.current = performance.now();
                   seekPendingRef.current = true;
-                  const onHookSeeked = () => {
+
+                  const onSeeked = () => {
                     seekPendingRef.current = false;
-                    if (!vv.ended) {
+                    if (!vv.ended && !freezeModeRef.current) {
                       vv.playbackRate = 1.0;
                       vv.play().catch(() => {});
                     }
-                    vv.removeEventListener("seeked", onHookSeeked);
+                    vv.removeEventListener("seeked", onSeeked);
                   };
-                  vv.addEventListener("seeked", onHookSeeked);
-                  vv.currentTime = hookSeg.vStart;
+                  vv.addEventListener("seeked", onSeeked);
+                  vv.currentTime = active.vStart;
                 } else if (!seekPendingRef.current) {
-                  // Clamp at hook segment end — hold last frame if overrun
-                  if (hookVEnd > 0 && vv.currentTime >= hookVEnd - 0.05) {
-                    if (!vv.paused) vv.pause();
-                  } else if (vv.paused && !vv.ended) {
-                    vv.playbackRate = 1.0;
-                    vv.play().catch(() => {});
-                  }
-                }
-              }
-              // Skip normal sync during hook phase — subtitle handled by canvas overlay
-            } else {
-              // ── After hook phase: force clean resync to segment 0 ──
-              if (recAgeSync >= HOOK_SYNC_MS && recAgeSync < HOOK_SYNC_MS + 200 && lastIndexRef.current >= 0) {
-                lastIndexRef.current = -1; // Reset so first real segment gets a clean hard seek
-              }
-
-              // ── TRUE RECAP HARD-CUT SYNC ──
-              // No more playbackRate manipulation. Each segment plays at 1.0x normal speed.
-              // On segment change: hard-seek video to vStart. Between segments: hold video.
-              const maxIdx = Math.min(audioTs.length, segs.length) - 1;
-              const getSeg = (idx: number) => segs[idx] as any;
-              if (maxIdx >= 0) {
-                lastTsIdx = clamp(lastTsIdx, 0, maxIdx);
-                while (lastTsIdx < maxIdx && currentTime >= audioTs[lastTsIdx].end) lastTsIdx += 1;
-                while (lastTsIdx > 0 && currentTime < audioTs[lastTsIdx].start) lastTsIdx -= 1;
-
-                if (currentTime >= audioTs[lastTsIdx].start && currentTime < audioTs[lastTsIdx].end) {
-                  activeIndex = lastTsIdx;
-                  activeText = getSeg(lastTsIdx)?.text || "";
-                }
-
-                if (activeIndex !== -1) {
-                  const active = getSeg(activeIndex);
-                  const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
-
-                  if (activeIndex !== lastIndexRef.current) {
-                    // TRUE RECAP: Hard cut — seek ONCE to segment start
-                    // seekPendingRef prevents re-seeking every frame during async HTML5 seek
-                    lastIndexRef.current = activeIndex;
-                    videoInSegmentRef.current = true;
-                    segCutTimeRef.current = performance.now(); // trigger canvas dip-to-dark
-                    seekPendingRef.current = true;
-
-                    const onSeeked = () => {
-                      seekPendingRef.current = false;
-                      // Always play video when freezeMode is OFF
-                      if (!vv.ended) {
-                        if (!freezeModeRef.current) {
-                          vv.playbackRate = 1.0;
-                          vv.play().catch(() => {});
-                        }
-                      }
-                      vv.removeEventListener("seeked", onSeeked);
-                    };
-                    vv.addEventListener("seeked", onSeeked);
-                    vv.currentTime = active.vStart;
-                  } else if (!seekPendingRef.current) {
-                    // Seek complete — normal playing state
-                    if (!freezeModeRef.current) {
-                      // When freezeMode is OFF: never pause, just keep playing
-                      if (vv.paused && !vv.ended) {
-                        vv.playbackRate = 1.0;
-                        vv.play().catch(() => {});
-                      }
-                    } else {
-                      // Only when freezeMode is ON: clamp at segment end
-                      if (vActualEnd > 0 && vv.currentTime >= vActualEnd - 0.05) {
-                        if (!vv.paused) vv.pause();
-                      } else if (vv.paused && !vv.ended) {
-                        vv.playbackRate = 1.0;
-                        vv.play().catch(() => {});
-                      }
+                  // Normal playing — NO PAUSING when freezeMode is OFF
+                  if (!freezeModeRef.current) {
+                    if (vv.paused && !vv.ended) {
+                      vv.playbackRate = 1.0;
+                      vv.play().catch(() => {});
                     }
-                  }
-                } else {
-                  // Between segments — only pause if freezeMode is ON
-                  if (freezeModeRef.current && videoInSegmentRef.current) {
-                    videoInSegmentRef.current = false;
-                    if (!vv.paused) vv.pause();
+                  } else {
+                    // Only pause at segment end if freezeMode is ON
+                    if (vActualEnd > 0 && vv.currentTime >= vActualEnd - 0.05) {
+                      if (!vv.paused) vv.pause();
+                    } else if (vv.paused && !vv.ended) {
+                      vv.playbackRate = 1.0;
+                      vv.play().catch(() => {});
+                    }
                   }
                 }
               } else {
-                // Fallback: word-count proportional (no timestamps available)
-                const aPct = currentTime / av.duration;
-                activeIndex = segs.findIndex((s: any) => aPct >= s.aStartPct && aPct <= s.aEndPct);
-                if (activeIndex === -1 && segs.length > 0 && aPct > 0) {
-                  const lastSeg = segs[segs.length - 1] as any;
-                  if (aPct > lastSeg.aStartPct) activeIndex = segs.length - 1;
-                }
-                if (activeIndex !== -1) {
-                  const s = segs[activeIndex] as any;
-                  activeText = s.text;
-                  if (activeIndex !== lastIndexRef.current) {
-                    // Hard cut fallback
-                    vv.currentTime = s.vStart;
-                    vv.playbackRate = 1.0;
-                    lastIndexRef.current = activeIndex;
-                  }
-                  if (!vv.paused && !vv.ended) {
-                    // playing normally
-                  } else if (vv.paused && !vv.ended) {
-                    vv.play().catch(() => {});
-                  }
-                } else {
+                // Between segments — only pause if freezeMode is ON
+                if (freezeModeRef.current && videoInSegmentRef.current) {
+                  videoInSegmentRef.current = false;
                   if (!vv.paused) vv.pause();
                 }
               }
@@ -3015,30 +2940,31 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         recapAnimFrameRef.current = requestAnimationFrame(syncAndDraw);
       };
-      // 100% MILLISECOND AV SYNC: Initialize video position before playback starts
-      const segs = syncSegmentsRef.current;
-      if (videoRef.current && segs.length > 0) {
-        const firstVStart = (segs[0] as any).vStart ?? 0;
-        videoRef.current.currentTime = firstVStart;
-      }
-
-      // SURGICAL FIX: Ensure perfect audio start by playing ONLY after async recorder setup completes (warmup + logo load)
-      // SURGICAL EDIT: Apply audioSpeedRate at recording start for actual effect on output
+      // 100% MILLISECOND AV SYNC: Initialize both audio and video to 0
       if (audioRef.current) {
-        audioRef.current.playbackRate = audioSpeedRate;
-        audioRef.current.play().catch(console.error);
+        audioRef.current.currentTime = 0;
       }
       if (videoRef.current) {
-        videoRef.current.play().catch((err) => {
-          // SURGICAL IOS FIX: Safely bypass the WebKit muted autoplay bug.
-          // If iOS drops the gesture token due to heavy network awaits and permanently freezes the decoder,
-          // reloading the explicitly muted video seamlessly restarts the hardware pipeline.
-          console.warn("[RECORDING] iOS Video freeze detected, applying safe hardware reload...", err);
-          videoRef.current!.muted = true;
-          videoRef.current!.load();
-          videoRef.current!.play().catch(console.error);
-        });
+        videoRef.current.currentTime = 0;
       }
+
+      // SURGICAL FIX: Play audio and video at EXACTLY the same time!
+      const playBoth = async () => {
+        if (audioRef.current && videoRef.current) {
+          audioRef.current.playbackRate = audioSpeedRate;
+          // Wait for both to be ready, then play together
+          await Promise.all([
+            audioRef.current.play().catch(console.error),
+            videoRef.current.play().catch((err) => {
+              console.warn("[RECORDING] iOS Video reload...", err);
+              videoRef.current!.muted = true;
+              videoRef.current!.load();
+              return videoRef.current!.play().catch(console.error);
+            }),
+          ]);
+        }
+      };
+      playBoth();
 
       recapAnimFrameRef.current = requestAnimationFrame(syncAndDraw);
     };
@@ -5056,13 +4982,6 @@ const RecapVideoNVPage: React.FC = () => {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoLink, setVideoLink] = useState<string>("");
   const [selectedNiche, setSelectedNiche] = useState<string>("movie");
-  const parseTime = (t: string) => {
-    if (!t) return 0;
-    const parts = t.split(":").map(Number);
-    if (parts.length === 2) return (parts[0] || 0) * 60 + (parts[1] || 0);
-    if (parts.length === 3) return (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
-    return 0;
-  };
   const videoDurationRef = useRef<number>(0);
   const sourceFileUriRef = useRef<string | null>(null);
   const videoFileRef = useRef<File | null>(null);
