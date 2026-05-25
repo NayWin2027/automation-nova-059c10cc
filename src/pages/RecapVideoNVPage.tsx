@@ -2188,7 +2188,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               freezeProgress < 0.5 ? 2 * freezeProgress * freezeProgress : 1 - Math.pow(-2 * freezeProgress + 2, 2) / 2;
             // ── SURGICAL EDIT: 1.5% MAX ZOOM ONLY! Extremely subtle, professional vibe, no jarring look ──
             const freezeZoom = 1.0 + 0.015 * eased;
-
+            
             // Extremely subtle gentle pan to add professional flow
             const t = audioEl.currentTime;
             const panX = Math.sin(t * 0.05) * (srcCropW * 0.003);
@@ -3730,6 +3730,43 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       ))}
                     </div>
                   </div>
+
+                  <div className="mt-3">
+                    <p className="text-xs text-slate-500 mb-2">🎯 Content Niche (Billion-View Style)</p>
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-1.5">
+                      {[
+                        { key: "movie", label: "🎬 Movie Recap", desc: "Mystery-driven, shocking twists" },
+                        { key: "entertainment", label: "🎭 Entertainment", desc: "Celebrity gossip, drama, fun" },
+                        { key: "cooking", label: "👨‍🍳 Cooking", desc: "Satisfying, mouth-watering" },
+                        { key: "weird", label: "🤪 Weird/Interesting", desc: "Curiosity, mind-blowing facts" },
+                        { key: "engineering", label: "⚙️ Engineering", desc: "How it's made, technical marvels" },
+                        { key: "production", label: "🏭 Production", desc: "Factory processes, satisfying builds" },
+                        { key: "agriculture", label: "🌾 Agriculture", desc: "Farming, harvest, nature's cycle" },
+                        { key: "health", label: "🏥 Health & Wellness", desc: "Life-changing tips, science-backed" },
+                        { key: "history", label: "📜 History", desc: "Epic stories, forgotten secrets" },
+                        { key: "tech", label: "💻 Tech & Gadgets", desc: "Future tech, innovations, reviews" },
+                        { key: "animals", label: "🐾 Animals", desc: "Cute, wild, amazing animal moments" },
+                        { key: "universe", label: "🌌 Universe/Space", desc: "Mind-blowing cosmic facts" },
+                        { key: "ai", label: "🤖 AI & Future", desc: "Artificial intelligence, what's next" },
+                        { key: "financial", label: "💰 Financial/Money", desc: "Wealth building, smart strategies" },
+                        { key: "animation", label: "🎨 Animation", desc: "Creative stories, visual magic" },
+                        { key: "automobile", label: "🚗 Automobile", desc: "Cars, supercars, engineering feats" },
+                        { key: "news", label: "📰 News/Politics", desc: "CNN/BBC dramatic style" },
+                        { key: "food", label: "🍔 Food/Travel", desc: "Sensory, vibrant energy" },
+                        { key: "docu", label: "🔬 Documentary", desc: "Insightful, curiosity-driven" },
+                        { key: "motivation", label: "💪 Motivation", desc: "Powerful, emotional speeches" },
+                      ].map((niche) => (
+                        <button
+                          key={niche.key}
+                          onClick={() => setSelectedNiche(niche.key)}
+                          className={`flex flex-col items-start gap-0.5 px-2 py-2 rounded-lg text-xs font-semibold border transition-all ${selectedNiche === niche.key ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white border-purple-500 shadow-[0_0_12px_rgba(147,51,234,0.3)]" : "bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500"}`}
+                        >
+                          <span>{niche.label}</span>
+                          <span className="text-[10px] opacity-75">{niche.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Logo Settings */}
@@ -4819,6 +4856,7 @@ const RecapVideoNVPage: React.FC = () => {
   const [progressMsg, setProgressMsg] = useState("");
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoLink, setVideoLink] = useState<string>("");
+  const [selectedNiche, setSelectedNiche] = useState<string>("movie");
   const videoDurationRef = useRef<number>(0);
   const sourceFileUriRef = useRef<string | null>(null);
   const videoFileRef = useRef<File | null>(null);
@@ -5273,77 +5311,204 @@ const RecapVideoNVPage: React.FC = () => {
             })
           : "";
 
+      const nichePrompts = {
+        movie: `You are a top-tier, billion-view YouTube movie recap writer.
+
+===== MOVIE RECAP STYLE =====
+**Shocking Hook First (First 5 seconds):**
+- START WITH A SHOCKING SCENE FROM THE MIDDLE OR END — a huge mystery, a shocking reveal, or a devastating twist.
+- Make the viewer immediately ask: "Wait, what? How did that happen?"
+
+**Mystery-Driven Buildup:**
+- Jump back to the beginning, but keep adding little mysteries and teasers every few sentences.
+- Examples: "But keep your eye on that character — they're hiding something huge." / "You won't believe what's about to happen next."
+
+**Step-by-Step Tension Escalation:**
+- As conflicts get worse, make sentences shorter, more dramatic, and faster-paced.
+- Build the tension higher and higher with every segment.
+
+**Ultimate Climax Peak:**
+- End with the biggest twist, the most shocking reveal, or the most emotional moment — hit the viewer like a truck!
+
+**Ruthless Cutting Rules:**
+- REMOVE: traveling, changing clothes, waiting, eating, sleeping, walking scenes, filler conversations, anything that doesn't advance the main plot.
+- KEEP ONLY: plot twists, reveals, conflicts, shocking moments, emotional beats, and the resolution.
+
+**Duration Guidelines (Critical):**
+- Original 30 min → Recap 10-15 min (max 18 min)
+- Original <15 min → Recap 5-8 min
+- Original <10 min → Recap 4-6 min
+- Original <5 min → Recap 2-3 min
+- NO REPEATING TEXT, NO PADDING TO FILL TIME.`,
+        entertainment: `You are a charismatic entertainment gossip YouTuber with millions of subscribers.
+
+===== ENTERTAINMENT STYLE =====
+**Tone:** Fun, dramatic, gossipy, energetic, like spilling tea with friends.
+**Focus:** Celebrity drama, surprising moments, shocking reveals, viral moments, behind-the-scenes secrets.
+**Keep sentences conversational and exciting — make viewers feel like they're in on the secret!
+**CUT:** boring red carpet walks, generic interviews, slow parts — only the juiciest moments!`,
+        cooking: `You are a satisfying, mouth-watering cooking content creator.
+
+===== COOKING STYLE =====
+**Tone:** Satisfying, sensory, mouth-watering, calm but engaging.
+**Focus:** ASMR moments, satisfying textures, beautiful plating, secret tips, the final reveal of the finished dish.
+**CUT:** long prep, washing dishes, messy parts (unless it's part of the fun!).
+**Emphasize:** the most satisfying parts — cheese pulls, crispy textures, perfect slices, vibrant colors!`,
+        weird: `You are a mind-blowing "wait, that's weird" content creator.
+
+===== WEIRD/INTERESTING STYLE =====
+**Tone:** Curious, shocked, fascinated, making the viewer go "WHAT?!"
+**Focus:** Unusual facts, strange phenomena, surprising statistics, "you won't believe this" moments, things that make people stop scrolling.
+**Keep asking rhetorical questions:** "Can you believe this?" / "Wait, why would anyone do that?" / "You've never seen anything like this!"
+**Make every sentence a surprise!`,
+        engineering: `You are a fascinating engineering/DIY content creator.
+
+===== ENGINEERING STYLE =====
+**Tone:** Impressed, curious, informative, showing "how it's done".
+**Focus:** Clever solutions, satisfying builds, technical marvels, problem-solving, "aha!" moments.
+**Explain things simply, but make them sound amazing — highlight the ingenuity!
+**CUT:** long boring setup, repetitive parts — only the key steps and the final result!`,
+        production: `You are a satisfying factory/production content creator.
+
+===== PRODUCTION STYLE =====
+**Tone:** Satisfying, calming, mesmerizing, ASMR-adjacent.
+**Focus:** Satisfying machine movements, perfect repetition, satisfying transformations, "how it's made" magic.
+**Emphasize the most satisfying parts: perfect cuts, smooth assembly, satisfying packaging!
+**Keep it calm, but make viewers feel like they're watching something incredible!`,
+        agriculture: `You are a peaceful, fascinating agriculture/farming content creator.
+
+===== AGRICULTURE STYLE =====
+**Tone:** Peaceful, respectful of nature, fascinating, showing the cycle of life.
+**Focus:** Satisfying harvests, growth timelapses, beautiful farm landscapes, clever farming techniques, the connection between humans and nature.
+**Highlight the most satisfying parts: harvesting, planting, beautiful crops, happy animals!
+**Keep it calm and respectful, but also fascinating!`,
+        health: `You are a trusted, life-changing health & wellness content creator.
+
+===== HEALTH & WELLNESS STYLE =====
+**Tone:** Trustworthy, encouraging, science-backed, life-changing.
+**Focus:** Actionable tips, surprising science, "you've been doing it wrong" moments, before/after transformations, life hacks that actually work.
+**Make every tip sound like it could change someone's life!
+**Keep it encouraging, not preachy — make viewers want to take action immediately!`,
+        history: `You are an epic history storyteller like MrBallen or Lemmino.
+
+===== HISTORY STYLE =====
+**Tone:** Epic, mysterious, storytelling, like telling a campfire story.
+**Start with a hook:** "You won't believe what historians just found..." / "This secret was hidden for 1000 years..."
+**Build mystery and tension:** Ask questions, reveal clues slowly, make the viewer desperate to know the answer.
+**Focus:** Forgotten secrets, epic battles, mysterious events, amazing discoveries, "wait, that really happened?!" moments.
+**Make history sound like a thriller!`,
+        tech: `You are an exciting tech/gadget reviewer like Marques Brownlee (MKBHD).
+
+===== TECH & GADGETS STYLE =====
+**Tone:** Excited, knowledgeable, fair, showing genuine enthusiasm for cool tech.
+**Focus:** New innovations, surprising features, "wait, it can do THAT?!" moments, honest reviews, future tech possibilities.
+**Highlight the most impressive parts: speed, design, unique features, how it changes the game!
+**Keep it knowledgeable but accessible — make everyone excited about tech!`,
+        animals: `You are a loving, fascinating animal content creator.
+
+===== ANIMALS STYLE =====
+**Tone:** Loving, fascinated, excited, wholesome, sometimes funny.
+**Focus:** Cute moments, amazing animal behaviors, surprising facts, heartwarming interactions, "did you know animals can do this?!" moments.
+**Emphasize the emotion: cute, funny, amazing, heartwarming!
+**Make viewers go "aww" or "wow" with every sentence!`,
+        universe: `You are a mind-blowing space/universe narrator like Kurzgesagt.
+
+===== UNIVERSE/SPACE STYLE =====
+**Tone:** Mind-blowing, awe-inspiring, making people feel tiny in the best way.
+**Start with a perspective-shattering hook:** "If you think Earth is big, wait until you see this..." / "This fact will change how you see the universe forever..."
+**Focus:** Mind-blowing facts, cosmic scale, amazing phenomena, "wait, that's impossible?!" moments, the beauty and mystery of space.
+**Make every fact sound like it's blowing your mind!
+**Use comparisons to help people grasp the scale: "It's like a billion Earths fitting inside..."`,
+        ai: `You are a forward-thinking AI & future tech content creator.
+
+===== AI & FUTURE STYLE =====
+**Tone:** Excited, forward-thinking, a little bit mysterious, showing what's coming next.
+**Focus:** New AI breakthroughs, "AI can do WHAT now?!" moments, future possibilities, how AI is changing the world, surprising use cases.
+**Start with a hook about the future: "The future is here, and it's crazier than you think..." / "This AI just changed everything..."
+**Make people excited (and a little scared) about what's coming!`,
+        financial: `You are a trusted, smart financial educator like Graham Stephan.
+
+===== FINANCIAL/MONEY STYLE =====
+**Tone:** Smart, trustworthy, actionable, making money feel achievable.
+**Focus:** Smart strategies, "I wish I knew this earlier" moments, surprising statistics, actionable steps, how ordinary people are building wealth.
+**Keep it practical and actionable — every tip should be something viewers can actually do!
+**Make money feel like a game you can win, not something scary!`,
+        animation: `You are a creative, magical animation storyteller.
+
+===== ANIMATION STYLE =====
+**Tone:** Creative, magical, storytelling, appreciating the art of animation.
+**Focus:** Beautiful visuals, clever storytelling, emotional moments, "how did they animate that?!" moments, the magic of the story.
+**Highlight the artistry: character design, backgrounds, animation techniques, emotional beats!
+**Make viewers feel like they're watching something truly special!`,
+        automobile: `You are an excited, knowledgeable car enthusiast like Top Gear.
+
+===== AUTOMOBILE STYLE =====
+**Tone:** Excited, passionate, knowledgeable, having fun with cars.
+**Focus:** Impressive specs, amazing design, "listen to that engine!" moments, surprising features, the feeling of driving something special.
+**Emphasize the excitement: speed, sound, design, what makes this car special!
+**Make even non-car people get excited about automobiles!`,
+        news: `You are a world-class breaking news anchor (CNN/BBC style but MORE DRAMATIC).
+
+===== NEWS/POLITICS STYLE =====
+**Tone:** Powerful, authoritative, urgent, dramatic, high-stakes.
+**Focus:** Big strategies, hidden motives, immediate consequences, global impact.
+**NO BORING DETAILS — only the most shocking, game-changing moments.
+**Keep sentences short, punchy, and dramatic — like breaking news alerts.`,
+        food: `You are a vibrant, energetic food/travel vlogger with millions of subscribers.
+
+===== FOOD/TRAVEL STYLE =====
+**Tone:** Exciting, sensory, enthusiastic, lively.
+**Focus:** Secret techniques, unique methods, amazing results, sensory experiences (taste, smell, sight).
+**CUT:** washing dishes, long stirring, long traveling, boring prep.
+**KEEP ONLY:** the interesting, surprising, and delicious parts!`,
+        docu: `You are a fascinating, mind-blowing documentary narrator.
+
+===== DOCUMENTARY STYLE =====
+**Tone:** Curious, fascinating, informative, mind-blowing.
+**If the video has no speech:** describe what's happening and why it's amazing — keep asking "What is this? Why is this incredible?" the whole time.
+**Focus:** unique processes, surprising facts, amazing data, "wait, really?!" moments.`,
+        motivation: `You are a world-famous motivational speaker who changes lives.
+
+===== MOTIVATION STYLE =====
+**Tone:** Powerful, emotional, high-energy, life-changing.
+**Use short, punchy, philosophical sentences that make people want to take action immediately.
+**Every line should hit hard and inspire!`
+      };
+
+      const selectedNichePrompt = nichePrompts[selectedNiche as keyof typeof nichePrompts] || nichePrompts.movie;
+
       const scriptBody: Record<string, unknown> = {
         fileUri,
         fileMimeType: mimeType,
-        // ── INTELLIGENT RECAP EDITOR PROMPT (surgical edit — comprehensive recap instructions) ──
-        niche: `You are an intelligent and professional movie recap editor.
+        // ── BILLION-VIEW YOUTUBE SCRIPT GENERATOR (surgical edit) ──
+        niche: `You are a TOP-TIER, BILLION-VIEW YouTube script writer.
 
-Your task is to analyze the uploaded movie/video and create a condensed, fast-paced recap version like YouTube movie recap channels. Do NOT simply speed up or use only the first part. You must understand the FULL STORY.
+${selectedNichePrompt}
 
-CRITICAL STORYTELLING RULE:
-Write the narration script as ONE CONTINUOUS GRIPPING STORY. Every sentence must hook into the next — create momentum, tension, and curiosity.
-Do NOT write isolated disconnected paragraphs. Each segment must END with a hook or transition that PULLS the listener into the next segment.
-Examples of good transitions: "But what she didn't know was..." / "And that's when everything changed." / "Just when he thought it was over..."
-The narration must feel like a non-stop thriller story, NOT a boring lecture or news report.
+===== GLOBAL RULES FOR ALL NICHES =====
+**HOOK IN FIRST 5 SECONDS:** The very first sentence MUST grab attention immediately — no slow starts!
+**CONTINUOUS FLOW:** Write the script as ONE continuous, gripping story. No disconnected paragraphs.
+**EVERY SEGMENT ENDS WITH A HOOK:** Each part must end with a line that makes the viewer NEED to hear the next part (e.g., "But that was just the beginning..." / "And then everything changed...").
+**SHORT, CONVERSATIONAL SENTENCES:** No long paragraphs, no book-like language — talk like a real person!
+**NO FILLER:** No repeating text, no padding to make it longer — only the good stuff!
 
-IMPORTANT EDITING RULE:
-Keep the important story moments, but remove unnecessary transition actions, filler activities, and dead air between them.
-Example: If a character is sick and goes to the hospital,
-Keep: The character being sick, arriving at the hospital, and receiving treatment.
-Remove: Changing clothes, walking to the car, driving scenes, waiting scenes, and unnecessary travel shots.
+**LANGUAGE:** Write the COMPLETE script in ${selectedLangName} ONLY. Cover 100% of the story from start to finish. No partial scripts!${burmeseStyleBlock}
 
-INSTRUCTIONS:
-- Keep ONLY the key plot points in chronological order. CUT everything else ruthlessly.
-- AGGRESSIVELY remove: unnecessary scenes, silence, slow walking, repetitive actions, filler moments, unimportant dialogues, transition scenes, travel montages, and any scene that does NOT advance the main plot.
-- Focus on: Main plot twists, key character moments, critical conflicts, shocking reveals, and the conclusion.
-- Shorten conversations to their essential meaning — do NOT include full back-and-forth dialogues.
-- Skip over setup/buildup scenes and jump straight to the payoff.
+**FORMAT (CRITICAL):**
+Output each paragraph as one segment starting with [MM:SS] prefix.
+First segment: [00:00]
+Last segment: reaches close to the end of the video.
 
-PACING & DURATION RULE (CRITICAL):
-- The recap MUST be significantly SHORTER than the original video. Target 40-65% of the original duration.
-- If source is 10 minutes, recap should be 3-5 minutes. If source is 2 hours, recap should be 15-25 minutes MAX.
-- If you include everything from start to finish without cutting, you have FAILED as a recap editor.
-- The viewer should feel like they watched a fast, exciting, condensed version — NOT the full video.
-
-IMPORTANT:
-Do NOT summarize using text only.
-Do NOT randomly cut scenes.
-Actually edit the video by intelligently compressing the narrative while preserving a professional complete story experience.
-
-LANGUAGE: Write the COMPLETE script in ${selectedLangName} language ONLY. Do NOT stop halfway; cover 100% of the story arc from start to finish.
-Never output partial/incomplete script.${burmeseStyleBlock}
-
-FORMAT (CRITICAL FOR SEGMENTING):
-Output each paragraph as one segment starting with a timestamp prefix like: [MM:SS] ... .
-The first segment should start at [00:00]. The last segment must reach close to the end of the full duration.
-
-ORIGINALITY:
-Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle text.`,
+**ORIGINALITY:** Use your own words — DO NOT copy exact dialogue or subtitles!`,
         language: selectedLangName,
         sourceDurationSec: duration,
         skipCreditDeduction: true,
-        extraInstructions: `CRITICAL:
-- Output language MUST be ${selectedLangName} ONLY. Do NOT switch to any other language even if the video's spoken dialogue is in a different language.
-- Script must cover the story arc from beginning to end, BUT must be HEAVILY CONDENSED (30-50% of original duration).
-- Each segment must flow smoothly into the next.
-- If token pressure appears, condense remaining story into brief segments instead of stopping.
-
-AGGRESSIVE CUTTING RULES (CRITICAL — this is a RECAP, not a retelling):
-- CUT all scenes that do NOT directly advance the main plot. Be ruthless.
-- CUT: travel/walking scenes, eating scenes, sleeping scenes, getting dressed, waiting, filler conversations, repetitive arguments, scenery shots, and any slow-paced moments.
-- KEEP ONLY: Plot twists, reveals, conflicts, character-defining moments, shocking scenes, and the resolution.
-- If a scene can be summarized in one sentence instead of described in detail, use one sentence.
-- The output MUST be significantly SHORTER than the source video. If it is the same length or longer, you have failed.
-- Think like a professional YouTube recap editor: fast, engaging, essential moments only.
-- Do NOT randomly cut scenes. Intelligently compress the narrative while preserving a professional complete story experience.
-
-STORYTELLING FLOW (CRITICAL — eliminates dead air):
-- Write narration as a CONTINUOUS FLOWING STORY. Never write isolated disconnected paragraphs.
-- Each segment MUST end with a hook or transition line that creates MOMENTUM into the next segment.
-- Use cliffhanger-style transitions: "But that was just the beginning..." / "And then, everything went wrong."
-- Keep sentence density HIGH. No filler words, no unnecessary repetition, no padding.
-- When the TTS reads this script, there should be ZERO moments where the audience wants to skip.${burmeseExtraStyle}`,
+        extraInstructions: `CRITICAL EXTRA REMINDERS:
+- Output language: ${selectedLangName} ONLY — NO other languages!
+- Follow the niche-specific instructions above perfectly!
+- Script must be COMPLETE (cover 100% of the story arc), but also HEAVILY CONDENSED!
+- NO FILLER, NO REPEATING, NO PADDING!
+- Every segment must end with a hook that makes people want to keep watching!${burmeseExtraStyle}`,
         generationConfig: {
           maxOutputTokens,
           temperature: 0.7,
@@ -5370,9 +5535,9 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
       const scriptText = scriptResult.script || "";
       if (!scriptText || scriptText.trim().length < 10) throw new Error("AI script generation returned empty result");
 
-      const segments = scriptToSegments(scriptText, duration);
-      setScriptData({ title: file.name.replace(/\.[^.]+$/, ""), full_script: scriptText, segments });
-      setProgressMsg("📝 Script generated! Now generating AI voice...");
+      let segments = scriptToSegments(scriptText, duration);
+      let hookSegment: RecapSegment | null = null;
+      let hookIndex = -1;
 
       // ── FEATURE: AI Hook Detector — LOCAL SCORING (no API, 100% reliable) ──
       // Finds the most viral/dramatic segment: highest emotional intensity + climax position
@@ -5482,24 +5647,39 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
           });
           const maxScore = Math.max(...scores);
           if (maxScore > 0) {
-            const hookIdx = scores.indexOf(maxScore);
+            hookIndex = scores.indexOf(maxScore);
+            hookSegment = segments[hookIndex];
             // Extract hook title: use the most impactful sentence from the segment
-            const sentences = segments[hookIdx].text
+            const sentences = hookSegment.text
               .split(/[.!?]+/)
               .map((s) => s.trim())
               .filter((s) => s.length > 10);
             const bestSentence = sentences.reduce(
               (best, s) => (s.length < 80 && s.length > best.length ? s : best),
-              sentences[0] || segments[hookIdx].text,
+              sentences[0] || hookSegment.text,
             );
             const words = bestSentence.trim().split(/\s+/);
             const hookTitle = words.slice(0, 8).join(" ") + (words.length > 8 ? "..." : "");
-            console.log(`[HOOK SCORER] Seg ${hookIdx} score=${maxScore.toFixed(1)}: "${hookTitle}"`);
+            console.log(`[HOOK SCORER] Seg ${hookIndex} score=${maxScore.toFixed(1)}: "${hookTitle}"`);
           }
         } catch (e) {
           console.warn("[HOOK LOCAL] Failed:", e);
         }
       })();
+
+      // ── SURGICAL EDIT: Reorder segments to put the HOOK FIRST (for first 5 seconds) ──
+      if (hookSegment && hookIndex > 0) {
+        // Create a new array with hook first, then the rest of the segments (without the hook)
+        const newSegments = [
+          { ...hookSegment, start: 0 }, // Set hook's start time to 0
+          ...segments.filter((_, i) => i !== hookIndex),
+        ];
+        segments = newSegments;
+        console.log("[HOOK REORDER] Hook segment moved to first position!");
+      }
+
+      setScriptData({ title: file.name.replace(/\.[^.]+$/, ""), full_script: scriptText, segments });
+      setProgressMsg("📝 Script generated! Now generating AI voice...");
       // ── BONUS: YouTube SEO Metadata Generator (async, non-blocking) ──
       (async () => {
         try {
@@ -6006,9 +6186,7 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
 
           {/* Video Link Input */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-neon-cyan">
-              Video Link (YouTube, TikTok, Instagram, Facebook)
-            </label>
+            <label className="text-sm font-medium text-neon-cyan">Video Link (YouTube, TikTok, Instagram, Facebook)</label>
             <input
               type="text"
               value={videoLink}
@@ -6029,7 +6207,7 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
                   if (!hasCredits) return;
                 }
                 didDeductRef.current = false;
-
+                
                 if (videoFile) {
                   startAutoPipeline(videoFile);
                 } else if (videoLink) {
@@ -6038,36 +6216,25 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
                   setProgressMsg("🎬 Video link ကိုလေ့လာနေပါသည်...");
                   try {
                     // Check if it's a platform URL (YouTube/TikTok/Instagram/Facebook)
-                    const isPlatformUrl =
+                    const isPlatformUrl = 
                       /(youtube\.com|youtu\.be|tiktok\.com|instagram\.com|facebook\.com|fb\.watch)/i.test(videoLink);
-
+                    
                     if (isPlatformUrl) {
                       // Handle platform URLs by sending to edge function (yt-dlp)
                       setProgressMsg("📥 Platform video ကို download လုပ်နေပါသည်...");
-
+                      
                       // Call edge function to download platform video
-                      const { data: downloadData, error: downloadError } = await supabase.functions.invoke(
-                        "video-recap",
-                        {
-                          body: {
-                            action: "downloadPlatformVideo",
-                            platformUrl: videoLink,
-                          },
+                      const { data: downloadData, error: downloadError } = await supabase.functions.invoke("video-recap", {
+                        body: {
+                          action: "downloadPlatformVideo",
+                          platformUrl: videoLink,
                         },
-                      );
-
-                      if (
-                        downloadError ||
-                        !downloadData?.videoUrl ||
-                        !downloadData?.fileName ||
-                        !downloadData?.fileSize ||
-                        !downloadData?.mimeType
-                      ) {
-                        throw new Error(
-                          downloadData?.error || downloadError?.message || "Platform video download failed",
-                        );
+                      });
+                      
+                      if (downloadError || !downloadData?.videoUrl || !downloadData?.fileName || !downloadData?.fileSize || !downloadData?.mimeType) {
+                        throw new Error(downloadData?.error || downloadError?.message || "Platform video download failed");
                       }
-
+                      
                       // Now fetch the downloaded video URL from edge function
                       const response = await fetch(downloadData.videoUrl);
                       if (!response.ok) throw new Error("Downloaded video ကို fetch လုပ်လို့မရပါဘူး။");
@@ -6082,22 +6249,17 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
                     } else {
                       // Handle direct video links (mp4/webm/mov etc.)
                       // First validate it's a direct video URL
-                      const isDirectVideo =
-                        /\.(mp4|webm|mov|avi|mkv)$/i.test(videoLink) ||
-                        videoLink.includes("video") ||
-                        videoLink.startsWith("blob:");
+                      const isDirectVideo = /\.(mp4|webm|mov|avi|mkv)$/i.test(videoLink) || 
+                                            videoLink.includes("video") || 
+                                            videoLink.startsWith("blob:");
                       if (!isDirectVideo) {
-                        throw new Error(
-                          "Direct video link (mp4/webm/mov) သို့မဟုတ် YouTube/TikTok/Instagram/Facebook link ကိုသာ လက်ခံပါတယ်။",
-                        );
+                        throw new Error("Direct video link (mp4/webm/mov) သို့မဟုတ် YouTube/TikTok/Instagram/Facebook link ကိုသာ လက်ခံပါတယ်။");
                       }
                       // Fetch direct video as blob
                       const response = await fetch(videoLink);
                       if (!response.ok) throw new Error("Video link ကို fetch လုပ်လို့မရပါဘူး။");
                       const blob = await response.blob();
-                      const file = new File([blob], `video_from_link.${blob.type.split("/")[1] || "mp4"}`, {
-                        type: blob.type,
-                      });
+                      const file = new File([blob], `video_from_link.${blob.type.split("/")[1] || "mp4"}`, { type: blob.type });
                       setVideoFile(file);
                       videoFileRef.current = file;
                       // Set videoUrl to preview it
