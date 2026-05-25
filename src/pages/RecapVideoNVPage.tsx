@@ -284,8 +284,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const subNeonHueRef = useRef(0);
     const [exportQuality, setExportQuality] = useState<string>("720p");
 
-    const [selectedNiche, setSelectedNiche] = useState<string>("movie");
-
     // Cinematic movie poster generation removed (feature disabled).
 
     const handleGeneratePoster = async () => {
@@ -3735,39 +3733,88 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
                   <div className="mt-3">
                     <p className="text-xs text-slate-500 mb-2">🎯 Content Niche (Billion-View Style)</p>
-                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-1.5">
-                      {[
-                        { key: "movie", label: "🎬 Movie Recap", desc: "Mystery-driven, shocking twists" },
-                        { key: "entertainment", label: "🎭 Entertainment", desc: "Celebrity gossip, drama, fun" },
-                        { key: "cooking", label: "👨‍🍳 Cooking", desc: "Satisfying, mouth-watering" },
-                        { key: "weird", label: "🤪 Weird/Interesting", desc: "Curiosity, mind-blowing facts" },
-                        { key: "engineering", label: "⚙️ Engineering", desc: "How it's made, technical marvels" },
-                        { key: "production", label: "🏭 Production", desc: "Factory processes, satisfying builds" },
-                        { key: "agriculture", label: "🌾 Agriculture", desc: "Farming, harvest, nature's cycle" },
-                        { key: "health", label: "🏥 Health & Wellness", desc: "Life-changing tips, science-backed" },
-                        { key: "history", label: "📜 History", desc: "Epic stories, forgotten secrets" },
-                        { key: "tech", label: "💻 Tech & Gadgets", desc: "Future tech, innovations, reviews" },
-                        { key: "animals", label: "🐾 Animals", desc: "Cute, wild, amazing animal moments" },
-                        { key: "universe", label: "🌌 Universe/Space", desc: "Mind-blowing cosmic facts" },
-                        { key: "ai", label: "🤖 AI & Future", desc: "Artificial intelligence, what's next" },
-                        { key: "financial", label: "💰 Financial/Money", desc: "Wealth building, smart strategies" },
-                        { key: "animation", label: "🎨 Animation", desc: "Creative stories, visual magic" },
-                        { key: "automobile", label: "🚗 Automobile", desc: "Cars, supercars, engineering feats" },
-                        { key: "news", label: "📰 News/Politics", desc: "CNN/BBC dramatic style" },
-                        { key: "food", label: "🍔 Food/Travel", desc: "Sensory, vibrant energy" },
-                        { key: "docu", label: "🔬 Documentary", desc: "Insightful, curiosity-driven" },
-                        { key: "motivation", label: "💪 Motivation", desc: "Powerful, emotional speeches" },
-                      ].map((niche) => (
+                    <Popover>
+                      <PopoverTrigger asChild>
                         <button
-                          key={niche.key}
-                          onClick={() => setSelectedNiche(niche.key)}
-                          className={`flex flex-col items-start gap-0.5 px-2 py-2 rounded-lg text-xs font-semibold border transition-all ${selectedNiche === niche.key ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white border-purple-500 shadow-[0_0_12px_rgba(147,51,234,0.3)]" : "bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500"}`}
+                          className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-semibold border border-slate-700 bg-slate-800 text-slate-200 hover:border-slate-500 transition-all shadow-sm"
                         >
-                          <span>{niche.label}</span>
-                          <span className="text-[10px] opacity-75">{niche.desc}</span>
+                          <span>
+                            {(() => {
+                              const niches = [
+                                { key: "movie", label: "🎬 Movie Recap", desc: "Mystery-driven, shocking twists" },
+                                { key: "entertainment", label: "🎭 Entertainment", desc: "Celebrity gossip, drama, fun" },
+                                { key: "cooking", label: "👨‍🍳 Cooking", desc: "Satisfying, mouth-watering" },
+                                { key: "weird", label: "🤪 Weird/Interesting", desc: "Curiosity, mind-blowing facts" },
+                                { key: "engineering", label: "⚙️ Engineering", desc: "How it's made, technical marvels" },
+                                { key: "production", label: "🏭 Production", desc: "Factory processes, satisfying builds" },
+                                { key: "agriculture", label: "🌾 Agriculture", desc: "Farming, harvest, nature's cycle" },
+                                { key: "health", label: "🏥 Health & Wellness", desc: "Life-changing tips, science-backed" },
+                                { key: "history", label: "📜 History", desc: "Epic stories, forgotten secrets" },
+                                { key: "tech", label: "💻 Tech & Gadgets", desc: "Future tech, innovations, reviews" },
+                                { key: "animals", label: "🐾 Animals", desc: "Cute, wild, amazing animal moments" },
+                                { key: "universe", label: "🌌 Universe/Space", desc: "Mind-blowing cosmic facts" },
+                                { key: "ai", label: "🤖 AI & Future", desc: "Artificial intelligence, what's next" },
+                                { key: "financial", label: "💰 Financial/Money", desc: "Wealth building, smart strategies" },
+                                { key: "animation", label: "🎨 Animation", desc: "Creative stories, visual magic" },
+                                { key: "automobile", label: "🚗 Automobile", desc: "Cars, supercars, engineering feats" },
+                                { key: "news", label: "📰 News/Politics", desc: "CNN/BBC dramatic style" },
+                                { key: "food", label: "🍔 Food/Travel", desc: "Sensory, vibrant energy" },
+                                { key: "docu", label: "🔬 Documentary", desc: "Insightful, curiosity-driven" },
+                                { key: "motivation", label: "💪 Motivation", desc: "Powerful, emotional speeches" },
+                              ];
+                              const found = niches.find(n => n.key === selectedNiche);
+                              return found ? found.label : "🎬 Movie Recap";
+                            })()}
+                          </span>
+                          <ChevronsUpDown className="h-4 w-4 text-slate-400" />
                         </button>
-                      ))}
-                    </div>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[320px] p-0 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl">
+                        <Command className="bg-transparent">
+                          <CommandInput placeholder="ရှာရန် niche ရိုက်ထည့်ပါ..." className="text-sm text-slate-200 placeholder:text-slate-500 border-b border-slate-700" />
+                          <CommandList className="max-h-[300px] overflow-y-auto">
+                            <CommandEmpty className="py-6 text-center text-sm text-slate-500">Niche မတွေ့ရှိပါ</CommandEmpty>
+                            <CommandGroup className="p-1">
+                              {[
+                                { key: "movie", label: "🎬 Movie Recap", desc: "Mystery-driven, shocking twists" },
+                                { key: "entertainment", label: "🎭 Entertainment", desc: "Celebrity gossip, drama, fun" },
+                                { key: "cooking", label: "👨‍🍳 Cooking", desc: "Satisfying, mouth-watering" },
+                                { key: "weird", label: "🤪 Weird/Interesting", desc: "Curiosity, mind-blowing facts" },
+                                { key: "engineering", label: "⚙️ Engineering", desc: "How it's made, technical marvels" },
+                                { key: "production", label: "🏭 Production", desc: "Factory processes, satisfying builds" },
+                                { key: "agriculture", label: "🌾 Agriculture", desc: "Farming, harvest, nature's cycle" },
+                                { key: "health", label: "🏥 Health & Wellness", desc: "Life-changing tips, science-backed" },
+                                { key: "history", label: "📜 History", desc: "Epic stories, forgotten secrets" },
+                                { key: "tech", label: "💻 Tech & Gadgets", desc: "Future tech, innovations, reviews" },
+                                { key: "animals", label: "🐾 Animals", desc: "Cute, wild, amazing animal moments" },
+                                { key: "universe", label: "🌌 Universe/Space", desc: "Mind-blowing cosmic facts" },
+                                { key: "ai", label: "🤖 AI & Future", desc: "Artificial intelligence, what's next" },
+                                { key: "financial", label: "💰 Financial/Money", desc: "Wealth building, smart strategies" },
+                                { key: "animation", label: "🎨 Animation", desc: "Creative stories, visual magic" },
+                                { key: "automobile", label: "🚗 Automobile", desc: "Cars, supercars, engineering feats" },
+                                { key: "news", label: "📰 News/Politics", desc: "CNN/BBC dramatic style" },
+                                { key: "food", label: "🍔 Food/Travel", desc: "Sensory, vibrant energy" },
+                                { key: "docu", label: "🔬 Documentary", desc: "Insightful, curiosity-driven" },
+                                { key: "motivation", label: "💪 Motivation", desc: "Powerful, emotional speeches" },
+                              ].map((niche) => (
+                                <CommandItem
+                                  key={niche.key}
+                                  value={niche.key}
+                                  onSelect={() => setSelectedNiche(niche.key)}
+                                  className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm cursor-pointer transition-all ${selectedNiche === niche.key ? "bg-gradient-to-r from-purple-600/20 to-pink-600/20 text-white border border-purple-500/50" : "text-slate-300 hover:bg-slate-800"}`}
+                                >
+                                  <div className="flex flex-col items-start gap-0.5">
+                                    <span className="font-semibold">{niche.label}</span>
+                                    <span className="text-[10px] text-slate-500">{niche.desc}</span>
+                                  </div>
+                                  {selectedNiche === niche.key && <Check className="h-4 w-4 text-purple-400" />}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                   </div>
                 </div>
 
