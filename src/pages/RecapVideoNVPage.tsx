@@ -271,6 +271,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     videoFileRef,
   }) => {
     const [activeTab, setActiveTab] = useState<"script" | "segments">("script");
+    const [selectedNiche, setSelectedNiche] = useState<string>("movie");
     const [isRecapPlaying, setIsRecapPlaying] = useState(false);
     const [currentSubtitle, setCurrentSubtitle] = useState("");
     const [subtitleKey, setSubtitleKey] = useState(0);
