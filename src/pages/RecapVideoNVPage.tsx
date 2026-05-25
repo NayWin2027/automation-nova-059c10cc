@@ -285,6 +285,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const localRecProgressRef = useRef<number>(0);
     const subNeonHueRef = useRef(0);
     const [exportQuality, setExportQuality] = useState<string>("720p");
+    const [selectedNiche, setSelectedNiche] = useState<string>("movie");
 
     // Cinematic movie poster generation removed (feature disabled).
 
@@ -5055,6 +5056,13 @@ const RecapVideoNVPage: React.FC = () => {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoLink, setVideoLink] = useState<string>("");
   const [selectedNiche, setSelectedNiche] = useState<string>("movie");
+  const parseTime = (t: string) => {
+    if (!t) return 0;
+    const parts = t.split(":").map(Number);
+    if (parts.length === 2) return (parts[0] || 0) * 60 + (parts[1] || 0);
+    if (parts.length === 3) return (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
+    return 0;
+  };
   const videoDurationRef = useRef<number>(0);
   const sourceFileUriRef = useRef<string | null>(null);
   const videoFileRef = useRef<File | null>(null);
