@@ -26,14 +26,6 @@ interface RecapScript {
   segments: RecapSegment[];
 }
 
-const parseTime = (t: string) => {
-  if (!t) return 0;
-  const parts = t.split(":").map(Number);
-  if (parts.length === 2) return (parts[0] || 0) * 60 + (parts[1] || 0);
-  if (parts.length === 3) return (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
-  return 0;
-};
-
 type ProcessingStatus = "idle" | "processing" | "done" | "error";
 
 interface ResultViewProps {
@@ -279,7 +271,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     videoFileRef,
   }) => {
     const [activeTab, setActiveTab] = useState<"script" | "segments">("script");
-    const [selectedNiche, setSelectedNiche] = useState<string>("movie");
     const [isRecapPlaying, setIsRecapPlaying] = useState(false);
     const [currentSubtitle, setCurrentSubtitle] = useState("");
     const [subtitleKey, setSubtitleKey] = useState(0);
@@ -1314,6 +1305,14 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const isLocalSource = (url?: string) => {
       if (!url) return false;
       return url.startsWith("blob:") || url.startsWith("data:") || url.startsWith("file:");
+    };
+
+    const parseTime = (t: string) => {
+      if (!t) return 0;
+      const parts = t.split(":").map(Number);
+      if (parts.length === 2) return (parts[0] || 0) * 60 + (parts[1] || 0);
+      if (parts.length === 3) return (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
+      return 0;
     };
 
     const syncSegmentsRef = useRef<ReturnType<typeof Array.prototype.map>>([]);
@@ -2810,63 +2809,104 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             let activeIndex = -1;
             let activeText = "";
 
-            // ── 100% ACCURATE AV SYNC ── NO HOOK OVERRIDE ──
-            // Audio and video both start at 0 and stay perfectly in sync!
-            const maxIdx = Math.min(audioTs.length, segs.length) - 1;
-            const getSeg = (idx: number) => segs[idx] as any;
-            if (maxIdx >= 0) {
-              lastTsIdx = clamp(lastTsIdx, 0, maxIdx);
-              while (lastTsIdx < maxIdx && currentTime >= audioTs[lastTsIdx].end) lastTsIdx += 1;
-              while (lastTsIdx > 0 && currentTime < audioTs[lastTsIdx].start) lastTsIdx -= 1;
+            // ── 100% ACCURATE AV SYNC + HOOK PHASE ──
+            const HOOK_DURATION_MS = 4000;
+            const recAgeSync = recStartTimeRef.current > 0 ? performance.now() - recStartTimeRef.current : Infinity;
+            const hookIdx = hookSegmentIdxRef.current;
+            const isHookPhase = recAgeSync < HOOK_DURATION_MS && hookIdx >= 0 && segs.length > hookIdx;
 
-              if (currentTime >= audioTs[lastTsIdx].start && currentTime < audioTs[lastTsIdx].end) {
-                activeIndex = lastTsIdx;
-                activeText = getSeg(lastTsIdx)?.text || "";
-              }
-
-              if (activeIndex !== -1) {
-                const active = getSeg(activeIndex);
-                const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
-
-                if (activeIndex !== lastIndexRef.current) {
-                  // Hard cut — seek ONCE to segment start (no multiple seeks!)
-                  lastIndexRef.current = activeIndex;
-                  videoInSegmentRef.current = true;
-                  segCutTimeRef.current = performance.now();
+            if (isHookPhase) {
+              // Hook phase: Play hook segment's video, audio stays at 0 (overlay is shown)
+              const hookSeg = segs[hookIdx] as any;
+              if (hookSeg) {
+                const hookVEnd = hookSeg.vEnd === -1 ? vv.duration : hookSeg.vEnd;
+                // Seek video to hook start if needed
+                if (!seekPendingRef.current && Math.abs(vv.currentTime - hookSeg.vStart) > 0.1) {
                   seekPendingRef.current = true;
-
-                  const onSeeked = () => {
+                  const onHookSeeked = () => {
                     seekPendingRef.current = false;
-                    if (!vv.ended && !freezeModeRef.current) {
+                    if (!vv.ended) {
                       vv.playbackRate = 1.0;
                       vv.play().catch(() => {});
                     }
-                    vv.removeEventListener("seeked", onSeeked);
+                    vv.removeEventListener("seeked", onHookSeeked);
                   };
-                  vv.addEventListener("seeked", onSeeked);
-                  vv.currentTime = active.vStart;
+                  vv.addEventListener("seeked", onHookSeeked);
+                  vv.currentTime = hookSeg.vStart;
                 } else if (!seekPendingRef.current) {
-                  // Normal playing — NO PAUSING when freezeMode is OFF
-                  if (!freezeModeRef.current) {
-                    if (vv.paused && !vv.ended) {
-                      vv.playbackRate = 1.0;
-                      vv.play().catch(() => {});
-                    }
-                  } else {
-                    // Only pause at segment end if freezeMode is ON
-                    if (vActualEnd > 0 && vv.currentTime >= vActualEnd - 0.05) {
-                      if (!vv.paused) vv.pause();
-                    } else if (vv.paused && !vv.ended) {
-                      vv.playbackRate = 1.0;
-                      vv.play().catch(() => {});
-                    }
+                  // Loop the hook segment video
+                  if (hookVEnd > 0 && vv.currentTime >= hookVEnd - 0.05) {
+                    vv.currentTime = hookSeg.vStart;
+                  } else if (vv.paused && !vv.ended) {
+                    vv.playbackRate = 1.0;
+                    vv.play().catch(() => {});
                   }
                 }
-              } else {
-                // Between segments — only pause if freezeMode is ON
-                if (freezeModeRef.current && videoInSegmentRef.current) {
-                  videoInSegmentRef.current = false;
-                  if (!vv.paused) vv.pause();
+                // Subtitle handled by hook overlay
+                activeText = "";
+              }
+            } else {
+              // After hook phase: RESET lastIndex for clean sync
+              if (lastIndexRef.current >= 0) {
+                lastIndexRef.current = -1;
+              }
+              // Perfect sync of audio & video
+              const maxIdx = Math.min(audioTs.length, segs.length) - 1;
+              const getSeg = (idx: number) => segs[idx] as any;
+              if (maxIdx >= 0) {
+                lastTsIdx = clamp(lastTsIdx, 0, maxIdx);
+                while (lastTsIdx < maxIdx && currentTime >= audioTs[lastTsIdx].end) lastTsIdx += 1;
+                while (lastTsIdx > 0 && currentTime < audioTs[lastTsIdx].start) lastTsIdx -= 1;
+
+                if (currentTime >= audioTs[lastTsIdx].start && currentTime < audioTs[lastTsIdx].end) {
+                  activeIndex = lastTsIdx;
+                  activeText = getSeg(lastTsIdx)?.text || "";
+                }
+
+                if (activeIndex !== -1) {
+                  const active = getSeg(activeIndex);
+                  const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
+
+                  if (activeIndex !== lastIndexRef.current) {
+                    // Hard cut — seek ONCE to segment start
+                    lastIndexRef.current = activeIndex;
+                    videoInSegmentRef.current = true;
+                    segCutTimeRef.current = performance.now();
+                    seekPendingRef.current = true;
+
+                    const onSeeked = () => {
+                      seekPendingRef.current = false;
+                      if (!vv.ended && !freezeModeRef.current) {
+                        vv.playbackRate = 1.0;
+                        vv.play().catch(() => {});
+                      }
+                      vv.removeEventListener("seeked", onSeeked);
+                    };
+                    vv.addEventListener("seeked", onSeeked);
+                    vv.currentTime = active.vStart;
+                  } else if (!seekPendingRef.current) {
+                    // Normal playing — NO PAUSING when freezeMode is OFF
+                    if (!freezeModeRef.current) {
+                      if (vv.paused && !vv.ended) {
+                        vv.playbackRate = 1.0;
+                        vv.play().catch(() => {});
+                      }
+                    } else {
+                      // Only pause at segment end if freezeMode is ON
+                      if (vActualEnd > 0 && vv.currentTime >= vActualEnd - 0.05) {
+                        if (!vv.paused) vv.pause();
+                      } else if (vv.paused && !vv.ended) {
+                        vv.playbackRate = 1.0;
+                        vv.play().catch(() => {});
+                      }
+                    }
+                  }
+                } else {
+                  // Between segments — only pause if freezeMode is ON
+                  if (freezeModeRef.current && videoInSegmentRef.current) {
+                    videoInSegmentRef.current = false;
+                    if (!vv.paused) vv.pause();
+                  }
                 }
               }
             }
@@ -4992,7 +5032,7 @@ const RecapVideoNVPage: React.FC = () => {
   const [recapHistory, setRecapHistory] = useState<RecapHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState("my-MM");
-  const [selectedVoice, setSelectedVoice] = useState("edge:en-US-GuyNeural");
+  const [selectedVoice, setSelectedVoice] = useState("edge:it-IT-GiuseppeMultilingualNeural");
   const [langPopoverOpen, setLangPopoverOpen] = useState(false);
   const [apiMode, setApiMode] = useState<"app" | "own">("own");
   const [ownApiKey, setOwnApiKey] = useState("");
