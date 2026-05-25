@@ -46,6 +46,8 @@ interface ResultViewProps {
   renderMode?: "browser" | "server";
   sourceFileUriRef?: React.MutableRefObject<string | null>;
   videoFileRef?: React.MutableRefObject<File | null>;
+  selectedNiche: string;
+  onSelectedNicheChange: (niche: string) => void;
 }
 
 interface LogoSettings {
@@ -250,6 +252,14 @@ const fixWebmDuration = (buffer: ArrayBuffer, durationMs: number): ArrayBuffer |
   return result.buffer;
 };
 
+const parseTime = (t: string) => {
+  if (!t) return 0;
+  const parts = t.split(":").map(Number);
+  if (parts.length === 2) return (parts[0] || 0) * 60 + (parts[1] || 0);
+  if (parts.length === 3) return (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
+  return 0;
+};
+
 export const ResultView: React.FC<ResultViewProps> = React.memo(
   ({
     scriptData,
@@ -269,6 +279,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     renderMode,
     sourceFileUriRef,
     videoFileRef,
+    selectedNiche,
+    onSelectedNicheChange,
   }) => {
     const [activeTab, setActiveTab] = useState<"script" | "segments">("script");
     const [isRecapPlaying, setIsRecapPlaying] = useState(false);
@@ -3913,7 +3925,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                                 <CommandItem
                                   key={niche.key}
                                   value={niche.key}
-                                  onSelect={() => setSelectedNiche(niche.key)}
+                                  onSelect={() => onSelectedNicheChange(niche.key)}
                                   className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm cursor-pointer transition-all ${selectedNiche === niche.key ? "bg-gradient-to-r from-purple-600/20 to-pink-600/20 text-white border border-purple-500/50" : "text-slate-300 hover:bg-slate-800"}`}
                                 >
                                   <div className="flex flex-col items-start gap-0.5">
@@ -6582,6 +6594,8 @@ Last segment: reaches close to the end of the video.
             onVoiceModeChange={setVoiceMode}
             sourceFileUriRef={sourceFileUriRef}
             videoFileRef={videoFileRef}
+            selectedNiche={selectedNiche}
+            onSelectedNicheChange={setSelectedNiche}
           />
         )}
 
