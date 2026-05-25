@@ -26,6 +26,14 @@ interface RecapScript {
   segments: RecapSegment[];
 }
 
+const parseTime = (t: string) => {
+  if (!t) return 0;
+  const parts = t.split(":").map(Number);
+  if (parts.length === 2) return (parts[0] || 0) * 60 + (parts[1] || 0);
+  if (parts.length === 3) return (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
+  return 0;
+};
+
 type ProcessingStatus = "idle" | "processing" | "done" | "error";
 
 interface ResultViewProps {
@@ -271,6 +279,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     videoFileRef,
   }) => {
     const [activeTab, setActiveTab] = useState<"script" | "segments">("script");
+    const [selectedNiche, setSelectedNiche] = useState<string>("movie");
     const [isRecapPlaying, setIsRecapPlaying] = useState(false);
     const [currentSubtitle, setCurrentSubtitle] = useState("");
     const [subtitleKey, setSubtitleKey] = useState(0);
