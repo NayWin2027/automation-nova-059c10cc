@@ -275,6 +275,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const [currentSubtitle, setCurrentSubtitle] = useState("");
     const [subtitleKey, setSubtitleKey] = useState(0);
     const [isRendering, setIsRendering] = useState(false);
+    const [selectedNiche, setSelectedNiche] = useState<string>("movie");
     // ── FEATURE: AI Hook Detector state ──
     const hookSegmentIdxRef = useRef<number>(-1);
     const hookTitleRef = useRef<string>("");
