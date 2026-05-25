@@ -275,13 +275,14 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const [currentSubtitle, setCurrentSubtitle] = useState("");
     const [subtitleKey, setSubtitleKey] = useState(0);
     const [isRendering, setIsRendering] = useState(false);
-    const [selectedNiche, setSelectedNiche] = useState<string>("movie");
     // ── FEATURE: AI Hook Detector state ──
     const hookSegmentIdxRef = useRef<number>(-1);
     const hookTitleRef = useRef<string>("");
     const recStartTimeRef = useRef<number>(0); // Recording start timestamp for hook overlay timing
     const [renderedBlobUrl, setRenderedBlobUrl] = useState<string | null>(null);
     const [serverRenderProgress, setServerRenderProgress] = useState<string>("");
+    const [localRecProgress, setLocalRecProgress] = useState<number>(0);
+    const localRecProgressRef = useRef<number>(0);
     const subNeonHueRef = useRef(0);
     const [exportQuality, setExportQuality] = useState<string>("720p");
 
@@ -2796,6 +2797,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         if (av && vv) {
           if (av.duration > 0 && vv.duration > 0) {
             const currentTime = av.currentTime;
+            // Update local recording progress (throttled to prevent too many re-renders)
+            const progress = Math.min(100, Math.max(0, (currentTime / av.duration) * 100));
+            // Only update if progress changes by more than 0.5%
+            if (Math.abs(progress - localRecProgressRef.current) > 0.5) {
+              localRecProgressRef.current = progress;
+              setLocalRecProgress(progress);
+            }
             const segs = syncSegmentsRef.current as typeof syncSegments;
             const audioTs = audioTimestampsRef.current;
             let activeIndex = -1;
@@ -3038,6 +3046,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     // Previously: syncLoop rAF + setTimeout(startRecapRecording) ran TWO separate rAF loops.
     // Now: startRecapRecording owns the single rAF loop (syncAndDraw) that handles both sync + draw.
     useEffect(() => {
+      // Reset progress when playback/recording starts
+      setLocalRecProgress(0);
+      localRecProgressRef.current = 0;
+      
       if (!isRecapPlaying || isYouTube) return;
 
       const a = audioRef.current;
@@ -3093,6 +3105,60 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       };
     }, [isRecapPlaying, isYouTube]);
 
+    // Reset progress when rendering starts
+    useEffect(() => {
+      if (isRendering) {
+        setLocalRecProgress(0);
+        localRecProgressRef.current = 0;
+      }
+    }, [isRendering]);
+
+    // PREVIEW SUBTITLE SYNC: Keep subtitles in sync with audio when preview playback (not recording)
+    useEffect(() => {
+      const a = audioRef.current;
+      if (!a || isRecapPlaying) return;
+
+      const updateSubtitle = () => {
+        if (!audioTimestampsRef.current || audioTimestampsRef.current.length === 0) return;
+        const currentTime = a.currentTime;
+        const ts = audioTimestampsRef.current;
+        const segs = scriptData.segments;
+        let activeText = "";
+        
+        // Update progress in preview mode
+        if (a.duration > 0) {
+          const progress = Math.min(100, Math.max(0, (currentTime / a.duration) * 100));
+          if (Math.abs(progress - localRecProgressRef.current) > 0.5) {
+            localRecProgressRef.current = progress;
+            setLocalRecProgress(progress);
+          }
+        }
+        
+        for (let i = 0; i < ts.length; i++) {
+          if (currentTime >= ts[i].start && currentTime < ts[i].end) {
+            activeText = segs[i]?.text || "";
+            break;
+          }
+        }
+        if (activeText !== currentSubtitleRef.current) {
+          setCurrentSubtitle(activeText);
+          setSubtitleKey((k) => k + 1);
+          currentSubtitleRef.current = activeText;
+          subFadeStartRef.current = performance.now();
+        } else if (!activeText && currentSubtitleRef.current !== "") {
+          setCurrentSubtitle("");
+          currentSubtitleRef.current = "";
+        }
+      };
+
+      a.addEventListener("timeupdate", updateSubtitle);
+      updateSubtitle();
+
+      return () => {
+        a.removeEventListener("timeupdate", updateSubtitle);
+      };
+    }, [audioUrl, scriptData.segments]);
+
     // Video styles
     const activeGrade = COLOR_GRADE_PRESETS[editorState.colorGrade] || COLOR_GRADE_PRESETS["OFF"];
     const bypassBoostCSS = editorState.bypass
@@ -3131,7 +3197,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             ref={audioRef}
             src={audioUrl}
             crossOrigin={isLocalSource(audioUrl) ? undefined : "anonymous"}
-            style={{ position: "absolute", opacity: 0, pointerEvents: "none" }}
+            style={isRecapPlaying ? { position: "absolute", opacity: 0, pointerEvents: "none" } : { position: "absolute", opacity: 1, pointerEvents: "auto", top: "10px", right: "10px", zIndex: 100 }}
+            controls={!isRecapPlaying}
             onLoadedMetadata={() => {
               const audioEl = audioRef.current;
               const realDuration = audioEl?.duration;
@@ -3263,29 +3330,46 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
             <div className="flex flex-col items-center justify-center w-full bg-black rounded-xl border border-slate-700/50 overflow-hidden shadow-2xl relative p-2 md:p-4">
               {isRecapPlaying && !isRendering && (
-                <div className="absolute top-3 left-3 z-50 flex items-center gap-2 bg-amber-500/30 px-2.5 py-1 rounded-full border border-amber-500/40">
-                  <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
-                  <span className="text-amber-400 font-bold text-[10px] tracking-wider">RECAP</span>
+                <div className="absolute top-3 left-3 z-50 flex items-center gap-2 bg-gradient-to-r from-amber-500/30 to-orange-500/30 px-3 py-1.5 rounded-full border border-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.2)]">
+                  <div className="w-2.5 h-2.5 bg-amber-500 rounded-full animate-pulse"></div>
+                  <span className="text-amber-400 font-black text-[11px] tracking-[0.15em]">RECAP PLAYBACK</span>
                 </div>
               )}
               {isRendering && (
-                <div className="absolute top-3 right-3 z-50 flex items-center gap-2 bg-rose-500/20 px-2.5 py-1 rounded-full border border-rose-500/40">
-                  <div className="w-2 h-2 bg-rose-500 rounded-full"></div>
-                  <span className="text-rose-400 font-bold text-[10px] tracking-wider">REC</span>
+                <div className="absolute top-3 right-3 z-50 flex items-center gap-2 bg-gradient-to-r from-rose-500/25 to-pink-500/25 px-3 py-1.5 rounded-full border border-rose-500/50 shadow-[0_0_20px_rgba(244,63,94,0.2)]">
+                  <div className="w-2.5 h-2.5 bg-rose-500 rounded-full animate-pulse"></div>
+                  <span className="text-rose-400 font-black text-[11px] tracking-[0.15em]">RECORDING</span>
                 </div>
               )}
-              {isRendering && renderMode === "server" && (
+              {/* PREMIUM PROGRESS INDICATOR */}
+              {(isRecapPlaying || isRendering) && (
                 <div className="absolute bottom-3 left-3 right-3 z-50">
-                  <div className="bg-black/70 backdrop-blur-sm rounded-lg px-3 py-2 border border-cyan-500/30">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-cyan-400 font-bold text-[10px] tracking-wider">☁️ SERVER RENDER</span>
-                      <span className="text-cyan-300 font-mono text-[11px]">{serverRenderProgress}</span>
+                  <div className="bg-black/80 backdrop-blur-md rounded-xl px-4 py-3 border-2 border-purple-500/30 shadow-[0_0_30px_rgba(168,85,247,0.3)]">
+                    <div className="flex items-center justify-between mb-2">
+                      {renderMode === "server" && isRendering ? (
+                        <span className="text-purple-400 font-black text-xs tracking-[0.2em] uppercase">☁️ SERVER RENDER</span>
+                      ) : (
+                        <span className="text-purple-400 font-black text-xs tracking-[0.2em] uppercase">🎬 LOCAL PROCESSING</span>
+                      )}
+                      <span className="text-white font-mono font-bold text-sm">
+                        {renderMode === "server" && isRendering 
+                          ? serverRenderProgress 
+                          : `${Math.round(localRecProgress)}%`}
+                      </span>
                     </div>
-                    <div className="w-full h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                    <div className="w-full h-2.5 bg-gradient-to-r from-slate-800 to-slate-900 rounded-full overflow-hidden shadow-inner">
                       <div
-                        className="h-full bg-gradient-to-r from-cyan-500 to-emerald-400 rounded-full transition-all duration-700 ease-out"
-                        style={{ width: `${parseInt(serverRenderProgress.match(/\d+/)?.[0] || "0")}%` }}
+                        className="h-full bg-gradient-to-r from-purple-500 via-pink-500 to-amber-500 rounded-full transition-all duration-300 ease-out shadow-[0_0_15px_rgba(168,85,247,0.6)]"
+                        style={{ 
+                          width: `${renderMode === "server" && isRendering 
+                            ? parseInt(serverRenderProgress.match(/\d+/)?.[0] || "0") 
+                            : localRecProgress}%` 
+                        }}
                       />
+                    </div>
+                    <div className="flex justify-between mt-1.5">
+                      <span className="text-slate-500 font-mono text-[10px]">0%</span>
+                      <span className="text-slate-500 font-mono text-[10px]">100%</span>
                     </div>
                   </div>
                 </div>
