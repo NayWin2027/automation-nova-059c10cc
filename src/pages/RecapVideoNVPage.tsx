@@ -284,6 +284,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const subNeonHueRef = useRef(0);
     const [exportQuality, setExportQuality] = useState<string>("720p");
 
+    const [selectedNiche, setSelectedNiche] = useState<string>("movie");
+
     // Cinematic movie poster generation removed (feature disabled).
 
     const handleGeneratePoster = async () => {
