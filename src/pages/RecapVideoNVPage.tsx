@@ -1316,14 +1316,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       return url.startsWith("blob:") || url.startsWith("data:") || url.startsWith("file:");
     };
 
-    const parseTime = (t: string) => {
-      if (!t) return 0;
-      const parts = t.split(":").map(Number);
-      if (parts.length === 2) return (parts[0] || 0) * 60 + (parts[1] || 0);
-      if (parts.length === 3) return (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
-      return 0;
-    };
-
     const syncSegmentsRef = useRef<ReturnType<typeof Array.prototype.map>>([]);
 
     const syncSegments = useMemo(() => {
