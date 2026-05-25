@@ -3925,7 +3925,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                                 <CommandItem
                                   key={niche.key}
                                   value={niche.key}
-                                  onSelect={() => setSelectedNiche(niche.key)}
+                                  onSelect={() => onSelectedNicheChange(niche.key)}
                                   className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm cursor-pointer transition-all ${selectedNiche === niche.key ? "bg-gradient-to-r from-purple-600/20 to-pink-600/20 text-white border border-purple-500/50" : "text-slate-300 hover:bg-slate-800"}`}
                                 >
                                   <div className="flex flex-col items-start gap-0.5">
@@ -6594,6 +6594,8 @@ Last segment: reaches close to the end of the video.
             onVoiceModeChange={setVoiceMode}
             sourceFileUriRef={sourceFileUriRef}
             videoFileRef={videoFileRef}
+            selectedNiche={selectedNiche}
+            onSelectedNicheChange={setSelectedNiche}
           />
         )}
 
