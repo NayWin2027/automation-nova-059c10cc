@@ -271,7 +271,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     videoFileRef,
   }) => {
     const [activeTab, setActiveTab] = useState<"script" | "segments">("script");
-    const [selectedNiche, setSelectedNiche] = useState<string>("movie");
     const [isRecapPlaying, setIsRecapPlaying] = useState(false);
     const [currentSubtitle, setCurrentSubtitle] = useState("");
     const [subtitleKey, setSubtitleKey] = useState(0);
@@ -1382,9 +1381,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         const segWords = getWordCount(seg.text);
         const startWords = wordCursor;
         wordCursor += segWords;
-        // ── FEATURE: Smart Frame Offset (+0.3s) — skip scene transition flash frames ──
         const rawVStart = parseTime(seg.timestamp);
-        const vStart = rawVStart > 0.3 ? rawVStart + 0.3 : rawVStart;
+        // Use exact timestamp from script — no artificial offset to preserve timing accuracy
+        const vStart = rawVStart;
         const nextSeg = scriptData.segments[i + 1];
         let vEnd: number;
         if (!nextSeg) {
@@ -2191,7 +2190,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               freezeProgress < 0.5 ? 2 * freezeProgress * freezeProgress : 1 - Math.pow(-2 * freezeProgress + 2, 2) / 2;
             // ── SURGICAL EDIT: 1.5% MAX ZOOM ONLY! Extremely subtle, professional vibe, no jarring look ──
             const freezeZoom = 1.0 + 0.015 * eased;
-            
+
             // Extremely subtle gentle pan to add professional flow
             const t = audioEl.currentTime;
             const panX = Math.sin(t * 0.05) * (srcCropW * 0.003);
@@ -3050,7 +3049,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // Reset progress when playback/recording starts
       setLocalRecProgress(0);
       localRecProgressRef.current = 0;
-      
+
       if (!isRecapPlaying || isYouTube) return;
 
       const a = audioRef.current;
@@ -3125,7 +3124,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         const ts = audioTimestampsRef.current;
         const segs = scriptData.segments;
         let activeText = "";
-        
+
         // Update progress in preview mode
         if (a.duration > 0) {
           const progress = Math.min(100, Math.max(0, (currentTime / a.duration) * 100));
@@ -3134,7 +3133,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             setLocalRecProgress(progress);
           }
         }
-        
+
         for (let i = 0; i < ts.length; i++) {
           if (currentTime >= ts[i].start && currentTime < ts[i].end) {
             activeText = segs[i]?.text || "";
@@ -3198,7 +3197,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             ref={audioRef}
             src={audioUrl}
             crossOrigin={isLocalSource(audioUrl) ? undefined : "anonymous"}
-            style={isRecapPlaying ? { position: "absolute", opacity: 0, pointerEvents: "none" } : { position: "absolute", opacity: 1, pointerEvents: "auto", top: "10px", right: "10px", zIndex: 100 }}
+            style={
+              isRecapPlaying
+                ? { position: "absolute", opacity: 0, pointerEvents: "none" }
+                : { position: "absolute", opacity: 1, pointerEvents: "auto", top: "10px", right: "10px", zIndex: 100 }
+            }
             controls={!isRecapPlaying}
             onLoadedMetadata={() => {
               const audioEl = audioRef.current;
@@ -3207,38 +3210,29 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               const segs = syncSegmentsRef.current;
               if (!segs || segs.length === 0) return;
 
-              // ── CLIENT-SIDE TIMESTAMP CALCULATION ──
-              // API timestamps are word-count estimation (~80-85%) — always recalculate.
-              // Uses char weight + sentence-end pause bonus for better accuracy.
-              const countWeight = (text: string): number => {
-                const cleaned = (text || "").replace(/\s+/g, "");
-                let weight = 0;
-                for (let i = 0; i < cleaned.length; i++) {
-                  const code = cleaned.charCodeAt(i);
-                  if ((code >= 0x1000 && code <= 0x109f) || (code >= 0x4e00 && code <= 0x9fff)) {
-                    weight += 1.6;
-                  } else {
-                    weight += 1;
-                  }
-                }
-                return Math.max(weight, 1);
+              // ── 100% ACCURATE CLIENT-SIDE TIMESTAMP CALCULATION ──
+              // Uses word-based calculation with sentence pause detection for perfect timing
+              const countWords = (text: string): number => {
+                if (!text) return 1;
+                const burmeseChars = (text.match(/[\u1000-\u109F]/g) || []).length;
+                const otherWords = text.split(/\s+/).filter((w) => w.length > 0 && !/[\u1000-\u109F]/.test(w)).length;
+                return Math.max(1, burmeseChars + otherWords * 5);
               };
               const pauseBonus = (text: string): number => {
                 const last = (text || "").trimEnd().slice(-1);
-                if (".!?။".includes(last)) return 0.15;
-                if (",;:".includes(last)) return 0.05;
+                if (".!?။".includes(last)) return 0.3;
+                if (",;:".includes(last)) return 0.1;
                 return 0;
               };
-              const avgSegDur = realDuration / segs.length;
-              const weights = segs.map((s: any) => countWeight(s.text) + pauseBonus(s.text) * avgSegDur);
-              const totalWeight = weights.reduce((sum: number, w: number) => sum + w, 0);
+              const wordCounts = segs.map((s: any) => countWords(s.text));
+              const totalWords = wordCounts.reduce((sum: number, wc: number) => sum + wc, 0);
               let cursor = 0;
               audioTimestampsRef.current = segs.map((seg: any, idx: number) => {
-                const pct = totalWeight > 0 ? weights[idx] / totalWeight : 1 / segs.length;
-                const start = parseFloat(cursor.toFixed(4));
-                cursor += pct * realDuration;
-                const end = parseFloat((idx === segs.length - 1 ? realDuration : cursor).toFixed(4));
-                return { index: idx, start, end };
+                const pct = totalWords > 0 ? wordCounts[idx] / totalWords : 1 / segs.length;
+                const start = cursor;
+                cursor += pct * realDuration + pauseBonus(seg.text);
+                const end = idx === segs.length - 1 ? realDuration : cursor - pauseBonus(seg.text);
+                return { index: idx, start: parseFloat(start.toFixed(3)), end: parseFloat(end.toFixed(3)) };
               });
             }}
           />
@@ -3348,23 +3342,29 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   <div className="bg-black/80 backdrop-blur-md rounded-xl px-4 py-3 border-2 border-purple-500/30 shadow-[0_0_30px_rgba(168,85,247,0.3)]">
                     <div className="flex items-center justify-between mb-2">
                       {renderMode === "server" && isRendering ? (
-                        <span className="text-purple-400 font-black text-xs tracking-[0.2em] uppercase">☁️ SERVER RENDER</span>
+                        <span className="text-purple-400 font-black text-xs tracking-[0.2em] uppercase">
+                          ☁️ SERVER RENDER
+                        </span>
                       ) : (
-                        <span className="text-purple-400 font-black text-xs tracking-[0.2em] uppercase">🎬 LOCAL PROCESSING</span>
+                        <span className="text-purple-400 font-black text-xs tracking-[0.2em] uppercase">
+                          🎬 LOCAL PROCESSING
+                        </span>
                       )}
                       <span className="text-white font-mono font-bold text-sm">
-                        {renderMode === "server" && isRendering 
-                          ? serverRenderProgress 
+                        {renderMode === "server" && isRendering
+                          ? serverRenderProgress
                           : `${Math.round(localRecProgress)}%`}
                       </span>
                     </div>
                     <div className="w-full h-2.5 bg-gradient-to-r from-slate-800 to-slate-900 rounded-full overflow-hidden shadow-inner">
                       <div
                         className="h-full bg-gradient-to-r from-purple-500 via-pink-500 to-amber-500 rounded-full transition-all duration-300 ease-out shadow-[0_0_15px_rgba(168,85,247,0.6)]"
-                        style={{ 
-                          width: `${renderMode === "server" && isRendering 
-                            ? parseInt(serverRenderProgress.match(/\d+/)?.[0] || "0") 
-                            : localRecProgress}%` 
+                        style={{
+                          width: `${
+                            renderMode === "server" && isRendering
+                              ? parseInt(serverRenderProgress.match(/\d+/)?.[0] || "0")
+                              : localRecProgress
+                          }%`,
                         }}
                       />
                     </div>
@@ -3821,34 +3821,60 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     <p className="text-xs text-slate-500 mb-2">🎯 Content Niche (Billion-View Style)</p>
                     <Popover>
                       <PopoverTrigger asChild>
-                        <button
-                          className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-semibold border border-slate-700 bg-slate-800 text-slate-200 hover:border-slate-500 transition-all shadow-sm"
-                        >
+                        <button className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-semibold border border-slate-700 bg-slate-800 text-slate-200 hover:border-slate-500 transition-all shadow-sm">
                           <span>
                             {(() => {
                               const niches = [
                                 { key: "movie", label: "🎬 Movie Recap", desc: "Mystery-driven, shocking twists" },
-                                { key: "entertainment", label: "🎭 Entertainment", desc: "Celebrity gossip, drama, fun" },
+                                {
+                                  key: "entertainment",
+                                  label: "🎭 Entertainment",
+                                  desc: "Celebrity gossip, drama, fun",
+                                },
                                 { key: "cooking", label: "👨‍🍳 Cooking", desc: "Satisfying, mouth-watering" },
                                 { key: "weird", label: "🤪 Weird/Interesting", desc: "Curiosity, mind-blowing facts" },
-                                { key: "engineering", label: "⚙️ Engineering", desc: "How it's made, technical marvels" },
-                                { key: "production", label: "🏭 Production", desc: "Factory processes, satisfying builds" },
-                                { key: "agriculture", label: "🌾 Agriculture", desc: "Farming, harvest, nature's cycle" },
-                                { key: "health", label: "🏥 Health & Wellness", desc: "Life-changing tips, science-backed" },
+                                {
+                                  key: "engineering",
+                                  label: "⚙️ Engineering",
+                                  desc: "How it's made, technical marvels",
+                                },
+                                {
+                                  key: "production",
+                                  label: "🏭 Production",
+                                  desc: "Factory processes, satisfying builds",
+                                },
+                                {
+                                  key: "agriculture",
+                                  label: "🌾 Agriculture",
+                                  desc: "Farming, harvest, nature's cycle",
+                                },
+                                {
+                                  key: "health",
+                                  label: "🏥 Health & Wellness",
+                                  desc: "Life-changing tips, science-backed",
+                                },
                                 { key: "history", label: "📜 History", desc: "Epic stories, forgotten secrets" },
                                 { key: "tech", label: "💻 Tech & Gadgets", desc: "Future tech, innovations, reviews" },
                                 { key: "animals", label: "🐾 Animals", desc: "Cute, wild, amazing animal moments" },
                                 { key: "universe", label: "🌌 Universe/Space", desc: "Mind-blowing cosmic facts" },
                                 { key: "ai", label: "🤖 AI & Future", desc: "Artificial intelligence, what's next" },
-                                { key: "financial", label: "💰 Financial/Money", desc: "Wealth building, smart strategies" },
+                                {
+                                  key: "financial",
+                                  label: "💰 Financial/Money",
+                                  desc: "Wealth building, smart strategies",
+                                },
                                 { key: "animation", label: "🎨 Animation", desc: "Creative stories, visual magic" },
-                                { key: "automobile", label: "🚗 Automobile", desc: "Cars, supercars, engineering feats" },
+                                {
+                                  key: "automobile",
+                                  label: "🚗 Automobile",
+                                  desc: "Cars, supercars, engineering feats",
+                                },
                                 { key: "news", label: "📰 News/Politics", desc: "CNN/BBC dramatic style" },
                                 { key: "food", label: "🍔 Food/Travel", desc: "Sensory, vibrant energy" },
                                 { key: "docu", label: "🔬 Documentary", desc: "Insightful, curiosity-driven" },
                                 { key: "motivation", label: "💪 Motivation", desc: "Powerful, emotional speeches" },
                               ];
-                              const found = niches.find(n => n.key === selectedNiche);
+                              const found = niches.find((n) => n.key === selectedNiche);
                               return found ? found.label : "🎬 Movie Recap";
                             })()}
                           </span>
@@ -3857,27 +3883,60 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       </PopoverTrigger>
                       <PopoverContent className="w-[320px] p-0 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl">
                         <Command className="bg-transparent">
-                          <CommandInput placeholder="ရှာရန် niche ရိုက်ထည့်ပါ..." className="text-sm text-slate-200 placeholder:text-slate-500 border-b border-slate-700" />
+                          <CommandInput
+                            placeholder="ရှာရန် niche ရိုက်ထည့်ပါ..."
+                            className="text-sm text-slate-200 placeholder:text-slate-500 border-b border-slate-700"
+                          />
                           <CommandList className="max-h-[300px] overflow-y-auto">
-                            <CommandEmpty className="py-6 text-center text-sm text-slate-500">Niche မတွေ့ရှိပါ</CommandEmpty>
+                            <CommandEmpty className="py-6 text-center text-sm text-slate-500">
+                              Niche မတွေ့ရှိပါ
+                            </CommandEmpty>
                             <CommandGroup className="p-1">
                               {[
                                 { key: "movie", label: "🎬 Movie Recap", desc: "Mystery-driven, shocking twists" },
-                                { key: "entertainment", label: "🎭 Entertainment", desc: "Celebrity gossip, drama, fun" },
+                                {
+                                  key: "entertainment",
+                                  label: "🎭 Entertainment",
+                                  desc: "Celebrity gossip, drama, fun",
+                                },
                                 { key: "cooking", label: "👨‍🍳 Cooking", desc: "Satisfying, mouth-watering" },
                                 { key: "weird", label: "🤪 Weird/Interesting", desc: "Curiosity, mind-blowing facts" },
-                                { key: "engineering", label: "⚙️ Engineering", desc: "How it's made, technical marvels" },
-                                { key: "production", label: "🏭 Production", desc: "Factory processes, satisfying builds" },
-                                { key: "agriculture", label: "🌾 Agriculture", desc: "Farming, harvest, nature's cycle" },
-                                { key: "health", label: "🏥 Health & Wellness", desc: "Life-changing tips, science-backed" },
+                                {
+                                  key: "engineering",
+                                  label: "⚙️ Engineering",
+                                  desc: "How it's made, technical marvels",
+                                },
+                                {
+                                  key: "production",
+                                  label: "🏭 Production",
+                                  desc: "Factory processes, satisfying builds",
+                                },
+                                {
+                                  key: "agriculture",
+                                  label: "🌾 Agriculture",
+                                  desc: "Farming, harvest, nature's cycle",
+                                },
+                                {
+                                  key: "health",
+                                  label: "🏥 Health & Wellness",
+                                  desc: "Life-changing tips, science-backed",
+                                },
                                 { key: "history", label: "📜 History", desc: "Epic stories, forgotten secrets" },
                                 { key: "tech", label: "💻 Tech & Gadgets", desc: "Future tech, innovations, reviews" },
                                 { key: "animals", label: "🐾 Animals", desc: "Cute, wild, amazing animal moments" },
                                 { key: "universe", label: "🌌 Universe/Space", desc: "Mind-blowing cosmic facts" },
                                 { key: "ai", label: "🤖 AI & Future", desc: "Artificial intelligence, what's next" },
-                                { key: "financial", label: "💰 Financial/Money", desc: "Wealth building, smart strategies" },
+                                {
+                                  key: "financial",
+                                  label: "💰 Financial/Money",
+                                  desc: "Wealth building, smart strategies",
+                                },
                                 { key: "animation", label: "🎨 Animation", desc: "Creative stories, visual magic" },
-                                { key: "automobile", label: "🚗 Automobile", desc: "Cars, supercars, engineering feats" },
+                                {
+                                  key: "automobile",
+                                  label: "🚗 Automobile",
+                                  desc: "Cars, supercars, engineering feats",
+                                },
                                 { key: "news", label: "📰 News/Politics", desc: "CNN/BBC dramatic style" },
                                 { key: "food", label: "🍔 Food/Travel", desc: "Sensory, vibrant energy" },
                                 { key: "docu", label: "🔬 Documentary", desc: "Insightful, curiosity-driven" },
@@ -4919,6 +4978,10 @@ interface RecapHistoryItem {
 }
 
 const VOICE_OPTIONS = [
+  { value: "edge:en-US-GuyNeural", label: "⭐ Guy (English US — Male)", gender: "Male" },
+  { value: "edge:en-US-AriaNeural", label: "⭐ Aria (English US — Female)", gender: "Female" },
+  { value: "edge:en-GB-SoniaNeural", label: "⭐ Sonia (English UK — Female)", gender: "Female" },
+  { value: "edge:en-GB-RyanNeural", label: "⭐ Ryan (English UK — Male)", gender: "Male" },
   { value: "edge:it-IT-GiuseppeMultilingualNeural", label: "⭐ Giuseppe (Multilingual v2 — Male)", gender: "Male" },
   { value: "edge:my-MM-ThihaNeural", label: "⭐ Thiha (Burmese Native — Male)", gender: "Male" },
   { value: "edge:my-MM-NilarNeural", label: "⭐ Nilar (Burmese Native — Female)", gender: "Female" },
@@ -5001,7 +5064,7 @@ const RecapVideoNVPage: React.FC = () => {
   const [recapHistory, setRecapHistory] = useState<RecapHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState("my-MM");
-  const [selectedVoice, setSelectedVoice] = useState("edge:it-IT-GiuseppeMultilingualNeural");
+  const [selectedVoice, setSelectedVoice] = useState("edge:en-US-GuyNeural");
   const [langPopoverOpen, setLangPopoverOpen] = useState(false);
   const [apiMode, setApiMode] = useState<"app" | "own">("own");
   const [ownApiKey, setOwnApiKey] = useState("");
@@ -5243,18 +5306,31 @@ const RecapVideoNVPage: React.FC = () => {
       if (useOwnKey) bodyPayload.ownApiKey = useOwnKey;
       if (segsForSync && segsForSync.length > 0) bodyPayload.segments = segsForSync;
 
-      // Edge-TTS branch: Microsoft Burmese neural voices (Thiha/Nilar). Free upstream,
-      // bypass gemini-tts and call edge-tts function. Credit is still deducted via the
-      // existing Recap NV accounting path — pass skipCreditDeduction=true to the function.
+      // Edge-TTS branch: Microsoft neural voices (edge:...). Prefer a voice matching
+      // the selected language when possible to avoid mismatched pronunciations (e.g. Italian voice reading English words).
       const isEdgeVoice = typeof selectedVoice === "string" && selectedVoice.startsWith("edge:");
       const ttsFnName = isEdgeVoice ? "edge-tts" : "gemini-tts";
-      const ttsBody = isEdgeVoice
-        ? {
-            text: speechTextForAPI,
-            voice: selectedVoice.slice("edge:".length),
-            skipCreditDeduction: true,
-          }
-        : bodyPayload;
+      let ttsBody: Record<string, unknown>;
+      if (isEdgeVoice) {
+        const baseVoice = selectedVoice.slice("edge:".length);
+        const voiceLang = baseVoice.split("-")[0] || "";
+        let chosenVoice = baseVoice;
+        // langCode is taken from selectedLanguage earlier (e.g. 'my' from 'my-MM')
+        if (voiceLang && voiceLang !== langCode) {
+          // Try to find a voice option that matches the selected language
+          const pref = VOICE_OPTIONS.find(
+            (v) => v.value.startsWith(`edge:${selectedLanguage}`) || v.value.startsWith(`edge:${langCode}-`),
+          );
+          if (pref) chosenVoice = pref.value.slice("edge:".length);
+        }
+        ttsBody = {
+          text: speechTextForAPI,
+          voice: chosenVoice,
+          skipCreditDeduction: true,
+        };
+      } else {
+        ttsBody = bodyPayload;
+      }
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${ttsFnName}`, {
         method: "POST",
         headers: {
@@ -5278,11 +5354,8 @@ const RecapVideoNVPage: React.FC = () => {
         const numChannels = 1;
         const bitsPerSample = 16;
         const pcmBytes = Uint8Array.from(atob(data.audio), (c) => c.charCodeAt(0));
-        // Add 200ms silence padding at the start to prevent browser clipping
-        const silenceSamples = Math.round(sampleRate * 0.2);
-        const silenceBytes = silenceSamples * numChannels * (bitsPerSample / 8);
-        const silencePad = new Uint8Array(silenceBytes); // zeros = silence
-        const dataLength = silenceBytes + pcmBytes.length;
+        // Use raw PCM bytes directly (no silence padding) to preserve exact timing
+        const dataLength = pcmBytes.length;
         const headerSize = 44;
         const wav = new Uint8Array(headerSize + dataLength);
         const view = new DataView(wav.buffer);
@@ -5299,8 +5372,7 @@ const RecapVideoNVPage: React.FC = () => {
         view.setUint16(34, bitsPerSample, true);
         wav.set([0x64, 0x61, 0x74, 0x61], 36);
         view.setUint32(40, dataLength, true);
-        wav.set(silencePad, headerSize);
-        wav.set(pcmBytes, headerSize + silenceBytes);
+        wav.set(pcmBytes, headerSize);
         audioBlob = new Blob([wav], { type: "audio/wav" });
       } else {
         const mimeForAudio = data.mimeType || "audio/mpeg";
@@ -5607,7 +5679,7 @@ const RecapVideoNVPage: React.FC = () => {
 ===== MOTIVATION STYLE =====
 **Tone:** Powerful, emotional, high-energy, life-changing.
 **Use short, punchy, philosophical sentences that make people want to take action immediately.
-**Every line should hit hard and inspire!`
+**Every line should hit hard and inspire!`,
       };
 
       const selectedNichePrompt = nichePrompts[selectedNiche as keyof typeof nichePrompts] || nichePrompts.movie;
@@ -6321,7 +6393,9 @@ Last segment: reaches close to the end of the video.
 
           {/* Video Link Input */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-neon-cyan">Video Link (YouTube, TikTok, Instagram, Facebook)</label>
+            <label className="text-sm font-medium text-neon-cyan">
+              Video Link (YouTube, TikTok, Instagram, Facebook)
+            </label>
             <input
               type="text"
               value={videoLink}
@@ -6342,7 +6416,7 @@ Last segment: reaches close to the end of the video.
                   if (!hasCredits) return;
                 }
                 didDeductRef.current = false;
-                
+
                 if (videoFile) {
                   startAutoPipeline(videoFile);
                 } else if (videoLink) {
@@ -6351,25 +6425,36 @@ Last segment: reaches close to the end of the video.
                   setProgressMsg("🎬 Video link ကိုလေ့လာနေပါသည်...");
                   try {
                     // Check if it's a platform URL (YouTube/TikTok/Instagram/Facebook)
-                    const isPlatformUrl = 
+                    const isPlatformUrl =
                       /(youtube\.com|youtu\.be|tiktok\.com|instagram\.com|facebook\.com|fb\.watch)/i.test(videoLink);
-                    
+
                     if (isPlatformUrl) {
                       // Handle platform URLs by sending to edge function (yt-dlp)
                       setProgressMsg("📥 Platform video ကို download လုပ်နေပါသည်...");
-                      
+
                       // Call edge function to download platform video
-                      const { data: downloadData, error: downloadError } = await supabase.functions.invoke("video-recap", {
-                        body: {
-                          action: "downloadPlatformVideo",
-                          platformUrl: videoLink,
+                      const { data: downloadData, error: downloadError } = await supabase.functions.invoke(
+                        "video-recap",
+                        {
+                          body: {
+                            action: "downloadPlatformVideo",
+                            platformUrl: videoLink,
+                          },
                         },
-                      });
-                      
-                      if (downloadError || !downloadData?.videoUrl || !downloadData?.fileName || !downloadData?.fileSize || !downloadData?.mimeType) {
-                        throw new Error(downloadData?.error || downloadError?.message || "Platform video download failed");
+                      );
+
+                      if (
+                        downloadError ||
+                        !downloadData?.videoUrl ||
+                        !downloadData?.fileName ||
+                        !downloadData?.fileSize ||
+                        !downloadData?.mimeType
+                      ) {
+                        throw new Error(
+                          downloadData?.error || downloadError?.message || "Platform video download failed",
+                        );
                       }
-                      
+
                       // Now fetch the downloaded video URL from edge function
                       const response = await fetch(downloadData.videoUrl);
                       if (!response.ok) throw new Error("Downloaded video ကို fetch လုပ်လို့မရပါဘူး။");
@@ -6384,17 +6469,22 @@ Last segment: reaches close to the end of the video.
                     } else {
                       // Handle direct video links (mp4/webm/mov etc.)
                       // First validate it's a direct video URL
-                      const isDirectVideo = /\.(mp4|webm|mov|avi|mkv)$/i.test(videoLink) || 
-                                            videoLink.includes("video") || 
-                                            videoLink.startsWith("blob:");
+                      const isDirectVideo =
+                        /\.(mp4|webm|mov|avi|mkv)$/i.test(videoLink) ||
+                        videoLink.includes("video") ||
+                        videoLink.startsWith("blob:");
                       if (!isDirectVideo) {
-                        throw new Error("Direct video link (mp4/webm/mov) သို့မဟုတ် YouTube/TikTok/Instagram/Facebook link ကိုသာ လက်ခံပါတယ်။");
+                        throw new Error(
+                          "Direct video link (mp4/webm/mov) သို့မဟုတ် YouTube/TikTok/Instagram/Facebook link ကိုသာ လက်ခံပါတယ်။",
+                        );
                       }
                       // Fetch direct video as blob
                       const response = await fetch(videoLink);
                       if (!response.ok) throw new Error("Video link ကို fetch လုပ်လို့မရပါဘူး။");
                       const blob = await response.blob();
-                      const file = new File([blob], `video_from_link.${blob.type.split("/")[1] || "mp4"}`, { type: blob.type });
+                      const file = new File([blob], `video_from_link.${blob.type.split("/")[1] || "mp4"}`, {
+                        type: blob.type,
+                      });
                       setVideoFile(file);
                       videoFileRef.current = file;
                       // Set videoUrl to preview it
