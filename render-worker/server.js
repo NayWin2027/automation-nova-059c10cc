@@ -55,7 +55,7 @@ async function downloadTo(url, dest) {
 
 function runFfmpeg(args) {
   return new Promise((resolve, reject) => {
-    const p = spawn("ffmpeg", args, { stdio: ["ignore", "pipe", "pipe"] });
+    const p = spawn("ffmpeg", args, { stdio: ["ignore", "ignore", "pipe"] });
     let stderr = "";
     p.stderr.on("data", (d) => {
       stderr += d.toString();
