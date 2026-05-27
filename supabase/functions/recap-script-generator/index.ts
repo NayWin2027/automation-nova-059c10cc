@@ -202,6 +202,9 @@ serve(async (req) => {
     let fileMimeType: string | null = null;
     let fileData: string | null = null;
     let sourceDurationSec: number | null = null;
+    let extraInstructions = "";
+    let editorRules = "";
+    let requestedMaxOutputTokens: number | null = null;
 
     const contentType = req.headers.get("content-type") || "";
     if (contentType.includes("multipart/form-data")) {
@@ -231,6 +234,12 @@ serve(async (req) => {
       userApiKey = body.apiKey || body.ownApiKey || null;
       isOwnApi = !!userApiKey;
       skipCreditDeduction = !!body.skipCreditDeduction;
+      extraInstructions = typeof body.extraInstructions === "string" ? body.extraInstructions : "";
+      editorRules = typeof body.editorRules === "string" ? body.editorRules : "";
+      const bodyMaxOutputTokens = Number(body.generationConfig?.maxOutputTokens);
+      if (Number.isFinite(bodyMaxOutputTokens) && bodyMaxOutputTokens > 0) {
+        requestedMaxOutputTokens = Math.min(32768, Math.max(2048, Math.floor(bodyMaxOutputTokens)));
+      }
 
       const parsedDuration = Number(body.sourceDurationSec);
       if (Number.isFinite(parsedDuration) && parsedDuration > 0) sourceDurationSec = parsedDuration;
@@ -249,6 +258,10 @@ serve(async (req) => {
     const nicheLabel = niche || "GENERAL";
     const lang = language || "BURMESE";
     const nicheStyle = nicheStyles[nicheLabel] || nicheStyles["GENERAL"];
+    const callerInstructionsBlock = [extraInstructions, editorRules]
+      .filter(Boolean)
+      .join("\n\n")
+      .trim();
 
     console.log(`[recap-script-generator] Language: ${lang}, Niche: ${nicheLabel}, isOwnApi: ${isOwnApi}`);
 
@@ -360,6 +373,8 @@ STRUCTURE:
 - Rising tension: Build with only the most gripping beats in chronological order
 - Climax: The single most shocking/dramatic moment at peak intensity
 - Resolution: Short, punchy ending that leaves viewers wanting more
+
+${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYLE/LENGTH DETAILS ABOVE WHEN CONFLICTING):\n${callerInstructionsBlock}\n` : ""}
 
 ###############################################################
 # FINAL ENFORCEMENT: YOUR ENTIRE OUTPUT MUST BE IN ${lang}.
@@ -514,7 +529,7 @@ ${transcript}
             contents: [{ parts: contentParts }],
             generationConfig: {
               temperature: 0.8,
-              maxOutputTokens: 32768,
+              maxOutputTokens: requestedMaxOutputTokens || 32768,
             },
           }),
         }
