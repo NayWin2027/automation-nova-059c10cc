@@ -5337,7 +5337,8 @@ const RecapVideoNVPage: React.FC = () => {
         fileUri,
         fileMimeType: mimeType,
         // ── INTELLIGENT RECAP EDITOR PROMPT (surgical edit — comprehensive recap instructions) ──
-        niche: `You are an aggressive international professional YouTube recap editor.
+        niche: "MOVIE RECAP",
+        extraInstructions: `You are an aggressive international professional YouTube recap editor.
 
 Your task is to analyze the uploaded movie/video and create a condensed, fast-paced recap version like the best YouTube movie recap channels. Do NOT simply speed up or use only the first part. You must understand the FULL STORY and then cut it down ruthlessly.
 
@@ -5400,7 +5401,7 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
         language: selectedLangName,
         sourceDurationSec: duration,
         skipCreditDeduction: true,
-        extraInstructions: `CRITICAL:
+        editorRules: `CRITICAL:
 - Output language MUST be ${selectedLangName} ONLY. Do NOT switch to any other language even if the video's spoken dialogue is in a different language.
 - Script must cover the story arc from beginning to end, BUT must be HEAVILY CONDENSED and no more than 50% of the source duration.
   * For a 30-minute source, aim for 10-15 minutes and never exceed 15 minutes.
