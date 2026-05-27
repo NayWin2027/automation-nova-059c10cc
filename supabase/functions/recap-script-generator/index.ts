@@ -374,6 +374,8 @@ STRUCTURE:
 - Climax: The single most shocking/dramatic moment at peak intensity
 - Resolution: Short, punchy ending that leaves viewers wanting more
 
+${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYLE/LENGTH DETAILS ABOVE WHEN CONFLICTING):\n${callerInstructionsBlock}\n` : ""}
+
 ###############################################################
 # FINAL ENFORCEMENT: YOUR ENTIRE OUTPUT MUST BE IN ${lang}.
 # NOT BURMESE. NOT MYANMAR. ONLY ${lang}. EVERY SINGLE WORD.
@@ -527,7 +529,7 @@ ${transcript}
             contents: [{ parts: contentParts }],
             generationConfig: {
               temperature: 0.8,
-              maxOutputTokens: 32768,
+              maxOutputTokens: requestedMaxOutputTokens || 32768,
             },
           }),
         }
