@@ -9,7 +9,12 @@ const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1bet
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
 const MODEL = "gemini-2.5-flash";
 
-async function uploadToGoogleFiles(apiKey: string, fileBytes: Uint8Array, mimeType: string, fileName: string): Promise<string> {
+async function uploadToGoogleFiles(
+  apiKey: string,
+  fileBytes: Uint8Array,
+  mimeType: string,
+  fileName: string,
+): Promise<string> {
   console.log("Uploading file to Google Files API...", fileName, fileBytes.length, mimeType);
 
   const startResponse = await fetch(`${GOOGLE_FILES_API}?key=${apiKey}`, {
@@ -61,7 +66,7 @@ async function waitForFileProcessing(apiKey: string, fileName: string, fallbackK
   // Try all candidate keys (the file was uploaded with ONE key in the script pool,
   // but this function may have been cold-started with a different key from the pool).
   // We probe each key until one returns a non-404/403 response.
-  const candidates = [apiKey, ...fallbackKeys.filter(k => k && k !== apiKey)];
+  const candidates = [apiKey, ...fallbackKeys.filter((k) => k && k !== apiKey)];
   let activeKey = apiKey;
   let probed = false;
   let failedStreak = 0;
@@ -71,39 +76,49 @@ async function waitForFileProcessing(apiKey: string, fileName: string, fallbackK
       let found = false;
       for (const k of candidates) {
         const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${k}`);
-        if (r.status === 404 || r.status === 403) { try { await r.body?.cancel(); } catch {} continue; }
+        if (r.status === 404 || r.status === 403) {
+          try {
+            await r.body?.cancel();
+          } catch {}
+          continue;
+        }
         activeKey = k;
         found = true;
         if (r.ok) {
           const fileInfo = await r.json();
           console.log(`File state: ${fileInfo.state}, key matched on attempt ${attempt + 1}`);
-          if (fileInfo.state === "ACTIVE") { probed = true; return activeKey; }
+          if (fileInfo.state === "ACTIVE") {
+            probed = true;
+            return activeKey;
+          }
           if (fileInfo.state === "FAILED") {
             failedStreak++;
             if (failedStreak >= 3) throw new Error("File processing failed");
             probed = true;
-            await new Promise(r => setTimeout(r, delay));
+            await new Promise((r) => setTimeout(r, delay));
             break;
           }
           failedStreak = 0;
         } else {
-          try { await r.body?.cancel(); } catch {}
+          try {
+            await r.body?.cancel();
+          } catch {}
         }
         break;
       }
       probed = found;
       if (!found) {
         // None of the keys can see the file yet — it may still be appearing. Wait and retry.
-        await new Promise(r => setTimeout(r, delay));
+        await new Promise((r) => setTimeout(r, delay));
         continue;
       }
-      await new Promise(r => setTimeout(r, delay));
+      await new Promise((r) => setTimeout(r, delay));
       continue;
     }
 
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${activeKey}`);
     if (!response.ok) {
-      await new Promise(r => setTimeout(r, delay));
+      await new Promise((r) => setTimeout(r, delay));
       continue;
     }
     const fileInfo = await response.json();
@@ -112,11 +127,11 @@ async function waitForFileProcessing(apiKey: string, fileName: string, fallbackK
     if (fileInfo.state === "FAILED") {
       failedStreak++;
       if (failedStreak >= 3) throw new Error("File processing failed");
-      await new Promise(r => setTimeout(r, delay));
+      await new Promise((r) => setTimeout(r, delay));
       continue;
     }
     failedStreak = 0;
-    await new Promise(r => setTimeout(r, delay));
+    await new Promise((r) => setTimeout(r, delay));
   }
   throw new Error("File processing timeout");
 }
@@ -125,9 +140,18 @@ function getMimeType(file: File): string {
   if (file.type) return file.type;
   const ext = file.name.split(".").pop()?.toLowerCase();
   const mimeMap: Record<string, string> = {
-    mp3: "audio/mpeg", wav: "audio/wav", m4a: "audio/mp4", mp4: "video/mp4",
-    webm: "video/webm", ogg: "audio/ogg", flac: "audio/flac", aac: "audio/aac",
-    mkv: "video/x-matroska", avi: "video/x-msvideo", mov: "video/quicktime", "3gp": "video/3gpp",
+    mp3: "audio/mpeg",
+    wav: "audio/wav",
+    m4a: "audio/mp4",
+    mp4: "video/mp4",
+    webm: "video/webm",
+    ogg: "audio/ogg",
+    flac: "audio/flac",
+    aac: "audio/aac",
+    mkv: "video/x-matroska",
+    avi: "video/x-msvideo",
+    mov: "video/quicktime",
+    "3gp": "video/3gpp",
   };
   return mimeMap[ext || ""] || "audio/mpeg";
 }
@@ -143,18 +167,18 @@ function enforceScriptCoverage70(script: string, _sourceDurationSec?: number | n
 const nicheStyles: Record<string, string> = {
   "MOVIE RECAP": `Write like a top-tier Netflix/Hollywood movie recap narrator. Build suspense, use dramatic pauses, cliffhangers, and emotional peaks. Make viewers feel every twist, betrayal, romance, and revelation as if they're watching the movie.`,
   "TECH / AI": `Write like MKBHD or Linus Tech Tips — sharp, informative, exciting. Use punchy tech jargon naturally, explain complex concepts simply, and build hype around innovations and breakthroughs.`,
-  "DOCUMENTARY": `Write like David Attenborough or a BBC World documentary narrator — authoritative, insightful, thought-provoking. Layer facts with storytelling to create a compelling narrative arc.`,
+  DOCUMENTARY: `Write like David Attenborough or a BBC World documentary narrator — authoritative, insightful, thought-provoking. Layer facts with storytelling to create a compelling narrative arc.`,
   "TRUE CRIME": `Write like a true crime podcast host — suspenseful, gripping, investigative. Build tension slowly, reveal clues dramatically, and keep the audience on edge with every detail.`,
   "RELIGIOUS / SPIRITUAL": `Write with reverence and wisdom. Use a warm, respectful tone that honors the spiritual content while making it accessible and emotionally moving for all viewers.`,
   "POLITICAL COMMENTARY": `Write like a sharp political analyst — balanced yet compelling. Present facts clearly, provide context, and build arguments that keep viewers engaged and informed.`,
   "TRAVEL / FOOD": `Write like Anthony Bourdain or a premium travel vlog narrator — vivid, sensory-rich, adventurous. Make viewers taste the food, feel the breeze, and smell the streets through your words.`,
-  "EDUCATIONAL": `Write like a TED Talk presenter — clear, inspiring, memorable. Break down complex topics into digestible insights while maintaining intellectual depth and curiosity.`,
+  EDUCATIONAL: `Write like a TED Talk presenter — clear, inspiring, memorable. Break down complex topics into digestible insights while maintaining intellectual depth and curiosity.`,
   "ENTERTAINMENT / GOSSIP": `Write like a premium entertainment news anchor — energetic, dramatic, juicy. Highlight the most shocking and exciting moments with flair and personality.`,
-  "SPORTS": `Write like a legendary sports commentator — passionate, electrifying, pulse-pounding. Capture the intensity of every play, the emotion of victory and defeat.`,
+  SPORTS: `Write like a legendary sports commentator — passionate, electrifying, pulse-pounding. Capture the intensity of every play, the emotion of victory and defeat.`,
   "BUSINESS / FINANCE": `Write like a Bloomberg or Forbes narrator — authoritative, data-driven yet engaging. Make business stories feel like thriller narratives with stakes and outcomes.`,
   "HEALTH / WELLNESS": `Write with warmth and authority — informative yet caring. Present health information clearly while being encouraging and empathetic.`,
   "MUSIC / CONCERT": `Write like a Rolling Stone journalist — passionate, poetic, rhythmic. Capture the energy of performances and the soul of the music.`,
-  "GENERAL": `Write with a versatile, professional narrator voice that adapts to the content's natural tone while maintaining engagement and clarity.`,
+  GENERAL: `Write with a versatile, professional narrator voice that adapts to the content's natural tone while maintaining engagement and clarity.`,
 };
 
 serve(async (req) => {
@@ -167,24 +191,27 @@ serve(async (req) => {
     // ===== AUTHENTICATION =====
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Authentication required" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Authentication required" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } }
+      global: { headers: { Authorization: authHeader } },
     });
 
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseClient.auth.getUser();
     if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Invalid or expired token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Invalid or expired token" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     console.log(`[recap-script-generator] Authenticated user: ${user.id}`);
@@ -246,10 +273,10 @@ serve(async (req) => {
     }
 
     if (!fileObj && !transcript && !fileUri && !fileData) {
-      return new Response(
-        JSON.stringify({ error: "No file, fileUri, or transcript provided" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "No file, fileUri, or transcript provided" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Credit deduction moved to AFTER successful script generation (see below)
@@ -258,21 +285,28 @@ serve(async (req) => {
     const nicheLabel = niche || "GENERAL";
     const lang = language || "BURMESE";
     const nicheStyle = nicheStyles[nicheLabel] || nicheStyles["GENERAL"];
-    const callerInstructionsBlock = [extraInstructions, editorRules]
-      .filter(Boolean)
-      .join("\n\n")
-      .trim();
+    const callerInstructionsBlock = [extraInstructions, editorRules].filter(Boolean).join("\n\n").trim();
 
     console.log(`[recap-script-generator] Language: ${lang}, Niche: ${nicheLabel}, isOwnApi: ${isOwnApi}`);
 
     // Map language name to a clear, unambiguous native label for the AI
     const langNativeMap: Record<string, string> = {
-      "ENGLISH": "English", "JAPANESE": "日本語 (Japanese)", "KOREAN": "한국어 (Korean)",
-      "CHINESE": "中文 (Chinese)", "THAI": "ภาษาไทย (Thai)", "HINDI": "हिन्दी (Hindi)",
-      "SPANISH": "Español (Spanish)", "FRENCH": "Français (French)", "GERMAN": "Deutsch (German)",
-      "ITALIAN": "Italiano (Italian)", "PORTUGUESE": "Português (Portuguese)", "RUSSIAN": "Русский (Russian)",
-      "ARABIC": "العربية (Arabic)", "VIETNAMESE": "Tiếng Việt (Vietnamese)", "INDONESIAN": "Bahasa Indonesia (Indonesian)",
-      "BURMESE": "မြန်မာ (Burmese)",
+      ENGLISH: "English",
+      JAPANESE: "日本語 (Japanese)",
+      KOREAN: "한국어 (Korean)",
+      CHINESE: "中文 (Chinese)",
+      THAI: "ภาษาไทย (Thai)",
+      HINDI: "हिन्दी (Hindi)",
+      SPANISH: "Español (Spanish)",
+      FRENCH: "Français (French)",
+      GERMAN: "Deutsch (German)",
+      ITALIAN: "Italiano (Italian)",
+      PORTUGUESE: "Português (Portuguese)",
+      RUSSIAN: "Русский (Russian)",
+      ARABIC: "العربية (Arabic)",
+      VIETNAMESE: "Tiếng Việt (Vietnamese)",
+      INDONESIAN: "Bahasa Indonesia (Indonesian)",
+      BURMESE: "မြန်မာ (Burmese)",
     };
     const langLabel = langNativeMap[lang] || lang;
 
@@ -395,16 +429,18 @@ ${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYL
         const arrayBuffer = await fileObj.arrayBuffer();
         const fileBytes = new Uint8Array(arrayBuffer);
 
-        console.log(`[recap-script-generator] Uploading file: ${fileObj.name}, size: ${fileBytes.length}, mime: ${resolvedMimeType}`);
+        console.log(
+          `[recap-script-generator] Uploading file: ${fileObj.name}, size: ${fileBytes.length}, mime: ${resolvedMimeType}`,
+        );
 
         try {
           resolvedFileUri = await uploadToGoogleFiles(activeApiKey, fileBytes, resolvedMimeType, fileObj.name);
         } catch (uploadError) {
           console.error("File upload failed:", uploadError);
-          return new Response(
-            JSON.stringify({ error: "ဖိုင် upload မအောင်မြင်ပါ။ ပြန်စမ်းပါ။" }),
-            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+          return new Response(JSON.stringify({ error: "ဖိုင် upload မအောင်မြင်ပါ။ ပြန်စမ်းပါ။" }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
         }
       } else {
         console.log(`[recap-script-generator] Using pre-uploaded fileUri: ${fileUri}`);
@@ -417,14 +453,16 @@ ${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYL
           try {
             // Build fallback key list from the script pool — the file may have been
             // uploaded by a sibling function using a different key in the same pool.
-            const fallbackKeys: string[] = isOwnApi ? [] : [
-              Deno.env.get("GEMINI_SCRIPT_KEY_1") || "",
-              Deno.env.get("GEMINI_SCRIPT_KEY_2") || "",
-              Deno.env.get("GEMINI_SCRIPT_KEY_3") || "",
-              Deno.env.get("GEMINI_API_KEY") || "",
-              Deno.env.get("GEMINI_API_KEY_2") || "",
-              Deno.env.get("GEMINI_API_KEY_3") || "",
-            ].filter(Boolean);
+            const fallbackKeys: string[] = isOwnApi
+              ? []
+              : [
+                  Deno.env.get("GEMINI_SCRIPT_KEY_1") || "",
+                  Deno.env.get("GEMINI_SCRIPT_KEY_2") || "",
+                  Deno.env.get("GEMINI_SCRIPT_KEY_3") || "",
+                  Deno.env.get("GEMINI_API_KEY") || "",
+                  Deno.env.get("GEMINI_API_KEY_2") || "",
+                  Deno.env.get("GEMINI_API_KEY_3") || "",
+                ].filter(Boolean);
             const matchedKey = await waitForFileProcessing(activeApiKey, fName, fallbackKeys);
             if (matchedKey && matchedKey !== activeApiKey) {
               console.log(`[recap-script-generator] Adopting matched key for file ownership`);
@@ -433,14 +471,19 @@ ${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYL
           } catch (processingError) {
             console.error("File processing failed:", processingError);
             return new Response(
-              JSON.stringify({ error: "Google video processing service က ဒီ ဖိုင်ကို လက်မခံပါ။ ဖိုင်ကို ပြန် upload လုပ်ပြီး ထပ်ကြိုးစားပါ။" }),
-              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              JSON.stringify({
+                error:
+                  "Google video processing service က ဒီ ဖိုင်ကို လက်မခံပါ။ ဖိုင်ကို ပြန် upload လုပ်ပြီး ထပ်ကြိုးစားပါ။",
+              }),
+              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
             );
           }
         }
       }
 
-      const durationHint = sourceDurationSec ? `\nSOURCE VIDEO DURATION: ${Math.floor(sourceDurationSec / 60)} minutes ${Math.round(sourceDurationSec % 60)} seconds` : '';
+      const durationHint = sourceDurationSec
+        ? `\nSOURCE VIDEO DURATION: ${Math.floor(sourceDurationSec / 60)} minutes ${Math.round(sourceDurationSec % 60)} seconds`
+        : "";
 
       const userPrompt = `[LANGUAGE: ${lang} — ${langLabel}]
 [NICHE: ${nicheLabel}]${durationHint}
@@ -511,7 +554,9 @@ ${transcript}
       contentParts = [{ text: userPrompt }];
     }
 
-    console.log(`[recap-script-generator] Sending to Gemini (${fileObj || fileUri || fileData ? 'file mode' : 'transcript mode'})...`);
+    console.log(
+      `[recap-script-generator] Sending to Gemini (${fileObj || fileUri || fileData ? "file mode" : "transcript mode"})...`,
+    );
 
     // Retry logic for Gemini API (handles 429 rate limits & 503 overloaded)
     const MAX_RETRIES = 4;
@@ -519,27 +564,26 @@ ${transcript}
     let lastError = "";
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      response = await fetch(
-        `${GOOGLE_AI_API}/${MODEL}:generateContent?key=${activeApiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            system_instruction: { parts: [{ text: systemPrompt }] },
-            contents: [{ parts: contentParts }],
-            generationConfig: {
-              temperature: 0.8,
-              maxOutputTokens: requestedMaxOutputTokens || 32768,
-            },
-          }),
-        }
-      );
+      response = await fetch(`${GOOGLE_AI_API}/${MODEL}:generateContent?key=${activeApiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ parts: contentParts }],
+          generationConfig: {
+            temperature: 0.8,
+            maxOutputTokens: requestedMaxOutputTokens || 32768,
+          },
+        }),
+      });
 
       if (response.ok) break;
 
       const errorText = await response.text();
       lastError = errorText;
-      console.warn(`[recap-script-generator] Gemini API error (attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${response.status} ${errorText.substring(0, 200)}`);
+      console.warn(
+        `[recap-script-generator] Gemini API error (attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${response.status} ${errorText.substring(0, 200)}`,
+      );
 
       // Only retry on 429 (rate limit) or 503 (overloaded)
       if (response.status === 429 || response.status === 503) {
@@ -548,7 +592,9 @@ ${transcript}
             const nextKey = rotateKey();
             if (nextKey && nextKey !== activeApiKey) {
               activeApiKey = nextKey;
-              console.log(`[recap-script-generator] 429 rate limit, rotated App API key (attempt ${attempt + 1}/${MAX_RETRIES + 1})`);
+              console.log(
+                `[recap-script-generator] 429 rate limit, rotated App API key (attempt ${attempt + 1}/${MAX_RETRIES + 1})`,
+              );
               continue;
             }
           }
@@ -564,7 +610,7 @@ ${transcript}
             }
           } catch {}
           console.log(`[recap-script-generator] Retrying in ${waitMs}ms...`);
-          await new Promise(r => setTimeout(r, waitMs));
+          await new Promise((r) => setTimeout(r, waitMs));
           continue;
         }
       }
@@ -577,11 +623,21 @@ ${transcript}
       console.error("Gemini API final error:", response?.status, lastError.substring(0, 300));
       if (response?.status === 429) {
         return new Response(
-          JSON.stringify({ error: "API Request limit ဖြစ်နေပါသည်။ ခဏစောင့်ပြီး ပြန်စမ်းပါ။", retryable: true, retryAfterSeconds: 30 }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({
+            error: "API Request limit ဖြစ်နေပါသည်။ ခဏစောင့်ပြီး ပြန်စမ်းပါ။",
+            retryable: true,
+            retryAfterSeconds: 30,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
-      throw new Error("Script generation failed");
+
+      // Return the provider error body (if available) instead of throwing a generic error.
+      const providerDetails = lastError || (await response?.text().catch(() => "")) || "Unknown provider error";
+      return new Response(JSON.stringify({ error: "Script generation failed", details: providerDetails }), {
+        status: response?.status || 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const data = await response.json();
@@ -590,10 +646,10 @@ ${transcript}
 
     if (!normalizedRawScript || normalizedRawScript.length < 10) {
       console.error("[recap-script-generator] Empty or invalid script output");
-      return new Response(
-        JSON.stringify({ error: "Script generation failed — empty output" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Script generation failed — empty output" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const rawWordCount = normalizedRawScript.split(/\s+/).filter(Boolean).length;
@@ -602,14 +658,14 @@ ${transcript}
 
     if (!script || script.trim().length < 10) {
       console.error("[recap-script-generator] Script became invalid after 70% enforcement");
-      return new Response(
-        JSON.stringify({ error: "Script generation failed after length enforcement" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Script generation failed after length enforcement" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     console.log(
-      `[recap-script-generator] Script generated and normalized (chars=${script.length}, words=${rawWordCount}->${finalWordCount}, sourceDurationSec=${sourceDurationSec ?? 0})`
+      `[recap-script-generator] Script generated and normalized (chars=${script.length}, words=${rawWordCount}->${finalWordCount}, sourceDurationSec=${sourceDurationSec ?? 0})`,
     );
 
     // ===== CREDIT DEDUCTION — ONLY after successful script output =====
@@ -640,17 +696,20 @@ ${transcript}
       console.log("[recap-script-generator] Skipping credit deduction (recap-nv pipeline handles it)");
     }
 
-    logToolActivity(user.id, "recap-script", "success", { scriptLength: script.length, niche: nicheLabel, language: lang });
-    return new Response(
-      JSON.stringify({ script }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    logToolActivity(user.id, "recap-script", "success", {
+      scriptLength: script.length,
+      niche: nicheLabel,
+      language: lang,
+    });
+    return new Response(JSON.stringify({ script }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (error) {
     console.error("Script generation error:", error);
     const errMsg = error instanceof Error ? error.message : "Unknown error";
-    return new Response(
-      JSON.stringify({ error: errMsg }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: errMsg }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
