@@ -4,11 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Communicate } from "npm:edge-tts-universal@1.4.0";
 import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
 
-const ALLOWED_VOICES = new Set([
-  "my-MM-ThihaNeural",
-  "my-MM-NilarNeural",
-  "it-IT-GiuseppeMultilingualNeural",
-]);
+const ALLOWED_VOICES = new Set(["my-MM-ThihaNeural", "my-MM-NilarNeural", "it-IT-GiuseppeMultilingualNeural"]);
 
 // SURGICAL: Make Burmese Edge TTS sound natural (human-like, not robotic).
 // Burmese uses ၊ (comma) and ။ (full stop). Microsoft Edge TTS does NOT detect
@@ -16,23 +12,31 @@ const ALLOWED_VOICES = new Set([
 // cadence. Converting them to "," and "." gives the neural engine the prosody
 // cues it needs to breathe, pause, rise, and fall like a real human narrator.
 function humanizeBurmese(text: string): string {
-  return text
-    // Normalize Burmese punctuation -> ASCII so prosody engine reacts
-    .replace(/\s*။\s*/g, ". ")
-    .replace(/\s*၊\s*/g, ", ")
-    // Collapse excessive whitespace
-    .replace(/[ \t]+/g, " ")
-    // Add a soft pause after closing quotes / parentheses
-    .replace(/([”"\)])\s*/g, "$1, ")
-    // Ensure space after sentence-ending punctuation
-    .replace(/([.!?])(?=\S)/g, "$1 ")
-    // Clean any doubled punctuation we may have created
-    .replace(/,\s*,/g, ",")
-    .replace(/\.\s*\./g, ".")
-    .trim();
+  return (
+    text
+      // Normalize Burmese punctuation -> ASCII so prosody engine reacts
+      .replace(/\s*။\s*/g, ". ")
+      .replace(/\s*၊\s*/g, ", ")
+      // Collapse excessive whitespace
+      .replace(/[ \t]+/g, " ")
+      // Add a soft pause after closing quotes / parentheses
+      .replace(/([”"\)])\s*/g, "$1, ")
+      // Ensure space after sentence-ending punctuation
+      .replace(/([.!?])(?=\S)/g, "$1 ")
+      // Clean any doubled punctuation we may have created
+      .replace(/,\s*,/g, ",")
+      .replace(/\.\s*\./g, ".")
+      .trim()
+  );
 }
 
-async function synthesize(text: string, voice: string, rate: string, pitch: string, volume: string): Promise<Uint8Array> {
+async function synthesize(
+  text: string,
+  voice: string,
+  rate: string,
+  pitch: string,
+  volume: string,
+): Promise<Uint8Array> {
   // Microsoft recently requires WebSocket headers/cookies that Deno's native
   // browser-style WebSocket cannot set. The maintained server-side client uses
   // npm ws and sends those headers correctly, fixing the protocol error.
@@ -49,7 +53,10 @@ async function synthesize(text: string, voice: string, rate: string, pitch: stri
 
   const out = new Uint8Array(total);
   let o = 0;
-  for (const c of chunks) { out.set(c, o); o += c.length; }
+  for (const c of chunks) {
+    out.set(c, o);
+    o += c.length;
+  }
   return out;
 }
 
@@ -75,17 +82,22 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Authorization required" }), {
-        status: 401, headers: { ...cors, "Content-Type": "application/json" },
+        status: 401,
+        headers: { ...cors, "Content-Type": "application/json" },
       });
     }
 
     const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     });
-    const { data: { user }, error: authErr } = await userClient.auth.getUser();
+    const {
+      data: { user },
+      error: authErr,
+    } = await userClient.auth.getUser();
     if (authErr || !user) {
       return new Response(JSON.stringify({ error: "Invalid token" }), {
-        status: 401, headers: { ...cors, "Content-Type": "application/json" },
+        status: 401,
+        headers: { ...cors, "Content-Type": "application/json" },
       });
     }
 
@@ -100,14 +112,16 @@ Deno.serve(async (req) => {
     const volume: string = (body.volume ?? "+0%").toString();
     const skipCreditDeduction: boolean = body.skipCreditDeduction === true;
 
-    if (!text || text.length > 10000) {
-      return new Response(JSON.stringify({ error: "Text must be 1–10000 chars" }), {
-        status: 400, headers: { ...cors, "Content-Type": "application/json" },
+    if (!text || text.length > 20000) {
+      return new Response(JSON.stringify({ error: "Text must be 1–20000 chars" }), {
+        status: 400,
+        headers: { ...cors, "Content-Type": "application/json" },
       });
     }
     if (!ALLOWED_VOICES.has(voice)) {
       return new Response(JSON.stringify({ error: "Unsupported voice" }), {
-        status: 400, headers: { ...cors, "Content-Type": "application/json" },
+        status: 400,
+        headers: { ...cors, "Content-Type": "application/json" },
       });
     }
 
@@ -122,33 +136,42 @@ Deno.serve(async (req) => {
       });
       if (rpcErr) {
         return new Response(JSON.stringify({ error: rpcErr.message }), {
-          status: 500, headers: { ...cors, "Content-Type": "application/json" },
+          status: 500,
+          headers: { ...cors, "Content-Type": "application/json" },
         });
       }
       if (!(data as any)?.success) {
         const r = data as any;
-        return new Response(JSON.stringify({ error: r?.error || "Credit check failed", errorCode: r?.errorCode, balance: r?.balance }), {
-          status: 402, headers: { ...cors, "Content-Type": "application/json" },
-        });
+        return new Response(
+          JSON.stringify({ error: r?.error || "Credit check failed", errorCode: r?.errorCode, balance: r?.balance }),
+          {
+            status: 402,
+            headers: { ...cors, "Content-Type": "application/json" },
+          },
+        );
       }
       rpcResult = data;
     }
 
     const audio = await synthesize(text, voice, rate, pitch, volume);
 
-    return new Response(JSON.stringify({
-      success: true,
-      audioBase64: toBase64(audio),
-      audio: toBase64(audio),
-      mimeType: "audio/mpeg",
-      sampleRate: 24000,
-      balance: (rpcResult as any)?.balance,
-      deducted: (rpcResult as any)?.deducted,
-    }), { status: 200, headers: { ...cors, "Content-Type": "application/json" } });
+    return new Response(
+      JSON.stringify({
+        success: true,
+        audioBase64: toBase64(audio),
+        audio: toBase64(audio),
+        mimeType: "audio/mpeg",
+        sampleRate: 24000,
+        balance: (rpcResult as any)?.balance,
+        deducted: (rpcResult as any)?.deducted,
+      }),
+      { status: 200, headers: { ...cors, "Content-Type": "application/json" } },
+    );
   } catch (e) {
     console.error("edge-tts error:", e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), {
-      status: 500, headers: { ...cors, "Content-Type": "application/json" },
+      status: 500,
+      headers: { ...cors, "Content-Type": "application/json" },
     });
   }
 });
