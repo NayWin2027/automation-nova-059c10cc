@@ -646,10 +646,18 @@ ${transcript}
 
     if (!normalizedRawScript || normalizedRawScript.length < 10) {
       console.error("[recap-script-generator] Empty or invalid script output");
-      return new Response(JSON.stringify({ error: "Script generation failed — empty output" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      const providerSnippet = rawScript ? rawScript.substring(0, 300) : null;
+      return new Response(
+        JSON.stringify({
+          error: "Script generation failed — empty output",
+          details: {
+            rawScriptLength: rawScript.length,
+            rawScriptSnippet: providerSnippet,
+            candidateCount: Array.isArray(data?.candidates) ? data.candidates.length : 0,
+          },
+        }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     const rawWordCount = normalizedRawScript.split(/\s+/).filter(Boolean).length;
@@ -658,10 +666,17 @@ ${transcript}
 
     if (!script || script.trim().length < 10) {
       console.error("[recap-script-generator] Script became invalid after 70% enforcement");
-      return new Response(JSON.stringify({ error: "Script generation failed after length enforcement" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({
+          error: "Script generation failed after length enforcement",
+          details: {
+            normalizedRawScriptLength: normalizedRawScript.length,
+            normalizedRawScriptSnippet: normalizedRawScript.substring(0, 300),
+            finalScriptLength: script ? script.length : 0,
+          },
+        }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     console.log(
