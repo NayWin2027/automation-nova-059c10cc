@@ -156,11 +156,25 @@ function getMimeType(file: File): string {
   return mimeMap[ext || ""] || "audio/mpeg";
 }
 
-function enforceScriptCoverage70(script: string, _sourceDurationSec?: number | null): string {
-  // SURGICAL CHANGE: Disabled 70% truncation. User requires 100% full-video coverage
-  // from start to end. The model is now instructed (see prompt) to produce a complete
-  // narration matching the full source duration without being cut short.
-  return script.replace(/\r\n/g, "\n").trim() || script;
+function enforceScriptCoverage70(script: string, sourceDurationSec?: number | null): string {
+  const normalized = script.replace(/\r\n/g, "\n").trim();
+  if (!normalized || !sourceDurationSec) return normalized || script;
+
+  const maxWords = Math.max(45, Math.floor((sourceDurationSec / 60) * 75));
+  const words = normalized.split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return normalized;
+
+  const paragraphs = normalized.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+  const kept: string[] = [];
+  let count = 0;
+  for (const paragraph of paragraphs) {
+    const paragraphWords = paragraph.split(/\s+/).filter(Boolean);
+    if (count + paragraphWords.length > maxWords && kept.length > 0) break;
+    kept.push(paragraph);
+    count += paragraphWords.length;
+    if (count >= maxWords) break;
+  }
+  return (kept.length ? kept.join("\n\n") : words.slice(0, maxWords).join(" ")).trim();
 }
 
 // Niche-specific style instructions
