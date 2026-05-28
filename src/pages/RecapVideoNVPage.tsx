@@ -5303,8 +5303,8 @@ const RecapVideoNVPage: React.FC = () => {
       } = await supabase.auth.getSession();
       const userToken = currentSession?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       const selectedLangName = languages.find((l) => l.code === selectedLanguage)?.name || "BURMESE";
-      // Larger token headroom to reduce incomplete scripts on long videos.
-      const maxOutputTokens = Math.min(16384, Math.max(4096, Math.ceil(duration * 220)));
+      // Keep generation bounded for true ~50% recap output and avoid Gemini deadline/504 spikes.
+      const maxOutputTokens = Math.min(8192, Math.max(2048, Math.ceil(duration * 6)));
 
       // ── LANGUAGE-AWARE BLOCKS: All language-specific text uses selectedLangName so user's chosen language is respected. ──
       const isBurmese = selectedLangName === "BURMESE";
