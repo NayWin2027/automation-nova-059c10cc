@@ -20,7 +20,6 @@ const POOL_KEYS: Record<KeyPool, readonly string[]> = {
     "GEMINI_SCRIPT_KEY_1",
     "GEMINI_SCRIPT_KEY_2",
     "GEMINI_SCRIPT_KEY_3",
-    ...LEGACY_KEYS,
   ],
   tts: [
     "GEMINI_TTS_KEY_1",
