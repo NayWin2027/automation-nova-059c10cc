@@ -589,6 +589,7 @@ ${transcript}
           generationConfig: {
             temperature: 0.55,
             maxOutputTokens: requestedMaxOutputTokens || 12288,
+            thinkingConfig: { thinkingBudget: 0 },
           },
         }),
       });
