@@ -1,27 +1,69 @@
-## Surgical Plan
+## Do I know what the issue is?
 
-Actual logs အရ failure point က `recap-script-generator` ထဲမှာဖြစ်နေပါတယ်။ Gemini က `gemini-2.5-flash` ကို 503 high demand ပြန်ပြီးနောက် code က dead/unsupported fallback models (`gemini-2.0-flash`, `gemini-1.5-flash`) ဆီဆင်းသွားလို့ final error က 404 နဲ့ `Script generation failed` ဖြစ်နေပါတယ်။
+ဟုတ်ပါတယ်။ Screenshot ထဲက error message က app credit မဖြတ်တာကြောင့်မဟုတ်ပါဘူး။ `recap-script-generator` function ထဲမှာ Google Gemini က `gemini-2.5-flash` ကို `503 UNAVAILABLE / high demand` ပြန်တာကြောင့် UI မှာ “Google AI video/script service မအားသေးပါ…” ဆိုပြီးပြနေတာပါ။
 
-### ပြင်မယ့်နေရာ
-- `supabase/functions/recap-script-generator/index.ts` တစ်ဖိုင်ပဲ ပြင်မယ်။
-- `src/pages/RecapVideoNVPage.tsx` မထိဘူး။
-- protected blocks / upload chunk logic / credit logic မထိဘူး။
+## Actual problem
 
-### ပြင်မယ့်အချက်
-1. လက်ရှိ broken model fallback list ကိုဖယ်မယ်
-   - `gemini-2.0-flash` နဲ့ `gemini-1.5-flash` က logs ထဲမှာ unsupported/404 ဖြစ်နေတဲ့အတွက် မသုံးတော့ဘူး။
+- Recent logs တွေမှာ `gemini-2.5-flash` က ဆက်တိုက် `503 high demand` ပြန်နေပါတယ်။
+- Own API ရော App API ရော မရတာက key/credit issue မဟုတ်ဘဲ same Google model endpoint overload ဖြစ်နေလို့ပါ။
+- Script style change က direct root cause မဟုတ်ပေမယ့် prompt က အရင်ထက် heavy ဖြစ်သွားတာကြောင့် 30-min video analysis + long style rules + output generation တွေက model pressure ပိုတက်စေပါတယ်။
+- “credit မဖြတ်ပါ” message က အခု code ထဲမှာ 503/504 ဖြစ်ချိန် user credit မကုန်အောင် ပြန်ပြတဲ့ protection message ပါ။
 
-2. Retry loop မထည့်ဘူး၊ လက်ရှိ retry behavior ကိုလည်း script generation path မှာ မမှီခိုတော့ဘူး
-   - User တောင်းထားတဲ့အတိုင်း retry logic ထပ်မထည့်ဘဲ deterministic single-pass generation ဖြစ်အောင် ပြင်မယ်။
+## Surgical fix scope
 
-3. Script generation ကို ပေါ့ပါးအောင် force လုပ်မယ်
-   - 30 မိနစ် video အတွက် output cap ကို script target နဲ့ကိုက်အောင် ထိန်းမယ်။
-   - prompt/output token pressure လျှော့ပြီး Google high-demand/timeout ထိနိုင်ခြေကိုလျှော့မယ်။
+Only this file:
 
-4. Error handling ကို exact ဖြစ်အောင်ပြင်မယ်
-   - Google model unavailable/overloaded ဖြစ်ရင် generic `Script generation failed` မဟုတ်ဘဲ root cause ကို client သိနိုင်အောင် structured error ပြန်မယ်။
-   - Credit deduction က successful script ရပြီးမှပဲဖြစ်တဲ့ current logic ကိုမထိဘူး။
+- `supabase/functions/recap-script-generator/index.ts`
 
-### Validate
-- Edge function ကို deploy လုပ်မယ်။
-- Recent logs နဲ့ direct function test ဖြင့် `404 dead fallback model` မရှိတော့တာ၊ generic `Script generation failed` မပြန်တော့တာ စစ်မယ်။
+Do not touch:
+
+- `src/pages/RecapVideoNVPage.tsx`
+- upload chunk logic
+- credit deduction logic
+- protected AV/voice/auto pipeline blocks
+- UI layout/design
+
+## Implementation plan
+
+1. **Stop using overloaded model as primary**
+   - Change the single `MODEL` constant from `gemini-2.5-flash` to `gemini-2.5-flash-lite`.
+   - This is not retry logic; it is one deterministic request to a lighter, lower-latency Gemini model.
+   - It should also avoid the Pro cost increase problem.
+
+2. **Keep one request only**
+   - Do not add retry loops.
+   - Do not add key rotation retry.
+   - Do not add fallback chains.
+   - Keep current single `fetch` behavior.
+
+3. **Reduce output/model pressure slightly without changing product behavior**
+   - Keep max output bounded at the existing `12288` ceiling.
+   - Keep `thinkingBudget: 0`.
+   - Keep script instructions, but do not expand prompt further.
+
+4. **Return exact error if Google still refuses**
+   - Keep the structured 503 response so credit is not deducted on failed generation.
+   - Do not convert it back to generic `Script generation failed`.
+
+## Validation
+
+After approval:
+
+- Deploy only `recap-script-generator`.
+- Check edge logs for new requests and confirm the old repeated `gemini-2.5-flash 503` path is gone.
+- Run a direct edge-function smoke test if an auth session is available.
+
+## Expected result
+
+- No Pro model cost increase.
+- No retry logic.
+- One-file surgical edit only.
+- Higher stability for 1–30 minute video script generation because the overloaded `gemini-2.5-flash` endpoint is no longer the primary path.
+
+<presentation-actions>
+  <presentation-open-history>View History</presentation-open-history>
+</presentation-actions>
+
+<presentation-actions>
+<presentation-link url="https://docs.lovable.dev/tips-tricks/troubleshooting">Troubleshooting docs</presentation-link>
+</presentation-actions>
