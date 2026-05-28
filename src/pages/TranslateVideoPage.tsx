@@ -380,6 +380,48 @@ function generateSRTContent(subs: { start: number; end: number; text: string }[]
     .join("\n");
 }
 
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+const isRetryableTranslateIssue = (value: any) => {
+  const message = String(value?.message || value?.error || value?.errorCode || value?.status || "");
+  return (
+    value?.fallback === true ||
+    value?.retryable === true ||
+    value?.errorCode === "SERVICE_UNAVAILABLE" ||
+    value?.errorCode === "RATE_LIMIT" ||
+    message.includes("503") ||
+    message.includes("500") ||
+    message.includes("429") ||
+    message.includes("UNAVAILABLE") ||
+    message.includes("timed out") ||
+    message.includes("rate limit")
+  );
+};
+
+async function invokeSubtitleTranslationChunk(body: {
+  audioBase64: string;
+  audioDuration: number;
+  targetLang: string;
+  videoFrames: string[];
+}) {
+  let lastMessage = "";
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const { data, error } = await supabase.functions.invoke("video-transform-translate", { body });
+    if (!error && !isRetryableTranslateIssue(data)) {
+      return typeof data?.result === "string" ? data.result : JSON.stringify(data?.result || []);
+    }
+
+    const retryable = isRetryableTranslateIssue(data) || isRetryableTranslateIssue(error);
+    lastMessage = String(error?.message || data?.error || data?.detail || "AI subtitle service busy");
+    if (!retryable) throw new Error(lastMessage || "Edge function error");
+    if (attempt < 3) await wait(1200 * (attempt + 1));
+  }
+
+  throw new Error(
+    `Google AI subtitle service မအားသေးပါ။ Subtitle မပါဘဲ render မလုပ်ပါဘူး။ ခဏနေရင် ပြန်စမ်းပါ။${lastMessage ? ` (${lastMessage})` : ""}`,
+  );
+}
+
 export default function App() {
   const navigate = useNavigate();
   const { isAllowed, isLoading: authLoading } = useAuthGuard("video-transform");
