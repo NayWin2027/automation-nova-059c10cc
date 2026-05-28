@@ -3,7 +3,7 @@
  *
  * Pools:
  *   - "script" (image + script generation): GEMINI_SCRIPT_KEY_1/2/3
- *     Legacy fallback: GEMINI_API_KEY, GEMINI_API_KEY_2, GEMINI_API_KEY_3
+ *     No legacy fallback — keep script generation isolated to 3 fresh script keys.
  *   - "tts" (text-to-speech only):           GEMINI_TTS_KEY_1/2/3
  *     Legacy fallback: GEMINI_API_KEY, GEMINI_API_KEY_2, GEMINI_API_KEY_3
  *
