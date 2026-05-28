@@ -122,10 +122,18 @@ serve(async (req) => {
 
       if (!mktResponse.ok) {
         const errText = await mktResponse.text();
-        return new Response(JSON.stringify({ error: `Marketing generation failed: ${mktResponse.status}` }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        console.error("Marketing generation error:", mktResponse.status, errText);
+        if (mktResponse.status >= 500 || mktResponse.status === 429) {
+          return jsonResponse({
+            result: JSON.stringify({ title: "", description: "" }),
+            error: "Marketing service မအားသေးပါ။ ခဏနေရင် ပြန်စမ်းပါ။",
+            errorCode: "SERVICE_UNAVAILABLE",
+            upstreamStatus: mktResponse.status,
+            retryable: true,
+            fallback: true,
+          });
+        }
+        return jsonResponse({ error: `Marketing generation failed: ${mktResponse.status}` }, mktResponse.status);
       }
 
       const mktData = await mktResponse.json();
