@@ -297,6 +297,10 @@ serve(async (req) => {
       skipCreditDeduction = !!body.skipCreditDeduction;
       extraInstructions = typeof body.extraInstructions === "string" ? body.extraInstructions : "";
       editorRules = typeof body.editorRules === "string" ? body.editorRules : "";
+      // SEO mode: accept a raw seoPrompt as transcript input (used by client SEO metadata generator)
+      if (body.seoMode && typeof body.seoPrompt === "string" && body.seoPrompt.trim()) {
+        transcript = body.seoPrompt;
+      }
       const bodyMaxOutputTokens = Number(body.generationConfig?.maxOutputTokens);
       if (Number.isFinite(bodyMaxOutputTokens) && bodyMaxOutputTokens > 0) {
         requestedMaxOutputTokens = Math.min(12288, Math.max(2048, Math.floor(bodyMaxOutputTokens)));
