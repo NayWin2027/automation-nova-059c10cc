@@ -10,7 +10,7 @@ const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
 const MODEL = "gemini-2.5-flash-lite";
 
 function buildGenerationConfig(model: string, requestedMaxOutputTokens: number | null): Record<string, unknown> {
-  const maxOutputTokens = model === "gemini-2.0-flash"
+  const maxOutputTokens = model === "gemini-flash-latest"
     ? Math.min(requestedMaxOutputTokens || 8192, 8192)
     : requestedMaxOutputTokens || 12288;
 
