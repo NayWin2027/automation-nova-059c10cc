@@ -1,14 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logToolActivity } from "../_shared/activityLog.ts";
-import { getGeminiKey, rotateKey } from "../_shared/geminiKeys.ts";
+import { getGeminiKey } from "../_shared/geminiKeys.ts";
 
 import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
 
 const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1beta/files";
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
-const MODEL = "gemini-2.5-flash";
-const MODEL_FALLBACKS = [MODEL, "gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-1.5-flash"];
+const MODEL = "gemini-2.5-pro";
 
 async function uploadToGoogleFiles(
   apiKey: string,
