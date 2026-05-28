@@ -1608,16 +1608,12 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
               text = ownResult.text || "[]";
             } else {
               // === APP API MODE: Server-side edge function (secure) ===
-              const { data, error } = await supabase.functions.invoke("video-transform-translate", {
-                body: {
-                  audioBase64: chunk.base64,
-                  audioDuration: chunk.duration,
-                  targetLang,
-                  videoFrames: frameBase64 ? [frameBase64] : [],
-                },
+              text = await invokeSubtitleTranslationChunk({
+                audioBase64: chunk.base64,
+                audioDuration: chunk.duration,
+                targetLang,
+                videoFrames: frameBase64 ? [frameBase64] : [],
               });
-              if (error) throw new Error(error.message || "Edge function error");
-              text = typeof data?.result === "string" ? data.result : JSON.stringify(data?.result || []);
             }
             const jsonMatch = text.match(/\[[\s\S]*\]/);
             let chunkSubs = JSON.parse(jsonMatch ? jsonMatch[0] : "[]");
@@ -1655,9 +1651,12 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
             if (isRateLimit) {
               throw new Error(`API Quota Exceeded! The server API key has hit its rate limit. Please try again later.`);
             }
-            throw new Error(`Failed to translate segment ${i + 1}. Please try again.`);
+            throw new Error(`Failed to translate segment ${i + 1}. Subtitle မပါဘဲ render မလုပ်ပါဘူး။ ခဏနေရင် ပြန်စမ်းပါ။`);
           }
         }
+      }
+      if (parsedSubtitles.length === 0) {
+        throw new Error("ဘာသာပြန် subtitle မထွက်သေးပါ။ Subtitle မပါဘဲ render မလုပ်ပါဘူး။ ခဏနေရင် ပြန်စမ်းပါ။");
       }
       // === AUTO PHASE 2: Render video with subtitles ===
       const generatedSrt = generateSRTContent(parsedSubtitles);
