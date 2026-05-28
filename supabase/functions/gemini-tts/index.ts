@@ -24,7 +24,10 @@ const GEMINI_TTS_API_FALLBACK_USERKEY =
 
 // Status codes that indicate the user's key cannot access the preview model
 // (allowlist / not-found / unsupported-modality style failures).
-const USERKEY_MODEL_FALLBACK_STATUSES = new Set<number>([400, 403, 404]);
+// Also includes 5xx so when the experimental 3.1 preview model is degraded/down
+// on Google's side, we transparently fall back to the stable gemini-2.5 TTS model
+// instead of surfacing a generic "Generation failed" to the user.
+const USERKEY_MODEL_FALLBACK_STATUSES = new Set<number>([400, 403, 404, 500, 502, 503, 504]);
 
 /**
  * Case-insensitive Linear16 / PCM mime detection.
