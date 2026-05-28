@@ -5304,7 +5304,7 @@ const RecapVideoNVPage: React.FC = () => {
       const userToken = currentSession?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       const selectedLangName = languages.find((l) => l.code === selectedLanguage)?.name || "BURMESE";
       // Keep generation bounded for true ~50% recap output and avoid Gemini deadline/504 spikes.
-      const maxOutputTokens = Math.min(8192, Math.max(2048, Math.ceil(duration * 6)));
+      const maxOutputTokens = Math.min(12288, Math.max(2048, Math.ceil(duration * 6)));
 
       // ── LANGUAGE-AWARE BLOCKS: All language-specific text uses selectedLangName so user's chosen language is respected. ──
       const isBurmese = selectedLangName === "BURMESE";
