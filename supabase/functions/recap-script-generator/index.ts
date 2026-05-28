@@ -10,7 +10,7 @@ const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
 const MODEL = "gemini-2.5-flash-lite";
 
 function buildGenerationConfig(model: string, requestedMaxOutputTokens: number | null): Record<string, unknown> {
-  const maxOutputTokens = model === "gemini-2.0-flash"
+  const maxOutputTokens = model === "gemini-flash-latest"
     ? Math.min(requestedMaxOutputTokens || 8192, 8192)
     : requestedMaxOutputTokens || 12288;
 
@@ -625,7 +625,7 @@ ${transcript}
     }
 
     // Surgical 503/504 fallback chain: only escalate when Google reports model overload.
-    for (const fallbackModel of ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"]) {
+    for (const fallbackModel of ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-flash-latest"]) {
       if (!response || response.ok || (response.status !== 503 && response.status !== 504)) break;
       activeModel = fallbackModel;
       console.warn(`[recap-script-generator] Previous model overloaded (${response.status}). Falling back to ${activeModel}...`);
