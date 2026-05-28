@@ -809,11 +809,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     // ── FIX: Recompute filter string only when grade or bypass changes — not per frame ──
     useEffect(() => {
       const g = COLOR_GRADE_PRESETS[editorState.colorGrade] || COLOR_GRADE_PRESETS["OFF"];
-      const bypassBoost = editorState.bypass
+      // NOTE: `bypass` means "skip color grading". Apply boosts only when NOT bypassing.
+      const bypassBoost = !editorState.bypass
         ? { contrast: 15, brightness: 5, saturate: 15, hue: 5 }
         : { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
-      // SURGICAL EDIT: When OFF, output exactly original — skip bonus adjustments
-      const isOff = editorState.colorGrade === "OFF" && !editorState.bypass;
+      // SURGICAL EDIT: When color grade is OFF OR bypass is enabled, use original source colors.
+      const isOff = editorState.colorGrade === "OFF" || editorState.bypass;
       const contrast = isOff ? 100 : g.contrast + bypassBoost.contrast + 5;
       const brightness = isOff ? 100 : g.brightness + bypassBoost.brightness + 5;
       const saturate = isOff ? 100 : g.saturate + bypassBoost.saturate + 8;
@@ -1794,11 +1795,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
       recorder.onstop = async () => {
         const recordingElapsedSecs = (Date.now() - recordingStartTime) / 1000;
-        // AV sync hardening: use the actual audio duration instead of wall-clock time.
-        // MediaRecorder/WebM duration metadata can drift slightly otherwise.
+        // SURGICAL EDIT: FORCE AV SYNC 100% ACCURACY
+        // Always use audio duration as the single source of truth for output video duration.
+        // This ensures perfect AV sync for all output videos.
         const av = audioRef.current;
-        const exactDurationSecs =
-          av && Number.isFinite(av.duration) && av.duration > 0 ? av.duration : recordingElapsedSecs;
+        let exactDurationSecs = recordingElapsedSecs;
+        if (av && Number.isFinite(av.duration) && av.duration > 0) {
+          exactDurationSecs = av.duration;
+        }
+        // Clamp to 3 decimal places for ffmpeg and metadata
+        exactDurationSecs = Number(exactDurationSecs.toFixed(3));
 
         if (audioCtx)
           try {
@@ -1840,10 +1846,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         if (isWebM && exactDurationSecs > 0) {
           try {
             const buf = await blob.arrayBuffer();
+            // Patch WebM duration to match audio duration exactly
             const patched = fixWebmDuration(buf, exactDurationSecs * 1000);
             if (patched) {
               finalBlob = new Blob([patched], { type: mimeType });
-              console.log(`[RECORDING] WebM duration fixed: ${exactDurationSecs.toFixed(1)}s`);
+              console.log(`[RECORDING] WebM duration fixed (audio duration): ${exactDurationSecs.toFixed(3)}s`);
             }
           } catch (fixErr) {
             console.warn("[RECORDING] WebM duration fix failed, using original:", fixErr);
@@ -1891,6 +1898,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           await ffmpeg.exec([
             "-i",
             "input.webm",
+            // SURGICAL EDIT: Force output video duration to match audio duration exactly
             "-t",
             exactDurationSecs.toFixed(3),
             "-shortest",
@@ -1938,7 +1946,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         setRenderedBlobUrl(url);
         console.log("[DOWNLOAD] Auto-download triggered successfully");
-        console.log("[CREDIT] Output video duration (exact):", exactDurationSecs, "seconds");
+        console.log("[CREDIT] Output video duration (A/V SYNC):", exactDurationSecs, "seconds");
+        // SURGICAL EDIT: Always report output video duration as audio duration for 100% AV sync
         onVideoReady?.(exactDurationSecs);
         setIsRendering(false);
         isRenderingRef.current = false;
@@ -2280,16 +2289,34 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           ctx.drawImage(videoEl, zoomedSrcX, zoomedSrcY, zoomedSrcW, zoomedSrcH, 0, 0, canvas.width, canvas.height);
           ctx.restore();
 
-          // ── FEATURE: Professional scene-cut dip-to-dark overlay (YouTube recap style) ──
-          const CUT_FADE_MS = 120;
+          // ── FEATURE: Professional scene-cut transition — smooth cinematic sweep ──
+          const TRANSITION_MS = 320;
           const cutAge = performance.now() - segCutTimeRef.current;
-          if (cutAge < CUT_FADE_MS && segCutTimeRef.current > 0) {
-            const fadeRatio = 1.0 - cutAge / CUT_FADE_MS;
-            const eased = fadeRatio * fadeRatio;
+          if (cutAge < TRANSITION_MS && segCutTimeRef.current > 0) {
+            const t = Math.min(1, cutAge / TRANSITION_MS);
+            const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+            const shadowAlpha = Math.max(0, 0.22 * (1 - ease));
+            const highlightAlpha = Math.max(0, 0.28 * (1 - Math.abs(t - 0.45) / 0.45));
+
             ctx.save();
-            ctx.globalAlpha = eased * 0.7;
-            ctx.fillStyle = "#000000";
+            ctx.globalAlpha = shadowAlpha;
+            ctx.fillStyle = "#07080c";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const glow = ctx.createLinearGradient(0, 0, canvas.width, 0);
+            glow.addColorStop(0, "rgba(255,255,255,0)");
+            glow.addColorStop(0.35, "rgba(255,255,255,0)");
+            glow.addColorStop(0.45, `rgba(255,255,255,${0.15 * highlightAlpha})`);
+            glow.addColorStop(0.5, `rgba(255,255,255,${0.12 * highlightAlpha})`);
+            glow.addColorStop(0.55, `rgba(255,255,255,${0.15 * highlightAlpha})`);
+            glow.addColorStop(1, "rgba(255,255,255,0)");
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = glow;
+            const sweepX = (t * 1.4 - 0.2) * canvas.width;
+            ctx.save();
+            ctx.translate(sweepX, 0);
+            ctx.fillRect(-canvas.width * 0.4, 0, canvas.width * 1.8, canvas.height);
+            ctx.restore();
             ctx.restore();
           }
 
@@ -2620,10 +2647,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           const startY = subCY - totalTextH / 2 + lineHeight / 2;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-          ctx.shadowColor = "rgba(0,0,0,0.9)";
-          ctx.shadowBlur = Math.max(3, fontSize * 0.08);
+          // Reduce heavy blur/offset for export — keeps subtitles crisp in encoded output
+          ctx.shadowColor = "rgba(0,0,0,0.6)";
+          ctx.shadowBlur = Math.max(0, fontSize * 0.03);
           ctx.shadowOffsetX = 0;
-          ctx.shadowOffsetY = Math.max(1, fontSize * 0.025);
+          ctx.shadowOffsetY = Math.max(0, Math.round(fontSize * 0.02));
 
           // SURGICAL EDIT: Dynamic Stroke Color Logic — auto-matches text color
           const tc = subSettings.textColor.toUpperCase();
@@ -2652,7 +2680,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           }
           ctx.strokeStyle = dynamicStroke;
           ctx.lineJoin = "round";
-          ctx.lineWidth = Math.max(3, fontSize * 0.12);
+          // Slightly thinner stroke to avoid darkening edges after encode
+          ctx.lineWidth = Math.max(2, fontSize * 0.08);
 
           // Layer final: Clean bright text on top
           // ── BONUS: Beautiful text color options (change hex code to switch) ──
@@ -2749,6 +2778,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
       let lastTsIdx = 0;
       let lastDrawTime = 0;
+      // Timestamp of last encoder push (ms) to guarantee steady encoder frame cadence
+      let lastEncPushTime = 0;
 
       const checkEnded = (): boolean => {
         const av = audioRef.current;
@@ -2866,7 +2897,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     // seekPendingRef prevents re-seeking every frame during async HTML5 seek
                     lastIndexRef.current = activeIndex;
                     videoInSegmentRef.current = true;
-                    segCutTimeRef.current = performance.now(); // trigger canvas dip-to-dark
+                    segCutTimeRef.current = performance.now(); // trigger smooth cinematic transition
                     seekPendingRef.current = true;
 
                     const onSeeked = () => {
@@ -2990,16 +3021,29 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         }
         // End of AV sync block (runs every frame)
 
-        // ── THROTTLED RENDER: Only draw at target FPS, but sync always runs ──
+        // ── ENCODER PUSH: Ensure encoder receives frames at steady target FPS
+        // This is the key surgical fix for visual smoothness: even when we throttle
+        // main drawing to save CPU, we must push a frame to the encoder at the
+        // desired output FPS so the produced video has smooth timing.
+        const encFrameInterval = 1000 / quality.fps;
+        // shouldDraw controls whether we re-render canvas content this tick
         const shouldDraw = timestamp - lastDrawTime >= adaptiveFrameInterval;
+
         if (shouldDraw) {
           if (frameInterval > 0) lastDrawTime = timestamp - ((timestamp - lastDrawTime) % frameInterval);
-
-          // ── MAIN THREAD RENDER: Render frame then copy to encoder ──
+          // Update visible canvas only when scheduled
           drawFrame(false);
-          encCtx.drawImage(canvas, 0, 0, encW, encH);
-          if (encTrack && typeof encTrack.requestFrame === "function") {
-            encTrack.requestFrame();
+        }
+
+        // Push to encoder at steady cadence (may be the same tick as draw or a repeat)
+        if (timestamp - (lastEncPushTime || 0) >= encFrameInterval) {
+          lastEncPushTime = timestamp;
+          try {
+            encCtx.drawImage(canvas, 0, 0, encW, encH);
+            if (encTrack && typeof encTrack.requestFrame === "function") encTrack.requestFrame();
+          } catch (e) {
+            // Non-fatal: if encoder draw fails, log for diagnostics but continue
+            console.warn("[RECORDING] Encoder push failed:", e);
           }
         }
 
@@ -3717,18 +3761,34 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   </div>
                   <div className="mt-3">
                     <p className="text-xs text-slate-500 mb-2">🎨 Auto Color Grade</p>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {Object.entries(COLOR_GRADE_PRESETS).map(([key, preset]) => (
-                        <button
-                          key={key}
-                          onClick={() => setEditorState((s) => ({ ...s, colorGrade: key }))}
-                          className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-semibold border transition-all ${editorState.colorGrade === key ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900 border-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.3)]" : "bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500"}`}
-                        >
-                          <span>{preset.emoji}</span>
-                          <span>{preset.label}</span>
-                        </button>
-                      ))}
-                    </div>
+                    <Select
+                      value={editorState.colorGrade}
+                      onValueChange={(value) => setEditorState((s) => ({ ...s, colorGrade: value }))}
+                    >
+                      <SelectTrigger className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-slate-100 shadow-[0_20px_50px_rgba(15,23,42,0.45)] transition hover:border-amber-400">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="inline-flex items-center gap-2">
+                            <span>{COLOR_GRADE_PRESETS[editorState.colorGrade]?.emoji || "🎨"}</span>
+                            <span>{COLOR_GRADE_PRESETS[editorState.colorGrade]?.label || "Select grade"}</span>
+                          </span>
+                        </div>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-slate-950 border border-slate-700 shadow-2xl">
+                        {Object.entries(COLOR_GRADE_PRESETS).map(([key, preset]) => (
+                          <SelectItem
+                            key={key}
+                            value={key}
+                            className="flex items-center justify-between rounded-xl px-3 py-2 text-sm text-slate-100 transition hover:bg-slate-900"
+                          >
+                            <span className="inline-flex items-center gap-2">
+                              <span>{preset.emoji}</span>
+                              <span>{preset.label}</span>
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 
@@ -5277,15 +5337,27 @@ const RecapVideoNVPage: React.FC = () => {
         fileUri,
         fileMimeType: mimeType,
         // ── INTELLIGENT RECAP EDITOR PROMPT (surgical edit — comprehensive recap instructions) ──
-        niche: `You are an intelligent and professional movie recap editor.
+        niche: `You are an aggressive international professional YouTube recap editor.
 
-Your task is to analyze the uploaded movie/video and create a condensed, fast-paced recap version like YouTube movie recap channels. Do NOT simply speed up or use only the first part. You must understand the FULL STORY.
+Your task is to analyze the uploaded movie/video and create a condensed, fast-paced recap version like the best YouTube movie recap channels. Do NOT simply speed up or use only the first part. You must understand the FULL STORY and then cut it down ruthlessly.
 
 CRITICAL STORYTELLING RULE:
 Write the narration script as ONE CONTINUOUS GRIPPING STORY. Every sentence must hook into the next — create momentum, tension, and curiosity.
+Use short, punchy sentences, action verbs, and high-energy transitions.
 Do NOT write isolated disconnected paragraphs. Each segment must END with a hook or transition that PULLS the listener into the next segment.
 Examples of good transitions: "But what she didn't know was..." / "And that's when everything changed." / "Just when he thought it was over..."
-The narration must feel like a non-stop thriller story, NOT a boring lecture or news report.
+The narration must feel like a non-stop thriller story, NOT a boring lecture, documentary, or news report.
+
+STRICT LENGTH RULE:
+This is a surgical recap, not a summary. Do NOT retain most of the source or produce a detailed retelling.
+If source length is 30 minutes, output must be 15 minutes or less. If source length is 6 minutes, output must be 3 minutes or less.
+Never exceed 50% of the original duration. If you cannot express the story in 50% or less, cut more aggressively until you can.
+
+STRUCTURE RULE:
+1. Start with a SHOCKING HOOK from the middle or end that immediately raises a “why did this happen?” question.
+2. Then build a MYSTERY-DRIVEN buildup while preserving the core plot logic and revealing hidden stakes.
+3. Increase tension step-by-step with shorter, sharper narration as the conflict intensifies.
+4. Finish with an ULTIMATE CLIMAX PEAK: the twist or payoff must land hard and leave the viewer breathless.
 
 IMPORTANT EDITING RULE:
 Keep the important story moments, but remove unnecessary transition actions, filler activities, and dead air between them.
@@ -5301,8 +5373,13 @@ INSTRUCTIONS:
 - Skip over setup/buildup scenes and jump straight to the payoff.
 
 PACING & DURATION RULE (CRITICAL):
-- The recap MUST be significantly SHORTER than the original video. Target 40-65% of the original duration.
-- If source is 10 minutes, recap should be 3-5 minutes. If source is 2 hours, recap should be 15-25 minutes MAX.
+- The recap MUST be truly shorter than the original video: aim for roughly 50% or less of the source duration.
+- The app is built for source videos up to 30 minutes. If the source is longer than 30 minutes, treat it like a 30-minute source and keep the recap no longer than 15 minutes.
+  * Source up to 30 minutes → recap 10-15 minutes (max 15 minutes preferred).
+  * Source under 15 minutes → recap as close to 50% as possible, never exceed 50%.
+  * Source under 10 minutes → recap about half the length, never exceed 50%.
+  * Source under 5 minutes → recap about half the length, never exceed 50%.
+- For short videos, do NOT return nearly the same length. A 6-minute source should produce a ~3-minute recap, not 6 minutes.
 - If you include everything from start to finish without cutting, you have FAILED as a recap editor.
 - The viewer should feel like they watched a fast, exciting, condensed version — NOT the full video.
 
@@ -5325,7 +5402,16 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
         skipCreditDeduction: true,
         extraInstructions: `CRITICAL:
 - Output language MUST be ${selectedLangName} ONLY. Do NOT switch to any other language even if the video's spoken dialogue is in a different language.
-- Script must cover the story arc from beginning to end, BUT must be HEAVILY CONDENSED (30-50% of original duration).
+- Script must cover the story arc from beginning to end, BUT must be HEAVILY CONDENSED and no more than 50% of the source duration.
+  * For a 30-minute source, aim for 10-15 minutes and never exceed 15 minutes.
+  * If the source is longer than 30 minutes, treat it like a 30-minute source and keep the recap at 15 minutes max.
+  * For a source under 15 minutes, aim for about half the length, never exceed 50%.
+  * For a source under 10 minutes, aim for about half the length, never exceed 50%.
+  * For a source under 5 minutes, aim for about half the length, never exceed 50%.
+- This is not a detailed summary or review. Do not include non-essential scene descriptions, explanatory pauses, or secondary character chatter.
+- If the story can be told in fewer segments, do that. Use as few segments as necessary to keep the full arc intact.
+- If you cannot fit the script in 50% of the source, cut harder until you can.
+- Do not round up or add padding. This is a strict 50%-or-less output rule.
 - Each segment must flow smoothly into the next.
 - If token pressure appears, condense remaining story into brief segments instead of stopping.
 
