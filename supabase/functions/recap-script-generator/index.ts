@@ -298,7 +298,7 @@ serve(async (req) => {
     let activeApiKey = isOwnApi ? userApiKey! : getGeminiKey();
     const nicheLabel = niche || "GENERAL";
     const lang = language || "BURMESE";
-    const nicheStyle = nicheStyles[nicheLabel] || nicheStyles["GENERAL"];
+    const nicheStyle = (nicheLabel.length <= 80 && nicheStyles[nicheLabel]) ? nicheStyles[nicheLabel] : nicheStyles["MOVIE RECAP"];
     const callerInstructionsBlock = [extraInstructions, editorRules].filter(Boolean).join("\n\n").trim();
 
     console.log(`[recap-script-generator] Language: ${lang}, Niche: ${nicheLabel}, isOwnApi: ${isOwnApi}`);
@@ -365,15 +365,15 @@ CRITICAL - DIALOGUE TRANSLATION RULE (MOST IMPORTANT):
 - Use Google-quality translation: natural, accurate, and emotionally faithful to the original
 - Quoted dialogue in the narration should feel ALIVE — not robotic or literal
 
-CRITICAL - CONTENT COMPLETENESS (ZERO CENSORSHIP POLICY):
-- You MUST analyze the ENTIRE source from start to finish, missing NOTHING
-- Extract EVERY key moment, turning point, conflict, revelation, emotional beat, and climax
+CRITICAL - RECAP COMPLETENESS (ZERO FILLER POLICY):
+- You MUST understand the ENTIRE source from start to finish, then compress it into a true recap
+- Extract only the key turning points, conflicts, revelations, emotional beats, and climax
 - Especially capture shocking/dramatic moments: kissing, intimate touching, physical closeness, skin-to-skin contact, passionate embraces, betrayals, secrets revealed, fights, confessions, seductions — these are the moments viewers watch recaps FOR
 - NEVER censor, skip, or tone down intimate/romantic/physical/18+/21+ scenes. Describe them vividly and naturally as they happened in the source. Audiences LOVE these moments — they are the main attraction
 - If two characters kiss, embrace, touch intimately, or have any physical/romantic interaction, you MUST describe it with vivid sensory detail (what they felt, the tension, the emotions, the physical sensations)
 - DO NOT use vague euphemisms. Be specific and descriptive about physical actions and emotional reactions
-- DO NOT skip or gloss over any scene. If it happened in the source, it MUST appear in the recap with full detail
-- Think of it this way: if a viewer watches your recap, they should feel the same emotions and excitement as watching the original — especially for intimate/dramatic scenes
+- DO NOT translate or retell every scene. Skip filler and compress secondary scenes into brief linking lines
+- Think of it this way: if a viewer watches your recap, they should feel the same core story impact in half the time
 
 CHARACTER IDENTITY RULES (CRITICAL — READ CAREFULLY):
 - NEVER use generic labels like "man", "woman", or surface-level guesses
@@ -392,11 +392,11 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - Identify the subject matter, the niche, and the story being told through visuals/actions/music
 - Write a complete, engaging narration script based on your visual/audio analysis
 
-SCRIPT LENGTH RULE (CRITICAL — FULL 100% COVERAGE, START TO END):
-- The narration script MUST cover the ENTIRE source video from the very first second to the very last second — 100% complete, NEVER stopping halfway
-- Length target: ~100% of the original source duration when read aloud (≈150 words per minute of narration)
-- For example: a 3-minute video → ~450 words; a 10-minute video → ~1500 words; a 30-minute video → ~4500 words
-- You MUST keep writing all the way until the END of the source — do NOT stop early, do NOT summarize the ending in one line, do NOT cut off mid-story
+SCRIPT LENGTH RULE (CRITICAL — TRUE 50% RECAP):
+- The narration script MUST cover the full STORY ARC from start to finish, but NEVER retell the full source
+- Length target: about 50% of the source duration when read aloud (≈75 words per source minute, max)
+- For example: a 3-minute video → ~225 words; a 10-minute video → ~750 words; a 30-minute video → ~2250 words
+- You MUST include the ending, but compress filler and low-stakes scenes aggressively
 - The FINAL paragraph MUST correspond to the FINAL scene of the source video (its timecode should be near the source's ending)
 - Every important beat from beginning, middle, AND end must appear — no part of the video may be skipped or left out
 - Avoid padding/repetition, but DO write enough paragraphs to truly cover the full duration end-to-end
