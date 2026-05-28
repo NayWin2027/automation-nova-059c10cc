@@ -7,7 +7,7 @@ import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts"
 
 const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1beta/files";
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
-const MODEL = "gemini-2.5-pro";
+const MODEL = "gemini-2.5-flash";
 
 async function uploadToGoogleFiles(
   apiKey: string,
@@ -589,6 +589,7 @@ ${transcript}
           generationConfig: {
             temperature: 0.55,
             maxOutputTokens: requestedMaxOutputTokens || 12288,
+            thinkingConfig: { thinkingBudget: 0 },
           },
         }),
       });
