@@ -611,10 +611,11 @@ ${transcript}
       );
     }
 
-    // Surgical 503/504 fallback: retry once on sibling stable model
-    if (response && (response.status === 503 || response.status === 504) && activeModel === MODEL) {
-      activeModel = "gemini-2.5-flash";
-      console.warn(`[recap-script-generator] ${MODEL} overloaded (${response.status}). Falling back to ${activeModel}...`);
+    // Surgical 503/504 fallback chain: only escalate when Google reports model overload.
+    for (const fallbackModel of ["gemini-2.5-flash", "gemini-2.5-pro"]) {
+      if (!response || response.ok || (response.status !== 503 && response.status !== 504)) break;
+      activeModel = fallbackModel;
+      console.warn(`[recap-script-generator] Previous model overloaded (${response.status}). Falling back to ${activeModel}...`);
       const fbController = new AbortController();
       const fbTimeoutId = setTimeout(() => fbController.abort(), 135000);
       try {
