@@ -5303,8 +5303,8 @@ const RecapVideoNVPage: React.FC = () => {
       } = await supabase.auth.getSession();
       const userToken = currentSession?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       const selectedLangName = languages.find((l) => l.code === selectedLanguage)?.name || "BURMESE";
-      // Keep generation bounded for true ~50% recap output and avoid Gemini deadline/504 spikes.
-      const maxOutputTokens = Math.min(12288, Math.max(2048, Math.ceil(duration * 6)));
+      // Larger token headroom to reduce incomplete scripts on long videos.
+      const maxOutputTokens = Math.min(16384, Math.max(4096, Math.ceil(duration * 220)));
 
       // ── LANGUAGE-AWARE BLOCKS: All language-specific text uses selectedLangName so user's chosen language is respected. ──
       const isBurmese = selectedLangName === "BURMESE";
@@ -5337,7 +5337,66 @@ const RecapVideoNVPage: React.FC = () => {
         fileUri,
         fileMimeType: mimeType,
         // ── INTELLIGENT RECAP EDITOR PROMPT (surgical edit — comprehensive recap instructions) ──
-        niche: "MOVIE RECAP",
+        niche: `You are an aggressive international professional YouTube recap editor.
+
+Your task is to analyze the uploaded movie/video and create a condensed, fast-paced recap version like the best YouTube movie recap channels. Do NOT simply speed up or use only the first part. You must understand the FULL STORY and then cut it down ruthlessly.
+
+CRITICAL STORYTELLING RULE:
+Write the narration script as ONE CONTINUOUS GRIPPING STORY. Every sentence must hook into the next — create momentum, tension, and curiosity.
+Use short, punchy sentences, action verbs, and high-energy transitions.
+Do NOT write isolated disconnected paragraphs. Each segment must END with a hook or transition that PULLS the listener into the next segment.
+Examples of good transitions: "But what she didn't know was..." / "And that's when everything changed." / "Just when he thought it was over..."
+The narration must feel like a non-stop thriller story, NOT a boring lecture, documentary, or news report.
+
+STRICT LENGTH RULE:
+This is a surgical recap, not a summary. Do NOT retain most of the source or produce a detailed retelling.
+If source length is 30 minutes, output must be 15 minutes or less. If source length is 6 minutes, output must be 3 minutes or less.
+Never exceed 50% of the original duration. If you cannot express the story in 50% or less, cut more aggressively until you can.
+
+STRUCTURE RULE:
+1. Start with a SHOCKING HOOK from the middle or end that immediately raises a “why did this happen?” question.
+2. Then build a MYSTERY-DRIVEN buildup while preserving the core plot logic and revealing hidden stakes.
+3. Increase tension step-by-step with shorter, sharper narration as the conflict intensifies.
+4. Finish with an ULTIMATE CLIMAX PEAK: the twist or payoff must land hard and leave the viewer breathless.
+
+IMPORTANT EDITING RULE:
+Keep the important story moments, but remove unnecessary transition actions, filler activities, and dead air between them.
+Example: If a character is sick and goes to the hospital,
+Keep: The character being sick, arriving at the hospital, and receiving treatment.
+Remove: Changing clothes, walking to the car, driving scenes, waiting scenes, and unnecessary travel shots.
+
+INSTRUCTIONS:
+- Keep ONLY the key plot points in chronological order. CUT everything else ruthlessly.
+- AGGRESSIVELY remove: unnecessary scenes, silence, slow walking, repetitive actions, filler moments, unimportant dialogues, transition scenes, travel montages, and any scene that does NOT advance the main plot.
+- Focus on: Main plot twists, key character moments, critical conflicts, shocking reveals, and the conclusion.
+- Shorten conversations to their essential meaning — do NOT include full back-and-forth dialogues.
+- Skip over setup/buildup scenes and jump straight to the payoff.
+
+PACING & DURATION RULE (CRITICAL):
+- The recap MUST be truly shorter than the original video: aim for roughly 50% or less of the source duration.
+- The app is built for source videos up to 30 minutes. If the source is longer than 30 minutes, treat it like a 30-minute source and keep the recap no longer than 15 minutes.
+  * Source up to 30 minutes → recap 10-15 minutes (max 15 minutes preferred).
+  * Source under 15 minutes → recap as close to 50% as possible, never exceed 50%.
+  * Source under 10 minutes → recap about half the length, never exceed 50%.
+  * Source under 5 minutes → recap about half the length, never exceed 50%.
+- For short videos, do NOT return nearly the same length. A 6-minute source should produce a ~3-minute recap, not 6 minutes.
+- If you include everything from start to finish without cutting, you have FAILED as a recap editor.
+- The viewer should feel like they watched a fast, exciting, condensed version — NOT the full video.
+
+IMPORTANT:
+Do NOT summarize using text only.
+Do NOT randomly cut scenes.
+Actually edit the video by intelligently compressing the narrative while preserving a professional complete story experience.
+
+LANGUAGE: Write the COMPLETE script in ${selectedLangName} language ONLY. Do NOT stop halfway; cover 100% of the story arc from start to finish.
+Never output partial/incomplete script.${burmeseStyleBlock}
+
+FORMAT (CRITICAL FOR SEGMENTING):
+Output each paragraph as one segment starting with a timestamp prefix like: [MM:SS] ... .
+The first segment should start at [00:00]. The last segment must reach close to the end of the full duration.
+
+ORIGINALITY:
+Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle text.`,
         language: selectedLangName,
         sourceDurationSec: duration,
         skipCreditDeduction: true,
