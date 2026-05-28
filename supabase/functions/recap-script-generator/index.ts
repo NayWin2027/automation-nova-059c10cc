@@ -156,11 +156,25 @@ function getMimeType(file: File): string {
   return mimeMap[ext || ""] || "audio/mpeg";
 }
 
-function enforceScriptCoverage70(script: string, _sourceDurationSec?: number | null): string {
-  // SURGICAL CHANGE: Disabled 70% truncation. User requires 100% full-video coverage
-  // from start to end. The model is now instructed (see prompt) to produce a complete
-  // narration matching the full source duration without being cut short.
-  return script.replace(/\r\n/g, "\n").trim() || script;
+function enforceScriptCoverage70(script: string, sourceDurationSec?: number | null): string {
+  const normalized = script.replace(/\r\n/g, "\n").trim();
+  if (!normalized || !sourceDurationSec) return normalized || script;
+
+  const maxWords = Math.max(45, Math.floor((sourceDurationSec / 60) * 75));
+  const words = normalized.split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return normalized;
+
+  const paragraphs = normalized.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+  const kept: string[] = [];
+  let count = 0;
+  for (const paragraph of paragraphs) {
+    const paragraphWords = paragraph.split(/\s+/).filter(Boolean);
+    if (count + paragraphWords.length > maxWords && kept.length > 0) break;
+    kept.push(paragraph);
+    count += paragraphWords.length;
+    if (count >= maxWords) break;
+  }
+  return (kept.length ? kept.join("\n\n") : words.slice(0, maxWords).join(" ")).trim();
 }
 
 // Niche-specific style instructions
@@ -284,7 +298,7 @@ serve(async (req) => {
     let activeApiKey = isOwnApi ? userApiKey! : getGeminiKey();
     const nicheLabel = niche || "GENERAL";
     const lang = language || "BURMESE";
-    const nicheStyle = nicheStyles[nicheLabel] || nicheStyles["GENERAL"];
+    const nicheStyle = (nicheLabel.length <= 80 && nicheStyles[nicheLabel]) ? nicheStyles[nicheLabel] : nicheStyles["MOVIE RECAP"];
     const callerInstructionsBlock = [extraInstructions, editorRules].filter(Boolean).join("\n\n").trim();
 
     console.log(`[recap-script-generator] Language: ${lang}, Niche: ${nicheLabel}, isOwnApi: ${isOwnApi}`);
@@ -351,15 +365,15 @@ CRITICAL - DIALOGUE TRANSLATION RULE (MOST IMPORTANT):
 - Use Google-quality translation: natural, accurate, and emotionally faithful to the original
 - Quoted dialogue in the narration should feel ALIVE — not robotic or literal
 
-CRITICAL - CONTENT COMPLETENESS (ZERO CENSORSHIP POLICY):
-- You MUST analyze the ENTIRE source from start to finish, missing NOTHING
-- Extract EVERY key moment, turning point, conflict, revelation, emotional beat, and climax
+CRITICAL - RECAP COMPLETENESS (ZERO FILLER POLICY):
+- You MUST understand the ENTIRE source from start to finish, then compress it into a true recap
+- Extract only the key turning points, conflicts, revelations, emotional beats, and climax
 - Especially capture shocking/dramatic moments: kissing, intimate touching, physical closeness, skin-to-skin contact, passionate embraces, betrayals, secrets revealed, fights, confessions, seductions — these are the moments viewers watch recaps FOR
 - NEVER censor, skip, or tone down intimate/romantic/physical/18+/21+ scenes. Describe them vividly and naturally as they happened in the source. Audiences LOVE these moments — they are the main attraction
 - If two characters kiss, embrace, touch intimately, or have any physical/romantic interaction, you MUST describe it with vivid sensory detail (what they felt, the tension, the emotions, the physical sensations)
 - DO NOT use vague euphemisms. Be specific and descriptive about physical actions and emotional reactions
-- DO NOT skip or gloss over any scene. If it happened in the source, it MUST appear in the recap with full detail
-- Think of it this way: if a viewer watches your recap, they should feel the same emotions and excitement as watching the original — especially for intimate/dramatic scenes
+- DO NOT translate or retell every scene. Skip filler and compress secondary scenes into brief linking lines
+- Think of it this way: if a viewer watches your recap, they should feel the same core story impact in half the time
 
 CHARACTER IDENTITY RULES (CRITICAL — READ CAREFULLY):
 - NEVER use generic labels like "man", "woman", or surface-level guesses
@@ -378,11 +392,11 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - Identify the subject matter, the niche, and the story being told through visuals/actions/music
 - Write a complete, engaging narration script based on your visual/audio analysis
 
-SCRIPT LENGTH RULE (CRITICAL — FULL 100% COVERAGE, START TO END):
-- The narration script MUST cover the ENTIRE source video from the very first second to the very last second — 100% complete, NEVER stopping halfway
-- Length target: ~100% of the original source duration when read aloud (≈150 words per minute of narration)
-- For example: a 3-minute video → ~450 words; a 10-minute video → ~1500 words; a 30-minute video → ~4500 words
-- You MUST keep writing all the way until the END of the source — do NOT stop early, do NOT summarize the ending in one line, do NOT cut off mid-story
+SCRIPT LENGTH RULE (CRITICAL — TRUE 50% RECAP):
+- The narration script MUST cover the full STORY ARC from start to finish, but NEVER retell the full source
+- Length target: about 50% of the source duration when read aloud (≈75 words per source minute, max)
+- For example: a 3-minute video → ~225 words; a 10-minute video → ~750 words; a 30-minute video → ~2250 words
+- You MUST include the ending, but compress filler and low-stakes scenes aggressively
 - The FINAL paragraph MUST correspond to the FINAL scene of the source video (its timecode should be near the source's ending)
 - Every important beat from beginning, middle, AND end must appear — no part of the video may be skipped or left out
 - Avoid padding/repetition, but DO write enough paragraphs to truly cover the full duration end-to-end
@@ -495,8 +509,8 @@ Below is a source video/audio file. Your job is to:
 2. Analyze ALL content: dialogue, actions, emotions, settings, visual elements, audio cues
 3. If there is NO spoken dialogue, analyze visual elements, actions, music, settings, body language
 4. Identify ALL key moments, especially dramatic/shocking ones (confrontations, revelations, emotional scenes, physical actions like kisses/fights/tears)
-5. Write a complete professional ${nicheLabel} narration script that covers EVERY important event
-6. A viewer reading your script should feel they know the FULL story
+5. Write a complete professional ${nicheLabel} narration script that covers only the essential story beats
+6. A viewer reading your script should understand the FULL story arc in about half the original duration
 7. Hook the audience immediately
 8. Use vivid, engaging ${lang} appropriate for "${nicheLabel}" content
 9. Be perfectly paced for voice narration
@@ -564,9 +578,13 @@ ${transcript}
     let lastError = "";
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      response = await fetch(`${GOOGLE_AI_API}/${MODEL}:generateContent?key=${activeApiKey}`, {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 105000);
+      try {
+        response = await fetch(`${GOOGLE_AI_API}/${MODEL}:generateContent?key=${activeApiKey}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           system_instruction: { parts: [{ text: systemPrompt }] },
           contents: [{ parts: contentParts }],
@@ -575,7 +593,19 @@ ${transcript}
             maxOutputTokens: requestedMaxOutputTokens || 32768,
           },
         }),
-      });
+        });
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : String(err);
+        console.warn(`[recap-script-generator] Gemini fetch error (attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${lastError}`);
+        if (attempt < MAX_RETRIES) {
+          await new Promise((r) => setTimeout(r, Math.min(2000 * Math.pow(2, attempt), 30000)));
+          continue;
+        }
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
+      if (!response) continue;
 
       if (response.ok) break;
 
@@ -585,8 +615,8 @@ ${transcript}
         `[recap-script-generator] Gemini API error (attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${response.status} ${errorText.substring(0, 200)}`,
       );
 
-      // Only retry on 429 (rate limit) or 503 (overloaded)
-      if (response.status === 429 || response.status === 503) {
+      // Retry transient Gemini/server deadline errors.
+      if (response.status === 429 || response.status === 500 || response.status === 502 || response.status === 503 || response.status === 504) {
         if (attempt < MAX_RETRIES) {
           if (response.status === 429 && !isOwnApi) {
             const nextKey = rotateKey();
