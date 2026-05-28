@@ -279,7 +279,7 @@ serve(async (req) => {
       editorRules = typeof body.editorRules === "string" ? body.editorRules : "";
       const bodyMaxOutputTokens = Number(body.generationConfig?.maxOutputTokens);
       if (Number.isFinite(bodyMaxOutputTokens) && bodyMaxOutputTokens > 0) {
-        requestedMaxOutputTokens = Math.min(32768, Math.max(2048, Math.floor(bodyMaxOutputTokens)));
+        requestedMaxOutputTokens = Math.min(12288, Math.max(2048, Math.floor(bodyMaxOutputTokens)));
       }
 
       const parsedDuration = Number(body.sourceDurationSec);
