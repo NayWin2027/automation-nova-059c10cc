@@ -8,6 +8,7 @@ import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts"
 const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1beta/files";
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
 const MODEL = "gemini-2.5-flash";
+const MODEL_FALLBACKS = [MODEL, "gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-1.5-flash"];
 
 async function uploadToGoogleFiles(
   apiKey: string,
@@ -576,81 +577,94 @@ ${transcript}
     const MAX_RETRIES = 4;
     let response: Response | null = null;
     let lastError = "";
+    let activeModel = MODEL;
 
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 105000);
-      try {
-        response = await fetch(`${GOOGLE_AI_API}/${MODEL}:generateContent?key=${activeApiKey}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: systemPrompt }] },
-          contents: [{ parts: contentParts }],
-          generationConfig: {
-            temperature: 0.8,
-            maxOutputTokens: requestedMaxOutputTokens || 32768,
-          },
-        }),
-        });
-      } catch (err) {
-        lastError = err instanceof Error ? err.message : String(err);
-        console.warn(`[recap-script-generator] Gemini fetch error (attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${lastError}`);
-        if (attempt < MAX_RETRIES) {
-          await new Promise((r) => setTimeout(r, Math.min(2000 * Math.pow(2, attempt), 30000)));
-          continue;
-        }
-      } finally {
-        clearTimeout(timeoutId);
-      }
+    modelLoop:
+    for (let modelIndex = 0; modelIndex < MODEL_FALLBACKS.length; modelIndex++) {
+      activeModel = MODEL_FALLBACKS[modelIndex];
 
-      if (!response) continue;
-
-      if (response.ok) break;
-
-      const errorText = await response.text();
-      lastError = errorText;
-      console.warn(
-        `[recap-script-generator] Gemini API error (attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${response.status} ${errorText.substring(0, 200)}`,
-      );
-
-      // Retry transient Gemini/server deadline errors.
-      if (response.status === 429 || response.status === 500 || response.status === 502 || response.status === 503 || response.status === 504) {
-        if (attempt < MAX_RETRIES) {
-          if (response.status === 429 && !isOwnApi) {
-            const nextKey = rotateKey();
-            if (nextKey && nextKey !== activeApiKey) {
-              activeApiKey = nextKey;
-              console.log(
-                `[recap-script-generator] 429 rate limit, rotated App API key (attempt ${attempt + 1}/${MAX_RETRIES + 1})`,
-              );
-              continue;
-            }
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 105000);
+        try {
+          response = await fetch(`${GOOGLE_AI_API}/${activeModel}:generateContent?key=${activeApiKey}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: systemPrompt }] },
+            contents: [{ parts: contentParts }],
+            generationConfig: {
+              temperature: 0.8,
+              maxOutputTokens: requestedMaxOutputTokens || 32768,
+            },
+          }),
+          });
+        } catch (err) {
+          lastError = err instanceof Error ? err.message : String(err);
+          console.warn(`[recap-script-generator] Gemini fetch error (${activeModel}, attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${lastError}`);
+          if (attempt < MAX_RETRIES) {
+            await new Promise((r) => setTimeout(r, Math.min(2000 * Math.pow(2, attempt), 30000)));
+            continue;
           }
-
-          // Parse retryDelay from Google's error if available, otherwise exponential backoff
-          let waitMs = Math.min(2000 * Math.pow(2, attempt), 30000);
-          try {
-            const errJson = JSON.parse(errorText);
-            const retryDelay = errJson?.error?.details?.find((d: any) => d.retryDelay)?.retryDelay;
-            if (retryDelay) {
-              const parsed = parseFloat(retryDelay);
-              if (!isNaN(parsed)) waitMs = Math.ceil(parsed * 1000);
-            }
-          } catch {}
-          console.log(`[recap-script-generator] Retrying in ${waitMs}ms...`);
-          await new Promise((r) => setTimeout(r, waitMs));
-          continue;
+        } finally {
+          clearTimeout(timeoutId);
         }
-      }
 
-      // Non-retryable error — fail immediately
-      break;
+        if (!response) continue;
+
+        if (response.ok) break modelLoop;
+
+        const errorText = await response.text();
+        lastError = errorText;
+        console.warn(
+          `[recap-script-generator] Gemini API error (${activeModel}, attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${response.status} ${errorText.substring(0, 200)}`,
+        );
+
+        const isHighDemand = response.status === 503 && /high demand|UNAVAILABLE/i.test(errorText);
+        const canFallbackModel = modelIndex < MODEL_FALLBACKS.length - 1;
+        if ((isHighDemand || response.status === 504) && canFallbackModel) {
+          console.warn(`[recap-script-generator] ${activeModel} unavailable, switching model fallback...`);
+          break;
+        }
+
+        // Retry transient Gemini/server deadline errors.
+        if (response.status === 429 || response.status === 500 || response.status === 502 || response.status === 503 || response.status === 504) {
+          if (attempt < MAX_RETRIES) {
+            if (response.status === 429 && !isOwnApi) {
+              const nextKey = rotateKey();
+              if (nextKey && nextKey !== activeApiKey) {
+                activeApiKey = nextKey;
+                console.log(
+                  `[recap-script-generator] 429 rate limit, rotated App API key (attempt ${attempt + 1}/${MAX_RETRIES + 1})`,
+                );
+                continue;
+              }
+            }
+
+            // Parse retryDelay from Google's error if available, otherwise exponential backoff
+            let waitMs = Math.min(2000 * Math.pow(2, attempt), 30000);
+            try {
+              const errJson = JSON.parse(errorText);
+              const retryDelay = errJson?.error?.details?.find((d: any) => d.retryDelay)?.retryDelay;
+              if (retryDelay) {
+                const parsed = parseFloat(retryDelay);
+                if (!isNaN(parsed)) waitMs = Math.ceil(parsed * 1000);
+              }
+            } catch {}
+            console.log(`[recap-script-generator] Retrying in ${waitMs}ms...`);
+            await new Promise((r) => setTimeout(r, waitMs));
+            continue;
+          }
+        }
+
+        // Non-retryable error — fail immediately
+        break;
+      }
     }
 
     if (!response || !response.ok) {
-      console.error("Gemini API final error:", response?.status, lastError.substring(0, 300));
+      console.error("Gemini API final error:", response?.status, activeModel, lastError.substring(0, 300));
       if (response?.status === 429) {
         return new Response(
           JSON.stringify({
