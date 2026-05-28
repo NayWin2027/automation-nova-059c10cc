@@ -619,6 +619,14 @@ ${transcript}
       const fbController = new AbortController();
       const fbTimeoutId = setTimeout(() => fbController.abort(), 135000);
       try {
+        // gemini-2.5-pro requires thinking mode; omit thinkingBudget for pro
+        const fbGenerationConfig: Record<string, unknown> = {
+          temperature: 0.55,
+          maxOutputTokens: requestedMaxOutputTokens || 12288,
+        };
+        if (activeModel !== "gemini-2.5-pro") {
+          fbGenerationConfig.thinkingConfig = { thinkingBudget: 0 };
+        }
         response = await fetch(`${GOOGLE_AI_API}/${activeModel}:generateContent?key=${activeApiKey}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -626,11 +634,7 @@ ${transcript}
           body: JSON.stringify({
             system_instruction: { parts: [{ text: systemPrompt }] },
             contents: [{ parts: contentParts }],
-            generationConfig: {
-              temperature: 0.55,
-              maxOutputTokens: requestedMaxOutputTokens || 12288,
-              thinkingConfig: { thinkingBudget: 0 },
-            },
+            generationConfig: fbGenerationConfig,
           }),
         });
         if (response && !response.ok) {
