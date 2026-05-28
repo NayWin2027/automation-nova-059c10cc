@@ -8,6 +8,25 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+function jsonResponse(body: Record<string, unknown>, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function geminiUnavailableResponse(upstreamStatus: number, detail?: string): Response {
+  return jsonResponse({
+    result: "[]",
+    error: "Google AI video translation service မအားသေးပါ။ ခဏနေရင် ပြန်စမ်းပါ။",
+    errorCode: "SERVICE_UNAVAILABLE",
+    upstreamStatus,
+    retryable: true,
+    fallback: true,
+    detail,
+  });
+}
+
 async function geminiRetryFetchWithTimeout(
   urlBuilder: (apiKey: string) => string,
   options: RequestInit,
@@ -304,17 +323,15 @@ Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'tex
       const errText = await response.text();
       console.error("Gemini API error:", response.status, errText);
 
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "API rate limit exceeded. Please try again later.", errorCode: "RATE_LIMIT" }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
+      if (response.status >= 500) {
+        return geminiUnavailableResponse(response.status);
       }
 
-      return new Response(JSON.stringify({ error: `Gemini API error: ${response.status}` }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      if (response.status === 429) {
+        return jsonResponse({ error: "API rate limit exceeded. Please try again later.", errorCode: "RATE_LIMIT" }, 429);
+      }
+
+      return jsonResponse({ error: `Gemini API error: ${response.status}` }, response.status);
     }
 
     const data = await response.json();
@@ -325,9 +342,10 @@ Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'tex
     });
   } catch (error) {
     console.error("video-transform-translate error:", error);
-    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Internal error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    const message = error instanceof Error ? error.message : "Internal error";
+    if (message.includes("timed out") || message.includes("UNAVAILABLE") || message.includes("503")) {
+      return geminiUnavailableResponse(503, message);
+    }
+    return jsonResponse({ error: message }, 500);
   }
 });
