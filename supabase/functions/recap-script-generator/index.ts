@@ -611,6 +611,41 @@ ${transcript}
       );
     }
 
+    // Surgical 503/504 fallback: retry once on sibling stable model
+    if (response && (response.status === 503 || response.status === 504) && activeModel === MODEL) {
+      activeModel = "gemini-2.5-flash";
+      console.warn(`[recap-script-generator] ${MODEL} overloaded (${response.status}). Falling back to ${activeModel}...`);
+      const fbController = new AbortController();
+      const fbTimeoutId = setTimeout(() => fbController.abort(), 135000);
+      try {
+        response = await fetch(`${GOOGLE_AI_API}/${activeModel}:generateContent?key=${activeApiKey}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: fbController.signal,
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: systemPrompt }] },
+            contents: [{ parts: contentParts }],
+            generationConfig: {
+              temperature: 0.55,
+              maxOutputTokens: requestedMaxOutputTokens || 12288,
+              thinkingConfig: { thinkingBudget: 0 },
+            },
+          }),
+        });
+        if (response && !response.ok) {
+          lastError = await response.text();
+          console.warn(
+            `[recap-script-generator] Fallback Gemini API error (${activeModel}): ${response.status} ${lastError.substring(0, 200)}`,
+          );
+        }
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : String(err);
+        console.warn(`[recap-script-generator] Fallback fetch error (${activeModel}): ${lastError}`);
+      } finally {
+        clearTimeout(fbTimeoutId);
+      }
+    }
+
     if (!response || !response.ok) {
       console.error("Gemini API final error:", response?.status, activeModel, lastError.substring(0, 300));
       if (response?.status === 429) {
