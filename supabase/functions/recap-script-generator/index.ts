@@ -9,6 +9,23 @@ const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1bet
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
 const MODEL = "gemini-2.5-flash-lite";
 
+function buildGenerationConfig(model: string, requestedMaxOutputTokens: number | null): Record<string, unknown> {
+  const maxOutputTokens = model === "gemini-2.0-flash"
+    ? Math.min(requestedMaxOutputTokens || 8192, 8192)
+    : requestedMaxOutputTokens || 12288;
+
+  const config: Record<string, unknown> = {
+    temperature: 0.55,
+    maxOutputTokens,
+  };
+
+  if (model === "gemini-2.5-flash-lite" || model === "gemini-2.5-flash") {
+    config.thinkingConfig = { thinkingBudget: 0 };
+  }
+
+  return config;
+}
+
 async function uploadToGoogleFiles(
   apiKey: string,
   fileBytes: Uint8Array,
@@ -590,11 +607,7 @@ ${transcript}
         body: JSON.stringify({
           system_instruction: { parts: [{ text: systemPrompt }] },
           contents: [{ parts: contentParts }],
-          generationConfig: {
-            temperature: 0.55,
-            maxOutputTokens: requestedMaxOutputTokens || 12288,
-            thinkingConfig: { thinkingBudget: 0 },
-          },
+          generationConfig: buildGenerationConfig(activeModel, requestedMaxOutputTokens),
         }),
       });
     } catch (err) {
@@ -612,21 +625,13 @@ ${transcript}
     }
 
     // Surgical 503/504 fallback chain: only escalate when Google reports model overload.
-    for (const fallbackModel of ["gemini-2.5-flash", "gemini-2.5-pro"]) {
+    for (const fallbackModel of ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"]) {
       if (!response || response.ok || (response.status !== 503 && response.status !== 504)) break;
       activeModel = fallbackModel;
       console.warn(`[recap-script-generator] Previous model overloaded (${response.status}). Falling back to ${activeModel}...`);
       const fbController = new AbortController();
       const fbTimeoutId = setTimeout(() => fbController.abort(), 135000);
       try {
-        // gemini-2.5-pro requires thinking mode; omit thinkingBudget for pro
-        const fbGenerationConfig: Record<string, unknown> = {
-          temperature: 0.55,
-          maxOutputTokens: requestedMaxOutputTokens || 12288,
-        };
-        if (activeModel !== "gemini-2.5-pro") {
-          fbGenerationConfig.thinkingConfig = { thinkingBudget: 0 };
-        }
         response = await fetch(`${GOOGLE_AI_API}/${activeModel}:generateContent?key=${activeApiKey}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -634,7 +639,7 @@ ${transcript}
           body: JSON.stringify({
             system_instruction: { parts: [{ text: systemPrompt }] },
             contents: [{ parts: contentParts }],
-            generationConfig: fbGenerationConfig,
+            generationConfig: buildGenerationConfig(activeModel, requestedMaxOutputTokens),
           }),
         });
         if (response && !response.ok) {
