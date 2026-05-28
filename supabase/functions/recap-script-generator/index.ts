@@ -509,8 +509,8 @@ Below is a source video/audio file. Your job is to:
 2. Analyze ALL content: dialogue, actions, emotions, settings, visual elements, audio cues
 3. If there is NO spoken dialogue, analyze visual elements, actions, music, settings, body language
 4. Identify ALL key moments, especially dramatic/shocking ones (confrontations, revelations, emotional scenes, physical actions like kisses/fights/tears)
-5. Write a complete professional ${nicheLabel} narration script that covers EVERY important event
-6. A viewer reading your script should feel they know the FULL story
+5. Write a complete professional ${nicheLabel} narration script that covers only the essential story beats
+6. A viewer reading your script should understand the FULL story arc in about half the original duration
 7. Hook the audience immediately
 8. Use vivid, engaging ${lang} appropriate for "${nicheLabel}" content
 9. Be perfectly paced for voice narration
@@ -578,9 +578,13 @@ ${transcript}
     let lastError = "";
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      response = await fetch(`${GOOGLE_AI_API}/${MODEL}:generateContent?key=${activeApiKey}`, {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 105000);
+      try {
+        response = await fetch(`${GOOGLE_AI_API}/${MODEL}:generateContent?key=${activeApiKey}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           system_instruction: { parts: [{ text: systemPrompt }] },
           contents: [{ parts: contentParts }],
@@ -589,7 +593,19 @@ ${transcript}
             maxOutputTokens: requestedMaxOutputTokens || 32768,
           },
         }),
-      });
+        });
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : String(err);
+        console.warn(`[recap-script-generator] Gemini fetch error (attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${lastError}`);
+        if (attempt < MAX_RETRIES) {
+          await new Promise((r) => setTimeout(r, Math.min(2000 * Math.pow(2, attempt), 30000)));
+          continue;
+        }
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
+      if (!response) continue;
 
       if (response.ok) break;
 
@@ -599,8 +615,8 @@ ${transcript}
         `[recap-script-generator] Gemini API error (attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${response.status} ${errorText.substring(0, 200)}`,
       );
 
-      // Only retry on 429 (rate limit) or 503 (overloaded)
-      if (response.status === 429 || response.status === 503) {
+      // Retry transient Gemini/server deadline errors.
+      if (response.status === 429 || response.status === 500 || response.status === 502 || response.status === 503 || response.status === 504) {
         if (attempt < MAX_RETRIES) {
           if (response.status === 429 && !isOwnApi) {
             const nextKey = rotateKey();
