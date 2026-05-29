@@ -5262,12 +5262,12 @@ const RecapVideoNVPage: React.FC = () => {
         resolvedOwnKey ? "get-upload-url" : "video-recap",
         {
           body: {
-            ...(resolvedOwnKey ? {} : { action: "initUpload" }),
+            ...(resolvedOwnKey ? { ownApiKey: resolvedOwnKey, apiKey: resolvedOwnKey } : { action: "initUpload" }),
             fileName: file.name,
             fileSize: file.size,
             mimeType,
-            ...(resolvedOwnKey ? { apiKey: resolvedOwnKey } : {}),
           },
+          headers: resolvedOwnKey ? { "x-own-api-key": resolvedOwnKey } : undefined,
         },
       );
       if (urlError || urlData?.error || !urlData?.uploadUrl)
@@ -5436,7 +5436,10 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
         },
       };
       if (fileData) scriptBody.fileData = fileData;
-      if (resolvedOwnKey) scriptBody.ownApiKey = resolvedOwnKey;
+      if (resolvedOwnKey) {
+        scriptBody.ownApiKey = resolvedOwnKey;
+        scriptBody.apiKey = resolvedOwnKey;
+      }
 
       const scriptResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recap-script-generator`, {
         method: "POST",
@@ -5444,32 +5447,22 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
           "Content-Type": "application/json",
           apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
           Authorization: `Bearer ${userToken}`,
+          ...(resolvedOwnKey ? { "x-own-api-key": resolvedOwnKey } : {}),
         },
         body: JSON.stringify(scriptBody),
       });
       if (!scriptResponse.ok) {
         const errData = await scriptResponse.json().catch(() => ({}));
-        if (errData.billingRequired) {
-          throw new Error(
-            "🔴 Google Files API Billing လိုပါသည်:\n" +
-              "aistudio.google.com → Settings → Billing မှာ Credit Card ချိတ်ပေးပါ။\n" +
-              "Free quota အတွင်း သုံးရင် ကောက်ချင်မကောက်ပါ (charge မကောက်ဘူး)。\n" +
-              "Card ချိတ်ပြီးမှ own key နဲ့ ပြန်သုံးနိုင်ပါသည်။",
-          );
-        }
         throw new Error(errData.error || `Script generation failed (${scriptResponse.status})`);
       }
       const scriptResult = await scriptResponse.json();
-      if (scriptResult.error) {
-        if (scriptResult.billingRequired) {
-          throw new Error(
-            "🔴 Google Files API Billing လိုပါသည်:\n" +
-              "aistudio.google.com → Settings → Billing မှာ Credit Card ချိတ်ပေးပါ။\n" +
-              "Free quota အတွင်း သုံးရင် charge မကောက်ဘူး — Card ချိတ်ပြီးမှ ပြန်သုံးနိုင်ပါသည်။",
-          );
-        }
-        throw new Error(scriptResult.error);
+      if (scriptResult?.fallback || scriptResult?.retryable) {
+        throw new Error(
+          scriptResult.error ||
+            "Google AI video/script service မအားသေးပါ။ ဒီ request က credit မဖြတ်ပါ။ ခဏနေရင် ပြန်စမ်းပါ။",
+        );
       }
+      if (scriptResult.error) throw new Error(scriptResult.error);
       const scriptText = scriptResult.script || "";
       if (!scriptText || scriptText.trim().length < 10) throw new Error("AI script generation returned empty result");
 
@@ -5741,7 +5734,7 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
             </div>
             {apiMode === "own" && (
               <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">Google AI API Key</label>
+                <label className="text-xs text-muted-foreground">Google AI API Key (billing enabled)</label>
                 <div className="flex gap-2">
                   <input
                     type={showApiKey ? "text" : "password"}
@@ -5757,10 +5750,6 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
                     {showApiKey ? "🙈" : "👁️"}
                   </button>
                 </div>
-                <p className="text-xs text-amber-400/90">
-                  ⚠️ aistudio.google.com မှ key ရယူပြီး Billing (Credit Card) ချိတ်ထားရပါမည်။ Free quota အတွင်း charge
-                  မကောက်ပါ။
-                </p>
                 <p className="text-xs text-muted-foreground">⚠️ Session ပိတ်ရင် key ပျောက်သွားမည်</p>
               </div>
             )}
