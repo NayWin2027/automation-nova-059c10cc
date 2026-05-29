@@ -38,17 +38,33 @@ function normalizeBase32Secret(input: string): string {
  
     // Verify the user via JWT claims (does not require a live server session)
     const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
-    
-    if (claimsError || !claimsData?.claims) {
-      return new Response(
-        JSON.stringify({ error: "Invalid token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    let userId: string | null = null;
+    let userEmail = "admin";
+
+    // Try local JWT claims first (fast, no network)
+    try {
+      const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
+      if (!claimsError && claimsData?.claims?.sub) {
+        userId = claimsData.claims.sub as string;
+        userEmail = (claimsData.claims.email as string) || "admin";
+      }
+    } catch (_e) {
+      // fall through to getUser fallback
     }
- 
-      const userId = claimsData.claims.sub as string;
-      const userEmail = (claimsData.claims.email as string) || "admin";
+
+    // Fallback: verify via Auth server (handles new signing keys / JWKS lag)
+    if (!userId) {
+      const { data: userData, error: userError } = await userClient.auth.getUser(token);
+      if (userError || !userData?.user?.id) {
+        console.error("admin-2fa auth failed", { userError: userError?.message });
+        return new Response(
+          JSON.stringify({ error: "Invalid token" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      userId = userData.user.id;
+      userEmail = userData.user.email || "admin";
+    }
  
      // Service role client for database operations
      const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
