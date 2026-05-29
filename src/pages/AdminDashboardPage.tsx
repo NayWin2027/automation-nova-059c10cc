@@ -56,7 +56,11 @@ const AdminDashboardPage: React.FC = () => {
       if (!user || !isAdmin) return;
 
       try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) throw new Error("Missing admin session");
+
         const { data: status2FA, error } = await supabase.functions.invoke("admin-2fa", {
+          headers: { Authorization: `Bearer ${session.access_token}` },
           body: { action: "status" }
         });
 
