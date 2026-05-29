@@ -628,9 +628,17 @@ ${transcript}
       );
     }
 
-    // Surgical 503/504 fallback chain: only escalate when Google reports model overload.
-    for (const fallbackModel of ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-flash-latest"]) {
-      if (!response || response.ok || (response.status !== 503 && response.status !== 504)) break;
+    // Surgical Own API fallback: avoid Pro quota traps; mirror the stable app flow with gemini-2.0-flash.
+    const fallbackModels = isOwnApi
+      ? ["gemini-2.0-flash", "gemini-2.5-flash"]
+      : ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-flash-latest"];
+    const shouldFallback = (status?: number) =>
+      status === 503 ||
+      status === 504 ||
+      (isOwnApi && (status === 404 || status === 429));
+
+    for (const fallbackModel of fallbackModels) {
+      if (!response || response.ok || !shouldFallback(response.status)) break;
       activeModel = fallbackModel;
       console.warn(`[recap-script-generator] Previous model overloaded (${response.status}). Falling back to ${activeModel}...`);
       const fbController = new AbortController();
