@@ -62,6 +62,7 @@ const AdminLoginPage: React.FC = () => {
         if (isAdmin) {
           // SECURITY FIX: Check if 2FA is enabled for this admin
           const { data: status2FA, error: status2FAError } = await supabase.functions.invoke("admin-2fa", {
+            headers: { Authorization: `Bearer ${session.access_token}` },
             body: { action: "status" },
           });
           
@@ -99,6 +100,7 @@ const AdminLoginPage: React.FC = () => {
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("admin-2fa", {
+        headers: { Authorization: `Bearer ${pendingSession.token}` },
         body: { action: "verify-login", code: totpCode },
       });
 
@@ -227,6 +229,7 @@ const AdminLoginPage: React.FC = () => {
 
       // Check if 2FA is enabled for this admin
       const { data: status2FA, error: status2FAError } = await supabase.functions.invoke("admin-2fa", {
+        headers: { Authorization: `Bearer ${authData.session.access_token}` },
         body: { action: "status" },
       });
 
