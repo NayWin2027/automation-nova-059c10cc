@@ -275,7 +275,7 @@ serve(async (req) => {
       language = (formData.get("language") as string) || "BURMESE";
       const formCreditCost = formData.get("customCreditCost") as string;
       if (formCreditCost) customCreditCost = Number(formCreditCost);
-      userApiKey = formData.get("apiKey") as string;
+      userApiKey = ((formData.get("ownApiKey") as string) || (formData.get("apiKey") as string) || req.headers.get("x-own-api-key") || "").trim() || null;
       isOwnApi = !!userApiKey;
 
       const formDurationSec = formData.get("sourceDurationSec") as string;
@@ -292,7 +292,7 @@ serve(async (req) => {
       niche = body.niche || "GENERAL";
       language = body.language || "BURMESE";
       if (body.customCreditCost !== undefined) customCreditCost = Number(body.customCreditCost);
-      userApiKey = body.apiKey || body.ownApiKey || null;
+      userApiKey = (body.ownApiKey || body.apiKey || req.headers.get("x-own-api-key") || "").trim() || null;
       isOwnApi = !!userApiKey;
       skipCreditDeduction = !!body.skipCreditDeduction;
       extraInstructions = typeof body.extraInstructions === "string" ? body.extraInstructions : "";
