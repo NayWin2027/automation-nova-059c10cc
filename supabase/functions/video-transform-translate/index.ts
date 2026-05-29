@@ -28,11 +28,12 @@ function geminiUnavailableResponse(upstreamStatus: number, detail?: string): Res
 }
 
 const SUBTITLE_MODELS = [
+  "gemini-2.0-flash",
+  "gemini-2.0-flash-001",
   "gemini-2.5-flash",
   "gemini-2.5-flash-lite",
-  "gemini-flash-latest",
-  "gemini-2.0-flash-001",
-  "gemini-2.0-flash",
+  "gemini-1.5-flash-latest",
+  "gemini-1.5-flash",
 ];
 
 function shouldTryNextModel(status: number): boolean {
@@ -370,6 +371,10 @@ Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'tex
 
       if (response.status === 429) {
         return jsonResponse({ error: "API rate limit exceeded. Please try again later.", errorCode: "RATE_LIMIT" }, 429);
+      }
+
+      if (response.status === 404) {
+        return geminiUnavailableResponse(404, "All subtitle models returned 404");
       }
 
       return jsonResponse({ error: `Gemini API error: ${response.status}` }, response.status);
