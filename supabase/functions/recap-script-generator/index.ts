@@ -10,9 +10,10 @@ const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
 const MODEL = "gemini-2.5-flash-lite";
 
 function buildGenerationConfig(model: string, requestedMaxOutputTokens: number | null): Record<string, unknown> {
-  const maxOutputTokens = model === "gemini-flash-latest"
-    ? Math.min(requestedMaxOutputTokens || 8192, 8192)
-    : requestedMaxOutputTokens || 12288;
+  const maxOutputTokens =
+    model === "gemini-flash-latest"
+      ? Math.min(requestedMaxOutputTokens || 8192, 8192)
+      : requestedMaxOutputTokens || 12288;
 
   const config: Record<string, unknown> = {
     temperature: 0.55,
@@ -275,7 +276,13 @@ serve(async (req) => {
       language = (formData.get("language") as string) || "BURMESE";
       const formCreditCost = formData.get("customCreditCost") as string;
       if (formCreditCost) customCreditCost = Number(formCreditCost);
-      userApiKey = ((formData.get("ownApiKey") as string) || (formData.get("apiKey") as string) || req.headers.get("x-own-api-key") || "").trim() || null;
+      userApiKey =
+        (
+          (formData.get("ownApiKey") as string) ||
+          (formData.get("apiKey") as string) ||
+          req.headers.get("x-own-api-key") ||
+          ""
+        ).trim() || null;
       isOwnApi = !!userApiKey;
 
       const formDurationSec = formData.get("sourceDurationSec") as string;
@@ -599,7 +606,7 @@ ${transcript}
 
     let response: Response | null = null;
     let lastError = "";
-    let activeModel = MODEL;
+    let activeModel = isOwnApi ? "gemini-3.1-pro-preview" : MODEL;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 135000);
@@ -628,19 +635,19 @@ ${transcript}
       );
     }
 
-    // Surgical Own API fallback: avoid Pro quota traps; mirror the stable app flow with gemini-2.0-flash.
+    // Surgical Own API fallback: preview models are free-tier during preview period.
     const fallbackModels = isOwnApi
-      ? ["gemini-2.0-flash", "gemini-2.5-flash"]
+      ? ["gemini-3-flash-preview", "gemini-1.5-flash", "gemini-2.0-flash-lite", "gemini-2.0-flash"]
       : ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-flash-latest"];
     const shouldFallback = (status?: number) =>
-      status === 503 ||
-      status === 504 ||
-      (isOwnApi && (status === 404 || status === 429));
+      status === 503 || status === 504 || (isOwnApi && (status === 404 || status === 429 || status === 403));
 
     for (const fallbackModel of fallbackModels) {
       if (!response || response.ok || !shouldFallback(response.status)) break;
       activeModel = fallbackModel;
-      console.warn(`[recap-script-generator] Previous model overloaded (${response.status}). Falling back to ${activeModel}...`);
+      console.warn(
+        `[recap-script-generator] Previous model overloaded (${response.status}). Falling back to ${activeModel}...`,
+      );
       const fbController = new AbortController();
       const fbTimeoutId = setTimeout(() => fbController.abort(), 135000);
       try {
@@ -680,11 +687,22 @@ ${transcript}
           { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
+      if (isOwnApi && response?.status === 403) {
+        return new Response(
+          JSON.stringify({
+            error:
+              "သင့် Gemini API Key ကို Google AI Studio မှာ Billing မဖွင့်သေးပါ။ aistudio.google.com သို့ ဝင်ပြီး Billing/Payment ဖွင့်ပေးပါ။ (Free tier ကို Billing ဖွင့်ပြီးမှ ရနိုင်ပါသည်)",
+            retryable: false,
+            billingRequired: true,
+          }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
       return new Response(
         JSON.stringify({
           error:
             response?.status === 503 || response?.status === 504
-              ? "Google AI video/script service မအားသေးပါ။ ဒီ request က credit မဖြတ်ပါ။ ခဏနေရင် ပြန်စမ်းပါ။"
+              ? "Google AI video/script service မအားသေးပါ။ ခဏနေရင် ပြန်စမ်းပါ။"
               : "Script generation failed",
           fallback: response?.status === 503 || response?.status === 504,
           upstreamStatus: response?.status || null,
