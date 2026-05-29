@@ -27,7 +27,13 @@ function geminiUnavailableResponse(upstreamStatus: number, detail?: string): Res
   });
 }
 
-const SUBTITLE_MODELS = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b"];
+const SUBTITLE_MODELS = [
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
+  "gemini-flash-latest",
+  "gemini-2.0-flash-001",
+  "gemini-2.0-flash",
+];
 
 function shouldTryNextModel(status: number): boolean {
   return status === 429 || status === 404 || status === 503 || status === 504;
