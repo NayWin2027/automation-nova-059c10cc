@@ -307,17 +307,25 @@ Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'tex
       });
 
       let lastResponse: Response | null = null;
+      let lastError: unknown = null;
 
       for (const model of SUBTITLE_MODELS) {
-        const response = await geminiRetryFetchWithTimeout(
-          (key) => `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: fetchBody,
-          },
-          timeoutMs,
-        );
+        let response: Response;
+        try {
+          response = await geminiRetryFetchWithTimeout(
+            (key) => `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: fetchBody,
+            },
+            timeoutMs,
+          );
+        } catch (error) {
+          console.warn(`Subtitle model ${model} stalled, trying next non-Pro model...`, error instanceof Error ? error.message : error);
+          lastError = error;
+          continue;
+        }
 
         if (response.ok || !shouldTryNextModel(response.status)) return response;
 
@@ -326,7 +334,8 @@ Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'tex
         lastResponse = response;
       }
 
-      return lastResponse!;
+      if (lastResponse) return lastResponse;
+      throw lastError instanceof Error ? lastError : new Error("All subtitle models failed");
     };
 
     let response: Response;
