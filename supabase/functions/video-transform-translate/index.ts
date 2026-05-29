@@ -27,6 +27,12 @@ function geminiUnavailableResponse(upstreamStatus: number, detail?: string): Res
   });
 }
 
+const SUBTITLE_MODELS = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b"];
+
+function shouldTryNextModel(status: number): boolean {
+  return status === 429 || status === 404 || status === 503 || status === 504;
+}
+
 async function geminiRetryFetchWithTimeout(
   urlBuilder: (apiKey: string) => string,
   options: RequestInit,
@@ -280,7 +286,7 @@ Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'tex
       }
     }
 
-    const runSubtitleRequest = (requestParts: any[], timeoutMs: number) => {
+    const runSubtitleRequest = async (requestParts: any[], timeoutMs: number) => {
       const fetchBody = JSON.stringify({
         contents: [{ parts: requestParts }],
         generationConfig: {
@@ -300,15 +306,36 @@ Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'tex
         },
       });
 
-      return geminiRetryFetchWithTimeout(
-        (key) => `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: fetchBody,
-        },
-        timeoutMs,
-      );
+      let lastResponse: Response | null = null;
+      let lastError: unknown = null;
+
+      for (const model of SUBTITLE_MODELS) {
+        let response: Response;
+        try {
+          response = await geminiRetryFetchWithTimeout(
+            (key) => `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: fetchBody,
+            },
+            timeoutMs,
+          );
+        } catch (error) {
+          console.warn(`Subtitle model ${model} stalled, trying next non-Pro model...`, error instanceof Error ? error.message : error);
+          lastError = error;
+          continue;
+        }
+
+        if (response.ok || !shouldTryNextModel(response.status)) return response;
+
+        console.warn(`Subtitle model ${model} failed with ${response.status}, trying next non-Pro model...`);
+        await response.clone().text().catch(() => "");
+        lastResponse = response;
+      }
+
+      if (lastResponse) return lastResponse;
+      throw lastError instanceof Error ? lastError : new Error("All subtitle models failed");
     };
 
     let response: Response;
