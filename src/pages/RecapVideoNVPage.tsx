@@ -5262,12 +5262,12 @@ const RecapVideoNVPage: React.FC = () => {
         resolvedOwnKey ? "get-upload-url" : "video-recap",
         {
           body: {
-            ...(resolvedOwnKey ? {} : { action: "initUpload" }),
+            ...(resolvedOwnKey ? { ownApiKey: resolvedOwnKey, apiKey: resolvedOwnKey } : { action: "initUpload" }),
             fileName: file.name,
             fileSize: file.size,
             mimeType,
-            ...(resolvedOwnKey ? { apiKey: resolvedOwnKey } : {}),
           },
+          headers: resolvedOwnKey ? { "x-own-api-key": resolvedOwnKey } : undefined,
         },
       );
       if (urlError || urlData?.error || !urlData?.uploadUrl)
@@ -5436,7 +5436,10 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
         },
       };
       if (fileData) scriptBody.fileData = fileData;
-      if (resolvedOwnKey) scriptBody.ownApiKey = resolvedOwnKey;
+      if (resolvedOwnKey) {
+        scriptBody.ownApiKey = resolvedOwnKey;
+        scriptBody.apiKey = resolvedOwnKey;
+      }
 
       const scriptResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recap-script-generator`, {
         method: "POST",
@@ -5444,6 +5447,7 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
           "Content-Type": "application/json",
           apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
           Authorization: `Bearer ${userToken}`,
+          ...(resolvedOwnKey ? { "x-own-api-key": resolvedOwnKey } : {}),
         },
         body: JSON.stringify(scriptBody),
       });
