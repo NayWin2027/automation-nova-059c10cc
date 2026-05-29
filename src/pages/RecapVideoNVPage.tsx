@@ -5456,6 +5456,12 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
         throw new Error(errData.error || `Script generation failed (${scriptResponse.status})`);
       }
       const scriptResult = await scriptResponse.json();
+      if (scriptResult?.fallback || scriptResult?.retryable) {
+        throw new Error(
+          scriptResult.error ||
+            "Google AI video/script service မအားသေးပါ။ ဒီ request က credit မဖြတ်ပါ။ ခဏနေရင် ပြန်စမ်းပါ။",
+        );
+      }
       if (scriptResult.error) throw new Error(scriptResult.error);
       const scriptText = scriptResult.script || "";
       if (!scriptText || scriptText.trim().length < 10) throw new Error("AI script generation returned empty result");

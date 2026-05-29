@@ -686,11 +686,12 @@ ${transcript}
             response?.status === 503 || response?.status === 504
               ? "Google AI video/script service မအားသေးပါ။ ဒီ request က credit မဖြတ်ပါ။ ခဏနေရင် ပြန်စမ်းပါ။"
               : "Script generation failed",
+          fallback: response?.status === 503 || response?.status === 504,
           upstreamStatus: response?.status || null,
           retryable: response?.status === 503 || response?.status === 504,
         }),
         {
-          status: response?.status === 503 || response?.status === 504 ? 503 : 500,
+          status: response?.status === 503 || response?.status === 504 ? 200 : 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         },
       );
