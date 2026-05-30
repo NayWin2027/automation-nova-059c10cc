@@ -198,6 +198,27 @@ function enforceScriptCoverage70(script: string, sourceDurationSec?: number | nu
   return (kept.length ? kept.join("\n\n") : words.slice(0, maxWords).join(" ")).trim();
 }
 
+function countMatches(text: string, pattern: RegExp): number {
+  return text.match(pattern)?.length || 0;
+}
+
+function violatesTargetLanguage(script: string, lang: string): boolean {
+  const body = script.replace(/\[\d{1,2}:\d{2}(?::\d{2})?\]/g, " ");
+  const target = lang.toUpperCase();
+  const cjkCount = countMatches(body, /[\u3400-\u9FFF]/g);
+  const myanmarCount = countMatches(body, /[\u1000-\u109F]/g);
+  const japaneseKanaCount = countMatches(body, /[\u3040-\u30FF]/g);
+  const koreanCount = countMatches(body, /[\uAC00-\uD7AF]/g);
+  const thaiCount = countMatches(body, /[\u0E00-\u0E7F]/g);
+
+  if (target === "BURMESE") return myanmarCount < 12 || cjkCount > 6 || japaneseKanaCount > 3 || koreanCount > 3 || thaiCount > 3;
+  if (target !== "CHINESE" && target !== "JAPANESE" && cjkCount > 12) return true;
+  if (target !== "JAPANESE" && japaneseKanaCount > 6) return true;
+  if (target !== "KOREAN" && koreanCount > 6) return true;
+  if (target !== "THAI" && thaiCount > 6) return true;
+  return false;
+}
+
 // Niche-specific style instructions
 const nicheStyles: Record<string, string> = {
   "MOVIE RECAP": `Write like a top-tier Netflix/Hollywood movie recap narrator. Build suspense, use dramatic pauses, cliffhangers, and emotional peaks. Make viewers feel every twist, betrayal, romance, and revelation as if they're watching the movie.`,
