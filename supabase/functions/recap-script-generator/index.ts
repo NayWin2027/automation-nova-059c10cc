@@ -376,12 +376,14 @@ serve(async (req) => {
       BURMESE: "မြန်မာ (Burmese)",
     };
     const langLabel = langNativeMap[lang] || lang;
+    const targetLanguageLock = `TARGET LANGUAGE LOCK: Output narration language is ${lang} / ${langLabel}. The source video's spoken language is only INPUT; translate ALL dialogue, signs, captions, and story details into ${langLabel}. Never copy the source language into the final script. If the source is Chinese but target is Burmese, write Burmese only. If target is English/Thai/Korean/Japanese/Hindi/etc., write only that selected target language.`;
 
     const systemPrompt = `You are a world-class professional scriptwriter. You write premium narration scripts at Netflix/BBC/HBO broadcast standard.
 
 ###############################################################
 # LANGUAGE: ${langLabel}
 # YOU MUST WRITE 100% OF YOUR OUTPUT IN ${lang} LANGUAGE.
+# ${targetLanguageLock}
 # IF ${lang} IS "ENGLISH" → WRITE IN ENGLISH.
 # IF ${lang} IS "JAPANESE" → WRITE IN JAPANESE (日本語).
 # IF ${lang} IS "KOREAN" → WRITE IN KOREAN (한국어).  
@@ -407,6 +409,7 @@ ABSOLUTE RULES:
 3. Each paragraph = natural spoken segment (2-4 sentences)
 4. The script must be READY TO READ as narration (no stage directions, no brackets, no formatting marks, no timestamps)
 5. Fully embody the "${nicheLabel}" niche style described above
+6. ${targetLanguageLock}
 
 CRITICAL - DIALOGUE TRANSLATION RULE (MOST IMPORTANT):
 - If characters or people in the video/audio SPEAK any dialogue — in ANY language (English, Thai, Korean, Chinese, Japanese, etc.) — you MUST translate and include what they actually said
