@@ -198,6 +198,27 @@ function enforceScriptCoverage70(script: string, sourceDurationSec?: number | nu
   return (kept.length ? kept.join("\n\n") : words.slice(0, maxWords).join(" ")).trim();
 }
 
+function countMatches(text: string, pattern: RegExp): number {
+  return text.match(pattern)?.length || 0;
+}
+
+function violatesTargetLanguage(script: string, lang: string): boolean {
+  const body = script.replace(/\[\d{1,2}:\d{2}(?::\d{2})?\]/g, " ");
+  const target = lang.toUpperCase();
+  const cjkCount = countMatches(body, /[\u3400-\u9FFF]/g);
+  const myanmarCount = countMatches(body, /[\u1000-\u109F]/g);
+  const japaneseKanaCount = countMatches(body, /[\u3040-\u30FF]/g);
+  const koreanCount = countMatches(body, /[\uAC00-\uD7AF]/g);
+  const thaiCount = countMatches(body, /[\u0E00-\u0E7F]/g);
+
+  if (target === "BURMESE") return myanmarCount < 12 || cjkCount > 6 || japaneseKanaCount > 3 || koreanCount > 3 || thaiCount > 3;
+  if (target !== "CHINESE" && target !== "JAPANESE" && cjkCount > 12) return true;
+  if (target !== "JAPANESE" && japaneseKanaCount > 6) return true;
+  if (target !== "KOREAN" && koreanCount > 6) return true;
+  if (target !== "THAI" && thaiCount > 6) return true;
+  return false;
+}
+
 // Niche-specific style instructions
 const nicheStyles: Record<string, string> = {
   "MOVIE RECAP": `Write like a top-tier Netflix/Hollywood movie recap narrator. Build suspense, use dramatic pauses, cliffhangers, and emotional peaks. Make viewers feel every twist, betrayal, romance, and revelation as if they're watching the movie.`,
@@ -355,12 +376,14 @@ serve(async (req) => {
       BURMESE: "မြန်မာ (Burmese)",
     };
     const langLabel = langNativeMap[lang] || lang;
+    const targetLanguageLock = `TARGET LANGUAGE LOCK: Output narration language is ${lang} / ${langLabel}. The source video's spoken language is only INPUT; translate ALL dialogue, signs, captions, and story details into ${langLabel}. Never copy the source language into the final script. If the source is Chinese but target is Burmese, write Burmese only. If target is English/Thai/Korean/Japanese/Hindi/etc., write only that selected target language.`;
 
     const systemPrompt = `You are a world-class professional scriptwriter. You write premium narration scripts at Netflix/BBC/HBO broadcast standard.
 
 ###############################################################
 # LANGUAGE: ${langLabel}
 # YOU MUST WRITE 100% OF YOUR OUTPUT IN ${lang} LANGUAGE.
+# ${targetLanguageLock}
 # IF ${lang} IS "ENGLISH" → WRITE IN ENGLISH.
 # IF ${lang} IS "JAPANESE" → WRITE IN JAPANESE (日本語).
 # IF ${lang} IS "KOREAN" → WRITE IN KOREAN (한국어).  
@@ -386,6 +409,7 @@ ABSOLUTE RULES:
 3. Each paragraph = natural spoken segment (2-4 sentences)
 4. The script must be READY TO READ as narration (no stage directions, no brackets, no formatting marks, no timestamps)
 5. Fully embody the "${nicheLabel}" niche style described above
+6. ${targetLanguageLock}
 
 CRITICAL - DIALOGUE TRANSLATION RULE (MOST IMPORTANT):
 - If characters or people in the video/audio SPEAK any dialogue — in ANY language (English, Thai, Korean, Chinese, Japanese, etc.) — you MUST translate and include what they actually said
@@ -725,6 +749,18 @@ ${transcript}
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    if (violatesTargetLanguage(normalizedRawScript, lang)) {
+      console.error(`[recap-script-generator] Target language validation failed for ${lang}`);
+      return new Response(
+        JSON.stringify({
+          error: "AI က ရွေးထားတဲ့ target language အတိုင်း script မထုတ်ပေးလို့ credit မဖြတ်ပါ။ ပြန် Generate လုပ်ပါ။",
+          retryable: true,
+          languageMismatch: true,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     const rawWordCount = normalizedRawScript.split(/\s+/).filter(Boolean).length;
