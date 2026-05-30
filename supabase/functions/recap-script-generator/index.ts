@@ -751,6 +751,18 @@ ${transcript}
       });
     }
 
+    if (violatesTargetLanguage(normalizedRawScript, lang)) {
+      console.error(`[recap-script-generator] Target language validation failed for ${lang}`);
+      return new Response(
+        JSON.stringify({
+          error: "AI က ရွေးထားတဲ့ target language အတိုင်း script မထုတ်ပေးလို့ credit မဖြတ်ပါ။ ပြန် Generate လုပ်ပါ။",
+          retryable: true,
+          languageMismatch: true,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     const rawWordCount = normalizedRawScript.split(/\s+/).filter(Boolean).length;
     const script = enforceScriptCoverage70(normalizedRawScript, sourceDurationSec);
     const finalWordCount = script.split(/\s+/).filter(Boolean).length;
