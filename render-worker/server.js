@@ -155,28 +155,45 @@ async function renderParallelJob(jobId, opts) {
   JOBS.set(jobId, { state: "processing", progress: 10 });
 
   try {
-    // 1) Dispatch all segments to separate Cloud Run instances
-    const segmentPromises = Array.from({ length: numSegs }, (_, i) => {
-      const start = i * segDur;
-      const duration = Math.min(segDur, totalDur - start);
-      return fetch(`${selfUrl}/render-segment`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Api-Secret": SHARED_SECRET },
-        body: JSON.stringify({
-          jobId,
-          index: i,
-          start,
-          duration,
-          videoUrl: opts.videoUrl,
-          audioUrl: opts.audioUrl,
-          subtitles: subsForRange(opts.subtitles || [], start, start + duration),
-        }),
-      }).then((r) => r.json());
-    });
+    // 1) Dispatch segments to Cloud Run instances in BATCHES.
+    //    Cloud Run --max-instances quota is currently 10, so we cap parallelism
+    //    to BATCH_SIZE per wave. When the quota is raised, just bump this number.
+    const BATCH_SIZE = Number(process.env.RENDER_BATCH_SIZE) || 10;
+    const results = [];
+    const totalBatches = Math.ceil(numSegs / BATCH_SIZE);
 
-    const results = await Promise.all(segmentPromises);
-    const failed = results.find((r) => r.error);
-    if (failed) throw new Error(`Segment failed: ${failed.error}`);
+    for (let b = 0; b < totalBatches; b++) {
+      const batchStart = b * BATCH_SIZE;
+      const batchEnd = Math.min(batchStart + BATCH_SIZE, numSegs);
+      const batchPromises = [];
+      for (let i = batchStart; i < batchEnd; i++) {
+        const start = i * segDur;
+        const duration = Math.min(segDur, totalDur - start);
+        batchPromises.push(
+          fetch(`${selfUrl}/render-segment`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Api-Secret": SHARED_SECRET },
+            body: JSON.stringify({
+              jobId,
+              index: i,
+              start,
+              duration,
+              videoUrl: opts.videoUrl,
+              audioUrl: opts.audioUrl,
+              subtitles: subsForRange(opts.subtitles || [], start, start + duration),
+            }),
+          }).then((r) => r.json()),
+        );
+      }
+      const batchResults = await Promise.all(batchPromises);
+      const failed = batchResults.find((r) => r.error);
+      if (failed) throw new Error(`Segment failed (batch ${b + 1}/${totalBatches}): ${failed.error}`);
+      results.push(...batchResults);
+
+      // Progress: 10% start, 80% at merge — distribute across batches
+      const pct = 10 + Math.round(((b + 1) / totalBatches) * 65);
+      JOBS.set(jobId, { state: "processing", progress: pct, batch: `${b + 1}/${totalBatches}` });
+    }
 
     // 2) Merge all segments (Lightning Fast)
     JOBS.set(jobId, { state: "merging", progress: 80 });
