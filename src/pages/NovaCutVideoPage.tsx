@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
 
-const DURATION_OPTIONS = [1, 2, 3, 4, 5, 10, 15];
+const DURATION_OPTIONS = [1, 2, 3, 4, 5, 10, 15, 20, 30];
 const FFMPEG_LOAD_TIMEOUT_MS = 45000;
 
 // Aspect ratio options — actually re-encode the video frame to these dimensions.
