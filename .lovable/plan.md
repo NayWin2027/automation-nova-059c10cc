@@ -1,69 +1,105 @@
-## Do I know what the issue is?
+## Scope (Server-only, Surgical)
 
-ဟုတ်ပါတယ်။ Screenshot ထဲက error message က app credit မဖြတ်တာကြောင့်မဟုတ်ပါဘူး။ `recap-script-generator` function ထဲမှာ Google Gemini က `gemini-2.5-flash` ကို `503 UNAVAILABLE / high demand` ပြန်တာကြောင့် UI မှာ “Google AI video/script service မအားသေးပါ…” ဆိုပြီးပြနေတာပါ။
+Only `render-worker/` folder ထဲက ဖိုင်တွေ ထိမယ်။ Browser code, AV-SYNC, VOICE-GEN, AUTO-PIPELINE, RECORD-PIPELINE, upload chunk, credit, auth, UI — **လုံးဝ မထိ**။
 
-## Actual problem
+## Files to Modify
 
-- Recent logs တွေမှာ `gemini-2.5-flash` က ဆက်တိုက် `503 high demand` ပြန်နေပါတယ်။
-- Own API ရော App API ရော မရတာက key/credit issue မဟုတ်ဘဲ same Google model endpoint overload ဖြစ်နေလို့ပါ။
-- Script style change က direct root cause မဟုတ်ပေမယ့် prompt က အရင်ထက် heavy ဖြစ်သွားတာကြောင့် 30-min video analysis + long style rules + output generation တွေက model pressure ပိုတက်စေပါတယ်။
-- “credit မဖြတ်ပါ” message က အခု code ထဲမှာ 503/504 ဖြစ်ချိန် user credit မကုန်အောင် ပြန်ပြတဲ့ protection message ပါ။
+1. **`render-worker/server.js`** (edit)
+   - Existing parallel orchestrator ကို keep
+   - Segment worker (`/render-segment`) ထဲက FFmpeg slideshow logic ကို **Remotion `renderMedia()` call** နဲ့ အစားထိုး
+   - Final FFmpeg concat (merge) logic keep (lossless)
+   - **Quota guard**: batch size = 10 (max-instances limit), 30 segments → 3 batches sequential
 
-## Surgical fix scope
+2. **`render-worker/package.json`** (edit)
+   - Add deps: `@remotion/renderer`, `@remotion/bundler`, `remotion`, `react`, `react-dom`
 
-Only this file:
+3. **`render-worker/Dockerfile`** (edit)
+   - Add Chromium + Remotion system deps: `chromium`, `libnss3`, `libatk1.0-0`, `libxkbcommon0`, `libgbm1`, etc.
+   - Pre-bundle Remotion composition during Docker build
 
-- `supabase/functions/recap-script-generator/index.ts`
+4. **`render-worker/remotion/`** (new folder)
+   - `Composition.tsx` — Browser RecapVideoNVPage draw logic ကို Remotion React component အဖြစ် port-copy
+   - `Root.tsx` — Remotion composition registration
+   - `index.ts` — Entry point
 
-Do not touch:
+## Architecture Flow
 
-- `src/pages/RecapVideoNVPage.tsx`
-- upload chunk logic
-- credit deduction logic
-- protected AV/voice/auto pipeline blocks
-- UI layout/design
+```text
+Client → POST /render  (no change to client)
+            ↓
+   server.js orchestrator
+            ↓
+   Split video into N × 1-min segments
+            ↓
+   Batch dispatch — 10 parallel max (quota)
+            ↓
+   POST /render-segment × N
+            ↓
+   Remotion renderMedia()  ← REPLACES ffmpeg slideshow
+   (Chromium renders React composition = browser-identical)
+            ↓
+   GCS upload per segment
+            ↓
+   FFmpeg concat -c copy (lossless merge)
+            ↓
+   Final MP4 → signed URL → return to client
+```
 
-## Implementation plan
+## Quota Handling (10-instance limit)
 
-1. **Stop using overloaded model as primary**
-   - Change the single `MODEL` constant from `gemini-2.5-flash` to `gemini-2.5-flash-lite`.
-   - This is not retry logic; it is one deterministic request to a lighter, lower-latency Gemini model.
-   - It should also avoid the Pro cost increase problem.
+```js
+const BATCH_SIZE = 10; // matches --max-instances
+for (let i = 0; i < segments.length; i += BATCH_SIZE) {
+  const batch = segments.slice(i, i + BATCH_SIZE);
+  await Promise.all(batch.map(dispatchSegment));
+}
+```
 
-2. **Keep one request only**
-   - Do not add retry loops.
-   - Do not add key rotation retry.
-   - Do not add fallback chains.
-   - Keep current single `fetch` behavior.
+- 30-min video → 30 segments → 3 batches × 10 = **~6-9 min total**
+- Quota တိုးပြီးတဲ့အခါ `BATCH_SIZE` ပြောင်းရုံပဲ
 
-3. **Reduce output/model pressure slightly without changing product behavior**
-   - Keep max output bounded at the existing `12288` ceiling.
-   - Keep `thinkingBudget: 0`.
-   - Keep script instructions, but do not expand prompt further.
+## Remotion Composition Port
 
-4. **Return exact error if Google still refuses**
-   - Keep the structured 503 response so credit is not deducted on failed generation.
-   - Do not convert it back to generic `Script generation failed`.
+Browser `RecapVideoNVPage.tsx` ထဲက canvas draw loop ကို **copy-port** လုပ်မယ်:
+- Subtitle rendering (font, position, timing)
+- Image crop / flip / scale / zoom (Copyright Safe Mode)
+- Transition effects
+- Audio overlay timing
+- Background style
+
+Props: `{ images, subtitles, audioUrl, segmentStart, segmentEnd, copyrightSafe, style }`
+
+**Critical**: Browser source ဖိုင်ကို read-only reference အဖြစ်ပဲ သုံးမယ်။ Browser file ကို လုံးဝ မထိဘူး။
 
 ## Validation
 
-After approval:
+1. `gcloud run deploy render-worker --source .` redeploy
+2. Health check: `/healthz`
+3. Single segment test: direct `POST /render-segment` call
+4. Full 5-min video test via `/render`
+5. Frame-by-frame visual diff: browser output vs server output
+6. Check Cloud Run logs for batch dispatch + Chromium render timing
 
-- Deploy only `recap-script-generator`.
-- Check edge logs for new requests and confirm the old repeated `gemini-2.5-flash 503` path is gone.
-- Run a direct edge-function smoke test if an auth session is available.
+## Protected — DO NOT TOUCH
 
-## Expected result
+- `src/pages/RecapVideoNVPage.tsx` (and any browser file)
+- AV-SYNC-9000-SMOOTH-v4
+- RECORD-PIPELINE-AUTO-v1
+- VOICE-GEN-PIPELINE-v2
+- AUTO-PIPELINE-v2
+- `get-upload-url`, `upload-chunk` edge functions
+- All other edge functions, client services, UI, credit logic
 
-- No Pro model cost increase.
-- No retry logic.
-- One-file surgical edit only.
-- Higher stability for 1–30 minute video script generation because the overloaded `gemini-2.5-flash` endpoint is no longer the primary path.
+## Risks & Notes
 
-<presentation-actions>
-  <presentation-open-history>View History</presentation-open-history>
-</presentation-actions>
+- **Cold start**: Chromium image က ~800MB-1.2GB → cold start +10-20s (first segment only)
+- **Memory**: Remotion + Chromium needs **4Gi memory** (current 2Gi) — Cloud Run config update needed at deploy time
+- **Font parity**: Browser fonts (Noto, custom) ကို Dockerfile ထဲ same version install ဖို့ ဂရုစိုက်ရမယ်
+- **First deploy**: Build 10-20 min (Chromium layer)
+- **Render speed**: Remotion က ffmpeg slideshow ထက် **3-5× slower per segment** ဒါပေမယ့် parallel ဖြစ်လို့ total time တူ/မြန်
 
-<presentation-actions>
-<presentation-link url="https://docs.lovable.dev/tips-tricks/troubleshooting">Troubleshooting docs</presentation-link>
-</presentation-actions>
+## Estimated Effort
+
+- Code: ~400-600 lines (server.js edit + composition port + dockerfile)
+- Deploy iteration: 2-3 rounds (Chromium tuning)
+- Total dev time: 1-2 sessions
