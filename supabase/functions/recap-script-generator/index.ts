@@ -211,7 +211,8 @@ function violatesTargetLanguage(script: string, lang: string): boolean {
   const koreanCount = countMatches(body, /[\uAC00-\uD7AF]/g);
   const thaiCount = countMatches(body, /[\u0E00-\u0E7F]/g);
 
-  if (target === "BURMESE") return myanmarCount < 12 || cjkCount > 6 || japaneseKanaCount > 3 || koreanCount > 3 || thaiCount > 3;
+  if (target === "BURMESE")
+    return myanmarCount < 12 || cjkCount > 6 || japaneseKanaCount > 3 || koreanCount > 3 || thaiCount > 3;
   if (target !== "CHINESE" && target !== "JAPANESE" && cjkCount > 12) return true;
   if (target !== "JAPANESE" && japaneseKanaCount > 6) return true;
   if (target !== "KOREAN" && koreanCount > 6) return true;
@@ -448,9 +449,9 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - Identify the subject matter, the niche, and the story being told through visuals/actions/music
 - Write a complete, engaging narration script based on your visual/audio analysis
 
-SCRIPT LENGTH RULE (CRITICAL — TRUE 50% RECAP):
+SCRIPT LENGTH RULE (CRITICAL — TRUE 55% RECAP):
 - The narration script MUST cover the full STORY ARC from start to finish, but NEVER retell the full source
-- Length target: about 50% of the source duration when read aloud (≈75 words per source minute, max)
+- Length target: about 55% of the source duration when read aloud (≈75 words per source minute, max)
 - For example: a 3-minute video → ~225 words; a 10-minute video → ~750 words; a 30-minute video → ~2250 words
 - You MUST include the ending, but compress filler and low-stakes scenes aggressively
 - The FINAL paragraph MUST correspond to the FINAL scene of the source video (its timecode should be near the source's ending)
