@@ -20,7 +20,7 @@ function buildGenerationConfig(model: string, requestedMaxOutputTokens: number |
     maxOutputTokens,
   };
 
-  if (model === "gemini-2.5-flash-lite" || model === "gemini-2.5-flash") {
+  if (model === "gemini-2.5-flash-lite" || model === "gemini-2.5-flash" || model.includes("preview")) {
     config.thinkingConfig = { thinkingBudget: 0 };
   }
 
@@ -178,7 +178,7 @@ function enforceScriptCoverage70(script: string, sourceDurationSec?: number | nu
   const normalized = script.replace(/\r\n/g, "\n").trim();
   if (!normalized || !sourceDurationSec) return normalized || script;
 
-  const maxWords = Math.max(45, Math.floor((sourceDurationSec / 60) * 75));
+  const maxWords = Math.max(45, Math.floor((sourceDurationSec / 60) * 150));
   const words = normalized.split(/\s+/).filter(Boolean);
   if (words.length <= maxWords) return normalized;
 
@@ -456,8 +456,8 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 
 SCRIPT LENGTH RULE (CRITICAL — TRUE 55% RECAP):
 - The narration script MUST cover the full STORY ARC from start to finish, but NEVER retell the full source
-- Length target: about 55% of the source duration when read aloud (≈75 words per source minute, max)
-- For example: a 3-minute video → ~225 words; a 10-minute video → ~750 words; a 30-minute video → ~2250 words
+- Length target: about 55% of the source duration when read aloud (≈150 words per source minute for Burmese/Asian, ≈100 for English)
+- For example: a 3-minute video → ~450 words; a 10-minute video → ~1500 words; a 20-minute video → ~3000 words; a 30-minute video → ~4500 words
 - You MUST include the ending, but compress filler and low-stakes scenes aggressively
 - The FINAL paragraph MUST correspond to the FINAL scene of the source video (its timecode should be near the source's ending)
 - Every important beat from beginning, middle, AND end must appear — no part of the video may be skipped or left out
