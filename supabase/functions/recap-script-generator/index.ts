@@ -281,6 +281,7 @@ serve(async (req) => {
     let customCreditCost: number | null = null;
     let skipCreditDeduction = false;
     let isOwnApi = false;
+    let isSeoMode = false;
     let userApiKey: string | null = null;
     let fileUri: string | null = null;
     let fileMimeType: string | null = null;
@@ -329,6 +330,10 @@ serve(async (req) => {
       // SEO mode: accept a raw seoPrompt as transcript input (used by client SEO metadata generator)
       if (body.seoMode && typeof body.seoPrompt === "string" && body.seoPrompt.trim()) {
         transcript = body.seoPrompt;
+        // SEO mode is a free bonus tied to a paid recap. Never deduct credits
+        // and never create a `narration-script` usage row for SEO calls.
+        isSeoMode = true;
+        skipCreditDeduction = true;
       }
       const bodyMaxOutputTokens = Number(body.generationConfig?.maxOutputTokens);
       if (Number.isFinite(bodyMaxOutputTokens) && bodyMaxOutputTokens > 0) {
@@ -782,7 +787,7 @@ ${transcript}
 
     // ===== CREDIT DEDUCTION — ONLY after successful script output =====
     // skipCreditDeduction: when called from recap-nv, credits are deducted at final video output stage
-    const skipCredits = skipCreditDeduction;
+    const skipCredits = skipCreditDeduction || isSeoMode;
     if (!isOwnApi && !skipCredits) {
       const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       const rpcParams: any = {
@@ -805,7 +810,9 @@ ${transcript}
         console.warn("[recap-script-generator] Credit deduction returned failure:", creditResult?.error);
       }
     } else if (skipCredits) {
-      console.log("[recap-script-generator] Skipping credit deduction (recap-nv pipeline handles it)");
+      console.log(
+        `[recap-script-generator] Skipping credit deduction (${isSeoMode ? "SEO bonus call" : "recap-nv pipeline handles it"})`,
+      );
     }
 
     logToolActivity(user.id, "recap-script", "success", {
