@@ -635,6 +635,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       flip: true,
       bypass: true,
       colorGrade: "OFF" as string,
+      brightness: 100,
     });
 
     const [logo, setLogo] = useState<LogoSettings>({
@@ -821,9 +822,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       const hue = isOff ? 0 : g.hue + bypassBoost.hue;
       const sepia = isOff ? 0 : g.sepia || 0;
       filterStringRef.current = isOff
-        ? "none"
-        : `contrast(${contrast}%) brightness(${brightness}%) saturate(${saturate}%) hue-rotate(${hue}deg) sepia(${sepia}%)`;
-    }, [editorState.colorGrade, editorState.bypass]);
+        ? editorState.brightness !== 100
+          ? `brightness(${editorState.brightness}%)`
+          : "none"
+        : `contrast(${contrast}%) brightness(${Math.round((brightness * editorState.brightness) / 100)}%) saturate(${saturate}%) hue-rotate(${hue}deg) sepia(${sepia}%)`;
+    }, [editorState.colorGrade, editorState.bypass, editorState.brightness]);
 
     // ── FIX: Invalidate blur canvas cache when blur settings change ──
     useEffect(() => {
@@ -2161,11 +2164,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // ── FIX: Use cached filter string — no string allocation per frame ──
         // ── BONUS: Scene-Aware Dynamic Color Grade — blend base filter with scene-type modifier ──
         const sceneType = segPacingTypeRef.current;
-        if (sceneType === "action") {
-          // Action: higher contrast + cool blue tint (intensity, urgency)
+        const isColorOff = editorState.colorGrade === "OFF" || editorState.bypass;
+        if (!isColorOff && sceneType === "action") {
           ctx.filter = filterStringRef.current + " contrast(118%) hue-rotate(-8deg) saturate(115%)";
-        } else if (sceneType === "emotional") {
-          // Emotional: warm amber + slight dim (drama, feeling)
+        } else if (!isColorOff && sceneType === "emotional") {
           ctx.filter = filterStringRef.current + " sepia(18%) brightness(96%) saturate(90%)";
         } else {
           ctx.filter = filterStringRef.current;
@@ -3789,6 +3791,20 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                         ))}
                       </SelectContent>
                     </Select>
+                    <div className="mt-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-xs text-slate-500">☀️ Brightness</p>
+                        <span className="text-xs text-slate-400">{editorState.brightness}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={50}
+                        max={150}
+                        value={editorState.brightness}
+                        onChange={(e) => setEditorState((s) => ({ ...s, brightness: parseInt(e.target.value) }))}
+                        className="w-full accent-amber-400"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -5350,8 +5366,15 @@ The narration must feel like a non-stop thriller story, NOT a boring lecture, do
 
 STRICT LENGTH RULE:
 This is a surgical recap, not a summary. Do NOT retain most of the source or produce a detailed retelling.
-If source length is 30 minutes, output must be 15 minutes or less. If source length is 6 minutes, output must be 3 minutes or less.
-Never exceed 50% of the original duration. If you cannot express the story in 50% or less, cut more aggressively until you can.
+The output script MUST be approximately 40-50% of the original video duration when read aloud.
+MINIMUM WORD COUNT (CRITICAL — DO NOT GO BELOW THIS):
+  * Source 5 min → minimum 350 words, target ~500 words
+  * Source 10 min → minimum 700 words, target ~1200 words
+  * Source 15 min → minimum 1000 words, target ~1800 words
+  * Source 20 min → minimum 1500 words, target ~2500 words
+  * Source 30 min → minimum 2000 words, target ~3500 words
+If your script is shorter than the MINIMUM, you MUST add more story detail until you reach it.
+A 20-minute source producing only 2 minutes of narration = FAILURE.
 
 STRUCTURE RULE:
 1. Start with a SHOCKING HOOK from the middle or end that immediately raises a “why did this happen?” question.
@@ -5373,15 +5396,15 @@ INSTRUCTIONS:
 - Skip over setup/buildup scenes and jump straight to the payoff.
 
 PACING & DURATION RULE (CRITICAL):
-- The recap MUST be truly shorter than the original video: aim for roughly 50% or less of the source duration.
-- The app is built for source videos up to 30 minutes. If the source is longer than 30 minutes, treat it like a 30-minute source and keep the recap no longer than 15 minutes.
-  * Source up to 30 minutes → recap 10-15 minutes (max 15 minutes preferred).
-  * Source under 15 minutes → recap as close to 50% as possible, never exceed 50%.
-  * Source under 10 minutes → recap about half the length, never exceed 50%.
-  * Source under 5 minutes → recap about half the length, never exceed 50%.
-- For short videos, do NOT return nearly the same length. A 6-minute source should produce a ~3-minute recap, not 6 minutes.
-- If you include everything from start to finish without cutting, you have FAILED as a recap editor.
-- The viewer should feel like they watched a fast, exciting, condensed version — NOT the full video.
+- The recap MUST be approximately 40-50% of the original video duration. NOT shorter, NOT longer.
+- The app is built for source videos up to 30 minutes. If the source is longer than 30 minutes, treat it like a 30-minute source.
+  * Source up to 30 min → recap 40-50% of source duration (e.g. 20 min → 8-10 min recap).
+  * Source under 15 min → recap about 40-50% of the length.
+  * Source under 10 min → recap about 40-50% of the length.
+  * Source under 5 min → recap about 40-50% of the length.
+- IMPORTANT: Going BELOW 30% is just as bad as exceeding 50%. A recap that is too short feels incomplete.
+- If your narration word count falls below the MINIMUM, ADD more story details until you reach it.
+- The viewer should feel like they watched a complete, exciting, condensed version — NOT a 30-second summary.
 
 IMPORTANT:
 Do NOT summarize using text only.
@@ -5410,8 +5433,8 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
   * For a source under 5 minutes, aim for about half the length, never exceed 50%.
 - This is not a detailed summary or review. Do not include non-essential scene descriptions, explanatory pauses, or secondary character chatter.
 - If the story can be told in fewer segments, do that. Use as few segments as necessary to keep the full arc intact.
-- If you cannot fit the script in 50% of the source, cut harder until you can.
-- Do not round up or add padding. This is a strict 50%-or-less output rule.
+- If the script exceeds 50% of source duration, condense low-priority scenes. But NEVER go below 30%.
+- Balance is key: aim for exactly 40-50% of the source duration.
 - Each segment must flow smoothly into the next.
 - If token pressure appears, condense remaining story into brief segments instead of stopping.
 
