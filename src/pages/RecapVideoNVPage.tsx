@@ -5231,6 +5231,9 @@ const RecapVideoNVPage: React.FC = () => {
   const startAutoPipeline = async (file: File) => {
     const resolvedApiMode = apiMode;
     const resolvedOwnKey = apiMode === "own" ? ownApiKey.trim() : "";
+    activePipelineApiModeRef.current = resolvedApiMode;
+    activePipelineOwnKeyRef.current = resolvedOwnKey;
+    activePipelineRenderModeRef.current = renderMode;
     if (resolvedApiMode === "own" && !resolvedOwnKey) {
       setProgressMsg("❌ Own API mode ရွေးထားပါသည်။ Google API Key ထည့်ပေးပါ။");
       setStatus("error");
