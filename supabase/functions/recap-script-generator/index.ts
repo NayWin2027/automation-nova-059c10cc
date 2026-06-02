@@ -282,8 +282,6 @@ serve(async (req) => {
     let skipCreditDeduction = false;
     let isOwnApi = false;
     let isSeoMode = false;
-    let isRecapNvPipeline = false;
-    let requestedApiMode = "";
     let userApiKey: string | null = null;
     let fileUri: string | null = null;
     let fileMimeType: string | null = null;
@@ -309,8 +307,6 @@ serve(async (req) => {
           ""
         ).trim() || null;
       isOwnApi = !!userApiKey;
-      isRecapNvPipeline = formData.get("recapNvPipeline") === "true";
-      requestedApiMode = String(formData.get("apiMode") || "");
 
       const formDurationSec = formData.get("sourceDurationSec") as string;
       if (formDurationSec) {
@@ -329,8 +325,6 @@ serve(async (req) => {
       userApiKey = (body.ownApiKey || body.apiKey || req.headers.get("x-own-api-key") || "").trim() || null;
       isOwnApi = !!userApiKey;
       skipCreditDeduction = !!body.skipCreditDeduction;
-      isRecapNvPipeline = body.recapNvPipeline === true;
-      requestedApiMode = typeof body.apiMode === "string" ? body.apiMode : "";
       extraInstructions = typeof body.extraInstructions === "string" ? body.extraInstructions : "";
       editorRules = typeof body.editorRules === "string" ? body.editorRules : "";
       // SEO mode: accept a raw seoPrompt as transcript input (used by client SEO metadata generator)
@@ -352,13 +346,6 @@ serve(async (req) => {
 
     if (!fileObj && !transcript && !fileUri && !fileData) {
       return new Response(JSON.stringify({ error: "No file, fileUri, or transcript provided" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    if (isRecapNvPipeline && requestedApiMode === "own" && !isOwnApi) {
-      return new Response(JSON.stringify({ error: "Own API mode requires the user's API key" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -800,7 +787,7 @@ ${transcript}
 
     // ===== CREDIT DEDUCTION — ONLY after successful script output =====
     // skipCreditDeduction: when called from recap-nv, credits are deducted at final video output stage
-    const skipCredits = skipCreditDeduction || isSeoMode || isRecapNvPipeline;
+    const skipCredits = skipCreditDeduction || isSeoMode;
     if (!isOwnApi && !skipCredits) {
       const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       const rpcParams: any = {
