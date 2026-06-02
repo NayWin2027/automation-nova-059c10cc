@@ -4127,7 +4127,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       {blurSettings.disabled ? "ON" : "OFF"}
                     </button>
                   </div>
-                  {blurSettings.enabled && (
+                  {blurSettings.disabled && (
                     <div className="space-y-3">
                       {[
                         { label: "Blur Intensity", key: "opacity", min: 1, max: 100 },
