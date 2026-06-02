@@ -101,7 +101,7 @@ const COLOR_GRADE_PRESETS: Record<
   { contrast: number; brightness: number; saturate: number; hue: number; sepia?: number; label: string; emoji: string }
 > = {
   // SURGICAL EDIT: OFF = true original source colors — no adjustments whatsoever
-  OFF: { contrast: 100, brightness: 100, saturate: 100, hue: 0, label: "Off", emoji: "⚫" },
+  OFF: { contrast: 100, brightness: 120, saturate: 100, hue: 0, label: "Off", emoji: "⚫" },
   CINEMATIC: { contrast: 120, brightness: 100, saturate: 65, hue: 5, label: "Cinematic", emoji: "🎬" },
   VINTAGE: { contrast: 108, brightness: 105, saturate: 60, hue: 12, sepia: 30, label: "Vintage", emoji: "📷" },
   COOL: { contrast: 110, brightness: 107, saturate: 90, hue: -25, label: "Cool", emoji: "🧊" },
