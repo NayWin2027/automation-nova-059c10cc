@@ -268,7 +268,7 @@ const AdminDailyUsageTab: React.FC = () => {
   // Prefer explicit APP/OWN variant rows for Recap NV / Translate Video.
   // Old base rows are kept only when no variant exists, so totals don't double count.
   // Admin display fix: Recap NV's internal script step can leave a legacy
-  // `narration-script` daily row. When the same user/date has OWN Recap NV
+  // `narration-script` daily row. When the same user/date has Recap NV
   // browser/server rows, treat the matching narration count as internal pipeline
   // noise and remove it from this admin summary only. This does not change DB
   // history or credit logic; it only prevents one recap from appearing as two tools.
@@ -276,15 +276,15 @@ const AdminDailyUsageTab: React.FC = () => {
     const variantsByKey = new Map<string, DailyUsage[]>(); // key: `${user_id}|${base}`
     const bases: DailyUsage[] = [];
     const variants: DailyUsage[] = [];
-    const ownRecapCountByUserDate = new Map<string, number>();
+    const recapCountByUserDate = new Map<string, number>();
     for (const row of usageData) {
       if (row.tool_id.includes(":")) {
         variants.push(row);
         const base = row.tool_id.split(":")[0];
         const [, mode] = row.tool_id.split(":");
-        if (base === "recap-nv" && mode === "own") {
-          const ownKey = `${row.user_id}|${row.usage_date}`;
-          ownRecapCountByUserDate.set(ownKey, (ownRecapCountByUserDate.get(ownKey) || 0) + (row.usage_count || 0));
+        if (base === "recap-nv") {
+          const recapKey = `${row.user_id}|${row.usage_date}`;
+          recapCountByUserDate.set(recapKey, (recapCountByUserDate.get(recapKey) || 0) + (row.usage_count || 0));
         }
         const key = `${row.user_id}|${base}`;
         const list = variantsByKey.get(key) || [];
@@ -304,7 +304,7 @@ const AdminDailyUsageTab: React.FC = () => {
     const normalizedBases = bases
       .map((base) => {
         if (base.tool_id !== "narration-script") return base;
-        const hiddenCount = Math.min(base.usage_count || 0, ownRecapCountByUserDate.get(`${base.user_id}|${base.usage_date}`) || 0);
+        const hiddenCount = Math.min(base.usage_count || 0, recapCountByUserDate.get(`${base.user_id}|${base.usage_date}`) || 0);
         if (hiddenCount <= 0) return base;
         return {
           ...base,
