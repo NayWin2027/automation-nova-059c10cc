@@ -4124,10 +4124,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       onClick={() => setBlurSettings((b) => ({ ...b, enabled: !b.enabled }))}
                       className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${blurSettings.enabled ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900" : "bg-slate-800 text-slate-400 border border-slate-700"}`}
                     >
-                      {blurSettings.disabled ? "ON" : "OFF"}
+                      {blurSettings.enabled ? "ON" : "OFF"}
                     </button>
                   </div>
-                  {blurSettings.disabled && (
+                  {blurSettings.enabled && (
                     <div className="space-y-3">
                       {[
                         { label: "Blur Intensity", key: "opacity", min: 1, max: 100 },
