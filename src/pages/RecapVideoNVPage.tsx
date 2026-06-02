@@ -5423,6 +5423,7 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
         language: selectedLangName,
         sourceDurationSec: duration,
         skipCreditDeduction: true,
+        recapNvPipeline: true,
         extraInstructions: `CRITICAL:
 - Output language MUST be ${selectedLangName} ONLY. Do NOT switch to any other language even if the video's spoken dialogue is in a different language.
 - Script must cover the story arc from beginning to end, BUT must be HEAVILY CONDENSED and no more than 50% of the source duration.
@@ -5634,6 +5635,7 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
             },
             body: JSON.stringify({
               seoMode: true,
+              recapNvPipeline: true,
               seoPrompt,
               generationConfig: { temperature: 0.4, maxOutputTokens: 700 },
             }),
