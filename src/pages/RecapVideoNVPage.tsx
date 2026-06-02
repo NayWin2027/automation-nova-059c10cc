@@ -4106,7 +4106,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                         onClick={() => setSubSettings((s) => ({ ...s, tripleStroke: !s.tripleStroke }))}
                         className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${subSettings.tripleStroke ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900" : "bg-slate-800 text-slate-400 border border-slate-700"}`}
                       >
-                        {subSettings.tripleStroke ? "ON" : "OFF"}
+                        {subSettings.tripleStroke ? "OFF" : "OFF"}
                       </button>
                     </div>
 
