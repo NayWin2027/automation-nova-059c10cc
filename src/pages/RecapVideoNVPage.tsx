@@ -4909,13 +4909,18 @@ const RecapVideoNVPage: React.FC = () => {
   const [apiMode, setApiMode] = useState<"app" | "own">("own");
   const [ownApiKey, setOwnApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
+  const activePipelineApiModeRef = useRef<"app" | "own">("own");
+  const activePipelineOwnKeyRef = useRef("");
+  const activePipelineRenderModeRef = useRef<"browser" | "server">("browser");
 
   const handleVideoReady = useCallback(
     async (outputDurationSecs: number) => {
       if (didDeductRef.current) return;
-      if (apiMode === "own") {
+      const billedApiMode = activePipelineOwnKeyRef.current ? "own" : activePipelineApiModeRef.current || apiMode;
+      const billedRenderMode = activePipelineRenderModeRef.current || renderMode;
+      if (billedApiMode === "own") {
         // Track per-variant usage (APP/OWN x BROWSER/SERVER) for admin Daily Records
-        void trackToolVariant("recap-nv", apiMode, renderMode, "success", false);
+        void trackToolVariant("recap-nv", "own", billedRenderMode, "success", false);
         didDeductRef.current = true;
         return;
       }
@@ -4937,7 +4942,7 @@ const RecapVideoNVPage: React.FC = () => {
       const totalMinutes = Math.floor(durationSecs / 60);
       const remainingSeconds = durationSecs % 60;
       const billedMinutes = remainingSeconds > 30 ? totalMinutes + 1 : totalMinutes;
-      const perMin = renderMode === "server" ? serverCreditPerMinRate : creditPerMinRate;
+      const perMin = billedRenderMode === "server" ? serverCreditPerMinRate : creditPerMinRate;
       const customCost = Math.max(1, Math.max(1, billedMinutes) * perMin);
       didDeductRef.current = true;
       try {
@@ -4946,7 +4951,7 @@ const RecapVideoNVPage: React.FC = () => {
           console.error("[CREDIT] Deduction FAILED:", result.error);
           didDeductRef.current = false;
         } else {
-          void trackToolVariant("recap-nv", apiMode, renderMode, "success", (result.deducted || 0) > 0);
+          void trackToolVariant("recap-nv", "app", billedRenderMode, "success", (result.deducted || 0) > 0);
         }
       } catch (err) {
         console.error("[CREDIT] ERROR:", err);
@@ -5226,6 +5231,9 @@ const RecapVideoNVPage: React.FC = () => {
   const startAutoPipeline = async (file: File) => {
     const resolvedApiMode = apiMode;
     const resolvedOwnKey = apiMode === "own" ? ownApiKey.trim() : "";
+    activePipelineApiModeRef.current = resolvedApiMode;
+    activePipelineOwnKeyRef.current = resolvedOwnKey;
+    activePipelineRenderModeRef.current = renderMode;
     if (resolvedApiMode === "own" && !resolvedOwnKey) {
       setProgressMsg("❌ Own API mode ရွေးထားပါသည်။ Google API Key ထည့်ပေးပါ။");
       setStatus("error");
@@ -5423,6 +5431,8 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
         language: selectedLangName,
         sourceDurationSec: duration,
         skipCreditDeduction: true,
+        recapNvPipeline: true,
+        apiMode: resolvedApiMode,
         extraInstructions: `CRITICAL:
 - Output language MUST be ${selectedLangName} ONLY. Do NOT switch to any other language even if the video's spoken dialogue is in a different language.
 - Script must cover the story arc from beginning to end, BUT must be HEAVILY CONDENSED and no more than 50% of the source duration.
@@ -5631,9 +5641,13 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
               "Content-Type": "application/json",
               apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
               Authorization: `Bearer ${userToken}`,
+              ...(resolvedOwnKey ? { "x-own-api-key": resolvedOwnKey } : {}),
             },
             body: JSON.stringify({
               seoMode: true,
+              recapNvPipeline: true,
+              apiMode: resolvedApiMode,
+              ...(resolvedOwnKey ? { ownApiKey: resolvedOwnKey, apiKey: resolvedOwnKey } : {}),
               seoPrompt,
               generationConfig: { temperature: 0.4, maxOutputTokens: 700 },
             }),

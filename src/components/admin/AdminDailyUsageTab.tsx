@@ -310,6 +310,7 @@ const AdminDailyUsageTab: React.FC = () => {
           ...base,
           usage_count: Math.max(0, (base.usage_count || 0) - hiddenCount),
           success_count: Math.max(0, (base.success_count || 0) - hiddenCount),
+          error_count: Math.max(0, (base.error_count || 0) - Math.min(base.error_count || 0, hiddenCount)),
           deduct_count: Math.max(0, (base.deduct_count || 0) - Math.min(base.deduct_count || 0, hiddenCount)),
         };
       })
