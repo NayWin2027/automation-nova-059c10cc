@@ -4909,13 +4909,18 @@ const RecapVideoNVPage: React.FC = () => {
   const [apiMode, setApiMode] = useState<"app" | "own">("own");
   const [ownApiKey, setOwnApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
+  const activePipelineApiModeRef = useRef<"app" | "own">("own");
+  const activePipelineOwnKeyRef = useRef("");
+  const activePipelineRenderModeRef = useRef<"browser" | "server">("browser");
 
   const handleVideoReady = useCallback(
     async (outputDurationSecs: number) => {
       if (didDeductRef.current) return;
-      if (apiMode === "own") {
+      const billedApiMode = activePipelineOwnKeyRef.current ? "own" : activePipelineApiModeRef.current || apiMode;
+      const billedRenderMode = activePipelineRenderModeRef.current || renderMode;
+      if (billedApiMode === "own") {
         // Track per-variant usage (APP/OWN x BROWSER/SERVER) for admin Daily Records
-        void trackToolVariant("recap-nv", apiMode, renderMode, "success", false);
+        void trackToolVariant("recap-nv", "own", billedRenderMode, "success", false);
         didDeductRef.current = true;
         return;
       }
@@ -4937,7 +4942,7 @@ const RecapVideoNVPage: React.FC = () => {
       const totalMinutes = Math.floor(durationSecs / 60);
       const remainingSeconds = durationSecs % 60;
       const billedMinutes = remainingSeconds > 30 ? totalMinutes + 1 : totalMinutes;
-      const perMin = renderMode === "server" ? serverCreditPerMinRate : creditPerMinRate;
+      const perMin = billedRenderMode === "server" ? serverCreditPerMinRate : creditPerMinRate;
       const customCost = Math.max(1, Math.max(1, billedMinutes) * perMin);
       didDeductRef.current = true;
       try {
@@ -4946,7 +4951,7 @@ const RecapVideoNVPage: React.FC = () => {
           console.error("[CREDIT] Deduction FAILED:", result.error);
           didDeductRef.current = false;
         } else {
-          void trackToolVariant("recap-nv", apiMode, renderMode, "success", (result.deducted || 0) > 0);
+          void trackToolVariant("recap-nv", "app", billedRenderMode, "success", (result.deducted || 0) > 0);
         }
       } catch (err) {
         console.error("[CREDIT] ERROR:", err);
