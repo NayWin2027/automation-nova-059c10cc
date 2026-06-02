@@ -3184,39 +3184,41 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               const segs = syncSegmentsRef.current;
               if (!segs || segs.length === 0) return;
 
-              // ── CLIENT-SIDE TIMESTAMP CALCULATION ──
-              // API timestamps are word-count estimation (~80-85%) — always recalculate.
-              // Uses char weight + sentence-end pause bonus for better accuracy.
-              const countWeight = (text: string): number => {
-                const cleaned = (text || "").replace(/\s+/g, "");
-                let weight = 0;
-                for (let i = 0; i < cleaned.length; i++) {
-                  const code = cleaned.charCodeAt(i);
-                  if ((code >= 0x1000 && code <= 0x109f) || (code >= 0x4e00 && code <= 0x9fff)) {
-                    weight += 1.6;
-                  } else {
-                    weight += 1;
+              // ── SURGICAL EDIT: ONLY recalculate timestamps if audioTimestampsRef is NOT already populated!
+              // If audioTimestampsRef already has data (e.g. accurate timestamps from Edge TTS/API), use those directly for 100% AV sync!
+              if (audioTimestampsRef.current.length === 0) {
+                // ── CLIENT-SIDE TIMESTAMP CALCULATION (fallback only if no timestamps provided)
+                const countWeight = (text: string): number => {
+                  const cleaned = (text || "").replace(/\s+/g, "");
+                  let weight = 0;
+                  for (let i = 0; i < cleaned.length; i++) {
+                    const code = cleaned.charCodeAt(i);
+                    if ((code >= 0x1000 && code <= 0x109f) || (code >= 0x4e00 && code <= 0x9fff)) {
+                      weight += 1.6;
+                    } else {
+                      weight += 1;
+                    }
                   }
-                }
-                return Math.max(weight, 1);
-              };
-              const pauseBonus = (text: string): number => {
-                const last = (text || "").trimEnd().slice(-1);
-                if (".!?။".includes(last)) return 0.15;
-                if (",;:".includes(last)) return 0.05;
-                return 0;
-              };
-              const avgSegDur = realDuration / segs.length;
-              const weights = segs.map((s: any) => countWeight(s.text) + pauseBonus(s.text) * avgSegDur);
-              const totalWeight = weights.reduce((sum: number, w: number) => sum + w, 0);
-              let cursor = 0;
-              audioTimestampsRef.current = segs.map((seg: any, idx: number) => {
-                const pct = totalWeight > 0 ? weights[idx] / totalWeight : 1 / segs.length;
-                const start = parseFloat(cursor.toFixed(4));
-                cursor += pct * realDuration;
-                const end = parseFloat((idx === segs.length - 1 ? realDuration : cursor).toFixed(4));
-                return { index: idx, start, end };
-              });
+                  return Math.max(weight, 1);
+                };
+                const pauseBonus = (text: string): number => {
+                  const last = (text || "").trimEnd().slice(-1);
+                  if (".!?။".includes(last)) return 0.15;
+                  if (",;:".includes(last)) return 0.05;
+                  return 0;
+                };
+                const avgSegDur = realDuration / segs.length;
+                const weights = segs.map((s: any) => countWeight(s.text) + pauseBonus(s.text) * avgSegDur);
+                const totalWeight = weights.reduce((sum: number, w: number) => sum + w, 0);
+                let cursor = 0;
+                audioTimestampsRef.current = segs.map((seg: any, idx: number) => {
+                  const pct = totalWeight > 0 ? weights[idx] / totalWeight : 1 / segs.length;
+                  const start = parseFloat(cursor.toFixed(4));
+                  cursor += pct * realDuration;
+                  const end = parseFloat((idx === segs.length - 1 ? realDuration : cursor).toFixed(4));
+                  return { index: idx, start, end };
+                });
+              }
             }}
           />
         )}
@@ -4905,17 +4907,31 @@ const RecapVideoNVPage: React.FC = () => {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState("my-MM");
   const [selectedVoice, setSelectedVoice] = useState("edge:it-IT-GiuseppeMultilingualNeural");
+
+  // Auto-update selected voice when selected language changes
+  useEffect(() => {
+    if (selectedLanguage === "my-MM") {
+      setSelectedVoice("edge:my-MM-ThihaNeural");
+    } else if (selectedLanguage.startsWith("en-")) {
+      setSelectedVoice("edge:it-IT-GiuseppeMultilingualNeural");
+    }
+  }, [selectedLanguage]);
   const [langPopoverOpen, setLangPopoverOpen] = useState(false);
   const [apiMode, setApiMode] = useState<"app" | "own">("own");
   const [ownApiKey, setOwnApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
+  const activePipelineApiModeRef = useRef<"app" | "own">("own");
+  const activePipelineOwnKeyRef = useRef("");
+  const activePipelineRenderModeRef = useRef<"browser" | "server">("browser");
 
   const handleVideoReady = useCallback(
     async (outputDurationSecs: number) => {
       if (didDeductRef.current) return;
-      if (apiMode === "own") {
+      const billedApiMode = activePipelineOwnKeyRef.current ? "own" : activePipelineApiModeRef.current || apiMode;
+      const billedRenderMode = activePipelineRenderModeRef.current || renderMode;
+      if (billedApiMode === "own") {
         // Track per-variant usage (APP/OWN x BROWSER/SERVER) for admin Daily Records
-        void trackToolVariant("recap-nv", apiMode, renderMode, "success", false);
+        void trackToolVariant("recap-nv", "own", billedRenderMode, "success", false);
         didDeductRef.current = true;
         return;
       }
@@ -4937,7 +4953,7 @@ const RecapVideoNVPage: React.FC = () => {
       const totalMinutes = Math.floor(durationSecs / 60);
       const remainingSeconds = durationSecs % 60;
       const billedMinutes = remainingSeconds > 30 ? totalMinutes + 1 : totalMinutes;
-      const perMin = renderMode === "server" ? serverCreditPerMinRate : creditPerMinRate;
+      const perMin = billedRenderMode === "server" ? serverCreditPerMinRate : creditPerMinRate;
       const customCost = Math.max(1, Math.max(1, billedMinutes) * perMin);
       didDeductRef.current = true;
       try {
@@ -4946,7 +4962,7 @@ const RecapVideoNVPage: React.FC = () => {
           console.error("[CREDIT] Deduction FAILED:", result.error);
           didDeductRef.current = false;
         } else {
-          void trackToolVariant("recap-nv", apiMode, renderMode, "success", (result.deducted || 0) > 0);
+          void trackToolVariant("recap-nv", "app", billedRenderMode, "success", (result.deducted || 0) > 0);
         }
       } catch (err) {
         console.error("[CREDIT] ERROR:", err);
@@ -5170,8 +5186,16 @@ const RecapVideoNVPage: React.FC = () => {
       const data = await response.json();
       if (data.useClientTTS || !data.audio) throw new Error(data.message || data.error || "TTS generation failed");
 
-      // API timestamps are word-count estimation (~80-85%) — always use client-side calculation
-      pageAudioTimestampsRef.current = [];
+      // Use API timestamps if available (for 100% AV sync accuracy), otherwise fallback to client-side calculation
+      if (data.segments && Array.isArray(data.segments)) {
+        pageAudioTimestampsRef.current = data.segments.map((seg: any, idx: number) => ({
+          index: idx,
+          start: seg.start || 0,
+          end: seg.end || 0,
+        }));
+      } else {
+        pageAudioTimestampsRef.current = [];
+      }
 
       let audioBlob: Blob;
       const mt = String(data.mimeType || "").toLowerCase();
@@ -5226,6 +5250,9 @@ const RecapVideoNVPage: React.FC = () => {
   const startAutoPipeline = async (file: File) => {
     const resolvedApiMode = apiMode;
     const resolvedOwnKey = apiMode === "own" ? ownApiKey.trim() : "";
+    activePipelineApiModeRef.current = resolvedApiMode;
+    activePipelineOwnKeyRef.current = resolvedOwnKey;
+    activePipelineRenderModeRef.current = renderMode;
     if (resolvedApiMode === "own" && !resolvedOwnKey) {
       setProgressMsg("❌ Own API mode ရွေးထားပါသည်။ Google API Key ထည့်ပေးပါ။");
       setStatus("error");
@@ -5423,6 +5450,8 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
         language: selectedLangName,
         sourceDurationSec: duration,
         skipCreditDeduction: true,
+        recapNvPipeline: true,
+        apiMode: resolvedApiMode,
         extraInstructions: `CRITICAL:
 - Output language MUST be ${selectedLangName} ONLY. Do NOT switch to any other language even if the video's spoken dialogue is in a different language.
 - Script must cover the story arc from beginning to end, BUT must be HEAVILY CONDENSED and no more than 50% of the source duration.
@@ -5631,9 +5660,13 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
               "Content-Type": "application/json",
               apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
               Authorization: `Bearer ${userToken}`,
+              ...(resolvedOwnKey ? { "x-own-api-key": resolvedOwnKey } : {}),
             },
             body: JSON.stringify({
               seoMode: true,
+              recapNvPipeline: true,
+              apiMode: resolvedApiMode,
+              ...(resolvedOwnKey ? { ownApiKey: resolvedOwnKey, apiKey: resolvedOwnKey } : {}),
               seoPrompt,
               generationConfig: { temperature: 0.4, maxOutputTokens: 700 },
             }),
