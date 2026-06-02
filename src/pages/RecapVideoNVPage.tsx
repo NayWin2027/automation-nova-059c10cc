@@ -654,7 +654,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       textColor: "#00FF88",
       bgColor: "rgba(0,0,0,0.6)",
       borderColor: "#FF69B4",
-      fontSize: 15,
+      fontSize: 20,
       scale: 1,
       maxWidth: 80,
       tripleStroke: true,
@@ -710,7 +710,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     });
 
     // SURGICAL EDIT: Audio speed rate state (0.5x – 4.0x)
-    const [audioSpeedRate, setAudioSpeedRate] = useState<number>(1.4);
+    const [audioSpeedRate, setAudioSpeedRate] = useState<number>(1.3);
 
     // SURGICAL EDIT: Freeze/Motion mode state
     // ON  = 5s Ken Burns freeze zoom-in → 15s smooth motion (alternating)
