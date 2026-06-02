@@ -4124,7 +4124,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       onClick={() => setBlurSettings((b) => ({ ...b, enabled: !b.enabled }))}
                       className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${blurSettings.enabled ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900" : "bg-slate-800 text-slate-400 border border-slate-700"}`}
                     >
-                      {blurSettings.enabled ? "ON" : "OFF"}
+                      {blurSettings.enabled ? "OFF" : "OFF"}
                     </button>
                   </div>
                   {blurSettings.enabled && (
