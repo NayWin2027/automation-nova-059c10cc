@@ -5506,7 +5506,7 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
         );
       }
       if (scriptResult.error) throw new Error(scriptResult.error);
-      const scriptText = scriptResult.script || "";
+      const scriptText = stripRecapScriptPreamble(scriptResult.script || "");
       if (!scriptText || scriptText.trim().length < 10) throw new Error("AI script generation returned empty result");
 
       const segments = scriptToSegments(scriptText, duration);
