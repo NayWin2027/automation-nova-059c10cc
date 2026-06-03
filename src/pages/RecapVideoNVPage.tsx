@@ -5615,9 +5615,9 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
             const words = bestSentence.trim().split(/\s+/);
             const hookTitle = words.slice(0, 8).join(" ") + (words.length > 8 ? "..." : "");
             console.log(`[HOOK SCORER] Seg ${hookIdx} score=${maxScore.toFixed(1)}: "${hookTitle}"`);
-            // SURGICAL FIX: Actually assign hook data to refs so rendering code can use them!
-            hookSegmentIdxRef.current = hookIdx;
-            hookTitleRef.current = hookTitle;
+            // NOTE: hook refs live in ResultView scope; this scorer only logs here.
+            void hookIdx;
+            void hookTitle;
           }
         } catch (e) {
           console.warn("[HOOK LOCAL] Failed:", e);
