@@ -469,6 +469,9 @@ VIRAL HOOK RULE (MANDATORY — FIRST 3 SECONDS):
 - Great hook examples: "No one expected what happened next." / "This moment destroyed everything." / "She had no idea her whole life was about to collapse."
 - The hook MUST target the single most shocking/dramatic moment in the source
 - After the hook, transition naturally into the story recap
+- ABSOLUTELY FORBIDDEN: Do NOT write ANY preamble, intro, acknowledgement, meta-comment, or framing sentence before the hook.
+- FORBIDDEN OPENERS include (but not limited to): "ဟုတ်ကဲ့", "ကောင်းပါပြီ", "ရပါပြီ", "အောက်မှာ ဖော်ပြပေး", "ဒီ ... ဗီဒီယိုလေးကို အခြေခံပြီး", "Here is", "Here's", "Below is", "Sure", "Okay", "Of course", or any sentence wrapped in ( ) / （ ） that describes what you are about to write.
+- The very FIRST character of your output MUST be the FIRST WORD of the viral hook itself. No labels like "Hook:", no headings, no parentheses, no markdown — just the hook sentence.
 
 RECAP WRITING STYLE (BILLION-VIEW YOUTUBE STANDARD):
 - Write like a billion-view YouTube narrator: MrBeast energy for drama, Coffeezilla tension for exposés, Mark Rober precision for tech
@@ -747,7 +750,31 @@ ${transcript}
 
     const data = await response.json();
     const rawScript = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    const normalizedRawScript = rawScript.trim();
+    const stripHookPreamble = (txt: string): string => {
+      let s = (txt || "").replace(/^\uFEFF/, "").trim();
+      // Strip code fences if model wrapped output
+      s = s.replace(/^```[a-zA-Z]*\s*\n?/, "").replace(/\n?```\s*$/, "").trim();
+      const preambleLineRe = /^(?:\s*[\(（][^\)）]*[\)）]\s*$|\s*(?:hook|HOOK|\*\*hook\*\*|#+\s*hook)\s*[:：]?\s*$|\s*(?:ဟုတ်ကဲ့|ကောင်းပါပြီ|ကောင်းပြီ|ရပါပြီ|အောက်မှာ|ဒီမှာ|ဟောဒီမှာ|ကဲ)[^\n]*[\:：]?\s*$|\s*(?:Here\s+(?:is|are|'s)|Here's|Below\s+is|Sure[,!\.]?|Okay[,!\.]?|Of\s+course[,!\.]?|Certainly[,!\.]?)[^\n]*[:：]?\s*$)/i;
+      // Also catch a single opening line that is fully wrapped in parens describing the script (multi-sentence inside parens)
+      const parenWholeLineRe = /^\s*[\(（][^\n]*[\)）]\s*$/;
+      for (let i = 0; i < 6; i++) {
+        const nl = s.indexOf("\n");
+        const firstLine = nl === -1 ? s : s.slice(0, nl);
+        if (preambleLineRe.test(firstLine) || parenWholeLineRe.test(firstLine)) {
+          s = nl === -1 ? "" : s.slice(nl + 1).trim();
+          continue;
+        }
+        // Inline preamble at very start: "(...)  <hook>" on same line
+        const inlineParen = firstLine.match(/^\s*[\(（][^\)）]*[\)）]\s*(.*)$/);
+        if (inlineParen && inlineParen[1].trim().length > 0) {
+          s = (inlineParen[1] + (nl === -1 ? "" : "\n" + s.slice(nl + 1))).trim();
+          break;
+        }
+        break;
+      }
+      return s.trim();
+    };
+    const normalizedRawScript = stripHookPreamble(rawScript);
 
     if (!normalizedRawScript || normalizedRawScript.length < 10) {
       console.error("[recap-script-generator] Empty or invalid script output");
