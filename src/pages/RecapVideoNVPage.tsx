@@ -2850,7 +2850,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 while (lastTsIdx < maxIdx && currentTime >= audioTs[lastTsIdx].end) lastTsIdx += 1;
                 while (lastTsIdx > 0 && currentTime < audioTs[lastTsIdx].start) lastTsIdx -= 1;
 
-                if (currentTime >= audioTs[lastTsIdx].start && currentTime < audioTs[lastTsIdx].end) {
+                // SURGICAL FIX: Add 50ms tolerance at segment boundaries to prevent gap-falling
+                const BOUNDARY_TOLERANCE = 0.05;
+                if (
+                  currentTime >= audioTs[lastTsIdx].start - BOUNDARY_TOLERANCE &&
+                  currentTime < audioTs[lastTsIdx].end + BOUNDARY_TOLERANCE
+                ) {
                   activeIndex = lastTsIdx;
                   activeText = getSeg(lastTsIdx)?.text || "";
                 }
@@ -5610,6 +5615,9 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
             const words = bestSentence.trim().split(/\s+/);
             const hookTitle = words.slice(0, 8).join(" ") + (words.length > 8 ? "..." : "");
             console.log(`[HOOK SCORER] Seg ${hookIdx} score=${maxScore.toFixed(1)}: "${hookTitle}"`);
+            // SURGICAL FIX: Actually assign hook data to refs so rendering code can use them!
+            hookSegmentIdxRef.current = hookIdx;
+            hookTitleRef.current = hookTitle;
           }
         } catch (e) {
           console.warn("[HOOK LOCAL] Failed:", e);
