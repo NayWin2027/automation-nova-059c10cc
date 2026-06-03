@@ -89,24 +89,7 @@ app.post("/render-segment", requireSecret, async (req, res) => {
     if (subtitles && subtitles.length > 0) {
       const srtPath = path.join(work, "s.srt");
       await fsp.writeFile(srtPath, buildSrt(subtitles));
-      // Match browser rendering subtitle style: bold white, black outline, bottom center, no background box
-      const subW = opts.maxW || 1280;
-      const subFontSize = Math.max(16, Math.round((opts.maxH || 720) * 0.04));
-      const outlineSize = Math.max(1, Math.round(subFontSize * 0.08));
-      const shadowDepth = Math.max(1, Math.round(subFontSize * 0.03));
-      const marginV = Math.round((opts.maxH || 720) * 0.08);
-      vfChain +=
-        `,subtitles='${srtPath.replace(/'/g, "\\'")}'` +
-        `:force_style='FontName=Noto Sans Myanmar,Noto Sans,FontSize=${subFontSize}` +
-        `,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000` +
-        `,BackColour=&H80000000,Outline=${outlineSize}` +
-        `,Shadow=${shadowDepth},MarginV=${marginV},Alignment=2'`;
-    }
-
-    // Scale to match browser export resolution if specified
-    if (opts.maxW && opts.maxH) {
-      vfChain += `,scale='min(${opts.maxW},iw)':'min(${opts.maxH},ih)':force_original_aspect_ratio=decrease`;
-      vfChain += `,pad=${opts.maxW}:${opts.maxH}:(ow-iw)/2:(oh-ih)/2:black`;
+      vfChain += `,subtitles='${srtPath.replace(/'/g, "\\'")}':force_style='FontName=Noto Sans,FontSize=20'`;
     }
 
     await runFfmpeg([
@@ -128,13 +111,13 @@ app.post("/render-segment", requireSecret, async (req, res) => {
       "-c:v",
       "libx264",
       "-preset",
-      opts.renderPreset || "ultrafast",
+      "ultrafast",
       "-crf",
-      String(opts.crf || 20),
+      "28",
       "-c:a",
       "aac",
       "-b:a",
-      "192k",
+      "128k",
       "-movflags",
       "+faststart",
       segOut,
@@ -198,7 +181,6 @@ async function renderParallelJob(jobId, opts) {
               videoUrl: opts.videoUrl,
               audioUrl: opts.audioUrl,
               subtitles: subsForRange(opts.subtitles || [], start, start + duration),
-              opts: { maxW: opts.maxW, maxH: opts.maxH, renderPreset: opts.renderPreset, crf: opts.crf },
             }),
           }).then((r) => r.json()),
         );
