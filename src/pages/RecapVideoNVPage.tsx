@@ -1383,9 +1383,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         const segWords = getWordCount(seg.text);
         const startWords = wordCursor;
         wordCursor += segWords;
-        // ── FEATURE: Smart Frame Offset (+0.3s) — skip scene transition flash frames ──
-        const rawVStart = parseTime(seg.timestamp);
-        const vStart = rawVStart > 0.3 ? rawVStart + 0.3 : rawVStart;
+        // SURGICAL EDIT: Use exact timestamp — no offset for 100% AV sync accuracy
+        const vStart = parseTime(seg.timestamp);
         const nextSeg = scriptData.segments[i + 1];
         let vEnd: number;
         if (!nextSeg) {
@@ -1399,12 +1398,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             vEnd = vStart + estimatedClipSec;
           }
         }
-        // ── FEATURE: Pacing Intelligence — cap vEnd based on scene type ──
-        if (vEnd !== -1) {
-          const pacing = classifyPacing(seg.text);
-          const maxDur = pacing === "action" ? 2.5 : pacing === "emotional" ? 5.0 : 3.5;
-          if (vEnd - vStart > maxDur) vEnd = vStart + maxDur;
-        }
+        // SURGICAL EDIT: No duration cap — video segment plays full natural duration
+        // for 100% voice-to-video accuracy (Pacing Intelligence caps removed)
         return {
           vStart,
           vEnd,
@@ -2419,38 +2414,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             ctx.fillText("🔥 Coming Up... 🔥", canvas.width / 2, tY);
             ctx.restore();
           }
-          // Changes overall frame luminance signature to confuse Content ID algorithms.
-          // Skip expensive gradient effects on extreme low-end devices
-          if (!isExtremeLowEnd) {
-            const vGrad = ctx.createRadialGradient(
-              canvas.width / 2,
-              canvas.height / 2,
-              canvas.width / 4,
-              canvas.width / 2,
-              canvas.height / 2,
-              canvas.width / 1.1,
-            );
-            vGrad.addColorStop(0, "transparent");
-            vGrad.addColorStop(1, "rgba(0,0,0,0.35)");
-            ctx.fillStyle = vGrad;
-            ctx.globalCompositeOperation = "multiply";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.globalCompositeOperation = "source-over";
-          }
-
-          // ── TRANSFORMATIVE LAYER: Dynamic Film Grain (Pixel Fingerprint Destruction) ──
-          // Breaks spatial/binary hashing by introducing unique frame noise.
-          // Skip film grain on extreme low-end devices - CPU intensive
-          if (!isExtremeLowEnd) {
-            ctx.save();
-            ctx.globalAlpha = 0.04; // Nearly invisible but breaks hashing algorithms
-            ctx.globalCompositeOperation = "overlay";
-            ctx.translate(Math.random() * 128, Math.random() * 128);
-            ctx.rotate(Math.random() * Math.PI);
-            ctx.fillStyle = noisePattern;
-            ctx.fillRect(-128, -128, canvas.width + 256, canvas.height + 256);
-            ctx.restore();
-          }
+          // SURGICAL EDIT: Vignette and film grain DISABLED — natural brightness, no shadow/darkening
+          // Original source video brightness preserved 100%
         } catch (e) {
           // Ignore DOMException (SecurityError) so subtitles/UI can still render perfectly
           console.warn("[RECORDING] Canvas drawImage failed. Continuing to render subtitles.", e);
@@ -2917,14 +2882,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     vv.currentTime = active.vStart;
                   } else if (!seekPendingRef.current) {
                     // Seek complete — normal playing state
+                    // SURGICAL EDIT: AV sync via hard-cut seek on segment change — video plays freely between cuts
+                    // No pause/clamp needed — when audio enters next segment, video hard-seeks to correct vStart
                     if (!freezeModeRef.current) {
-                      // When freezeMode is OFF: never pause, just keep playing
                       if (vv.paused && !vv.ended) {
                         vv.playbackRate = 1.0;
                         vv.play().catch(() => {});
                       }
                     } else {
-                      // Only when freezeMode is ON: clamp at segment end
+                      // freezeMode ON: clamp at segment end (freeze behavior)
                       if (vActualEnd > 0 && vv.currentTime >= vActualEnd - 0.05) {
                         if (!vv.paused) vv.pause();
                       } else if (vv.paused && !vv.ended) {
@@ -2934,7 +2900,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     }
                   }
                 } else {
-                  // Between segments — only pause if freezeMode is ON
+                  // Between segments — video keeps playing naturally (no pause = no slideshow)
+                  // AV sync is maintained by hard-cut seek when next audio segment begins
                   if (freezeModeRef.current && videoInSegmentRef.current) {
                     videoInSegmentRef.current = false;
                     if (!vv.paused) vv.pause();
