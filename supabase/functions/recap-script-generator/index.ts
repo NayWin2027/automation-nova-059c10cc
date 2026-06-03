@@ -750,7 +750,31 @@ ${transcript}
 
     const data = await response.json();
     const rawScript = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    const normalizedRawScript = rawScript.trim();
+    const stripHookPreamble = (txt: string): string => {
+      let s = (txt || "").replace(/^\uFEFF/, "").trim();
+      // Strip code fences if model wrapped output
+      s = s.replace(/^```[a-zA-Z]*\s*\n?/, "").replace(/\n?```\s*$/, "").trim();
+      const preambleLineRe = /^(?:\s*[\(（][^\)）]*[\)）]\s*$|\s*(?:hook|HOOK|\*\*hook\*\*|#+\s*hook)\s*[:：]?\s*$|\s*(?:ဟုတ်ကဲ့|ကောင်းပါပြီ|ကောင်းပြီ|ရပါပြီ|အောက်မှာ|ဒီမှာ|ဟောဒီမှာ|ကဲ)[^\n]*[\:：]?\s*$|\s*(?:Here\s+(?:is|are|'s)|Here's|Below\s+is|Sure[,!\.]?|Okay[,!\.]?|Of\s+course[,!\.]?|Certainly[,!\.]?)[^\n]*[:：]?\s*$)/i;
+      // Also catch a single opening line that is fully wrapped in parens describing the script (multi-sentence inside parens)
+      const parenWholeLineRe = /^\s*[\(（][^\n]*[\)）]\s*$/;
+      for (let i = 0; i < 6; i++) {
+        const nl = s.indexOf("\n");
+        const firstLine = nl === -1 ? s : s.slice(0, nl);
+        if (preambleLineRe.test(firstLine) || parenWholeLineRe.test(firstLine)) {
+          s = nl === -1 ? "" : s.slice(nl + 1).trim();
+          continue;
+        }
+        // Inline preamble at very start: "(...)  <hook>" on same line
+        const inlineParen = firstLine.match(/^\s*[\(（][^\)）]*[\)）]\s*(.*)$/);
+        if (inlineParen && inlineParen[1].trim().length > 0) {
+          s = (inlineParen[1] + (nl === -1 ? "" : "\n" + s.slice(nl + 1))).trim();
+          break;
+        }
+        break;
+      }
+      return s.trim();
+    };
+    const normalizedRawScript = stripHookPreamble(rawScript);
 
     if (!normalizedRawScript || normalizedRawScript.length < 10) {
       console.error("[recap-script-generator] Empty or invalid script output");
