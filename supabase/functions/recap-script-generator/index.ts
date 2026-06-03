@@ -636,7 +636,7 @@ ${transcript}
 
     let response: Response | null = null;
     let lastError = "";
-    let activeModel = isOwnApi ? "gemini-3.1-pro-preview" : MODEL;
+    let activeModel = isOwnApi ? "gemini-1.5-flash-8b" : MODEL;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 135000);
