@@ -5028,6 +5028,25 @@ const RecapVideoNVPage: React.FC = () => {
     }
   };
 
+  const stripRecapScriptPreamble = (rawScript: string): string => {
+    let cleaned = String(rawScript || "").replace(/\r\n/g, "\n").trim();
+    for (let i = 0; i < 5; i++) {
+      cleaned = cleaned
+        .replace(/^\s*```(?:[\w-]+)?\s*/i, "")
+        .replace(/\s*```\s*$/i, "")
+        .trim();
+      cleaned = cleaned
+        .replace(/^\s*[([{（]?[^\n]{0,260}(?:ဟုတ်ကဲ့|Recap Script|recap script|မြန်မာလို\s*Recap|အောက်မှာ\s*ဖော်ပြ|ဖော်ပြပေးလိုက်ပါတယ်|ရေးပေးလိုက်ပါတယ်|Here(?:'s| is)|Below is|Sure|Okay|Of course)[^\n]{0,260}[)\]}）]?\s*\n+/i, "")
+        .trim();
+      cleaned = cleaned
+        .replace(/^\s*(?:#+\s*)?(?:Recap Script|Narration Script|Script|Output)\s*:?\s*\n+/i, "")
+        .trim();
+    }
+    const firstTimestamp = cleaned.search(/\[\d{1,2}:\d{2}\]/);
+    if (firstTimestamp > 0) cleaned = cleaned.slice(firstTimestamp).trim();
+    return cleaned;
+  };
+
   const scriptToSegments = (scriptText: string, videoDuration: number): RecapSegment[] => {
     const paragraphs = scriptText.split("\n").filter((p) => p.trim().length > 0);
     if (paragraphs.length === 0) return [];
@@ -5487,7 +5506,7 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
         );
       }
       if (scriptResult.error) throw new Error(scriptResult.error);
-      const scriptText = scriptResult.script || "";
+      const scriptText = stripRecapScriptPreamble(scriptResult.script || "");
       if (!scriptText || scriptText.trim().length < 10) throw new Error("AI script generation returned empty result");
 
       const segments = scriptToSegments(scriptText, duration);
