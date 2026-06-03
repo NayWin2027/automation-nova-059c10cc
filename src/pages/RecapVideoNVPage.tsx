@@ -908,9 +908,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               return uploadTempAsset(audioBlob, "audio", audioExt === "mp3" ? "audio/mpeg" : "audio/wav", audioExt);
             })();
 
-            // Always upload source video for server render — Cloud Run cannot access Gemini fileUri
+            // Skip re-upload when Gemini fileUri already exists (20min video → saves many minutes)
             const videoUploadP =
-              !isYouTubeSource && videoUrl
+              !isYouTubeSource && videoUrl && !sourceFileUri
                 ? (async () => {
                     try {
                       const videoBlob = videoFileRef?.current ?? (await fetch(videoUrl).then((r) => r.blob()));
