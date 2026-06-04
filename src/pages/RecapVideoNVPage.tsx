@@ -1712,15 +1712,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
       // iOS-specific: Force lower resolution for compatibility
       if (isIOS && quality.maxH > 720) {
-        outW = Math.round(outW * 0.75);
-        outH = Math.round(outH * 0.75);
+        outW = Math.round(outW * 1.0);
+        outH = Math.round(outH * 1.0);
         console.log(`[iOS] Reduced resolution to ${outW}x${outH} for compatibility`);
       }
 
       // ── iOS-specific: Force 480p for iPhone 8/X (3GB RAM devices) ──
       if (isIOS && force480p && quality.maxH > 480) {
-        outW = Math.round(outW * 0.67); // 67% reduction to ~480p equivalent
-        outH = Math.round(outH * 0.67);
+        outW = Math.round(outW * 1.0); // 67% reduction to ~480p equivalent
+        outH = Math.round(outH * 1.0);
         console.log(`[iOS] iPhone 8/X detected. Forced 480p resolution: ${outW}x${outH} for 100% smooth performance`);
       }
 
