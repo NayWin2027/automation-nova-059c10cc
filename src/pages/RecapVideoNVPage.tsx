@@ -1695,13 +1695,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       let drawScale: number;
       if (isExtremeLowEnd) {
         // 480p devices: aggressive 70% scale for guaranteed smoothness
-        drawScale = 0.7;
+        drawScale = 1.0;
       } else if (isLowEndDevice) {
         // 720p devices: 75% scale for smooth 720p performance
-        drawScale = quality.maxH === 720 ? 0.75 : 0.8;
+        drawScale = quality.maxH === 720 ? 1.0 : 1.0;
       } else if (isMidTier) {
         // Mid-tier: 80% for 720p, 85% for 1080p
-        drawScale = quality.maxH === 1080 ? 0.8 : 0.85;
+        drawScale = quality.maxH === 1080 ? 1.0 : 1.0;
       } else {
         // High-end: native quality
         drawScale = quality.maxH === 1080 ? 1.0 : 1.0;
@@ -5029,18 +5029,21 @@ const RecapVideoNVPage: React.FC = () => {
   };
 
   const stripRecapScriptPreamble = (rawScript: string): string => {
-    let cleaned = String(rawScript || "").replace(/\r\n/g, "\n").trim();
+    let cleaned = String(rawScript || "")
+      .replace(/\r\n/g, "\n")
+      .trim();
     for (let i = 0; i < 5; i++) {
       cleaned = cleaned
         .replace(/^\s*```(?:[\w-]+)?\s*/i, "")
         .replace(/\s*```\s*$/i, "")
         .trim();
       cleaned = cleaned
-        .replace(/^\s*[([{（]?[^\n]{0,260}(?:ဟုတ်ကဲ့|Recap Script|recap script|မြန်မာလို\s*Recap|အောက်မှာ\s*ဖော်ပြ|ဖော်ပြပေးလိုက်ပါတယ်|ရေးပေးလိုက်ပါတယ်|Here(?:'s| is)|Below is|Sure|Okay|Of course)[^\n]{0,260}[)\]}）]?\s*\n+/i, "")
+        .replace(
+          /^\s*[([{（]?[^\n]{0,260}(?:ဟုတ်ကဲ့|Recap Script|recap script|မြန်မာလို\s*Recap|အောက်မှာ\s*ဖော်ပြ|ဖော်ပြပေးလိုက်ပါတယ်|ရေးပေးလိုက်ပါတယ်|Here(?:'s| is)|Below is|Sure|Okay|Of course)[^\n]{0,260}[)\]}）]?\s*\n+/i,
+          "",
+        )
         .trim();
-      cleaned = cleaned
-        .replace(/^\s*(?:#+\s*)?(?:Recap Script|Narration Script|Script|Output)\s*:?\s*\n+/i, "")
-        .trim();
+      cleaned = cleaned.replace(/^\s*(?:#+\s*)?(?:Recap Script|Narration Script|Script|Output)\s*:?\s*\n+/i, "").trim();
     }
     const firstTimestamp = cleaned.search(/\[\d{1,2}:\d{2}\]/);
     if (firstTimestamp > 0) cleaned = cleaned.slice(firstTimestamp).trim();
