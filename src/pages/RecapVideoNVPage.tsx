@@ -1698,7 +1698,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         drawScale = 1.0;
       } else if (isLowEndDevice) {
         // 720p devices: 75% scale for smooth 720p performance
-        ddrawScale = 1.0;
+        drawScale = 1.0;
       } else if (isMidTier) {
         // Mid-tier: 80% for 720p, 85% for 1080p
         drawScale = 1.0;
