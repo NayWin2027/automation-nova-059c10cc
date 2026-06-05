@@ -1672,7 +1672,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       }
 
       const quality = EXPORT_QUALITY_OPTIONS[effectiveExportQuality] || EXPORT_QUALITY_OPTIONS["720p"];
-      const qualityScale = Math.min(1, quality.maxW / outW, quality.maxH / outH);
+      // ── SURGICAL EDIT: Force 100% selected resolution for ALL aspect ratios ──
+      // Fit chosen aspect-ratio box into the long/short edges of the selected quality,
+      // allowing upscale so e.g. 720p source → 1920×1080 when 1080p is selected,
+      // and portrait 9:16 → 1080×1920 (orientation-aware).
+      const longEdge = Math.max(quality.maxW, quality.maxH);
+      const shortEdge = Math.min(quality.maxW, quality.maxH);
+      const longSrc = Math.max(outW, outH);
+      const shortSrc = Math.min(outW, outH);
+      const qualityScale = Math.min(longEdge / longSrc, shortEdge / shortSrc);
       outW = Math.round(outW * qualityScale);
       outH = Math.round(outH * qualityScale);
 
