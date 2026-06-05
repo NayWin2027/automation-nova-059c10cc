@@ -470,11 +470,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.globalCompositeOperation = "source-over";
 
-        // Bottom gradient for text
+        // Bottom gradient for text — lightened for natural brightness
         const grad = ctx.createLinearGradient(0, canvas.height * 0.4, 0, canvas.height);
         grad.addColorStop(0, "rgba(0,0,0,0)");
-        grad.addColorStop(0.5, "rgba(0,0,0,0.6)");
-        grad.addColorStop(1, "rgba(0,0,0,0.95)");
+        grad.addColorStop(0.5, "rgba(0,0,0,0.25)");
+        grad.addColorStop(1, "rgba(0,0,0,0.55)");
         ctx.fillStyle = grad;
         ctx.fillRect(0, canvas.height * 0.4, canvas.width, canvas.height * 0.6);
 
@@ -1284,8 +1284,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         const v = videoRef.current;
         const audioReady = a && a.src && (a.readyState >= 1 || a.duration > 0);
         const videoReady = v && v.src && (v.readyState >= 1 || v.duration > 0);
-        if ((audioReady && videoReady) || attempts >= maxAttempts) {
-          clearInterval(poll); // ← FIX: clear BEFORE triggering rAF useEffect
+        // ── AV SYNC FIX: wait for timestamps to be populated by onLoadedMetadata ──
+        const timestampsReady = audioTimestampsRef.current.length > 0;
+        if ((audioReady && videoReady && timestampsReady) || attempts >= maxAttempts) {
+          clearInterval(poll);
           onAutoStartConsumed?.();
           setTimeout(() => setIsRecapPlaying(true), 300);
         }
@@ -2337,9 +2339,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             ctx.save();
             // Dark gradient overlay
             const hGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-            hGrad.addColorStop(0, `rgba(0,0,0,${0.72 * easedFade})`);
-            hGrad.addColorStop(0.45, `rgba(0,0,0,${0.45 * easedFade})`);
-            hGrad.addColorStop(1, `rgba(0,0,0,${0.82 * easedFade})`);
+            hGrad.addColorStop(0, `rgba(0,0,0,${0.35 * easedFade})`);
+            hGrad.addColorStop(0.45, `rgba(0,0,0,${0.18 * easedFade})`);
+            hGrad.addColorStop(1, `rgba(0,0,0,${0.4 * easedFade})`);
             ctx.fillStyle = hGrad;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
