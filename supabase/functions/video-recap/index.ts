@@ -1033,18 +1033,6 @@ serve(async (req) => {
         preferVideoPath,
         renderPreset,
         encodePreset,
-        // SURGICAL EDIT: Add visual settings to match browser rendering 100%
-        logo,
-        blurSettings,
-        watermark,
-        colorGrade,
-        videoBorder,
-        timelineBar,
-        zoomEnabled,
-        freezeMode,
-        audioSpeedRate,
-        flip,
-        ratio,
       } = body || {};
       const renderUrl = Deno.env.get("CLOUD_RUN_RENDER_URL");
       const renderSecret = Deno.env.get("CLOUD_RUN_RENDER_SECRET");
@@ -1060,18 +1048,6 @@ serve(async (req) => {
         audioUrl,
         subtitles,
         duration,
-        // SURGICAL EDIT: Pass visual settings to Cloud Run worker
-        logo,
-        blurSettings,
-        watermark,
-        colorGrade,
-        videoBorder,
-        timelineBar,
-        zoomEnabled,
-        freezeMode,
-        audioSpeedRate,
-        flip,
-        ratio,
       };
       if (videoUrl) renderPayload.videoUrl = videoUrl;
       if (sourceFileUri) renderPayload.sourceFileUri = sourceFileUri;
