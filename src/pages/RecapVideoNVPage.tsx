@@ -814,17 +814,17 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       const bypassBoost = !editorState.bypass
         ? { contrast: 15, brightness: 5, saturate: 15, hue: 5 }
         : { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
-      // SURGICAL EDIT: When color grade is OFF OR bypass is enabled, use original source colors.
+      // SURGICAL EDIT: When color grade is OFF OR bypass is enabled, use original source colors with natural brightness.
       const isOff = editorState.colorGrade === "OFF" || editorState.bypass;
       const contrast = isOff ? 100 : g.contrast + bypassBoost.contrast + 5;
       const brightness = isOff ? 100 : g.brightness + bypassBoost.brightness + 5;
       const saturate = isOff ? 100 : g.saturate + bypassBoost.saturate + 8;
       const hue = isOff ? 0 : g.hue + bypassBoost.hue;
       const sepia = isOff ? 0 : g.sepia || 0;
+      // SURGICAL FIX: When color grade is OFF, ensure natural brightness (105%) to prevent dark output
+      // This matches the original video's natural lighting without shadows
       filterStringRef.current = isOff
-        ? editorState.brightness !== 100
-          ? `brightness(${editorState.brightness}%)`
-          : "none"
+        ? `brightness(${editorState.colorGrade === "OFF" ? 105 : editorState.brightness}%) contrast(100%) saturate(100%)`
         : `contrast(${contrast}%) brightness(${Math.round((brightness * editorState.brightness) / 100)}%) saturate(${saturate}%) hue-rotate(${hue}deg) sepia(${sepia}%)`;
     }, [editorState.colorGrade, editorState.bypass, editorState.brightness]);
 
@@ -1164,6 +1164,18 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 start: ts ? ts.start : 0,
                 end: ts ? ts.end : 0,
                 text: seg.text,
+                // SURGICAL EDIT: Add subtitle styling to match browser rendering 100%
+                fontFamily: subSettings.fontFamily,
+                fontSize: subSettings.fontSize,
+                textColor: subSettings.textColor,
+                borderColor: subSettings.borderColor,
+                bgColor: subSettings.bgColor,
+                tripleStroke: subSettings.tripleStroke,
+                neonColorOverride: subSettings.neonColorOverride,
+                x: subSettings.x,
+                y: subSettings.y,
+                scale: subSettings.scale,
+                maxWidth: subSettings.maxWidth,
               };
             });
             const dur =
@@ -1187,6 +1199,18 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               preferVideoPath: true,
               renderPreset: "ultrafast",
               encodePreset: "ultrafast",
+              // SURGICAL EDIT: Add all visual settings to match browser rendering 100%
+              logo: logo,
+              blurSettings: blurSettings,
+              watermark: watermark,
+              colorGrade: editorState.colorGrade,
+              videoBorder: videoBorder,
+              timelineBar: timelineBar,
+              zoomEnabled: zoomEnabledRef.current,
+              freezeMode: freezeModeRef.current,
+              audioSpeedRate: audioSpeedRate,
+              flip: editorState.flip,
+              ratio: editorState.ratio,
             };
             if (signedSourceVideoUrl) triggerBody.videoUrl = signedSourceVideoUrl;
             if (sourceFileUri) triggerBody.sourceFileUri = sourceFileUri;
@@ -1673,14 +1697,14 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
       const quality = EXPORT_QUALITY_OPTIONS[effectiveExportQuality] || EXPORT_QUALITY_OPTIONS["720p"];
       // ── SURGICAL EDIT: Force 100% selected resolution for ALL aspect ratios ──
-      // Fit chosen aspect-ratio box into the long/short edges of the selected quality,
-      // allowing upscale so e.g. 720p source → 1920×1080 when 1080p is selected,
-      // and portrait 9:16 → 1080×1920 (orientation-aware).
+      // Use the larger scale factor to allow upscaling to full selected quality.
+      // This ensures 720p source → 1920×1080 when 1080p is selected (full quality).
       const longEdge = Math.max(quality.maxW, quality.maxH);
       const shortEdge = Math.min(quality.maxW, quality.maxH);
       const longSrc = Math.max(outW, outH);
       const shortSrc = Math.min(outW, outH);
-      const qualityScale = Math.min(longEdge / longSrc, shortEdge / shortSrc);
+      // SURGICAL FIX: Use Math.max instead of Math.min to allow upscaling to full selected resolution
+      const qualityScale = Math.max(longEdge / longSrc, shortEdge / shortSrc);
       outW = Math.round(outW * qualityScale);
       outH = Math.round(outH * qualityScale);
 
@@ -2895,10 +2919,18 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     vv.currentTime = active.vStart;
                   } else if (!seekPendingRef.current) {
                     // Seek complete — normal playing state
-                    // SURGICAL EDIT: AV sync via hard-cut seek on segment change — video plays freely between cuts
-                    // No pause/clamp needed — when audio enters next segment, video hard-seeks to correct vStart
+                    // SURGICAL FIX: Clamp video to exact segment boundaries for 100% AV sync accuracy
+                    // This prevents video from drifting and showing wrong scenes
                     if (!freezeModeRef.current) {
-                      if (vv.paused && !vv.ended) {
+                      // SURGICAL FIX: Hard clamp to segment boundaries - no drift allowed
+                      // If video goes before segment start, seek back to start
+                      if (vv.currentTime < active.vStart - 0.01) {
+                        vv.currentTime = active.vStart;
+                      }
+                      // If video goes after segment end, pause and hold at end
+                      if (vActualEnd > 0 && vv.currentTime >= vActualEnd - 0.01) {
+                        if (!vv.paused) vv.pause();
+                      } else if (vv.paused && !vv.ended) {
                         vv.playbackRate = 1.0;
                         vv.play().catch(() => {});
                       }
@@ -2913,9 +2945,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     }
                   }
                 } else {
-                  // Between segments — video keeps playing naturally (no pause = no slideshow)
-                  // AV sync is maintained by hard-cut seek when next audio segment begins
-                  if (freezeModeRef.current && videoInSegmentRef.current) {
+                  // Between segments — pause video to prevent showing wrong scenes
+                  // SURGICAL FIX: Hard pause between segments for 100% sync accuracy
+                  if (videoInSegmentRef.current) {
                     videoInSegmentRef.current = false;
                     if (!vv.paused) vv.pause();
                   }
