@@ -1164,18 +1164,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 start: ts ? ts.start : 0,
                 end: ts ? ts.end : 0,
                 text: seg.text,
-                // SURGICAL EDIT: Add subtitle styling to match browser rendering 100%
-                fontFamily: subSettings.fontFamily,
-                fontSize: subSettings.fontSize,
-                textColor: subSettings.textColor,
-                borderColor: subSettings.borderColor,
-                bgColor: subSettings.bgColor,
-                tripleStroke: subSettings.tripleStroke,
-                neonColorOverride: subSettings.neonColorOverride,
-                x: subSettings.x,
-                y: subSettings.y,
-                scale: subSettings.scale,
-                maxWidth: subSettings.maxWidth,
               };
             });
             const dur =
@@ -1199,18 +1187,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               preferVideoPath: true,
               renderPreset: "ultrafast",
               encodePreset: "ultrafast",
-              // SURGICAL EDIT: Add all visual settings to match browser rendering 100%
-              logo: logo,
-              blurSettings: blurSettings,
-              watermark: watermark,
-              colorGrade: editorState.colorGrade,
-              videoBorder: videoBorder,
-              timelineBar: timelineBar,
-              zoomEnabled: zoomEnabledRef.current,
-              freezeMode: freezeModeRef.current,
-              audioSpeedRate: audioSpeedRate,
-              flip: editorState.flip,
-              ratio: editorState.ratio,
             };
             if (signedSourceVideoUrl) triggerBody.videoUrl = signedSourceVideoUrl;
             if (sourceFileUri) triggerBody.sourceFileUri = sourceFileUri;
