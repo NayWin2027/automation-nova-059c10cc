@@ -42,7 +42,13 @@ function runFfmpeg(args) {
       stderr += d.toString();
     });
     p.on("error", reject);
+    // SURGICAL EDIT: Add timeout to prevent hanging at merge phase
+    const timeout = setTimeout(() => {
+      p.kill("SIGKILL");
+      reject(new Error(`ffmpeg timeout after 300s: ${stderr.slice(-500)}`));
+    }, 300000); // 5 minutes timeout
     p.on("close", (code) => {
+      clearTimeout(timeout);
       if (code === 0) resolve();
       else reject(new Error(`ffmpeg exit ${code}: ${stderr.slice(-500)}`));
     });
@@ -89,7 +95,14 @@ app.post("/render-segment", requireSecret, async (req, res) => {
     if (subtitles && subtitles.length > 0) {
       const srtPath = path.join(work, "s.srt");
       await fsp.writeFile(srtPath, buildSrt(subtitles));
-      vfChain += `,subtitles='${srtPath.replace(/'/g, "\\'")}':force_style='FontName=Noto Sans,FontSize=20'`;
+      // SURGICAL EDIT: Use subtitle styling from client if available
+      const firstSub = subtitles[0] || {};
+      const fontSize = firstSub.fontSize || 20;
+      const fontFamily = firstSub.fontFamily || "Noto Sans";
+      const textColor = firstSub.textColor || "white";
+      const borderColor = firstSub.borderColor || "black";
+      const forceStyle = `FontName=${fontFamily},FontSize=${fontSize},PrimaryColour=&H${toAssColor(textColor)},OutlineColour=&H${toAssColor(borderColor)}`;
+      vfChain += `,subtitles='${srtPath.replace(/\\/g, "/")}':force_style='${forceStyle}'`;
     }
 
     await runFfmpeg([
@@ -131,6 +144,18 @@ app.post("/render-segment", requireSecret, async (req, res) => {
     fsp.rm(work, { recursive: true, force: true }).catch(() => {});
   }
 });
+
+// SURGICAL EDIT: Helper to convert hex color to ASS format
+function toAssColor(hex) {
+  if (!hex || hex === "white") return "FFFFFF";
+  if (hex === "black") return "000000";
+  if (hex.startsWith("#")) hex = hex.slice(1);
+  // FFmpeg ASS uses BGR format
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  return ((b << 16) | (g << 8) | r).toString(16).padStart(6, "0").toUpperCase();
+}
 
 // ── Orchestrator: Main Render Route ──────────────────────────────────────────
 app.post("/render", requireSecret, async (req, res) => {
@@ -201,34 +226,63 @@ async function renderParallelJob(jobId, opts) {
     const listPath = path.join(work, "list.txt");
     const outPath = path.join(work, "final.mp4");
 
-    const localPaths = await Promise.all(
-      results.map(async (r, i) => {
-        const p = path.join(work, `s_${i}.mp4`);
-        await bucket.file(r.gcsPath).download({ destination: p });
-        return `file '${p}'`;
-      }),
-    );
+    try {
+      const localPaths = await Promise.all(
+        results.map(async (r, i) => {
+          const p = path.join(work, `s_${i}.mp4`);
+          await bucket.file(r.gcsPath).download({ destination: p });
+          // SURGICAL EDIT: Use forward slashes for concat list (FFmpeg requirement)
+          return `file '${p.replace(/\\/g, "/")}'`;
+        }),
+      );
 
-    await fsp.writeFile(listPath, localPaths.join("\n"));
-    await runFfmpeg(["-y", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", outPath]);
+      await fsp.writeFile(listPath, localPaths.join("\n"));
 
-    // 3) Upload Final
-    const objectName = `renders/${jobId}.mp4`;
-    await bucket.upload(outPath, { destination: objectName });
-    const [url] = await bucket
-      .file(objectName)
-      .getSignedUrl({ action: "read", expires: Date.now() + 7 * 24 * 60 * 60 * 1000 });
+      // SURGICAL EDIT: Use demuxer instead of concat for better compatibility
+      await runFfmpeg([
+        "-y",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        listPath,
+        "-c",
+        "copy",
+        "-fflags",
+        "+genpts",
+        "-movflags",
+        "+faststart",
+        outPath,
+      ]);
 
-    JOBS.set(jobId, { state: "done", url, progress: 100 });
+      // 3) Upload Final
+      const objectName = `renders/${jobId}.mp4`;
+      await bucket.upload(outPath, { destination: objectName });
+      const [url] = await bucket
+        .file(objectName)
+        .getSignedUrl({ action: "read", expires: Date.now() + 7 * 24 * 60 * 60 * 1000 });
 
-    // Cleanup Temp GCS files
-    results.forEach((r) =>
-      bucket
-        .file(r.gcsPath)
-        .delete()
-        .catch(() => {}),
-    );
+      JOBS.set(jobId, { state: "done", url, progress: 100 });
+
+      // Cleanup Temp GCS files
+      results.forEach((r) =>
+        bucket
+          .file(r.gcsPath)
+          .delete()
+          .catch(() => {}),
+      );
+    } catch (mergeErr) {
+      // SURGICAL EDIT: Update job state to failed on merge error to prevent hanging at 60%
+      JOBS.set(jobId, { state: "failed", error: `Merge failed: ${mergeErr.message}`, progress: 80 });
+      throw mergeErr;
+    } finally {
+      // Cleanup temp directory
+      fsp.rm(work, { recursive: true, force: true }).catch(() => {});
+    }
   } catch (err) {
+    // SURGICAL EDIT: Ensure job state is updated to failed on any error
+    JOBS.set(jobId, { state: "failed", error: err.message });
     throw err;
   }
 }
