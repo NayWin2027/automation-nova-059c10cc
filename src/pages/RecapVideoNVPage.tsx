@@ -1672,17 +1672,28 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       }
 
       const quality = EXPORT_QUALITY_OPTIONS[effectiveExportQuality] || EXPORT_QUALITY_OPTIONS["720p"];
-      // ── SURGICAL EDIT: Force 100% selected resolution for ALL aspect ratios ──
-      // Use the larger scale factor to allow upscaling to full selected quality.
-      // This ensures 720p source → 1920×1080 when 1080p is selected (full quality).
+      // ── SURGICAL EDIT: RESTORE ORIGINAL AV SYNC LOGIC ──
+      // Use Math.min to prevent upscaling which breaks AV SYNC accuracy
+      // This ensures 100% AV SYNC by maintaining original video timing
       const longEdge = Math.max(quality.maxW, quality.maxH);
       const shortEdge = Math.min(quality.maxW, quality.maxH);
       const longSrc = Math.max(outW, outH);
       const shortSrc = Math.min(outW, outH);
-      // SURGICAL FIX: Use Math.max instead of Math.min to allow upscaling to full selected resolution
-      const qualityScale = Math.max(longEdge / longSrc, shortEdge / shortSrc);
+      // SURGICAL FIX: Use Math.min to prevent upscaling and maintain AV SYNC accuracy
+      const qualityScale = Math.min(longEdge / longSrc, shortEdge / shortSrc);
       outW = Math.round(outW * qualityScale);
       outH = Math.round(outH * qualityScale);
+
+      // ── SURGICAL EDIT: CAP MAX RESOLUTION TO 1080p FOR SMOOTH MOTION ──
+      // Prevent 1440p output which causes lag on high-end devices
+      const MAX_WIDTH = 1920;
+      const MAX_HEIGHT = 1080;
+      if (outW > MAX_WIDTH || outH > MAX_HEIGHT) {
+        const maxScale = Math.min(MAX_WIDTH / outW, MAX_HEIGHT / outH);
+        outW = Math.round(outW * maxScale);
+        outH = Math.round(outH * maxScale);
+        console.log(`[RESOLUTION] Capped to ${outW}x${outH} for smooth motion`);
+      }
 
       // Force exact even integer dimensions.
       // Hardware MP4 encoders (H.264) often drop or crop 1px from the right/bottom if width/height are odd numbers!
@@ -2483,11 +2494,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           const blurH = canvas.height * (curBlur.height / 100);
           const blurX = canvas.width * (curBlur.x / 100) - blurW / 2;
           const blurY = canvas.height * (curBlur.y / 100) - blurH / 2;
-          // Draw semi-transparent darkened region to simulate blur in canvas output
-          ctx.fillStyle = `rgba(0,0,0,${Math.max(0.15, blurSettings.opacity / 200)})`;
+          // SURGICAL FIX: Professional silver color with full opacity to hide original text completely
+          ctx.fillStyle = "rgba(192, 192, 192, 0.95)";
           ctx.beginPath();
-          ctx.roundRect(blurX, blurY, blurW, blurH, 6);
+          ctx.roundRect(blurX, blurY, blurW, blurH, 8);
           ctx.fill();
+          // Add subtle border for professional look
+          ctx.strokeStyle = "rgba(160, 160, 160, 0.8)";
+          ctx.lineWidth = 2;
+          ctx.stroke();
           ctx.restore();
         }
 
@@ -2498,9 +2513,22 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
 
-          // Subtitle position from user drag (subSettings.x/y), NOT from blur box
-          const subCX = canvas.width * (subSettings.x / 100);
-          const subCY = canvas.height * (subSettings.y / 100);
+          // SURGICAL FIX: Position subtitle inside blur box when blur is enabled
+          let subCX, subCY;
+          if (blurSettings.enabled) {
+            const curBlur = blurSettingsRef.current;
+            const blurW = canvas.width * (curBlur.width / 100);
+            const blurH = canvas.height * (curBlur.height / 100);
+            const blurX = canvas.width * (curBlur.x / 100) - blurW / 2;
+            const blurY = canvas.height * (curBlur.y / 100) - blurH / 2;
+            // Center subtitle inside blur box
+            subCX = blurX + blurW / 2;
+            subCY = blurY + blurH / 2;
+          } else {
+            // Subtitle position from user drag (subSettings.x/y) when blur is disabled
+            subCX = canvas.width * (subSettings.x / 100);
+            subCY = canvas.height * (subSettings.y / 100);
+          }
           const maxTextWidth = canvas.width * (subSettings.maxWidth / 100);
           const fontSize = fixedCanvasFontSizeRef.current || Math.max(8, Math.round(canvas.height * 0.04));
           ctx.font = `bold ${fontSize}px ${subSettings.fontFamily}`;
