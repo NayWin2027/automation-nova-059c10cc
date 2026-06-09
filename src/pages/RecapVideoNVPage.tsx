@@ -814,17 +814,17 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       const bypassBoost = !editorState.bypass
         ? { contrast: 15, brightness: 5, saturate: 15, hue: 5 }
         : { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
-      // SURGICAL EDIT: When color grade is OFF OR bypass is enabled, use original source colors with natural brightness.
+      // SURGICAL EDIT: When color grade is OFF OR bypass is enabled, use original source colors.
       const isOff = editorState.colorGrade === "OFF" || editorState.bypass;
       const contrast = isOff ? 100 : g.contrast + bypassBoost.contrast + 5;
       const brightness = isOff ? 100 : g.brightness + bypassBoost.brightness + 5;
       const saturate = isOff ? 100 : g.saturate + bypassBoost.saturate + 8;
       const hue = isOff ? 0 : g.hue + bypassBoost.hue;
       const sepia = isOff ? 0 : g.sepia || 0;
-      // SURGICAL FIX: When color grade is OFF, ensure natural brightness (105%) to prevent dark output
-      // This matches the original video's natural lighting without shadows
       filterStringRef.current = isOff
-        ? `brightness(${editorState.colorGrade === "OFF" ? 105 : editorState.brightness}%) contrast(100%) saturate(100%)`
+        ? editorState.brightness !== 100
+          ? `brightness(${editorState.brightness}%)`
+          : "none"
         : `contrast(${contrast}%) brightness(${Math.round((brightness * editorState.brightness) / 100)}%) saturate(${saturate}%) hue-rotate(${hue}deg) sepia(${sepia}%)`;
     }, [editorState.colorGrade, editorState.bypass, editorState.brightness]);
 
@@ -1672,12 +1672,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       }
 
       const quality = EXPORT_QUALITY_OPTIONS[effectiveExportQuality] || EXPORT_QUALITY_OPTIONS["720p"];
-      // ── SURGICAL EDIT: FORCE EXACT PORTRAIT OUTPUT FOR ALL RATIOS ──
-      // User requirement: every ratio at 1080p must output EXACTLY 1080×1920
-      // (720p → 720×1280, 480p → 480×854, etc.). Long edge = quality.maxW, short edge = quality.maxH.
-      // This guarantees the chosen quality's pixel target is always met 100%, never over, never under.
-      outW = quality.maxH; // 1080 for 1080p
-      outH = quality.maxW; // 1920 for 1080p
+      const qualityScale = Math.min(1, quality.maxW / outW, quality.maxH / outH);
+      outW = Math.round(outW * qualityScale);
+      outH = Math.round(outH * qualityScale);
 
       // Force exact even integer dimensions.
       // Hardware MP4 encoders (H.264) often drop or crop 1px from the right/bottom if width/height are odd numbers!
@@ -1698,13 +1695,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       let drawScale: number;
       if (isExtremeLowEnd) {
         // 480p devices: aggressive 70% scale for guaranteed smoothness
-        drawScale = 1.0;
+        drawScale = 0.7;
       } else if (isLowEndDevice) {
         // 720p devices: 75% scale for smooth 720p performance
-        drawScale = 1.0;
+        drawScale = quality.maxH === 720 ? 0.75 : 0.8;
       } else if (isMidTier) {
         // Mid-tier: 80% for 720p, 85% for 1080p
-        drawScale = 1.0;
+        drawScale = quality.maxH === 1080 ? 0.8 : 0.85;
       } else {
         // High-end: native quality
         drawScale = quality.maxH === 1080 ? 1.0 : 1.0;
@@ -1715,15 +1712,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
       // iOS-specific: Force lower resolution for compatibility
       if (isIOS && quality.maxH > 720) {
-        outW = Math.round(outW * 1.0);
-        outH = Math.round(outH * 1.0);
+        outW = Math.round(outW * 0.75);
+        outH = Math.round(outH * 0.75);
         console.log(`[iOS] Reduced resolution to ${outW}x${outH} for compatibility`);
       }
 
       // ── iOS-specific: Force 480p for iPhone 8/X (3GB RAM devices) ──
       if (isIOS && force480p && quality.maxH > 480) {
-        outW = Math.round(outW * 1.0); // 67% reduction to ~480p equivalent
-        outH = Math.round(outH * 1.0);
+        outW = Math.round(outW * 0.67); // 67% reduction to ~480p equivalent
+        outH = Math.round(outH * 0.67);
         console.log(`[iOS] iPhone 8/X detected. Forced 480p resolution: ${outW}x${outH} for 100% smooth performance`);
       }
 
@@ -2478,15 +2475,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           const blurH = canvas.height * (curBlur.height / 100);
           const blurX = canvas.width * (curBlur.x / 100) - blurW / 2;
           const blurY = canvas.height * (curBlur.y / 100) - blurH / 2;
-          // SURGICAL FIX: Professional silver color with full opacity to hide original text completely
-          ctx.fillStyle = "rgba(192, 192, 192, 0.95)";
+          // Draw semi-transparent darkened region to simulate blur in canvas output
+          ctx.fillStyle = `rgba(0,0,0,${Math.max(0.15, blurSettings.opacity / 200)})`;
           ctx.beginPath();
-          ctx.roundRect(blurX, blurY, blurW, blurH, 8);
+          ctx.roundRect(blurX, blurY, blurW, blurH, 6);
           ctx.fill();
-          // Add subtle border for professional look
-          ctx.strokeStyle = "rgba(160, 160, 160, 0.8)";
-          ctx.lineWidth = 2;
-          ctx.stroke();
           ctx.restore();
         }
 
@@ -2497,22 +2490,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
 
-          // SURGICAL FIX: Position subtitle inside blur box when blur is enabled
-          let subCX, subCY;
-          if (blurSettings.enabled) {
-            const curBlur = blurSettingsRef.current;
-            const blurW = canvas.width * (curBlur.width / 100);
-            const blurH = canvas.height * (curBlur.height / 100);
-            const blurX = canvas.width * (curBlur.x / 100) - blurW / 2;
-            const blurY = canvas.height * (curBlur.y / 100) - blurH / 2;
-            // Center subtitle inside blur box
-            subCX = blurX + blurW / 2;
-            subCY = blurY + blurH / 2;
-          } else {
-            // Subtitle position from user drag (subSettings.x/y) when blur is disabled
-            subCX = canvas.width * (subSettings.x / 100);
-            subCY = canvas.height * (subSettings.y / 100);
-          }
+          // Subtitle position from user drag (subSettings.x/y), NOT from blur box
+          const subCX = canvas.width * (subSettings.x / 100);
+          const subCY = canvas.height * (subSettings.y / 100);
           const maxTextWidth = canvas.width * (subSettings.maxWidth / 100);
           const fontSize = fixedCanvasFontSizeRef.current || Math.max(8, Math.round(canvas.height * 0.04));
           ctx.font = `bold ${fontSize}px ${subSettings.fontFamily}`;
@@ -2870,8 +2850,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 while (lastTsIdx < maxIdx && currentTime >= audioTs[lastTsIdx].end) lastTsIdx += 1;
                 while (lastTsIdx > 0 && currentTime < audioTs[lastTsIdx].start) lastTsIdx -= 1;
 
-                // SURGICAL FIX: Tight 20ms tolerance for ms-level AV SYNC accuracy
-                const BOUNDARY_TOLERANCE = 0.02;
+                // SURGICAL FIX: Add 50ms tolerance at segment boundaries to prevent gap-falling
+                const BOUNDARY_TOLERANCE = 0.05;
                 if (
                   currentTime >= audioTs[lastTsIdx].start - BOUNDARY_TOLERANCE &&
                   currentTime < audioTs[lastTsIdx].end + BOUNDARY_TOLERANCE
@@ -2907,30 +2887,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     vv.currentTime = active.vStart;
                   } else if (!seekPendingRef.current) {
                     // Seek complete — normal playing state
-                    // SURGICAL FIX: Clamp video to exact segment boundaries for 100% AV sync accuracy
+                    // SURGICAL EDIT: AV sync via hard-cut seek on segment change — video plays freely between cuts
+                    // No pause/clamp needed — when audio enters next segment, video hard-seeks to correct vStart
                     if (!freezeModeRef.current) {
-                      // SURGICAL FIX: PURE MOTION MODE — never pause/freeze.
-                      // SMOOTH FIX: Guard every seek with seekPendingRef to prevent stacked seeks
-                      // (stacked seeks cause stutter on high-CPU devices). Single-shot loop only.
-                      if (vv.currentTime < active.vStart - 0.005) {
-                        seekPendingRef.current = true;
-                        const onDriftSeeked = () => {
-                          seekPendingRef.current = false;
-                          vv.removeEventListener("seeked", onDriftSeeked);
-                        };
-                        vv.addEventListener("seeked", onDriftSeeked);
-                        vv.currentTime = active.vStart;
-                      } else if (vActualEnd > 0 && vv.currentTime >= vActualEnd - 0.005) {
-                        // LOOP back to vStart for continuous motion (no freeze).
-                        seekPendingRef.current = true;
-                        const onLoopSeeked = () => {
-                          seekPendingRef.current = false;
-                          vv.removeEventListener("seeked", onLoopSeeked);
-                        };
-                        vv.addEventListener("seeked", onLoopSeeked);
-                        vv.currentTime = active.vStart;
-                      }
-                      // Always keep playing — never pause when Freeze/Motion mode is OFF.
                       if (vv.paused && !vv.ended) {
                         vv.playbackRate = 1.0;
                         vv.play().catch(() => {});
@@ -2946,16 +2905,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     }
                   }
                 } else {
-                  // Between segments — pause video to prevent showing wrong scenes
-                  // SURGICAL FIX: Motion mode (freezeMode OFF) keeps video playing for smooth vibe.
-                  // Freeze mode ON → hard pause to hold last frame. Next seg triggers a hard-cut seek.
-                  if (videoInSegmentRef.current) {
+                  // Between segments — video keeps playing naturally (no pause = no slideshow)
+                  // AV sync is maintained by hard-cut seek when next audio segment begins
+                  if (freezeModeRef.current && videoInSegmentRef.current) {
                     videoInSegmentRef.current = false;
-                    if (freezeModeRef.current && !vv.paused) vv.pause();
-                  }
-                  if (!freezeModeRef.current && vv.paused && !vv.ended) {
-                    vv.playbackRate = 1.0;
-                    vv.play().catch(() => {});
+                    if (!vv.paused) vv.pause();
                   }
                 }
               } else {
