@@ -37,6 +37,29 @@ function shouldTryNextModel(status: number): boolean {
   return status === 429 || status === 404 || status === 503 || status === 504;
 }
 
+function hasTargetScriptConflict(text: string, targetLang: string): boolean {
+  const lang = targetLang.toLowerCase();
+  const hasLatin = /[A-Za-z]/.test(text);
+  const hasBurmese = /[\u1000-\u109F\uAA60-\uAA7F]/.test(text);
+  const hasThai = /[\u0E00-\u0E7F]/.test(text);
+  const hasCjk = /[\u3400-\u9FFF\uF900-\uFAFF]/.test(text);
+  const hasDevanagari = /[\u0900-\u097F]/.test(text);
+
+  if (lang.includes("burmese") || lang.includes("myanmar") || targetLang.includes("မြန်မာ")) {
+    return !hasBurmese || hasLatin || hasThai || hasCjk || hasDevanagari;
+  }
+  if (lang.includes("thai") || targetLang.includes("ไทย")) {
+    return !hasThai || hasBurmese || hasCjk || hasDevanagari;
+  }
+  if (lang.includes("chinese") || targetLang.includes("中文")) {
+    return !hasCjk || hasBurmese || hasThai || hasDevanagari;
+  }
+  if (lang.includes("english")) {
+    return hasBurmese || hasThai || hasCjk || hasDevanagari;
+  }
+  return false;
+}
+
 async function geminiRetryFetchWithTimeout(
   urlBuilder: (apiKey: string) => string,
   options: RequestInit,
@@ -423,7 +446,17 @@ Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'tex
     }
 
     const data = await response.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
+    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
+    let text = rawText;
+    try {
+      const jsonMatch = rawText.match(/\[[\s\S]*\]/);
+      const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : "[]");
+      if (Array.isArray(parsed)) {
+        text = JSON.stringify(parsed.filter((item: any) => !hasTargetScriptConflict(String(item?.text || ""), targetLang)));
+      }
+    } catch {
+      text = rawText;
+    }
 
     return new Response(JSON.stringify({ result: text }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

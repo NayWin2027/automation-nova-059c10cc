@@ -193,6 +193,32 @@ const stripSpeakerName = (str: string) => {
   return cleanStr;
 };
 
+const hasTargetScriptConflict = (text: string, targetLang: string) => {
+  const lang = targetLang.toLowerCase();
+  const hasLatin = /[A-Za-z]/.test(text);
+  const hasBurmese = /[\u1000-\u109F\uAA60-\uAA7F]/.test(text);
+  const hasThai = /[\u0E00-\u0E7F]/.test(text);
+  const hasCjk = /[\u3400-\u9FFF\uF900-\uFAFF]/.test(text);
+  const hasDevanagari = /[\u0900-\u097F]/.test(text);
+
+  if (lang.includes("burmese") || lang.includes("myanmar") || targetLang.includes("မြန်မာ")) {
+    return !hasBurmese || hasLatin || hasThai || hasCjk || hasDevanagari;
+  }
+  if (lang.includes("thai") || targetLang.includes("ไทย")) {
+    return !hasThai || hasBurmese || hasCjk || hasDevanagari;
+  }
+  if (lang.includes("chinese") || targetLang.includes("中文")) {
+    return !hasCjk || hasBurmese || hasThai || hasDevanagari;
+  }
+  if (lang.includes("english")) {
+    return hasBurmese || hasThai || hasCjk || hasDevanagari;
+  }
+  return false;
+};
+
+const keepOnlyTargetLanguageSubtitles = <T extends { text: string }>(subs: T[], targetLang: string) =>
+  subs.filter((sub) => sub.text.trim().length > 0 && !hasTargetScriptConflict(sub.text, targetLang));
+
 function parseSubtitleFile(content: string) {
   const parseTime = (timeStr: string) => {
     const cleanTime = timeStr.replace(/[^\d:.,]/g, "");
@@ -1647,7 +1673,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
               })
               .filter((sub: any) => sub.text.length > 0 && sub.end > sub.start);
 
-            parsedSubtitles = [...parsedSubtitles, ...adjustedSubs];
+            parsedSubtitles = [...parsedSubtitles, ...keepOnlyTargetLanguageSubtitles(adjustedSubs, targetLang)];
           } catch (err: any) {
             console.error(`Error processing chunk ${i}:`, err);
             const isRateLimit =
