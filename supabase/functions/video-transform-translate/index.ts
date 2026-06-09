@@ -232,6 +232,10 @@ CRITICAL RULES:
 - Do NOT add speaker names, labels, notes, or metadata
 - Translate every segment completely, even if it is short
 - Return ONLY a JSON array with 'start', 'end', and 'text' properties
+- TARGET LANGUAGE EXCLUSIVITY (ABSOLUTE): Every 'text' value MUST be written ENTIRELY in ${targetLang} ONLY.
+- NEVER include the original source language words, NEVER include English, NEVER mix languages.
+- Do NOT output the original line followed by the translation. Do NOT output English alongside ${targetLang}.
+- The ONLY exception is proper names of people/places, which stay as-is. Everything else MUST be in ${targetLang}.
 
 Subtitles to translate:
 ${JSON.stringify(textBatch)}`;
@@ -276,6 +280,7 @@ CRITICAL SOURCE PRIORITY:
 6. Translate into modern, natural ${targetLang} conversational spoken style. NEVER use formal or literary language.
 7. Do NOT add speaker names, labels, descriptions, or any metadata not present in the source.
 8. If there is no clear speech and no readable subtitle text, return [].
+9. TARGET LANGUAGE EXCLUSIVITY (ABSOLUTE): Every 'text' value MUST be written ENTIRELY in ${targetLang} ONLY. NEVER output the original source language (e.g. Hindi/English) alongside the translation. NEVER mix two or three languages in one line. NEVER include the original line followed by the ${targetLang} version. Only proper names of people/places may remain unchanged — every other word MUST be in ${targetLang}.
 
 Audio chunk duration: ${(audioDuration || 0).toFixed(2)} seconds. Timestamps: 0 to ${(audioDuration || 0).toFixed(2)}.
 Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'text' (translated text only).`
@@ -287,6 +292,7 @@ CRITICAL RULES:
 - Do NOT add speaker names, labels, or descriptions.
 - If no clear speech is present, return [].
 - Timing must be accurate. Break into short 2-3 second subtitle chunks.
+- TARGET LANGUAGE EXCLUSIVITY (ABSOLUTE): Every 'text' value MUST be written ENTIRELY in ${targetLang} ONLY. NEVER include the original spoken language or English. NEVER mix languages. Only proper names may remain unchanged.
 Audio duration: ${(audioDuration || 0).toFixed(2)} seconds. Timestamps: 0 to ${(audioDuration || 0).toFixed(2)}.
 Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'text' (translated text only).`;
 
@@ -304,6 +310,7 @@ CRITICAL RULES:
 - Do NOT add speaker names, labels, or descriptions.
 - If no clear speech is present, return [].
 - Timing must be accurate. Break into short 2-3 second subtitle chunks.
+- TARGET LANGUAGE EXCLUSIVITY (ABSOLUTE): Every 'text' value MUST be written ENTIRELY in ${targetLang} ONLY. NEVER include the original spoken language or English. NEVER mix languages. Only proper names may remain unchanged.
 Audio duration: ${(audioDuration || 0).toFixed(2)} seconds. Timestamps: 0 to ${(audioDuration || 0).toFixed(2)}.
 Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'text' (translated text only).`,
           },
