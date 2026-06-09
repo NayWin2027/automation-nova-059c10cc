@@ -1672,28 +1672,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       }
 
       const quality = EXPORT_QUALITY_OPTIONS[effectiveExportQuality] || EXPORT_QUALITY_OPTIONS["720p"];
-      // ── SURGICAL EDIT: RESTORE ORIGINAL AV SYNC LOGIC ──
-      // Use Math.min to prevent upscaling which breaks AV SYNC accuracy
-      // This ensures 100% AV SYNC by maintaining original video timing
-      const longEdge = Math.max(quality.maxW, quality.maxH);
-      const shortEdge = Math.min(quality.maxW, quality.maxH);
-      const longSrc = Math.max(outW, outH);
-      const shortSrc = Math.min(outW, outH);
-      // SURGICAL FIX: Use Math.min to prevent upscaling and maintain AV SYNC accuracy
-      const qualityScale = Math.min(longEdge / longSrc, shortEdge / shortSrc);
-      outW = Math.round(outW * qualityScale);
-      outH = Math.round(outH * qualityScale);
-
-      // ── SURGICAL EDIT: CAP MAX RESOLUTION TO 1080p FOR SMOOTH MOTION ──
-      // Prevent 1440p output which causes lag on high-end devices
-      const MAX_WIDTH = 1920;
-      const MAX_HEIGHT = 1080;
-      if (outW > MAX_WIDTH || outH > MAX_HEIGHT) {
-        const maxScale = Math.min(MAX_WIDTH / outW, MAX_HEIGHT / outH);
-        outW = Math.round(outW * maxScale);
-        outH = Math.round(outH * maxScale);
-        console.log(`[RESOLUTION] Capped to ${outW}x${outH} for smooth motion`);
-      }
+      // ── SURGICAL EDIT: FORCE EXACT PORTRAIT OUTPUT FOR ALL RATIOS ──
+      // User requirement: every ratio at 1080p must output EXACTLY 1080×1920
+      // (720p → 720×1280, 480p → 480×854, etc.). Long edge = quality.maxW, short edge = quality.maxH.
+      // This guarantees the chosen quality's pixel target is always met 100%, never over, never under.
+      outW = quality.maxH; // 1080 for 1080p
+      outH = quality.maxW; // 1920 for 1080p
 
       // Force exact even integer dimensions.
       // Hardware MP4 encoders (H.264) often drop or crop 1px from the right/bottom if width/height are odd numbers!
