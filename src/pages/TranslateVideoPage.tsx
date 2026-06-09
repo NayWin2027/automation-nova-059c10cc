@@ -1656,7 +1656,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
 
             // Adjust timestamps by adding the EXACT segment offset (calculated by VAD)
             // Also clamp and validate each subtitle to prevent timing bugs
-            const adjustedSubs = chunkSubs
+            const adjustedSubs: { start: number; end: number; text: string }[] = chunkSubs
               .filter((sub: any) => {
                 const s = parseFloat(sub.start) || 0;
                 const e = parseFloat(sub.end) || 0;
