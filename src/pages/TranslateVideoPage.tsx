@@ -1540,12 +1540,19 @@ export default function App() {
           parts.push({
             text: `You are a highly accurate Multimodal Video Transcription and Translation Expert for subtitle burn-in. Your ABSOLUTE core directive is 100% fidelity to the ORIGINAL SOURCE MATERIAL ONLY.
 
+TARGET LANGUAGE LOCK — MOST IMPORTANT RULE:
+- The selected output language is ${targetLang}. EVERY 'text' value MUST be ${targetLang} ONLY.
+- First silently understand/transcribe the source audio or visible source subtitle text, then translate internally, then output ONLY the final ${targetLang} translation.
+- NEVER copy source-language words into 'text'. NEVER output English unless ${targetLang} is English. NEVER output Hindi unless ${targetLang} is Hindi.
+- NEVER output source text + translation together. The 'text' field is NOT transcription; it is FINAL TRANSLATION ONLY.
+- Proper names of people/places may stay unchanged. All other words must be translated to ${targetLang}.
+
 STRICT OPERATING PRINCIPLES:
 1. COMPREHENSIVE ANALYSIS: You must process the video input using three concurrent sources of information to construct context:
    - AUDIO (Speech Recognition)
    - VISUALS (Character actions, setting, context)
    - ON-SCREEN TEXT/OCR (Hardcoded names, titles, captions)
-   *Combine these to ensure names are spelled correctly (e.g., use on-screen spellings) and intended meanings are captured based on visual context.*
+   *Use these ONLY to understand meaning, names, and timing. Do NOT copy on-screen/source text into the output.*
 2. ABSOLUTE ZERO HALLUCINATION — THE #1 RULE:
    - You MUST ONLY translate words that are ACTUALLY SPOKEN in the source audio.
    - NEVER fabricate, imagine, infer, or add ANY content that does not exist in the source video.
@@ -1577,10 +1584,10 @@ TECHNICAL RULES FOR JSON OUTPUT:
 7. ONLY TRANSLATE ACTUAL WORDS: If the speaker is just making sounds, ignore it. Only transcribe and translate actual spoken language.
 8. If there is NO speech, return an empty array []. Do NOT invent dialogue.
 9. ABSOLUTELY NO SYMBOLS OR PUNCTUATION: Output ONLY the raw spoken words.
-10. ABSOLUTELY NO SPEAKER LABELS OR ENGLISH WORDS: ONLY output the dialogue itself.
+ 10. ABSOLUTELY NO SPEAKER LABELS OR NON-${targetLang.toUpperCase()} WORDS: ONLY output the final ${targetLang} dialogue itself.
 
 REQUIRED OUTPUT FORMAT:
-Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure translated spoken words.
+Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${targetLang} translated spoken words.
 [{"start": 0.0, "end": 2.1, "text": "မင်္ဂလာပါခင်ဗျာ"}, {"start": 2.2, "end": 4.0, "text": "နေကောင်းကြရဲ့လား"}, ...]`,
           });
 
@@ -1600,7 +1607,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure tran
                 model: "gemini-2.5-flash",
                 contents: [{ role: "user", parts: ownParts }],
                 config: {
-                  temperature: 0.1,
+                  temperature: 0,
                   maxOutputTokens: 8192,
                   responseMimeType: "application/json",
                 },
