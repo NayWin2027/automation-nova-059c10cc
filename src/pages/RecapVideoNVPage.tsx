@@ -2870,8 +2870,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 while (lastTsIdx < maxIdx && currentTime >= audioTs[lastTsIdx].end) lastTsIdx += 1;
                 while (lastTsIdx > 0 && currentTime < audioTs[lastTsIdx].start) lastTsIdx -= 1;
 
-                // SURGICAL FIX: Add 50ms tolerance at segment boundaries to prevent gap-falling
-                const BOUNDARY_TOLERANCE = 0.05;
+                // SURGICAL FIX: Tight 20ms tolerance for ms-level AV SYNC accuracy
+                const BOUNDARY_TOLERANCE = 0.02;
                 if (
                   currentTime >= audioTs[lastTsIdx].start - BOUNDARY_TOLERANCE &&
                   currentTime < audioTs[lastTsIdx].end + BOUNDARY_TOLERANCE
@@ -2908,17 +2908,18 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   } else if (!seekPendingRef.current) {
                     // Seek complete — normal playing state
                     // SURGICAL FIX: Clamp video to exact segment boundaries for 100% AV sync accuracy
-                    // This prevents video from drifting and showing wrong scenes
                     if (!freezeModeRef.current) {
-                      // SURGICAL FIX: Hard clamp to segment boundaries - no drift allowed
-                      // If video goes before segment start, seek back to start
-                      if (vv.currentTime < active.vStart - 0.01) {
+                      // SURGICAL FIX: PURE MOTION MODE — never pause/freeze.
+                      // If video drifts before segment start, snap to start.
+                      if (vv.currentTime < active.vStart - 0.005) {
                         vv.currentTime = active.vStart;
                       }
-                      // If video goes after segment end, pause and hold at end
-                      if (vActualEnd > 0 && vv.currentTime >= vActualEnd - 0.01) {
-                        if (!vv.paused) vv.pause();
-                      } else if (vv.paused && !vv.ended) {
+                      // If video reaches segment end, LOOP back to vStart for continuous motion (no freeze).
+                      if (vActualEnd > 0 && vv.currentTime >= vActualEnd - 0.005) {
+                        vv.currentTime = active.vStart;
+                      }
+                      // Always keep playing — never pause when Freeze/Motion mode is OFF.
+                      if (vv.paused && !vv.ended) {
                         vv.playbackRate = 1.0;
                         vv.play().catch(() => {});
                       }
@@ -2934,10 +2935,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   }
                 } else {
                   // Between segments — pause video to prevent showing wrong scenes
-                  // SURGICAL FIX: Hard pause between segments for 100% sync accuracy
+                  // SURGICAL FIX: Motion mode (freezeMode OFF) keeps video playing for smooth vibe.
+                  // Freeze mode ON → hard pause to hold last frame. Next seg triggers a hard-cut seek.
                   if (videoInSegmentRef.current) {
                     videoInSegmentRef.current = false;
-                    if (!vv.paused) vv.pause();
+                    if (freezeModeRef.current && !vv.paused) vv.pause();
+                  }
+                  if (!freezeModeRef.current && vv.paused && !vv.ended) {
+                    vv.playbackRate = 1.0;
+                    vv.play().catch(() => {});
                   }
                 }
               } else {
