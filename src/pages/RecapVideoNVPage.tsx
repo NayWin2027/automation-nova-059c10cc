@@ -2910,12 +2910,24 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     // SURGICAL FIX: Clamp video to exact segment boundaries for 100% AV sync accuracy
                     if (!freezeModeRef.current) {
                       // SURGICAL FIX: PURE MOTION MODE — never pause/freeze.
-                      // If video drifts before segment start, snap to start.
+                      // SMOOTH FIX: Guard every seek with seekPendingRef to prevent stacked seeks
+                      // (stacked seeks cause stutter on high-CPU devices). Single-shot loop only.
                       if (vv.currentTime < active.vStart - 0.005) {
+                        seekPendingRef.current = true;
+                        const onDriftSeeked = () => {
+                          seekPendingRef.current = false;
+                          vv.removeEventListener("seeked", onDriftSeeked);
+                        };
+                        vv.addEventListener("seeked", onDriftSeeked);
                         vv.currentTime = active.vStart;
-                      }
-                      // If video reaches segment end, LOOP back to vStart for continuous motion (no freeze).
-                      if (vActualEnd > 0 && vv.currentTime >= vActualEnd - 0.005) {
+                      } else if (vActualEnd > 0 && vv.currentTime >= vActualEnd - 0.005) {
+                        // LOOP back to vStart for continuous motion (no freeze).
+                        seekPendingRef.current = true;
+                        const onLoopSeeked = () => {
+                          seekPendingRef.current = false;
+                          vv.removeEventListener("seeked", onLoopSeeked);
+                        };
+                        vv.addEventListener("seeked", onLoopSeeked);
                         vv.currentTime = active.vStart;
                       }
                       // Always keep playing — never pause when Freeze/Motion mode is OFF.
