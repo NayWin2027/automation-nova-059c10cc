@@ -257,6 +257,7 @@ export type Database = {
           ban_reason: string | null
           created_at: string
           credits: number
+          credits_expires_at: string | null
           credits_started_at: string | null
           display_name: string | null
           email: string
@@ -272,6 +273,7 @@ export type Database = {
           ban_reason?: string | null
           created_at?: string
           credits?: number
+          credits_expires_at?: string | null
           credits_started_at?: string | null
           display_name?: string | null
           email: string
@@ -287,6 +289,7 @@ export type Database = {
           ban_reason?: string | null
           created_at?: string
           credits?: number
+          credits_expires_at?: string | null
           credits_started_at?: string | null
           display_name?: string | null
           email?: string

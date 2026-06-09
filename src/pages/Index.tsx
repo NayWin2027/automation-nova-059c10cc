@@ -223,12 +223,20 @@ const Index = () => {
     }
 
     // CREDIT EXPIRATION CHECK: Block expired users from using tools
-    if (profile?.credits_started_at && !isAdmin) {
-      const startDate = new Date(profile.credits_started_at);
-      const expiryDate = new Date(startDate);
-      expiryDate.setMonth(expiryDate.getMonth() + 1);
-      expiryDate.setDate(expiryDate.getDate() + 7);
-      if (new Date() > expiryDate) {
+    if (!isAdmin) {
+      const override = (profile as any)?.credits_expires_at as string | null | undefined;
+      let expiryDate: Date | null = null;
+      if (override) {
+        expiryDate = new Date(override);
+      } else if (profile?.credits_started_at) {
+        const startDate = new Date(profile.credits_started_at);
+        expiryDate = new Date(startDate);
+        expiryDate.setMonth(expiryDate.getMonth() + 1);
+        expiryDate.setDate(expiryDate.getDate() + 7);
+      }
+      // If we have a profile but no start AND no override → loophole; treat as expired
+      const noDates = !!profile && !override && !profile.credits_started_at;
+      if ((expiryDate && new Date() > expiryDate) || noDates) {
         toast({
           title: "⛔ Credit သက်တမ်းကုန်ဆုံးပါပြီ",
           description: "သင့် Credit သက်တမ်းကုန်ဆုံးသွားပါပြီ။ Credit ထပ်ဖြည့်ပြီးမှ ဆက်သုံးပါ။",
