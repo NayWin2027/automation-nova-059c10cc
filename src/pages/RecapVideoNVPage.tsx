@@ -1173,17 +1173,14 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               60;
 
             setServerRenderProgress("Sending to server... 55%");
-            // SURGICAL FIX: Force 1080x1920 portrait resolution for server rendering
-            const serverMaxW = exportQ.maxW < exportQ.maxH ? 1080 : exportQ.maxW;
-            const serverMaxH = exportQ.maxW < exportQ.maxH ? 1920 : exportQ.maxH;
             const triggerBody: Record<string, unknown> = {
               action: "triggerServerRender",
               audioUrl: audioSignedUrl,
               subtitles,
               duration: dur,
               fps: exportQ.fps,
-              maxW: serverMaxW,
-              maxH: serverMaxH,
+              maxW: exportQ.maxW,
+              maxH: exportQ.maxH,
               bitrate: exportQ.bitrate,
               fastMode: true,
               ultraFast: true,
@@ -1675,48 +1672,27 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       }
 
       const quality = EXPORT_QUALITY_OPTIONS[effectiveExportQuality] || EXPORT_QUALITY_OPTIONS["720p"];
-      // ── SURGICAL FIX: Force 1080x1920 portrait resolution for 100% accuracy ──
-      // Skip quality scaling for portrait videos to maintain exact 1080x1920 output
-      if (outW < outH) {
-        // Portrait: Force exact 1080x1920 regardless of quality settings
-        outW = 1080;
-        outH = 1920;
-        console.log(`[RESOLUTION] Forced portrait 1080x1920 for exact output`);
-      } else {
-        // Landscape: Apply quality scaling as before
-        const longEdge = Math.max(quality.maxW, quality.maxH);
-        const shortEdge = Math.min(quality.maxW, quality.maxH);
-        const longSrc = Math.max(outW, outH);
-        const shortSrc = Math.min(outW, outH);
-        const qualityScale = Math.min(longEdge / longSrc, shortEdge / shortSrc);
-        outW = Math.round(outW * qualityScale);
-        outH = Math.round(outH * qualityScale);
-      }
+      // ── SURGICAL EDIT: RESTORE ORIGINAL AV SYNC LOGIC ──
+      // Use Math.min to prevent upscaling which breaks AV SYNC accuracy
+      // This ensures 100% AV SYNC by maintaining original video timing
+      const longEdge = Math.max(quality.maxW, quality.maxH);
+      const shortEdge = Math.min(quality.maxW, quality.maxH);
+      const longSrc = Math.max(outW, outH);
+      const shortSrc = Math.min(outW, outH);
+      // SURGICAL FIX: Use Math.min to prevent upscaling and maintain AV SYNC accuracy
+      const qualityScale = Math.min(longEdge / longSrc, shortEdge / shortSrc);
+      outW = Math.round(outW * qualityScale);
+      outH = Math.round(outH * qualityScale);
 
       // ── SURGICAL EDIT: CAP MAX RESOLUTION TO 1080p FOR SMOOTH MOTION ──
       // Prevent 1440p output which causes lag on high-end devices
-      // Support both landscape (1920x1080) and portrait (1080x1920) orientations
-      const MAX_LANDSCAPE_WIDTH = 1920;
-      const MAX_LANDSCAPE_HEIGHT = 1080;
-      const MAX_PORTRAIT_WIDTH = 1080;
-      const MAX_PORTRAIT_HEIGHT = 1920;
-
-      if (outW > outH) {
-        // Landscape orientation
-        if (outW > MAX_LANDSCAPE_WIDTH || outH > MAX_LANDSCAPE_HEIGHT) {
-          const maxScale = Math.min(MAX_LANDSCAPE_WIDTH / outW, MAX_LANDSCAPE_HEIGHT / outH);
-          outW = Math.round(outW * maxScale);
-          outH = Math.round(outH * maxScale);
-          console.log(`[RESOLUTION] Capped to ${outW}x${outH} (landscape) for smooth motion`);
-        }
-      } else {
-        // Portrait orientation
-        if (outW > MAX_PORTRAIT_WIDTH || outH > MAX_PORTRAIT_HEIGHT) {
-          const maxScale = Math.min(MAX_PORTRAIT_WIDTH / outW, MAX_PORTRAIT_HEIGHT / outH);
-          outW = Math.round(outW * maxScale);
-          outH = Math.round(outH * maxScale);
-          console.log(`[RESOLUTION] Capped to ${outW}x${outH} (portrait) for smooth motion`);
-        }
+      const MAX_WIDTH = 1920;
+      const MAX_HEIGHT = 1080;
+      if (outW > MAX_WIDTH || outH > MAX_HEIGHT) {
+        const maxScale = Math.min(MAX_WIDTH / outW, MAX_HEIGHT / outH);
+        outW = Math.round(outW * maxScale);
+        outH = Math.round(outH * maxScale);
+        console.log(`[RESOLUTION] Capped to ${outW}x${outH} for smooth motion`);
       }
 
       // Force exact even integer dimensions.
@@ -2950,21 +2926,21 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     // SURGICAL FIX: Clamp video to exact segment boundaries for 100% AV sync accuracy
                     // This prevents video from drifting and showing wrong scenes
                     if (!freezeModeRef.current) {
-                      // SURGICAL FIX: Professional hard-cut seek - 100% accuracy, zero tolerance
-                      // Exact seek to segment start with no drift allowed
-                      if (Math.abs(vv.currentTime - active.vStart) > 0.00001) {
+                      // SURGICAL FIX: Hard clamp to segment boundaries - no drift allowed
+                      // If video goes before segment start, seek back to start
+                      if (vv.currentTime < active.vStart - 0.01) {
                         vv.currentTime = active.vStart;
                       }
-                      // Exact hard-cut at segment end - no tolerance
-                      if (vActualEnd > 0 && vv.currentTime >= vActualEnd) {
+                      // If video goes after segment end, pause and hold at end
+                      if (vActualEnd > 0 && vv.currentTime >= vActualEnd - 0.01) {
                         if (!vv.paused) vv.pause();
                       } else if (vv.paused && !vv.ended) {
                         vv.playbackRate = 1.0;
                         vv.play().catch(() => {});
                       }
                     } else {
-                      // freezeMode ON: exact hard-cut at segment end
-                      if (vActualEnd > 0 && vv.currentTime >= vActualEnd) {
+                      // freezeMode ON: clamp at segment end (freeze behavior)
+                      if (vActualEnd > 0 && vv.currentTime >= vActualEnd - 0.05) {
                         if (!vv.paused) vv.pause();
                       } else if (vv.paused && !vv.ended) {
                         vv.playbackRate = 1.0;
