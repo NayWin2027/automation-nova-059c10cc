@@ -648,7 +648,6 @@ serve(async (req) => {
         );
       }
 
-      default:
       case 'update_credit_dates': {
         // SECURITY: Only master admins can directly edit credit start/expiry dates
         if (!isCallerMasterAdmin) {
