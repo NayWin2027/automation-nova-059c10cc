@@ -2935,10 +2935,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   }
                 } else {
                   // Between segments — pause video to prevent showing wrong scenes
-                  // SURGICAL FIX: Hard pause between segments for 100% sync accuracy
+                  // SURGICAL FIX: Motion mode (freezeMode OFF) keeps video playing for smooth vibe.
+                  // Freeze mode ON → hard pause to hold last frame. Next seg triggers a hard-cut seek.
                   if (videoInSegmentRef.current) {
                     videoInSegmentRef.current = false;
-                    if (!vv.paused) vv.pause();
+                    if (freezeModeRef.current && !vv.paused) vv.pause();
+                  }
+                  if (!freezeModeRef.current && vv.paused && !vv.ended) {
+                    vv.playbackRate = 1.0;
+                    vv.play().catch(() => {});
                   }
                 }
               } else {
