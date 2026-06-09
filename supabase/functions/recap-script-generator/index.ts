@@ -639,7 +639,7 @@ ${transcript}
 
     let response: Response | null = null;
     let lastError = "";
-    let activeModel = isOwnApi ? "gemini-1.5-flash-8b" : MODEL;
+    let activeModel = isOwnApi ? "gemini-1.5-flash" : MODEL;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 135000);
@@ -753,8 +753,12 @@ ${transcript}
     const stripHookPreamble = (txt: string): string => {
       let s = (txt || "").replace(/^\uFEFF/, "").trim();
       // Strip code fences if model wrapped output
-      s = s.replace(/^```[a-zA-Z]*\s*\n?/, "").replace(/\n?```\s*$/, "").trim();
-      const preambleLineRe = /^(?:\s*[\(（][^\)）]*[\)）]\s*$|\s*(?:hook|HOOK|\*\*hook\*\*|#+\s*hook)\s*[:：]?\s*$|\s*(?:ဟုတ်ကဲ့|ကောင်းပါပြီ|ကောင်းပြီ|ရပါပြီ|အောက်မှာ|ဒီမှာ|ဟောဒီမှာ|ကဲ)[^\n]*[\:：]?\s*$|\s*(?:Here\s+(?:is|are|'s)|Here's|Below\s+is|Sure[,!\.]?|Okay[,!\.]?|Of\s+course[,!\.]?|Certainly[,!\.]?)[^\n]*[:：]?\s*$)/i;
+      s = s
+        .replace(/^```[a-zA-Z]*\s*\n?/, "")
+        .replace(/\n?```\s*$/, "")
+        .trim();
+      const preambleLineRe =
+        /^(?:\s*[\(（][^\)）]*[\)）]\s*$|\s*(?:hook|HOOK|\*\*hook\*\*|#+\s*hook)\s*[:：]?\s*$|\s*(?:ဟုတ်ကဲ့|ကောင်းပါပြီ|ကောင်းပြီ|ရပါပြီ|အောက်မှာ|ဒီမှာ|ဟောဒီမှာ|ကဲ)[^\n]*[\:：]?\s*$|\s*(?:Here\s+(?:is|are|'s)|Here's|Below\s+is|Sure[,!\.]?|Okay[,!\.]?|Of\s+course[,!\.]?|Certainly[,!\.]?)[^\n]*[:：]?\s*$)/i;
       // Also catch a single opening line that is fully wrapped in parens describing the script (multi-sentence inside parens)
       const parenWholeLineRe = /^\s*[\(（][^\n]*[\)）]\s*$/;
       for (let i = 0; i < 6; i++) {
