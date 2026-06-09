@@ -2870,8 +2870,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 while (lastTsIdx < maxIdx && currentTime >= audioTs[lastTsIdx].end) lastTsIdx += 1;
                 while (lastTsIdx > 0 && currentTime < audioTs[lastTsIdx].start) lastTsIdx -= 1;
 
-                // SURGICAL FIX: Add 50ms tolerance at segment boundaries to prevent gap-falling
-                const BOUNDARY_TOLERANCE = 0.05;
+                // SURGICAL FIX: Tight 20ms tolerance for ms-level AV SYNC accuracy
+                const BOUNDARY_TOLERANCE = 0.02;
                 if (
                   currentTime >= audioTs[lastTsIdx].start - BOUNDARY_TOLERANCE &&
                   currentTime < audioTs[lastTsIdx].end + BOUNDARY_TOLERANCE
