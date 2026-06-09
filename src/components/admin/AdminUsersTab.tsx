@@ -33,6 +33,7 @@ const AdminUsersTab: React.FC = () => {
     banUser,
     updateCredits,
     updatePlan,
+    updateCreditDates,
     clearDevices
   } = useAdmin();
 
@@ -44,6 +45,10 @@ const AdminUsersTab: React.FC = () => {
   const [devicesDialogOpen, setDevicesDialogOpen] = useState(false);
   const [creditDetailOpen, setCreditDetailOpen] = useState(false);
   const [creditDetailProfile, setCreditDetailProfile] = useState<typeof profiles[0] | null>(null);
+  const [editDatesMode, setEditDatesMode] = useState(false);
+  const [editStartDate, setEditStartDate] = useState<string>("");
+  const [editExpiryDate, setEditExpiryDate] = useState<string>("");
+  const [savingDates, setSavingDates] = useState(false);
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<typeof profiles[0] | null>(null);
 
