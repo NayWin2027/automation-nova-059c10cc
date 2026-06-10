@@ -44,9 +44,10 @@ Deno.serve(async (req) => {
     const projectKeys = [anonKey, publishableKey, ...publishableKeys].filter(Boolean);
     const bearerToken = authHeader?.replace(/^Bearer\s+/i, "").trim() || "";
     const bearerPayload = decodeJwtPayload(bearerToken);
+    const tokenIssuer = typeof bearerPayload?.iss === "string" ? bearerPayload.iss : "";
     const isCurrentProjectAnonJwt =
       bearerPayload?.role === "anon" &&
-      bearerPayload?.iss === `${Deno.env.get("SUPABASE_URL")}/auth/v1` &&
+      tokenIssuer.includes("ijnwvbdazdowiljfcmpq") &&
       typeof bearerPayload.exp === "number" &&
       bearerPayload.exp * 1000 > Date.now();
     const isAnonOrPublishable =
