@@ -90,7 +90,8 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
 
       if (slipFile) {
         const ext = slipFile.name.split(".").pop();
-        const fileName = `${Date.now()}_${crypto.randomUUID().substring(0, 8)}.${ext}`;
+        const folder = currentUser?.id ? currentUser.id : "public";
+        const fileName = `${folder}/${Date.now()}_${crypto.randomUUID().substring(0, 8)}.${ext}`;
         const { error: uploadError } = await supabase.storage.from("payment-slips").upload(fileName, slipFile);
 
         if (uploadError) {

@@ -635,6 +635,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       flip: true,
       bypass: true,
       colorGrade: "OFF" as string,
+      brightness: 100,
     });
 
     const [logo, setLogo] = useState<LogoSettings>({
@@ -821,9 +822,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       const hue = isOff ? 0 : g.hue + bypassBoost.hue;
       const sepia = isOff ? 0 : g.sepia || 0;
       filterStringRef.current = isOff
-        ? "none"
-        : `contrast(${contrast}%) brightness(${brightness}%) saturate(${saturate}%) hue-rotate(${hue}deg) sepia(${sepia}%)`;
-    }, [editorState.colorGrade, editorState.bypass]);
+        ? editorState.brightness !== 100
+          ? `brightness(${editorState.brightness}%)`
+          : "none"
+        : `contrast(${contrast}%) brightness(${Math.round((brightness * editorState.brightness) / 100)}%) saturate(${saturate}%) hue-rotate(${hue}deg) sepia(${sepia}%)`;
+    }, [editorState.colorGrade, editorState.bypass, editorState.brightness]);
 
     // ── FIX: Invalidate blur canvas cache when blur settings change ──
     useEffect(() => {
@@ -1380,9 +1383,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         const segWords = getWordCount(seg.text);
         const startWords = wordCursor;
         wordCursor += segWords;
-        // ── FEATURE: Smart Frame Offset (+0.3s) — skip scene transition flash frames ──
-        const rawVStart = parseTime(seg.timestamp);
-        const vStart = rawVStart > 0.3 ? rawVStart + 0.3 : rawVStart;
+        // SURGICAL EDIT: Use exact timestamp — no offset for 100% AV sync accuracy
+        const vStart = parseTime(seg.timestamp);
         const nextSeg = scriptData.segments[i + 1];
         let vEnd: number;
         if (!nextSeg) {
@@ -1396,12 +1398,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             vEnd = vStart + estimatedClipSec;
           }
         }
-        // ── FEATURE: Pacing Intelligence — cap vEnd based on scene type ──
-        if (vEnd !== -1) {
-          const pacing = classifyPacing(seg.text);
-          const maxDur = pacing === "action" ? 2.5 : pacing === "emotional" ? 5.0 : 3.5;
-          if (vEnd - vStart > maxDur) vEnd = vStart + maxDur;
-        }
+        // SURGICAL EDIT: No duration cap — video segment plays full natural duration
+        // for 100% voice-to-video accuracy (Pacing Intelligence caps removed)
         return {
           vStart,
           vEnd,
@@ -2161,11 +2159,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // ── FIX: Use cached filter string — no string allocation per frame ──
         // ── BONUS: Scene-Aware Dynamic Color Grade — blend base filter with scene-type modifier ──
         const sceneType = segPacingTypeRef.current;
-        if (sceneType === "action") {
-          // Action: higher contrast + cool blue tint (intensity, urgency)
+        const isColorOff = editorState.colorGrade === "OFF" || editorState.bypass;
+        if (!isColorOff && sceneType === "action") {
           ctx.filter = filterStringRef.current + " contrast(118%) hue-rotate(-8deg) saturate(115%)";
-        } else if (sceneType === "emotional") {
-          // Emotional: warm amber + slight dim (drama, feeling)
+        } else if (!isColorOff && sceneType === "emotional") {
           ctx.filter = filterStringRef.current + " sepia(18%) brightness(96%) saturate(90%)";
         } else {
           ctx.filter = filterStringRef.current;
@@ -2417,38 +2414,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             ctx.fillText("🔥 Coming Up... 🔥", canvas.width / 2, tY);
             ctx.restore();
           }
-          // Changes overall frame luminance signature to confuse Content ID algorithms.
-          // Skip expensive gradient effects on extreme low-end devices
-          if (!isExtremeLowEnd) {
-            const vGrad = ctx.createRadialGradient(
-              canvas.width / 2,
-              canvas.height / 2,
-              canvas.width / 4,
-              canvas.width / 2,
-              canvas.height / 2,
-              canvas.width / 1.1,
-            );
-            vGrad.addColorStop(0, "transparent");
-            vGrad.addColorStop(1, "rgba(0,0,0,0.35)");
-            ctx.fillStyle = vGrad;
-            ctx.globalCompositeOperation = "multiply";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.globalCompositeOperation = "source-over";
-          }
-
-          // ── TRANSFORMATIVE LAYER: Dynamic Film Grain (Pixel Fingerprint Destruction) ──
-          // Breaks spatial/binary hashing by introducing unique frame noise.
-          // Skip film grain on extreme low-end devices - CPU intensive
-          if (!isExtremeLowEnd) {
-            ctx.save();
-            ctx.globalAlpha = 0.04; // Nearly invisible but breaks hashing algorithms
-            ctx.globalCompositeOperation = "overlay";
-            ctx.translate(Math.random() * 128, Math.random() * 128);
-            ctx.rotate(Math.random() * Math.PI);
-            ctx.fillStyle = noisePattern;
-            ctx.fillRect(-128, -128, canvas.width + 256, canvas.height + 256);
-            ctx.restore();
-          }
+          // SURGICAL EDIT: Vignette and film grain DISABLED — natural brightness, no shadow/darkening
+          // Original source video brightness preserved 100%
         } catch (e) {
           // Ignore DOMException (SecurityError) so subtitles/UI can still render perfectly
           console.warn("[RECORDING] Canvas drawImage failed. Continuing to render subtitles.", e);
@@ -2883,7 +2850,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 while (lastTsIdx < maxIdx && currentTime >= audioTs[lastTsIdx].end) lastTsIdx += 1;
                 while (lastTsIdx > 0 && currentTime < audioTs[lastTsIdx].start) lastTsIdx -= 1;
 
-                if (currentTime >= audioTs[lastTsIdx].start && currentTime < audioTs[lastTsIdx].end) {
+                // SURGICAL FIX: Add 50ms tolerance at segment boundaries to prevent gap-falling
+                const BOUNDARY_TOLERANCE = 0.05;
+                if (
+                  currentTime >= audioTs[lastTsIdx].start - BOUNDARY_TOLERANCE &&
+                  currentTime < audioTs[lastTsIdx].end + BOUNDARY_TOLERANCE
+                ) {
                   activeIndex = lastTsIdx;
                   activeText = getSeg(lastTsIdx)?.text || "";
                 }
@@ -2915,14 +2887,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     vv.currentTime = active.vStart;
                   } else if (!seekPendingRef.current) {
                     // Seek complete — normal playing state
+                    // SURGICAL EDIT: AV sync via hard-cut seek on segment change — video plays freely between cuts
+                    // No pause/clamp needed — when audio enters next segment, video hard-seeks to correct vStart
                     if (!freezeModeRef.current) {
-                      // When freezeMode is OFF: never pause, just keep playing
                       if (vv.paused && !vv.ended) {
                         vv.playbackRate = 1.0;
                         vv.play().catch(() => {});
                       }
                     } else {
-                      // Only when freezeMode is ON: clamp at segment end
+                      // freezeMode ON: clamp at segment end (freeze behavior)
                       if (vActualEnd > 0 && vv.currentTime >= vActualEnd - 0.05) {
                         if (!vv.paused) vv.pause();
                       } else if (vv.paused && !vv.ended) {
@@ -2932,7 +2905,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     }
                   }
                 } else {
-                  // Between segments — only pause if freezeMode is ON
+                  // Between segments — video keeps playing naturally (no pause = no slideshow)
+                  // AV sync is maintained by hard-cut seek when next audio segment begins
                   if (freezeModeRef.current && videoInSegmentRef.current) {
                     videoInSegmentRef.current = false;
                     if (!vv.paused) vv.pause();
@@ -3182,39 +3156,41 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               const segs = syncSegmentsRef.current;
               if (!segs || segs.length === 0) return;
 
-              // ── CLIENT-SIDE TIMESTAMP CALCULATION ──
-              // API timestamps are word-count estimation (~80-85%) — always recalculate.
-              // Uses char weight + sentence-end pause bonus for better accuracy.
-              const countWeight = (text: string): number => {
-                const cleaned = (text || "").replace(/\s+/g, "");
-                let weight = 0;
-                for (let i = 0; i < cleaned.length; i++) {
-                  const code = cleaned.charCodeAt(i);
-                  if ((code >= 0x1000 && code <= 0x109f) || (code >= 0x4e00 && code <= 0x9fff)) {
-                    weight += 1.6;
-                  } else {
-                    weight += 1;
+              // ── SURGICAL EDIT: ONLY recalculate timestamps if audioTimestampsRef is NOT already populated!
+              // If audioTimestampsRef already has data (e.g. accurate timestamps from Edge TTS/API), use those directly for 100% AV sync!
+              if (audioTimestampsRef.current.length === 0) {
+                // ── CLIENT-SIDE TIMESTAMP CALCULATION (fallback only if no timestamps provided)
+                const countWeight = (text: string): number => {
+                  const cleaned = (text || "").replace(/\s+/g, "");
+                  let weight = 0;
+                  for (let i = 0; i < cleaned.length; i++) {
+                    const code = cleaned.charCodeAt(i);
+                    if ((code >= 0x1000 && code <= 0x109f) || (code >= 0x4e00 && code <= 0x9fff)) {
+                      weight += 1.6;
+                    } else {
+                      weight += 1;
+                    }
                   }
-                }
-                return Math.max(weight, 1);
-              };
-              const pauseBonus = (text: string): number => {
-                const last = (text || "").trimEnd().slice(-1);
-                if (".!?။".includes(last)) return 0.15;
-                if (",;:".includes(last)) return 0.05;
-                return 0;
-              };
-              const avgSegDur = realDuration / segs.length;
-              const weights = segs.map((s: any) => countWeight(s.text) + pauseBonus(s.text) * avgSegDur);
-              const totalWeight = weights.reduce((sum: number, w: number) => sum + w, 0);
-              let cursor = 0;
-              audioTimestampsRef.current = segs.map((seg: any, idx: number) => {
-                const pct = totalWeight > 0 ? weights[idx] / totalWeight : 1 / segs.length;
-                const start = parseFloat(cursor.toFixed(4));
-                cursor += pct * realDuration;
-                const end = parseFloat((idx === segs.length - 1 ? realDuration : cursor).toFixed(4));
-                return { index: idx, start, end };
-              });
+                  return Math.max(weight, 1);
+                };
+                const pauseBonus = (text: string): number => {
+                  const last = (text || "").trimEnd().slice(-1);
+                  if (".!?။".includes(last)) return 0.15;
+                  if (",;:".includes(last)) return 0.05;
+                  return 0;
+                };
+                const avgSegDur = realDuration / segs.length;
+                const weights = segs.map((s: any) => countWeight(s.text) + pauseBonus(s.text) * avgSegDur);
+                const totalWeight = weights.reduce((sum: number, w: number) => sum + w, 0);
+                let cursor = 0;
+                audioTimestampsRef.current = segs.map((seg: any, idx: number) => {
+                  const pct = totalWeight > 0 ? weights[idx] / totalWeight : 1 / segs.length;
+                  const start = parseFloat(cursor.toFixed(4));
+                  cursor += pct * realDuration;
+                  const end = parseFloat((idx === segs.length - 1 ? realDuration : cursor).toFixed(4));
+                  return { index: idx, start, end };
+                });
+              }
             }}
           />
         )}
@@ -3789,6 +3765,20 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                         ))}
                       </SelectContent>
                     </Select>
+                    <div className="mt-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-xs text-slate-500">☀️ Brightness</p>
+                        <span className="text-xs text-slate-400">{editorState.brightness}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={50}
+                        max={150}
+                        value={editorState.brightness}
+                        onChange={(e) => setEditorState((s) => ({ ...s, brightness: parseInt(e.target.value) }))}
+                        className="w-full accent-amber-400"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -4889,17 +4879,31 @@ const RecapVideoNVPage: React.FC = () => {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState("my-MM");
   const [selectedVoice, setSelectedVoice] = useState("edge:it-IT-GiuseppeMultilingualNeural");
+
+  // Auto-update selected voice when selected language changes
+  useEffect(() => {
+    if (selectedLanguage === "my-MM") {
+      setSelectedVoice("edge:my-MM-ThihaNeural");
+    } else if (selectedLanguage.startsWith("en-")) {
+      setSelectedVoice("edge:it-IT-GiuseppeMultilingualNeural");
+    }
+  }, [selectedLanguage]);
   const [langPopoverOpen, setLangPopoverOpen] = useState(false);
   const [apiMode, setApiMode] = useState<"app" | "own">("own");
   const [ownApiKey, setOwnApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
+  const activePipelineApiModeRef = useRef<"app" | "own">("own");
+  const activePipelineOwnKeyRef = useRef("");
+  const activePipelineRenderModeRef = useRef<"browser" | "server">("browser");
 
   const handleVideoReady = useCallback(
     async (outputDurationSecs: number) => {
       if (didDeductRef.current) return;
-      if (apiMode === "own") {
+      const billedApiMode = activePipelineOwnKeyRef.current ? "own" : activePipelineApiModeRef.current || apiMode;
+      const billedRenderMode = activePipelineRenderModeRef.current || renderMode;
+      if (billedApiMode === "own") {
         // Track per-variant usage (APP/OWN x BROWSER/SERVER) for admin Daily Records
-        void trackToolVariant("recap-nv", apiMode, renderMode, "success", false);
+        void trackToolVariant("recap-nv", "own", billedRenderMode, "success", false);
         didDeductRef.current = true;
         return;
       }
@@ -4921,7 +4925,7 @@ const RecapVideoNVPage: React.FC = () => {
       const totalMinutes = Math.floor(durationSecs / 60);
       const remainingSeconds = durationSecs % 60;
       const billedMinutes = remainingSeconds > 30 ? totalMinutes + 1 : totalMinutes;
-      const perMin = renderMode === "server" ? serverCreditPerMinRate : creditPerMinRate;
+      const perMin = billedRenderMode === "server" ? serverCreditPerMinRate : creditPerMinRate;
       const customCost = Math.max(1, Math.max(1, billedMinutes) * perMin);
       didDeductRef.current = true;
       try {
@@ -4930,7 +4934,7 @@ const RecapVideoNVPage: React.FC = () => {
           console.error("[CREDIT] Deduction FAILED:", result.error);
           didDeductRef.current = false;
         } else {
-          void trackToolVariant("recap-nv", apiMode, renderMode, "success", (result.deducted || 0) > 0);
+          void trackToolVariant("recap-nv", "app", billedRenderMode, "success", (result.deducted || 0) > 0);
         }
       } catch (err) {
         console.error("[CREDIT] ERROR:", err);
@@ -5022,6 +5026,28 @@ const RecapVideoNVPage: React.FC = () => {
       const segments = scriptData.segments.map((s) => ({ text: s.text }));
       generateVoice(scriptData.full_script, resolvedOwnKey || undefined, segments);
     }
+  };
+
+  const stripRecapScriptPreamble = (rawScript: string): string => {
+    let cleaned = String(rawScript || "")
+      .replace(/\r\n/g, "\n")
+      .trim();
+    for (let i = 0; i < 5; i++) {
+      cleaned = cleaned
+        .replace(/^\s*```(?:[\w-]+)?\s*/i, "")
+        .replace(/\s*```\s*$/i, "")
+        .trim();
+      cleaned = cleaned
+        .replace(
+          /^\s*[([{（]?[^\n]{0,260}(?:ဟုတ်ကဲ့|Recap Script|recap script|မြန်မာလို\s*Recap|အောက်မှာ\s*ဖော်ပြ|ဖော်ပြပေးလိုက်ပါတယ်|ရေးပေးလိုက်ပါတယ်|Here(?:'s| is)|Below is|Sure|Okay|Of course)[^\n]{0,260}[)\]}）]?\s*\n+/i,
+          "",
+        )
+        .trim();
+      cleaned = cleaned.replace(/^\s*(?:#+\s*)?(?:Recap Script|Narration Script|Script|Output)\s*:?\s*\n+/i, "").trim();
+    }
+    const firstTimestamp = cleaned.search(/\[\d{1,2}:\d{2}\]/);
+    if (firstTimestamp > 0) cleaned = cleaned.slice(firstTimestamp).trim();
+    return cleaned;
   };
 
   const scriptToSegments = (scriptText: string, videoDuration: number): RecapSegment[] => {
@@ -5154,8 +5180,16 @@ const RecapVideoNVPage: React.FC = () => {
       const data = await response.json();
       if (data.useClientTTS || !data.audio) throw new Error(data.message || data.error || "TTS generation failed");
 
-      // API timestamps are word-count estimation (~80-85%) — always use client-side calculation
-      pageAudioTimestampsRef.current = [];
+      // Use API timestamps if available (for 100% AV sync accuracy), otherwise fallback to client-side calculation
+      if (data.segments && Array.isArray(data.segments)) {
+        pageAudioTimestampsRef.current = data.segments.map((seg: any, idx: number) => ({
+          index: idx,
+          start: seg.start || 0,
+          end: seg.end || 0,
+        }));
+      } else {
+        pageAudioTimestampsRef.current = [];
+      }
 
       let audioBlob: Blob;
       const mt = String(data.mimeType || "").toLowerCase();
@@ -5210,6 +5244,9 @@ const RecapVideoNVPage: React.FC = () => {
   const startAutoPipeline = async (file: File) => {
     const resolvedApiMode = apiMode;
     const resolvedOwnKey = apiMode === "own" ? ownApiKey.trim() : "";
+    activePipelineApiModeRef.current = resolvedApiMode;
+    activePipelineOwnKeyRef.current = resolvedOwnKey;
+    activePipelineRenderModeRef.current = renderMode;
     if (resolvedApiMode === "own" && !resolvedOwnKey) {
       setProgressMsg("❌ Own API mode ရွေးထားပါသည်။ Google API Key ထည့်ပေးပါ။");
       setStatus("error");
@@ -5350,8 +5387,15 @@ The narration must feel like a non-stop thriller story, NOT a boring lecture, do
 
 STRICT LENGTH RULE:
 This is a surgical recap, not a summary. Do NOT retain most of the source or produce a detailed retelling.
-If source length is 30 minutes, output must be 15 minutes or less. If source length is 6 minutes, output must be 3 minutes or less.
-Never exceed 50% of the original duration. If you cannot express the story in 50% or less, cut more aggressively until you can.
+The output script MUST be approximately 40-50% of the original video duration when read aloud.
+MINIMUM WORD COUNT (CRITICAL — DO NOT GO BELOW THIS):
+  * Source 5 min → minimum 350 words, target ~500 words
+  * Source 10 min → minimum 700 words, target ~1200 words
+  * Source 15 min → minimum 1000 words, target ~1800 words
+  * Source 20 min → minimum 1500 words, target ~2500 words
+  * Source 30 min → minimum 2000 words, target ~3500 words
+If your script is shorter than the MINIMUM, you MUST add more story detail until you reach it.
+A 20-minute source producing only 2 minutes of narration = FAILURE.
 
 STRUCTURE RULE:
 1. Start with a SHOCKING HOOK from the middle or end that immediately raises a “why did this happen?” question.
@@ -5373,15 +5417,15 @@ INSTRUCTIONS:
 - Skip over setup/buildup scenes and jump straight to the payoff.
 
 PACING & DURATION RULE (CRITICAL):
-- The recap MUST be truly shorter than the original video: aim for roughly 50% or less of the source duration.
-- The app is built for source videos up to 30 minutes. If the source is longer than 30 minutes, treat it like a 30-minute source and keep the recap no longer than 15 minutes.
-  * Source up to 30 minutes → recap 10-15 minutes (max 15 minutes preferred).
-  * Source under 15 minutes → recap as close to 50% as possible, never exceed 50%.
-  * Source under 10 minutes → recap about half the length, never exceed 50%.
-  * Source under 5 minutes → recap about half the length, never exceed 50%.
-- For short videos, do NOT return nearly the same length. A 6-minute source should produce a ~3-minute recap, not 6 minutes.
-- If you include everything from start to finish without cutting, you have FAILED as a recap editor.
-- The viewer should feel like they watched a fast, exciting, condensed version — NOT the full video.
+- The recap MUST be approximately 40-50% of the original video duration. NOT shorter, NOT longer.
+- The app is built for source videos up to 30 minutes. If the source is longer than 30 minutes, treat it like a 30-minute source.
+  * Source up to 30 min → recap 40-50% of source duration (e.g. 20 min → 8-10 min recap).
+  * Source under 15 min → recap about 40-50% of the length.
+  * Source under 10 min → recap about 40-50% of the length.
+  * Source under 5 min → recap about 40-50% of the length.
+- IMPORTANT: Going BELOW 30% is just as bad as exceeding 50%. A recap that is too short feels incomplete.
+- If your narration word count falls below the MINIMUM, ADD more story details until you reach it.
+- The viewer should feel like they watched a complete, exciting, condensed version — NOT a 30-second summary.
 
 IMPORTANT:
 Do NOT summarize using text only.
@@ -5400,6 +5444,8 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
         language: selectedLangName,
         sourceDurationSec: duration,
         skipCreditDeduction: true,
+        recapNvPipeline: true,
+        apiMode: resolvedApiMode,
         extraInstructions: `CRITICAL:
 - Output language MUST be ${selectedLangName} ONLY. Do NOT switch to any other language even if the video's spoken dialogue is in a different language.
 - Script must cover the story arc from beginning to end, BUT must be HEAVILY CONDENSED and no more than 50% of the source duration.
@@ -5410,8 +5456,8 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
   * For a source under 5 minutes, aim for about half the length, never exceed 50%.
 - This is not a detailed summary or review. Do not include non-essential scene descriptions, explanatory pauses, or secondary character chatter.
 - If the story can be told in fewer segments, do that. Use as few segments as necessary to keep the full arc intact.
-- If you cannot fit the script in 50% of the source, cut harder until you can.
-- Do not round up or add padding. This is a strict 50%-or-less output rule.
+- If the script exceeds 50% of source duration, condense low-priority scenes. But NEVER go below 30%.
+- Balance is key: aim for exactly 40-50% of the source duration.
 - Each segment must flow smoothly into the next.
 - If token pressure appears, condense remaining story into brief segments instead of stopping.
 
@@ -5463,7 +5509,7 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
         );
       }
       if (scriptResult.error) throw new Error(scriptResult.error);
-      const scriptText = scriptResult.script || "";
+      const scriptText = stripRecapScriptPreamble(scriptResult.script || "");
       if (!scriptText || scriptText.trim().length < 10) throw new Error("AI script generation returned empty result");
 
       const segments = scriptToSegments(scriptText, duration);
@@ -5591,6 +5637,9 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
             const words = bestSentence.trim().split(/\s+/);
             const hookTitle = words.slice(0, 8).join(" ") + (words.length > 8 ? "..." : "");
             console.log(`[HOOK SCORER] Seg ${hookIdx} score=${maxScore.toFixed(1)}: "${hookTitle}"`);
+            // NOTE: hook refs live in ResultView scope; this scorer only logs here.
+            void hookIdx;
+            void hookTitle;
           }
         } catch (e) {
           console.warn("[HOOK LOCAL] Failed:", e);
@@ -5608,9 +5657,13 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
               "Content-Type": "application/json",
               apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
               Authorization: `Bearer ${userToken}`,
+              ...(resolvedOwnKey ? { "x-own-api-key": resolvedOwnKey } : {}),
             },
             body: JSON.stringify({
               seoMode: true,
+              recapNvPipeline: true,
+              apiMode: resolvedApiMode,
+              ...(resolvedOwnKey ? { ownApiKey: resolvedOwnKey, apiKey: resolvedOwnKey } : {}),
               seoPrompt,
               generationConfig: { temperature: 0.4, maxOutputTokens: 700 },
             }),

@@ -33,6 +33,7 @@ const AdminUsersTab: React.FC = () => {
     banUser,
     updateCredits,
     updatePlan,
+    updateCreditDates,
     clearDevices
   } = useAdmin();
 
@@ -44,6 +45,10 @@ const AdminUsersTab: React.FC = () => {
   const [devicesDialogOpen, setDevicesDialogOpen] = useState(false);
   const [creditDetailOpen, setCreditDetailOpen] = useState(false);
   const [creditDetailProfile, setCreditDetailProfile] = useState<typeof profiles[0] | null>(null);
+  const [editDatesMode, setEditDatesMode] = useState(false);
+  const [editStartDate, setEditStartDate] = useState<string>("");
+  const [editExpiryDate, setEditExpiryDate] = useState<string>("");
+  const [savingDates, setSavingDates] = useState(false);
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<typeof profiles[0] | null>(null);
 
@@ -939,36 +944,125 @@ const AdminUsersTab: React.FC = () => {
 
               {/* Credit Dates */}
               <div className="space-y-1.5 pt-2 border-t border-border/20">
-                <div className="flex justify-between items-center">
-                  <span className="text-2xs text-muted-foreground">Start Date</span>
-                  <span className="text-2xs font-medium text-foreground">
-                    {creditDetailProfile.credits_started_at 
-                      ? new Date(creditDetailProfile.credits_started_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-                      : '—'}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-2xs text-muted-foreground">Expiry Date</span>
-                  <span className={`text-2xs font-medium ${
-                    creditDetailProfile.credits_started_at && (() => {
-                      const s = new Date(creditDetailProfile.credits_started_at);
-                      const exp = new Date(s);
-                      exp.setMonth(exp.getMonth() + 1);
-                      exp.setDate(exp.getDate() + 7);
-                      return exp.getTime() < Date.now();
-                    })() ? 'text-red-400' : 'text-foreground'
-                  }`}>
-                    {creditDetailProfile.credits_started_at 
-                      ? (() => {
+                {!editDatesMode ? (
+                  <>
+                    <div className="flex justify-between items-center">
+                      <span className="text-2xs text-muted-foreground">Start Date</span>
+                      <span className="text-2xs font-medium text-foreground">
+                        {creditDetailProfile.credits_started_at 
+                          ? new Date(creditDetailProfile.credits_started_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                          : '—'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-2xs text-muted-foreground">Expiry Date</span>
+                      <span className={`text-2xs font-medium ${(() => {
+                        const override = (creditDetailProfile as any).credits_expires_at as string | null | undefined;
+                        let exp: Date | null = null;
+                        if (override) exp = new Date(override);
+                        else if (creditDetailProfile.credits_started_at) {
                           const s = new Date(creditDetailProfile.credits_started_at);
-                          const exp = new Date(s);
+                          exp = new Date(s);
                           exp.setMonth(exp.getMonth() + 1);
                           exp.setDate(exp.getDate() + 7);
-                          return exp.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-                        })()
-                      : '—'}
-                  </span>
-                </div>
+                        }
+                        return exp && exp.getTime() < Date.now() ? 'text-red-400' : 'text-foreground';
+                      })()}`}>
+                        {(() => {
+                          const override = (creditDetailProfile as any).credits_expires_at as string | null | undefined;
+                          let exp: Date | null = null;
+                          if (override) exp = new Date(override);
+                          else if (creditDetailProfile.credits_started_at) {
+                            const s = new Date(creditDetailProfile.credits_started_at);
+                            exp = new Date(s);
+                            exp.setMonth(exp.getMonth() + 1);
+                            exp.setDate(exp.getDate() + 7);
+                          }
+                          return exp ? exp.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+                        })()}
+                        {(creditDetailProfile as any).credits_expires_at && (
+                          <span className="ml-1 text-[9px] text-amber-400">(override)</span>
+                        )}
+                      </span>
+                    </div>
+                    {isMasterAdmin && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full h-7 text-2xs mt-1"
+                        onClick={() => {
+                          const toInput = (iso: string | null | undefined) =>
+                            iso ? new Date(iso).toISOString().slice(0, 10) : "";
+                          setEditStartDate(toInput(creditDetailProfile.credits_started_at));
+                          setEditExpiryDate(toInput((creditDetailProfile as any).credits_expires_at));
+                          setEditDatesMode(true);
+                        }}
+                      >
+                        Edit Dates
+                      </Button>
+                    )}
+                  </>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="space-y-1">
+                      <Label className="text-2xs text-muted-foreground">Start Date</Label>
+                      <Input
+                        type="date"
+                        value={editStartDate}
+                        onChange={(e) => setEditStartDate(e.target.value)}
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-2xs text-muted-foreground">
+                        Expiry Date <span className="text-[9px] text-amber-400">(override; leave blank = auto +1m+7d)</span>
+                      </Label>
+                      <Input
+                        type="date"
+                        value={editExpiryDate}
+                        onChange={(e) => setEditExpiryDate(e.target.value)}
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        className="flex-1 h-7 text-2xs"
+                        disabled={savingDates}
+                        onClick={async () => {
+                          if (!creditDetailProfile) return;
+                          setSavingDates(true);
+                          const { error } = await updateCreditDates(
+                            creditDetailProfile.user_id,
+                            editStartDate || null,
+                            editExpiryDate || null
+                          );
+                          setSavingDates(false);
+                          if (error) {
+                            toast({ title: "Save failed", description: error.message, variant: "destructive" });
+                            return;
+                          }
+                          toast({ title: "✅ Dates updated" });
+                          await fetchProfiles();
+                          setEditDatesMode(false);
+                          // Refresh dialog profile
+                          const updated = profiles.find(p => p.user_id === creditDetailProfile.user_id);
+                          if (updated) setCreditDetailProfile(updated);
+                        }}
+                      >
+                        {savingDates ? "Saving..." : "Save"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 h-7 text-2xs"
+                        onClick={() => setEditDatesMode(false)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 <div className="flex justify-between items-center">
                   <span className="text-2xs text-muted-foreground">Plan</span>
                   <span className={`inline-flex items-center gap-1 rounded-full ${getPlanBadgeClass(creditDetailProfile.plan)}`}>
