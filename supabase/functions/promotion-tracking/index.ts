@@ -45,9 +45,10 @@ Deno.serve(async (req) => {
     const bearerToken = authHeader?.replace(/^Bearer\s+/i, "").trim() || "";
     const bearerPayload = decodeJwtPayload(bearerToken);
     const tokenIssuer = typeof bearerPayload?.iss === "string" ? bearerPayload.iss : "";
+    const tokenProjectRef = typeof bearerPayload?.ref === "string" ? bearerPayload.ref : "";
     const isCurrentProjectAnonJwt =
       bearerPayload?.role === "anon" &&
-      tokenIssuer.includes("ijnwvbdazdowiljfcmpq") &&
+      (tokenIssuer.includes("ijnwvbdazdowiljfcmpq") || tokenProjectRef === "ijnwvbdazdowiljfcmpq") &&
       typeof bearerPayload.exp === "number" &&
       bearerPayload.exp * 1000 > Date.now();
     const isAnonOrPublishable =
