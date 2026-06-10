@@ -648,51 +648,6 @@ serve(async (req) => {
         );
       }
 
-      case 'update_credit_dates': {
-        // SECURITY: Only master admins can directly edit credit start/expiry dates
-        if (!isCallerMasterAdmin) {
-          return new Response(
-            JSON.stringify({ error: "Master Admin access required to edit credit dates" }),
-            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        const { userId, startDate, expiryDate } = params;
-        if (!userId || typeof userId !== 'string') {
-          return new Response(
-            JSON.stringify({ error: "Invalid user ID" }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        const updateObj: Record<string, any> = {};
-        if (startDate !== undefined) {
-          updateObj.credits_started_at = startDate ? new Date(startDate).toISOString() : null;
-        }
-        if (expiryDate !== undefined) {
-          updateObj.credits_expires_at = expiryDate ? new Date(expiryDate).toISOString() : null;
-        }
-
-        if (Object.keys(updateObj).length === 0) {
-          return new Response(
-            JSON.stringify({ error: "No dates provided" }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        const { error: dateErr } = await supabaseAdmin
-          .from('profiles')
-          .update(updateObj)
-          .eq('user_id', userId);
-
-        if (dateErr) throw dateErr;
-
-        return new Response(
-          JSON.stringify({ success: true }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
       default:
         return new Response(
           JSON.stringify({ error: "Unknown action" }),

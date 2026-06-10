@@ -1,9 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getGeminiKey, geminiRetryFetch } from "../_shared/geminiKeys.ts";
-import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
 
-let corsHeaders: Record<string, string> = {};
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
 
 function jsonResponse(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -37,31 +40,6 @@ function shouldTryNextModel(status: number): boolean {
   return status === 429 || status === 404 || status === 503 || status === 504;
 }
 
-function hasTargetScriptConflict(text: string, targetLang: string): boolean {
-  const lang = targetLang.toLowerCase();
-  const latinChars = text.match(/[A-Za-z]/g)?.length || 0;
-  const letterChars = text.match(/[\p{L}\p{M}]/gu)?.length || 1;
-  const hasTooMuchLatin = latinChars > 16 || latinChars / letterChars > 0.35;
-  const hasBurmese = /[\u1000-\u109F\uAA60-\uAA7F]/.test(text);
-  const hasThai = /[\u0E00-\u0E7F]/.test(text);
-  const hasCjk = /[\u3400-\u9FFF\uF900-\uFAFF]/.test(text);
-  const hasDevanagari = /[\u0900-\u097F]/.test(text);
-
-  if (lang.includes("burmese") || lang.includes("myanmar") || targetLang.includes("မြန်မာ")) {
-    return !hasBurmese || hasTooMuchLatin || hasThai || hasCjk || hasDevanagari;
-  }
-  if (lang.includes("thai") || targetLang.includes("ไทย")) {
-    return !hasThai || hasTooMuchLatin || hasBurmese || hasCjk || hasDevanagari;
-  }
-  if (lang.includes("chinese") || targetLang.includes("中文")) {
-    return !hasCjk || hasTooMuchLatin || hasBurmese || hasThai || hasDevanagari;
-  }
-  if (lang.includes("english")) {
-    return hasBurmese || hasThai || hasCjk || hasDevanagari;
-  }
-  return false;
-}
-
 async function geminiRetryFetchWithTimeout(
   urlBuilder: (apiKey: string) => string,
   options: RequestInit,
@@ -90,32 +68,11 @@ async function geminiRetryFetchWithTimeout(
 }
 
 serve(async (req) => {
-  const _corsBlock = handleCorsPreflightOrReject(req);
-  if (_corsBlock) return _corsBlock;
-  corsHeaders = getCorsHeaders(req);
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
 
   try {
-    // ===== AUTHENTICATION =====
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Authentication required" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-    const supabaseAuthClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-    const { data: { user }, error: authError } = await supabaseAuthClient.auth.getUser();
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Invalid or expired token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     const body = await req.json();
     const {
       audioBase64,
@@ -257,10 +214,6 @@ CRITICAL RULES:
 - Do NOT add speaker names, labels, notes, or metadata
 - Translate every segment completely, even if it is short
 - Return ONLY a JSON array with 'start', 'end', and 'text' properties
-- TARGET LANGUAGE EXCLUSIVITY (ABSOLUTE): Every 'text' value MUST be written ENTIRELY in ${targetLang} ONLY.
-- NEVER include the original source language words, NEVER include English, NEVER mix languages.
-- Do NOT output the original line followed by the translation. Do NOT output English alongside ${targetLang}.
-- The ONLY exception is proper names of people/places, which stay as-is. Everything else MUST be in ${targetLang}.
 
 Subtitles to translate:
 ${JSON.stringify(textBatch)}`;
@@ -295,15 +248,8 @@ ${JSON.stringify(textBatch)}`;
       const multimodalPrompt = hasFrames
         ? `You are an expert subtitle translator with ABSOLUTE ZERO HALLUCINATION policy. You receive BOTH audio AND video frame screenshots.
 
-TARGET LANGUAGE LOCK — MOST IMPORTANT RULE:
-- The selected output language is ${targetLang}. EVERY 'text' value MUST be ${targetLang} ONLY.
-- First silently understand/transcribe the source audio or visible source subtitle text, then translate internally, then output ONLY the final ${targetLang} translation.
-- NEVER copy source-language words into 'text'. NEVER output English unless ${targetLang} is English. NEVER output Hindi unless ${targetLang} is Hindi.
-- NEVER output source text + translation together. The 'text' field is NOT transcription; it is FINAL TRANSLATION ONLY.
-- Proper names of people/places may stay unchanged. All other words must be translated to ${targetLang}.
-
 CRITICAL SOURCE PRIORITY:
-1. If the frames contain burned-in original subtitles, use that on-screen text ONLY to understand meaning, names, and timing. Do NOT copy it into the output.
+1. If the frames contain burned-in original subtitles, treat that on-screen text as the PRIMARY wording reference.
 2. Use the audio to verify timing, fill gaps, and catch spoken words not visible on screen.
 3. Translate EVERY clearly spoken or clearly visible subtitle line to ${targetLang}. Do not omit dialogue.
 4. ABSOLUTE ZERO HALLUCINATION: ONLY translate words that are ACTUALLY SPOKEN or ACTUALLY VISIBLE. NEVER fabricate, imagine, or add content not in the source.
@@ -312,16 +258,10 @@ CRITICAL SOURCE PRIORITY:
 6. Translate into modern, natural ${targetLang} conversational spoken style. NEVER use formal or literary language.
 7. Do NOT add speaker names, labels, descriptions, or any metadata not present in the source.
 8. If there is no clear speech and no readable subtitle text, return [].
-9. TARGET LANGUAGE EXCLUSIVITY (ABSOLUTE): Every 'text' value MUST be written ENTIRELY in ${targetLang} ONLY. NEVER output the original source language (e.g. Hindi/English) alongside the translation. NEVER mix two or three languages in one line. NEVER include the original line followed by the ${targetLang} version. Only proper names of people/places may remain unchanged — every other word MUST be in ${targetLang}.
 
 Audio chunk duration: ${(audioDuration || 0).toFixed(2)} seconds. Timestamps: 0 to ${(audioDuration || 0).toFixed(2)}.
-Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'text' (${targetLang} translated text only).`
+Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'text' (translated text only).`
         : `Transcribe the audio and translate it to ${targetLang}.
-TARGET LANGUAGE LOCK — MOST IMPORTANT RULE:
-- EVERY 'text' value MUST be ${targetLang} ONLY.
-- First silently understand/transcribe the source audio, then translate internally, then output ONLY the final ${targetLang} translation.
-- NEVER copy source-language words into 'text'. NEVER output English unless ${targetLang} is English. NEVER output Hindi unless ${targetLang} is Hindi.
-- The 'text' field is NOT transcription; it is FINAL TRANSLATION ONLY.
 CRITICAL RULES:
 - ONLY translate words that are ACTUALLY SPOKEN. NEVER fabricate or add content not in the source audio.
 - Keep character names exactly as spoken in the original.
@@ -329,9 +269,8 @@ CRITICAL RULES:
 - Do NOT add speaker names, labels, or descriptions.
 - If no clear speech is present, return [].
 - Timing must be accurate. Break into short 2-3 second subtitle chunks.
-- TARGET LANGUAGE EXCLUSIVITY (ABSOLUTE): Every 'text' value MUST be written ENTIRELY in ${targetLang} ONLY. NEVER include the original spoken language or English. NEVER mix languages. Only proper names may remain unchanged.
 Audio duration: ${(audioDuration || 0).toFixed(2)} seconds. Timestamps: 0 to ${(audioDuration || 0).toFixed(2)}.
-Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'text' (${targetLang} translated text only).`;
+Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'text' (translated text only).`;
 
       parts = [audioPart, ...frameParts, { text: multimodalPrompt }];
 
@@ -340,11 +279,6 @@ Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'tex
           audioPart,
           {
             text: `Transcribe the audio and translate it to ${targetLang}.
-TARGET LANGUAGE LOCK — MOST IMPORTANT RULE:
-- EVERY 'text' value MUST be ${targetLang} ONLY.
-- First silently understand/transcribe the source audio, then translate internally, then output ONLY the final ${targetLang} translation.
-- NEVER copy source-language words into 'text'. NEVER output English unless ${targetLang} is English. NEVER output Hindi unless ${targetLang} is Hindi.
-- The 'text' field is NOT transcription; it is FINAL TRANSLATION ONLY.
 CRITICAL RULES:
 - ONLY translate words that are ACTUALLY SPOKEN. NEVER fabricate or add content not in the source audio.
 - Keep character names exactly as spoken in the original.
@@ -352,9 +286,8 @@ CRITICAL RULES:
 - Do NOT add speaker names, labels, or descriptions.
 - If no clear speech is present, return [].
 - Timing must be accurate. Break into short 2-3 second subtitle chunks.
-- TARGET LANGUAGE EXCLUSIVITY (ABSOLUTE): Every 'text' value MUST be written ENTIRELY in ${targetLang} ONLY. NEVER include the original spoken language or English. NEVER mix languages. Only proper names may remain unchanged.
 Audio duration: ${(audioDuration || 0).toFixed(2)} seconds. Timestamps: 0 to ${(audioDuration || 0).toFixed(2)}.
-Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'text' (${targetLang} translated text only).`,
+Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'text' (translated text only).`,
           },
         ];
       }
@@ -448,17 +381,7 @@ Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'tex
     }
 
     const data = await response.json();
-    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
-    let text = rawText;
-    try {
-      const jsonMatch = rawText.match(/\[[\s\S]*\]/);
-      const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : "[]");
-      if (Array.isArray(parsed)) {
-        text = JSON.stringify(parsed.filter((item: any) => !hasTargetScriptConflict(String(item?.text || ""), targetLang)));
-      }
-    } catch {
-      text = rawText;
-    }
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
 
     return new Response(JSON.stringify({ result: text }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

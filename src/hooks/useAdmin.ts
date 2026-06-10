@@ -192,12 +192,6 @@ export function useAdmin() {
     });
   };
 
-  const updateCreditDates = async (userId: string, startDate: string | null, expiryDate: string | null) => {
-    return supabase.functions.invoke('admin-actions', {
-      body: { action: 'update_credit_dates', userId, startDate, expiryDate }
-    });
-  };
-
   const clearDevices = async (userId: string) => {
     return supabase.functions.invoke('admin-actions', {
       body: { action: 'clear_devices', userId }
@@ -252,7 +246,6 @@ export function useAdmin() {
     banUser,
     updateCredits,
     updatePlan,
-    updateCreditDates,
     clearDevices,
     updateAppSettings,
     getAppSettings,

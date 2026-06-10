@@ -45,30 +45,6 @@ serve(async (req) => {
       );
     }
 
-    // SSRF guard: only allow Google upload endpoints over HTTPS
-    const ALLOWED_UPLOAD_PREFIXES = [
-      "https://generativelanguage.googleapis.com/",
-      "https://storage.googleapis.com/",
-    ];
-    let parsedUploadUrl: URL;
-    try {
-      parsedUploadUrl = new URL(uploadUrl);
-    } catch {
-      return new Response(
-        JSON.stringify({ error: "Invalid uploadUrl" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-    if (
-      parsedUploadUrl.protocol !== "https:" ||
-      !ALLOWED_UPLOAD_PREFIXES.some((p) => uploadUrl.startsWith(p))
-    ) {
-      return new Response(
-        JSON.stringify({ error: "uploadUrl not in allowlist" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     const chunkBytes = new Uint8Array(await chunk.arrayBuffer());
 
     // Forward chunk to Google resumable upload URL

@@ -10,44 +10,6 @@ Deno.serve(async (req) => {
 
 
   try {
-    // ===== AUTHENTICATION =====
-    // Promotion Mode is used by GUEST (unauthenticated) users, so the browser
-    // SDK sends the anon publishable key as the Bearer token (no `sub` claim).
-    // Accept either:
-    //   (a) the project's anon/publishable key, OR
-    //   (b) a valid user JWT
-    // Server-to-server abuse is mitigated by the CORS origin allowlist.
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Authentication required" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const publishableKeys = (Deno.env.get("SUPABASE_PUBLISHABLE_KEYS") || "")
-      .split(",").map((k) => k.trim()).filter(Boolean);
-    const isAnonOrPublishable =
-      token === anonKey || publishableKeys.includes(token);
-
-    if (!isAnonOrPublishable) {
-      // Not the anon key — must be a valid user JWT
-      const authClient = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        anonKey,
-        { global: { headers: { Authorization: authHeader } } }
-      );
-      const { data: claimsData, error: authError } =
-        await authClient.auth.getClaims(token);
-      if (authError || !claimsData?.claims?.sub) {
-        return new Response(
-          JSON.stringify({ error: "Invalid or expired token" }),
-          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-    }
-
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!

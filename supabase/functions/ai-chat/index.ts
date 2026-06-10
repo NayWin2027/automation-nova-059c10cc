@@ -43,7 +43,7 @@ serve(async (req) => {
     console.log(`[ai-chat] Authenticated user: ${user.id}`);
 
     // ===== INPUT VALIDATION =====
-    const { messages } = await req.json();
+    const { messages, systemPrompt } = await req.json();
 
     // Validate messages
     if (!messages || !Array.isArray(messages)) {
@@ -83,9 +83,10 @@ serve(async (req) => {
       }
     }
 
-    // Hardcoded system prompt — never accept user-supplied system instructions
-    // to prevent prompt injection / safety bypass on a shared backend key.
-    const sanitizedSystemPrompt = `You are the "Fast-Response Burmese Linguist & Content Specialist," a high-speed AI engine powered by Gemini 3 Flash, optimized for rapid and accurate Myanmar language processing. Use the Official Myanmar Sar Dictionary (မြန်မာစာသတ်ပုံကျမ်း) as the absolute gold standard. Ensure natural language flow, 100% accurate Burmese orthography, and contextual translations.`;
+    // Validate system prompt
+    const sanitizedSystemPrompt = systemPrompt && typeof systemPrompt === "string" 
+      ? systemPrompt.substring(0, MAX_PROMPT_LENGTH) 
+      : `You are the "Fast-Response Burmese Linguist & Content Specialist," a high-speed AI engine powered by Gemini 3 Flash, optimized for rapid and accurate Myanmar language processing. Use the Official Myanmar Sar Dictionary (မြန်မာစာသတ်ပုံကျမ်း) as the absolute gold standard. Ensure natural language flow, 100% accurate Burmese orthography, and contextual translations.`;
 
     // ===== CREDIT CHECK (Server-side) =====
     const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);

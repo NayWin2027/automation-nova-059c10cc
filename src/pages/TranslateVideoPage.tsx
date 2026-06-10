@@ -193,34 +193,6 @@ const stripSpeakerName = (str: string) => {
   return cleanStr;
 };
 
-const hasTargetScriptConflict = (text: string, targetLang: string) => {
-  const lang = targetLang.toLowerCase();
-  const latinChars = text.match(/[A-Za-z]/g)?.length || 0;
-  const letterChars = text.match(/[\p{L}\p{M}]/gu)?.length || 1;
-  const hasTooMuchLatin = latinChars > 16 || latinChars / letterChars > 0.35;
-  const hasBurmese = /[\u1000-\u109F\uAA60-\uAA7F]/.test(text);
-  const hasThai = /[\u0E00-\u0E7F]/.test(text);
-  const hasCjk = /[\u3400-\u9FFF\uF900-\uFAFF]/.test(text);
-  const hasDevanagari = /[\u0900-\u097F]/.test(text);
-
-  if (lang.includes("burmese") || lang.includes("myanmar") || targetLang.includes("မြန်မာ")) {
-    return !hasBurmese || hasTooMuchLatin || hasThai || hasCjk || hasDevanagari;
-  }
-  if (lang.includes("thai") || targetLang.includes("ไทย")) {
-    return !hasThai || hasTooMuchLatin || hasBurmese || hasCjk || hasDevanagari;
-  }
-  if (lang.includes("chinese") || targetLang.includes("中文")) {
-    return !hasCjk || hasTooMuchLatin || hasBurmese || hasThai || hasDevanagari;
-  }
-  if (lang.includes("english")) {
-    return hasBurmese || hasThai || hasCjk || hasDevanagari;
-  }
-  return false;
-};
-
-const keepOnlyTargetLanguageSubtitles = <T extends { text: string }>(subs: T[], targetLang: string) =>
-  subs.filter((sub) => sub.text.trim().length > 0 && !hasTargetScriptConflict(sub.text, targetLang));
-
 function parseSubtitleFile(content: string) {
   const parseTime = (timeStr: string) => {
     const cleanTime = timeStr.replace(/[^\d:.,]/g, "");
@@ -1568,19 +1540,12 @@ export default function App() {
           parts.push({
             text: `You are a highly accurate Multimodal Video Transcription and Translation Expert for subtitle burn-in. Your ABSOLUTE core directive is 100% fidelity to the ORIGINAL SOURCE MATERIAL ONLY.
 
-TARGET LANGUAGE LOCK — MOST IMPORTANT RULE:
-- The selected output language is ${targetLang}. EVERY 'text' value MUST be ${targetLang} ONLY.
-- First silently understand/transcribe the source audio or visible source subtitle text, then translate internally, then output ONLY the final ${targetLang} translation.
-- NEVER copy source-language words into 'text'. NEVER output English unless ${targetLang} is English. NEVER output Hindi unless ${targetLang} is Hindi.
-- NEVER output source text + translation together. The 'text' field is NOT transcription; it is FINAL TRANSLATION ONLY.
-- Proper names of people/places may stay unchanged. All other words must be translated to ${targetLang}.
-
 STRICT OPERATING PRINCIPLES:
 1. COMPREHENSIVE ANALYSIS: You must process the video input using three concurrent sources of information to construct context:
    - AUDIO (Speech Recognition)
    - VISUALS (Character actions, setting, context)
    - ON-SCREEN TEXT/OCR (Hardcoded names, titles, captions)
-   *Use these ONLY to understand meaning, names, and timing. Do NOT copy on-screen/source text into the output.*
+   *Combine these to ensure names are spelled correctly (e.g., use on-screen spellings) and intended meanings are captured based on visual context.*
 2. ABSOLUTE ZERO HALLUCINATION — THE #1 RULE:
    - You MUST ONLY translate words that are ACTUALLY SPOKEN in the source audio.
    - NEVER fabricate, imagine, infer, or add ANY content that does not exist in the source video.
@@ -1612,10 +1577,10 @@ TECHNICAL RULES FOR JSON OUTPUT:
 7. ONLY TRANSLATE ACTUAL WORDS: If the speaker is just making sounds, ignore it. Only transcribe and translate actual spoken language.
 8. If there is NO speech, return an empty array []. Do NOT invent dialogue.
 9. ABSOLUTELY NO SYMBOLS OR PUNCTUATION: Output ONLY the raw spoken words.
- 10. ABSOLUTELY NO SPEAKER LABELS OR NON-${targetLang.toUpperCase()} WORDS: ONLY output the final ${targetLang} dialogue itself.
+10. ABSOLUTELY NO SPEAKER LABELS OR ENGLISH WORDS: ONLY output the dialogue itself.
 
 REQUIRED OUTPUT FORMAT:
-Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${targetLang} translated spoken words.
+Return ONLY a valid JSON array. The 'text' field MUST contain ONLY the pure translated spoken words.
 [{"start": 0.0, "end": 2.1, "text": "မင်္ဂလာပါခင်ဗျာ"}, {"start": 2.2, "end": 4.0, "text": "နေကောင်းကြရဲ့လား"}, ...]`,
           });
 
@@ -1635,7 +1600,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                 model: "gemini-2.5-flash",
                 contents: [{ role: "user", parts: ownParts }],
                 config: {
-                  temperature: 0,
+                  temperature: 0.1,
                   maxOutputTokens: 8192,
                   responseMimeType: "application/json",
                 },
@@ -1658,7 +1623,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
 
             // Adjust timestamps by adding the EXACT segment offset (calculated by VAD)
             // Also clamp and validate each subtitle to prevent timing bugs
-            const adjustedSubs: { start: number; end: number; text: string }[] = chunkSubs
+            const adjustedSubs = chunkSubs
               .filter((sub: any) => {
                 const s = parseFloat(sub.start) || 0;
                 const e = parseFloat(sub.end) || 0;
@@ -1675,7 +1640,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
               })
               .filter((sub: any) => sub.text.length > 0 && sub.end > sub.start);
 
-            parsedSubtitles = [...parsedSubtitles, ...keepOnlyTargetLanguageSubtitles(adjustedSubs, targetLang)];
+            parsedSubtitles = [...parsedSubtitles, ...adjustedSubs];
           } catch (err: any) {
             console.error(`Error processing chunk ${i}:`, err);
             const isRateLimit =

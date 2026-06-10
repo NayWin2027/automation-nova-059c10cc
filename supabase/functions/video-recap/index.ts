@@ -309,7 +309,7 @@ serve(async (req) => {
           const resp = await fetch("https://tikwm.com/api/", {
             method: "POST",
             headers: {
-              Accept: "application/json",
+              "Accept": "application/json",
               "Content-Type": "application/x-www-form-urlencoded",
               "User-Agent": "Mozilla/5.0 (Linux; Android 13) RecapNV/1.0",
             },
@@ -319,10 +319,7 @@ serve(async (req) => {
           if (data?.code === 0 && data?.data) {
             mediaUrl = data.data.hdplay || data.data.play || data.data.wmplay || null;
             if (data.data.title) {
-              mediaFileName =
-                String(data.data.title)
-                  .replace(/[\/\\:*?"<>|]/g, "_")
-                  .slice(0, 80) + ".mp4";
+              mediaFileName = String(data.data.title).replace(/[\/\\:*?"<>|]/g, "_").slice(0, 80) + ".mp4";
             }
           } else {
             lastErr = `tikwm: ${data?.msg || resp.status}`;
@@ -340,8 +337,8 @@ serve(async (req) => {
             headers: {
               "Content-Type": "application/json",
               "User-Agent": "Mozilla/5.0",
-              Origin: "https://snapsave.app",
-              Referer: "https://snapsave.app/",
+              "Origin": "https://snapsave.app",
+              "Referer": "https://snapsave.app/",
             },
             body: JSON.stringify({ url: platformUrl }),
           });
@@ -349,8 +346,7 @@ serve(async (req) => {
           const u =
             d?.data?.url ||
             d?.url ||
-            (Array.isArray(d?.data?.medias) &&
-              d.data.medias.find((m: any) => /mp4/i.test(m?.type || m?.ext || ""))?.url);
+            (Array.isArray(d?.data?.medias) && d.data.medias.find((m: any) => /mp4/i.test(m?.type || m?.ext || ""))?.url);
           if (u) mediaUrl = u;
           else lastErr = `snapsave-ig: ${d?.message || r.status}`;
         } catch (e: any) {
@@ -376,26 +372,15 @@ serve(async (req) => {
               const r = await fetch(`${base}/streams/${vid}`, {
                 headers: { "User-Agent": "Mozilla/5.0" },
               });
-              if (!r.ok) {
-                lastErr = `${base}: ${r.status}`;
-                continue;
-              }
+              if (!r.ok) { lastErr = `${base}: ${r.status}`; continue; }
               const d = await r.json();
               // Find a video stream that contains both audio+video (mp4, ≤720p).
-              const muxed =
-                (d.videoStreams || []).find(
-                  (s: any) =>
-                    s.videoOnly === false &&
-                    /mp4/i.test(s.mimeType || s.format || "") &&
-                    (s.quality || "").includes("720"),
-                ) || (d.videoStreams || []).find((s: any) => s.videoOnly === false);
+              const muxed = (d.videoStreams || []).find((s: any) =>
+                s.videoOnly === false && /mp4/i.test(s.mimeType || s.format || "") && (s.quality || "").includes("720"),
+              ) || (d.videoStreams || []).find((s: any) => s.videoOnly === false);
               if (muxed?.url) {
                 mediaUrl = muxed.url;
-                if (d.title)
-                  mediaFileName =
-                    String(d.title)
-                      .replace(/[\/\\:*?"<>|]/g, "_")
-                      .slice(0, 80) + ".mp4";
+                if (d.title) mediaFileName = String(d.title).replace(/[\/\\:*?"<>|]/g, "_").slice(0, 80) + ".mp4";
                 break;
               }
               lastErr = `${base}: no muxed stream`;
@@ -418,24 +403,15 @@ serve(async (req) => {
                 const r = await fetch(`${base}/api/v1/videos/${vid}`, {
                   headers: { "User-Agent": "Mozilla/5.0" },
                 });
-                if (!r.ok) {
-                  lastErr = `${base}: ${r.status}`;
-                  continue;
-                }
+                if (!r.ok) { lastErr = `${base}: ${r.status}`; continue; }
                 const d = await r.json();
                 const muxed =
-                  (d.formatStreams || []).find(
-                    (s: any) => /mp4/i.test(s.container || s.type || "") && (s.qualityLabel || "").includes("720"),
-                  ) ||
+                  (d.formatStreams || []).find((s: any) => /mp4/i.test(s.container || s.type || "") && (s.qualityLabel || "").includes("720")) ||
                   (d.formatStreams || []).find((s: any) => /mp4/i.test(s.container || s.type || "")) ||
                   (d.formatStreams || [])[0];
                 if (muxed?.url) {
                   mediaUrl = muxed.url;
-                  if (d.title)
-                    mediaFileName =
-                      String(d.title)
-                        .replace(/[\/\\:*?"<>|]/g, "_")
-                        .slice(0, 80) + ".mp4";
+                  if (d.title) mediaFileName = String(d.title).replace(/[\/\\:*?"<>|]/g, "_").slice(0, 80) + ".mp4";
                   break;
                 }
                 lastErr = `${base}: no formatStreams`;
@@ -457,8 +433,8 @@ serve(async (req) => {
             headers: {
               "Content-Type": "application/json",
               "User-Agent": "Mozilla/5.0",
-              Origin: "https://snapany.com",
-              Referer: "https://snapany.com/",
+              "Origin": "https://snapany.com",
+              "Referer": "https://snapany.com/",
             },
             body: JSON.stringify({ link: platformUrl }),
           });
@@ -479,7 +455,7 @@ serve(async (req) => {
             headers: {
               "Content-Type": "application/x-www-form-urlencoded",
               "User-Agent": "Mozilla/5.0",
-              Referer: "https://getfvid.com/",
+              "Referer": "https://getfvid.com/",
             },
             body: `url=${encodeURIComponent(platformUrl)}`,
           });
@@ -502,8 +478,8 @@ serve(async (req) => {
             headers: {
               "Content-Type": "application/json",
               "User-Agent": "Mozilla/5.0",
-              Origin: "https://snapany.com",
-              Referer: "https://snapany.com/",
+              "Origin": "https://snapany.com",
+              "Referer": "https://snapany.com/",
             },
             body: JSON.stringify({ link: platformUrl }),
           });
@@ -535,10 +511,10 @@ serve(async (req) => {
           headers: { "User-Agent": "Mozilla/5.0" },
         });
         if (!videoResp.ok) {
-          return new Response(JSON.stringify({ error: `Video stream fetch failed: ${videoResp.status}` }), {
-            status: 502,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return new Response(
+            JSON.stringify({ error: `Video stream fetch failed: ${videoResp.status}` }),
+            { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
         }
         const arrayBuf = await videoResp.arrayBuffer();
         const mimeType = videoResp.headers.get("content-type") || "video/mp4";
@@ -568,10 +544,10 @@ serve(async (req) => {
           { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       } catch (e: any) {
-        return new Response(JSON.stringify({ error: `Video proxy failed: ${e?.message || "unknown"}` }), {
-          status: 502,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return new Response(
+          JSON.stringify({ error: `Video proxy failed: ${e?.message || "unknown"}` }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
       }
     }
 

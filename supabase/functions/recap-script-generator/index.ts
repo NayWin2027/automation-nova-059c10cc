@@ -20,7 +20,7 @@ function buildGenerationConfig(model: string, requestedMaxOutputTokens: number |
     maxOutputTokens,
   };
 
-  if (model === "gemini-2.5-flash-lite" || model === "gemini-2.5-flash" || model.includes("preview")) {
+  if (model === "gemini-2.5-flash-lite" || model === "gemini-2.5-flash") {
     config.thinkingConfig = { thinkingBudget: 0 };
   }
 
@@ -178,7 +178,7 @@ function enforceScriptCoverage70(script: string, sourceDurationSec?: number | nu
   const normalized = script.replace(/\r\n/g, "\n").trim();
   if (!normalized || !sourceDurationSec) return normalized || script;
 
-  const maxWords = Math.max(45, Math.floor((sourceDurationSec / 60) * 150));
+  const maxWords = Math.max(45, Math.floor((sourceDurationSec / 60) * 75));
   const words = normalized.split(/\s+/).filter(Boolean);
   if (words.length <= maxWords) return normalized;
 
@@ -456,8 +456,8 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 
 SCRIPT LENGTH RULE (CRITICAL — TRUE 55% RECAP):
 - The narration script MUST cover the full STORY ARC from start to finish, but NEVER retell the full source
-- Length target: about 55% of the source duration when read aloud (≈150 words per source minute for Burmese/Asian, ≈100 for English)
-- For example: a 3-minute video → ~450 words; a 10-minute video → ~1500 words; a 20-minute video → ~3000 words; a 30-minute video → ~4500 words
+- Length target: about 55% of the source duration when read aloud (≈75 words per source minute, max)
+- For example: a 3-minute video → ~225 words; a 10-minute video → ~750 words; a 30-minute video → ~2250 words
 - You MUST include the ending, but compress filler and low-stakes scenes aggressively
 - The FINAL paragraph MUST correspond to the FINAL scene of the source video (its timecode should be near the source's ending)
 - Every important beat from beginning, middle, AND end must appear — no part of the video may be skipped or left out
@@ -469,9 +469,6 @@ VIRAL HOOK RULE (MANDATORY — FIRST 3 SECONDS):
 - Great hook examples: "No one expected what happened next." / "This moment destroyed everything." / "She had no idea her whole life was about to collapse."
 - The hook MUST target the single most shocking/dramatic moment in the source
 - After the hook, transition naturally into the story recap
-- ABSOLUTELY FORBIDDEN: Do NOT write ANY preamble, intro, acknowledgement, meta-comment, or framing sentence before the hook.
-- FORBIDDEN OPENERS include (but not limited to): "ဟုတ်ကဲ့", "ကောင်းပါပြီ", "ရပါပြီ", "အောက်မှာ ဖော်ပြပေး", "ဒီ ... ဗီဒီယိုလေးကို အခြေခံပြီး", "Here is", "Here's", "Below is", "Sure", "Okay", "Of course", or any sentence wrapped in ( ) / （ ） that describes what you are about to write.
-- The very FIRST character of your output MUST be the FIRST WORD of the viral hook itself. No labels like "Hook:", no headings, no parentheses, no markdown — just the hook sentence.
 
 RECAP WRITING STYLE (BILLION-VIEW YOUTUBE STANDARD):
 - Write like a billion-view YouTube narrator: MrBeast energy for drama, Coffeezilla tension for exposés, Mark Rober precision for tech
@@ -639,7 +636,7 @@ ${transcript}
 
     let response: Response | null = null;
     let lastError = "";
-    let activeModel = isOwnApi ? "gemini-1.5-flash" : MODEL;
+    let activeModel = isOwnApi ? "gemini-3.1-pro-preview" : MODEL;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 135000);
@@ -750,35 +747,7 @@ ${transcript}
 
     const data = await response.json();
     const rawScript = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    const stripHookPreamble = (txt: string): string => {
-      let s = (txt || "").replace(/^\uFEFF/, "").trim();
-      // Strip code fences if model wrapped output
-      s = s
-        .replace(/^```[a-zA-Z]*\s*\n?/, "")
-        .replace(/\n?```\s*$/, "")
-        .trim();
-      const preambleLineRe =
-        /^(?:\s*[\(（][^\)）]*[\)）]\s*$|\s*(?:hook|HOOK|\*\*hook\*\*|#+\s*hook)\s*[:：]?\s*$|\s*(?:ဟုတ်ကဲ့|ကောင်းပါပြီ|ကောင်းပြီ|ရပါပြီ|အောက်မှာ|ဒီမှာ|ဟောဒီမှာ|ကဲ)[^\n]*[\:：]?\s*$|\s*(?:Here\s+(?:is|are|'s)|Here's|Below\s+is|Sure[,!\.]?|Okay[,!\.]?|Of\s+course[,!\.]?|Certainly[,!\.]?)[^\n]*[:：]?\s*$)/i;
-      // Also catch a single opening line that is fully wrapped in parens describing the script (multi-sentence inside parens)
-      const parenWholeLineRe = /^\s*[\(（][^\n]*[\)）]\s*$/;
-      for (let i = 0; i < 6; i++) {
-        const nl = s.indexOf("\n");
-        const firstLine = nl === -1 ? s : s.slice(0, nl);
-        if (preambleLineRe.test(firstLine) || parenWholeLineRe.test(firstLine)) {
-          s = nl === -1 ? "" : s.slice(nl + 1).trim();
-          continue;
-        }
-        // Inline preamble at very start: "(...)  <hook>" on same line
-        const inlineParen = firstLine.match(/^\s*[\(（][^\)）]*[\)）]\s*(.*)$/);
-        if (inlineParen && inlineParen[1].trim().length > 0) {
-          s = (inlineParen[1] + (nl === -1 ? "" : "\n" + s.slice(nl + 1))).trim();
-          break;
-        }
-        break;
-      }
-      return s.trim();
-    };
-    const normalizedRawScript = stripHookPreamble(rawScript);
+    const normalizedRawScript = rawScript.trim();
 
     if (!normalizedRawScript || normalizedRawScript.length < 10) {
       console.error("[recap-script-generator] Empty or invalid script output");
