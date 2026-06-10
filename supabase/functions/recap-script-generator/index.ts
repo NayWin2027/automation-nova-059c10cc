@@ -7,7 +7,7 @@ import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts"
 
 const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1beta/files";
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
-const MODEL = "gemini-2.5-flash-lite";
+const MODEL = "gemini-2.5-flash";
 
 function buildGenerationConfig(model: string, requestedMaxOutputTokens: number | null): Record<string, unknown> {
   const maxOutputTokens =
@@ -20,7 +20,10 @@ function buildGenerationConfig(model: string, requestedMaxOutputTokens: number |
     maxOutputTokens,
   };
 
-  if (model === "gemini-2.5-flash-lite" || model === "gemini-2.5-flash" || model.includes("preview")) {
+  // NOTE: Do NOT force thinkingBudget:0 on flash/flash-lite — it causes the model
+  // to degenerate into repetitive loops ("မင်းဘာလုပ်နေတာလဲ / ဟုတ်ကဲ့...") on long
+  // multimodal video inputs. Allow Gemini's default thinking budget.
+  if (model === "gemini-2.5-flash-lite") {
     config.thinkingConfig = { thinkingBudget: 0 };
   }
 
