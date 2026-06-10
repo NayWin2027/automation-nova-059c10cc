@@ -2,6 +2,18 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
 
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return null;
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+}
+
 Deno.serve(async (req) => {
   const _corsBlock = handleCorsPreflightOrReject(req);
   if (_corsBlock) return _corsBlock;
@@ -18,31 +30,41 @@ Deno.serve(async (req) => {
     //   (b) a valid user JWT
     // Server-to-server abuse is mitigated by the CORS origin allowlist.
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    const apiKeyHeader = req.headers.get("apikey") || "";
+    if (!authHeader && !apiKeyHeader) {
       return new Response(
         JSON.stringify({ error: "Authentication required" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const publishableKey = (Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || "").trim();
     const publishableKeys = (Deno.env.get("SUPABASE_PUBLISHABLE_KEYS") || "")
       .split(",").map((k) => k.trim()).filter(Boolean);
+    const projectKeys = [anonKey, publishableKey, ...publishableKeys].filter(Boolean);
+    const bearerToken = authHeader?.replace(/^Bearer\s+/i, "").trim() || "";
+    const bearerPayload = decodeJwtPayload(bearerToken);
+    const tokenIssuer = typeof bearerPayload?.iss === "string" ? bearerPayload.iss : "";
+    const tokenProjectRef = typeof bearerPayload?.ref === "string" ? bearerPayload.ref : "";
+    const isCurrentProjectAnonJwt =
+      bearerPayload?.role === "anon" &&
+      (tokenIssuer.includes("ijnwvbdazdowiljfcmpq") || tokenProjectRef === "ijnwvbdazdowiljfcmpq") &&
+      typeof bearerPayload.exp === "number" &&
+      bearerPayload.exp * 1000 > Date.now();
     const isAnonOrPublishable =
-      token === anonKey ||
-      (publishableKey && token === publishableKey) ||
-      publishableKeys.includes(token);
+      projectKeys.includes(bearerToken) ||
+      projectKeys.includes(apiKeyHeader.trim()) ||
+      isCurrentProjectAnonJwt;
 
     if (!isAnonOrPublishable) {
       // Not the anon key — must be a valid user JWT
       const authClient = createClient(
         Deno.env.get("SUPABASE_URL")!,
         anonKey,
-        { global: { headers: { Authorization: authHeader } } }
+        { global: { headers: { Authorization: authHeader || `Bearer ${bearerToken}` } } }
       );
       const { data: claimsData, error: authError } =
-        await authClient.auth.getClaims(token);
+        await authClient.auth.getClaims(bearerToken);
       if (authError || !claimsData?.claims?.sub) {
         return new Response(
           JSON.stringify({ error: "Invalid or expired token" }),
