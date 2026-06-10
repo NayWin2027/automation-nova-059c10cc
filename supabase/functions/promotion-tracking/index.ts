@@ -26,10 +26,13 @@ Deno.serve(async (req) => {
     }
     const token = authHeader.replace(/^Bearer\s+/i, "").trim();
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const publishableKey = (Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || "").trim();
     const publishableKeys = (Deno.env.get("SUPABASE_PUBLISHABLE_KEYS") || "")
       .split(",").map((k) => k.trim()).filter(Boolean);
     const isAnonOrPublishable =
-      token === anonKey || publishableKeys.includes(token);
+      token === anonKey ||
+      (publishableKey && token === publishableKey) ||
+      publishableKeys.includes(token);
 
     if (!isAnonOrPublishable) {
       // Not the anon key — must be a valid user JWT
