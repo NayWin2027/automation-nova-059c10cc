@@ -18,31 +18,32 @@ Deno.serve(async (req) => {
     //   (b) a valid user JWT
     // Server-to-server abuse is mitigated by the CORS origin allowlist.
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    const apiKeyHeader = req.headers.get("apikey") || "";
+    if (!authHeader && !apiKeyHeader) {
       return new Response(
         JSON.stringify({ error: "Authentication required" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const publishableKey = (Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || "").trim();
     const publishableKeys = (Deno.env.get("SUPABASE_PUBLISHABLE_KEYS") || "")
       .split(",").map((k) => k.trim()).filter(Boolean);
+    const projectKeys = [anonKey, publishableKey, ...publishableKeys].filter(Boolean);
+    const bearerToken = authHeader?.replace(/^Bearer\s+/i, "").trim() || "";
     const isAnonOrPublishable =
-      token === anonKey ||
-      (publishableKey && token === publishableKey) ||
-      publishableKeys.includes(token);
+      projectKeys.includes(bearerToken) ||
+      projectKeys.includes(apiKeyHeader.trim());
 
     if (!isAnonOrPublishable) {
       // Not the anon key — must be a valid user JWT
       const authClient = createClient(
         Deno.env.get("SUPABASE_URL")!,
         anonKey,
-        { global: { headers: { Authorization: authHeader } } }
+        { global: { headers: { Authorization: authHeader || `Bearer ${bearerToken}` } } }
       );
       const { data: claimsData, error: authError } =
-        await authClient.auth.getClaims(token);
+        await authClient.auth.getClaims(bearerToken);
       if (authError || !claimsData?.claims?.sub) {
         return new Response(
           JSON.stringify({ error: "Invalid or expired token" }),
