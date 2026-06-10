@@ -2,6 +2,18 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
 
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return null;
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+}
+
 Deno.serve(async (req) => {
   const _corsBlock = handleCorsPreflightOrReject(req);
   if (_corsBlock) return _corsBlock;
@@ -31,9 +43,16 @@ Deno.serve(async (req) => {
       .split(",").map((k) => k.trim()).filter(Boolean);
     const projectKeys = [anonKey, publishableKey, ...publishableKeys].filter(Boolean);
     const bearerToken = authHeader?.replace(/^Bearer\s+/i, "").trim() || "";
+    const bearerPayload = decodeJwtPayload(bearerToken);
+    const isCurrentProjectAnonJwt =
+      bearerPayload?.role === "anon" &&
+      bearerPayload?.iss === `${Deno.env.get("SUPABASE_URL")}/auth/v1` &&
+      typeof bearerPayload.exp === "number" &&
+      bearerPayload.exp * 1000 > Date.now();
     const isAnonOrPublishable =
       projectKeys.includes(bearerToken) ||
-      projectKeys.includes(apiKeyHeader.trim());
+      projectKeys.includes(apiKeyHeader.trim()) ||
+      isCurrentProjectAnonJwt;
 
     if (!isAnonOrPublishable) {
       // Not the anon key — must be a valid user JWT
