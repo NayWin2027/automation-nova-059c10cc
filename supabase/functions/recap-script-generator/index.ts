@@ -181,7 +181,8 @@ function enforceScriptCoverage70(script: string, sourceDurationSec?: number | nu
   const normalized = script.replace(/\r\n/g, "\n").trim();
   if (!normalized || !sourceDurationSec) return normalized || script;
 
-  const maxWords = Math.max(45, Math.floor((sourceDurationSec / 60) * 150));
+  // True recap: target ~45% of source duration when read aloud (≈150 wpm).
+  const maxWords = Math.max(45, Math.floor((sourceDurationSec / 60) * 150 * 0.45));
   const words = normalized.split(/\s+/).filter(Boolean);
   if (words.length <= maxWords) return normalized;
 
@@ -457,11 +458,13 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - Identify the subject matter, the niche, and the story being told through visuals/actions/music
 - Write a complete, engaging narration script based on your visual/audio analysis
 
-SCRIPT LENGTH RULE (CRITICAL — TRUE 55% RECAP):
-- The narration script MUST cover the full STORY ARC from start to finish, but NEVER retell the full source
-- Length target: about 55% of the source duration when read aloud (≈150 words per source minute for Burmese/Asian, ≈100 for English)
-- For example: a 3-minute video → ~450 words; a 10-minute video → ~1500 words; a 20-minute video → ~3000 words; a 30-minute video → ~4500 words
-- You MUST include the ending, but compress filler and low-stakes scenes aggressively
+SCRIPT LENGTH RULE (CRITICAL — TRUE 40–50% RECAP / SUMMARY):
+- This is a RECAP (summary), NOT a retelling. The narration MUST cover the full STORY ARC end-to-end but in a heavily compressed form.
+- HARD length target: about 40–50% of the source duration when read aloud (≈150 wpm for Burmese/Asian, ≈100 wpm for English). NEVER exceed 50%.
+- Word budget examples (Burmese/Asian @150wpm): a 3-min video → ~200 words; 10-min → ~675 words; 20-min → ~1350 words; 30-min → ~2025 words.
+- Word budget examples (English @100wpm): 3-min → ~135 words; 10-min → ~450 words; 20-min → ~900 words; 30-min → ~1350 words.
+- You MUST include the ending, but aggressively cut filler, repetition, side-beats, and low-stakes scenes.
+- Keep ONLY the main connected story beats and the highest-tension/climax scenes, in a tightly-linked narrative.
 - The FINAL paragraph MUST correspond to the FINAL scene of the source video (its timecode should be near the source's ending)
 - Every important beat from beginning, middle, AND end must appear — no part of the video may be skipped or left out
 - Avoid padding/repetition, but DO write enough paragraphs to truly cover the full duration end-to-end
@@ -578,7 +581,7 @@ Below is a source video/audio file. Your job is to:
 3. If there is NO spoken dialogue, analyze visual elements, actions, music, settings, body language
 4. Identify ALL key moments, especially dramatic/shocking ones (confrontations, revelations, emotional scenes, physical actions like kisses/fights/tears)
 5. Write a complete professional ${nicheLabel} narration script that covers only the essential story beats
-6. A viewer reading your script should understand the FULL story arc in about half the original duration
+6. A viewer reading your script aloud should finish in roughly 40–50% of the original source duration — NEVER longer.
 7. Hook the audience immediately
 8. Use vivid, engaging ${lang} appropriate for "${nicheLabel}" content
 9. Be perfectly paced for voice narration
