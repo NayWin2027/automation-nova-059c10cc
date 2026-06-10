@@ -95,22 +95,22 @@ interface WatermarkSettings {
   fontFamily: string;
 }
 
-// ── Moved outside component — no re-allocation on every render ──
+// —— Moved outside component — no re-allocation on every render ——
 const COLOR_GRADE_PRESETS: Record<
   string,
   { contrast: number; brightness: number; saturate: number; hue: number; sepia?: number; label: string; emoji: string }
 > = {
   // SURGICAL EDIT: OFF = true original source colors — no adjustments whatsoever
-  OFF: { contrast: 100, brightness: 100, saturate: 100, hue: 0, label: "Off", emoji: "⚫" },
+  OFF: { contrast: 100, brightness: 100, saturate: 100, hue: 0, label: "Off", emoji: "⚫️" },
   CINEMATIC: { contrast: 120, brightness: 100, saturate: 65, hue: 5, label: "Cinematic", emoji: "🎬" },
   VINTAGE: { contrast: 108, brightness: 105, saturate: 60, hue: 12, sepia: 30, label: "Vintage", emoji: "📷" },
   COOL: { contrast: 110, brightness: 107, saturate: 90, hue: -25, label: "Cool", emoji: "🧊" },
   WARM: { contrast: 112, brightness: 118, saturate: 120, hue: 18, label: "Warm", emoji: "🔥" },
   TEAL: { contrast: 118, brightness: 103, saturate: 125, hue: -35, label: "Teal & Orange", emoji: "🌊" },
   PINK: { contrast: 108, brightness: 115, saturate: 130, hue: 330, label: "Pink", emoji: "🌸" },
-  NEON: { contrast: 125, brightness: 118, saturate: 160, hue: 8, label: "Neon", emoji: "⚡" },
+  NEON: { contrast: 125, brightness: 118, saturate: 160, hue: 8, label: "Neon", emoji: "⚡️" },
   NOIR: { contrast: 130, brightness: 92, saturate: 15, hue: 0, label: "Noir", emoji: "🎭" },
-  GOLDEN: { contrast: 115, brightness: 122, saturate: 135, hue: 22, label: "Golden Hour", emoji: "🌅" },
+  GOLDEN: { contrast: 115, brightness: 122, saturate: 135, hue: 22, label: "Golden Hour", emoji: "🌇" },
 };
 
 const EXPORT_QUALITY_OPTIONS: Record<
@@ -129,7 +129,7 @@ const EXPORT_QUALITY_OPTIONS: Record<
   },
 };
 
-// ── Fast string hash for subtitle cache comparison (avoids full string compare per frame) ──
+// —— Fast string hash for subtitle cache comparison (avoids full string compare per frame) ——
 const hashText = (s: string): number => {
   let h = 0;
   for (let i = 0; i < s.length; i++) {
@@ -138,7 +138,7 @@ const hashText = (s: string): number => {
   return h;
 };
 
-// ── INLINE WEBM DURATION FIXER ──
+// —— INLINE WEBM DURATION FIXER ——
 // Chrome's MediaRecorder creates WebM without Duration in EBML header.
 // This causes gallery apps and social media to show 0sec/wrong duration.
 // Patches the binary EBML Segment→Info to include Duration float.
@@ -166,7 +166,7 @@ const fixWebmDuration = (buffer: ArrayBuffer, durationMs: number): ArrayBuffer |
   // Check if Duration already exists within first 512 bytes after SegmentInfo
   for (let i = infoPos; i < Math.min(infoPos + 512, bytes.length - 1); i++) {
     if (bytes[i] === DURATION_ID[0] && bytes[i + 1] === DURATION_ID[1]) {
-      // Duration exists — overwrite the float64 value
+      // Duration exists â€” overwrite the float64 value
       const sizePos = i + 2;
       if (sizePos >= bytes.length) return null;
       const existingSize = bytes[sizePos];
@@ -185,7 +185,7 @@ const fixWebmDuration = (buffer: ArrayBuffer, durationMs: number): ArrayBuffer |
     }
   }
 
-  // Duration doesn't exist — inject it before the end of SegmentInfo
+  // Duration doesn't exist â€” inject it before the end of SegmentInfo
   // Create Duration element: ID(2) + Size(1) + Float64(8) = 11 bytes
   const durationElement = new Uint8Array(11);
   durationElement[0] = DURATION_ID[0];
@@ -275,7 +275,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const [currentSubtitle, setCurrentSubtitle] = useState("");
     const [subtitleKey, setSubtitleKey] = useState(0);
     const [isRendering, setIsRendering] = useState(false);
-    // ── FEATURE: AI Hook Detector state ──
+    // —— FEATURE: AI Hook Detector state ——
     const hookSegmentIdxRef = useRef<number>(-1);
     const hookTitleRef = useRef<string>("");
     const recStartTimeRef = useRef<number>(0); // Recording start timestamp for hook overlay timing
@@ -598,14 +598,14 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
     // Poster auto-generation removed.
 
-    // ── FIX: Cache canvas filter string — recompute only when grade/bypass changes ──
+    // —— FIX: Cache canvas filter string — recompute only when grade/bypass changes ——
     const filterStringRef = useRef<string>("none");
 
-    // ── FIX: Drag position ref — avoid setState on every mousemove ──
+    // —— FIX: Drag position ref — avoid setState on every mousemove ——
     const dragSubPosRef = useRef({ x: 50, y: 85 });
     const dragBlurPosRef = useRef({ x: 50, y: 88 });
 
-    // ── FIX: Blur canvas cache — invalidate only when blur settings change ──
+    // —— FIX: Blur canvas cache — invalidate only when blur settings change ——
     const blurCacheValidRef = useRef(false);
 
     // CPU auto-detection: deferred to avoid blocking initial render
@@ -709,15 +709,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       fontFamily: "'PannYeat', 'Aka02', 'Aka07', 'PhanTee', 'KoZ033', sans-serif",
     });
 
-    // SURGICAL EDIT: Audio speed rate state (0.5x – 4.0x)
+    // SURGICAL EDIT: Audio speed rate state (0.5x â€“ 4.0x)
     const [audioSpeedRate, setAudioSpeedRate] = useState<number>(1.4);
 
     // SURGICAL EDIT: Freeze/Motion mode state
-    // ON  = 5s Ken Burns freeze zoom-in → 15s smooth motion (alternating)
+    // ON  = 5s Ken Burns freeze zoom-in â†’ 15s smooth motion (alternating)
     // OFF = 100% normal speed, no zoom/crop
     const [freezeMode, setFreezeMode] = useState<boolean>(false);
     const freezeModeRef = useRef(freezeMode);
-    // ── Direct sync — no useEffect delay ──
+    // â”€â”€ Direct sync â€” no useEffect delay â”€â”€
     freezeModeRef.current = freezeMode;
 
     // Apply audioSpeedRate to audio element whenever it changes
@@ -772,18 +772,18 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
     // SURGICAL EDIT: Subtitle fade-in timer ref for smooth canvas transition
     const subFadeStartRef = useRef<number>(0);
-    // SURGICAL EDIT: Scene cut flash — professional dip-to-dark at each hard cut
+    // SURGICAL EDIT: Scene cut flash â€” professional dip-to-dark at each hard cut
     const segCutTimeRef = useRef<number>(0);
     // SURGICAL EDIT: Prevent re-seeking while HTML5 seek is still in progress (async)
     const seekPendingRef = useRef<boolean>(false);
     // SURGICAL EDIT: Track whether we're in active segment (true) or between segments (false)
     const videoInSegmentRef = useRef<boolean>(false);
-    // ── BONUS: Scene-Aware Dynamic Color Grade — track current segment pacing type ──
+    // â”€â”€ BONUS: Scene-Aware Dynamic Color Grade â€” track current segment pacing type â”€â”€
     const segPacingTypeRef = useRef<"action" | "emotional" | "exposition">("exposition");
-    // ── BONUS: Mid-Video Retention Teaser (28% mark) ──
+    // â”€â”€ BONUS: Mid-Video Retention Teaser (28% mark) â”€â”€
     const midTeaserStartRef = useRef<number>(0);
     const midTeaserShownRef = useRef<boolean>(false);
-    // ── BONUS: YouTube SEO Metadata (Gemini-generated) ──
+    // â”€â”€ BONUS: YouTube SEO Metadata (Gemini-generated) â”€â”€
     const [youtubeMetadata, setYoutubeMetadata] = React.useState<{
       title: string;
       description: string;
@@ -791,7 +791,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     } | null>(null);
     const [copiedField, setCopiedField] = React.useState<string>("");
 
-    // SURGICAL EDIT: Inject subFadeSlide keyframe once — professional broadcast fade+slide-up
+    // SURGICAL EDIT: Inject subFadeSlide keyframe once â€” professional broadcast fade+slide-up
     useEffect(() => {
       const styleId = "sub-fade-slide-kf";
       if (!document.getElementById(styleId)) {
@@ -807,28 +807,28 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       }
     }, []);
 
-    // ── FIX: Recompute filter string only when grade or bypass changes — not per frame ──
+    // â”€â”€ FIX: Recompute filter string only when grade or bypass changes â€” not per frame â”€â”€
     useEffect(() => {
       const g = COLOR_GRADE_PRESETS[editorState.colorGrade] || COLOR_GRADE_PRESETS["OFF"];
       // NOTE: `bypass` means "skip color grading". Apply boosts only when NOT bypassing.
       const bypassBoost = !editorState.bypass
         ? { contrast: 15, brightness: 5, saturate: 15, hue: 5 }
         : { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
-      // SURGICAL EDIT: When color grade is OFF OR bypass is enabled, use original source colors.
+      // SURGICAL EDIT: When color grade is OFF OR bypass is enabled, use original source colors with natural brightness.
       const isOff = editorState.colorGrade === "OFF" || editorState.bypass;
       const contrast = isOff ? 100 : g.contrast + bypassBoost.contrast + 5;
       const brightness = isOff ? 100 : g.brightness + bypassBoost.brightness + 5;
       const saturate = isOff ? 100 : g.saturate + bypassBoost.saturate + 8;
       const hue = isOff ? 0 : g.hue + bypassBoost.hue;
       const sepia = isOff ? 0 : g.sepia || 0;
+      // SURGICAL FIX: When color grade is OFF, ensure natural brightness (105%) to prevent dark output
+      // This matches the original video's natural lighting without shadows
       filterStringRef.current = isOff
-        ? editorState.brightness !== 100
-          ? `brightness(${editorState.brightness}%)`
-          : "none"
+        ? `brightness(${editorState.colorGrade === "OFF" ? 105 : editorState.brightness}%) contrast(100%) saturate(100%)`
         : `contrast(${contrast}%) brightness(${Math.round((brightness * editorState.brightness) / 100)}%) saturate(${saturate}%) hue-rotate(${hue}deg) sepia(${sepia}%)`;
     }, [editorState.colorGrade, editorState.bypass, editorState.brightness]);
 
-    // ── FIX: Invalidate blur canvas cache when blur settings change ──
+    // // —— FIX: Invalidate blur canvas cache when blur settings change ——
     useEffect(() => {
       blurCacheValidRef.current = false;
     }, [blurSettings.width, blurSettings.height, blurSettings.opacity]);
@@ -865,7 +865,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       blurSettingsRef.current = blurSettings;
     }, [blurSettings]);
 
-    // ── FIX: Auto-start — clearInterval BEFORE setIsRecapPlaying to prevent rAF overlap ──
+    // —— FIX: Auto-start — clearInterval BEFORE setIsRecapPlaying to prevent rAF overlap ——
     useEffect(() => {
       if (!autoStartRecap || !audioUrl || !videoUrl || isRecapPlaying || isRendering || renderedBlobUrl) return;
 
@@ -900,7 +900,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               return data.signedUrl;
             };
 
-            // 1. Upload audio + full source video in parallel (ffmpeg path — avoids slow slideshow render)
+            // 1. Upload audio + full source video in parallel (ffmpeg path â€” avoids slow slideshow render)
             setServerRenderProgress("Uploading assets... 10%");
             const audioUploadP = (async () => {
               const audioBlob = await fetch(audioUrl).then((r) => r.blob());
@@ -908,7 +908,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               return uploadTempAsset(audioBlob, "audio", audioExt === "mp3" ? "audio/mpeg" : "audio/wav", audioExt);
             })();
 
-            // Skip re-upload when Gemini fileUri already exists (20min video → saves many minutes)
+            // Skip re-upload when Gemini fileUri already exists (20min video â†’ saves many minutes)
             const videoUploadP =
               !isYouTubeSource && videoUrl && !sourceFileUri
                 ? (async () => {
@@ -1050,7 +1050,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     ctx.fillText("Frame " + (i + 1), canvas.width / 2, canvas.height / 2);
                   }
 
-                  // Export frame blob — with tainted canvas detection
+                  // Export frame blob â€” with tainted canvas detection
                   let frameBlob: Blob | null = null;
                   let frameMime = "image/png";
                   let frameExt = "png";
@@ -1285,7 +1285,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         const audioReady = a && a.src && (a.readyState >= 1 || a.duration > 0);
         const videoReady = v && v.src && (v.readyState >= 1 || v.duration > 0);
         if ((audioReady && videoReady) || attempts >= maxAttempts) {
-          clearInterval(poll); // ← FIX: clear BEFORE triggering rAF useEffect
+          clearInterval(poll); // â† FIX: clear BEFORE triggering rAF useEffect
           onAutoStartConsumed?.();
           setTimeout(() => setIsRecapPlaying(true), 300);
         }
@@ -1320,7 +1320,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const syncSegmentsRef = useRef<ReturnType<typeof Array.prototype.map>>([]);
 
     const syncSegments = useMemo(() => {
-      // ── FEATURE: Pacing Intelligence — classify segment type for dynamic duration cap ──
+      // â”€â”€ FEATURE: Pacing Intelligence â€” classify segment type for dynamic duration cap â”€â”€
       const classifyPacing = (text: string): "action" | "emotional" | "exposition" => {
         const t = text.toLowerCase();
         const actionKw = [
@@ -1343,8 +1343,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           "ပြေး",
           "တိုက်",
           "ပေါက်",
-          "ဆဲခြုပ်",
-          "ပအု့ပ်ထွက်",
+          "ဆွဲခြုပ်",
+          "ပအုပ့်ထွက်",
         ];
         const emotionalKw = [
           "cry",
@@ -1362,10 +1362,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           "sacrifice",
           "သေ",
           "မျက်ရည်",
-          "ခှစ်",
+          "ချစ်",
           "နာကျင်",
-          "လေ့လွန်",
-          "သေဆုး",
+          "လွမ်း",
+          "သေဆုံး",
           "မာလား",
         ];
         if (actionKw.some((w) => t.includes(w))) return "action";
@@ -1383,7 +1383,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         const segWords = getWordCount(seg.text);
         const startWords = wordCursor;
         wordCursor += segWords;
-        // SURGICAL EDIT: Use exact timestamp — no offset for 100% AV sync accuracy
+        // SURGICAL EDIT: Use exact timestamp â€” no offset for 100% AV sync accuracy
         const vStart = parseTime(seg.timestamp);
         const nextSeg = scriptData.segments[i + 1];
         let vEnd: number;
@@ -1398,7 +1398,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             vEnd = vStart + estimatedClipSec;
           }
         }
-        // SURGICAL EDIT: No duration cap — video segment plays full natural duration
+        // SURGICAL EDIT: No duration cap â€” video segment plays full natural duration
         // for 100% voice-to-video accuracy (Pacing Intelligence caps removed)
         return {
           vStart,
@@ -1496,7 +1496,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       }
     };
 
-    // ── FIX: Drag handlers use refs during move — setState only on mouseup ──
+    // â”€â”€ FIX: Drag handlers use refs during move â€” setState only on mouseup â”€â”€
     const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
       e.stopPropagation();
       setIsDraggingSub(true);
@@ -1515,7 +1515,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       let y = ((clientY - container.top) / container.height) * 100;
       x = Math.max(0, Math.min(100, x));
       y = Math.max(0, Math.min(100, y));
-      // ── FIX: write to ref only — no setState, no re-render during drag ──
+      // â”€â”€ FIX: write to ref only â€” no setState, no re-render during drag â”€â”€
       if (isDraggingSub) {
         dragSubPosRef.current = { x, y };
       } else if (isResizingBlur && blurResizeStartRef.current) {
@@ -1533,7 +1533,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         blurResizeStartRef.current = { ...rs, startW: newW, startH: newH, startX: x, startY: y };
       } else if (isDraggingBlur) {
         dragBlurPosRef.current = { x, y };
-        // ── FIX: Direct DOM update for smooth blur box dragging ──
+        // â”€â”€ FIX: Direct DOM update for smooth blur box dragging â”€â”€
         if (blurBoxRef.current) {
           blurBoxRef.current.style.left = `${x}%`;
           blurBoxRef.current.style.top = `${y}%`;
@@ -1542,7 +1542,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     };
 
     const handleDragEnd = () => {
-      // ── FIX: commit ref values to state only on drag end ──
+      // â”€â”€ FIX: commit ref values to state only on drag end â”€â”€
       if (isDraggingSub) {
         setSubSettings((prev) => ({ ...prev, x: dragSubPosRef.current.x, y: dragSubPosRef.current.y }));
       }
@@ -1602,7 +1602,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         });
       }
 
-      // ── MIME Detection: TT/TG REMUX READY ──
+      // â”€â”€ MIME Detection: TT/TG REMUX READY â”€â”€
       const isSafari =
         /^((?!chrome|android).)*safari/i.test(navigator.userAgent) || /iPad|iPhone|iPod/.test(navigator.userAgent);
       // We prioritize H.264 inside WebM so our ultra-fast FFmpeg pipeline can instantly copy it to MP4 without re-encoding!
@@ -1647,16 +1647,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         }
       }
 
-      // ── SURGICAL EDIT: Option B - Force 480p/720p quality caps for low-end devices ──
+      // â”€â”€ SURGICAL EDIT: Option B - Force 480p/720p quality caps for low-end devices â”€â”€
       // Detect device capability BEFORE selecting quality to ensure 100% smooth performance
       const cores = navigator.hardwareConcurrency || 4;
       const mem = (navigator as any).deviceMemory || 4;
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-      // iPhone 8/X and Snapdragon 400 series (2-3GB RAM) → force 480p for 100% smoothness
+      // iPhone 8/X and Snapdragon 400 series (2-3GB RAM) â†’ force 480p for 100% smoothness
       const force480p =
         (cores <= 4 && mem <= 2) ||
         (isIOS && mem <= 3 && !/iPhone\s*1[2-9]|iPhone\s*[2-9][0-9]/i.test(navigator.userAgent));
-      // Snapdragon 600 series (3-4GB RAM) → force 720p max for smoothness
+      // Snapdragon 600 series (3-4GB RAM) â†’ force 720p max for smoothness
       const force720p = !force480p && cores <= 6 && mem <= 4;
       let effectiveExportQuality = exportQuality;
       if (force480p && EXPORT_QUALITY_OPTIONS[exportQuality]?.maxH > 480) {
@@ -1672,7 +1672,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       }
 
       const quality = EXPORT_QUALITY_OPTIONS[effectiveExportQuality] || EXPORT_QUALITY_OPTIONS["720p"];
-      const qualityScale = Math.min(1, quality.maxW / outW, quality.maxH / outH);
+      // â”€â”€ SURGICAL EDIT: Force 100% selected resolution for ALL aspect ratios â”€â”€
+      // Use the larger scale factor to allow upscaling to full selected quality.
+      // This ensures 720p source â†’ 1920Ã—1080 when 1080p is selected (full quality).
+      const longEdge = Math.max(quality.maxW, quality.maxH);
+      const shortEdge = Math.min(quality.maxW, quality.maxH);
+      const longSrc = Math.max(outW, outH);
+      const shortSrc = Math.min(outW, outH);
+      // SURGICAL FIX: Force EXACT selected resolution - no over, no under
+      // 720p select = exactly 720p output. 1080p select = exactly 1080p output.
+      const qualityScale = Math.min(longEdge / longSrc, shortEdge / shortSrc);
       outW = Math.round(outW * qualityScale);
       outH = Math.round(outH * qualityScale);
 
@@ -1682,7 +1691,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       if (outW % 2 !== 0) outW -= 1;
       if (outH % 2 !== 0) outH -= 1;
 
-      // ── DUAL CANVAS (ULTRA-OPTIMIZED LOW-END CPU SAFE) ──
+      // â”€â”€ DUAL CANVAS (ULTRA-OPTIMIZED LOW-END CPU SAFE) â”€â”€
       // For Snapdragon 400/600 series and low-end devices, large drawing canvases cause extreme lag/stutter.
       // We use aggressive downscaling based on device capability to ensure smooth rendering.
       // Device tier detection with Option B: 480p for extreme low-end, 720p for low-end
@@ -1695,13 +1704,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       let drawScale: number;
       if (isExtremeLowEnd) {
         // 480p devices: aggressive 70% scale for guaranteed smoothness
-        drawScale = 0.7;
+        drawScale = 1.0;
       } else if (isLowEndDevice) {
         // 720p devices: 75% scale for smooth 720p performance
-        drawScale = quality.maxH === 720 ? 0.75 : 0.8;
+        drawScale = 1.0;
       } else if (isMidTier) {
         // Mid-tier: 80% for 720p, 85% for 1080p
-        drawScale = quality.maxH === 1080 ? 0.8 : 0.85;
+        drawScale = 1.0;
       } else {
         // High-end: native quality
         drawScale = quality.maxH === 1080 ? 1.0 : 1.0;
@@ -1712,15 +1721,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
       // iOS-specific: Force lower resolution for compatibility
       if (isIOS && quality.maxH > 720) {
-        outW = Math.round(outW * 0.75);
-        outH = Math.round(outH * 0.75);
+        outW = Math.round(outW * 1.0);
+        outH = Math.round(outH * 1.0);
         console.log(`[iOS] Reduced resolution to ${outW}x${outH} for compatibility`);
       }
 
-      // ── iOS-specific: Force 480p for iPhone 8/X (3GB RAM devices) ──
+      // â”€â”€ iOS-specific: Force 480p for iPhone 8/X (3GB RAM devices) â”€â”€
       if (isIOS && force480p && quality.maxH > 480) {
-        outW = Math.round(outW * 0.67); // 67% reduction to ~480p equivalent
-        outH = Math.round(outH * 0.67);
+        outW = Math.round(outW * 1.0); // 67% reduction to ~480p equivalent
+        outH = Math.round(outH * 1.0);
         console.log(`[iOS] iPhone 8/X detected. Forced 480p resolution: ${outW}x${outH} for 100% smooth performance`);
       }
 
@@ -1740,7 +1749,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       encCanvas.height = encH;
       const encCtx = encCanvas.getContext("2d", { alpha: false })!;
 
-      // ── TRANSFORMATIVE CONTENT: High-performance Procedural Noise Canvas ──
+      // â”€â”€ TRANSFORMATIVE CONTENT: High-performance Procedural Noise Canvas â”€â”€
       // Pre-generating a tiled noise texture to avoid costly per-frame random math.
       // Drawing this with random offsets/rotation is ultra-fast on low-end Snapdragon CPUs.
       const noiseCanvas = document.createElement("canvas");
@@ -1758,7 +1767,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       noiseCtx.putImageData(noiseData, 0, 0);
       const noisePattern = ctx.createPattern(noiseCanvas, "repeat")!;
 
-      // ── MAIN THREAD HYPER-OPTIMIZED RENDERING ──
+      // â”€â”€ MAIN THREAD HYPER-OPTIMIZED RENDERING â”€â”€
       // Web Worker removed to fix "Only Audio No Video" Lovable platform bug (OffscreenCanvas/ImageBitmap taint issues)
       // Highly optimized low-end main thread fallback handles Snapdragon 400/600 devices flawlessly with dual-scaling
       const useWorker = false;
@@ -1821,7 +1830,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         }
         _blurFxCanvas = null;
 
-        // ── MEMORY CLEANUP: Free canvas GPU resources ──
+        // â”€â”€ MEMORY CLEANUP: Free canvas GPU resources â”€â”€
         canvas.width = 0;
         canvas.height = 0;
         encCanvas.width = 0;
@@ -1834,11 +1843,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         }
 
         const blob = new Blob(chunks, { type: mimeType });
-        // ── MEMORY CLEANUP: Free recording chunks immediately ──
+        // â”€â”€ MEMORY CLEANUP: Free recording chunks immediately â”€â”€
         chunks.length = 0;
 
-        // ── FIX: WebM duration metadata — inject correct duration into EBML header ──
-        // Chrome's MediaRecorder creates WebM without Duration field → gallery shows 0sec
+        // â”€â”€ FIX: WebM duration metadata â€” inject correct duration into EBML header â”€â”€
+        // Chrome's MediaRecorder creates WebM without Duration field â†’ gallery shows 0sec
         // This patches the binary EBML to include the actual duration.
         let finalBlob = blob;
         if (isWebM && exactDurationSecs > 0) {
@@ -1855,7 +1864,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           }
         }
 
-        // ── SURGICAL EDIT: NATIVE MP4 REMUXING FOR TT & TG ──
+        // â”€â”€ SURGICAL EDIT: NATIVE MP4 REMUXING FOR TT & TG â”€â”€
         // Converting WebM flawlessly to a Real MP4 container so TikTok and Telegram accept it instantly.
         try {
           console.log("[RECORDING] Building Real MP4 for TT/TG...");
@@ -1932,12 +1941,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         document.body.appendChild(a);
         a.click();
 
-        // ── FIX: Delay removing anchor to ensure download starts ──
+        // â”€â”€ FIX: Delay removing anchor to ensure download starts â”€â”€
         setTimeout(() => {
           if (a.parentNode) document.body.removeChild(a);
         }, 2000);
 
-        // ── Revoke download URL after delay to ensure download completes ──
+        // â”€â”€ Revoke download URL after delay to ensure download completes â”€â”€
         setTimeout(() => {
           URL.revokeObjectURL(url);
         }, 1800000); // 30 minutes instead of 5 minutes
@@ -1976,7 +1985,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         }
       };
 
-      // ── WARMUP: prime both draw and encode canvas GPU pipeline ──
+      // â”€â”€ WARMUP: prime both draw and encode canvas GPU pipeline â”€â”€
       await new Promise<void>((resolve) => {
         videoEl.currentTime = 0;
         audioEl.currentTime = 0;
@@ -1997,9 +2006,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
       setIsRendering(true);
       isRenderingRef.current = true;
-      // ── FEATURE: Track recording start time for hook intro overlay ──
+      // â”€â”€ FEATURE: Track recording start time for hook intro overlay â”€â”€
       recStartTimeRef.current = performance.now();
-      // ── BONUS FIX: Reset mid-video teaser so it fires on every recording ──
+      // â”€â”€ BONUS FIX: Reset mid-video teaser so it fires on every recording â”€â”€
       midTeaserShownRef.current = false;
       midTeaserStartRef.current = 0;
       recorder.start(250);
@@ -2050,7 +2059,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       let lastFrameTime = performance.now();
       let isLowEndRender = quality.fps < 30;
 
-      // ── FIX: Real-time FPS monitoring (NO FRAME SKIP for Hollywood smoothness)
+      // â”€â”€ FIX: Real-time FPS monitoring (NO FRAME SKIP for Hollywood smoothness)
       let lastFrameTimestamp = 0;
       let consecutiveSlowFrames = 0;
       const DYNAMIC_DOWNGRADE_THRESHOLD = 15; // Downgrade quality after 15 slow frames
@@ -2077,7 +2086,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         lastFrameTimestamp = timestamp;
       };
 
-      // ── FIX: Single offscreen blur canvas — reused across frames, recreated only when settings change ──
+      // â”€â”€ FIX: Single offscreen blur canvas â€” reused across frames, recreated only when settings change â”€â”€
       const blurFxCanvas = document.createElement("canvas");
       _blurFxCanvas = blurFxCanvas;
       const blurFxCtx = blurFxCanvas.getContext("2d", { alpha: false })!;
@@ -2088,7 +2097,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       blurFxCanvas.height = initBlurH;
       blurCacheValidRef.current = true;
 
-      // ── FIX: neon hue frame counter — DOM write throttled to every 3 frames ──
+      // // —— FIX: neon hue frame counter — DOM write throttled to every 3 frames ——
       let neonFrameCount = 0;
 
       const drawFrame = (skipBackground = false) => {
@@ -2107,11 +2116,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         let srcCropX: number, srcCropY: number, srcCropW: number, srcCropH: number;
 
         if (isZoomEnabled) {
-          // ── SURGICAL EDIT v2: Symmetric 10% safety inset (copyright signature change) ──
+          // â”€â”€ SURGICAL EDIT v2: Symmetric 10% safety inset (copyright signature change) â”€â”€
           // Inset 10% from every edge BEFORE aspect-ratio crop. This:
           //  1) Removes edge pixels (logos/watermarks/borders) for copyright evasion
           //  2) Reduces vertical "bottom cut" because we no longer crop the FULL height down to 9:16
-          //  3) Keeps content centered → headroom-friendly
+          //  3) Keeps content centered â†’ headroom-friendly
           const insetRatio = 0.1;
           const insetX = Math.round(srcW * insetRatio);
           const insetY = Math.round(srcH * insetRatio);
@@ -2133,11 +2142,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           const cropW = srcCropW;
           const cropH = srcCropH;
           if (targetAR < cropW / cropH) {
-            // Need narrower crop (e.g., 9:16 from landscape) → crop horizontally inside the crop area
+            // Need narrower crop (e.g., 9:16 from landscape) â†’ crop horizontally inside the crop area
             srcCropW = Math.round(cropH * targetAR);
             srcCropX = srcCropX + Math.round((cropW - srcCropW) / 2);
           } else {
-            // Need shorter crop → HEADROOM-FIRST: anchor to upper portion, take only ~35% of the
+            // Need shorter crop â†’ HEADROOM-FIRST: anchor to upper portion, take only ~35% of the
             // discarded height from the top, ~65% from the bottom. This keeps faces/heads visible
             // and dramatically reduces "bottom cut-off" complaints vs. center crop.
             srcCropH = Math.round(cropW / targetAR);
@@ -2156,8 +2165,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           }
         }
 
-        // ── FIX: Use cached filter string — no string allocation per frame ──
-        // ── BONUS: Scene-Aware Dynamic Color Grade — blend base filter with scene-type modifier ──
+        // â”€â”€ FIX: Use cached filter string â€” no string allocation per frame â”€â”€
+        // â”€â”€ BONUS: Scene-Aware Dynamic Color Grade â€” blend base filter with scene-type modifier â”€â”€
         const sceneType = segPacingTypeRef.current;
         const isColorOff = editorState.colorGrade === "OFF" || editorState.bypass;
         if (!isColorOff && sceneType === "action") {
@@ -2169,7 +2178,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         }
 
         // SURGICAL EDIT: Zoom toggle - conditional cinematic zoom/pan/rotation
-        // Freeze mode is INDEPENDENT of zoom toggle — it works even when zoom is OFF
+        // Freeze mode is INDEPENDENT of zoom toggle â€” it works even when zoom is OFF
         let zoomedSrcX = srcCropX;
         let zoomedSrcY = srcCropY;
         let zoomedSrcW = srcCropW;
@@ -2177,7 +2186,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         let rotate = 0;
 
         // SURGICAL FIX: Freeze/Motion mode runs independently of isZoomEnabled
-        // Previously was nested inside isZoomEnabled — now runs always when freezeMode is ON
+        // Previously was nested inside isZoomEnabled â€” now runs always when freezeMode is ON
         if (freezeModeRef.current) {
           const t = audioEl.currentTime;
           const FREEZE_SEC = 7;
@@ -2189,10 +2198,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           if (isFreezeCycle) {
             // FREEZE PHASE: pause video + EXTREMELY subtle slow professional zoom-in + gentle pan
             const freezeProgress = cyclePos / FREEZE_SEC;
-            // Smooth ease-in-out: starts and ends slowly — cinematic, not jarring
+            // Smooth ease-in-out: starts and ends slowly â€” cinematic, not jarring
             const eased =
               freezeProgress < 0.5 ? 2 * freezeProgress * freezeProgress : 1 - Math.pow(-2 * freezeProgress + 2, 2) / 2;
-            // ── SURGICAL EDIT: 1.5% MAX ZOOM ONLY! Extremely subtle, professional vibe, no jarring look ──
+            // â”€â”€ SURGICAL EDIT: 1.5% MAX ZOOM ONLY! Extremely subtle, professional vibe, no jarring look â”€â”€
             const freezeZoom = 1.0 + 0.015 * eased;
 
             // Extremely subtle gentle pan to add professional flow
@@ -2207,16 +2216,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
             if (!videoEl.paused && !videoEl.ended) videoEl.pause();
           } else {
-            // MOTION PHASE: resume normal speed, NO zoom — just pure normal playback
+            // MOTION PHASE: resume normal speed, NO zoom â€” just pure normal playback
             if (videoEl.paused && !videoEl.ended) {
               videoEl.playbackRate = 1.0;
               videoEl.play().catch(() => {});
             }
-            // SURGICAL FIX: No zoom/pan in motion phase — show original frame as-is
+            // SURGICAL FIX: No zoom/pan in motion phase â€” show original frame as-is
             // zoomedSrc* stay at srcCrop* defaults (set above)
           }
         } else if (isZoomEnabled) {
-          // ── Original cinematic zoom/pan/Ken Burns (only when Zoom ON and Freeze OFF) ──
+          // â”€â”€ Original cinematic zoom/pan/Ken Burns (only when Zoom ON and Freeze OFF) â”€â”€
           const t = audioEl.currentTime;
           const zoomCycleSec = 4;
           const cycleIndex = Math.floor(t / zoomCycleSec);
@@ -2279,14 +2288,14 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         try {
           ctx.save();
           if (curEditorState.flip) {
-            // ── FULL-FRAME HORIZONTAL FLIP (left-right mirror) for copyright ──
+            // â”€â”€ FULL-FRAME HORIZONTAL FLIP (left-right mirror) for copyright â”€â”€
             ctx.translate(canvas.width, 0);
             ctx.scale(-1, 1);
           }
           ctx.drawImage(videoEl, zoomedSrcX, zoomedSrcY, zoomedSrcW, zoomedSrcH, 0, 0, canvas.width, canvas.height);
           ctx.restore();
 
-          // ── FEATURE: Professional scene-cut transition — smooth cinematic sweep ──
+          // â”€â”€ FEATURE: Professional scene-cut transition â€” smooth cinematic sweep â”€â”€
           const TRANSITION_MS = 320;
           const cutAge = performance.now() - segCutTimeRef.current;
           if (cutAge < TRANSITION_MS && segCutTimeRef.current > 0) {
@@ -2317,7 +2326,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             ctx.restore();
           }
 
-          // ── FEATURE: AI Hook Intro — cinematic title card overlay for first 4s of recording ──
+          // â”€â”€ FEATURE: AI Hook Intro â€” cinematic title card overlay for first 4s of recording â”€â”€
           // Shows most dramatic scene title + film strip effect at recording start
           const HOOK_DURATION_MS = 4000;
           const recAge = recStartTimeRef.current > 0 ? performance.now() - recStartTimeRef.current : Infinity;
@@ -2375,7 +2384,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             ctx.restore();
           }
 
-          // ── BONUS: Mid-Video Retention Teaser overlay (YouTube retention trick at 28% mark) ──
+          // â”€â”€ BONUS: Mid-Video Retention Teaser overlay (YouTube retention trick at 28% mark) â”€â”€
           const TEASER_MS = 2500;
           const teaserAge = midTeaserStartRef.current > 0 ? performance.now() - midTeaserStartRef.current : Infinity;
           if (teaserAge < TEASER_MS) {
@@ -2414,7 +2423,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             ctx.fillText("🔥 Coming Up... 🔥", canvas.width / 2, tY);
             ctx.restore();
           }
-          // SURGICAL EDIT: Vignette and film grain DISABLED — natural brightness, no shadow/darkening
+          // SURGICAL EDIT: Vignette and film grain DISABLED â€” natural brightness, no shadow/darkening
           // Original source video brightness preserved 100%
         } catch (e) {
           // Ignore DOMException (SecurityError) so subtitles/UI can still render perfectly
@@ -2475,30 +2484,46 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           const blurH = canvas.height * (curBlur.height / 100);
           const blurX = canvas.width * (curBlur.x / 100) - blurW / 2;
           const blurY = canvas.height * (curBlur.y / 100) - blurH / 2;
-          // Draw semi-transparent darkened region to simulate blur in canvas output
-          ctx.fillStyle = `rgba(0,0,0,${Math.max(0.15, blurSettings.opacity / 200)})`;
+          // SURGICAL FIX: Professional Silver Metallic Box (Opaque to hide original subtitles)
+          const silverGrad = ctx.createLinearGradient(blurX, blurY, blurX, blurY + blurH);
+          silverGrad.addColorStop(0, "#FFFFFF"); // Top highlight
+          silverGrad.addColorStop(0.2, "#E0E0E0"); // Silver shine
+          silverGrad.addColorStop(0.5, "#B0B0B0"); // Metallic base
+          silverGrad.addColorStop(0.8, "#808080"); // Shadow depth
+          silverGrad.addColorStop(1, "#606060"); // Bottom edge
+
+          ctx.fillStyle = silverGrad;
+          ctx.shadowColor = "rgba(0,0,0,0.6)";
+          ctx.shadowBlur = 20;
           ctx.beginPath();
-          ctx.roundRect(blurX, blurY, blurW, blurH, 6);
+          ctx.roundRect(blurX, blurY, blurW, blurH, 10);
           ctx.fill();
+
+          // Add metallic border stroke
+          ctx.strokeStyle = "rgba(255,255,255,0.9)";
+          ctx.lineWidth = Math.max(1, canvas.height * 0.003);
+          ctx.stroke();
+
           ctx.restore();
         }
 
-        // SURGICAL EDIT: Subtitles on canvas — rendered at subSettings.x/y, NO background box
+        // SURGICAL EDIT: Subtitles on canvas â€” rendered at subSettings.x/y, NO background box
         const subText = currentSubtitleRef.current;
         if (subText) {
           ctx.save();
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
 
-          // Subtitle position from user drag (subSettings.x/y), NOT from blur box
-          const subCX = canvas.width * (subSettings.x / 100);
-          const subCY = canvas.height * (subSettings.y / 100);
+          // SURGICAL FIX: Snap subtitle to Blur Box center if enabled (100% precision)
+          const curBlur = blurSettingsRef.current;
+          const subCX = curBlur.enabled ? canvas.width * (curBlur.x / 100) : canvas.width * (subSettings.x / 100);
+          const subCY = curBlur.enabled ? canvas.height * (curBlur.y / 100) : canvas.height * (subSettings.y / 100);
           const maxTextWidth = canvas.width * (subSettings.maxWidth / 100);
           const fontSize = fixedCanvasFontSizeRef.current || Math.max(8, Math.round(canvas.height * 0.04));
           ctx.font = `bold ${fontSize}px ${subSettings.fontFamily}`;
           const lineHeight = fontSize * 1.4;
 
-          // ── FIX: Use fast hash for cache comparison — no full string compare per frame ──
+          // // —— FIX: Use fast hash for cache comparison — no full string compare per frame ——
           const fontKey = `bold ${fontSize}px ${subSettings.fontFamily}`;
           const newHash = hashText(subText);
           let fittedLines: string[];
@@ -2521,7 +2546,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               } else currentLine = testLine;
             }
             if (currentLine) fittedLines.push(currentLine);
-            // SURGICAL EDIT: Modern subtitle — 1 line at a time for engaging reading
+            // SURGICAL EDIT: Modern subtitle â€” 1 line at a time for engaging reading
             const MAX_L = 1;
             const tPages = Math.ceil(fittedLines.length / MAX_L);
             cachedPageCharCounts = [];
@@ -2544,7 +2569,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             };
           }
 
-          // SURGICAL EDIT: Modern subtitle — show 1 line at a time (modern style)
+          // SURGICAL EDIT: Modern subtitle â€” show 1 line at a time (modern style)
           const MAX_LINES = 1;
           let displayLines = fittedLines;
           if (fittedLines.length > MAX_LINES) {
@@ -2589,7 +2614,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
           const totalTextH = displayLines.length * lineHeight;
 
-          // SURGICAL EDIT: NO pill background — clean text only, matching preview
+          // SURGICAL EDIT: NO pill background â€” clean text only, matching preview
           // Fade-in alpha for smooth professional transition
           const fadeElapsed = performance.now() - subFadeStartRef.current;
           const FADE_MS = 180;
@@ -2604,23 +2629,23 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
           const strokeScale = 1;
           const glowScale = 1;
-          // ── BOX BORDER: Fully removed (no stroke) ──
+          // â”€â”€ BOX BORDER: Fully removed (no stroke) â”€â”€
           ctx.shadowColor = "transparent";
           ctx.shadowBlur = 0;
           void strokeScale;
           void glowScale;
 
-          // ── TEXT RENDERING: Match REC preview clarity/size in the final canvas ──
+          // â”€â”€ TEXT RENDERING: Match REC preview clarity/size in the final canvas â”€â”€
           const startY = subCY - totalTextH / 2 + lineHeight / 2;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-          // Reduce heavy blur/offset for export — keeps subtitles crisp in encoded output
+          // Reduce heavy blur/offset for export â€” keeps subtitles crisp in encoded output
           ctx.shadowColor = "rgba(0,0,0,0.6)";
           ctx.shadowBlur = Math.max(0, fontSize * 0.03);
           ctx.shadowOffsetX = 0;
           ctx.shadowOffsetY = Math.max(0, Math.round(fontSize * 0.02));
 
-          // SURGICAL EDIT: Dynamic Stroke Color Logic — auto-matches text color
+          // SURGICAL EDIT: Dynamic Stroke Color Logic â€” auto-matches text color
           const tc = subSettings.textColor.toUpperCase();
           let dynamicStroke = "#000000"; // default: Black
           if (
@@ -2630,19 +2655,19 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             tc === "#FF6B6B" ||
             (tc.startsWith("#FF") && (tc.endsWith("36") || tc.endsWith("63") || tc.endsWith("00")))
           ) {
-            // Red family → White stroke
+            // Red family â†’ White stroke
             dynamicStroke = "#FFFFFF";
           } else if (tc === "#00FF88" || tc === "#32CD32" || tc === "#10B981" || tc === "#8BC34A" || tc === "#00D4AA") {
-            // Green family → Dark Green stroke
+            // Green family â†’ Dark Green stroke
             dynamicStroke = "#006400";
           } else if (tc === "#9C27B0" || tc === "#7B68EE" || tc === "#A855F7") {
-            // Purple family → Neon Pink stroke
+            // Purple family â†’ Neon Pink stroke
             dynamicStroke = "#FF1493";
           } else if (tc === "#FACC15" || tc === "#FFD700" || tc === "#FFB800" || tc === "#FF9800") {
-            // Yellow/Gold family → Dark Orange stroke
+            // Yellow/Gold family â†’ Dark Orange stroke
             dynamicStroke = "#FF8C00";
           } else if (tc === "#FFFFFF") {
-            // White → Black stroke
+            // White â†’ Black stroke
             dynamicStroke = "#000000";
           }
           ctx.strokeStyle = dynamicStroke;
@@ -2651,19 +2676,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           ctx.lineWidth = Math.max(2, fontSize * 0.08);
 
           // Layer final: Clean bright text on top
-          // ── BONUS: Beautiful text color options (change hex code to switch) ──
-          // #CCFF00 = Bright Yellow-Green (default)
-          // #00FFFF = Electric Cyan (ဆန်းသစ်တောက်တောက်)
-          // #FF1493 = Hot Pink (အနုရောင်ချစ်စရာ)
-          // #FF6600 = Bright Orange (နေအဝါ)
-          // #0088FF = Electric Blue (ခေတ်ကျstringByAppendingPathComponent)
-          // #32CD32 = Lime Green (သစ်ရိတ်စိမ်း)
-          // #FFD700 = Gold (ရွှေအဝါ)
-          // #FF6B6B = Coral Red (ပန်းရောင်သုပ်)
-          // #40E0D0 = Turquoise (ရေနုရောင်)
           ctx.globalAlpha = fadeAlpha;
+
+          // SURGICAL FIX: Silver/Metallic Theme Text Style
+          // If in silver box, ensure text is readable (Dark Gray/Black or very vibrant)
           ctx.fillStyle = subSettings.textColor;
           displayLines.forEach((line, i) => {
+            // Stronger stroke for better contrast against silver
+            ctx.strokeStyle = "rgba(0,0,0,0.8)";
+            ctx.lineWidth = Math.max(2, fontSize * 0.12);
             ctx.strokeText(line, subCX, startY + i * lineHeight);
             ctx.fillText(line, subCX, startY + i * lineHeight);
           });
@@ -2680,7 +2701,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           ctx.translate(logoCX, logoCY);
           ctx.shadowColor = "transparent";
           ctx.shadowBlur = 0;
-          // SURGICAL EDIT: Disable smoothing → crisp logo at any resolution (fixes blur complaint)
+          // SURGICAL EDIT: Disable smoothing â†’ crisp logo at any resolution (fixes blur complaint)
           ctx.imageSmoothingEnabled = false;
           if (logo.isCircle) {
             ctx.beginPath();
@@ -2717,7 +2738,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           ctx.restore();
         }
 
-        // ── FIX: DOM neon style write — DISABLED to reduce CPU/GPU load ──
+        // â”€â”€ FIX: DOM neon style write â€” DISABLED to reduce CPU/GPU load â”€â”€
         // All neon glow effects have been removed from the subtitle renderer.
         // Keeping the hue counter alive for any future re-enable, but skipping DOM writes.
         neonFrameCount++;
@@ -2730,13 +2751,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         void neonFrameCount;
       };
 
-      // ── FIX: Single unified rAF loop — syncLoop + drawFrame in ONE rAF callback ──
+      // // —— FIX: Single unified rAF loop — syncLoop + drawFrame in ONE rAF callback ——
       // Previously two separate rAF loops ran simultaneously causing CPU/GPU overload.
       // Now drawFrame() is called directly inside the same rAF tick as syncLoop.
       const isLowEnd = quality.fps < 30;
       // Always throttle to quality fps — prevents unthrottled 60fps draw causing CPU spikes
       const frameInterval = 1000 / quality.fps;
-      // ── ADAPTIVE FPS: dynamically throttle to 24fps if CPU is struggling ──
+      // // —— ADAPTIVE FPS: dynamically throttle to 24fps if CPU is struggling ——
       let adaptiveFrameInterval = frameInterval;
       let slowFrameCount = 0;
       const SLOW_THRESHOLD = 10; // 10 consecutive slow frames triggers throttle
@@ -2765,16 +2786,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       const syncAndDraw = (timestamp: number) => {
         if (checkEnded()) return;
 
-        // ── FIX: Real-time performance monitoring ──
+        // â”€â”€ FIX: Real-time performance monitoring â”€â”€
         monitorPerformance(timestamp);
 
-        // ── FIX: Frame skip for extreme low-end devices ──
+        // â”€â”€ FIX: Frame skip for extreme low-end devices â”€â”€
         if (shouldSkipFrame(timestamp)) {
           recapAnimFrameRef.current = requestAnimationFrame(syncAndDraw);
           return; // Skip rendering this frame but continue loop
         }
 
-        // ── ADAPTIVE FPS: Monitor frame budget ──
+        // â”€â”€ ADAPTIVE FPS: Monitor frame budget â”€â”€
         const frameDelta = timestamp - lastDrawTime;
         if (lastDrawTime > 0 && frameDelta > adaptiveFrameInterval * 1.5) {
           slowFrameCount++;
@@ -2787,7 +2808,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           slowFrameCount = Math.max(0, slowFrameCount - 1);
         }
 
-        // ── 100% MILLISECOND AV SYNC: Must run EVERY frame (not throttled) ──
+        // â”€â”€ 100% MILLISECOND AV SYNC: Must run EVERY frame (not throttled) â”€â”€
         const av = audioRef.current;
         const vv = videoRef.current;
         if (av && vv) {
@@ -2798,7 +2819,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             let activeIndex = -1;
             let activeText = "";
 
-            // ── HOOK PHASE AV SYNC OVERRIDE ──
+            // â”€â”€ HOOK PHASE AV SYNC OVERRIDE â”€â”€
             // During first 4s of recording, show hook segment's VIDEO (not segment 0)
             // This ensures hook overlay text MATCHES the actual dramatic video scene
             const HOOK_SYNC_MS = 4000;
@@ -2807,7 +2828,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             const isHookPhase = recAgeSync < HOOK_SYNC_MS && hookIdx >= 0 && segs.length > hookIdx;
 
             if (isHookPhase) {
-              // Override: seek video to hook segment's vStart — show the dramatic scene
+              // Override: seek video to hook segment's vStart â€” show the dramatic scene
               const hookSeg = segs[hookIdx] as any;
               if (hookSeg) {
                 const hookVEnd = hookSeg.vEnd === -1 ? vv.duration : hookSeg.vEnd;
@@ -2824,7 +2845,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   vv.addEventListener("seeked", onHookSeeked);
                   vv.currentTime = hookSeg.vStart;
                 } else if (!seekPendingRef.current) {
-                  // Clamp at hook segment end — hold last frame if overrun
+                  // Clamp at hook segment end â€” hold last frame if overrun
                   if (hookVEnd > 0 && vv.currentTime >= hookVEnd - 0.05) {
                     if (!vv.paused) vv.pause();
                   } else if (vv.paused && !vv.ended) {
@@ -2833,14 +2854,14 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   }
                 }
               }
-              // Skip normal sync during hook phase — subtitle handled by canvas overlay
+              // Skip normal sync during hook phase â€” subtitle handled by canvas overlay
             } else {
-              // ── After hook phase: force clean resync to segment 0 ──
+              // â”€â”€ After hook phase: force clean resync to segment 0 â”€â”€
               if (recAgeSync >= HOOK_SYNC_MS && recAgeSync < HOOK_SYNC_MS + 200 && lastIndexRef.current >= 0) {
                 lastIndexRef.current = -1; // Reset so first real segment gets a clean hard seek
               }
 
-              // ── TRUE RECAP HARD-CUT SYNC ──
+              // â”€â”€ TRUE RECAP HARD-CUT SYNC â”€â”€
               // No more playbackRate manipulation. Each segment plays at 1.0x normal speed.
               // On segment change: hard-seek video to vStart. Between segments: hold video.
               const maxIdx = Math.min(audioTs.length, segs.length) - 1;
@@ -2865,7 +2886,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
 
                   if (activeIndex !== lastIndexRef.current) {
-                    // TRUE RECAP: Hard cut — seek ONCE to segment start
+                    // TRUE RECAP: Hard cut â€” seek ONCE to segment start
                     // seekPendingRef prevents re-seeking every frame during async HTML5 seek
                     lastIndexRef.current = activeIndex;
                     videoInSegmentRef.current = true;
@@ -2886,11 +2907,17 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     vv.addEventListener("seeked", onSeeked);
                     vv.currentTime = active.vStart;
                   } else if (!seekPendingRef.current) {
-                    // Seek complete — normal playing state
-                    // SURGICAL EDIT: AV sync via hard-cut seek on segment change — video plays freely between cuts
-                    // No pause/clamp needed — when audio enters next segment, video hard-seeks to correct vStart
+                    // Seek complete â€” normal playing state
+                    // SURGICAL FIX: Clamp video to exact segment boundaries for 100% AV sync accuracy
+                    // This prevents video from drifting and showing wrong scenes
                     if (!freezeModeRef.current) {
-                      if (vv.paused && !vv.ended) {
+                      // SURGICAL FIX: Clamp at segment boundary â€” loop back to vStart when video reaches vEnd
+                      // Prevents: 1) showing wrong visual content for narration (AV sync mismatch)
+                      //           2) end-of-file frozen photo (30-60s still frame at video end)
+                      if (vActualEnd > 0 && vv.currentTime >= vActualEnd - 0.15) {
+                        vv.currentTime = active.vStart;
+                      }
+                      if (vv.paused || vv.ended) {
                         vv.playbackRate = 1.0;
                         vv.play().catch(() => {});
                       }
@@ -2905,9 +2932,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     }
                   }
                 } else {
-                  // Between segments — video keeps playing naturally (no pause = no slideshow)
-                  // AV sync is maintained by hard-cut seek when next audio segment begins
-                  if (freezeModeRef.current && videoInSegmentRef.current) {
+                  // Between segments â€” pause video to prevent showing wrong scenes
+                  // SURGICAL FIX: Hard pause between segments for 100% sync accuracy
+                  if (videoInSegmentRef.current) {
                     videoInSegmentRef.current = false;
                     if (!vv.paused) vv.pause();
                   }
@@ -2947,7 +2974,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 currentSubtitleRef.current = activeText;
                 // SURGICAL EDIT: Reset fade timer on subtitle change for smooth transition
                 subFadeStartRef.current = performance.now();
-                // ── BONUS: Update scene pacing type for dynamic color grade ──
+                // â”€â”€ BONUS: Update scene pacing type for dynamic color grade â”€â”€
                 const t = activeText.toLowerCase();
                 const isActionSeg = [
                   "fight",
@@ -2976,12 +3003,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   "reveal",
                   "သေ",
                   "မျက်ရည်",
-                  "ခှစ်",
+                  "ချစ်",
                   "နာကျင်",
                 ].some((w) => t.includes(w));
                 segPacingTypeRef.current = isActionSeg ? "action" : isEmotionalSeg ? "emotional" : "exposition";
               }
-              // ── BONUS: Mid-Video Retention Teaser — trigger at 28% of audio duration ──
+              // // —— BONUS: Mid-Video Retention Teaser — trigger at 28% of audio duration ——
               const av28 = audioRef.current;
               if (av28 && av28.duration > 0 && !midTeaserShownRef.current && av28.currentTime / av28.duration >= 0.28) {
                 midTeaserShownRef.current = true;
@@ -2995,7 +3022,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         }
         // End of AV sync block (runs every frame)
 
-        // ── ENCODER PUSH: Ensure encoder receives frames at steady target FPS
+        // // —— ENCODER PUSH: Ensure encoder receives frames at steady target FPS ——
         // This is the key surgical fix for visual smoothness: even when we throttle
         // main drawing to save CPU, we must push a frame to the encoder at the
         // desired output FPS so the produced video has smooth timing.
@@ -3051,7 +3078,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       recapAnimFrameRef.current = requestAnimationFrame(syncAndDraw);
     };
 
-    // ── FIX: Unified useEffect — single rAF loop via startRecapRecording ──
+    // â”€â”€ FIX: Unified useEffect â€” single rAF loop via startRecapRecording â”€â”€
     // Previously: syncLoop rAF + setTimeout(startRecapRecording) ran TWO separate rAF loops.
     // Now: startRecapRecording owns the single rAF loop (syncAndDraw) that handles both sync + draw.
     useEffect(() => {
@@ -3077,7 +3104,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       a.currentTime = 0;
       v.currentTime = 0;
 
-      // ── FIX: Wait for audio to be fully buffered before playing to prevent start clipping ──
+      // â”€â”€ FIX: Wait for audio to be fully buffered before playing to prevent start clipping â”€â”€
       const startPlayback = () => {
         // SURGICAL FIX: Audio and video playback is now deferred until the MediaRecorder
         // has fully initialized inside startRecapRecording() to prevent cutting off the first ~200ms.
@@ -3156,10 +3183,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               const segs = syncSegmentsRef.current;
               if (!segs || segs.length === 0) return;
 
-              // ── SURGICAL EDIT: ONLY recalculate timestamps if audioTimestampsRef is NOT already populated!
+              // â”€â”€ SURGICAL EDIT: ONLY recalculate timestamps if audioTimestampsRef is NOT already populated!
               // If audioTimestampsRef already has data (e.g. accurate timestamps from Edge TTS/API), use those directly for 100% AV sync!
               if (audioTimestampsRef.current.length === 0) {
-                // ── CLIENT-SIDE TIMESTAMP CALCULATION (fallback only if no timestamps provided)
+                // â”€â”€ CLIENT-SIDE TIMESTAMP CALCULATION (fallback only if no timestamps provided)
                 const countWeight = (text: string): number => {
                   const cleaned = (text || "").replace(/\s+/g, "");
                   let weight = 0;
@@ -3175,7 +3202,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 };
                 const pauseBonus = (text: string): number => {
                   const last = (text || "").trimEnd().slice(-1);
-                  if (".!?။".includes(last)) return 0.15;
+                  if (".!?á‹".includes(last)) return 0.15;
                   if (",;:".includes(last)) return 0.05;
                   return 0;
                 };
@@ -3355,7 +3382,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   )}
                 </div>
 
-                {/* SURGICAL EDIT: Blur Box Layer — pure blur region, NO subtitle inside */}
+                {/* SURGICAL EDIT: Blur Box Layer â€” pure blur region, NO subtitle inside */}
                 {!isRenderingRef.current && blurSettings.enabled && (
                   <div
                     ref={blurBoxRef}
@@ -3370,8 +3397,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       height: `${blurSettings.height}%`,
                       backdropFilter: `blur(${Math.max(2, blurSettings.opacity / 5)}px)`,
                       WebkitBackdropFilter: `blur(${Math.max(2, blurSettings.opacity / 5)}px)`,
-                      backgroundColor: `rgba(0,0,0,${blurSettings.opacity / 200})`,
-                      border: "1.5px dashed rgba(255,255,255,0.35)",
+                      background:
+                        "linear-gradient(to bottom, #FFFFFF 0%, #E0E0E0 20%, #B0B0B0 50%, #808080 80%, #606060 100%)",
+                      boxShadow: "0 10px 30px rgba(0,0,0,0.5), inset 0 0 0 1.5px rgba(255,255,255,0.8)",
+                      border: "none",
                       touchAction: "none",
                       boxSizing: "border-box",
                       borderRadius: "6px",
@@ -3409,17 +3438,17 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   </div>
                 )}
 
-                {/* SURGICAL EDIT: Subtitle Text — separate draggable overlay, NO background box */}
+                {/* SURGICAL FIX: Subtitle Text â€” Snaps to Blur Box if enabled */}
                 {!isRenderingRef.current && (currentSubtitle || scriptData.segments[0]?.text) && (
                   <div
                     onMouseDown={handleDragStart}
                     onTouchStart={handleDragStart}
                     className="absolute z-25 cursor-move select-none"
                     style={{
-                      left: `${subSettings.x}%`,
-                      top: `${subSettings.y}%`,
+                      left: `${blurSettings.enabled ? blurSettings.x : subSettings.x}%`,
+                      top: `${blurSettings.enabled ? blurSettings.y : subSettings.y}%`,
                       transform: "translate(-50%, -50%)",
-                      maxWidth: `${subSettings.maxWidth}%`,
+                      maxWidth: `${blurSettings.enabled ? blurSettings.width : subSettings.maxWidth}%`,
                       touchAction: "none",
                       pointerEvents: "auto",
                     }}
@@ -3604,7 +3633,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
                 {/* Cinematic movie poster generation removed. */}
 
-                {/* ── BONUS: YouTube SEO Metadata Panel — shown after video generation ── */}
+                {/* â”€â”€ BONUS: YouTube SEO Metadata Panel â€” shown after video generation â”€â”€ */}
                 {youtubeMetadata && (
                   <div className="mt-4 w-full max-w-lg">
                     <div className="bg-gradient-to-br from-red-950/60 to-slate-900/90 border border-red-500/30 rounded-2xl p-4 space-y-3 shadow-xl">
@@ -3721,7 +3750,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       </SelectContent>
                     </Select>
                     <p className="mt-1.5 text-base text-neon-rose">
-                      ⚡ Device ပေါ်မူတည်ပြီး resolution ကို ရွေးပါ။ Low-end phone ဆိုရင် 480p/720p ရွေးပါ။
+                      ⚡️ Device ပေါ်မူတည်ပြီး resolution ကို ရွေးပါ။ Low-end phone ဆိုရင် 480p/720p ရွေးပါ။
                     </p>
                   </div>
                   <div className="grid grid-cols-3 lg:grid-cols-5 gap-2 mb-4">
@@ -4254,7 +4283,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                         setFreezeMode((f) => {
                           const next = !f;
                           if (!next) {
-                            // ── FIX: set ref immediately so rAF loop sees it this frame ──
+                            // â”€â”€ FIX: set ref immediately so rAF loop sees it this frame â”€â”€
                             freezeModeRef.current = false;
                             const vv = videoRef.current;
                             if (vv && vv.paused && !vv.ended) {
@@ -4516,7 +4545,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       </p>
                       <button
                         onClick={async () => {
-                          // ── IN-APP MP4 CONVERTER: Load FFmpeg and convert current video ──
+                          // â”€â”€ IN-APP MP4 CONVERTER: Load FFmpeg and convert current video â”€â”€
                           const inputVideo = renderedBlobUrl || videoUrl;
                           if (!inputVideo) {
                             alert("No video to convert. Please generate a recap video first.");
@@ -4784,7 +4813,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
   },
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface RecapHistoryItem {
   id: string;
@@ -4873,6 +4902,8 @@ const RecapVideoNVPage: React.FC = () => {
   const sourceFileUriRef = useRef<string | null>(null);
   const videoFileRef = useRef<File | null>(null);
   const pageAudioTimestampsRef = useRef<{ index: number; start: number; end: number }[]>([]);
+  const hookSegmentIdxRef = useRef<number>(-1);
+  const hookTitleRef = useRef<string>("");
   const [autoStartRecap, setAutoStartRecap] = useState(false);
   const [voiceMode, setVoiceMode] = useState<"modern" | "normal">("normal");
   const [recapHistory, setRecapHistory] = useState<RecapHistoryItem[]>([]);
@@ -5039,7 +5070,7 @@ const RecapVideoNVPage: React.FC = () => {
         .trim();
       cleaned = cleaned
         .replace(
-          /^\s*[([{（]?[^\n]{0,260}(?:ဟုတ်ကဲ့|Recap Script|recap script|မြန်မာလို\s*Recap|အောက်မှာ\s*ဖော်ပြ|ဖော်ပြပေးလိုက်ပါတယ်|ရေးပေးလိုက်ပါတယ်|Here(?:'s| is)|Below is|Sure|Okay|Of course)[^\n]{0,260}[)\]}）]?\s*\n+/i,
+          /^\s*[([{ï¼ˆ]?[^\n]{0,260}(?:á€Ÿá€¯á€á€ºá€€á€²á€·|Recap Script|recap script|á€™á€¼á€”á€ºá€™á€¬á€œá€­á€¯\s*Recap|á€¡á€±á€¬á€€á€ºá€™á€¾á€¬\s*á€–á€±á€¬á€ºá€•á€¼|á€–á€±á€¬á€ºá€•á€¼á€•á€±á€¸á€œá€­á€¯á€€á€ºá€•á€«á€á€šá€º|á€›á€±á€¸á€•á€±á€¸á€œá€­á€¯á€€á€ºá€•á€«á€á€šá€º|Here(?:'s| is)|Below is|Sure|Okay|Of course)[^\n]{0,260}[)\]}ï¼‰]?\s*\n+/i,
           "",
         )
         .trim();
@@ -5085,7 +5116,7 @@ const RecapVideoNVPage: React.FC = () => {
     // Voice naturalness: keep Burmese punctuation so TTS can insert realistic micro-pauses.
     let speechTextForAPI = scriptText.replace(/\[.*?\]\s*/g, "");
     if (voiceMode === "normal") {
-      // Remove mainly English punctuation, but keep Burmese "။" / "၊".
+      // Remove mainly English punctuation, but keep Burmese "á‹" / "áŠ".
       speechTextForAPI = speechTextForAPI.replace(/[.,!?;:"'()\[\]{}\-_\n\r]/g, " ").replace(/\s+/g, " ");
     }
 
@@ -5096,34 +5127,34 @@ const RecapVideoNVPage: React.FC = () => {
         data: { session: currentSession },
       } = await supabase.auth.getSession();
       const userToken = currentSession?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-      // ── NATIVE VOICE FINE-TUNE: Per-language realistic human voice instructions ──
+      // â”€â”€ NATIVE VOICE FINE-TUNE: Per-language realistic human voice instructions â”€â”€
       // Ensures each language sounds like a real human professional native speaker.
       // For Burmese: eliminates Chinese/European/ethnic minority accent interference.
       const langCode = selectedLanguage.split("-")[0];
       const NATIVE_VOICE_INSTRUCTIONS: Record<string, string> = {
         my:
-          "You MUST speak in 100% authentic professional native Burmese (ဗမာစကား) with a modern Yangon-standard accent. " +
+          "You MUST speak in 100% authentic professional native Burmese (á€—á€™á€¬á€…á€€á€¬á€¸) with a modern Yangon-standard accent. " +
           "Speak exactly like a real professional native Burmese person in their 20s-30s speaking naturally in everyday modern Burmese. " +
           "DO NOT mix any Chinese tone, Kachin accent, Shan accent, European accent, or any ethnic minority accent whatsoever. " +
-          "Pure ဗမာလေသံစစ်စစ် only — natural, fluent, warm, and confident modern Burmese speaking voice. " +
+          "Pure á€—á€™á€¬á€œá€±á€žá€¶á€…á€…á€ºá€…á€…á€º only â€” natural, fluent, warm, and confident modern Burmese speaking voice. " +
           "Pronounce every Burmese syllable, consonant cluster, and tone with perfect native Burmese phonology. " +
           "Human-like delivery: natural intonation and light breathing; NEVER robotic cadence.",
         en:
           "Speak in 100% natural native English with a clear, modern, professional American or British accent. " +
-          "Sound like a real native English-speaking human — warm, confident, and naturally fluent.",
-        ja: "100%ネイティブな日本語で話してください。自然で現代的な標準日本語アクセントで、本物の日本人のように話してください。",
-        ko: "100% 자연스러운 원어민 한국어로 말하세요. 현대 표준 한국어 억양으로 실제 한국 사람처럼 자연스럽게 말하세요.",
-        th: "พูดภาษาไทยแบบเจ้าของภาษา 100% ด้วยสำเนียงไทยกลางมาตรฐานสมัยใหม่ เหมือนคนไทยแท้ๆ พูดอย่างเป็นธรรมชาติ",
-        zh: "用100%纯正的普通话说话，像真正的中国人一样自然流畅地说现代标准普通话。",
-        hi: "100% प्राकृतिक मूल हिंदी में बोलें। आधुनिक मानक हिंदी उच्चारण के साथ एक वास्तविक हिंदी मूल वक्ता की तरह बोलें।",
-        vi: "Nói tiếng Việt 100% tự nhiên như người Việt bản xứ. Giọng Hà Nội hoặc Sài Gòn chuẩn, hiện đại và tự nhiên.",
+          "Sound like a real native English-speaking human â€” warm, confident, and naturally fluent.",
+        ja: "100%ãƒã‚¤ãƒ†ã‚£ãƒ–ãªæ—¥æœ¬èªžã§è©±ã—ã¦ãã ã•ã„ã€‚è‡ªç„¶ã§ç¾ä»£çš„ãªæ¨™æº–æ—¥æœ¬èªžã‚¢ã‚¯ã‚»ãƒ³ãƒˆã§ã€æœ¬ç‰©ã®æ—¥æœ¬äººã®ã‚ˆã†ã«è©±ã—ã¦ãã ã•ã„ã€‚",
+        ko: "100% ìžì—°ìŠ¤ëŸ¬ìš´ ì›ì–´ë¯¼ í•œêµ­ì–´ë¡œ ë§í•˜ì„¸ìš”. í˜„ëŒ€ í‘œì¤€ í•œêµ­ì–´ ì–µì–‘ìœ¼ë¡œ ì‹¤ì œ í•œêµ­ ì‚¬ëžŒì²˜ëŸ¼ ìžì—°ìŠ¤ëŸ½ê²Œ ë§í•˜ì„¸ìš”.",
+        th: "à¸žà¸¹à¸”à¸ à¸²à¸©à¸²à¹„à¸—à¸¢à¹à¸šà¸šà¹€à¸ˆà¹‰à¸²à¸‚à¸­à¸‡à¸ à¸²à¸©à¸² 100% à¸”à¹‰à¸§à¸¢à¸ªà¸³à¹€à¸™à¸µà¸¢à¸‡à¹„à¸—à¸¢à¸à¸¥à¸²à¸‡à¸¡à¸²à¸•à¸£à¸à¸²à¸™à¸ªà¸¡à¸±à¸¢à¹ƒà¸«à¸¡à¹ˆ à¹€à¸«à¸¡à¸·à¸­à¸™à¸„à¸™à¹„à¸—à¸¢à¹à¸—à¹‰à¹† à¸žà¸¹à¸”à¸­à¸¢à¹ˆà¸²à¸‡à¹€à¸›à¹‡à¸™à¸˜à¸£à¸£à¸¡à¸Šà¸²à¸•à¸´",
+        zh: "ç”¨100%çº¯æ­£çš„æ™®é€šè¯è¯´è¯ï¼ŒåƒçœŸæ­£çš„ä¸­å›½äººä¸€æ ·è‡ªç„¶æµç•…åœ°è¯´çŽ°ä»£æ ‡å‡†æ™®é€šè¯ã€‚",
+        hi: "100% à¤ªà¥à¤°à¤¾à¤•à¥ƒà¤¤à¤¿à¤• à¤®à¥‚à¤² à¤¹à¤¿à¤‚à¤¦à¥€ à¤®à¥‡à¤‚ à¤¬à¥‹à¤²à¥‡à¤‚à¥¤ à¤†à¤§à¥à¤¨à¤¿à¤• à¤®à¤¾à¤¨à¤• à¤¹à¤¿à¤‚à¤¦à¥€ à¤‰à¤šà¥à¤šà¤¾à¤°à¤£ à¤•à¥‡ à¤¸à¤¾à¤¥ à¤à¤• à¤µà¤¾à¤¸à¥à¤¤à¤µà¤¿à¤• à¤¹à¤¿à¤‚à¤¦à¥€ à¤®à¥‚à¤² à¤µà¤•à¥à¤¤à¤¾ à¤•à¥€ à¤¤à¤°à¤¹ à¤¬à¥‹à¤²à¥‡à¤‚à¥¤",
+        vi: "NÃ³i tiáº¿ng Viá»‡t 100% tá»± nhiÃªn nhÆ° ngÆ°á»i Viá»‡t báº£n xá»©. Giá»ng HÃ  Ná»™i hoáº·c SÃ i GÃ²n chuáº©n, hiá»‡n Ä‘áº¡i vÃ  tá»± nhiÃªn.",
         id: "Berbicara dalam bahasa Indonesia 100% asli dan alami seperti penutur asli Indonesia modern.",
         ms: "Bercakap dalam bahasa Melayu 100% asli dan semula jadi seperti penutur asli Melayu moden.",
         tl: "Magsalita sa 100% natural na katutubong Filipino/Tagalog tulad ng isang tunay na Pilipino.",
       };
       const nativeInstructions =
         NATIVE_VOICE_INSTRUCTIONS[langCode] ||
-        `Speak in 100% authentic native ${langCode} language. Sound like a real native human speaker — natural, fluent, warm, and confident. ` +
+        `Speak in 100% authentic native ${langCode} language. Sound like a real native human speaker â€” natural, fluent, warm, and confident. ` +
           `Do NOT mix any foreign accent. Use perfect native pronunciation and modern standard speaking style.`;
 
       const bodyPayload: Record<string, unknown> = {
@@ -5135,11 +5166,11 @@ const RecapVideoNVPage: React.FC = () => {
         nativeVoiceInstructions:
           nativeInstructions +
           " CRITICAL: You MUST narrate the COMPLETE text from BEGINNING to END without skipping any part. Start from the very first word and continue to the very last word. Do NOT truncate or summarize.",
-        // ── PACING & EMOTION: compelling continuous storytelling, zero dead air, international recap channel quality ──
+        // â”€â”€ PACING & EMOTION: compelling continuous storytelling, zero dead air, international recap channel quality â”€â”€
         styleInstructions:
           nativeInstructions +
           ` CINEMATIC STORYTELLING VOICE: You are the voice of a world-class movie recap channel. ` +
-          ` Your voice must be GRIPPING, COMPELLING, and CONTINUOUS — like MrBallen, Daniel Gonzalez, or StoryRecapped narrators. ` +
+          ` Your voice must be GRIPPING, COMPELLING, and CONTINUOUS â€” like MrBallen, Daniel Gonzalez, or StoryRecapped narrators. ` +
           ` NEVER leave dead air or long pauses between sentences. Each sentence must flow IMMEDIATELY into the next with momentum. ` +
           ` Build tension, suspense, and curiosity in your voice. Make the listener NEED to hear what happens next. ` +
           ` Automatically adapt emotional intensity to match the scene: whisper for horror, urgency for action, warmth for romance, shock for twists. ` +
@@ -5158,7 +5189,7 @@ const RecapVideoNVPage: React.FC = () => {
 
       // Edge-TTS branch: Microsoft Burmese neural voices (Thiha/Nilar). Free upstream,
       // bypass gemini-tts and call edge-tts function. Credit is still deducted via the
-      // existing Recap NV accounting path — pass skipCreditDeduction=true to the function.
+      // existing Recap NV accounting path â€” pass skipCreditDeduction=true to the function.
       const isEdgeVoice = typeof selectedVoice === "string" && selectedVoice.startsWith("edge:");
       const ttsFnName = isEdgeVoice ? "edge-tts" : "gemini-tts";
       const ttsBody = isEdgeVoice
@@ -5343,7 +5374,7 @@ const RecapVideoNVPage: React.FC = () => {
       // Larger token headroom to reduce incomplete scripts on long videos.
       const maxOutputTokens = Math.min(16384, Math.max(4096, Math.ceil(duration * 220)));
 
-      // ── LANGUAGE-AWARE BLOCKS: All language-specific text uses selectedLangName so user's chosen language is respected. ──
+      // â”€â”€ LANGUAGE-AWARE BLOCKS: All language-specific text uses selectedLangName so user's chosen language is respected. â”€â”€
       const isBurmese = selectedLangName === "BURMESE";
       const burmeseStyleBlock = isBurmese
         ? `\n\nLANGUAGE STYLE (CRITICAL for Burmese):\n` +
@@ -5373,13 +5404,13 @@ const RecapVideoNVPage: React.FC = () => {
       const scriptBody: Record<string, unknown> = {
         fileUri,
         fileMimeType: mimeType,
-        // ── INTELLIGENT RECAP EDITOR PROMPT (surgical edit — comprehensive recap instructions) ──
+        // â”€â”€ INTELLIGENT RECAP EDITOR PROMPT (surgical edit â€” comprehensive recap instructions) â”€â”€
         niche: `You are an aggressive international professional YouTube recap editor.
 
 Your task is to analyze the uploaded movie/video and create a condensed, fast-paced recap version like the best YouTube movie recap channels. Do NOT simply speed up or use only the first part. You must understand the FULL STORY and then cut it down ruthlessly.
 
 CRITICAL STORYTELLING RULE:
-Write the narration script as ONE CONTINUOUS GRIPPING STORY. Every sentence must hook into the next — create momentum, tension, and curiosity.
+Write the narration script as ONE CONTINUOUS GRIPPING STORY. Every sentence must hook into the next â€” create momentum, tension, and curiosity.
 Use short, punchy sentences, action verbs, and high-energy transitions.
 Do NOT write isolated disconnected paragraphs. Each segment must END with a hook or transition that PULLS the listener into the next segment.
 Examples of good transitions: "But what she didn't know was..." / "And that's when everything changed." / "Just when he thought it was over..."
@@ -5388,17 +5419,17 @@ The narration must feel like a non-stop thriller story, NOT a boring lecture, do
 STRICT LENGTH RULE:
 This is a surgical recap, not a summary. Do NOT retain most of the source or produce a detailed retelling.
 The output script MUST be approximately 40-50% of the original video duration when read aloud.
-MINIMUM WORD COUNT (CRITICAL — DO NOT GO BELOW THIS):
-  * Source 5 min → minimum 350 words, target ~500 words
-  * Source 10 min → minimum 700 words, target ~1200 words
-  * Source 15 min → minimum 1000 words, target ~1800 words
-  * Source 20 min → minimum 1500 words, target ~2500 words
-  * Source 30 min → minimum 2000 words, target ~3500 words
+MINIMUM WORD COUNT (CRITICAL â€” DO NOT GO BELOW THIS):
+  * Source 5 min â†’ minimum 350 words, target ~500 words
+  * Source 10 min â†’ minimum 700 words, target ~1200 words
+  * Source 15 min â†’ minimum 1000 words, target ~1800 words
+  * Source 20 min â†’ minimum 1500 words, target ~2500 words
+  * Source 30 min â†’ minimum 2000 words, target ~3500 words
 If your script is shorter than the MINIMUM, you MUST add more story detail until you reach it.
 A 20-minute source producing only 2 minutes of narration = FAILURE.
 
 STRUCTURE RULE:
-1. Start with a SHOCKING HOOK from the middle or end that immediately raises a “why did this happen?” question.
+1. Start with a SHOCKING HOOK from the middle or end that immediately raises a â€œwhy did this happen?â€ question.
 2. Then build a MYSTERY-DRIVEN buildup while preserving the core plot logic and revealing hidden stakes.
 3. Increase tension step-by-step with shorter, sharper narration as the conflict intensifies.
 4. Finish with an ULTIMATE CLIMAX PEAK: the twist or payoff must land hard and leave the viewer breathless.
@@ -5413,19 +5444,19 @@ INSTRUCTIONS:
 - Keep ONLY the key plot points in chronological order. CUT everything else ruthlessly.
 - AGGRESSIVELY remove: unnecessary scenes, silence, slow walking, repetitive actions, filler moments, unimportant dialogues, transition scenes, travel montages, and any scene that does NOT advance the main plot.
 - Focus on: Main plot twists, key character moments, critical conflicts, shocking reveals, and the conclusion.
-- Shorten conversations to their essential meaning — do NOT include full back-and-forth dialogues.
+- Shorten conversations to their essential meaning â€” do NOT include full back-and-forth dialogues.
 - Skip over setup/buildup scenes and jump straight to the payoff.
 
 PACING & DURATION RULE (CRITICAL):
 - The recap MUST be approximately 40-50% of the original video duration. NOT shorter, NOT longer.
 - The app is built for source videos up to 30 minutes. If the source is longer than 30 minutes, treat it like a 30-minute source.
-  * Source up to 30 min → recap 40-50% of source duration (e.g. 20 min → 8-10 min recap).
-  * Source under 15 min → recap about 40-50% of the length.
-  * Source under 10 min → recap about 40-50% of the length.
-  * Source under 5 min → recap about 40-50% of the length.
+  * Source up to 30 min â†’ recap 40-50% of source duration (e.g. 20 min â†’ 8-10 min recap).
+  * Source under 15 min â†’ recap about 40-50% of the length.
+  * Source under 10 min â†’ recap about 40-50% of the length.
+  * Source under 5 min â†’ recap about 40-50% of the length.
 - IMPORTANT: Going BELOW 30% is just as bad as exceeding 50%. A recap that is too short feels incomplete.
 - If your narration word count falls below the MINIMUM, ADD more story details until you reach it.
-- The viewer should feel like they watched a complete, exciting, condensed version — NOT a 30-second summary.
+- The viewer should feel like they watched a complete, exciting, condensed version â€” NOT a 30-second summary.
 
 IMPORTANT:
 Do NOT summarize using text only.
@@ -5461,7 +5492,7 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
 - Each segment must flow smoothly into the next.
 - If token pressure appears, condense remaining story into brief segments instead of stopping.
 
-AGGRESSIVE CUTTING RULES (CRITICAL — this is a RECAP, not a retelling):
+AGGRESSIVE CUTTING RULES (CRITICAL â€” this is a RECAP, not a retelling):
 - CUT all scenes that do NOT directly advance the main plot. Be ruthless.
 - CUT: travel/walking scenes, eating scenes, sleeping scenes, getting dressed, waiting, filler conversations, repetitive arguments, scenery shots, and any slow-paced moments.
 - KEEP ONLY: Plot twists, reveals, conflicts, character-defining moments, shocking scenes, and the resolution.
@@ -5470,7 +5501,7 @@ AGGRESSIVE CUTTING RULES (CRITICAL — this is a RECAP, not a retelling):
 - Think like a professional YouTube recap editor: fast, engaging, essential moments only.
 - Do NOT randomly cut scenes. Intelligently compress the narrative while preserving a professional complete story experience.
 
-STORYTELLING FLOW (CRITICAL — eliminates dead air):
+STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
 - Write narration as a CONTINUOUS FLOWING STORY. Never write isolated disconnected paragraphs.
 - Each segment MUST end with a hook or transition line that creates MOMENTUM into the next segment.
 - Use cliffhanger-style transitions: "But that was just the beginning..." / "And then, everything went wrong."
@@ -5516,12 +5547,12 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
       setScriptData({ title: file.name.replace(/\.[^.]+$/, ""), full_script: scriptText, segments });
       setProgressMsg("📝 Script generated! Now generating AI voice...");
 
-      // ── FEATURE: AI Hook Detector — LOCAL SCORING (no API, 100% reliable) ──
+      // â”€â”€ FEATURE: AI Hook Detector â€” LOCAL SCORING (no API, 100% reliable) â”€â”€
       // Finds the most viral/dramatic segment: highest emotional intensity + climax position
       (() => {
         try {
           if (segments.length < 2) return;
-          // TIER 1: Ultra-high drama (×5) — twists, reveals, deaths, betrayals
+          // TIER 1: Ultra-high drama (Ã—5) â€” twists, reveals, deaths, betrayals
           const ultraKw = [
             "died",
             "killed",
@@ -5539,16 +5570,16 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
             "discovered",
             "exposed",
             "confessed",
-            "သေသွားပြီ",
-            "ဆုံးသွားပြီ",
-            "ဖော်ထုတ်လိုက်ပြီ",
-            "လျှို့ဝှက်ချက်",
-            "သစ္စာဖောက်",
-            "ထွင်းကိုက်",
-            "သတ်လိုက်",
-            "ဆိုးတဲ့လျှို့ဝှက်",
+            "á€žá€±á€žá€½á€¬á€¸á€•á€¼á€®",
+            "á€†á€¯á€¶á€¸á€žá€½á€¬á€¸á€•á€¼á€®",
+            "á€–á€±á€¬á€ºá€‘á€¯á€á€ºá€œá€­á€¯á€€á€ºá€•á€¼á€®",
+            "á€œá€»á€¾á€­á€¯á€·á€á€¾á€€á€ºá€á€»á€€á€º",
+            "á€žá€…á€¹á€…á€¬á€–á€±á€¬á€€á€º",
+            "á€‘á€½á€„á€ºá€¸á€€á€­á€¯á€€á€º",
+            "á€žá€á€ºá€œá€­á€¯á€€á€º",
+            "á€†á€­á€¯á€¸á€á€²á€·á€œá€»á€¾á€­á€¯á€·á€á€¾á€€á€º",
           ];
-          // TIER 2: High drama (×3)
+          // TIER 2: High drama (Ã—3)
           const highKw = [
             "die",
             "death",
@@ -5637,15 +5668,15 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
             const words = bestSentence.trim().split(/\s+/);
             const hookTitle = words.slice(0, 8).join(" ") + (words.length > 8 ? "..." : "");
             console.log(`[HOOK SCORER] Seg ${hookIdx} score=${maxScore.toFixed(1)}: "${hookTitle}"`);
-            // NOTE: hook refs live in ResultView scope; this scorer only logs here.
-            void hookIdx;
-            void hookTitle;
+            // SURGICAL FIX: Actually assign hook data to refs so rendering code can use them!
+            hookSegmentIdxRef.current = hookIdx;
+            hookTitleRef.current = hookTitle;
           }
         } catch (e) {
           console.warn("[HOOK LOCAL] Failed:", e);
         }
       })();
-      // ── BONUS: YouTube SEO Metadata Generator (async, non-blocking) ──
+      // â”€â”€ BONUS: YouTube SEO Metadata Generator (async, non-blocking) â”€â”€
       (async () => {
         try {
           if (!scriptText) return;
@@ -5782,7 +5813,8 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
                 onClick={() => setApiMode("own")}
                 className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${apiMode === "own" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
               >
-                🔑 Own API Key<span className="block text-xs font-normal opacity-70">သင့်ကိုယ်ပိုင် Key</span>
+                🔑 Own API Key
+                <span className="block text-xs font-normal opacity-70">သင့်ကိုယ်ပိုင် Key</span>
               </button>
             </div>
             {apiMode === "own" && (
@@ -5820,7 +5852,7 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
                   }}
                   className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${deviceTier === "fast" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
                 >
-                  ⚡ Fast Device
+                  ⚡️ Fast Device
                   <span className="block text-xs font-normal opacity-70">SD 7/8 Gen, PC, Modern Android</span>
                 </button>
                 <button
@@ -6073,11 +6105,11 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
                         languageCode: "my",
                         skipCreditDeduction: true,
                         nativeVoiceInstructions:
-                          "You MUST speak in 100% authentic native Burmese (ဗမာစကား) with a modern Yangon-standard accent. " +
+                          "You MUST speak in 100% authentic native Burmese (á€—á€™á€¬á€…á€€á€¬á€¸) with a modern Yangon-standard accent. " +
                           "Speak exactly like a real native Burmese person in their 20s-30s speaking naturally in everyday modern Burmese. " +
                           "DO NOT mix any Chinese tone, Kachin accent, Shan accent, European accent, or any ethnic minority accent whatsoever. " +
-                          "Pure ဗမာလေသံစစ်စစ် only — natural, fluent, warm, and confident modern Burmese speaking voice. " +
-                          "Match the quality of Google Producer AI's Burmese human voice output — indistinguishable from a real Burmese human speaker.",
+                          "Pure á€—á€™á€¬á€œá€±á€žá€¶á€…á€…á€ºá€…á€…á€º only â€” natural, fluent, warm, and confident modern Burmese speaking voice. " +
+                          "Match the quality of Google Producer AI's Burmese human voice output â€” indistinguishable from a real Burmese human speaker.",
                         voiceConfig: {
                           speakingStyle: "natural_conversational",
                           pronunciationStrictness: "native_only",
@@ -6123,7 +6155,7 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
                 onClick={() => setVoiceMode("modern")}
                 className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${voiceMode === "modern" ? "bg-neon-cyan text-black shadow-[0_0_10px_rgba(0,229,255,0.4)] ring-2 ring-neon-cyan" : "bg-charcoal-700 text-gray-400 hover:text-gray-200"}`}
               >
-                ⚡ Modern Version
+                ⚡️ Modern Version
               </button>
               <button
                 onClick={() => setVoiceMode("normal")}
@@ -6168,7 +6200,7 @@ STORYTELLING FLOW (CRITICAL — eliminates dead air):
             />
           </div>
 
-          {/* SURGICAL EDIT: Generate Recap Button — user must click to start pipeline */}
+          {/* SURGICAL EDIT: Generate Recap Button â€” user must click to start pipeline */}
           {(videoFile || videoLink) && status !== "processing" && !audioUrl && (
             <button
               onClick={async () => {
