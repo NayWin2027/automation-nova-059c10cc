@@ -729,7 +729,14 @@ const TutorialVideosPage: React.FC = () => {
                   <div className="flex flex-col sm:flex-row gap-4">
                     {/* Video thumbnail / player */}
                     {t.video_url ? (
-                      <VideoPlayer tutorial={t} autoPlay={shouldAutoPlay && visible.indexOf(t) === 0} />
+                      <VideoPlayer
+                        tutorial={t}
+                        autoPlay={shouldAutoPlay && visible.indexOf(t) === 0}
+                        onDuration={(d) =>
+                          setDurations((prev) => (prev[t.id] === d ? prev : { ...prev, [t.id]: d }))
+                        }
+                        onFirstPlay={() => handleViewIncrement(t.id)}
+                      />
                     ) : (
                       <div className="w-full sm:w-56 sm:min-w-[14rem] aspect-video rounded-xl bg-gradient-to-br from-primary/10 via-violet-500/10 to-fuchsia-500/10 flex items-center justify-center flex-shrink-0 border border-border/20">
                         <FileText className="w-10 h-10 text-primary/30" />
@@ -784,6 +791,24 @@ const TutorialVideosPage: React.FC = () => {
 
                       <p className="mt-3 text-2xs text-muted-foreground/60">
                         {new Date(t.created_at).toLocaleDateString()}
+                        <span className="ml-2 inline-flex items-center gap-1 text-muted-foreground/80">
+                          <Eye className="w-3 h-3" />
+                          <span className="font-semibold">{(t.view_count ?? 0).toLocaleString()}</span>
+                          <span>views</span>
+                        </span>
+                        {durations[t.id] != null && (
+                          <span className="ml-2 inline-flex items-center gap-1 text-muted-foreground/80">
+                            <Clock className="w-3 h-3" />
+                            <span className="font-semibold">
+                              {(() => {
+                                const s = Math.round(durations[t.id]);
+                                const m = Math.floor(s / 60);
+                                const r = s % 60;
+                                return `${m}:${r.toString().padStart(2, "0")}`;
+                              })()}
+                            </span>
+                          </span>
+                        )}
                         {isAdmin && (
                           <span className={`ml-2 font-semibold ${t.is_published ? "text-emerald-400" : "text-amber-400"}`}>
                             • {t.is_published ? "Published" : "Draft"}
