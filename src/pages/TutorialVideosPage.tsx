@@ -449,7 +449,16 @@ const TutorialVideosPage: React.FC = () => {
     (t) => filterCategory === "all" || t.category === filterCategory
   );
 
-  const visible = filtered;
+  const visible = [...filtered].sort((a, b) => {
+    if (sortBy === "newest" || sortBy === "oldest") {
+      const at = new Date(a.created_at).getTime();
+      const bt = new Date(b.created_at).getTime();
+      return sortBy === "newest" ? bt - at : at - bt;
+    }
+    const ad = durations[a.id] ?? -1;
+    const bd = durations[b.id] ?? -1;
+    return sortBy === "longest" ? bd - ad : ad - bd;
+  });
 
   if (loading || accessLoading) {
     return (
