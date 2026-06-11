@@ -191,6 +191,29 @@ const TutorialVideosPage: React.FC = () => {
 
   // Filter
   const [filterCategory, setFilterCategory] = useState("all");
+  // Sort: newest (default), oldest, longest, shortest
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "longest" | "shortest">("newest");
+  // Client-side measured durations per tutorial id (from video metadata)
+  const [durations, setDurations] = useState<Record<string, number>>({});
+  // Track which tutorials we've already counted a view for this session
+  const viewedRef = useRef<Set<string>>(new Set());
+
+  const handleViewIncrement = async (tutorialId: string) => {
+    if (viewedRef.current.has(tutorialId)) return;
+    viewedRef.current.add(tutorialId);
+    try {
+      const { data, error } = await supabase.rpc("increment_tutorial_view", {
+        _tutorial_id: tutorialId,
+      });
+      if (!error && typeof data === "number") {
+        setTutorials((prev) =>
+          prev.map((t) => (t.id === tutorialId ? { ...t, view_count: data } : t))
+        );
+      }
+    } catch {
+      // silent — view count is non-critical
+    }
+  };
 
   const canView = isAdmin || (profile?.plan === "premium");
   const accessLoading = adminLoading || authLoading;
