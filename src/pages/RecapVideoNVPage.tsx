@@ -2209,6 +2209,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           const MOTION_SEC = 8;
           const CYCLE_SEC = FREEZE_SEC + MOTION_SEC;
           const cyclePos = t % CYCLE_SEC;
+          const cycleIndex = Math.floor(t / CYCLE_SEC);
           const isFreezeCycle = cyclePos < FREEZE_SEC;
 
           if (isFreezeCycle) {
@@ -2237,8 +2238,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               videoEl.playbackRate = 1.0;
               videoEl.play().catch(() => {});
             }
-            // SURGICAL FIX: No zoom/pan in motion phase â€” show original frame as-is
-            // zoomedSrc* stay at srcCrop* defaults (set above)
           }
         } else if (isZoomEnabled) {
           // â”€â”€ Original cinematic zoom/pan/Ken Burns (only when Zoom ON and Freeze OFF) â”€â”€
@@ -2274,8 +2273,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           const microShakeY = Math.cos(t * 28.0) * 0.4 * motionFactor;
           const translateX = (driftX + crossX) * motionFactor + microShakeX;
           const translateY = (driftY + crossY) * motionFactor + microShakeY;
-          const rotDir = Math.floor(cycleIndex / 2) % 2 === 0 ? 1 : -1;
-          rotate = isPhotoFreeze ? 0 : rotDir * 0.02 * hump;
+          // Literal rotation removed to focus on Freeze/Motion alternation
+          rotate = 0;
           zoomedSrcW = Math.max(2, Math.round(srcCropW / cinematicZoom));
           zoomedSrcH = Math.max(2, Math.round(srcCropH / cinematicZoom));
           const maxShiftX = (srcCropW - zoomedSrcW) / 2;
@@ -2848,7 +2847,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               const hookSeg = segs[hookIdx] as any;
               if (hookSeg) {
                 const hookVEnd = hookSeg.vEnd === -1 ? vv.duration : hookSeg.vEnd;
-                if (!seekPendingRef.current && Math.abs(vv.currentTime - hookSeg.vStart) > 0.8) {
+                if (!seekPendingRef.current && Math.abs(vv.currentTime - hookSeg.vStart) > 0.001) {
                   seekPendingRef.current = true;
                   const onHookSeeked = () => {
                     seekPendingRef.current = false;
@@ -2861,10 +2860,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   vv.addEventListener("seeked", onHookSeeked);
                   vv.currentTime = hookSeg.vStart;
                 } else if (!seekPendingRef.current) {
-                  // Clamp at hook segment end â€” hold last frame if overrun
-                  if (hookVEnd > 0 && vv.currentTime >= hookVEnd - 0.05) {
-                    if (!vv.paused) vv.pause();
-                  } else if (vv.paused && !vv.ended) {
+                  // SURGICAL FIX: Loop hook segment instead of pausing to prevent freeze artifacts
+                  if (hookVEnd > 0 && (vv.currentTime >= hookVEnd - 0.001 || vv.currentTime < hookSeg.vStart)) {
+                    vv.currentTime = hookSeg.vStart;
+                  }
+                  if (vv.paused && !vv.ended) {
                     vv.playbackRate = 1.0;
                     vv.play().catch(() => {});
                   }
@@ -2887,12 +2887,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 while (lastTsIdx < maxIdx && currentTime >= audioTs[lastTsIdx].end) lastTsIdx += 1;
                 while (lastTsIdx > 0 && currentTime < audioTs[lastTsIdx].start) lastTsIdx -= 1;
 
-                // SURGICAL FIX: Add 50ms tolerance at segment boundaries to prevent gap-falling
-                const BOUNDARY_TOLERANCE = 0.05;
-                if (
-                  currentTime >= audioTs[lastTsIdx].start - BOUNDARY_TOLERANCE &&
-                  currentTime < audioTs[lastTsIdx].end + BOUNDARY_TOLERANCE
-                ) {
+                // SURGICAL FIX: 100% Accuracy - No tolerance, use exact audio timestamps
+                if (currentTime >= audioTs[lastTsIdx].start && currentTime < audioTs[lastTsIdx].end) {
                   activeIndex = lastTsIdx;
                   activeText = getSeg(lastTsIdx)?.text || "";
                 }
@@ -2913,7 +2909,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       seekPendingRef.current = false;
                       // Always play video when freezeMode is OFF
                       if (!vv.ended) {
-                        if (!freezeModeRef.current) {
+                        // SURGICAL FIX: Only auto-play if NOT in a freeze cycle of freezeMode
+                        const isFreezeCycle = freezeModeRef.current && av.currentTime % (7 + 8) < 7;
+                        if (!isFreezeCycle) {
                           vv.playbackRate = 1.0;
                           vv.play().catch(() => {});
                         }
@@ -2926,33 +2924,25 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     // Seek complete â€” normal playing state
                     // SURGICAL FIX: Clamp video to exact segment boundaries for 100% AV sync accuracy
                     // This prevents video from drifting and showing wrong scenes
-                    if (!freezeModeRef.current) {
-                      // SURGICAL FIX: Clamp at segment boundary â€” loop back to vStart when video reaches vEnd
-                      // Prevents: 1) showing wrong visual content for narration (AV sync mismatch)
-                      //           2) end-of-file frozen photo (30-60s still frame at video end)
-                      if (vActualEnd > 0 && vv.currentTime >= vActualEnd - 0.15) {
-                        vv.currentTime = active.vStart;
-                      }
+                    // SURGICAL FIX: 100% AV Sync - Handle looping and playback based on freezeMode
+                    if (vActualEnd > 0 && (vv.currentTime >= vActualEnd - 0.001 || vv.currentTime < active.vStart)) {
+                      vv.currentTime = active.vStart;
+                    }
+
+                    // SURGICAL FIX: Only auto-play if NOT in a freeze cycle of freezeMode
+                    const isFreezeCycle = freezeModeRef.current && av.currentTime % (7 + 8) < 7;
+                    if (!isFreezeCycle) {
                       if (vv.paused || vv.ended) {
-                        vv.playbackRate = 1.0;
-                        vv.play().catch(() => {});
-                      }
-                    } else {
-                      // freezeMode ON: clamp at segment end (freeze behavior)
-                      if (vActualEnd > 0 && vv.currentTime >= vActualEnd - 0.05) {
-                        if (!vv.paused) vv.pause();
-                      } else if (vv.paused && !vv.ended) {
                         vv.playbackRate = 1.0;
                         vv.play().catch(() => {});
                       }
                     }
                   }
                 } else {
-                  // Between segments â€” pause video to prevent showing wrong scenes
-                  // SURGICAL FIX: Hard pause between segments for 100% sync accuracy
+                  // SURGICAL FIX: Remove hard pause between segments to prevent freeze artifacts.
+                  // Instead, we allow the video to continue or transition to the next segment naturally.
                   if (videoInSegmentRef.current) {
                     videoInSegmentRef.current = false;
-                    if (!vv.paused) vv.pause();
                   }
                 }
               } else {
@@ -2978,7 +2968,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     vv.play().catch(() => {});
                   }
                 } else {
-                  if (!vv.paused) vv.pause();
+                  // SURGICAL FIX: No pause in fallback logic
                 }
               }
             }
@@ -3080,15 +3070,17 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         audioRef.current.play().catch(console.error);
       }
       if (videoRef.current) {
-        videoRef.current.play().catch((err) => {
-          // SURGICAL IOS FIX: Safely bypass the WebKit muted autoplay bug.
-          // If iOS drops the gesture token due to heavy network awaits and permanently freezes the decoder,
-          // reloading the explicitly muted video seamlessly restarts the hardware pipeline.
-          console.warn("[RECORDING] iOS Video freeze detected, applying safe hardware reload...", err);
-          videoRef.current!.muted = true;
-          videoRef.current!.load();
-          videoRef.current!.play().catch(console.error);
-        });
+        // SURGICAL FIX: Only auto-play if NOT in a freeze cycle of freezeMode
+        const isFreezeCycle = freezeModeRef.current && audioRef.current!.currentTime % (7 + 8) < 7;
+        if (!isFreezeCycle) {
+          videoRef.current.play().catch((err) => {
+            // SURGICAL IOS FIX: Safely bypass the WebKit muted autoplay bug.
+            console.warn("[RECORDING] iOS Video freeze detected, applying safe hardware reload...", err);
+            videoRef.current!.muted = true;
+            videoRef.current!.load();
+            videoRef.current!.play().catch(console.error);
+          });
+        }
       }
 
       recapAnimFrameRef.current = requestAnimationFrame(syncAndDraw);
