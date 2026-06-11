@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import {
   ArrowLeft, Plus, Trash2, Video, FileText, Upload, RefreshCw,
-  Eye, EyeOff, GripVertical, Play, BookOpen, Sparkles,
+  Eye, EyeOff, GripVertical, Play, BookOpen, Sparkles, ArrowUpDown, Clock,
 } from "lucide-react";
 
 interface Tutorial {
@@ -32,6 +32,7 @@ interface Tutorial {
   order_index: number;
   is_published: boolean;
   created_at: string;
+  view_count?: number;
 }
 
 const QUALITY_OPTIONS = ["360p", "720p", "1080p"] as const;
@@ -50,10 +51,16 @@ const CATEGORIES = [
   { value: "tips", label: "Tips & Tricks" },
 ];
 // Video player with quality + aspect ratio selectors
-const VideoPlayer: React.FC<{ tutorial: Tutorial; autoPlay?: boolean }> = ({ tutorial, autoPlay }) => {
+const VideoPlayer: React.FC<{
+  tutorial: Tutorial;
+  autoPlay?: boolean;
+  onDuration?: (seconds: number) => void;
+  onFirstPlay?: () => void;
+}> = ({ tutorial, autoPlay, onDuration, onFirstPlay }) => {
   const [selectedQuality, setSelectedQuality] = useState<string>("auto");
   const [aspectRatio, setAspectRatio] = useState<string>("video");
   const videoRef = React.useRef<HTMLVideoElement>(null);
+  const playedRef = React.useRef(false);
 
   const qualities = tutorial.video_qualities || {};
   const hasRealQualities = QUALITY_OPTIONS.some(q => qualities[q]);
@@ -95,6 +102,15 @@ const VideoPlayer: React.FC<{ tutorial: Tutorial; autoPlay?: boolean }> = ({ tut
           onContextMenu={(e) => e.preventDefault()}
           preload={autoPlay ? "auto" : "metadata"}
           autoPlay={autoPlay}
+          onLoadedMetadata={(e) => {
+            const d = (e.currentTarget as HTMLVideoElement).duration;
+            if (Number.isFinite(d) && d > 0) onDuration?.(d);
+          }}
+          onPlay={() => {
+            if (playedRef.current) return;
+            playedRef.current = true;
+            onFirstPlay?.();
+          }}
           className="w-full h-full object-contain rounded-xl bg-black"
         />
       </div>
@@ -175,6 +191,29 @@ const TutorialVideosPage: React.FC = () => {
 
   // Filter
   const [filterCategory, setFilterCategory] = useState("all");
+  // Sort: newest (default), oldest, longest, shortest
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "longest" | "shortest">("newest");
+  // Client-side measured durations per tutorial id (from video metadata)
+  const [durations, setDurations] = useState<Record<string, number>>({});
+  // Track which tutorials we've already counted a view for this session
+  const viewedRef = useRef<Set<string>>(new Set());
+
+  const handleViewIncrement = async (tutorialId: string) => {
+    if (viewedRef.current.has(tutorialId)) return;
+    viewedRef.current.add(tutorialId);
+    try {
+      const { data, error } = await supabase.rpc("increment_tutorial_view", {
+        _tutorial_id: tutorialId,
+      });
+      if (!error && typeof data === "number") {
+        setTutorials((prev) =>
+          prev.map((t) => (t.id === tutorialId ? { ...t, view_count: data } : t))
+        );
+      }
+    } catch {
+      // silent — view count is non-critical
+    }
+  };
 
   const canView = isAdmin || (profile?.plan === "premium");
   const accessLoading = adminLoading || authLoading;
@@ -410,7 +449,16 @@ const TutorialVideosPage: React.FC = () => {
     (t) => filterCategory === "all" || t.category === filterCategory
   );
 
-  const visible = filtered;
+  const visible = [...filtered].sort((a, b) => {
+    if (sortBy === "newest" || sortBy === "oldest") {
+      const at = new Date(a.created_at).getTime();
+      const bt = new Date(b.created_at).getTime();
+      return sortBy === "newest" ? bt - at : at - bt;
+    }
+    const ad = durations[a.id] ?? -1;
+    const bd = durations[b.id] ?? -1;
+    return sortBy === "longest" ? bd - ad : ad - bd;
+  });
 
   if (loading || accessLoading) {
     return (
@@ -463,6 +511,19 @@ const TutorialVideosPage: React.FC = () => {
                     {c.label}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+
+            {/* Sort */}
+            <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
+              <SelectTrigger className="w-[150px] h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="newest">🆕 Newest first</SelectItem>
+                <SelectItem value="oldest">📅 Oldest first</SelectItem>
+                <SelectItem value="longest">⏱️ Longest first</SelectItem>
+                <SelectItem value="shortest">⚡ Shortest first</SelectItem>
               </SelectContent>
             </Select>
 
@@ -668,7 +729,14 @@ const TutorialVideosPage: React.FC = () => {
                   <div className="flex flex-col sm:flex-row gap-4">
                     {/* Video thumbnail / player */}
                     {t.video_url ? (
-                      <VideoPlayer tutorial={t} autoPlay={shouldAutoPlay && visible.indexOf(t) === 0} />
+                      <VideoPlayer
+                        tutorial={t}
+                        autoPlay={shouldAutoPlay && visible.indexOf(t) === 0}
+                        onDuration={(d) =>
+                          setDurations((prev) => (prev[t.id] === d ? prev : { ...prev, [t.id]: d }))
+                        }
+                        onFirstPlay={() => handleViewIncrement(t.id)}
+                      />
                     ) : (
                       <div className="w-full sm:w-56 sm:min-w-[14rem] aspect-video rounded-xl bg-gradient-to-br from-primary/10 via-violet-500/10 to-fuchsia-500/10 flex items-center justify-center flex-shrink-0 border border-border/20">
                         <FileText className="w-10 h-10 text-primary/30" />
@@ -723,6 +791,24 @@ const TutorialVideosPage: React.FC = () => {
 
                       <p className="mt-3 text-2xs text-muted-foreground/60">
                         {new Date(t.created_at).toLocaleDateString()}
+                        <span className="ml-2 inline-flex items-center gap-1 text-muted-foreground/80">
+                          <Eye className="w-3 h-3" />
+                          <span className="font-semibold">{(t.view_count ?? 0).toLocaleString()}</span>
+                          <span>views</span>
+                        </span>
+                        {durations[t.id] != null && (
+                          <span className="ml-2 inline-flex items-center gap-1 text-muted-foreground/80">
+                            <Clock className="w-3 h-3" />
+                            <span className="font-semibold">
+                              {(() => {
+                                const s = Math.round(durations[t.id]);
+                                const m = Math.floor(s / 60);
+                                const r = s % 60;
+                                return `${m}:${r.toString().padStart(2, "0")}`;
+                              })()}
+                            </span>
+                          </span>
+                        )}
                         {isAdmin && (
                           <span className={`ml-2 font-semibold ${t.is_published ? "text-emerald-400" : "text-amber-400"}`}>
                             • {t.is_published ? "Published" : "Draft"}
