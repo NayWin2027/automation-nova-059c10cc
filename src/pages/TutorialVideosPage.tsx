@@ -514,6 +514,19 @@ const TutorialVideosPage: React.FC = () => {
               </SelectContent>
             </Select>
 
+            {/* Sort */}
+            <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
+              <SelectTrigger className="w-[150px] h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="newest">🆕 Newest first</SelectItem>
+                <SelectItem value="oldest">📅 Oldest first</SelectItem>
+                <SelectItem value="longest">⏱️ Longest first</SelectItem>
+                <SelectItem value="shortest">⚡ Shortest first</SelectItem>
+              </SelectContent>
+            </Select>
+
             {isAdmin && (
               <Button
                 size="sm"
