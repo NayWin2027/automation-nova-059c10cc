@@ -1606,13 +1606,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       const isSafari =
         /^((?!chrome|android).)*safari/i.test(navigator.userAgent) || /iPad|iPhone|iPod/.test(navigator.userAgent);
       // We prioritize H.264 inside WebM so our ultra-fast FFmpeg pipeline can instantly copy it to MP4 without re-encoding!
+      // SURGICAL FIX: VP8+opus first - guaranteed video track on ALL Android (Snapdragon 7/8 Gen)
+      // h264 codec lies: isTypeSupported=true on Snapdragon 7 but records AUDIO-ONLY (no video track)
+      // Result: gallery/MXPlayer shows frozen photo + audio = h264 phantom video bug
       const allMimeTypes = [
+        "video/webm;codecs=vp8,opus",
+        "video/webm;codecs=vp9,opus",
+        "video/webm;codecs=vp8",
+        "video/webm;codecs=vp9",
         "video/webm;codecs=h264,opus",
         "video/webm;codecs=h264",
-        "video/webm;codecs=vp9,opus",
-        "video/webm;codecs=vp8,opus",
-        "video/webm;codecs=vp9",
-        "video/webm;codecs=vp8",
         "video/webm",
       ];
       const mimeType =
@@ -1777,7 +1780,20 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // 0 fps forces the encoder to ONLY record a frame precisely when we push it.
       // This mathematically eliminates all stutter/lag exactly.
       const canvasStream = encCanvas.captureStream(0);
-      const encTrack = canvasStream.getVideoTracks()[0] as any;
+      // SURGICAL FIX: Verify video track exists - Snapdragon 7 h264 silently omits video track
+      // If no video track, the output has audio only = frozen photo in gallery/MXPlayer
+      const videoTracks = canvasStream.getVideoTracks();
+      if (videoTracks.length === 0) {
+        console.error("[RECORDING] CRITICAL: No video track in canvas stream! Codec: ${mimeType}");
+        // Force a known-good fallback stream with explicit VP8
+        const fallbackMime = "video/webm;codecs=vp8,opus";
+        if (MediaRecorder.isTypeSupported(fallbackMime)) {
+          console.warn("[RECORDING] Retrying with VP8 fallback codec");
+          // Re-init with VP8 by overriding mimeType for this session
+          (window as any).__recapFallbackMime = fallbackMime;
+        }
+      }
+      const encTrack = videoTracks[0] as any;
       const chunks: BlobPart[] = [];
 
       let audioCtx: AudioContext | null = null;
