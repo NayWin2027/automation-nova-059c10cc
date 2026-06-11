@@ -469,6 +469,7 @@ export type Database = {
           updated_at: string
           video_qualities: Json | null
           video_url: string | null
+          view_count: number
         }
         Insert: {
           category?: string
@@ -483,6 +484,7 @@ export type Database = {
           updated_at?: string
           video_qualities?: Json | null
           video_url?: string | null
+          view_count?: number
         }
         Update: {
           category?: string
@@ -497,6 +499,7 @@ export type Database = {
           updated_at?: string
           video_qualities?: Json | null
           video_url?: string | null
+          view_count?: number
         }
         Relationships: []
       }
@@ -677,6 +680,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      increment_tutorial_view: {
+        Args: { _tutorial_id: string }
+        Returns: number
       }
       record_tool_outcome: {
         Args: { _outcome: string; _tool_id: string; _user_id: string }
