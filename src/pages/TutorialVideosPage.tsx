@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import {
   ArrowLeft, Plus, Trash2, Video, FileText, Upload, RefreshCw,
-  Eye, EyeOff, GripVertical, Play, BookOpen, Sparkles,
+  Eye, EyeOff, GripVertical, Play, BookOpen, Sparkles, ArrowUpDown, Clock,
 } from "lucide-react";
 
 interface Tutorial {
@@ -32,6 +32,7 @@ interface Tutorial {
   order_index: number;
   is_published: boolean;
   created_at: string;
+  view_count?: number;
 }
 
 const QUALITY_OPTIONS = ["360p", "720p", "1080p"] as const;
@@ -50,10 +51,16 @@ const CATEGORIES = [
   { value: "tips", label: "Tips & Tricks" },
 ];
 // Video player with quality + aspect ratio selectors
-const VideoPlayer: React.FC<{ tutorial: Tutorial; autoPlay?: boolean }> = ({ tutorial, autoPlay }) => {
+const VideoPlayer: React.FC<{
+  tutorial: Tutorial;
+  autoPlay?: boolean;
+  onDuration?: (seconds: number) => void;
+  onFirstPlay?: () => void;
+}> = ({ tutorial, autoPlay, onDuration, onFirstPlay }) => {
   const [selectedQuality, setSelectedQuality] = useState<string>("auto");
   const [aspectRatio, setAspectRatio] = useState<string>("video");
   const videoRef = React.useRef<HTMLVideoElement>(null);
+  const playedRef = React.useRef(false);
 
   const qualities = tutorial.video_qualities || {};
   const hasRealQualities = QUALITY_OPTIONS.some(q => qualities[q]);
@@ -95,6 +102,15 @@ const VideoPlayer: React.FC<{ tutorial: Tutorial; autoPlay?: boolean }> = ({ tut
           onContextMenu={(e) => e.preventDefault()}
           preload={autoPlay ? "auto" : "metadata"}
           autoPlay={autoPlay}
+          onLoadedMetadata={(e) => {
+            const d = (e.currentTarget as HTMLVideoElement).duration;
+            if (Number.isFinite(d) && d > 0) onDuration?.(d);
+          }}
+          onPlay={() => {
+            if (playedRef.current) return;
+            playedRef.current = true;
+            onFirstPlay?.();
+          }}
           className="w-full h-full object-contain rounded-xl bg-black"
         />
       </div>
