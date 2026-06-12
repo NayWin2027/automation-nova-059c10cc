@@ -1914,23 +1914,48 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
           await ffmpeg.writeFile("input.webm", await FFmpegUtil.fetchFile(finalBlob));
 
-          // -c:v copy drops the H.264 stream directly into MP4 instantly instead of transcoding.
-          const isH264 = mimeType.includes("h264");
-          const vCodec = isH264 ? "copy" : "libx264";
-
+          // SURGICAL FIX: Always re-encode to a broadly-compatible H.264 profile so low-end
+          // Android devices (Snapdragon 6 Gen, stock Gallery, MX Player) can decode the video,
+          // not just the audio. Baseline + yuv420p + even dimensions + CFR is the universal recipe.
           await ffmpeg.exec([
             "-i",
             "input.webm",
-            // SURGICAL EDIT: Force output video duration to match audio duration exactly
+            // Force output video duration to match audio duration exactly
             "-t",
             exactDurationSecs.toFixed(3),
             "-shortest",
+            // Even dimensions are mandatory for H.264
+            "-vf",
+            "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+            // Constant frame rate fixes "frozen first frame, audio plays" on budget decoders
+            "-r",
+            "30",
+            "-vsync",
+            "cfr",
+            // Regular keyframes every 2s for clean seek/decode resync
+            "-g",
+            "60",
+            "-keyint_min",
+            "60",
             "-c:v",
-            vCodec,
+            "libx264",
+            "-profile:v",
+            "baseline",
+            "-level",
+            "4.0",
+            "-pix_fmt",
+            "yuv420p",
             "-preset",
             "ultrafast",
+            // Universal AAC audio profile accepted by every Android player
             "-c:a",
             "aac",
+            "-ar",
+            "44100",
+            "-ac",
+            "2",
+            "-b:a",
+            "128k",
             "-movflags",
             "+faststart",
             "output.mp4",
