@@ -6482,7 +6482,6 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
           })}
         </div>
       </div>
-    </div>
     <AlertDialog open={!!errorBox} onOpenChange={(open) => !open && setErrorBox(null)}>
       <AlertDialogContent className="border-2 border-red-500/60 bg-background">
         <AlertDialogHeader>
@@ -6504,7 +6503,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-    </>
+    </div>
   );
 };
 
