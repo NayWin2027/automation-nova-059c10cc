@@ -2921,12 +2921,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 while (lastTsIdx < maxIdx && currentTime >= audioTs[lastTsIdx].end) lastTsIdx += 1;
                 while (lastTsIdx > 0 && currentTime < audioTs[lastTsIdx].start) lastTsIdx -= 1;
 
-                // SURGICAL FIX: Add 50ms tolerance at segment boundaries to prevent gap-falling
-                const BOUNDARY_TOLERANCE = 0.05;
-                if (
-                  currentTime >= audioTs[lastTsIdx].start - BOUNDARY_TOLERANCE &&
-                  currentTime < audioTs[lastTsIdx].end + BOUNDARY_TOLERANCE
-                ) {
+                // SURGICAL FIX: 100% Accuracy - No tolerance, use exact audio timestamps
+                if (currentTime >= audioTs[lastTsIdx].start && currentTime < audioTs[lastTsIdx].end) {
                   activeIndex = lastTsIdx;
                   activeText = getSeg(lastTsIdx)?.text || "";
                 }
@@ -2936,17 +2932,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
                   const vSegDuration = vActualEnd - active.vStart;
 
-                  // SURGICAL FIX: Calculate exact playbackRate so video segment visual duration
-                  // matches audio segment narration duration for 100% AV sync accuracy.
-                  // This prevents: showing wrong visual content when narration describes different action
-                  // and timing drift where video/audio go out of sync mid-segment.
-                  const aSegDuration = audioTs[activeIndex].end - audioTs[activeIndex].start;
-                  let targetRate = 1.0;
-                  if (aSegDuration > 0.05 && vSegDuration > 0.05) {
-                    targetRate = vSegDuration / aSegDuration;
-                    // Clamp to reasonable range: 0.25x - 4.0x to avoid extreme distortion
-                    targetRate = Math.max(0.25, Math.min(4.0, targetRate));
-                  }
+                  // SURGICAL FIX: 100% AV Sync - Maintain normal speed (1.0x) as requested
+                  const targetRate = 1.0;
 
                   if (activeIndex !== lastIndexRef.current) {
                     // TRUE RECAP: Hard cut â€” seek ONCE to segment start
@@ -2960,8 +2947,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       seekPendingRef.current = false;
                       // Always play video when freezeMode is OFF
                       if (!vv.ended) {
-                        if (!freezeModeRef.current) {
-                          // SURGICAL FIX v5 (Freeze OFF): force 1.0x normal speed
+                        // SURGICAL FIX: Only auto-play if NOT in a freeze cycle of freezeMode
+                        const isFreezeCycle = freezeModeRef.current && av.currentTime % (7 + 8) < 7;
+                        if (!isFreezeCycle) {
                           vv.playbackRate = 1.0;
                           vv.play().catch(() => {});
                         }
@@ -2972,57 +2960,27 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     vv.currentTime = active.vStart;
                   } else if (!seekPendingRef.current) {
                     // Seek complete â€” normal playing state
-                    // SURGICAL FIX: Dynamic playbackRate matching for 100% AV sync accuracy
-                    // Video segment speed matches audio narration speed perfectly
-                    if (!freezeModeRef.current) {
-                      // SURGICAL FIX v5 (Freeze OFF - Smooth Pro Mode)
-                      // RULES: (1) NEVER pause video. (2) Always 1.0x normal speed.
-                      // (3) AV sync via hard-cut on segment change only.
-                      // (4) Subtle loop only when video segment ends before audio segment.
-                      if (Math.abs(vv.playbackRate - 1.0) > 0.001) {
+                    // SURGICAL FIX: Clamp video to exact segment boundaries for 100% AV sync accuracy
+                    // This prevents video from drifting and showing wrong scenes
+                    // SURGICAL FIX: 100% AV Sync - Handle looping and playback based on freezeMode
+                    if (vActualEnd > 0 && (vv.currentTime >= vActualEnd - 0.001 || vv.currentTime < active.vStart)) {
+                      vv.currentTime = active.vStart;
+                    }
+
+                    // SURGICAL FIX: Only auto-play if NOT in a freeze cycle of freezeMode
+                    const isFreezeCycle = freezeModeRef.current && av.currentTime % (7 + 8) < 7;
+                    if (!isFreezeCycle) {
+                      if (vv.paused || vv.ended) {
                         vv.playbackRate = 1.0;
-                      }
-                      if (vActualEnd > 0 && vv.currentTime >= vActualEnd - 0.05) {
-                        if (!seekPendingRef.current && vSegDuration > 0.3) {
-                          const loopBack = active.vStart + vSegDuration * 0.5;
-                          seekPendingRef.current = true;
-                          const onLoopSeeked = () => {
-                            seekPendingRef.current = false;
-                            if (!vv.ended && !freezeModeRef.current) {
-                              vv.playbackRate = 1.0;
-                              vv.play().catch(() => {});
-                            }
-                            vv.removeEventListener("seeked", onLoopSeeked);
-                          };
-                          vv.addEventListener("seeked", onLoopSeeked);
-                          vv.currentTime = loopBack;
-                        }
-                      } else if (vv.paused && !vv.ended) {
-                        vv.playbackRate = 1.0;
-                        vv.play().catch(() => {});
-                      }
-                    } else {
-                      // freezeMode ON: clamp at segment end (freeze behavior)
-                      if (vActualEnd > 0 && vv.currentTime >= vActualEnd - 0.05) {
-                        if (!vv.paused) vv.pause();
-                      } else if (vv.paused && !vv.ended) {
-                        vv.playbackRate = targetRate;
                         vv.play().catch(() => {});
                       }
                     }
                   }
                 } else {
-                  // Between segments - freeze-mode dependent behavior
+                  // SURGICAL FIX: Remove hard pause between segments to prevent freeze artifacts.
+                  // Instead, we allow the video to continue or transition to the next segment naturally.
                   if (videoInSegmentRef.current) {
                     videoInSegmentRef.current = false;
-                    if (freezeModeRef.current) {
-                      if (!vv.paused) vv.pause();
-                    }
-                  }
-                  // Freeze OFF: keep video rolling at 1.0x for smooth pro vibe
-                  if (!freezeModeRef.current && vv.paused && !vv.ended) {
-                    vv.playbackRate = 1.0;
-                    vv.play().catch(() => {});
                   }
                 }
               } else {
@@ -3039,20 +2997,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   if (activeIndex !== lastIndexRef.current) {
                     // Hard cut fallback with playbackRate matching
                     vv.currentTime = s.vStart;
-                    const vDur = (s.vEnd === -1 ? vv.duration : s.vEnd) - s.vStart;
-                    const aDur = (s.aEndPct - s.aStartPct) * av.duration;
-                    let fbRate = 1.0;
-                    if (aDur > 0.05 && vDur > 0.05) {
-                      fbRate = Math.max(0.25, Math.min(4.0, vDur / aDur));
-                    }
-                    vv.playbackRate = fbRate;
+                    // SURGICAL FIX: 100% AV Sync - Maintain normal speed (1.0x) as requested
+                    vv.playbackRate = 1.0;
                     lastIndexRef.current = activeIndex;
                   }
                   if (vv.paused && !vv.ended) {
                     vv.play().catch(() => {});
                   }
                 } else {
-                  if (!vv.paused) vv.pause();
+                  // SURGICAL FIX: No pause between segments
                 }
               }
             }
@@ -3154,15 +3107,17 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         audioRef.current.play().catch(console.error);
       }
       if (videoRef.current) {
-        videoRef.current.play().catch((err) => {
-          // SURGICAL IOS FIX: Safely bypass the WebKit muted autoplay bug.
-          // If iOS drops the gesture token due to heavy network awaits and permanently freezes the decoder,
-          // reloading the explicitly muted video seamlessly restarts the hardware pipeline.
-          console.warn("[RECORDING] iOS Video freeze detected, applying safe hardware reload...", err);
-          videoRef.current!.muted = true;
-          videoRef.current!.load();
-          videoRef.current!.play().catch(console.error);
-        });
+        // SURGICAL FIX: Only auto-play if NOT in a freeze cycle of freezeMode
+        const isFreezeCycle = freezeModeRef.current && audioRef.current!.currentTime % (7 + 8) < 7;
+        if (!isFreezeCycle) {
+          videoRef.current.play().catch((err) => {
+            // SURGICAL IOS FIX: Safely bypass the WebKit muted autoplay bug.
+            console.warn("[RECORDING] iOS Video freeze detected, applying safe hardware reload...", err);
+            videoRef.current!.muted = true;
+            videoRef.current!.load();
+            videoRef.current!.play().catch(console.error);
+          });
+        }
       }
 
       recapAnimFrameRef.current = requestAnimationFrame(syncAndDraw);
@@ -5019,14 +4974,28 @@ const RecapVideoNVPage: React.FC = () => {
     const msg = (rawMessage || "").toString();
     const lower = msg.toLowerCase();
     let suggestion = "ခဏစောင့်ပြီး ပြန်လုပ်ကြည့်ပါ။ ပြဿနာ ဆက်ဖြစ်နေပါက App API Mode သို့ ပြောင်းပါ။";
-    if (lower.includes("quota") || lower.includes("429") || lower.includes("resource_exhausted") || lower.includes("rate limit")) {
-      suggestion = "API Quota ပြည့်သွားပါပြီ။ Billing enable ထားသော Google API Key အသစ်ထည့်ပါ၊ မဖြစ်ရင် App API Mode သို့ ပြောင်းပါ။";
-    } else if (lower.includes("api key") || lower.includes("api_key_invalid") || lower.includes("invalid key") || lower.includes("unauthorized") || lower.includes("401")) {
+    if (
+      lower.includes("quota") ||
+      lower.includes("429") ||
+      lower.includes("resource_exhausted") ||
+      lower.includes("rate limit")
+    ) {
+      suggestion =
+        "API Quota ပြည့်သွားပါပြီ။ Billing enable ထားသော Google API Key အသစ်ထည့်ပါ၊ မဖြစ်ရင် App API Mode သို့ ပြောင်းပါ။";
+    } else if (
+      lower.includes("api key") ||
+      lower.includes("api_key_invalid") ||
+      lower.includes("invalid key") ||
+      lower.includes("unauthorized") ||
+      lower.includes("401")
+    ) {
       suggestion = "API Key မမှန်ပါ။ Google AI Studio မှ မှန်ကန်သော Key အသစ်ထည့်ပေးပါ။";
     } else if (lower.includes("network") || lower.includes("failed to fetch") || lower.includes("timeout")) {
-      suggestion = "Internet connection ကို စစ်ဆေးပါ။ Wi-Fi သို့မဟုတ် Mobile Data ပိုကောင်းသော network ဖြင့် ထပ်ကြိုးစားပါ။";
+      suggestion =
+        "Internet connection ကို စစ်ဆေးပါ။ Wi-Fi သို့မဟုတ် Mobile Data ပိုကောင်းသော network ဖြင့် ထပ်ကြိုးစားပါ။";
     } else if (lower.includes("billing")) {
-      suggestion = "ဤ API Key တွင် Billing မဖွင့်ထားပါ။ Google Cloud Console တွင် Billing enable လုပ်ပါ၊ မဖြစ်ရင် App API Mode သို့ ပြောင်းပါ။";
+      suggestion =
+        "ဤ API Key တွင် Billing မဖွင့်ထားပါ။ Google Cloud Console တွင် Billing enable လုပ်ပါ၊ မဖြစ်ရင် App API Mode သို့ ပြောင်းပါ။";
     } else if (lower.includes("upload") || lower.includes("chunk")) {
       suggestion = "Video upload မအောင်မြင်ပါ။ ဖိုင်အရွယ်အစား/Network ကို စစ်ဆေးပြီး ပြန်ကြိုးစားပါ။";
     }
@@ -6500,27 +6469,27 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
           })}
         </div>
       </div>
-    <AlertDialog open={!!errorBox} onOpenChange={(open) => !open && setErrorBox(null)}>
-      <AlertDialogContent className="border-2 border-red-500/60 bg-background">
-        <AlertDialogHeader>
-          <AlertDialogTitle className="text-red-500">{errorBox?.title}</AlertDialogTitle>
-          <AlertDialogDescription asChild>
-            <div className="space-y-3 text-left">
-              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-200 break-words">
-                {errorBox?.message}
+      <AlertDialog open={!!errorBox} onOpenChange={(open) => !open && setErrorBox(null)}>
+        <AlertDialogContent className="border-2 border-red-500/60 bg-background">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-red-500">{errorBox?.title}</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-left">
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-200 break-words">
+                  {errorBox?.message}
+                </div>
+                <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+                  <p className="text-xs font-semibold text-emerald-400 mb-1">💡 ဖြေရှင်းနည်း — Solve to fix</p>
+                  <p className="text-sm text-emerald-100">{errorBox?.suggestion}</p>
+                </div>
               </div>
-              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
-                <p className="text-xs font-semibold text-emerald-400 mb-1">💡 ဖြေရှင်းနည်း — Solve to fix</p>
-                <p className="text-sm text-emerald-100">{errorBox?.suggestion}</p>
-              </div>
-            </div>
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogAction onClick={() => setErrorBox(null)}>နားလည်ပါပြီ</AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setErrorBox(null)}>နားလည်ပါပြီ</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
