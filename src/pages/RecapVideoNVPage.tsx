@@ -283,6 +283,74 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const [serverRenderProgress, setServerRenderProgress] = useState<string>("");
     const subNeonHueRef = useRef(0);
     const [exportQuality, setExportQuality] = useState<string>("720p");
+    const ffmpegRef = useRef<any>(null);
+    const [isFFmpegLoading, setIsFFmpegLoading] = useState(false);
+    const [ffmpegLoadError, setFFmpegLoadError] = useState<string | null>(null);
+
+    useEffect(() => {
+      const loadFFmpeg = async () => {
+        setIsFFmpegLoading(true);
+        setFFmpegLoadError(null);
+        try {
+          const loadFFmpegModule = () =>
+            new Promise<any>((resolve, reject) => {
+              if ((window as any).FFmpeg) return resolve((window as any).FFmpeg);
+              const script = document.createElement("script");
+              script.src = "https://unpkg.com/@ffmpeg/ffmpeg@0.12.7/dist/umd/ffmpeg.js";
+              script.onload = () => resolve((window as any).FFmpeg);
+              script.onerror = reject;
+              document.head.appendChild(script);
+            });
+          const loadFFmpegUtil = () =>
+            new Promise<any>((resolve, reject) => {
+              if ((window as any).FFmpegUtil) return resolve((window as any).FFmpegUtil);
+              const script = document.createElement("script");
+              script.src = "https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js";
+              script.onload = () => resolve((window as any).FFmpegUtil);
+              script.onerror = reject;
+              document.head.appendChild(script);
+            });
+
+          const FFmpegModule = await loadFFmpegModule();
+          const FFmpegUtil = await loadFFmpegUtil();
+
+          const ffmpeg = new FFmpegModule.FFmpeg();
+          ffmpeg.on("log", ({ message }) => console.log("[FFMPEG LOG]", message));
+          ffmpeg.on("progress", ({ progress, time }) => {
+            console.log(`[FFMPEG PROGRESS] ${progress * 100}% (time: ${time})`);
+            // You can update a state here to show progress in UI if needed
+          });
+
+          await ffmpeg.load({
+            coreURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js",
+            wasmURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm",
+          });
+          ffmpegRef.current = ffmpeg;
+          (window as any).FFmpegUtil = FFmpegUtil; // Make FFmpegUtil globally available for now
+          console.log("[FFMPEG] FFmpeg loaded successfully.");
+        } catch (err: any) {
+          console.error("[FFMPEG] Failed to load FFmpeg:", err);
+          setFFmpegLoadError(
+            "ဗီဒီယို ပြောင်းလဲရန် လိုအပ်သော စနစ်များ အဆင်သင့်မဖြစ်သေးပါ၊ ကျေးဇူးပြု၍ စာမျက်နှာကို ပြန်လည်စစ်ဆေးပါ။",
+          );
+          toast.error(
+            "ဗီဒီယို ပြောင်းလဲရန် လိုအပ်သော စနစ်များ အဆင်သင့်မဖြစ်သေးပါ၊ ကျေးဇူးပြု၍ စာမျက်နှာကို ပြန်လည်စစ်ဆေးပါ။",
+          );
+        } finally {
+          setIsFFmpegLoading(false);
+        }
+      };
+
+      loadFFmpeg();
+
+      return () => {
+        // Cleanup FFmpeg instance if needed
+        if (ffmpegRef.current) {
+          ffmpegRef.current.terminate();
+          ffmpegRef.current = null;
+        }
+      };
+    }, []);
 
     // Cinematic movie poster generation removed (feature disabled).
 
@@ -1590,9 +1658,26 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       Object.entries(LOGO_POSITIONS).find(([, v]) => v.x === logo.x && v.y === logo.y)?.[0] || "UR";
 
     const startRecapRecording = async () => {
+      if (isFFmpegLoading) {
+        toast.info("FFmpeg စနစ်ကို စတင်နေပါသည်၊ ခေတ္တစောင့်ဆိုင်းပါ။");
+        return;
+      }
+      if (ffmpegLoadError) {
+        toast.error("FFmpeg စနစ် အဆင်သင့်မဖြစ်သေးပါ၊ ဗီဒီယို ပြောင်းလဲ၍ မရပါ။");
+        return;
+      }
       const videoEl = videoRef.current;
       const audioEl = audioRef.current;
       if (!videoEl || !audioEl) return;
+
+      if (isFFmpegLoading) {
+        toast.info("FFmpeg စနစ်ကို စတင်နေပါသည်၊ ခေတ္တစောင့်ဆိုင်းပါ။");
+        return;
+      }
+      if (ffmpegLoadError) {
+        toast.error("FFmpeg စနစ် အဆင်သင့်မဖြစ်သေးပါ၊ ဗီဒီယို ပြောင်းလဲ၍ မရပါ။");
+        return;
+      }
 
       let _blurFxCanvas: HTMLCanvasElement | null = null;
 
@@ -1610,15 +1695,27 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // h264 codec lies: isTypeSupported=true on Snapdragon 7 but records AUDIO-ONLY (no video track)
       // Result: gallery/MXPlayer shows frozen photo + audio = h264 phantom video bug
       const allMimeTypes = [
-        "video/webm;codecs=vp8,opus",
+        "video/webm;codecs=vp8,opus", // Prioritize VP8 for broader compatibility
         "video/webm;codecs=vp9,opus",
         "video/webm;codecs=vp8",
         "video/webm;codecs=vp9",
-        "video/webm;codecs=h264,opus",
+        "video/webm;codecs=h264,opus", // H.264 as a fallback if VP8/VP9 not supported
         "video/webm;codecs=h264",
         "video/webm",
       ];
-      const mimeType =
+      const cores = navigator.hardwareConcurrency || 4;
+      const mem = (navigator as any).deviceMemory || 4;
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      // iPhone 8/X and Snapdragon 400 series (2-3GB RAM) â†’ force 480p for 100% smoothness
+      const force480p =
+        (cores <= 4 && mem <= 2) ||
+        (isIOS && mem <= 3 && !/iPhone\s*1[2-9]|iPhone\s*[2-9][0-9]/i.test(navigator.userAgent));
+      // Snapdragon 600 series (3-4GB RAM) â†’ force 720p max for smoothness
+      const force720p = !force480p && cores <= 6 && mem <= 4;
+
+      // SURGICAL FIX: Explicitly check for VP8 support first, as some devices lie about H.264 support
+      // and produce audio-only WebM streams. FFmpeg will re-encode to H.264 MP4 later.
+      let mimeType =
         allMimeTypes.find((type) => {
           try {
             return MediaRecorder.isTypeSupported(type);
@@ -1626,6 +1723,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             return false;
           }
         }) || (isSafari ? "video/mp4" : "video/webm");
+
       if (!mimeType) {
         console.warn("No supported recording mime type");
         return;
@@ -1652,27 +1750,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
       // â”€â”€ SURGICAL EDIT: Option B - Force 480p/720p quality caps for low-end devices â”€â”€
       // Detect device capability BEFORE selecting quality to ensure 100% smooth performance
-      const cores = navigator.hardwareConcurrency || 4;
-      const mem = (navigator as any).deviceMemory || 4;
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-      // iPhone 8/X and Snapdragon 400 series (2-3GB RAM) â†’ force 480p for 100% smoothness
-      const force480p =
-        (cores <= 4 && mem <= 2) ||
-        (isIOS && mem <= 3 && !/iPhone\s*1[2-9]|iPhone\s*[2-9][0-9]/i.test(navigator.userAgent));
-      // Snapdragon 600 series (3-4GB RAM) â†’ force 720p max for smoothness
-      const force720p = !force480p && cores <= 6 && mem <= 4;
-      let effectiveExportQuality = exportQuality;
-      if (force480p && EXPORT_QUALITY_OPTIONS[exportQuality]?.maxH > 480) {
-        effectiveExportQuality = "480p";
-        console.log(
-          `[PERF] Extreme low-end detected (cores:${cores}, RAM:${mem}GB). Forcing 480p for 100% smooth performance.`,
-        );
-      } else if (force720p && EXPORT_QUALITY_OPTIONS[exportQuality]?.maxH > 720) {
-        effectiveExportQuality = "720p";
-        console.log(
-          `[PERF] Low-end device detected (cores:${cores}, RAM:${mem}GB). Capping at 720p for smooth performance.`,
-        );
-      }
+
+      let effectiveExportQuality = exportQuality; // Keep original export quality, do not cap resolution
 
       const quality = EXPORT_QUALITY_OPTIONS[effectiveExportQuality] || EXPORT_QUALITY_OPTIONS["720p"];
       // â”€â”€ SURGICAL EDIT: Force 100% selected resolution for ALL aspect ratios â”€â”€
@@ -1721,20 +1800,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       console.log(
         `[PERF] Device tier: ${isExtremeLowEnd ? "EXTREME_LOW_480P" : isLowEndDevice ? "LOW_720P" : isMidTier ? "MID" : "HIGH"}, Canvas scale: ${drawScale}, Quality: ${quality.maxH}p, Cores: ${cores}, RAM: ${mem}GB`,
       );
-
-      // iOS-specific: Force lower resolution for compatibility
-      if (isIOS && quality.maxH > 720) {
-        outW = Math.round(outW * 1.0);
-        outH = Math.round(outH * 1.0);
-        console.log(`[iOS] Reduced resolution to ${outW}x${outH} for compatibility`);
-      }
-
-      // â”€â”€ iOS-specific: Force 480p for iPhone 8/X (3GB RAM devices) â”€â”€
-      if (isIOS && force480p && quality.maxH > 480) {
-        outW = Math.round(outW * 1.0); // 67% reduction to ~480p equivalent
-        outH = Math.round(outH * 1.0);
-        console.log(`[iOS] iPhone 8/X detected. Forced 480p resolution: ${outW}x${outH} for 100% smooth performance`);
-      }
 
       const drawW = Math.round(outW * drawScale);
       const drawH = Math.round(outH * drawScale);
@@ -1808,7 +1873,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         console.warn("Could not capture audio for recording:", audioErr);
       }
 
-      const recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: quality.bitrate });
+      const recorder = new MediaRecorder(canvasStream, {
+        mimeType: (window as any).__recapFallbackMime || mimeType,
+        videoBitsPerSecond: quality.bitrate,
+      });
+      // Clear the fallback mimeType after use to prevent it from persisting across multiple recordings.
+      (window as any).__recapFallbackMime = undefined;
       recapRecorderRef.current = recorder;
       const recordingStartTime = Date.now();
 
@@ -1858,7 +1928,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           return;
         }
 
-        const blob = new Blob(chunks, { type: mimeType });
+        const blob = new Blob(chunks, { type: actualMimeType });
         // â”€â”€ MEMORY CLEANUP: Free recording chunks immediately â”€â”€
         chunks.length = 0;
 
@@ -1872,7 +1942,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             // Patch WebM duration to match audio duration exactly
             const patched = fixWebmDuration(buf, exactDurationSecs * 1000);
             if (patched) {
-              finalBlob = new Blob([patched], { type: mimeType });
+              finalBlob = new Blob([patched], { type: actualMimeType });
               console.log(`[RECORDING] WebM duration fixed (audio duration): ${exactDurationSecs.toFixed(3)}s`);
             }
           } catch (fixErr) {
@@ -1884,39 +1954,23 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // Converting WebM flawlessly to a Real MP4 container so TikTok and Telegram accept it instantly.
         try {
           console.log("[RECORDING] Building Real MP4 for TT/TG...");
-          const loadFFmpeg = () =>
-            new Promise<any>((resolve, reject) => {
-              if ((window as any).FFmpeg) return resolve((window as any).FFmpeg);
-              const script = document.createElement("script");
-              script.src = "https://unpkg.com/@ffmpeg/ffmpeg@0.12.7/dist/umd/ffmpeg.js";
-              script.onload = () => resolve((window as any).FFmpeg);
-              script.onerror = reject;
-              document.head.appendChild(script);
-            });
-          const loadFetchFile = () =>
-            new Promise<any>((resolve, reject) => {
-              if ((window as any).FFmpegUtil) return resolve((window as any).FFmpegUtil);
-              const script = document.createElement("script");
-              script.src = "https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js";
-              script.onload = () => resolve((window as any).FFmpegUtil);
-              script.onerror = reject;
-              document.head.appendChild(script);
-            });
-
-          const FFmpegModule = await loadFFmpeg();
-          const FFmpegUtil = await loadFetchFile();
-
-          const ffmpeg = new FFmpegModule.FFmpeg();
-          await ffmpeg.load({
-            coreURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js",
-            wasmURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm",
-          });
+          if (!ffmpegRef.current || ffmpegLoadError) {
+            toast.error("FFmpeg စနစ် အဆင်သင့်မဖြစ်သေးပါ၊ ဗီဒီယို ပြောင်းလဲ၍ မရပါ။");
+            setIsRendering(false);
+            isRenderingRef.current = false;
+            return;
+          }
+          const ffmpeg = ffmpegRef.current;
+          const FFmpegUtil = (window as any).FFmpegUtil; // Access globally available FFmpegUtil
 
           await ffmpeg.writeFile("input.webm", await FFmpegUtil.fetchFile(finalBlob));
 
           // -c:v copy drops the H.264 stream directly into MP4 instantly instead of transcoding.
-          const isH264 = mimeType.includes("h264");
-          const vCodec = isH264 ? "copy" : "libx264";
+          const actualMimeType = (window as any).__recapFallbackMime || mimeType;
+          const isH264 = actualMimeType.includes("h264");
+          // SURGICAL FIX: Force re-encode video to libx264 for broader compatibility on low-end devices
+          const forceReencode = true;
+          const vCodec = isH264 && !forceReencode ? "copy" : "libx264";
 
           await ffmpeg.exec([
             "-i",
@@ -1925,10 +1979,20 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             "-t",
             exactDurationSecs.toFixed(3),
             "-shortest",
+            // SURGICAL FIX: Add -r (frame rate) to ensure consistent playback rate
+            // and -vsync 2 (cfr) to ensure constant frame rate for better compatibility
+            "-r",
+            String(EXPORT_QUALITY_OPTIONS[exportQuality]?.fps || 30), // Use configured FPS or default to 30
+            "-vsync",
+            "2", // Force constant frame rate
+
             "-c:v",
             vCodec,
             "-preset",
-            "ultrafast",
+            "medium", // Use 'medium' preset for better compatibility and quality, 'ultrafast' can be too aggressive
+            "-crf",
+            "23", // Constant Rate Factor for good quality and reasonable file size
+
             "-c:a",
             "aac",
             "-movflags",
@@ -1944,11 +2008,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           );
           console.log("[RECORDING] Real MP4 Generation Complete");
         } catch (e) {
-          console.error("MP4 conversion failed, using direct rename fallback:", e);
-          finalBlob = new Blob([finalBlob], { type: "video/mp4" });
+          console.error("MP4 conversion failed:", e);
+          toast.error("ဗီဒီယို ပြောင်းလဲခြင်း မအောင်မြင်ပါ၊ ကျေးဇူးပြု၍ ထပ်မံကြိုးစားပါ။");
+          setIsRendering(false);
+          isRenderingRef.current = false;
         }
 
         const ext = "mp4";
+        // Reset fallback mimeType in case of success or failure to ensure clean state for next recording
+        (window as any).__recapFallbackMime = undefined;
 
         const url = URL.createObjectURL(finalBlob);
         const a = document.createElement("a");
@@ -6241,6 +6309,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
           {/* SURGICAL EDIT: Generate Recap Button â€” user must click to start pipeline */}
           {(videoFile || videoLink) && status !== "processing" && !audioUrl && (
             <button
+              disabled={isFFmpegLoading || !!ffmpegLoadError}
               onClick={async () => {
                 if (!videoFile && !videoLink) return;
                 if (apiMode === "app") {
