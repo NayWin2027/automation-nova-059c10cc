@@ -14,6 +14,15 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Check, ChevronsUpDown, Sparkles, Download, Palette, Loader2 } from "lucide-react";
 import { GoogleGenAI, Type } from "@google/genai";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface RecapSegment {
   timestamp: string;
@@ -4986,6 +4995,25 @@ const RecapVideoNVPage: React.FC = () => {
   const [apiMode, setApiMode] = useState<"app" | "own">("own");
   const [ownApiKey, setOwnApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
+  // SURGICAL: Restore blocking "Solve to fix" error dialog (per user request)
+  const [errorBox, setErrorBox] = useState<{ title: string; message: string; suggestion: string } | null>(null);
+  const showSolveToFixBox = useCallback((rawMessage: string) => {
+    const msg = (rawMessage || "").toString();
+    const lower = msg.toLowerCase();
+    let suggestion = "ခဏစောင့်ပြီး ပြန်လုပ်ကြည့်ပါ။ ပြဿနာ ဆက်ဖြစ်နေပါက App API Mode သို့ ပြောင်းပါ။";
+    if (lower.includes("quota") || lower.includes("429") || lower.includes("resource_exhausted") || lower.includes("rate limit")) {
+      suggestion = "API Quota ပြည့်သွားပါပြီ။ Billing enable ထားသော Google API Key အသစ်ထည့်ပါ၊ မဖြစ်ရင် App API Mode သို့ ပြောင်းပါ။";
+    } else if (lower.includes("api key") || lower.includes("api_key_invalid") || lower.includes("invalid key") || lower.includes("unauthorized") || lower.includes("401")) {
+      suggestion = "API Key မမှန်ပါ။ Google AI Studio မှ မှန်ကန်သော Key အသစ်ထည့်ပေးပါ။";
+    } else if (lower.includes("network") || lower.includes("failed to fetch") || lower.includes("timeout")) {
+      suggestion = "Internet connection ကို စစ်ဆေးပါ။ Wi-Fi သို့မဟုတ် Mobile Data ပိုကောင်းသော network ဖြင့် ထပ်ကြိုးစားပါ။";
+    } else if (lower.includes("billing")) {
+      suggestion = "ဤ API Key တွင် Billing မဖွင့်ထားပါ။ Google Cloud Console တွင် Billing enable လုပ်ပါ၊ မဖြစ်ရင် App API Mode သို့ ပြောင်းပါ။";
+    } else if (lower.includes("upload") || lower.includes("chunk")) {
+      suggestion = "Video upload မအောင်မြင်ပါ။ ဖိုင်အရွယ်အစား/Network ကို စစ်ဆေးပြီး ပြန်ကြိုးစားပါ။";
+    }
+    setErrorBox({ title: "❌ Error — Solve to fix", message: msg || "Unknown error", suggestion });
+  }, []);
   const activePipelineApiModeRef = useRef<"app" | "own">("own");
   const activePipelineOwnKeyRef = useRef("");
   const activePipelineRenderModeRef = useRef<"browser" | "server">("browser");
@@ -5332,6 +5360,7 @@ const RecapVideoNVPage: React.FC = () => {
       console.error("TTS error:", err);
       setStatus("error");
       setProgressMsg(`❌ Voice generation failed: ${err.message}`);
+      showSolveToFixBox(err?.message || String(err));
     }
   };
 
@@ -5344,6 +5373,7 @@ const RecapVideoNVPage: React.FC = () => {
     if (resolvedApiMode === "own" && !resolvedOwnKey) {
       setProgressMsg("❌ Own API mode ရွေးထားပါသည်။ Google API Key ထည့်ပေးပါ။");
       setStatus("error");
+      showSolveToFixBox("Own API mode ရွေးထားပါသည်။ Google API Key ထည့်ပေးပါ။");
       return;
     }
     setStatus("processing");
@@ -5786,6 +5816,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
       console.error("Pipeline error:", err);
       setStatus("error");
       setProgressMsg(`❌ Error: ${err.message}`);
+      showSolveToFixBox(err?.message || String(err));
     }
   };
 
@@ -6352,6 +6383,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                   } catch (err: any) {
                     setStatus("error");
                     setProgressMsg(`❌ Error: ${err.message}`);
+                    showSolveToFixBox(err?.message || String(err));
                   }
                 }
               }}
@@ -6451,6 +6483,28 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
         </div>
       </div>
     </div>
+    <AlertDialog open={!!errorBox} onOpenChange={(open) => !open && setErrorBox(null)}>
+      <AlertDialogContent className="border-2 border-red-500/60 bg-background">
+        <AlertDialogHeader>
+          <AlertDialogTitle className="text-red-500">{errorBox?.title}</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-3 text-left">
+              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-200 break-words">
+                {errorBox?.message}
+              </div>
+              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+                <p className="text-xs font-semibold text-emerald-400 mb-1">💡 ဖြေရှင်းနည်း — Solve to fix</p>
+                <p className="text-sm text-emerald-100">{errorBox?.suggestion}</p>
+              </div>
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogAction onClick={() => setErrorBox(null)}>နားလည်ပါပြီ</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 };
 
