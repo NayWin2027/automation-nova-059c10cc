@@ -2961,7 +2961,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       // Always play video when freezeMode is OFF
                       if (!vv.ended) {
                         if (!freezeModeRef.current) {
-                          vv.playbackRate = targetRate;
+                          // SURGICAL FIX v5 (Freeze OFF): force 1.0x normal speed
+                          vv.playbackRate = 1.0;
                           vv.play().catch(() => {});
                         }
                       }
