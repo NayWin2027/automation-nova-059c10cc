@@ -1928,6 +1928,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           return;
         }
 
+        const actualMimeType = (window as any).__recapFallbackMime || mimeType;
         const blob = new Blob(chunks, { type: actualMimeType });
         // â”€â”€ MEMORY CLEANUP: Free recording chunks immediately â”€â”€
         chunks.length = 0;
@@ -1966,7 +1967,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           await ffmpeg.writeFile("input.webm", await FFmpegUtil.fetchFile(finalBlob));
 
           // -c:v copy drops the H.264 stream directly into MP4 instantly instead of transcoding.
-          const actualMimeType = (window as any).__recapFallbackMime || mimeType;
           const isH264 = actualMimeType.includes("h264");
           // SURGICAL FIX: Force re-encode video to libx264 for broader compatibility on low-end devices
           const forceReencode = true;
