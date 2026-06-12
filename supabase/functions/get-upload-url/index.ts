@@ -90,9 +90,17 @@ serve(async (req) => {
         );
       }
 
+      // Google returns 400 "API_KEY_INVALID" for bad keys — surface as auth error
+      if (startResponse.status === 400 && /API[_ ]?KEY|api key/i.test(errorText)) {
+        return new Response(
+          JSON.stringify({ error: "API key invalid. သင်ထည့်ထားသော Gemini API Key မမှန်ကန်ပါ။ Own API Key ကို စစ်ဆေးပါ။" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       return new Response(
-        JSON.stringify({ error: "Failed to get upload URL" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: `Failed to get upload URL: ${errorText.slice(0, 200)}` }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
