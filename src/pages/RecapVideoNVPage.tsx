@@ -6309,7 +6309,6 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
           {/* SURGICAL EDIT: Generate Recap Button â€” user must click to start pipeline */}
           {(videoFile || videoLink) && status !== "processing" && !audioUrl && (
             <button
-              disabled={isFFmpegLoading || !!ffmpegLoadError}
               onClick={async () => {
                 if (!videoFile && !videoLink) return;
                 if (apiMode === "app") {
