@@ -2975,20 +2975,31 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     // SURGICAL FIX: Dynamic playbackRate matching for 100% AV sync accuracy
                     // Video segment speed matches audio narration speed perfectly
                     if (!freezeModeRef.current) {
-                      // SURGICAL FIX: Hold last frame at segment boundary â€” hold last frame when video reaches vEnd (no loop-seek micro-pause)
-                      // Prevents: 1) showing wrong visual content for narration (AV sync mismatch)
-                      //           2) end-of-file frozen photo (30-60s still frame at video end)
+                      // SURGICAL FIX v5 (Freeze OFF - Smooth Pro Mode)
+                      // RULES: (1) NEVER pause video. (2) Always 1.0x normal speed.
+                      // (3) AV sync via hard-cut on segment change only.
+                      // (4) Subtle loop only when video segment ends before audio segment.
+                      if (Math.abs(vv.playbackRate - 1.0) > 0.001) {
+                        vv.playbackRate = 1.0;
+                      }
                       if (vActualEnd > 0 && vv.currentTime >= vActualEnd - 0.05) {
-                        if (!vv.paused) vv.pause(); // Hold on last frame
-                      } else {
-                        // Continuously adjust playbackRate for AV sync
-                        if (Math.abs(vv.playbackRate - targetRate) > 0.02) {
-                          vv.playbackRate = targetRate;
+                        if (!seekPendingRef.current && vSegDuration > 0.3) {
+                          const loopBack = active.vStart + vSegDuration * 0.5;
+                          seekPendingRef.current = true;
+                          const onLoopSeeked = () => {
+                            seekPendingRef.current = false;
+                            if (!vv.ended && !freezeModeRef.current) {
+                              vv.playbackRate = 1.0;
+                              vv.play().catch(() => {});
+                            }
+                            vv.removeEventListener("seeked", onLoopSeeked);
+                          };
+                          vv.addEventListener("seeked", onLoopSeeked);
+                          vv.currentTime = loopBack;
                         }
-                        if (vv.paused && !vv.ended) {
-                          vv.playbackRate = targetRate;
-                          vv.play().catch(() => {});
-                        }
+                      } else if (vv.paused && !vv.ended) {
+                        vv.playbackRate = 1.0;
+                        vv.play().catch(() => {});
                       }
                     } else {
                       // freezeMode ON: clamp at segment end (freeze behavior)
@@ -3001,11 +3012,17 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     }
                   }
                 } else {
-                  // Between segments â€” pause video to prevent showing wrong scenes
-                  // SURGICAL FIX: Hard pause between segments for 100% sync accuracy
+                  // Between segments - freeze-mode dependent behavior
                   if (videoInSegmentRef.current) {
                     videoInSegmentRef.current = false;
-                    if (!vv.paused) vv.pause();
+                    if (freezeModeRef.current) {
+                      if (!vv.paused) vv.pause();
+                    }
+                  }
+                  // Freeze OFF: keep video rolling at 1.0x for smooth pro vibe
+                  if (!freezeModeRef.current && vv.paused && !vv.ended) {
+                    vv.playbackRate = 1.0;
+                    vv.play().catch(() => {});
                   }
                 }
               } else {
