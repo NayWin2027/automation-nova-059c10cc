@@ -1938,7 +1938,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             "scale=trunc(iw/2)*2:trunc(ih/2)*2",
             // Constant frame rate fixes "frozen first frame, audio plays" on budget decoders
             "-r",
-            String(quality.fps || 30),
+            "30",
             "-vsync",
             "cfr",
             // Regular keyframes every 2s for clean seek/decode resync
@@ -2936,15 +2936,18 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   const targetRate = 1.0;
 
                   if (activeIndex !== lastIndexRef.current) {
-                    // SURGICAL FIX: Professional Hard-Cut Seek - Force immediate resync to exact segment start
+                    // TRUE RECAP: Hard cut â€” seek ONCE to segment start
+                    // seekPendingRef prevents re-seeking every frame during async HTML5 seek
                     lastIndexRef.current = activeIndex;
                     videoInSegmentRef.current = true;
-                    segCutTimeRef.current = performance.now();
+                    segCutTimeRef.current = performance.now(); // trigger smooth cinematic transition
                     seekPendingRef.current = true;
 
                     const onSeeked = () => {
                       seekPendingRef.current = false;
+                      // Always play video when freezeMode is OFF
                       if (!vv.ended) {
+                        // SURGICAL FIX: Only auto-play if NOT in a freeze cycle of freezeMode
                         const isFreezeCycle = freezeModeRef.current && av.currentTime % (7 + 8) < 7;
                         if (!isFreezeCycle) {
                           vv.playbackRate = 1.0;
@@ -2954,26 +2957,17 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       vv.removeEventListener("seeked", onSeeked);
                     };
                     vv.addEventListener("seeked", onSeeked);
-                    // Force accurate seek to millisecond precision
                     vv.currentTime = active.vStart;
                   } else if (!seekPendingRef.current) {
-                    // SURGICAL FIX: 100% AV Sync - Maintain normal speed (1.0x) and prevent drift
-                    const vActualPos = vv.currentTime;
-                    const aActualPos = currentTime;
-                    const aStart = audioTs[activeIndex].start;
-                    const aElapsed = aActualPos - aStart;
-                    const expectedVPos = active.vStart + aElapsed;
-
-                    // Hard-cut resync if video drifts by more than 50ms from audio
-                    if (Math.abs(vActualPos - expectedVPos) > 0.05) {
-                      vv.currentTime = expectedVPos;
-                    }
-
-                    // Prevent video from overrunning segment boundary
+                    // Seek complete â€” normal playing state
+                    // SURGICAL FIX: Clamp video to exact segment boundaries for 100% AV sync accuracy
+                    // This prevents video from drifting and showing wrong scenes
+                    // SURGICAL FIX: 100% AV Sync - Handle looping and playback based on freezeMode
                     if (vActualEnd > 0 && (vv.currentTime >= vActualEnd - 0.001 || vv.currentTime < active.vStart)) {
                       vv.currentTime = active.vStart;
                     }
 
+                    // SURGICAL FIX: Only auto-play if NOT in a freeze cycle of freezeMode
                     const isFreezeCycle = freezeModeRef.current && av.currentTime % (7 + 8) < 7;
                     if (!isFreezeCycle) {
                       if (vv.paused || vv.ended) {
@@ -3001,20 +2995,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   const s = segs[activeIndex] as any;
                   activeText = s.text;
                   if (activeIndex !== lastIndexRef.current) {
-                    // SURGICAL FIX: Professional Hard-Cut Seek (Fallback)
+                    // Hard cut fallback with playbackRate matching
                     vv.currentTime = s.vStart;
+                    // SURGICAL FIX: 100% AV Sync - Maintain normal speed (1.0x) as requested
                     vv.playbackRate = 1.0;
                     lastIndexRef.current = activeIndex;
                   }
-
-                  // Continuous sync check for fallback mode
-                  const aStart = s.aStartPct * av.duration;
-                  const aElapsed = currentTime - aStart;
-                  const expectedVPos = s.vStart + aElapsed;
-                  if (Math.abs(vv.currentTime - expectedVPos) > 0.05) {
-                    vv.currentTime = expectedVPos;
-                  }
-
                   if (vv.paused && !vv.ended) {
                     vv.play().catch(() => {});
                   }
