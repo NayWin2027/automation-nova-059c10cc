@@ -4,18 +4,32 @@ import { useToast } from '@/hooks/use-toast';
 
 /**
  * Viber-style single device enforcement.
- * When a user logs in on a new device, the old device auto-logs out.
- * 
- * How it works:
- * 1. On login, register the current session ID in profiles.active_session_id
- * 2. Poll every 10 seconds to check if the stored session still matches
- * 3. If mismatch (another device logged in), auto sign-out
+ * Uses a STABLE per-device ID stored in localStorage so token rotation
+ * (refresh_token changes on auto-refresh) does NOT cause spurious logouts.
+ * Only a real login on another device overwrites profiles.active_session_id,
+ * which then triggers logout on this device on the next poll.
  */
 
-export function useSessionEnforcement(userId: string | null, sessionId: string | null) {
+const DEVICE_ID_KEY = 'an_device_session_id';
+
+export function getDeviceSessionId(): string {
+  try {
+    let id = localStorage.getItem(DEVICE_ID_KEY);
+    if (!id) {
+      id = (crypto?.randomUUID?.() ?? `dev_${Date.now()}_${Math.random().toString(36).slice(2)}`);
+      localStorage.setItem(DEVICE_ID_KEY, id);
+    }
+    return id;
+  } catch {
+    return `dev_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  }
+}
+
+export function useSessionEnforcement(userId: string | null, _sessionId?: string | null) {
   const { toast } = useToast();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isEnforcingRef = useRef(false);
+  const sessionId = userId ? getDeviceSessionId() : null;
 
   // Register current session as the active one
   const registerSession = useCallback(async () => {
@@ -86,8 +100,8 @@ export function useSessionEnforcement(userId: string | null, sessionId: string |
       return;
     }
 
-    // Start polling every 10 seconds
-    intervalRef.current = setInterval(checkSession, 10000);
+    // Poll every 30 seconds (less aggressive; device ID is stable)
+    intervalRef.current = setInterval(checkSession, 30000);
 
     return () => {
       if (intervalRef.current) {
