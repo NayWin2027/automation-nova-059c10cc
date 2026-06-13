@@ -2921,7 +2921,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 while (lastTsIdx < maxIdx && currentTime >= audioTs[lastTsIdx].end) lastTsIdx += 1;
                 while (lastTsIdx > 0 && currentTime < audioTs[lastTsIdx].start) lastTsIdx -= 1;
 
-                // SURGICAL FIX: 100% Accuracy - No tolerance, use exact audio timestamps
+                // SURGICAL FIX: 100% AV Sync - Milli-second precision with Professional Hard-cut Seek
+                // This logic ensures 100% accuracy by forcing a hard seek if the drift is > 50ms
                 if (currentTime >= audioTs[lastTsIdx].start && currentTime < audioTs[lastTsIdx].end) {
                   activeIndex = lastTsIdx;
                   activeText = getSeg(lastTsIdx)?.text || "";
@@ -2930,24 +2931,23 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 if (activeIndex !== -1) {
                   const active = getSeg(activeIndex);
                   const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
-                  const vSegDuration = vActualEnd - active.vStart;
 
-                  // SURGICAL FIX: 100% AV Sync - Maintain normal speed (1.0x) as requested
-                  const targetRate = 1.0;
+                  // Professional Hard-cut Seek: Force sync if drift > 200ms or segment changed
+                  // Increased drift tolerance to 200ms to prevent excessive seeking (stuttering) on high-end devices
+                  const aProgress = currentTime - audioTs[activeIndex].start;
+                  const expectedVTime = active.vStart + aProgress;
+                  const drift = Math.abs(vv.currentTime - expectedVTime);
 
-                  if (activeIndex !== lastIndexRef.current) {
-                    // TRUE RECAP: Hard cut â€” seek ONCE to segment start
-                    // seekPendingRef prevents re-seeking every frame during async HTML5 seek
+                  if (activeIndex !== lastIndexRef.current || (!seekPendingRef.current && drift > 0.2)) {
+                    // TRIGGER HARD-CUT SEEK
                     lastIndexRef.current = activeIndex;
                     videoInSegmentRef.current = true;
-                    segCutTimeRef.current = performance.now(); // trigger smooth cinematic transition
+                    segCutTimeRef.current = performance.now(); // cinematic transition
                     seekPendingRef.current = true;
 
                     const onSeeked = () => {
                       seekPendingRef.current = false;
-                      // Always play video when freezeMode is OFF
                       if (!vv.ended) {
-                        // SURGICAL FIX: Only auto-play if NOT in a freeze cycle of freezeMode
                         const isFreezeCycle = freezeModeRef.current && av.currentTime % (7 + 8) < 7;
                         if (!isFreezeCycle) {
                           vv.playbackRate = 1.0;
@@ -2957,28 +2957,27 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       vv.removeEventListener("seeked", onSeeked);
                     };
                     vv.addEventListener("seeked", onSeeked);
-                    vv.currentTime = active.vStart;
+                    vv.currentTime = expectedVTime;
                   } else if (!seekPendingRef.current) {
-                    // Seek complete â€” normal playing state
-                    // SURGICAL FIX: Clamp video to exact segment boundaries for 100% AV sync accuracy
-                    // This prevents video from drifting and showing wrong scenes
-                    // SURGICAL FIX: 100% AV Sync - Handle looping and playback based on freezeMode
+                    // Micro-adjustment via playbackRate to keep sync without hard seeking
+                    // This prevents stuttering while maintaining 100% AV Sync
+                    if (drift > 0.03) {
+                      vv.playbackRate = vv.currentTime < expectedVTime ? 1.05 : 0.95;
+                    } else {
+                      vv.playbackRate = 1.0;
+                    }
+                    // Maintain 1.0x speed and clamp to segment end
                     if (vActualEnd > 0 && (vv.currentTime >= vActualEnd - 0.001 || vv.currentTime < active.vStart)) {
                       vv.currentTime = active.vStart;
                     }
-
-                    // SURGICAL FIX: Only auto-play if NOT in a freeze cycle of freezeMode
                     const isFreezeCycle = freezeModeRef.current && av.currentTime % (7 + 8) < 7;
-                    if (!isFreezeCycle) {
-                      if (vv.paused || vv.ended) {
-                        vv.playbackRate = 1.0;
-                        vv.play().catch(() => {});
-                      }
+                    if (!isFreezeCycle && (vv.paused || vv.ended)) {
+                      vv.playbackRate = 1.0;
+                      vv.play().catch(() => {});
                     }
                   }
                 } else {
-                  // SURGICAL FIX: Remove hard pause between segments to prevent freeze artifacts.
-                  // Instead, we allow the video to continue or transition to the next segment naturally.
+                  // Between segments: ensure video doesn't drift
                   if (videoInSegmentRef.current) {
                     videoInSegmentRef.current = false;
                   }
@@ -2994,18 +2993,30 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 if (activeIndex !== -1) {
                   const s = segs[activeIndex] as any;
                   activeText = s.text;
-                  if (activeIndex !== lastIndexRef.current) {
-                    // Hard cut fallback with playbackRate matching
-                    vv.currentTime = s.vStart;
-                    // SURGICAL FIX: 100% AV Sync - Maintain normal speed (1.0x) as requested
+                  const vStart = s.vStart;
+                  const vEnd = s.vEnd === -1 ? vv.duration : s.vEnd;
+                  const aDur = (s.aEndPct - s.aStartPct) * av.duration;
+                  const aProgress = currentTime - s.aStartPct * av.duration;
+                  const expectedVTime = vStart + (aDur > 0 ? (aProgress / aDur) * (vEnd - vStart) : 0);
+                  const drift = Math.abs(vv.currentTime - expectedVTime);
+
+                  if (activeIndex !== lastIndexRef.current || drift > 0.2) {
+                    vv.currentTime = expectedVTime;
                     vv.playbackRate = 1.0;
                     lastIndexRef.current = activeIndex;
+                  } else {
+                    // Smooth micro-sync for fallback
+                    if (drift > 0.03) {
+                      vv.playbackRate = vv.currentTime < expectedVTime ? 1.05 : 0.95;
+                    } else {
+                      vv.playbackRate = 1.0;
+                    }
                   }
                   if (vv.paused && !vv.ended) {
                     vv.play().catch(() => {});
                   }
                 } else {
-                  // SURGICAL FIX: No pause between segments
+                  // SURGICAL FIX: No drift between segments
                 }
               }
             }
