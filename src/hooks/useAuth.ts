@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useSessionEnforcement } from '@/hooks/useSessionEnforcement';
+import { useSessionEnforcement, getDeviceSessionId } from '@/hooks/useSessionEnforcement';
 import { User, Session } from '@supabase/supabase-js';
 
 interface UserProfile {
@@ -27,11 +27,8 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
   const [todayUsage, setTodayUsage] = useState<ToolUsage[]>([]);
 
-  // Viber-style single device enforcement
-  const { registerSession } = useSessionEnforcement(
-    user?.id ?? null,
-    session?.refresh_token ?? null
-  );
+  // Viber-style single device enforcement (uses stable device ID, not refresh_token)
+  const { registerSession } = useSessionEnforcement(user?.id ?? null);
 
   useEffect(() => {
     void registerSession();
@@ -49,14 +46,13 @@ export function useAuth() {
             fetchTodayUsage(session.user.id);
           }, 0);
 
-          // Fix: Re-register session on token refresh to prevent mismatch auto-logout
-          // Use refresh_token (stable across access-token refreshes within same session)
-          if (event === 'TOKEN_REFRESHED' && session.refresh_token) {
+          // No need to re-register on TOKEN_REFRESHED — device ID is stable.
+          if (event === 'SIGNED_IN') {
             supabase.rpc('register_active_session', {
               _user_id: session.user.id,
-              _session_id: session.refresh_token,
+              _session_id: getDeviceSessionId(),
             }).then(({ error }) => {
-              if (error) console.error('Session re-register on token refresh failed:', error);
+              if (error) console.error('Session register failed:', error);
             });
           }
         } else {

@@ -2,7 +2,7 @@ import React, { useState, useEffect, lazy, Suspense } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useSessionEnforcement } from "@/hooks/useSessionEnforcement";
+import { getDeviceSessionId } from "@/hooks/useSessionEnforcement";
 import {
   User, Lock, ArrowRight, Eye, EyeOff,
   LogIn, Home, MessageCircle, ShoppingCart } from
@@ -86,7 +86,7 @@ const UserLoginPage: React.FC = () => {
         try {
           await supabase.rpc('register_active_session', {
             _user_id: data.user.id,
-            _session_id: data.session.refresh_token
+            _session_id: getDeviceSessionId()
           });
         } catch (e) {
           console.error('Failed to register session:', e);
