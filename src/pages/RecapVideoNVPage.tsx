@@ -2938,8 +2938,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   const expectedVTime = active.vStart + aProgress;
                   const drift = Math.abs(vv.currentTime - expectedVTime);
 
-                  if (activeIndex !== lastIndexRef.current || (!seekPendingRef.current && drift > 0.2)) {
-                    // TRIGGER HARD-CUT SEEK
+                  if (activeIndex !== lastIndexRef.current || (!seekPendingRef.current && drift > 0.5)) {
+                    // TRIGGER HARD-CUT SEEK: Only for segment changes or major drift (>500ms)
                     lastIndexRef.current = activeIndex;
                     videoInSegmentRef.current = true;
                     segCutTimeRef.current = performance.now(); // cinematic transition
@@ -2950,8 +2950,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       if (!vv.ended) {
                         const isFreezeCycle = freezeModeRef.current && av.currentTime % (7 + 8) < 7;
                         if (!isFreezeCycle) {
-                          vv.playbackRate = 1.0;
-                          vv.play().catch(() => {});
+                          if (vv.paused) vv.play().catch(() => {});
                         }
                       }
                       vv.removeEventListener("seeked", onSeeked);
@@ -2959,20 +2958,21 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     vv.addEventListener("seeked", onSeeked);
                     vv.currentTime = expectedVTime;
                   } else if (!seekPendingRef.current) {
-                    // Micro-adjustment via playbackRate to keep sync without hard seeking
-                    // This prevents stuttering while maintaining 100% AV Sync
-                    if (drift > 0.03) {
-                      vv.playbackRate = vv.currentTime < expectedVTime ? 1.05 : 0.95;
-                    } else {
-                      vv.playbackRate = 1.0;
+                    // ZERO-STUTTER SYNC ENGINE:
+                    // 1. Adaptive playbackRate (only change if drift > 50ms)
+                    const targetRate = drift > 0.05 ? (vv.currentTime < expectedVTime ? 1.06 : 0.94) : 1.0;
+                    if (Math.abs(vv.playbackRate - targetRate) > 0.01) {
+                      vv.playbackRate = targetRate;
                     }
-                    // Maintain 1.0x speed and clamp to segment end
-                    if (vActualEnd > 0 && (vv.currentTime >= vActualEnd - 0.001 || vv.currentTime < active.vStart)) {
+
+                    // 2. Precise clamping without redundant seek calls
+                    if (vActualEnd > 0 && vv.currentTime >= vActualEnd - 0.01) {
                       vv.currentTime = active.vStart;
                     }
+
+                    // 3. Playback control without redundant engine calls
                     const isFreezeCycle = freezeModeRef.current && av.currentTime % (7 + 8) < 7;
-                    if (!isFreezeCycle && (vv.paused || vv.ended)) {
-                      vv.playbackRate = 1.0;
+                    if (!isFreezeCycle && vv.paused && !vv.ended) {
                       vv.play().catch(() => {});
                     }
                   }
@@ -3000,16 +3000,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   const expectedVTime = vStart + (aDur > 0 ? (aProgress / aDur) * (vEnd - vStart) : 0);
                   const drift = Math.abs(vv.currentTime - expectedVTime);
 
-                  if (activeIndex !== lastIndexRef.current || drift > 0.2) {
+                  if (activeIndex !== lastIndexRef.current || drift > 0.5) {
                     vv.currentTime = expectedVTime;
                     vv.playbackRate = 1.0;
                     lastIndexRef.current = activeIndex;
                   } else {
-                    // Smooth micro-sync for fallback
-                    if (drift > 0.03) {
-                      vv.playbackRate = vv.currentTime < expectedVTime ? 1.05 : 0.95;
-                    } else {
-                      vv.playbackRate = 1.0;
+                    // ZERO-STUTTER fallback sync
+                    const targetRate = drift > 0.05 ? (vv.currentTime < expectedVTime ? 1.06 : 0.94) : 1.0;
+                    if (Math.abs(vv.playbackRate - targetRate) > 0.01) {
+                      vv.playbackRate = targetRate;
                     }
                   }
                   if (vv.paused && !vv.ended) {
