@@ -2959,28 +2959,32 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     vv.addEventListener("seeked", onSeeked);
                     vv.currentTime = active.vStart;
                   } else if (!seekPendingRef.current) {
-                    // Seek complete â€” normal playing state
-                    // SURGICAL FIX: Clamp video to exact segment boundaries for 100% AV sync accuracy
-                    // This prevents video from drifting and showing wrong scenes
-                    // SURGICAL FIX: 100% AV Sync - Handle looping and playback based on freezeMode
-                    if (vActualEnd > 0 && (vv.currentTime >= vActualEnd - 0.001 || vv.currentTime < active.vStart)) {
-                      vv.currentTime = active.vStart;
-                    }
-
-                    // SURGICAL FIX: Only auto-play if NOT in a freeze cycle of freezeMode
+                    // SURGICAL FIX: Natural playback — video plays forward from vStart to vActualEnd
+                    // Zero-tolerance per-frame seek REMOVED (was freezing video at vStart every frame)
+                    // Only hard-seek on segment change. Let video breathe = 100% AV sync accuracy.
                     const isFreezeCycle = freezeModeRef.current && av.currentTime % (7 + 8) < 7;
-                    if (!isFreezeCycle) {
-                      if (vv.paused || vv.ended) {
+                    const endMargin = 0.05; // 50ms safety margin before vEnd
+
+                    if (isFreezeCycle) {
+                      // Freeze phase: pause video for Ken Burns zoom effect
+                      if (!vv.paused) vv.pause();
+                    } else if (vActualEnd > 0 && vv.currentTime >= vActualEnd - endMargin) {
+                      // Video reached end of segment — hold last frame (hard-cut boundary)
+                      if (!vv.paused) vv.pause();
+                    } else {
+                      // Within segment bounds — ensure video is playing at 1.0x
+                      if (vv.paused && !vv.ended) {
                         vv.playbackRate = 1.0;
                         vv.play().catch(() => {});
                       }
                     }
                   }
                 } else {
-                  // SURGICAL FIX: Remove hard pause between segments to prevent freeze artifacts.
-                  // Instead, we allow the video to continue or transition to the next segment naturally.
+                  // SURGICAL FIX: Professional smooth transition between segments
+                  // Hold video at last frame during segment transition for smooth cinematic feel
                   if (videoInSegmentRef.current) {
                     videoInSegmentRef.current = false;
+                    if (!vv.paused) vv.pause();
                   }
                 }
               } else {
@@ -2995,13 +2999,22 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   const s = segs[activeIndex] as any;
                   activeText = s.text;
                   if (activeIndex !== lastIndexRef.current) {
-                    // Hard cut fallback with playbackRate matching
+                    // Hard cut fallback — seek ONCE to segment start
                     vv.currentTime = s.vStart;
-                    // SURGICAL FIX: 100% AV Sync - Maintain normal speed (1.0x) as requested
                     vv.playbackRate = 1.0;
                     lastIndexRef.current = activeIndex;
+                    videoInSegmentRef.current = true;
+                    segCutTimeRef.current = performance.now();
                   }
-                  if (vv.paused && !vv.ended) {
+                  // Natural playback with segment boundary check
+                  const fbVEnd = s.vEnd === -1 ? vv.duration : s.vEnd;
+                  const fbFreeze = freezeModeRef.current && av.currentTime % (7 + 8) < 7;
+                  if (fbFreeze) {
+                    if (!vv.paused) vv.pause();
+                  } else if (fbVEnd > 0 && vv.currentTime >= fbVEnd - 0.05) {
+                    if (!vv.paused) vv.pause();
+                  } else if (vv.paused && !vv.ended) {
+                    vv.playbackRate = 1.0;
                     vv.play().catch(() => {});
                   }
                 } else {
@@ -3066,10 +3079,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // End of AV sync block (runs every frame)
 
         // // —— ENCODER PUSH: Ensure encoder receives frames at steady target FPS ——
-        // This is the key surgical fix for visual smoothness: even when we throttle
-        // main drawing to save CPU, we must push a frame to the encoder at the
-        // desired output FPS so the produced video has smooth timing.
-        const encFrameInterval = 1000 / quality.fps;
+        // SURGICAL FIX: Optimize for smooth performance on all devices (high-end and low-end)
+        // Use adaptive frame interval based on device capability to prevent stuttering
+        const deviceCores = navigator.hardwareConcurrency || 4;
+        const adaptiveFps = deviceCores >= 8 ? quality.fps : Math.min(quality.fps, 24);
+        const encFrameInterval = 1000 / adaptiveFps;
         // shouldDraw controls whether we re-render canvas content this tick
         const shouldDraw = timestamp - lastDrawTime >= adaptiveFrameInterval;
 
@@ -3080,6 +3094,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         }
 
         // Push to encoder at steady cadence (may be the same tick as draw or a repeat)
+        // SURGICAL FIX: Use adaptive FPS for encoder push to ensure smooth performance on all devices
         if (timestamp - (lastEncPushTime || 0) >= encFrameInterval) {
           lastEncPushTime = timestamp;
           try {
