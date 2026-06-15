@@ -181,6 +181,31 @@ function enforceScriptCoverage70(script: string, sourceDurationSec?: number | nu
   const normalized = script.replace(/\r\n/g, "\n").trim();
   if (!normalized || !sourceDurationSec) return normalized || script;
 
+  const sentenceEndRe = /[။.!?…。！？]$/;
+  const splitCompleteSentences = (text: string): string[] => {
+    const sentences = text
+      .replace(/\s+/g, " ")
+      .match(/[^။.!?…。！？]+[။.!?…。！？]+(?:["'”’）\)]*)?/g)
+      ?.map((s) => s.trim())
+      .filter((s) => sentenceEndRe.test(s.replace(/["'”’）\)]*$/, ""))) || [];
+    return sentences;
+  };
+  const trimToCompleteSentences = (text: string, maxWordBudget: number): string => {
+    const completeSentences = splitCompleteSentences(text);
+    if (!completeSentences.length) return text.trim();
+
+    const kept: string[] = [];
+    let count = 0;
+    for (const sentence of completeSentences) {
+      const sentenceWords = sentence.split(/\s+/).filter(Boolean);
+      if (kept.length > 0 && count + sentenceWords.length > maxWordBudget) break;
+      kept.push(sentence);
+      count += sentenceWords.length;
+      if (count >= maxWordBudget) break;
+    }
+    return (kept.length ? kept.join(" ") : completeSentences[0]).trim();
+  };
+
   // True recap: target ~45% of source duration when read aloud (≈150 wpm).
   const maxWords = Math.max(45, Math.floor((sourceDurationSec / 60) * 150 * 0.45));
   const words = normalized.split(/\s+/).filter(Boolean);
@@ -199,7 +224,8 @@ function enforceScriptCoverage70(script: string, sourceDurationSec?: number | nu
     count += paragraphWords.length;
     if (count >= maxWords) break;
   }
-  return (kept.length ? kept.join("\n\n") : words.slice(0, maxWords).join(" ")).trim();
+  const paragraphTrimmed = kept.length ? kept.join("\n\n") : trimToCompleteSentences(normalized, maxWords);
+  return trimToCompleteSentences(paragraphTrimmed, maxWords);
 }
 
 function countMatches(text: string, pattern: RegExp): number {
