@@ -2930,13 +2930,23 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 if (activeIndex !== -1) {
                   const active = getSeg(activeIndex);
                   const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
-                  const vSegDuration = vActualEnd - active.vStart;
-
-                  // SURGICAL FIX: 100% AV Sync - Maintain normal speed (1.0x) as requested
-                  const targetRate = 1.0;
+                  const activeTs = audioTs[activeIndex];
+                  const audioElapsed = Math.max(0, currentTime - activeTs.start);
+                  const audioSegDuration = Math.max(0.001, activeTs.end - activeTs.start);
+                  const sourceEnd = vActualEnd > active.vStart ? vActualEnd : vv.duration;
+                  const sourceDuration = Math.max(0.001, sourceEnd - active.vStart);
+                  const syncProgress = Math.min(1, audioElapsed / audioSegDuration);
+                  const targetPlaybackRate = Math.max(0.25, Math.min(4, sourceDuration / audioSegDuration));
+                  const targetVideoTime =
+                    sourceEnd > active.vStart
+                      ? Math.max(
+                          active.vStart,
+                          Math.min(sourceEnd - 0.03, active.vStart + sourceDuration * syncProgress),
+                        )
+                      : active.vStart;
 
                   if (activeIndex !== lastIndexRef.current) {
-                    // TRUE RECAP: Hard cut â€” seek ONCE to segment start
+                    // TRUE RECAP: Hard cut â€” seek ONCE to the exact audio-matched source frame
                     // seekPendingRef prevents re-seeking every frame during async HTML5 seek
                     lastIndexRef.current = activeIndex;
                     videoInSegmentRef.current = true;
@@ -2950,41 +2960,58 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                         // SURGICAL FIX: Only auto-play if NOT in a freeze cycle of freezeMode
                         const isFreezeCycle = freezeModeRef.current && av.currentTime % (7 + 8) < 7;
                         if (!isFreezeCycle) {
-                          vv.playbackRate = 1.0;
+                          vv.playbackRate = targetPlaybackRate;
                           vv.play().catch(() => {});
                         }
                       }
                       vv.removeEventListener("seeked", onSeeked);
                     };
                     vv.addEventListener("seeked", onSeeked);
-                    vv.currentTime = active.vStart;
+                    vv.currentTime = targetVideoTime;
                   } else if (!seekPendingRef.current) {
-                    // SURGICAL FIX: Natural playback — video plays forward from vStart to vActualEnd
-                    // Zero-tolerance per-frame seek REMOVED (was freezing video at vStart every frame)
-                    // Only hard-seek on segment change. Let video breathe = 100% AV sync accuracy.
+                    // SURGICAL FIX: Hard-cut micro-resync only when drift is visible.
+                    // Keeps video tied to the exact audio timestamp without per-frame seek stutter.
                     const isFreezeCycle = freezeModeRef.current && av.currentTime % (7 + 8) < 7;
                     const endMargin = 0.05; // 50ms safety margin before vEnd
 
                     if (isFreezeCycle) {
                       // Freeze phase: pause video for Ken Burns zoom effect
                       if (!vv.paused) vv.pause();
-                    } else if (vActualEnd > 0 && vv.currentTime >= vActualEnd - endMargin) {
-                      // Video reached end of segment — hold last frame (hard-cut boundary)
-                      if (!vv.paused) vv.pause();
+                    } else if (sourceEnd > 0 && vv.currentTime >= sourceEnd - endMargin) {
+                      // Freeze/Motion OFF: never hold last frame; resync keeps motion until audio boundary.
+                      vv.playbackRate = targetPlaybackRate;
+                      if (vv.paused && !vv.ended) vv.play().catch(() => {});
                     } else {
-                      // Within segment bounds — ensure video is playing at 1.0x
-                      if (vv.paused && !vv.ended) {
-                        vv.playbackRate = 1.0;
+                      const drift = targetVideoTime - vv.currentTime;
+                      if (Math.abs(drift) > 0.12) {
+                        seekPendingRef.current = true;
+                        const onMicroSeeked = () => {
+                          seekPendingRef.current = false;
+                          vv.removeEventListener("seeked", onMicroSeeked);
+                          if (!vv.ended && !audioRef.current?.ended) {
+                            vv.playbackRate = targetPlaybackRate;
+                            vv.play().catch(() => {});
+                          }
+                        };
+                        vv.addEventListener("seeked", onMicroSeeked);
+                        vv.currentTime = targetVideoTime;
+                      }
+                      // Within segment bounds — ensure video is playing at the segment-matched rate
+                      if (!seekPendingRef.current && vv.paused && !vv.ended) {
+                        vv.playbackRate = targetPlaybackRate;
                         vv.play().catch(() => {});
                       }
                     }
                   }
                 } else {
-                  // SURGICAL FIX: Professional smooth transition between segments
-                  // Hold video at last frame during segment transition for smooth cinematic feel
+                  // SURGICAL FIX: Freeze/Motion OFF must never pause between segments.
                   if (videoInSegmentRef.current) {
                     videoInSegmentRef.current = false;
-                    if (!vv.paused) vv.pause();
+                    if (freezeModeRef.current && !vv.paused) vv.pause();
+                    if (!freezeModeRef.current && vv.paused && !vv.ended) {
+                      vv.playbackRate = 1.0;
+                      vv.play().catch(() => {});
+                    }
                   }
                 }
               } else {
@@ -2998,23 +3025,28 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 if (activeIndex !== -1) {
                   const s = segs[activeIndex] as any;
                   activeText = s.text;
+                  const fbVEnd = s.vEnd === -1 ? vv.duration : s.vEnd;
+                  const fbSourceEnd = fbVEnd > s.vStart ? fbVEnd : vv.duration;
+                  const fbSourceDuration = Math.max(0.001, fbSourceEnd - s.vStart);
+                  const fbAudioDuration = Math.max(0.001, (s.aEndPct - s.aStartPct) * av.duration);
+                  const fbTargetRate = Math.max(0.25, Math.min(4, fbSourceDuration / fbAudioDuration));
                   if (activeIndex !== lastIndexRef.current) {
                     // Hard cut fallback — seek ONCE to segment start
                     vv.currentTime = s.vStart;
-                    vv.playbackRate = 1.0;
+                    vv.playbackRate = fbTargetRate;
                     lastIndexRef.current = activeIndex;
                     videoInSegmentRef.current = true;
                     segCutTimeRef.current = performance.now();
                   }
                   // Natural playback with segment boundary check
-                  const fbVEnd = s.vEnd === -1 ? vv.duration : s.vEnd;
                   const fbFreeze = freezeModeRef.current && av.currentTime % (7 + 8) < 7;
                   if (fbFreeze) {
                     if (!vv.paused) vv.pause();
-                  } else if (fbVEnd > 0 && vv.currentTime >= fbVEnd - 0.05) {
-                    if (!vv.paused) vv.pause();
+                  } else if (fbSourceEnd > 0 && vv.currentTime >= fbSourceEnd - 0.05) {
+                    vv.playbackRate = fbTargetRate;
+                    if (vv.paused && !vv.ended) vv.play().catch(() => {});
                   } else if (vv.paused && !vv.ended) {
-                    vv.playbackRate = 1.0;
+                    vv.playbackRate = fbTargetRate;
                     vv.play().catch(() => {});
                   }
                 } else {
