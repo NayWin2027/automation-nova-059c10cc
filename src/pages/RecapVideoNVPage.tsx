@@ -1674,7 +1674,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         (isIOS && mem <= 3 && !/iPhone\s*1[2-9]|iPhone\s*[2-9][0-9]/i.test(navigator.userAgent));
       // Snapdragon 600 series (3-4GB RAM) â†’ force 720p max for smoothness
       const force720p = !force480p && cores <= 6 && mem <= 4;
-      const isHighEndDevice = cores >= 8 && mem >= 6;
+      const hasDeviceMemoryApi = typeof (navigator as any).deviceMemory === "number";
+      const isHighEndDevice = cores >= 8 && (!hasDeviceMemoryApi || mem >= 6);
       // SURGICAL FIX: Never downgrade selected export resolution on any device tier.
       const quality = EXPORT_QUALITY_OPTIONS[exportQuality] || EXPORT_QUALITY_OPTIONS["720p"];
       // â”€â”€ SURGICAL EDIT: Force 100% selected resolution for ALL aspect ratios â”€â”€
@@ -2806,7 +2807,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       let adaptiveFrameInterval = frameInterval;
       let slowFrameCount = 0;
       const SLOW_THRESHOLD = 10; // 10 consecutive slow frames triggers throttle
-      const MIN_FPS = 24;
+      const MIN_FPS = isHighEndDevice ? quality.fps : 24;
       const MIN_FRAME_INTERVAL = 1000 / MIN_FPS;
       const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
       let lastTsIdx = 0;
@@ -2842,7 +2843,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         // â”€â”€ ADAPTIVE FPS: Monitor frame budget â”€â”€
         const frameDelta = timestamp - lastDrawTime;
-        // SURGICAL FIX: High-end devices keep full target FPS — no adaptive throttle stutter
+        // SURGICAL FIX: High-end (i7/i5 desktop) never down-throttles — keeps cinematic 30fps steady
         if (!isHighEndDevice && lastDrawTime > 0 && frameDelta > adaptiveFrameInterval * 1.5) {
           slowFrameCount++;
           if (slowFrameCount >= SLOW_THRESHOLD) {
@@ -2930,35 +2931,19 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 if (activeIndex !== -1) {
                   const active = getSeg(activeIndex);
                   const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
-                  const activeTs = audioTs[activeIndex];
-                  const audioElapsed = Math.max(0, currentTime - activeTs.start);
-                  const audioSegDuration = Math.max(0.001, activeTs.end - activeTs.start);
                   const sourceEnd = vActualEnd > active.vStart ? vActualEnd : vv.duration;
-                  const sourceDuration = Math.max(0.001, sourceEnd - active.vStart);
-                  const syncProgress = Math.min(1, audioElapsed / audioSegDuration);
                   const targetPlaybackRate = 1.0;
-                  const targetVideoTime =
-                    sourceEnd > active.vStart
-                      ? Math.max(
-                          active.vStart,
-                          Math.min(sourceEnd - 0.03, active.vStart + sourceDuration * syncProgress),
-                        )
-                      : active.vStart;
-                  const driftThreshold = isHighEndDevice ? 0.045 : 0.07;
 
                   if (activeIndex !== lastIndexRef.current) {
-                    // TRUE RECAP: Hard cut â€” seek ONCE to the exact audio-matched source frame
-                    // seekPendingRef prevents re-seeking every frame during async HTML5 seek
+                    // TRUE RECAP: Hard cut — seek ONCE to segment start, then play 1x (no mid-segment seeks)
                     lastIndexRef.current = activeIndex;
                     videoInSegmentRef.current = true;
-                    segCutTimeRef.current = performance.now(); // trigger smooth cinematic transition
+                    segCutTimeRef.current = performance.now();
                     seekPendingRef.current = true;
 
                     const onSeeked = () => {
                       seekPendingRef.current = false;
-                      // Always play video when freezeMode is OFF
                       if (!vv.ended) {
-                        // SURGICAL FIX: Only auto-play if NOT in a freeze cycle of freezeMode
                         const isFreezeCycle = freezeModeRef.current && av.currentTime % (7 + 8) < 7;
                         if (!isFreezeCycle) {
                           vv.playbackRate = targetPlaybackRate;
@@ -2968,40 +2953,19 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       vv.removeEventListener("seeked", onSeeked);
                     };
                     vv.addEventListener("seeked", onSeeked);
-                    vv.currentTime = targetVideoTime;
+                    vv.currentTime = active.vStart;
                   } else if (!seekPendingRef.current) {
-                    // SURGICAL FIX: Hard-cut micro-resync only when drift is visible.
-                    // Keeps video tied to the exact audio timestamp without per-frame seek stutter.
                     const isFreezeCycle = freezeModeRef.current && av.currentTime % (7 + 8) < 7;
-                    const endMargin = 0.05; // 50ms safety margin before vEnd
+                    const endMargin = 0.05;
 
                     if (isFreezeCycle) {
-                      // Freeze phase: pause video for Ken Burns zoom effect
                       if (!vv.paused) vv.pause();
                     } else if (sourceEnd > 0 && vv.currentTime >= sourceEnd - endMargin) {
-                      // 1x natural speed: hold last frame at source end until audio segment boundary.
                       vv.playbackRate = 1.0;
                       if (!vv.paused) vv.pause();
                     } else {
-                      const drift = targetVideoTime - vv.currentTime;
-                      if (Math.abs(drift) > driftThreshold) {
-                        seekPendingRef.current = true;
-                        const onMicroSeeked = () => {
-                          seekPendingRef.current = false;
-                          vv.removeEventListener("seeked", onMicroSeeked);
-                          if (!vv.ended && !audioRef.current?.ended) {
-                            vv.playbackRate = targetPlaybackRate;
-                            vv.play().catch(() => {});
-                          }
-                        };
-                        vv.addEventListener("seeked", onMicroSeeked);
-                        vv.currentTime = targetVideoTime;
-                      }
-                      // Within segment bounds — ensure video is playing at the segment-matched rate
-                      if (!seekPendingRef.current && vv.paused && !vv.ended) {
-                        vv.playbackRate = targetPlaybackRate;
-                        vv.play().catch(() => {});
-                      }
+                      vv.playbackRate = 1.0;
+                      if (vv.paused && !vv.ended) vv.play().catch(() => {});
                     }
                   }
                 } else {
@@ -3028,17 +2992,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   activeText = s.text;
                   const fbVEnd = s.vEnd === -1 ? vv.duration : s.vEnd;
                   const fbSourceEnd = fbVEnd > s.vStart ? fbVEnd : vv.duration;
-                  const fbSourceDuration = Math.max(0.001, fbSourceEnd - s.vStart);
-                  const fbAudioSpan = Math.max(0.001, s.aEndPct - s.aStartPct);
-                  const fbSyncProgress = Math.min(1, Math.max(0, (aPct - s.aStartPct) / fbAudioSpan));
-                  const fbTargetTime = Math.max(
-                    s.vStart,
-                    Math.min(fbSourceEnd - 0.03, s.vStart + fbSourceDuration * fbSyncProgress),
-                  );
                   const fbTargetRate = 1.0;
-                  const fbDriftThreshold = isHighEndDevice ? 0.045 : 0.07;
                   if (activeIndex !== lastIndexRef.current) {
-                    // Hard cut fallback — seek ONCE to segment start
                     vv.currentTime = s.vStart;
                     vv.playbackRate = fbTargetRate;
                     lastIndexRef.current = activeIndex;
@@ -3051,24 +3006,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     } else if (fbSourceEnd > 0 && vv.currentTime >= fbSourceEnd - 0.05) {
                       vv.playbackRate = 1.0;
                       if (!vv.paused) vv.pause();
-                    } else {
-                      const fbDrift = fbTargetTime - vv.currentTime;
-                      if (Math.abs(fbDrift) > fbDriftThreshold) {
-                        seekPendingRef.current = true;
-                        const onFbSeeked = () => {
-                          seekPendingRef.current = false;
-                          vv.removeEventListener("seeked", onFbSeeked);
-                          if (!vv.ended && !audioRef.current?.ended) {
-                            vv.playbackRate = fbTargetRate;
-                            vv.play().catch(() => {});
-                          }
-                        };
-                        vv.addEventListener("seeked", onFbSeeked);
-                        vv.currentTime = fbTargetTime;
-                      } else if (vv.paused && !vv.ended) {
-                        vv.playbackRate = fbTargetRate;
-                        vv.play().catch(() => {});
-                      }
+                    } else if (vv.paused && !vv.ended) {
+                      vv.playbackRate = fbTargetRate;
+                      vv.play().catch(() => {});
                     }
                   }
                 } else {
@@ -3133,25 +3073,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // End of AV sync block (runs every frame)
 
         // // —— ENCODER PUSH: Ensure encoder receives frames at steady target FPS ——
-        // SURGICAL FIX: Encoder only receives freshly drawn frames — eliminates output AV drift
-        const deviceCores = navigator.hardwareConcurrency || 4;
-        const deviceMem = (navigator as any).deviceMemory || 4;
-        const isHighEndEncoder = deviceCores >= 8 && deviceMem >= 6;
-        const adaptiveFps = isHighEndEncoder ? quality.fps : Math.min(quality.fps, deviceCores >= 6 ? 24 : 20);
-        const encFrameInterval = 1000 / adaptiveFps;
-        const shouldDraw = isHighEndEncoder || timestamp - lastDrawTime >= adaptiveFrameInterval;
-
-        if (shouldDraw) {
+        // SURGICAL FIX: Single steady tick — draw + encode together at target FPS (no 60fps overload, no stale frames)
+        if (timestamp - lastDrawTime >= adaptiveFrameInterval) {
           lastDrawTime = timestamp;
+          lastEncPushTime = timestamp;
           drawFrame(false);
-          if (timestamp - (lastEncPushTime || 0) >= encFrameInterval) {
-            lastEncPushTime = timestamp;
-            try {
-              encCtx.drawImage(canvas, 0, 0, encW, encH);
-              if (encTrack && typeof encTrack.requestFrame === "function") encTrack.requestFrame();
-            } catch (e) {
-              console.warn("[RECORDING] Encoder push failed:", e);
-            }
+          try {
+            encCtx.drawImage(canvas, 0, 0, encW, encH);
+            if (encTrack && typeof encTrack.requestFrame === "function") encTrack.requestFrame();
+          } catch (e) {
+            console.warn("[RECORDING] Encoder push failed:", e);
           }
         }
 
