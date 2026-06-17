@@ -291,7 +291,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const [renderedBlobUrl, setRenderedBlobUrl] = useState<string | null>(null);
     const [serverRenderProgress, setServerRenderProgress] = useState<string>("");
     const subNeonHueRef = useRef(0);
-    const [exportQuality, setExportQuality] = useState<string>("720p");
+    const [exportQuality, setExportQuality] = useState<string>("1080p");
 
     // Cinematic movie poster generation removed (feature disabled).
 
@@ -623,11 +623,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         const cores = navigator.hardwareConcurrency || 4;
         const mem = (navigator as any).deviceMemory || 4;
         if (cores <= 4 || mem <= 2) {
-          setExportQuality("480p");
+          setExportQuality("1080p");
           setEditorState((prev) => ({ ...prev, colorGrade: "GOLDEN" }));
           setLogo((prev) => ({ ...prev, spin: false }));
         } else if (cores <= 6 || mem <= 4) {
-          setExportQuality("720p");
+          setExportQuality("1080p");
           setEditorState((prev) => ({ ...prev, colorGrade: "GOLDEN" }));
           setLogo((prev) => ({ ...prev, spin: false }));
         } else {
@@ -719,7 +719,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     });
 
     // SURGICAL EDIT: Audio speed rate state (0.5x â€“ 4.0x)
-    const [audioSpeedRate, setAudioSpeedRate] = useState<number>(1.4);
+    const [audioSpeedRate, setAudioSpeedRate] = useState<number>(1.0);
 
     // SURGICAL EDIT: Freeze/Motion mode state
     // ON  = 5s Ken Burns freeze zoom-in â†’ 15s smooth motion (alternating)
@@ -1392,11 +1392,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       };
       const totalWords = scriptData.segments.reduce((acc, s) => acc + getWordCount(s.text), 0);
       let wordCursor = 0;
+      // SURGICAL EDIT: Use actual audio timestamps for 100% AV sync accuracy
+      const audioTs = audioTimestampsRef.current || [];
+      const hasAudioTs = audioTs.length > 0 && audioTs.length >= scriptData.segments.length;
+      const totalAudioDur = hasAudioTs ? Math.max(...audioTs.map((t) => t.end)) : 0;
       return scriptData.segments.map((seg, i) => {
         const segWords = getWordCount(seg.text);
         const startWords = wordCursor;
         wordCursor += segWords;
-        // SURGICAL EDIT: Use exact timestamp â€” no offset for 100% AV sync accuracy
+        // SURGICAL EDIT: Use exact timestamp — no offset for 100% AV sync accuracy
         const vStart = parseTime(seg.timestamp);
         const nextSeg = scriptData.segments[i + 1];
         let vEnd: number;
@@ -1411,17 +1415,34 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             vEnd = vStart + estimatedClipSec;
           }
         }
-        // SURGICAL EDIT: No duration cap â€” video segment plays full natural duration
+        // SURGICAL EDIT: No duration cap — video segment plays full natural duration
         // for 100% voice-to-video accuracy (Pacing Intelligence caps removed)
+        // SURGICAL EDIT: Use exact audio timestamps for 100% AV sync accuracy
+        const ts = audioTs.find((x) => x.index === i);
+        let aStartPct: number;
+        let aEndPct: number;
+        let aStart: number = 0;
+        let aEnd: number = 0;
+        if (hasAudioTs && ts && totalAudioDur > 0) {
+          aStart = ts.start;
+          aEnd = ts.end;
+          aStartPct = ts.start / totalAudioDur;
+          aEndPct = ts.end / totalAudioDur;
+        } else {
+          aStartPct = totalWords > 0 ? startWords / totalWords : 0;
+          aEndPct = totalWords > 0 ? wordCursor / totalWords : 1;
+        }
         return {
           vStart,
           vEnd,
-          aStartPct: totalWords > 0 ? startWords / totalWords : 0,
-          aEndPct: totalWords > 0 ? wordCursor / totalWords : 1,
+          aStart,
+          aEnd,
+          aStartPct,
+          aEndPct,
           text: seg.text,
         };
       });
-    }, [scriptData]);
+    }, [scriptData, audioUrl]);
 
     useEffect(() => {
       syncSegmentsRef.current = syncSegments;
