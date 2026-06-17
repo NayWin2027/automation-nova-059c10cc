@@ -726,8 +726,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     // OFF = 100% normal speed, no zoom/crop
     const [freezeMode, setFreezeMode] = useState<boolean>(false);
     const freezeModeRef = useRef(freezeMode);
+    // SURGICAL FIX: Subtitle ON/OFF toggle — allows users to disable subtitles
+    const [subtitleEnabled, setSubtitleEnabled] = useState<boolean>(true);
+    const subtitleEnabledRef = useRef(subtitleEnabled);
     // â”€â”€ Direct sync â€” no useEffect delay â”€â”€
     freezeModeRef.current = freezeMode;
+    subtitleEnabledRef.current = subtitleEnabled;
 
     // Apply audioSpeedRate to audio element whenever it changes
     useEffect(() => {
@@ -2534,31 +2538,33 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           const blurH = canvas.height * (curBlur.height / 100);
           const blurX = canvas.width * (curBlur.x / 100) - blurW / 2;
           const blurY = canvas.height * (curBlur.y / 100) - blurH / 2;
-          // SURGICAL FIX: Professional Silver Metallic Box (Opaque to hide original subtitles)
-          const silverGrad = ctx.createLinearGradient(blurX, blurY, blurX, blurY + blurH);
-          silverGrad.addColorStop(0, "#FFFFFF"); // Top highlight
-          silverGrad.addColorStop(0.2, "#E0E0E0"); // Silver shine
-          silverGrad.addColorStop(0.5, "#B0B0B0"); // Metallic base
-          silverGrad.addColorStop(0.8, "#808080"); // Shadow depth
-          silverGrad.addColorStop(1, "#606060"); // Bottom edge
-
-          ctx.fillStyle = silverGrad;
-          ctx.shadowColor = "rgba(0,0,0,0.6)";
-          ctx.shadowBlur = 20;
+          // SURGICAL FIX: InShot-style professional blur (video content visible through blur)
+          // Draws the video region beneath, applies heavy Gaussian blur, overlays tinted mask
+          // Result: source text hidden but video shapes/colors still faintly visible
           ctx.beginPath();
-          ctx.roundRect(blurX, blurY, blurW, blurH, 10);
-          ctx.fill();
+          ctx.roundRect(blurX, blurY, blurW, blurH, 8);
+          ctx.clip();
 
-          // Add metallic border stroke
-          ctx.strokeStyle = "rgba(255,255,255,0.9)";
-          ctx.lineWidth = Math.max(1, canvas.height * 0.003);
+          // Step 1: Draw blurred video content into the region
+          ctx.filter = "blur(18px)";
+          ctx.drawImage(canvas, blurX, blurY, blurW, blurH, blurX, blurY, blurW, blurH);
+          ctx.filter = "none";
+
+          // Step 2: Semi-transparent dark tint overlay (hides text, shows shapes)
+          ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
+          ctx.fillRect(blurX, blurY, blurW, blurH);
+
+          // Step 3: Subtle border for clean edge
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
+          ctx.lineWidth = 1;
           ctx.stroke();
 
           ctx.restore();
         }
 
         // SURGICAL EDIT: Subtitles on canvas â€” rendered at subSettings.x/y, NO background box
-        const subText = currentSubtitleRef.current;
+        // SURGICAL FIX: Only render subtitles when subtitleEnabled is ON
+        const subText = subtitleEnabledRef.current ? currentSubtitleRef.current : "";
         if (subText) {
           ctx.save();
           ctx.textAlign = "center";
@@ -2856,6 +2862,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           }
         } else if (lastDrawTime > 0) {
           slowFrameCount = Math.max(0, slowFrameCount - 1);
+          // SURGICAL FIX: Recover FPS when CPU catches up (was one-directional throttle causing permanent stutter)
+          if (slowFrameCount === 0 && adaptiveFrameInterval > frameInterval) {
+            adaptiveFrameInterval = Math.max(frameInterval, adaptiveFrameInterval - 2);
+          }
         }
 
         // â”€â”€ 100% MILLISECOND AV SYNC: Must run EVERY frame (not throttled) â”€â”€
@@ -3113,14 +3123,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // // —— ENCODER PUSH: Ensure encoder receives frames at steady target FPS ——
         // SURGICAL FIX: Optimize for smooth performance on all devices (high-end and low-end)
         // Use adaptive frame interval based on device capability to prevent stuttering
+        // SURGICAL FIX: Encoder FPS = draw FPS (never faster, prevents duplicate stale frame jitter)
         const deviceCores = navigator.hardwareConcurrency || 4;
-        const adaptiveFps = deviceCores >= 8 ? quality.fps : Math.min(quality.fps, 24);
+        const adaptiveFps = deviceCores >= 8 ? quality.fps : Math.min(quality.fps, 20);
         const encFrameInterval = 1000 / adaptiveFps;
         // shouldDraw controls whether we re-render canvas content this tick
         const shouldDraw = timestamp - lastDrawTime >= adaptiveFrameInterval;
 
         if (shouldDraw) {
-          if (frameInterval > 0) lastDrawTime = timestamp - ((timestamp - lastDrawTime) % frameInterval);
+          // SURGICAL FIX: Snap lastDrawTime precisely to prevent accumulated drift jitter
+          lastDrawTime = timestamp;
           // Update visible canvas only when scheduled
           drawFrame(false);
         }
@@ -4393,6 +4405,28 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       }`}
                     >
                       {freezeMode ? "ON" : "OFF"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* SURGICAL FIX: Subtitle ON/OFF Toggle */}
+                <div className="border-t border-slate-700/50 pt-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-semibold text-slate-300">Subtitle</h4>
+                      <span className="text-[10px] text-slate-500">
+                        {subtitleEnabled ? "Subtitle ON" : "Subtitle OFF"}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setSubtitleEnabled((p) => !p)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                        subtitleEnabled
+                          ? "bg-gradient-to-r from-emerald-500 to-emerald-600 text-white"
+                          : "bg-slate-800 text-slate-400 border border-slate-700"
+                      }`}
+                    >
+                      {subtitleEnabled ? "ON" : "OFF"}
                     </button>
                   </div>
                 </div>
