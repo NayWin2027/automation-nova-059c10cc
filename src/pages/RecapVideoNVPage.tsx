@@ -1674,20 +1674,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         (isIOS && mem <= 3 && !/iPhone\s*1[2-9]|iPhone\s*[2-9][0-9]/i.test(navigator.userAgent));
       // Snapdragon 600 series (3-4GB RAM) â†’ force 720p max for smoothness
       const force720p = !force480p && cores <= 6 && mem <= 4;
-      let effectiveExportQuality = exportQuality;
-      if (force480p && EXPORT_QUALITY_OPTIONS[exportQuality]?.maxH > 480) {
-        effectiveExportQuality = "480p";
-        console.log(
-          `[PERF] Extreme low-end detected (cores:${cores}, RAM:${mem}GB). Forcing 480p for 100% smooth performance.`,
-        );
-      } else if (force720p && EXPORT_QUALITY_OPTIONS[exportQuality]?.maxH > 720) {
-        effectiveExportQuality = "720p";
-        console.log(
-          `[PERF] Low-end device detected (cores:${cores}, RAM:${mem}GB). Capping at 720p for smooth performance.`,
-        );
-      }
-
-      const quality = EXPORT_QUALITY_OPTIONS[effectiveExportQuality] || EXPORT_QUALITY_OPTIONS["720p"];
+      // SURGICAL FIX: Never downgrade selected export resolution on any device tier.
+      const quality = EXPORT_QUALITY_OPTIONS[exportQuality] || EXPORT_QUALITY_OPTIONS["720p"];
       // â”€â”€ SURGICAL EDIT: Force 100% selected resolution for ALL aspect ratios â”€â”€
       // Use the larger scale factor to allow upscaling to full selected quality.
       // This ensures 720p source â†’ 1920Ã—1080 when 1080p is selected (full quality).
@@ -1695,9 +1683,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       const shortEdge = Math.min(quality.maxW, quality.maxH);
       const longSrc = Math.max(outW, outH);
       const shortSrc = Math.min(outW, outH);
-      // SURGICAL FIX: Use Math.max to allow upscaling to full selected resolution
+      // SURGICAL FIX: Force EXACT selected resolution - no over, no under
       // 720p select = exactly 720p output. 1080p select = exactly 1080p output.
-      const qualityScale = Math.max(longEdge / longSrc, shortEdge / shortSrc);
+      const qualityScale = Math.min(longEdge / longSrc, shortEdge / shortSrc);
       outW = Math.round(outW * qualityScale);
       outH = Math.round(outH * qualityScale);
 
@@ -2945,15 +2933,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   const audioSegDuration = Math.max(0.001, activeTs.end - activeTs.start);
                   const sourceEnd = vActualEnd > active.vStart ? vActualEnd : vv.duration;
                   const sourceDuration = Math.max(0.001, sourceEnd - active.vStart);
-                  const syncProgress = Math.min(1, audioElapsed / audioSegDuration);
-                  // SURGICAL FIX: Force 1.0x normal speed for natural playback (no variable speed)
                   const targetPlaybackRate = 1.0;
                   const targetVideoTime =
                     sourceEnd > active.vStart
-                      ? Math.max(
-                          active.vStart,
-                          Math.min(sourceEnd - 0.03, active.vStart + sourceDuration * syncProgress),
-                        )
+                      ? Math.max(active.vStart, Math.min(sourceEnd - 0.03, active.vStart + audioElapsed))
                       : active.vStart;
 
                   if (activeIndex !== lastIndexRef.current) {
@@ -2978,7 +2961,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       vv.removeEventListener("seeked", onSeeked);
                     };
                     vv.addEventListener("seeked", onSeeked);
-                    vv.currentTime = targetVideoTime;
+                    vv.currentTime = active.vStart;
                   } else if (!seekPendingRef.current) {
                     // SURGICAL FIX: Hard-cut micro-resync only when drift is visible.
                     // Keeps video tied to the exact audio timestamp without per-frame seek stutter.
@@ -2989,9 +2972,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       // Freeze phase: pause video for Ken Burns zoom effect
                       if (!vv.paused) vv.pause();
                     } else if (sourceEnd > 0 && vv.currentTime >= sourceEnd - endMargin) {
-                      // Freeze/Motion OFF: never hold last frame; resync keeps motion until audio boundary.
-                      vv.playbackRate = targetPlaybackRate;
-                      if (vv.paused && !vv.ended) vv.play().catch(() => {});
+                      // 1x natural speed: hold last frame at source end until audio segment boundary.
+                      vv.playbackRate = 1.0;
+                      if (!vv.paused) vv.pause();
                     } else {
                       const drift = targetVideoTime - vv.currentTime;
                       if (Math.abs(drift) > 0.12) {
@@ -3040,7 +3023,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   const fbSourceEnd = fbVEnd > s.vStart ? fbVEnd : vv.duration;
                   const fbSourceDuration = Math.max(0.001, fbSourceEnd - s.vStart);
                   const fbAudioDuration = Math.max(0.001, (s.aEndPct - s.aStartPct) * av.duration);
-                  const fbTargetRate = Math.max(0.25, Math.min(4, fbSourceDuration / fbAudioDuration));
+                  const fbTargetRate = 1.0;
                   if (activeIndex !== lastIndexRef.current) {
                     // Hard cut fallback — seek ONCE to segment start
                     vv.currentTime = s.vStart;
@@ -3122,10 +3105,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // End of AV sync block (runs every frame)
 
         // // —— ENCODER PUSH: Ensure encoder receives frames at steady target FPS ——
-        // SURGICAL FIX: Use quality.fps directly for ALL devices to ensure smooth playback
-        // No FPS cap for low-end devices - prevents stuttering on Snapdragon 4/6 gen, i3
+        // SURGICAL FIX: Optimize for smooth performance on all devices (high-end and low-end)
+        // Use adaptive frame interval based on device capability to prevent stuttering
+        // SURGICAL FIX: Encoder FPS = draw FPS (never faster, prevents duplicate stale frame jitter)
         const deviceCores = navigator.hardwareConcurrency || 4;
-        const adaptiveFps = quality.fps; // Use full quality FPS for smooth performance on all devices
+        const deviceMem = (navigator as any).deviceMemory || 4;
+        const isHighEndEncoder = deviceCores >= 8 && deviceMem >= 6;
+        const adaptiveFps = isHighEndEncoder ? quality.fps : Math.min(quality.fps, deviceCores >= 6 ? 24 : 20);
         const encFrameInterval = 1000 / adaptiveFps;
         // shouldDraw controls whether we re-render canvas content this tick
         const shouldDraw = timestamp - lastDrawTime >= adaptiveFrameInterval;
@@ -3160,7 +3146,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       }
 
       // SURGICAL FIX: Ensure perfect audio start by playing ONLY after async recorder setup completes (warmup + logo load)
-      // SURGICAL EDIT: Apply audioSpeedRate at recording start for actual effect on output
+      // SURGICAL EDIT: Apply user-selected audioSpeedRate at recording start
       if (audioRef.current) {
         audioRef.current.playbackRate = audioSpeedRate;
         audioRef.current.play().catch(console.error);
