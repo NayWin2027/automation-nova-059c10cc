@@ -2102,6 +2102,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       logoAngleRef.current = 0;
       let lastFrameTime = performance.now();
       let isLowEndRender = quality.fps < 30;
+      let activeSegRate = 1.0;
 
       // â”€â”€ FIX: Real-time FPS monitoring (NO FRAME SKIP for Hollywood smoothness)
       let lastFrameTimestamp = 0;
@@ -2909,78 +2910,74 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             } else {
               // â”€â”€ After hook phase: force clean resync to segment 0 â”€â”€
               if (recAgeSync >= HOOK_SYNC_MS && recAgeSync < HOOK_SYNC_MS + 200 && lastIndexRef.current >= 0) {
-                lastIndexRef.current = -1; // Reset so first real segment gets a clean hard seek
+                lastIndexRef.current = -1;
               }
 
-              // â”€â”€ TRUE RECAP HARD-CUT SYNC â”€â”€
-              // No more playbackRate manipulation. Each segment plays at 1.0x normal speed.
-              // On segment change: hard-seek video to vStart. Between segments: hold video.
+              // TRUE RECAP: hard-cut per segment + smooth continuous play (no pause/scrub freeze)
               const maxIdx = Math.min(audioTs.length, segs.length) - 1;
               const getSeg = (idx: number) => segs[idx] as any;
               if (maxIdx >= 0) {
-                lastTsIdx = clamp(lastTsIdx, 0, maxIdx);
-                while (lastTsIdx < maxIdx && currentTime >= audioTs[lastTsIdx].end) lastTsIdx += 1;
-                while (lastTsIdx > 0 && currentTime < audioTs[lastTsIdx].start) lastTsIdx -= 1;
-
-                // SURGICAL FIX: 100% Accuracy - No tolerance, use exact audio timestamps
-                if (currentTime >= audioTs[lastTsIdx].start && currentTime < audioTs[lastTsIdx].end) {
-                  activeIndex = lastTsIdx;
-                  activeText = getSeg(lastTsIdx)?.text || "";
+                activeIndex = -1;
+                for (let i = 0; i <= maxIdx; i++) {
+                  const ts = audioTs[i];
+                  const inSeg =
+                    currentTime >= ts.start &&
+                    (currentTime < ts.end || (i === maxIdx && currentTime <= ts.end + 0.001));
+                  if (inSeg) {
+                    activeIndex = i;
+                    lastTsIdx = i;
+                    activeText = getSeg(i)?.text || "";
+                    break;
+                  }
                 }
 
                 if (activeIndex !== -1) {
                   const active = getSeg(activeIndex);
                   const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
+                  const activeTs = audioTs[activeIndex];
+                  const audioSegDuration = Math.max(0.001, activeTs.end - activeTs.start);
                   const sourceEnd = vActualEnd > active.vStart ? vActualEnd : vv.duration;
-                  const targetPlaybackRate = 1.0;
+                  const sourceDuration = Math.max(0.001, sourceEnd - active.vStart);
+                  const audioRate = Math.max(0.25, av.playbackRate || 1);
+                  const wallSegDur = audioSegDuration / audioRate;
+                  const idealRate = sourceDuration / wallSegDur;
+                  let segRate = 1.0;
+                  if (idealRate > 1.1) segRate = Math.min(idealRate, 1.6);
+                  else if (idealRate < 0.9) segRate = Math.max(idealRate, 0.85);
 
                   if (activeIndex !== lastIndexRef.current) {
-                    // TRUE RECAP: Hard cut — seek ONCE to segment start, then play 1x (no mid-segment seeks)
                     lastIndexRef.current = activeIndex;
                     videoInSegmentRef.current = true;
                     segCutTimeRef.current = performance.now();
+                    activeSegRate = segRate;
                     seekPendingRef.current = true;
-
                     const onSeeked = () => {
                       seekPendingRef.current = false;
                       if (!vv.ended) {
-                        const isFreezeCycle = freezeModeRef.current && av.currentTime % (7 + 8) < 7;
-                        if (!isFreezeCycle) {
-                          vv.playbackRate = targetPlaybackRate;
-                          vv.play().catch(() => {});
-                        }
+                        const isFreezeCycle = freezeModeRef.current && av.currentTime % 15 < 7;
+                        vv.playbackRate = activeSegRate;
+                        if (!isFreezeCycle) vv.play().catch(() => {});
                       }
                       vv.removeEventListener("seeked", onSeeked);
                     };
                     vv.addEventListener("seeked", onSeeked);
                     vv.currentTime = active.vStart;
                   } else if (!seekPendingRef.current) {
-                    const isFreezeCycle = freezeModeRef.current && av.currentTime % (7 + 8) < 7;
+                    const isFreezeCycle = freezeModeRef.current && av.currentTime % 15 < 7;
                     const endMargin = 0.05;
-
                     if (isFreezeCycle) {
                       if (!vv.paused) vv.pause();
                     } else if (sourceEnd > 0 && vv.currentTime >= sourceEnd - endMargin) {
-                      vv.playbackRate = 1.0;
                       if (!vv.paused) vv.pause();
                     } else {
-                      vv.playbackRate = 1.0;
+                      vv.playbackRate = activeSegRate;
                       if (vv.paused && !vv.ended) vv.play().catch(() => {});
                     }
                   }
-                } else {
-                  // SURGICAL FIX: Freeze/Motion OFF must never pause between segments.
-                  if (videoInSegmentRef.current) {
-                    videoInSegmentRef.current = false;
-                    if (freezeModeRef.current && !vv.paused) vv.pause();
-                    if (!freezeModeRef.current && vv.paused && !vv.ended) {
-                      vv.playbackRate = 1.0;
-                      vv.play().catch(() => {});
-                    }
-                  }
+                } else if (videoInSegmentRef.current) {
+                  videoInSegmentRef.current = false;
                 }
               } else {
-                // Fallback: word-count proportional (no timestamps available)
                 const aPct = currentTime / av.duration;
                 activeIndex = segs.findIndex((s: any) => aPct >= s.aStartPct && aPct <= s.aEndPct);
                 if (activeIndex === -1 && segs.length > 0 && aPct > 0) {
@@ -2992,27 +2989,38 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   activeText = s.text;
                   const fbVEnd = s.vEnd === -1 ? vv.duration : s.vEnd;
                   const fbSourceEnd = fbVEnd > s.vStart ? fbVEnd : vv.duration;
-                  const fbTargetRate = 1.0;
+                  const fbSourceDuration = Math.max(0.001, fbSourceEnd - s.vStart);
+                  const fbAudioSpan = Math.max(0.001, s.aEndPct - s.aStartPct);
+                  const fbAudioDur = Math.max(0.001, fbAudioSpan * av.duration);
+                  const fbIdealRate = fbSourceDuration / (fbAudioDur / Math.max(0.25, av.playbackRate || 1));
+                  let fbRate = 1.0;
+                  if (fbIdealRate > 1.1) fbRate = Math.min(fbIdealRate, 1.6);
+                  else if (fbIdealRate < 0.9) fbRate = Math.max(fbIdealRate, 0.85);
                   if (activeIndex !== lastIndexRef.current) {
+                    activeSegRate = fbRate;
+                    seekPendingRef.current = true;
+                    const onFbSeeked = () => {
+                      seekPendingRef.current = false;
+                      vv.playbackRate = activeSegRate;
+                      vv.play().catch(() => {});
+                      vv.removeEventListener("seeked", onFbSeeked);
+                    };
+                    vv.addEventListener("seeked", onFbSeeked);
                     vv.currentTime = s.vStart;
-                    vv.playbackRate = fbTargetRate;
                     lastIndexRef.current = activeIndex;
                     videoInSegmentRef.current = true;
                     segCutTimeRef.current = performance.now();
                   } else if (!seekPendingRef.current) {
-                    const fbFreeze = freezeModeRef.current && av.currentTime % (7 + 8) < 7;
+                    const fbFreeze = freezeModeRef.current && av.currentTime % 15 < 7;
                     if (fbFreeze) {
                       if (!vv.paused) vv.pause();
                     } else if (fbSourceEnd > 0 && vv.currentTime >= fbSourceEnd - 0.05) {
-                      vv.playbackRate = 1.0;
                       if (!vv.paused) vv.pause();
-                    } else if (vv.paused && !vv.ended) {
-                      vv.playbackRate = fbTargetRate;
-                      vv.play().catch(() => {});
+                    } else {
+                      vv.playbackRate = activeSegRate;
+                      if (vv.paused && !vv.ended) vv.play().catch(() => {});
                     }
                   }
-                } else {
-                  // SURGICAL FIX: No pause between segments
                 }
               }
             }
@@ -3103,11 +3111,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       }
       if (videoRef.current) {
         videoRef.current.playbackRate = 1.0;
-        // SURGICAL FIX: Only auto-play if NOT in a freeze cycle of freezeMode
-        const isFreezeCycle = freezeModeRef.current && audioRef.current!.currentTime % (7 + 8) < 7;
+        const isFreezeCycle = freezeModeRef.current && audioRef.current!.currentTime % 15 < 7;
         if (!isFreezeCycle) {
           videoRef.current.play().catch((err) => {
-            // SURGICAL IOS FIX: Safely bypass the WebKit muted autoplay bug.
             console.warn("[RECORDING] iOS Video freeze detected, applying safe hardware reload...", err);
             videoRef.current!.muted = true;
             videoRef.current!.load();
