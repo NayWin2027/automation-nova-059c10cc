@@ -708,10 +708,12 @@ ${transcript}
       status === 503 || status === 504 || (isOwnApi && (status === 404 || status === 429 || status === 403));
 
     for (const fallbackModel of fallbackModels) {
-      if (!response || response.ok || !shouldFallback(response.status)) break;
+      // Fallback if: no response (timeout/abort/network) OR response not ok and status warrants fallback
+      if (response && response.ok) break;
+      if (response && !shouldFallback(response.status)) break;
       activeModel = fallbackModel;
       console.warn(
-        `[recap-script-generator] Previous model overloaded (${response.status}). Falling back to ${activeModel}...`,
+        `[recap-script-generator] Previous attempt failed (${response?.status ?? "no-response"}). Falling back to ${activeModel}...`,
       );
       const fbController = new AbortController();
       const fbTimeoutId = setTimeout(() => fbController.abort(), 135000);
@@ -742,6 +744,19 @@ ${transcript}
 
     if (!response || !response.ok) {
       console.error("Gemini API final error:", response?.status, activeModel, lastError.substring(0, 300));
+      // Abort/timeout/network error: tell client to retry
+      if (!response) {
+        return new Response(
+          JSON.stringify({
+            error: "Google AI server တုံ့ပြန်ချိန် ကြာနေပါသည်။ ခဏနေပြီး ပြန်စမ်းပါ။",
+            fallback: true,
+            upstreamStatus: null,
+            retryable: true,
+            retryAfterSeconds: 15,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
       if (response?.status === 429) {
         return new Response(
           JSON.stringify({
