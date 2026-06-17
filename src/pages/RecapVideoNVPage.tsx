@@ -2935,21 +2935,27 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   const active = getSeg(activeIndex);
                   const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
                   const activeTs = audioTs[activeIndex];
+                  const audioElapsed = Math.max(0, currentTime - activeTs.start);
                   const audioSegDuration = Math.max(0.001, activeTs.end - activeTs.start);
                   const sourceEnd = vActualEnd > active.vStart ? vActualEnd : vv.duration;
                   const sourceDuration = Math.max(0.001, sourceEnd - active.vStart);
                   const audioRate = Math.max(0.25, av.playbackRate || 1);
-                  const wallSegDur = audioSegDuration / audioRate;
-                  const idealRate = sourceDuration / wallSegDur;
-                  let segRate = 1.0;
-                  if (idealRate > 1.1) segRate = Math.min(idealRate, 1.6);
-                  else if (idealRate < 0.9) segRate = Math.max(idealRate, 0.85);
+                  const syncProgress = Math.min(1, audioElapsed / audioSegDuration);
+                  const hardCutTime = Math.max(
+                    active.vStart,
+                    Math.min(sourceEnd - 0.03, active.vStart + sourceDuration * syncProgress),
+                  );
+                  // SURGICAL FIX: 100% AV — map full source clip to audio segment wall time (accounts for audioRate e.g. 1.4x)
+                  const targetPlaybackRate = Math.max(
+                    0.25,
+                    Math.min(4, (sourceDuration * audioRate) / audioSegDuration),
+                  );
 
                   if (activeIndex !== lastIndexRef.current) {
                     lastIndexRef.current = activeIndex;
                     videoInSegmentRef.current = true;
                     segCutTimeRef.current = performance.now();
-                    activeSegRate = segRate;
+                    activeSegRate = targetPlaybackRate;
                     seekPendingRef.current = true;
                     const onSeeked = () => {
                       seekPendingRef.current = false;
@@ -2961,13 +2967,14 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       vv.removeEventListener("seeked", onSeeked);
                     };
                     vv.addEventListener("seeked", onSeeked);
-                    vv.currentTime = active.vStart;
+                    vv.currentTime = hardCutTime;
                   } else if (!seekPendingRef.current) {
                     const isFreezeCycle = freezeModeRef.current && av.currentTime % 15 < 7;
                     const endMargin = 0.05;
                     if (isFreezeCycle) {
                       if (!vv.paused) vv.pause();
                     } else if (sourceEnd > 0 && vv.currentTime >= sourceEnd - endMargin) {
+                      vv.playbackRate = activeSegRate;
                       if (!vv.paused) vv.pause();
                     } else {
                       vv.playbackRate = activeSegRate;
@@ -2992,10 +2999,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   const fbSourceDuration = Math.max(0.001, fbSourceEnd - s.vStart);
                   const fbAudioSpan = Math.max(0.001, s.aEndPct - s.aStartPct);
                   const fbAudioDur = Math.max(0.001, fbAudioSpan * av.duration);
-                  const fbIdealRate = fbSourceDuration / (fbAudioDur / Math.max(0.25, av.playbackRate || 1));
-                  let fbRate = 1.0;
-                  if (fbIdealRate > 1.1) fbRate = Math.min(fbIdealRate, 1.6);
-                  else if (fbIdealRate < 0.9) fbRate = Math.max(fbIdealRate, 0.85);
+                  const fbProgress = Math.min(1, Math.max(0, (aPct - s.aStartPct) / fbAudioSpan));
+                  const fbHardCut = Math.max(
+                    s.vStart,
+                    Math.min(fbSourceEnd - 0.03, s.vStart + fbSourceDuration * fbProgress),
+                  );
+                  const fbRate = Math.max(
+                    0.25,
+                    Math.min(4, (fbSourceDuration * Math.max(0.25, av.playbackRate || 1)) / fbAudioDur),
+                  );
                   if (activeIndex !== lastIndexRef.current) {
                     activeSegRate = fbRate;
                     seekPendingRef.current = true;
@@ -3006,7 +3018,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       vv.removeEventListener("seeked", onFbSeeked);
                     };
                     vv.addEventListener("seeked", onFbSeeked);
-                    vv.currentTime = s.vStart;
+                    vv.currentTime = fbHardCut;
                     lastIndexRef.current = activeIndex;
                     videoInSegmentRef.current = true;
                     segCutTimeRef.current = performance.now();
