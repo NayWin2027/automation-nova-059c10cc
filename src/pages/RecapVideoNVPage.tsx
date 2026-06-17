@@ -2941,32 +2941,34 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     lastIndexRef.current = activeIndex;
                     videoInSegmentRef.current = true;
                     segCutTimeRef.current = performance.now();
+                    seekPendingRef.current = true;
 
-                    if (!freezeModeRef.current) {
-                      // SURGICAL FIX: freeze OFF = ZERO-PAUSE seek
-                      // Keep video playing during seek — eliminates micro-pause completely
-                      // HTML5 video continues displaying frames while seeking when not paused
-                      vv.playbackRate = targetPlaybackRate;
-                      if (vv.paused && !vv.ended) vv.play().catch(() => {});
-                      vv.currentTime = active.vStart;
-                      // No seekPending needed — video stays playing throughout
-                    } else {
-                      // freezeMode ON: use seekPending for controlled seek
-                      seekPendingRef.current = true;
-                      const onSeeked = () => {
-                        seekPendingRef.current = false;
-                        if (!vv.ended) {
+                    const onSeeked = () => {
+                      seekPendingRef.current = false;
+                      if (!vv.ended) {
+                        if (!freezeModeRef.current) {
+                          // freeze OFF: ensure playing at correct rate after seek completes
+                          vv.playbackRate = targetPlaybackRate;
+                          if (vv.paused) vv.play().catch(() => {});
+                        } else {
                           const isFreezeCycle = av.currentTime % (7 + 8) < 7;
                           if (!isFreezeCycle) {
                             vv.playbackRate = targetPlaybackRate;
                             vv.play().catch(() => {});
                           }
                         }
-                        vv.removeEventListener("seeked", onSeeked);
-                      };
-                      vv.addEventListener("seeked", onSeeked);
-                      vv.currentTime = active.vStart;
+                      }
+                      vv.removeEventListener("seeked", onSeeked);
+                    };
+                    vv.addEventListener("seeked", onSeeked);
+
+                    // SURGICAL FIX: freeze OFF = keep video playing DURING seek to prevent micro-pause
+                    // seekPendingRef guard still protects AV sync accuracy
+                    if (!freezeModeRef.current) {
+                      vv.playbackRate = targetPlaybackRate;
+                      if (vv.paused && !vv.ended) vv.play().catch(() => {});
                     }
+                    vv.currentTime = active.vStart;
                   } else if (!seekPendingRef.current) {
                     if (!freezeModeRef.current) {
                       // SURGICAL FIX: freeze OFF = continuous motion, NEVER pause at segment end
@@ -3017,9 +3019,19 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   const fbSourceEnd = fbVEnd > s.vStart ? fbVEnd : vv.duration;
                   const fbTargetRate = 1.0;
                   if (activeIndex !== lastIndexRef.current) {
-                    // SURGICAL FIX: freeze OFF = keep playing during seek (zero-pause)
+                    // SURGICAL FIX: seekPending guard for AV sync + play during seek for no pause
+                    seekPendingRef.current = true;
                     vv.playbackRate = fbTargetRate;
                     if (!freezeModeRef.current && vv.paused && !vv.ended) vv.play().catch(() => {});
+                    const onFbSeeked = () => {
+                      seekPendingRef.current = false;
+                      if (!vv.ended && vv.paused && !freezeModeRef.current) {
+                        vv.playbackRate = fbTargetRate;
+                        vv.play().catch(() => {});
+                      }
+                      vv.removeEventListener("seeked", onFbSeeked);
+                    };
+                    vv.addEventListener("seeked", onFbSeeked);
                     vv.currentTime = s.vStart;
                     lastIndexRef.current = activeIndex;
                     videoInSegmentRef.current = true;
