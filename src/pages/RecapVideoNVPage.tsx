@@ -291,7 +291,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const [renderedBlobUrl, setRenderedBlobUrl] = useState<string | null>(null);
     const [serverRenderProgress, setServerRenderProgress] = useState<string>("");
     const subNeonHueRef = useRef(0);
-    const [exportQuality, setExportQuality] = useState<string>("1080p");
+    const [exportQuality, setExportQuality] = useState<string>("720p");
 
     // Cinematic movie poster generation removed (feature disabled).
 
@@ -623,11 +623,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         const cores = navigator.hardwareConcurrency || 4;
         const mem = (navigator as any).deviceMemory || 4;
         if (cores <= 4 || mem <= 2) {
-          setExportQuality("1080p");
+          setExportQuality("480p");
           setEditorState((prev) => ({ ...prev, colorGrade: "GOLDEN" }));
           setLogo((prev) => ({ ...prev, spin: false }));
         } else if (cores <= 6 || mem <= 4) {
-          setExportQuality("1080p");
+          setExportQuality("720p");
           setEditorState((prev) => ({ ...prev, colorGrade: "GOLDEN" }));
           setLogo((prev) => ({ ...prev, spin: false }));
         } else {
@@ -719,7 +719,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     });
 
     // SURGICAL EDIT: Audio speed rate state (0.5x â€“ 4.0x)
-    const [audioSpeedRate, setAudioSpeedRate] = useState<number>(1.0);
+    const [audioSpeedRate, setAudioSpeedRate] = useState<number>(1.4);
 
     // SURGICAL EDIT: Freeze/Motion mode state
     // ON  = 5s Ken Burns freeze zoom-in â†’ 15s smooth motion (alternating)
