@@ -2899,9 +2899,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   vv.currentTime = hookSeg.vStart;
                 } else if (!seekPendingRef.current) {
                   // Clamp at hook segment end â€” hold last frame if overrun
-                  if (hookVEnd > 0 && vv.currentTime >= hookVEnd - 0.05) {
-                    if (!vv.paused) vv.pause();
-                  } else if (vv.paused && !vv.ended) {
+                  // SURGICAL FIX: Loop back at hook segment end - no freeze/pause
+                  if (hookVEnd > 0 && vv.currentTime >= hookVEnd - 0.15) {
+                    vv.currentTime = hookSeg.vStart;
+                  }
+                  if (vv.paused || vv.ended) {
                     vv.playbackRate = 1.0;
                     vv.play().catch(() => {});
                   }
@@ -2925,7 +2927,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 while (lastTsIdx > 0 && currentTime < audioTs[lastTsIdx].start) lastTsIdx -= 1;
 
                 // SURGICAL FIX: 100% Accuracy - No tolerance, use exact audio timestamps
-                if (currentTime >= audioTs[lastTsIdx].start && currentTime < audioTs[lastTsIdx].end) {
+                // SURGICAL FIX: 50ms boundary tolerance for seamless segment transitions
+                if (currentTime >= audioTs[lastTsIdx].start - 0.05 && currentTime < audioTs[lastTsIdx].end + 0.05) {
                   activeIndex = lastTsIdx;
                   activeText = getSeg(lastTsIdx)?.text || "";
                 }
@@ -3281,7 +3284,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   for (let i = 0; i < cleaned.length; i++) {
                     const code = cleaned.charCodeAt(i);
                     if ((code >= 0x1000 && code <= 0x109f) || (code >= 0x4e00 && code <= 0x9fff)) {
-                      weight += 1.6;
+                      // SURGICAL FIX: Myanmar TTS speaks ~2.8x slower per character than English
+                      weight += 2.8;
                     } else {
                       weight += 1;
                     }
@@ -3290,8 +3294,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 };
                 const pauseBonus = (text: string): number => {
                   const last = (text || "").trimEnd().slice(-1);
-                  if (".!?á‹".includes(last)) return 0.15;
-                  if (",;:".includes(last)) return 0.05;
+                  if (".!?á‹".includes(last)) return 0.25; // SURGICAL FIX: TTS pauses ~250ms at sentence end
+                  if (",;:".includes(last)) return 0.12; // SURGICAL FIX: TTS pauses ~120ms at comma/semicolon
                   return 0;
                 };
                 const avgSegDur = realDuration / segs.length;
