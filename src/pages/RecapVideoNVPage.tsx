@@ -2293,8 +2293,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           }
           const motionFactor = isPhotoFreeze ? 0 : hump;
           const phase = 2 * Math.PI * cyclePos + cycleIndex * 0.7;
-          const driftX = Math.cos(t * 0.12) * (canvas.width * 0.008);
-          const driftY = Math.sin(t * 0.1) * (canvas.height * 0.008);
+          const driftX = Math.cos(t * 0.12) * (canvas.width * 0.004);
+          const driftY = Math.sin(t * 0.1) * (canvas.height * 0.004);
           const easePan = (n: number) => 0.5 - 0.5 * Math.cos(n * Math.PI);
           const crossX = easePan(Math.cos(phase)) * (canvas.width * 0.009);
           const crossY = easePan(Math.sin(phase)) * (canvas.height * 0.009);
