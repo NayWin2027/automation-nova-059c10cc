@@ -2293,13 +2293,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           }
           const motionFactor = isPhotoFreeze ? 0 : hump;
           const phase = 2 * Math.PI * cyclePos + cycleIndex * 0.7;
-          const driftX = Math.cos(t * 0.12) * (canvas.width * 0.004);
-          const driftY = Math.sin(t * 0.1) * (canvas.height * 0.004);
+          const driftX = Math.cos(t * 0.12) * (canvas.width * 0.008);
+          const driftY = Math.sin(t * 0.1) * (canvas.height * 0.008);
           const easePan = (n: number) => 0.5 - 0.5 * Math.cos(n * Math.PI);
-          const crossX = easePan(Math.cos(phase)) * (canvas.width * 0.009);
-          const crossY = easePan(Math.sin(phase)) * (canvas.height * 0.009);
-          const microShakeX = Math.sin(t * 32.0) * 0 * motionFactor;
-          const microShakeY = Math.cos(t * 28.0) * 0 * motionFactor;
+          const crossX = easePan(Math.cos(phase)) * (canvas.width * 0.018);
+          const crossY = easePan(Math.sin(phase)) * (canvas.height * 0.018);
+          const microShakeX = Math.sin(t * 32.0) * 0.4 * motionFactor;
+          const microShakeY = Math.cos(t * 28.0) * 0.4 * motionFactor;
           const translateX = (driftX + crossX) * motionFactor + microShakeX;
           const translateY = (driftY + crossY) * motionFactor + microShakeY;
           const rotDir = Math.floor(cycleIndex / 2) % 2 === 0 ? 1 : -1;
@@ -2528,25 +2528,27 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           const blurH = canvas.height * (curBlur.height / 100);
           const blurX = canvas.width * (curBlur.x / 100) - blurW / 2;
           const blurY = canvas.height * (curBlur.y / 100) - blurH / 2;
-          // SURGICAL FIX: InShot-style professional blur (video content visible through blur)
-          // Draws the video region beneath, applies heavy Gaussian blur, overlays tinted mask
-          // Result: source text hidden but video shapes/colors still faintly visible
+          // SURGICAL FIX: Dark frosted glass blur — intensity controlled by opacity slider
+          // Higher opacity = more blur + darker tint (actual real effect)
+          const blurIntensity = curBlur.opacity; // 1-100 from slider
+          const actualBlurPx = Math.max(2, Math.round(blurIntensity * 0.3)); // 2px-30px real blur
+          const darkAlpha = Math.max(0.15, Math.min(0.85, blurIntensity / 120)); // 0.15-0.85 darkness
           ctx.beginPath();
-          ctx.roundRect(blurX, blurY, blurW, blurH, 8);
+          ctx.roundRect(blurX, blurY, blurW, blurH, 12);
           ctx.clip();
 
-          // Step 1: Draw blurred video content into the region
-          ctx.filter = "blur(18px)";
+          // Step 1: Draw blurred video content — blur amount from slider
+          ctx.filter = `blur(${actualBlurPx}px)`;
           ctx.drawImage(canvas, blurX, blurY, blurW, blurH, blurX, blurY, blurW, blurH);
           ctx.filter = "none";
 
-          // Step 2: Semi-transparent dark tint overlay (hides text, shows shapes)
-          ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
+          // Step 2: Dark frosted tint — darkness from slider intensity
+          ctx.fillStyle = `rgba(0, 0, 0, ${darkAlpha})`;
           ctx.fillRect(blurX, blurY, blurW, blurH);
 
-          // Step 3: Subtle border for clean edge
-          ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
-          ctx.lineWidth = 1;
+          // Step 3: Subtle frosted glass edge glow
+          ctx.strokeStyle = `rgba(255, 255, 255, ${Math.max(0.05, 0.15 - blurIntensity / 500)})`;
+          ctx.lineWidth = 0.8;
           ctx.stroke();
 
           ctx.restore();
@@ -2935,7 +2937,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   const targetPlaybackRate = 1.0;
 
                   if (activeIndex !== lastIndexRef.current) {
-                    // TRUE RECAP: Hard cut — seek ONCE to segment start, then play 1x (no mid-segment seeks)
+                    // TRUE RECAP: Hard cut — seek ONCE to segment start
                     lastIndexRef.current = activeIndex;
                     videoInSegmentRef.current = true;
                     segCutTimeRef.current = performance.now();
@@ -2945,9 +2947,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       seekPendingRef.current = false;
                       if (!vv.ended) {
                         if (!freezeModeRef.current) {
-                          // SURGICAL FIX: freeze OFF = always play, never pause at segment transition
+                          // freeze OFF: ensure playing at correct rate after seek completes
                           vv.playbackRate = targetPlaybackRate;
-                          vv.play().catch(() => {});
+                          if (vv.paused) vv.play().catch(() => {});
                         } else {
                           const isFreezeCycle = av.currentTime % (7 + 8) < 7;
                           if (!isFreezeCycle) {
@@ -2959,6 +2961,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       vv.removeEventListener("seeked", onSeeked);
                     };
                     vv.addEventListener("seeked", onSeeked);
+
+                    // SURGICAL FIX: freeze OFF = keep video playing DURING seek to prevent micro-pause
+                    // seekPendingRef guard still protects AV sync accuracy
+                    if (!freezeModeRef.current) {
+                      vv.playbackRate = targetPlaybackRate;
+                      if (vv.paused && !vv.ended) vv.play().catch(() => {});
+                    }
                     vv.currentTime = active.vStart;
                   } else if (!seekPendingRef.current) {
                     if (!freezeModeRef.current) {
@@ -3010,8 +3019,20 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   const fbSourceEnd = fbVEnd > s.vStart ? fbVEnd : vv.duration;
                   const fbTargetRate = 1.0;
                   if (activeIndex !== lastIndexRef.current) {
-                    vv.currentTime = s.vStart;
+                    // SURGICAL FIX: seekPending guard for AV sync + play during seek for no pause
+                    seekPendingRef.current = true;
                     vv.playbackRate = fbTargetRate;
+                    if (!freezeModeRef.current && vv.paused && !vv.ended) vv.play().catch(() => {});
+                    const onFbSeeked = () => {
+                      seekPendingRef.current = false;
+                      if (!vv.ended && vv.paused && !freezeModeRef.current) {
+                        vv.playbackRate = fbTargetRate;
+                        vv.play().catch(() => {});
+                      }
+                      vv.removeEventListener("seeked", onFbSeeked);
+                    };
+                    vv.addEventListener("seeked", onFbSeeked);
+                    vv.currentTime = s.vStart;
                     lastIndexRef.current = activeIndex;
                     videoInSegmentRef.current = true;
                     segCutTimeRef.current = performance.now();
@@ -3462,16 +3483,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       transform: "translate(-50%, -50%)",
                       width: `${blurSettings.width}%`,
                       height: `${blurSettings.height}%`,
-                      backdropFilter: `blur(${Math.max(2, blurSettings.opacity / 5)}px)`,
-                      WebkitBackdropFilter: `blur(${Math.max(2, blurSettings.opacity / 5)}px)`,
-                      background:
-                        "linear-gradient(to bottom, #FFFFFF 0%, #E0E0E0 20%, #B0B0B0 50%, #808080 80%, #606060 100%)",
-                      boxShadow: "0 10px 30px rgba(0,0,0,0.5), inset 0 0 0 1.5px rgba(255,255,255,0.8)",
+                      backdropFilter: `blur(${Math.max(2, Math.round(blurSettings.opacity * 0.3))}px)`,
+                      WebkitBackdropFilter: `blur(${Math.max(2, Math.round(blurSettings.opacity * 0.3))}px)`,
+                      background: `rgba(0, 0, 0, ${Math.max(0.15, Math.min(0.85, blurSettings.opacity / 120))})`,
+                      boxShadow: `0 4px 20px rgba(0,0,0,0.4), inset 0 0 0 0.5px rgba(255,255,255,${Math.max(0.05, 0.15 - blurSettings.opacity / 500)})`,
                       border: "none",
                       touchAction: "none",
                       boxSizing: "border-box",
-                      borderRadius: "6px",
-                      transition: "border-color 0.1s, box-shadow 0.1s",
+                      borderRadius: "12px",
+                      transition: "backdrop-filter 0.15s, background 0.15s, box-shadow 0.15s",
                     }}
                   >
                     {/* SURGICAL EDIT: Corner resize handles for touch/drag resize */}
