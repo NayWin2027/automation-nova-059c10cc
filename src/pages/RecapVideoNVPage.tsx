@@ -2298,8 +2298,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           const easePan = (n: number) => 0.5 - 0.5 * Math.cos(n * Math.PI);
           const crossX = easePan(Math.cos(phase)) * (canvas.width * 0.009);
           const crossY = easePan(Math.sin(phase)) * (canvas.height * 0.009);
-          const microShakeX = Math.sin(t * 32.0) * 0.4 * motionFactor;
-          const microShakeY = Math.cos(t * 28.0) * 0.4 * motionFactor;
+          const microShakeX = Math.sin(t * 32.0) * 0 * motionFactor;
+          const microShakeY = Math.cos(t * 28.0) * 0 * motionFactor;
           const translateX = (driftX + crossX) * motionFactor + microShakeX;
           const translateY = (driftY + crossY) * motionFactor + microShakeY;
           const rotDir = Math.floor(cycleIndex / 2) % 2 === 0 ? 1 : -1;
