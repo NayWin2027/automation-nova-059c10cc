@@ -925,22 +925,17 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             const videoUploadP =
               !isYouTubeSource && videoUrl && !sourceFileUri
                 ? (async () => {
-                    try {
-                      const videoBlob = videoFileRef?.current ?? (await fetch(videoUrl).then((r) => r.blob()));
-                      if (!videoBlob.size) return null;
-                      const ext = videoBlob.type.includes("webm")
-                        ? "webm"
-                        : videoBlob.type.includes("quicktime")
-                          ? "mov"
-                          : "mp4";
-                      const mime =
-                        videoBlob.type ||
-                        (ext === "webm" ? "video/webm" : ext === "mov" ? "video/quicktime" : "video/mp4");
-                      return uploadTempAsset(videoBlob, "source_video", mime, ext);
-                    } catch (videoUpErr) {
-                      console.warn("[ServerRender] Source video upload skipped:", videoUpErr);
-                      return null;
-                    }
+                    const videoBlob = videoFileRef?.current ?? (await fetch(videoUrl).then((r) => r.blob()));
+                    if (!videoBlob.size) throw new Error("Video blob is empty!");
+                    const ext = videoBlob.type.includes("webm")
+                      ? "webm"
+                      : videoBlob.type.includes("quicktime")
+                        ? "mov"
+                        : "mp4";
+                    const mime =
+                      videoBlob.type ||
+                      (ext === "webm" ? "video/webm" : ext === "mov" ? "video/quicktime" : "video/mp4");
+                    return uploadTempAsset(videoBlob, "source_video", mime, ext);
                   })()
                 : Promise.resolve<string | null>(null);
 
@@ -1203,7 +1198,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             };
             if (signedSourceVideoUrl) triggerBody.videoUrl = signedSourceVideoUrl;
             if (sourceFileUri) triggerBody.sourceFileUri = sourceFileUri;
-            if (signedImageUrls.length > 0) triggerBody.imageUrls = signedImageUrls;
+            // NEVER send imageUrls when we have a videoUrl!
+            if (!signedSourceVideoUrl && !sourceFileUri && signedImageUrls.length > 0)
+              triggerBody.imageUrls = signedImageUrls;
 
             const { data: jobData, error: jobError } = await supabase.functions.invoke("video-recap", {
               body: triggerBody,
