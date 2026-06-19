@@ -1,44 +1,47 @@
-## Problem
+## Goal
+Google Compute Engine VM ပေါ်မှာ render-worker server ကို external access ရအောင် ၃ ချက်တည်းကို surgical fix လုပ်မယ်။ တခြားဘာ logic မှ မထိ။
 
-Output `.mp4` plays fine in desktop/browser and on flagship phones (SD8 Gen), but on lower-end Android devices (SD6 Gen, stock Gallery / MX Player) only **audio + subtitles** play while the video shows a frozen first frame.
+## Files to modify
+**`render-worker/server.js`** — ၃ နေရာတည်း ပြောင်းမယ်
 
-## Root Cause
+### Change 1 — PORT default to 5000
+```js
+const PORT = process.env.PORT || 8080;
+```
+→
+```js
+const PORT = process.env.PORT || 5000;
+```
 
-The current FFmpeg remux in `RecapVideoNVPage.tsx` (around lines 1917–1937) does:
+### Change 2 — CORS for all origins
+`app.use(express.json(...))` အောက်မှာ minimal CORS middleware ထည့်မယ် (extra npm dep မလို):
+```js
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, X-Api-Secret, Authorization");
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
+```
 
-- `-c:v copy` when source is H.264 → keeps the raw MediaRecorder bitstream. Chrome's MediaRecorder produces H.264 with **High profile / no `yuv420p` guarantee / variable frame timing / no proper SPS-PPS at every keyframe**. Hardware decoders on budget Snapdragon chips reject this and fall back to "audio only + first frame".
-- Even on the `libx264` re-encode path, there is **no `-pix_fmt yuv420p`, no `-profile:v baseline`, no `-level`, no even-dimension guard**. Android's stock decoder requires `yuv420p` + Baseline/Main profile for guaranteed playback.
-- Audio is left at whatever sample rate Chrome captured (often 48 kHz mono Opus → AAC). Some budget players want 44.1 kHz stereo AAC.
+### Change 3 — Bind explicitly to 0.0.0.0
+```js
+app.listen(PORT, () => console.log(`Worker listening on ${PORT}`));
+```
+→
+```js
+app.listen(PORT, "0.0.0.0", () => console.log(`Worker listening on 0.0.0.0:${PORT}`));
+```
 
-## Surgical Fix (single block, ~10 lines changed)
+## Untouched (protected)
+- `/render-segment`, `/render`, `/status/:jobId` logic
+- `requireSecret`, ffmpeg pipeline, GCS upload, parallel batch orchestration
+- Frontend, browser-rendering code, RecapVideoNVPage protected blocks — **ဘာမှ မထိ**
+- `package.json` — dependency အသစ် မထည့်
 
-Inside the existing `try` block at line ~1921 in `src/pages/RecapVideoNVPage.tsx`, replace **only the FFmpeg arg array and the `vCodec` decision** with:
+## GitHub push
+Lovable မှာ GitHub two-way sync ဖွင့်ထားရင် save လုပ်ပြီးတာနဲ့ repo ကို auto-push ဖြစ်တယ်။ Lovable က manual `git push` မလုပ်နိုင်ဘူး — sync က handle လုပ်တယ်။ Sync မဖွင့်ရသေးရင် Plus (+) → GitHub → Connect project ကနေ ချိတ်ပေးပါ။
 
-1. Drop the `-c:v copy` shortcut — **always re-encode video** with `libx264` (one-time cost, guarantees compatibility).
-2. Add these args to the existing exec call:
-   - `-pix_fmt yuv420p` (mandatory for Android hardware decoder)
-   - `-profile:v baseline` + `-level 4.0` (universally decodable, including SD6 Gen / older chips)
-   - `-vf "scale=trunc(iw/2)*2:trunc(ih/2)*2"` (force even dimensions — H.264 hard requirement)
-   - `-r 30` + `-vsync cfr` (constant frame rate, fixes "frozen first frame" on players that don't honor VFR)
-   - `-g 60` `-keyint_min 60` (regular keyframes every 2s so seek/decode resync works)
-   - `-c:a aac -ar 44100 -ac 2 -b:a 128k` (universal audio profile)
-   - Keep existing `-preset ultrafast`, `-movflags +faststart`, `-t exactDurationSecs`, `-shortest`, `+faststart`.
-
-## What does NOT change
-
-- Hook intro overlay, mid-video teaser, subtitle burn-in
-- Output resolution (encW/encH from existing pipeline)
-- Professional hard-cut seek tech, AV-SYNC-9000-SMOOTH-v4, RECORD-PIPELINE-AUTO-v1, VOICE-GEN-PIPELINE-v2, AUTO-PIPELINE-v2 — all untouched
-- Upload to Supabase, history insert, download anchor, blob URL revoke logic
-- Any other tool or file
-
-## Files Touched
-
-- `src/pages/RecapVideoNVPage.tsx` — only the single `ffmpeg.exec([...])` call near line 1921 and the `vCodec` const above it.
-
-## Expected Result
-
-After the fix:
-- File still ends in `.mp4`, same resolution, same hook, same subtitles
-- Plays correctly in Android Gallery, MX Player, VLC on SD6 Gen and older devices
-- ~5–15% longer render time (acceptable cost for guaranteed playback)
+## Note
+Compute Engine VM ရဲ့ **firewall rule** မှာ TCP port 5000 ကို allow ထားဖို့ လိုတယ် (VPC → Firewall rules → `tcp:5000`, source `0.0.0.0/0` သို့မဟုတ် သင်ဖွင့်ချင်တဲ့ range)။ ဒါက code မဟုတ်ဘဲ GCP console က setting။

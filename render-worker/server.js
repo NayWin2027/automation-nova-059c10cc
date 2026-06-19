@@ -10,7 +10,17 @@ const { Storage } = require("@google-cloud/storage");
 const app = express();
 app.use(express.json({ limit: "50mb" })); // Increased limit for parallel data
 
-const PORT = process.env.PORT || 8080;
+// ── CORS (allow all origins) ────────────────────────────────────────────────
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, X-Api-Secret, Authorization");
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
+
+const PORT = process.env.PORT || 5000;
+const HOST = "0.0.0.0";
 const SHARED_SECRET = process.env.RENDER_SHARED_SECRET || "";
 const GCS_BUCKET = process.env.GCS_BUCKET || "";
 const SERVICE_URL = process.env.SERVICE_URL || ""; // Cloud Run URL (e.g. https://render-worker-xxx.run.app)
@@ -239,4 +249,4 @@ app.get("/status/:jobId", requireSecret, (req, res) => {
   res.json(job);
 });
 
-app.listen(PORT, () => console.log(`Worker listening on ${PORT}`));
+app.listen(PORT, HOST, () => console.log(`Worker listening on ${HOST}:${PORT}`));
