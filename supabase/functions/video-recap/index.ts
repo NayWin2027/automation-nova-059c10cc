@@ -1074,7 +1074,15 @@ serve(async (req) => {
         },
         body: JSON.stringify(renderPayload),
       });
-      const data = await res.json();
+      const rawText = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        data = {
+          error: `Render worker returned non-JSON (status ${res.status}): ${rawText.slice(0, 200)}`,
+        };
+      }
       return new Response(JSON.stringify(data), {
         status: res.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -1094,7 +1102,17 @@ serve(async (req) => {
       const res = await fetch(`${renderUrl}/status/${jobId}`, {
         headers: { "X-Api-Secret": renderSecret },
       });
-      const data = await res.json();
+      const rawText = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        data = {
+          state: "processing",
+          progress: 60,
+          warning: `Render worker returned non-JSON (status ${res.status})`,
+        };
+      }
       return new Response(JSON.stringify(data), {
         status: res.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
