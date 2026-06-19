@@ -1198,8 +1198,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             };
             if (signedSourceVideoUrl) triggerBody.videoUrl = signedSourceVideoUrl;
             if (sourceFileUri) triggerBody.sourceFileUri = sourceFileUri;
-            // NEVER send imageUrls when we have a videoUrl!
-            if (!signedSourceVideoUrl && !sourceFileUri && signedImageUrls.length > 0)
+            // NEVER send imageUrls when we have a downloadable videoUrl.
+            // sourceFileUri (Gemini Files API) is NOT downloadable by the Cloud Run worker,
+            // so we MUST still send extracted frames when only sourceFileUri is present.
+            if (!signedSourceVideoUrl && signedImageUrls.length > 0)
               triggerBody.imageUrls = signedImageUrls;
 
             const { data: jobData, error: jobError } = await supabase.functions.invoke("video-recap", {
