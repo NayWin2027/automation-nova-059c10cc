@@ -1122,10 +1122,16 @@ serve(async (req) => {
       const renderUrl = Deno.env.get("CLOUD_RUN_RENDER_URL");
       const renderSecret = Deno.env.get("CLOUD_RUN_RENDER_SECRET");
       if (!renderUrl || !renderSecret || !jobId) {
-        return new Response(JSON.stringify({ error: "Missing config or jobId" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        // Return 200 so the frontend can recover (restart render) instead of crashing.
+        return new Response(
+          JSON.stringify({
+            state: "unknown",
+            workerRestarted: true,
+            error: "Missing config or jobId",
+            hint: "No active jobId; restart the render.",
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
       }
       // Resilient poll: never bubble a non-2xx back to the client for
       // transient worker hiccups (connection reset, restart, unknown jobId).
