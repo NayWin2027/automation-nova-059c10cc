@@ -1205,7 +1205,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             const hue = isOff ? 0 : activeGrade.hue + bypassBoostCSS.hue;
             const sepia = isOff ? 0 : activeGrade.sepia || 0;
             const finalFilterString = isOff
-              ? brightness(${editorState.colorGrade === "OFF" ? 105 : editorState.brightness}%) contrast(100%) saturate(100%)
+              ? `brightness(${editorState.colorGrade === "OFF" ? 105 : editorState.brightness}%) contrast(100%) saturate(100%)`
               : `contrast(${contrast}%) brightness(${Math.round((brightness * editorState.brightness) / 100)}%) saturate(${saturate}%) hue-rotate(${hue}deg) sepia(${sepia}%)`;
 
             setServerRenderProgress("Sending to server... 55%");
