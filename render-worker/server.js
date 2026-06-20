@@ -1,11 +1,4 @@
-// AutomationNova render worker — Cloud Run
-// Endpoints:
-//   POST /render          → kick off ffmpeg render job, returns { jobId }
-//   GET  /status/:jobId   → poll job status, returns { state, url?, error? }
-//   GET  /healthz         → health check
-//
-// Auth: every request must include header `X-Api-Secret` matching env RENDER_SHARED_SECRET.
-
+// AutomationNova render worker — Cloud Run / VM
 const express = require("express");
 const { spawn } = require("child_process");
 const fs = require("fs");
@@ -14,9 +7,10 @@ const path = require("path");
 const os = require("os");
 const { v4: uuidv4 } = require("uuid");
 const { Storage } = require("@google-cloud/storage");
+const puppeteer = require("puppeteer"); // SURGICAL EDIT: Added Puppeteer for 100% Browser Match
 
 const app = express();
-app.use(express.json({ limit: "20mb" }));
+app.use(express.json({ limit: "50mb" })); // Increased limit to accept Base64 Logo strings
 
 const PORT = process.env.PORT || 8080;
 const SHARED_SECRET = process.env.RENDER_SHARED_SECRET || "";
@@ -29,11 +23,6 @@ console.log(`[boot] config secret=${SHARED_SECRET ? "set" : "missing"} bucket=${
 
 const storage = new Storage();
 const bucket = GCS_BUCKET ? storage.bucket(GCS_BUCKET) : null;
-
-// In-memory job map. Cloud Run instance may be reused for the lifetime of the
-// process; if scaled to 0 the job map disappears, but signed URLs are durable
-// in GCS so the client can be re-pointed by jobId convention.
-/** @type {Map<string, { state: string, url?: string, error?: string, startedAt: number }>} */
 const JOBS = new Map();
 
 // ── auth ────────────────────────────────────────────────────────────────────
@@ -57,9 +46,7 @@ function runFfmpeg(args) {
   return new Promise((resolve, reject) => {
     const p = spawn("ffmpeg", args, { stdio: ["ignore", "pipe", "pipe"] });
     let stderr = "";
-    p.stderr.on("data", (d) => {
-      stderr += d.toString();
-    });
+    p.stderr.on("data", (d) => (stderr += d.toString()));
     p.on("error", reject);
     p.on("close", (code) => {
       if (code === 0) resolve();
@@ -68,100 +55,27 @@ function runFfmpeg(args) {
   });
 }
 
-function escapeForSrt(s) {
-  return String(s ?? "").replace(/\r/g, "");
-}
-
-function secToSrtTs(t) {
-  const ms = Math.max(0, Math.floor(t * 1000));
-  const h = Math.floor(ms / 3600000);
-  const m = Math.floor((ms % 3600000) / 60000);
-  const s = Math.floor((ms % 60000) / 1000);
-  const milli = ms % 1000;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")},${String(milli).padStart(3, "0")}`;
-}
-
-function buildSrt(subs) {
-  // subs: [{ start, end, text }]
-  return subs
-    .map((c, i) => `${i + 1}\n${secToSrtTs(c.start)} --> ${secToSrtTs(c.end)}\n${escapeForSrt(c.text)}\n`)
-    .join("\n");
-}
-
-function subsForRange(subs, segStart, segEnd) {
-  return subs
-    .filter((s) => s.end > segStart && s.start < segEnd)
-    .map((s) => ({
-      start: Math.max(0, s.start - segStart),
-      end: Math.min(segEnd - segStart, s.end - segStart),
-      text: s.text,
-    }));
-}
-
-function effectiveCaps(maxW, maxH, isFast) {
-  let w = Number(maxW) > 0 ? Number(maxW) : 0;
-  let h = Number(maxH) > 0 ? Number(maxH) : 0;
-  if (isFast) {
-    if (!w || w > 1280) w = 1280;
-    if (!h || h > 720) h = 720;
-  }
-  return { w, h };
-}
-
-async function getBestVideoEncoder() {
-  // Check for hardware encoders in order of preference
-  const encoders = ["h264_nvenc", "h264_qsv", "h264_amf", "libx264"];
-  for (const enc of encoders) {
-    try {
-      const testProc = spawn("ffmpeg", ["-hide_banner", "-encoders"], { stdio: ["ignore", "pipe", "pipe"] });
-      let output = "";
-      testProc.stdout.on("data", (d) => (output += d.toString()));
-      await new Promise((resolve) => testProc.on("close", resolve));
-      if (output.includes(enc)) {
-        console.log(`[encoder] Using hardware encoder: ${enc}`);
-        return enc;
-      }
-    } catch (e) {
-      // Ignore, try next encoder
-    }
-  }
-  console.log("[encoder] Using software encoder: libx264");
-  return "libx264";
-}
-
 // ── routes ──────────────────────────────────────────────────────────────────
 app.get("/healthz", (_req, res) =>
   res.json({
     ok: true,
     startedAt: STARTED_AT,
-    ready: {
-      secret: Boolean(SHARED_SECRET),
-      bucket: Boolean(GCS_BUCKET),
-    },
-  }),
+    ready: { secret: Boolean(SHARED_SECRET), bucket: Boolean(GCS_BUCKET) },
+  })
 );
 
 app.post("/render", requireSecret, async (req, res) => {
   const body = req.body || {};
-  const { audioUrl, imageUrls, videoUrl } = body;
+  const { audioUrl, videoUrl } = body;
 
-  if (!audioUrl) {
-    return res.status(400).json({ error: "audioUrl required" });
-  }
-  const hasVideo = typeof videoUrl === "string" && videoUrl.length > 0;
-  const hasImages = Array.isArray(imageUrls) && imageUrls.length > 0;
-  if (!hasVideo && !hasImages) {
-    return res.status(400).json({ error: "videoUrl or imageUrls[] required" });
-  }
-  if (!bucket) {
-    return res.status(500).json({ error: "GCS_BUCKET not configured" });
-  }
+  if (!audioUrl) return res.status(400).json({ error: "audioUrl required" });
+  if (!videoUrl) return res.status(400).json({ error: "videoUrl required" });
+  if (!bucket) return res.status(500).json({ error: "GCS_BUCKET not configured" });
 
   const jobId = uuidv4();
   JOBS.set(jobId, { state: "queued", startedAt: Date.now() });
 
-  // Fire-and-forget; client polls /status/:jobId
-  renderJob(jobId, body).catch((err) => {
+  renderJobFromVideo(jobId, body).catch((err) => {
     console.error(`[job ${jobId}] failed:`, err);
     JOBS.set(jobId, { state: "failed", error: String(err.message || err), startedAt: Date.now() });
   });
@@ -175,388 +89,158 @@ app.get("/status/:jobId", requireSecret, (req, res) => {
   res.json(job);
 });
 
-// ── worker ──────────────────────────────────────────────────────────────────
-async function renderJob(jobId, opts) {
-  const { audioUrl, imageUrls, videoUrl, subtitles, duration } = opts || {};
-  JOBS.set(jobId, { state: "processing", progress: 5, startedAt: Date.now() });
-
-  const useVideoPath = typeof videoUrl === "string" && videoUrl.length > 0;
-  if (useVideoPath) {
-    console.log(`[job ${jobId}] Using video path (not slideshow)!`);
-    return renderJobFromVideo(jobId, opts);
-  }
-
-  const work = await fsp.mkdtemp(path.join(os.tmpdir(), `job-${jobId}-`));
-  console.log(`[job ${jobId}] slideshow workdir=${work} images=${imageUrls.length}`);
-
-  try {
-    // 1) download audio
-    const audioPath = path.join(work, "audio.mp3");
-    await downloadTo(audioUrl, audioPath);
-
-    // 2) download images IN PARALLEL (10x faster than sequential)
-    const rawImages = await Promise.all(
-      imageUrls.map(async (url, i) => {
-        const ext = (url.match(/\.(jpg|jpeg|png|webp)/i)?.[1] || "jpg").toLowerCase();
-        const p = path.join(work, `raw_${String(i).padStart(4, "0")}.${ext}`);
-        await downloadTo(url, p);
-        return p;
-      }),
-    );
-
-    // Use original images at original resolution — no pre-scaling.
-    const localImages = rawImages;
-
-    // 3) build slideshow concat list — even split across duration
-    const totalDur = Number(duration) || 60;
-    const perImage = totalDur / localImages.length;
-    const concatList = localImages
-      .map((p) => `file '${p.replace(/'/g, "'\\''")}'\nduration ${perImage.toFixed(3)}`)
-      .join("\n");
-    // ffmpeg concat demuxer requires last file repeated without duration
-    const concatPath = path.join(work, "concat.txt");
-    await fsp.writeFile(
-      concatPath,
-      `${concatList}\nfile '${localImages[localImages.length - 1].replace(/'/g, "'\\''")}'\n`,
-    );
-
-    // 4) optional subtitles
-    let subFilter = "";
-    if (Array.isArray(subtitles) && subtitles.length > 0) {
-      const srtPath = path.join(work, "subs.srt");
-      await fsp.writeFile(srtPath, buildSrt(subtitles), "utf8");
-      // use force_style with Noto fonts for Burmese / Latin
-      subFilter = `,subtitles='${srtPath.replace(/'/g, "\\'")}':force_style='FontName=Noto Sans,FontSize=20,Outline=2,Shadow=1,MarginV=40'`;
-    }
-
-    // 5) ffmpeg compose — ultrafast; cap resolution when fastMode to avoid full-res slideshow encode
-    const outPath = path.join(work, "out.mp4");
-    const isFastSlideshow = Boolean(opts.ultraFast || opts.fastMode);
-    const capW = Number(opts.maxW) > 0 ? Number(opts.maxW) : isFastSlideshow ? 1280 : 0;
-    const capH = Number(opts.maxH) > 0 ? Number(opts.maxH) : isFastSlideshow ? 720 : 0;
-    const scalePart =
-      capW > 0 && capH > 0 ? `scale='min(iw,${capW})':'min(ih,${capH})':force_original_aspect_ratio=decrease,` : "";
-    const vfChain = `${scalePart}format=yuv420p${subFilter}`;
-
-    const preset = opts.encodePreset || opts.renderPreset || "ultrafast";
-    const ffmpegArgs = [
-      "-y",
-      "-f",
-      "concat",
-      "-safe",
-      "0",
-      "-i",
-      concatPath,
-      "-i",
-      audioPath,
-      "-vf",
-      vfChain,
-      "-c:v",
-      "libx264",
-      "-preset",
-      preset,
-      "-threads",
-      "0",
-      "-pix_fmt",
-      "yuv420p",
-      "-c:a",
-      "aac",
-      "-b:a",
-      "192k",
-      "-shortest",
-      "-movflags",
-      "+faststart",
-      outPath,
-    ];
-    if (opts.bitrate)
-      ffmpegArgs.splice(ffmpegArgs.indexOf("-preset") + 2, 0, "-b:v", `${Math.round(Number(opts.bitrate) / 1000)}k`);
-    await runFfmpeg(ffmpegArgs);
-
-    // 6) upload to GCS — fall back to inline data URL if IAM permission missing
-    const objectName = `renders/${jobId}.mp4`;
-    let finalUrl = null;
-    try {
-      await bucket.upload(outPath, {
-        destination: objectName,
-        metadata: { contentType: "video/mp4", cacheControl: "public, max-age=86400" },
-      });
-      const [signedUrl] = await bucket.file(objectName).getSignedUrl({
-        action: "read",
-        expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
-      });
-      finalUrl = signedUrl;
-      console.log(`[job ${jobId}] uploaded → ${objectName}`);
-    } catch (gcsErr) {
-      console.warn(`[job ${jobId}] GCS upload failed, using inline fallback:`, gcsErr.message || gcsErr);
-      const buf = await fsp.readFile(outPath);
-      finalUrl = `data:video/mp4;base64,${buf.toString("base64")}`;
-    }
-
-    JOBS.set(jobId, { state: "done", url: finalUrl, progress: 100, startedAt: Date.now() });
-    console.log(`[job ${jobId}] done`);
-  } finally {
-    // cleanup workdir
-    fsp.rm(work, { recursive: true, force: true }).catch(() => {});
-  }
-}
-
-/** Ultra-fast path: source video + narration audio (+ optional subtitles). */
+// ── SURGICAL EDIT: 100% BROWSER RENDER WORKER (PUPPETEER) ──────────────────
 async function renderJobFromVideo(jobId, opts) {
-  const { audioUrl, videoUrl, subtitles, fps, maxW, maxH, bitrate, encodePreset, renderPreset, ultraFast, fastMode } =
-    opts || {};
-
   const work = await fsp.mkdtemp(path.join(os.tmpdir(), `job-${jobId}-`));
-  const isFast = Boolean(ultraFast || fastMode);
-  console.log(`[job ${jobId}] video-path workdir=${work} fast=${isFast}`);
-
-  // Get best available video encoder
-  let videoEncoder = "libx264";
-  try {
-    const testProc = spawn("ffmpeg", ["-hide_banner", "-encoders"], { stdio: ["ignore", "pipe", "pipe"] });
-    let output = "";
-    testProc.stdout.on("data", (d) => (output += d.toString()));
-    await new Promise((resolve) => testProc.on("close", resolve));
-    if (output.includes("h264_nvenc")) videoEncoder = "h264_nvenc";
-    else if (output.includes("h264_qsv")) videoEncoder = "h264_qsv";
-    else if (output.includes("h264_amf")) videoEncoder = "h264_amf";
-    console.log(`[job ${jobId}] Using encoder: ${videoEncoder}`);
-  } catch (e) {
-    console.log(`[job ${jobId}] Using software encoder: libx264`);
-  }
+  console.log(`[job ${jobId}] Starting 100% Browser Render workdir=${work}`);
 
   try {
-    JOBS.set(jobId, { state: "processing", progress: 12, startedAt: Date.now() });
+    JOBS.set(jobId, { state: "processing", progress: 10, startedAt: Date.now() });
 
     const audioPath = path.join(work, "audio.mp3");
     const videoPath = path.join(work, "source.mp4");
-    await Promise.all([downloadTo(audioUrl, audioPath), downloadTo(videoUrl, videoPath)]);
-
-    JOBS.set(jobId, { state: "processing", progress: 38, startedAt: Date.now() });
-
-    const hasSubtitles = Array.isArray(subtitles) && subtitles.length > 0;
-    const { w: capW, h: capH } = effectiveCaps(maxW, maxH, isFast);
-    const needsScale = capW > 0 && capH > 0;
-    const needsFps = fps && Number(fps) > 0;
-    const canStreamCopy = !hasSubtitles && !needsScale && !needsFps;
-    const totalDur = Number(opts.duration) || 0;
-    const useParallel = totalDur > 120 && !canStreamCopy; // PARALLEL BY DEFAULT for videos >2min!
-
-    let subFilter = "";
-    if (hasSubtitles) {
-      const srtPath = path.join(work, "subs.srt");
-      await fsp.writeFile(srtPath, buildSrt(subtitles), "utf8");
-      subFilter = `,subtitles='${srtPath.replace(/'/g, "\\'")}':force_style='FontName=Noto Sans,FontSize=20,Outline=2,Shadow=1,MarginV=40'`;
-    }
-
+    const tempWebm = path.join(work, "temp_render.webm");
     const outPath = path.join(work, "out.mp4");
-    let ffmpegArgs;
 
-    if (canStreamCopy) {
-      console.log(`[job ${jobId}] STREAM COPY (video copy + new audio)`);
-      ffmpegArgs = [
-        "-y",
-        "-i",
-        videoPath,
-        "-i",
-        audioPath,
-        "-map",
-        "0:v:0",
-        "-map",
-        "1:a:0",
-        "-c:v",
-        "copy",
-        "-c:a",
-        "aac",
-        "-b:a",
-        "192k",
-        "-shortest",
-        "-movflags",
-        "+faststart",
-        outPath,
-      ];
-    } else {
-      const vfParts = [];
-      if (needsScale) {
-        vfParts.push(`scale='min(iw,${capW})':'min(ih,${capH})':force_original_aspect_ratio=decrease`);
-      }
-      vfParts.push(`format=yuv420p${subFilter}`);
-      const vfChain = vfParts.join(",");
-      const preset = encodePreset || renderPreset || "ultrafast";
-      const crf = "28"; // Balanced: great quality + fast speed!
-      ffmpegArgs = [
-        "-y",
-        "-i",
-        videoPath,
-        "-i",
-        audioPath,
-        "-vf",
-        vfChain,
-        "-map",
-        "0:v:0",
-        "-map",
-        "1:a:0",
-        "-c:v",
-        videoEncoder,
-        "-preset",
-        preset,
-        "-tune",
-        "fastdecode",
-        "-crf",
-        crf,
-        "-threads",
-        "0",
-        "-pix_fmt",
-        "yuv420p",
-        "-c:a",
-        "aac",
-        "-b:a",
-        "192k",
-        "-shortest",
-        "-movflags",
-        "+faststart",
-        outPath,
-      ];
-      if (bitrate) {
-        const brK = Math.max(500, Math.round(Number(bitrate) / 1000));
-        const crfIdx = ffmpegArgs.indexOf("-crf");
-        if (crfIdx !== -1) ffmpegArgs.splice(crfIdx, 2);
-        const presetIdx = ffmpegArgs.indexOf("-preset");
-        ffmpegArgs.splice(
-          presetIdx + 2,
-          0,
-          "-b:v",
-          `${brK}k`,
-          "-maxrate",
-          `${Math.round(brK * 1.5)}k`,
-          "-bufsize",
-          `${brK * 2}k`,
-        );
-      }
-      if (needsFps) {
-        const cvIdx = ffmpegArgs.indexOf("-c:v");
-        ffmpegArgs.splice(cvIdx, 0, "-r", String(Math.round(Number(fps))));
-      }
-    }
+    // Download Audio & Video Source
+    await Promise.all([
+      downloadTo(opts.audioUrl, audioPath),
+      downloadTo(opts.videoUrl, videoPath)
+    ]);
 
-    JOBS.set(jobId, { state: "processing", progress: 55, startedAt: Date.now() });
+    JOBS.set(jobId, { state: "processing", progress: 30, startedAt: Date.now() });
 
-    if (useParallel) {
-      const segDur = Math.min(20, Math.max(10, Math.ceil(totalDur / 12))); // MORE PARALLELISM!
-      const numSegs = Math.ceil(totalDur / segDur);
-      const preset = encodePreset || renderPreset || "ultrafast";
-      const segPaths = await Promise.all(
-        Array.from({ length: numSegs }, async (_, i) => {
-          const segStart = i * segDur;
-          const segEnd = Math.min(totalDur, segStart + segDur);
-          const segDurActual = segEnd - segStart;
-          const segOut = path.join(work, `seg_${String(i).padStart(4, "0")}.mp4`);
-          let segSubFilter = "";
-          if (hasSubtitles) {
-            const segSubs = subsForRange(subtitles, segStart, segEnd);
-            if (segSubs.length > 0) {
-              const srtPath = path.join(work, `subs_${i}.srt`);
-              await fsp.writeFile(srtPath, buildSrt(segSubs), "utf8");
-              segSubFilter = `,subtitles='${srtPath.replace(/'/g, "\\'")}':force_style='FontName=Noto Sans,FontSize=20,Outline=2,Shadow=1,MarginV=40'`;
-            }
-          }
-          const vfParts = [];
-          if (needsScale) {
-            vfParts.push(`scale='min(iw,${capW})':'min(ih,${capH})':force_original_aspect_ratio=decrease`);
-          }
-          vfParts.push(`format=yuv420p${segSubFilter}`);
-          const segArgs = [
-            "-y",
-            "-ss",
-            String(segStart),
-            "-t",
-            String(segDurActual),
-            "-i",
-            videoPath,
-            "-ss",
-            String(segStart),
-            "-t",
-            String(segDurActual),
-            "-i",
-            audioPath,
-            "-vf",
-            vfParts.join(","),
-            "-map",
-            "0:v:0",
-            "-map",
-            "1:a:0",
-            "-c:v",
-            videoEncoder,
-            "-preset",
-            preset,
-            "-tune",
-            "fastdecode",
-            "-crf",
-            "28",
-            "-threads",
-            "0",
-            "-pix_fmt",
-            "yuv420p",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k",
-            "-movflags",
-            "+faststart",
-            segOut,
-          ];
-          await runFfmpeg(segArgs);
-          return segOut;
-        }),
-      );
-      const concatPath = path.join(work, "segments.txt");
-      await fsp.writeFile(concatPath, segPaths.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join("\n") + "\n");
-      await runFfmpeg([
-        "-y",
-        "-f",
-        "concat",
-        "-safe",
-        "0",
-        "-i",
-        concatPath,
-        "-c",
-        "copy",
-        "-movflags",
-        "+faststart",
-        outPath,
-      ]);
-      console.log(`[job ${jobId}] parallel segments=${numSegs} segDur=${segDur}`);
-    } else {
-      await runFfmpeg(ffmpegArgs);
-    }
+    // Generate Headless HTML that perfectly mimics your Frontend Canvas
+    // This allows exact replication of filters, blurs, watermarks, and typography
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;700;900&display=swap" rel="stylesheet">
+      <style>
+        body { margin: 0; padding: 0; background: black; overflow: hidden; display: flex; align-items: center; justify-content: center; height: 100vh; }
+        canvas { display: block; }
+      </style>
+    </head>
+    <body>
+      <video id="vid" src="source.mp4" crossorigin="anonymous" playsinline muted style="display:none;"></video>
+      <audio id="aud" src="audio.mp3" crossorigin="anonymous"></audio>
+      ${opts.logo && opts.logo.url ? <img id="logoImg" src="${opts.logo.url}" style="display:none;" /> : ''}
+      <canvas id="canvas"></canvas>
+      <script>
+        const PAYLOAD = ${JSON.stringify(opts)};
+        const vid = document.getElementById('vid');
+        const aud = document.getElementById('aud');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d', { alpha: false });
+        const logoImg = document.getElementById('logoImg');
 
-    JOBS.set(jobId, { state: "processing", progress: 85, startedAt: Date.now() });
+        const rawW = PAYLOAD.maxW || 1280;
+        const rawH = PAYLOAD.maxH || 720;
+        canvas.width = rawW;
+        canvas.height = rawH;
 
-    const objectName = `renders/${jobId}.mp4`;
-    let finalUrl = null;
-    try {
-      await bucket.upload(outPath, {
-        destination: objectName,
-        metadata: { contentType: "video/mp4", cacheControl: "public, max-age=86400" },
-      });
-      const [signedUrl] = await bucket.file(objectName).getSignedUrl({
-        action: "read",
-        expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
-      });
-      finalUrl = signedUrl;
-      console.log(`[job ${jobId}] uploaded → ${objectName}`);
-    } catch (gcsErr) {
-      console.warn(`[job ${jobId}] GCS upload failed, using inline fallback:`, gcsErr.message || gcsErr);
-      const buf = await fsp.readFile(outPath);
-      finalUrl = `data:video/mp4;base64,${buf.toString("base64")}`;
-    }
+        let recorder;
+        let recording = false;
 
-    JOBS.set(jobId, { state: "done", url: finalUrl, progress: 100, startedAt: Date.now() });
-    console.log(`[job ${jobId}] video-path done`);
-  } finally {
-    fsp.rm(work, { recursive: true, force: true }).catch(() => {});
-  }
-}
+        async function startRecord() {
+           await new Promise(r => { 
+               vid.onloadedmetadata = r; 
+               vid.load(); 
+               if(vid.readyState >= 1) r(); 
+           });
 
-app.listen(PORT, () => {
-  console.log(`[boot] render-worker listening on :${PORT}`);
-});
+           // Hardware MediaRecorder capturing the canvas stream exactly like browser
+           const stream = canvas.captureStream(PAYLOAD.fps || 30);
+           recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8', videoBitsPerSecond: PAYLOAD.bitrate || 6000000 });
+           
+           recorder.ondataavailable = async (e) => {
+              if (e.data.size > 0) {
+                 const buffer = await e.data.arrayBuffer();
+                 const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+                 // Send chunk to Node.js backend safely
+                 await window.sendChunk(base64);
+              }
+           };
+           
+           recorder.onstop = () => {
+              window.renderFinished(); // Signal Node.js that rendering is done
+           };
+
+           recorder.start(250);
+           aud.playbackRate = PAYLOAD.audioSpeedRate || 1.0;
+           aud.play();
+           vid.play();
+           recording = true;
+           drawLoop();
+        }
+
+        function drawLoop() {
+           if (!recording) return;
+           if (aud.ended) {
+              recording = false;
+              recorder.stop();
+              vid.pause();
+              return;
+           }
+
+           const outW = canvas.width;
+           const outH = canvas.height;
+           const srcW = vid.videoWidth;
+           const srcH = vid.videoHeight;
+           
+           // Simple Center Crop Logic (Mimics Frontend Ratio)
+           let srcCropX = 0, srcCropY = 0, srcCropW = srcW, srcCropH = srcH;
+           if (PAYLOAD.editorState && PAYLOAD.editorState.ratio !== "auto") {
+              const targetAR = outW / outH;
+              if (targetAR < srcCropW / srcCropH) {
+                 srcCropW = srcCropH * targetAR;
+                 srcCropX = (srcW - srcCropW) / 2;
+              } else {
+                 srcCropH = srcCropW / targetAR;
+                 srcCropY = (srcH - srcCropH) * 0.35; // Headroom crop
+              }
+           }
+
+           ctx.save();
+           
+           // 1. Apply Color Grade Filters & Flip exactly as Frontend
+           if (PAYLOAD.editorState) {
+               ctx.filter = PAYLOAD.editorState.filterString || 'none';
+               if (PAYLOAD.editorState.flip) {
+                   ctx.translate(outW, 0);
+                   ctx.scale(-1, 1);
+               }
+           }
+           ctx.drawImage(vid, srcCropX, srcCropY, srcCropW, srcCropH, 0, 0, outW, outH);
+           ctx.restore();
+
+           // 2. Blur Box Effect
+           if (PAYLOAD.blurSettings && PAYLOAD.blurSettings.enabled) {
+              ctx.save();
+              const blurW = outW * (PAYLOAD.blurSettings.width / 100);
+              const blurH = outH * (PAYLOAD.blurSettings.height / 100);
+              const blurX = outW * (PAYLOAD.blurSettings.x / 100) - blurW / 2;
+              const blurY = outH * (PAYLOAD.blurSettings.y / 100) - blurH / 2;
+              
+              ctx.beginPath();
+              ctx.roundRect(blurX, blurY, blurW, blurH, 12);
+              ctx.clip();
+              ctx.filter = \`blur(\${Math.max(2, PAYLOAD.blurSettings.opacity * 0.3)}px)\`;
+              ctx.drawImage(canvas, blurX, blurY, blurW, blurH, blurX, blurY, blurW, blurH);
+              ctx.filter = "none";
+              ctx.fillStyle = \`rgba(0,0,0,\${Math.min(0.85, PAYLOAD.blurSettings.opacity / 120)})\`;
+              ctx.fillRect(blurX, blurY, blurW, blurH);
+              ctx.restore();
+           }
+
+           // 3. Subtitles (Synced with Audio)
+           if (PAYLOAD.subtitleEnabled && PAYLOAD.subtitles) {
+              const t = aud.currentTime;
+              const activeSub = PAYLOAD.subtitles.find(s => t >= s.start && t < s.end);
+              if (activeSub && activeSub.text) {
+                 ctx.save();
+                 const sSet = PAYLOAD.subSettings || {};
+                 const subCX = PAYLOAD.blurSettings?.enabled ? outW * (PAYLOAD.blurSettings.x / 100) : outW * ((sSet.x || 50) / 100);
+                 const subCY = PAYLOAD.blurSettings?.enabled ? outH * (PAYLOAD.blurSettings.y / 100) : outH * ((sSet.y || 85) / 100);
