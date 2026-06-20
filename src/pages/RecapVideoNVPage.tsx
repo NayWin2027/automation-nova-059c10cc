@@ -1180,6 +1180,34 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               frameVideo?.duration ||
               60;
 
+            // --- SURGICAL EDIT: Prepare Logo & Filters for Server ---
+            let logoBase64 = null;
+            if (logo.url) {
+              try {
+                const resp = await fetch(logo.url);
+                const blob = await resp.blob();
+                logoBase64 = await new Promise((r) => {
+                  const reader = new FileReader();
+                  reader.onload = () => r(reader.result);
+                  reader.readAsDataURL(blob);
+                });
+              } catch (e) {}
+            }
+
+            const activeGrade = COLOR_GRADE_PRESETS[editorState.colorGrade] || COLOR_GRADE_PRESETS["OFF"];
+            const bypassBoostCSS = editorState.bypass
+              ? { contrast: 15, brightness: 5, saturate: 15, hue: 5 }
+              : { contrast: 0, brightness: 0, saturate: 0, hue: 0 };
+            const isOff = editorState.colorGrade === "OFF" || editorState.bypass;
+            const contrast = isOff ? 100 : activeGrade.contrast + bypassBoostCSS.contrast + 5;
+            const brightness = isOff ? 100 : activeGrade.brightness + bypassBoostCSS.brightness + 5;
+            const saturate = isOff ? 100 : activeGrade.saturate + bypassBoostCSS.saturate + 8;
+            const hue = isOff ? 0 : activeGrade.hue + bypassBoostCSS.hue;
+            const sepia = isOff ? 0 : activeGrade.sepia || 0;
+            const finalFilterString = isOff
+              ? brightness(${editorState.colorGrade === "OFF" ? 105 : editorState.brightness}%) contrast(100%) saturate(100%)
+              : `contrast(${contrast}%) brightness(${Math.round((brightness * editorState.brightness) / 100)}%) saturate(${saturate}%) hue-rotate(${hue}deg) sepia(${sepia}%)`;
+
             setServerRenderProgress("Sending to server... 55%");
             const triggerBody: Record<string, unknown> = {
               action: "triggerServerRender",
@@ -1195,6 +1223,19 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               preferVideoPath: true,
               renderPreset: "ultrafast",
               encodePreset: "ultrafast",
+              
+              // --- NEW: 100% BROWSER RENDER STYLES ---
+              editorState: { ...editorStateRef.current, filterString: finalFilterString },
+              subSettings: subSettings,
+              blurSettings: blurSettingsRef.current,
+              timelineBar: timelineBar,
+              videoBorder: videoBorder,
+              watermark: watermark,
+              logo: { ...logo, url: logoBase64 }, // Sent as Base64
+              zoomEnabled: zoomEnabledRef.current,
+              freezeMode: freezeModeRef.current,
+              audioSpeedRate: audioSpeedRate,
+              subtitleEnabled: subtitleEnabledRef.current,
             };
             if (signedSourceVideoUrl) triggerBody.videoUrl = signedSourceVideoUrl;
             if (sourceFileUri) triggerBody.sourceFileUri = sourceFileUri;
