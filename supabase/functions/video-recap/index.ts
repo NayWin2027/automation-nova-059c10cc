@@ -1066,27 +1066,55 @@ serve(async (req) => {
       if (renderPreset) renderPayload.renderPreset = renderPreset;
       if (encodePreset) renderPayload.encodePreset = encodePreset;
 
-      const res = await fetch(`${renderUrl}/render`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Api-Secret": renderSecret,
-        },
-        body: JSON.stringify(renderPayload),
-      });
-      const rawText = await res.text();
-      let data: any;
       try {
-        data = JSON.parse(rawText);
-      } catch {
-        data = {
-          error: `Render worker returned non-JSON (status ${res.status}): ${rawText.slice(0, 200)}`,
-        };
+        const res = await fetch(`${renderUrl}/render`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Api-Secret": renderSecret,
+          },
+          body: JSON.stringify(renderPayload),
+          signal: AbortSignal.timeout(15000),
+        });
+        const rawText = await res.text();
+        let data: any;
+        try {
+          data = JSON.parse(rawText);
+        } catch {
+          data = {
+            message: `Render worker returned non-JSON (status ${res.status}): ${rawText.slice(0, 200)}`,
+            retryable: true,
+            state: "unavailable",
+          };
+        }
+
+        if (!res.ok) {
+          return new Response(
+            JSON.stringify({
+              ...data,
+              message: data?.error || data?.message || `Render worker unavailable (${res.status})`,
+              retryable: true,
+              state: "unavailable",
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        return new Response(JSON.stringify(data), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (e: any) {
+        console.warn("[video-recap] triggerServerRender worker unreachable:", e?.message || e);
+        return new Response(
+          JSON.stringify({
+            message: `Render worker unreachable: ${e?.message || "connection error"}`,
+            retryable: true,
+            state: "unavailable",
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
       }
-      return new Response(JSON.stringify(data), {
-        status: res.status,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
     }
 
     if (action === "pollServerRender") {
