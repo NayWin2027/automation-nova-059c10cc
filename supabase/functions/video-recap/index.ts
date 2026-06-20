@@ -1099,24 +1099,66 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const res = await fetch(`${renderUrl}/status/${jobId}`, {
-        headers: { "X-Api-Secret": renderSecret },
-      });
-      const rawText = await res.text();
-      let data: any;
+      // Resilient poll: never bubble a non-2xx back to the client for
+      // transient worker hiccups (connection reset, restart, unknown jobId).
+      // Always reply 200 with a structured body so the frontend can decide.
       try {
-        data = JSON.parse(rawText);
-      } catch {
-        data = {
-          state: "processing",
-          progress: 60,
-          warning: `Render worker returned non-JSON (status ${res.status})`,
-        };
+        const res = await fetch(`${renderUrl}/status/${jobId}`, {
+          headers: { "X-Api-Secret": renderSecret },
+          signal: AbortSignal.timeout(15000),
+        });
+        const rawText = await res.text();
+        let data: any;
+        try {
+          data = JSON.parse(rawText);
+        } catch {
+          data = {
+            state: "processing",
+            progress: 60,
+            warning: `Render worker returned non-JSON (status ${res.status})`,
+          };
+        }
+        // Worker restarted → in-memory job map lost. Tell client to restart.
+        if (res.status === 404 || data?.error === "unknown jobId" || data?.state === "unknown") {
+          return new Response(
+            JSON.stringify({
+              state: "unknown",
+              workerRestarted: true,
+              error: "unknown jobId",
+              hint: "Worker restarted; restart the render.",
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+        // Any other non-2xx → treat as transient; keep client polling.
+        if (!res.ok) {
+          return new Response(
+            JSON.stringify({
+              state: "processing",
+              progress: 60,
+              transient: true,
+              warning: `Worker status ${res.status}`,
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+        return new Response(JSON.stringify(data), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (e: any) {
+        // Network reset / timeout — keep client polling instead of crashing.
+        console.warn("[video-recap] pollServerRender transient error:", e?.message || e);
+        return new Response(
+          JSON.stringify({
+            state: "processing",
+            progress: 60,
+            transient: true,
+            warning: `Worker unreachable: ${e?.message || "connection error"}`,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
       }
-      return new Response(JSON.stringify(data), {
-        status: res.status,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
     }
 
     // Default: Handle base64 video data
