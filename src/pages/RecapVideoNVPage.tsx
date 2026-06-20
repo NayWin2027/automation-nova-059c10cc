@@ -923,7 +923,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
             // Skip re-upload when Gemini fileUri already exists (20min video â†’ saves many minutes)
             const videoUploadP =
-              !isYouTubeSource && videoUrl && !sourceFileUri
+              !isYouTubeSource && videoUrl
                 ? (async () => {
                     const videoBlob = videoFileRef?.current ?? (await fetch(videoUrl).then((r) => r.blob()));
                     if (!videoBlob.size) throw new Error("Video blob is empty!");
