@@ -244,3 +244,162 @@ async function renderJobFromVideo(jobId, opts) {
                  const sSet = PAYLOAD.subSettings || {};
                  const subCX = PAYLOAD.blurSettings?.enabled ? outW * (PAYLOAD.blurSettings.x / 100) : outW * ((sSet.x || 50) / 100);
                  const subCY = PAYLOAD.blurSettings?.enabled ? outH * (PAYLOAD.blurSettings.y / 100) : outH * ((sSet.y || 85) / 100);
+                 
+                 const fSize = Math.max(12, Math.round(outH * 0.04));
+                 // Fallback to Myanmar Noto Sans if custom font is missing on Server
+                 ctx.font = `bold ${fSize}px 'Noto Sans Myanmar', sans-serif`;
+                 ctx.textAlign = "center";
+                 ctx.textBaseline = "middle";
+                 
+                 ctx.shadowColor = "rgba(0,0,0,0.8)";
+                 ctx.shadowBlur = fSize * 0.1;
+                 ctx.lineWidth = Math.max(2, fSize * 0.08);
+                 ctx.strokeStyle = "#000000"; // Dynamic stroke is handled in frontend, defaulting to black here
+                 ctx.fillStyle = sSet.textColor || "#FFFFFF";
+                 
+                 ctx.strokeText(activeSub.text, subCX, subCY);
+                 ctx.fillText(activeSub.text, subCX, subCY);
+                 ctx.restore();
+              }
+           }
+
+           // 4. Logo Layer
+           if (logoImg && PAYLOAD.logo && PAYLOAD.logo.url) {
+              const lSize = outW * (PAYLOAD.logo.size / 100);
+              const lCX = outW * (PAYLOAD.logo.x / 100);
+              const lCY = outH * (PAYLOAD.logo.y / 100);
+              ctx.save();
+              ctx.translate(lCX, lCY);
+              if (PAYLOAD.logo.isCircle) {
+                 ctx.beginPath();
+                 ctx.arc(0, 0, lSize/2, 0, Math.PI*2);
+                 ctx.clip();
+              }
+              ctx.drawImage(logoImg, -lSize/2, -lSize/2, lSize, lSize);
+              ctx.restore();
+           }
+
+           // 5. Timeline Bar
+           if (PAYLOAD.timelineBar && PAYLOAD.timelineBar.enabled) {
+              const progress = aud.currentTime / aud.duration;
+              const barH = PAYLOAD.timelineBar.thickness || 4;
+              ctx.fillStyle = PAYLOAD.timelineBar.color || "#4B0082";
+              ctx.fillRect(0, outH - barH, outW * progress, barH);
+           }
+
+           // 6. Watermark Layer
+           if (PAYLOAD.watermark && PAYLOAD.watermark.enabled && PAYLOAD.watermark.text) {
+              ctx.save();
+              const wmFontSize = Math.max(12, Math.round(outH * (PAYLOAD.watermark.fontSize / 400)));
+              ctx.font = `bold ${wmFontSize}px sans-serif`;
+              ctx.textAlign = "center";
+              ctx.textBaseline = "middle";
+              ctx.globalAlpha = Math.max(0.05, Math.min(1, PAYLOAD.watermark.opacity / 100));
+              const wmX = outW * (PAYLOAD.watermark.x / 100);
+              const wmY = outH * (PAYLOAD.watermark.y / 100);
+              ctx.strokeStyle = "rgba(0,0,0,0.5)";
+              ctx.lineWidth = Math.max(2, wmFontSize * 0.06);
+              ctx.strokeText(PAYLOAD.watermark.text, wmX, wmY);
+              ctx.fillStyle = PAYLOAD.watermark.color || "#FFFFFF";
+              ctx.fillText(PAYLOAD.watermark.text, wmX, wmY);
+              ctx.restore();
+           }
+
+           requestAnimationFrame(drawLoop);
+        }
+      </script>
+    </body>
+    </html>
+    `;
+
+    const htmlPath = path.join(work, "render.html");
+    await fsp.writeFile(htmlPath, htmlContent);
+
+    JOBS.set(jobId, { state: "processing", progress: 40, startedAt: Date.now() });
+
+    // Launch Headless Browser (GPU Accelerated if available)
+    console.log(`[job ${jobId}] Launching Puppeteer...`);
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--use-gl=egl',
+        '--ignore-gpu-blocklist',
+        '--disable-dev-shm-usage',
+        '--autoplay-policy=no-user-gesture-required' // Critical for audio auto-play
+      ]
+    });
+
+    const page = await browser.newPage();
+    await page.setViewport({ width: opts.maxW || 1280, height: opts.maxH || 720 });
+
+    // Stream video data from Browser directly to Disk to prevent Out-Of-Memory (OOM)
+    await page.exposeFunction('sendChunk', (base64Chunk) => {
+       fs.appendFileSync(tempWebm, Buffer.from(base64Chunk, 'base64'));
+    });
+
+    let renderResolve;
+    const renderPromise = new Promise(r => renderResolve = r);
+    await page.exposeFunction('renderFinished', () => {
+       renderResolve();
+    });
+
+    JOBS.set(jobId, { state: "processing", progress: 60, startedAt: Date.now() });
+
+    // Start Rendering
+    await page.goto('file://' + htmlPath);
+    await page.evaluate(() => window.startRecord());
+
+    // Wait for the video duration to finish recording
+    await renderPromise;
+    await browser.close();
+
+    JOBS.set(jobId, { state: "processing", progress: 85, startedAt: Date.now() });
+
+    // Final FFmpeg Pass: Convert raw WebM to highly optimized MP4
+    console.log(`[job ${jobId}] Finalizing MP4 encoding...`);
+    await runFfmpeg([
+      "-y",
+      "-i", tempWebm,
+      "-c:v", "libx264",
+      "-preset", "ultrafast",
+      "-crf", "28",
+      "-c:a", "aac",
+      "-b:a", "128k",
+      "-movflags", "+faststart",
+      outPath
+    ]);
+
+    // Upload to GCS
+    const objectName = `renders/${jobId}.mp4`;
+    let finalUrl = null;
+    try {
+      await bucket.upload(outPath, {
+        destination: objectName,
+        metadata: { contentType: "video/mp4", cacheControl: "public, max-age=86400" },
+      });
+      const [signedUrl] = await bucket.file(objectName).getSignedUrl({
+        action: "read",
+        expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
+      });
+      finalUrl = signedUrl;
+      console.log(`[job ${jobId}] uploaded → ${objectName}`);
+    } catch (gcsErr) {
+      console.warn(`[job ${jobId}] GCS upload failed, using inline fallback:`, gcsErr);
+      const buf = await fsp.readFile(outPath);
+      finalUrl = `data:video/mp4;base64,${buf.toString("base64")}`;
+    }
+
+    JOBS.set(jobId, { state: "done", url: finalUrl, progress: 100, startedAt: Date.now() });
+    console.log(`[job ${jobId}] Complete!`);
+
+  } finally {
+    // Cleanup temporary files
+    fsp.rm(work, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+app.listen(PORT, () => {
+  console.log(`[boot] render-worker listening on :${PORT}`);
+});
