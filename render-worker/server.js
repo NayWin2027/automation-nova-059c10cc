@@ -319,20 +319,32 @@ async function renderJobFromVideo(jobId, opts) {
 
     // Launch Headless Browser (GPU Accelerated if available)
     console.log(`[job ${jobId}] Launching Puppeteer...`);
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--use-gl=egl',
-        '--ignore-gpu-blocklist',
-        '--disable-dev-shm-usage',
-        '--autoplay-policy=no-user-gesture-required' // Critical for audio auto-play
-      ]
-    });
+    // Launch Headless Browser (GPU Accelerated if available)
+    console.log(`[job ${jobId}] Launching Puppeteer...`);
+    let browser;
+    try {
+      browser = await puppeteer.launch({
+        headless: "new",
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage', // Critical to prevent RAM crash in Linux
+          '--disable-gpu',           // Fallback to CPU since GPU is not approved yet
+          '--autoplay-policy=no-user-gesture-required', // Critical for audio auto-play
+          '--window-size=1280,720'
+        ]
+      });
+    } catch (launchErr) {
+      console.error(`[job ${jobId}] Puppeteer Launch Error:`, launchErr);
+      throw new Error("Failed to launch Headless Browser on Server. Missing Linux libraries?");
+    }
 
     const page = await browser.newPage();
     await page.setViewport({ width: opts.maxW || 1280, height: opts.maxH || 720 });
+
+    // Catch Page Errors so it doesn't get stuck at 60%
+    page.on('pageerror', err => console.error(`[job ${jobId}] Page Error:`, err));
+    page.on('console', msg => console.log(`[job ${jobId}] Browser Console:`, msg.text()));
 
     // Stream video data from Browser directly to Disk to prevent Out-Of-Memory (OOM)
     await page.exposeFunction('sendChunk', (base64Chunk) => {
@@ -348,7 +360,8 @@ async function renderJobFromVideo(jobId, opts) {
     JOBS.set(jobId, { state: "processing", progress: 60, startedAt: Date.now() });
 
     // Start Rendering
-    await page.goto('file://' + htmlPath);
+    console.log(`[job ${jobId}] Loading HTML and starting record...`);
+    await page.goto('file://' + htmlPath, { waitUntil: 'networkidle0', timeout: 60000 });
     await page.evaluate(() => window.startRecord());
 
     // Wait for the video duration to finish recording
