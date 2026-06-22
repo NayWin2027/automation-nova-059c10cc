@@ -5034,7 +5034,7 @@ const RecapVideoNVPage: React.FC = () => {
   useEffect(() => {
     const timer = setTimeout(async () => {
       const { data } = await supabase
-        .from("tool_settings")
+        .from("safe_tool_settings")
         .select("credit_cost, server_credit_per_min")
         .eq("tool_id", "recap-nv")
         .maybeSingle();

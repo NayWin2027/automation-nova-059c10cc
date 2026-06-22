@@ -23,7 +23,7 @@ export function useCreditDeduction() {
   // Get tool credit cost from settings
   const getToolCreditCost = useCallback(async (toolId: string): Promise<number> => {
     const { data, error } = await supabase
-      .from('tool_settings')
+      .from('safe_tool_settings')
       .select('credit_cost, title')
       .eq('tool_id', toolId)
       .maybeSingle();
