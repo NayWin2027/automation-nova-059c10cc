@@ -519,7 +519,7 @@ export default function App() {
   useEffect(() => {
     const timer = setTimeout(async () => {
       const { data } = await supabase
-        .from("tool_settings")
+        .from("safe_tool_settings")
         .select("credit_cost")
         .eq("tool_id", "video-transform")
         .maybeSingle();
