@@ -624,29 +624,35 @@ export type Database = {
       }
       safe_tool_settings: {
         Row: {
+          credit_cost: number | null
           description: string | null
           id: string | null
           is_enabled: boolean | null
           is_premium: boolean | null
           requires_auth: boolean | null
+          server_credit_per_min: number | null
           title: string | null
           tool_id: string | null
         }
         Insert: {
+          credit_cost?: number | null
           description?: string | null
           id?: string | null
           is_enabled?: boolean | null
           is_premium?: boolean | null
           requires_auth?: boolean | null
+          server_credit_per_min?: number | null
           title?: string | null
           tool_id?: string | null
         }
         Update: {
+          credit_cost?: number | null
           description?: string | null
           id?: string | null
           is_enabled?: boolean | null
           is_premium?: boolean | null
           requires_auth?: boolean | null
+          server_credit_per_min?: number | null
           title?: string | null
           tool_id?: string | null
         }
