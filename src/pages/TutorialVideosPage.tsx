@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import {
   ArrowLeft, Plus, Trash2, Video, FileText, Upload, RefreshCw,
-  Eye, EyeOff, GripVertical, Play, BookOpen, Sparkles, ArrowUpDown, Clock,
+  Eye, EyeOff, GripVertical, Play, BookOpen, Sparkles, ArrowUpDown, Clock, Download,
 } from "lucide-react";
 
 interface Tutorial {
@@ -445,6 +445,33 @@ const TutorialVideosPage: React.FC = () => {
     fetchTutorials();
   };
 
+  // Admin-only: download original video (highest quality available)
+  const handleDownload = async (tutorial: Tutorial) => {
+    try {
+      const qualities = tutorial.video_qualities || {};
+      const preferred = (["1080p", "720p", "360p"] as const).find(q => qualities[q]);
+      const url = (preferred && qualities[preferred]) || tutorial.video_url;
+      if (!url) {
+        toast({ title: "Video URL မရှိပါ", variant: "destructive" });
+        return;
+      }
+      toast({ title: "⬇️ Downloading..." });
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      const safeName = tutorial.title.replace(/[^\w\-]+/g, "_").slice(0, 80) || "tutorial";
+      a.download = `${safeName}.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    } catch (err: any) {
+      toast({ title: "Download failed", description: err.message, variant: "destructive" });
+    }
+  };
+
   const filtered = tutorials.filter(
     (t) => filterCategory === "all" || t.category === filterCategory
   );
@@ -761,6 +788,15 @@ const TutorialVideosPage: React.FC = () => {
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8 rounded-lg hover:bg-primary/10"
+                              onClick={() => handleDownload(t)}
+                              title="Download Video (Admin only)"
+                            >
+                              <Download className="w-3.5 h-3.5 text-primary" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 rounded-lg hover:bg-primary/10"
                               onClick={() => togglePublish(t)}
                               title={t.is_published ? "Unpublish" : "Publish"}
                             >
@@ -791,11 +827,13 @@ const TutorialVideosPage: React.FC = () => {
 
                       <p className="mt-3 text-2xs text-muted-foreground/60">
                         {new Date(t.created_at).toLocaleDateString()}
-                        <span className="ml-2 inline-flex items-center gap-1 text-muted-foreground/80">
-                          <Eye className="w-3 h-3" />
-                          <span className="font-semibold">{(t.view_count ?? 0).toLocaleString()}</span>
-                          <span>views</span>
-                        </span>
+                        {isAdmin && (
+                          <span className="ml-2 inline-flex items-center gap-1 text-muted-foreground/80">
+                            <Eye className="w-3 h-3" />
+                            <span className="font-semibold">{(t.view_count ?? 0).toLocaleString()}</span>
+                            <span>views</span>
+                          </span>
+                        )}
                         {durations[t.id] != null && (
                           <span className="ml-2 inline-flex items-center gap-1 text-muted-foreground/80">
                             <Clock className="w-3 h-3" />
