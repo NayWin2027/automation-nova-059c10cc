@@ -183,11 +183,12 @@ function enforceScriptCoverage70(script: string, sourceDurationSec?: number | nu
 
   const sentenceEndRe = /[။.!?…。！？]$/;
   const splitCompleteSentences = (text: string): string[] => {
-    const sentences = text
-      .replace(/\s+/g, " ")
-      .match(/[^။.!?…。！？]+[။.!?…。！？]+(?:["'”’）\)]*)?/g)
-      ?.map((s) => s.trim())
-      .filter((s) => sentenceEndRe.test(s.replace(/["'”’）\)]*$/, ""))) || [];
+    const sentences =
+      text
+        .replace(/\s+/g, " ")
+        .match(/[^။.!?…。！？]+[။.!?…。！？]+(?:["'”’）\)]*)?/g)
+        ?.map((s) => s.trim())
+        .filter((s) => sentenceEndRe.test(s.replace(/["'”’）\)]*$/, ""))) || [];
     return sentences;
   };
   const trimToCompleteSentences = (text: string, maxWordBudget: number): string => {
