@@ -5245,6 +5245,129 @@ const RecapVideoNVPage: React.FC = () => {
     }
   };
 
+  // ──────────────────────────────────────────────────────────────────────
+  // SURGICAL ADD: Retry Script Only
+  // If a script-generation error occurs AFTER the video upload succeeded
+  // (sourceFileUriRef.current is set), users can retry ONLY the script
+  // step instead of re-uploading the whole video from scratch.
+  // This function intentionally does NOT modify the protected AUTO-PIPELINE-v2;
+  // it duplicates the minimal script-gen logic and then hands off to the
+  // existing generateVoice() so the rest of the pipeline continues normally.
+  // ──────────────────────────────────────────────────────────────────────
+  const retryScriptOnly = async () => {
+    const fileUri = sourceFileUriRef.current;
+    const file = videoFileRef.current;
+    const duration = videoDurationRef.current;
+    if (!fileUri || !file || !duration) {
+      showSolveToFixBox(
+        "Retry လုပ်ရန် မရပါ — Video upload data ပျောက်နေပါသည်။ Video ကို ပြန်ရွေးပြီး စလုပ်ပါ။",
+      );
+      return;
+    }
+    const resolvedApiMode = apiMode;
+    const resolvedOwnKey = apiMode === "own" ? ownApiKey.trim() : "";
+    if (resolvedApiMode === "own" && !resolvedOwnKey) {
+      showSolveToFixBox("Own API mode ရွေးထားပါသည်။ Google API Key ထည့်ပေးပါ။");
+      return;
+    }
+    activePipelineApiModeRef.current = resolvedApiMode;
+    activePipelineOwnKeyRef.current = resolvedOwnKey;
+    setStatus("processing");
+    setProgressMsg("🧠 Script ကို ပြန်ရေးနေပါသည်... (Video ပြန်တင်စရာမလို)");
+    try {
+      const ext = file.name.split(".").pop()?.toLowerCase() || "";
+      const mimeMap: Record<string, string> = {
+        mp4: "video/mp4",
+        webm: "video/webm",
+        mkv: "video/x-matroska",
+        avi: "video/x-msvideo",
+        mov: "video/quicktime",
+        "3gp": "video/3gpp",
+        mp3: "audio/mpeg",
+        wav: "audio/wav",
+        m4a: "audio/mp4",
+        ogg: "audio/ogg",
+      };
+      const mimeType = file.type || mimeMap[ext] || "video/mp4";
+      const {
+        data: { session: currentSession },
+      } = await supabase.auth.getSession();
+      const userToken = currentSession?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      const selectedLangName = languages.find((l) => l.code === selectedLanguage)?.name || "BURMESE";
+      const maxOutputTokens = Math.min(16384, Math.max(4096, Math.ceil(duration * 220)));
+      const isBurmese = selectedLangName === "BURMESE";
+      const burmeseStyleBlock = isBurmese
+        ? `\n\nLANGUAGE STYLE (CRITICAL for Burmese):\n` +
+          `- Use modern Yangon everyday Burmese (spoken style).\n` +
+          `- Avoid formal connectors: ထို့အပြင်, ထို့ကြောင့်, ဥပမာ, စသဖြင့်.\n` +
+          `- DO allow spoken connectors: ဒါ့အပြင်, ဒါကြောင့်, တယ်.\n` +
+          `- No placeholders like "ဇာတ်ကောင်နာမည်". Write real narration only.`
+        : "";
+      const burmeseExtraStyle = isBurmese
+        ? `\n\nSTYLE RULES (Burmese):\n` +
+          `- Use modern conversational Burmese only.\n` +
+          `- Avoid formal writing cadence; keep it human and natural.\n` +
+          `- No formal "ထို့အပြင်/ထို့ကြောင့်/ဥပမာ/စသဖြင့်" type connectors.\n` +
+          `- It is OK to use spoken connectors like "ဒါ့အပြင်" / "ဒါကြောင့်" in natural conversation.`
+        : "";
+      const scriptBody: Record<string, unknown> = {
+        fileUri,
+        fileMimeType: mimeType,
+        niche: `You are an aggressive international professional YouTube recap editor. Analyze the uploaded movie/video and produce a condensed, fast-paced recap script in ${selectedLangName}. Length must be approximately 40-50% of the original duration when read aloud (never below 30%). Start with a shocking hook, build mystery, escalate tension, finish with a climactic payoff. Aggressively cut filler/travel/waiting scenes. Keep only plot twists, key character moments, conflicts, reveals, and the resolution. Write as ONE continuous gripping story with hook transitions between segments. Output each paragraph prefixed by [MM:SS] starting at [00:00] and ending close to the full duration. Use original wording — do NOT quote distinctive dialogue.${burmeseStyleBlock}`,
+        language: selectedLangName,
+        sourceDurationSec: duration,
+        skipCreditDeduction: true,
+        recapNvPipeline: true,
+        apiMode: resolvedApiMode,
+        extraInstructions: `CRITICAL:\n- Output language MUST be ${selectedLangName} ONLY.\n- Cover the full story arc but stay at 40-50% of source duration (never below 30%, never above 50%).\n- For sources longer than 30 minutes, treat as 30-minute source and cap recap at 15 minutes.\n- Aggressively cut filler. Keep only plot-advancing moments.\n- Each segment must flow into the next with a hook/transition.\n- Never output a partial/incomplete script.${burmeseExtraStyle}`,
+        generationConfig: {
+          maxOutputTokens,
+          temperature: 0.7,
+        },
+      };
+      if (resolvedOwnKey) {
+        scriptBody.ownApiKey = resolvedOwnKey;
+        scriptBody.apiKey = resolvedOwnKey;
+      }
+      const scriptResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recap-script-generator`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${userToken}`,
+          ...(resolvedOwnKey ? { "x-own-api-key": resolvedOwnKey } : {}),
+        },
+        body: JSON.stringify(scriptBody),
+      });
+      if (!scriptResponse.ok) {
+        const errData = await scriptResponse.json().catch(() => ({}));
+        throw new Error(errData.error || `Script generation failed (${scriptResponse.status})`);
+      }
+      const scriptResult = await scriptResponse.json();
+      if (scriptResult?.fallback || scriptResult?.retryable) {
+        throw new Error(
+          scriptResult.error ||
+            "Google AI script service မအားသေးပါ။ ဒီ request က credit မဖြတ်ပါ။ ခဏနေရင် ပြန်စမ်းပါ။",
+        );
+      }
+      if (scriptResult.error) throw new Error(scriptResult.error);
+      const scriptText = stripRecapScriptPreamble(scriptResult.script || "");
+      if (!scriptText || scriptText.trim().length < 10) {
+        throw new Error("AI script generation returned empty result");
+      }
+      const segments = scriptToSegments(scriptText, duration);
+      setScriptData({ title: file.name.replace(/\.[^.]+$/, ""), full_script: scriptText, segments });
+      setProgressMsg("📝 Script generated! Now generating AI voice...");
+      // Continue into the existing voice pipeline (VOICE-GEN-PIPELINE-v2)
+      const segsForSync = segments.map((s) => ({ text: s.text }));
+      generateVoice(scriptText, resolvedOwnKey || undefined, segsForSync);
+    } catch (err: any) {
+      setStatus("error");
+      setProgressMsg(`❌ Retry failed: ${err?.message || "Unknown error"}`);
+      showSolveToFixBox(err?.message || "Script retry failed");
+    }
+  };
+
   const stripRecapScriptPreamble = (rawScript: string): string => {
     let cleaned = String(rawScript || "")
       .replace(/\r\n/g, "\n")
@@ -6594,6 +6717,17 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
+            {sourceFileUriRef.current && videoFileRef.current && (
+              <button
+                onClick={() => {
+                  setErrorBox(null);
+                  retryScriptOnly();
+                }}
+                className="inline-flex items-center justify-center gap-2 rounded-md bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-sm px-4 py-2 transition"
+              >
+                🔁 Retry Script (Video ပြန်တင်စရာမလို)
+              </button>
+            )}
             <AlertDialogAction onClick={() => setErrorBox(null)}>နားလည်ပါပြီ</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
