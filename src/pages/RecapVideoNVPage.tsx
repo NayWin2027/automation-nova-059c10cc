@@ -6717,6 +6717,17 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
+            {sourceFileUriRef.current && videoFileRef.current && (
+              <button
+                onClick={() => {
+                  setErrorBox(null);
+                  retryScriptOnly();
+                }}
+                className="inline-flex items-center justify-center gap-2 rounded-md bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-sm px-4 py-2 transition"
+              >
+                🔁 Retry Script (Video ပြန်တင်စရာမလို)
+              </button>
+            )}
             <AlertDialogAction onClick={() => setErrorBox(null)}>နားလည်ပါပြီ</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
