@@ -8,7 +8,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { preCheckCredits } from "@/utils/creditPreCheck";
 import { recordToolOutcome } from "@/utils/toolOutcome";
-import { useCreditDeduction } from "@/hooks/useCreditDeduction";
 
 // ============ ADMIN CMS TYPES ============
 interface TranscribeSettings {
@@ -122,7 +121,6 @@ export default function TranscriptionView() {
   // API Mode States
   const [apiType, setApiType] = useState<"app" | "own">("app");
   const { apiKey, setApiKey } = useSecureApiKey("master_transcribe_api_key");
-  const { deductCredits } = useCreditDeduction();
 
   // Admin CMS States
   const [isAdmin, setIsAdmin] = useState(false);
@@ -377,7 +375,6 @@ export default function TranscriptionView() {
             language: selectedLanguage,
             apiKey: ownApiKey || undefined,
             customCreditCost: tierCredits !== undefined && apiType === "app" ? tierCredits : undefined,
-            skipCreditDeduction: true,
           }),
           signal: scriptController.signal,
         }
@@ -395,10 +392,6 @@ export default function TranscriptionView() {
         setGeneratedScript(data.script);
         toast.success("Script အောင်မြင်စွာ ထွက်လာပါပြီ!");
         recordToolOutcome('transcribe', 'success');
-        // ===== CLIENT-SIDE CREDIT DEDUCTION (only after confirmed success) =====
-        if (apiType === "app" && tierCredits !== undefined) {
-          await deductCredits("narration-script", false, tierCredits);
-        }
       } else {
         toast.error("Script generation failed.");
         recordToolOutcome('transcribe', 'error');
