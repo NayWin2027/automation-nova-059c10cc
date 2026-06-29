@@ -1223,7 +1223,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               preferVideoPath: true,
               renderPreset: "ultrafast",
               encodePreset: "ultrafast",
-              
+
               // --- NEW: 100% BROWSER RENDER STYLES ---
               editorState: { ...editorStateRef.current, filterString: finalFilterString },
               subSettings: subSettings,
@@ -1242,8 +1242,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             // NEVER send imageUrls when we have a downloadable videoUrl.
             // sourceFileUri (Gemini Files API) is NOT downloadable by the Cloud Run worker,
             // so we MUST still send extracted frames when only sourceFileUri is present.
-            if (!signedSourceVideoUrl && signedImageUrls.length > 0)
-              triggerBody.imageUrls = signedImageUrls;
+            if (!signedSourceVideoUrl && signedImageUrls.length > 0) triggerBody.imageUrls = signedImageUrls;
 
             const { data: jobData, error: jobError } = await supabase.functions.invoke("video-recap", {
               body: triggerBody,
@@ -5259,9 +5258,7 @@ const RecapVideoNVPage: React.FC = () => {
     const file = videoFileRef.current;
     const duration = videoDurationRef.current;
     if (!fileUri || !file || !duration) {
-      showSolveToFixBox(
-        "Retry လုပ်ရန် မရပါ — Video upload data ပျောက်နေပါသည်။ Video ကို ပြန်ရွေးပြီး စလုပ်ပါ။",
-      );
+      showSolveToFixBox("Retry လုပ်ရန် မရပါ — Video upload data ပျောက်နေပါသည်။ Video ကို ပြန်ရွေးပြီး စလုပ်ပါ။");
       return;
     }
     const resolvedApiMode = apiMode;
@@ -5346,8 +5343,7 @@ const RecapVideoNVPage: React.FC = () => {
       const scriptResult = await scriptResponse.json();
       if (scriptResult?.fallback || scriptResult?.retryable) {
         throw new Error(
-          scriptResult.error ||
-            "Google AI script service မအားသေးပါ။ ဒီ request က credit မဖြတ်ပါ။ ခဏနေရင် ပြန်စမ်းပါ။",
+          scriptResult.error || "Google AI script service မအားသေးပါ။ ဒီ request က credit မဖြတ်ပါ။ ခဏနေရင် ပြန်စမ်းပါ။",
         );
       }
       if (scriptResult.error) throw new Error(scriptResult.error);
