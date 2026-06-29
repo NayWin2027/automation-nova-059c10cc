@@ -117,7 +117,7 @@ async function renderJobFromVideo(jobId, opts) {
     <html>
     <head>
       <meta charset="utf-8">
-      <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;700;900&display=swap" rel="stylesheet">
+      
       <style>
         body { margin: 0; padding: 0; background: black; overflow: hidden; display: flex; align-items: center; justify-content: center; height: 100vh; }
         canvas { display: block; }
@@ -158,7 +158,13 @@ async function renderJobFromVideo(jobId, opts) {
            recorder.ondataavailable = async (e) => {
               if (e.data.size > 0) {
                  const buffer = await e.data.arrayBuffer();
-                 const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+                 const bytes = new Uint8Array(buffer);
+                 let binary = '';
+                 const CHUNK_SIZE = 8192;
+                 for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+                   binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK_SIZE));
+                 }
+                 const base64 = btoa(binary);
                  // Send chunk to Node.js backend safely
                  await window.sendChunk(base64);
               }
@@ -362,11 +368,14 @@ async function renderJobFromVideo(jobId, opts) {
 
     // Start Rendering
     console.log(`[job ${jobId}] Loading HTML and starting record...`);
-    await page.goto('file://' + htmlPath, { waitUntil: 'networkidle0', timeout: 60000 });
+    await page.goto('file://' + htmlPath, { waitUntil: 'load', timeout: 60000 });
     await page.evaluate(() => window.startRecord());
 
-    // Wait for the video duration to finish recording
-    await renderPromise;
+    // Wait for the video duration to finish recording (10-minute safety timeout)
+    const renderTimeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Render timed out after 10 minutes')), 600000)
+    );
+    await Promise.race([renderPromise, renderTimeout]);
     await browser.close();
 
     JOBS.set(jobId, { state: "processing", progress: 85, startedAt: Date.now() });
