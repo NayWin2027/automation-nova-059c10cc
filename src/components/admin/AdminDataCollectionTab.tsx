@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AdminMonthlyYearlySummary from "./AdminMonthlyYearlySummary";
+import AdminTotalRevenueSummary from "./AdminTotalRevenueSummary";
 import { supabase } from "@/integrations/supabase/client";
 import {
   RefreshCw,
@@ -15,6 +16,7 @@ import {
   Database,
   TrendingUp,
   BarChart3,
+  Wallet,
 } from "lucide-react";
 
 /**
@@ -334,17 +336,24 @@ const AdminDataCollectionTab: React.FC = () => {
   // ---------- UI ----------
   return (
     <Tabs defaultValue="detail" className="space-y-4">
-      <TabsList className="grid w-full max-w-md grid-cols-2 bg-secondary/30 p-0.5 h-9">
+      <TabsList className="grid w-full max-w-2xl grid-cols-3 bg-secondary/30 p-0.5 h-9">
         <TabsTrigger value="detail" className="text-xs gap-1.5 data-[state=active]:bg-card">
           <Database className="w-3.5 h-3.5" /> Detail
         </TabsTrigger>
         <TabsTrigger value="summary" className="text-xs gap-1.5 data-[state=active]:bg-card">
           <BarChart3 className="w-3.5 h-3.5" /> Monthly / Yearly Summary
         </TabsTrigger>
+        <TabsTrigger value="revenue" className="text-xs gap-1.5 data-[state=active]:bg-card">
+          <Wallet className="w-3.5 h-3.5" /> Total Revenue
+        </TabsTrigger>
       </TabsList>
 
       <TabsContent value="summary" className="mt-0">
         <AdminMonthlyYearlySummary />
+      </TabsContent>
+
+      <TabsContent value="revenue" className="mt-0">
+        <AdminTotalRevenueSummary />
       </TabsContent>
 
       <TabsContent value="detail" className="mt-0 space-y-4">
