@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AdminMonthlyYearlySummary from "./AdminMonthlyYearlySummary";
 import AdminTotalRevenueSummary from "./AdminTotalRevenueSummary";
+import { AdminMonthlyRevenueCompare, AdminYearlyRevenueCompare } from "./AdminRevenueCompare";
 import { supabase } from "@/integrations/supabase/client";
 import {
   RefreshCw,
@@ -17,6 +18,8 @@ import {
   TrendingUp,
   BarChart3,
   Wallet,
+  LineChart as LineChartIcon,
+  BarChart2,
 } from "lucide-react";
 
 /**
@@ -336,7 +339,7 @@ const AdminDataCollectionTab: React.FC = () => {
   // ---------- UI ----------
   return (
     <Tabs defaultValue="detail" className="space-y-4">
-      <TabsList className="grid w-full max-w-2xl grid-cols-3 bg-secondary/30 p-0.5 h-9">
+      <TabsList className="grid w-full max-w-4xl grid-cols-5 bg-secondary/30 p-0.5 h-9">
         <TabsTrigger value="detail" className="text-xs gap-1.5 data-[state=active]:bg-card">
           <Database className="w-3.5 h-3.5" /> Detail
         </TabsTrigger>
@@ -346,6 +349,12 @@ const AdminDataCollectionTab: React.FC = () => {
         <TabsTrigger value="revenue" className="text-xs gap-1.5 data-[state=active]:bg-card">
           <Wallet className="w-3.5 h-3.5" /> Total Revenue
         </TabsTrigger>
+        <TabsTrigger value="month-compare" className="text-xs gap-1.5 data-[state=active]:bg-card">
+          <BarChart2 className="w-3.5 h-3.5" /> Monthly Compare
+        </TabsTrigger>
+        <TabsTrigger value="year-compare" className="text-xs gap-1.5 data-[state=active]:bg-card">
+          <LineChartIcon className="w-3.5 h-3.5" /> Yearly Compare
+        </TabsTrigger>
       </TabsList>
 
       <TabsContent value="summary" className="mt-0">
@@ -354,6 +363,14 @@ const AdminDataCollectionTab: React.FC = () => {
 
       <TabsContent value="revenue" className="mt-0">
         <AdminTotalRevenueSummary />
+      </TabsContent>
+
+      <TabsContent value="month-compare" className="mt-0">
+        <AdminMonthlyRevenueCompare />
+      </TabsContent>
+
+      <TabsContent value="year-compare" className="mt-0">
+        <AdminYearlyRevenueCompare />
       </TabsContent>
 
       <TabsContent value="detail" className="mt-0 space-y-4">
