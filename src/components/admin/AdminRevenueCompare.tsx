@@ -219,7 +219,7 @@ export const AdminMonthlyRevenueCompare: React.FC = () => {
     const set = new Set<string>();
     profiles.forEach((p) => set.add(String(new Date(p.created_at).getFullYear())));
     topups.forEach((t) => set.add(String(new Date(t.created_at).getFullYear())));
-    for (let y = now.getFullYear() + 1; y >= 2025; y--) set.add(String(y));
+    for (let y = 2100; y >= 2025; y--) set.add(String(y));
     return Array.from(set).sort((a, b) => b.localeCompare(a));
   }, [profiles, topups]);
 
@@ -315,8 +315,8 @@ export const AdminYearlyRevenueCompare: React.FC = () => {
     const set = new Set<string>();
     profiles.forEach((p) => set.add(String(new Date(p.created_at).getFullYear())));
     topups.forEach((t) => set.add(String(new Date(t.created_at).getFullYear())));
-    // Always include 2025 → currentYear as baseline
-    for (let y = 2025; y <= now.getFullYear(); y++) set.add(String(y));
+    // Always include 2025 → 2100 as baseline
+    for (let y = 2025; y <= 2100; y++) set.add(String(y));
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [profiles, topups]);
 

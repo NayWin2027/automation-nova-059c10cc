@@ -167,7 +167,7 @@ const AdminTotalRevenueSummary: React.FC = () => {
 
   const years = useMemo(() => {
     const out: string[] = [];
-    for (let y = 2050; y >= 2025; y--) out.push(String(y));
+    for (let y = 2100; y >= 2025; y--) out.push(String(y));
     return out;
   }, []);
 
