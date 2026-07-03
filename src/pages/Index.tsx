@@ -39,6 +39,7 @@ import { usePromotionTracking } from "@/hooks/usePromotionTracking";
 import ToolLimitsBadge from "@/components/ToolLimitsBadge";
 import AccountInfoCard from "@/components/AccountInfoCard";
 import NotificationBell from "@/components/NotificationBell";
+import HomeRewardsSection from "@/components/HomeRewardsSection";
 const defaultTools = [
 {
   id: "recap-nv",
@@ -400,6 +401,7 @@ const Index = () => {
       })}
 
       </div>
+      {isAuthenticated && !isAdmin && <div className="mt-4"><HomeRewardsSection /></div>}
     </>;
 
   const renderPremiumContent = () => <PlansView />;
