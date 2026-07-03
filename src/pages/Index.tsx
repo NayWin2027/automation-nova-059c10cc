@@ -401,6 +401,7 @@ const Index = () => {
       })}
 
       </div>
+      {isAuthenticated && !isAdmin && <div className="mt-4"><HomeRewardsSection /></div>}
     </>;
 
   const renderPremiumContent = () => <PlansView />;
