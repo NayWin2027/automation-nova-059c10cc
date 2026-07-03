@@ -177,6 +177,7 @@ export function useAuth() {
     recordToolUsage,
     getToolUsageCount,
     signOut,
+    refreshProfile: () => user ? fetchProfile(user.id) : Promise.resolve(),
     isAuthenticated: !!user,
   };
 }
