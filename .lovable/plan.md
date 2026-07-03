@@ -1,83 +1,83 @@
-
 ## Goal
-Admin → Data tab ထဲမှာ "📊 Monthly / Yearly Summary" sub-view အသစ်တစ်ခု ထပ်ထည့်ပါမယ်။ Renew / Top-Up / New Account သုံးခုပဲ MMK (× 100) နဲ့ တွက်ပြီး NW, KYS, NW-KYS Compare သုံးမျိုး ကြည့်လို့ရအောင်လုပ်မယ်။ Bonus / Referral လုံး၀မပါ။ ရှိပြီးသား "Agent Data Collection" detail view ကို လုံး၀ မထိ — surgical addition only။
+Add 2 user-facing features without touching any unrelated tool / logic:
 
-## Scope (only what changes)
-**New file:**
-- `src/components/admin/AdminMonthlyYearlySummary.tsx`
+1. **5FRIENDS Referral Reward** → Refer 5 friends = Free Premium Plan (1 month).
+2. **2WEEKS Recap History** → User's exported recap videos kept 14 days in cloud, downloadable/shareable from a clean panel.
 
-**Modified file (1 line area only):**
-- `src/components/admin/AdminDataCollectionTab.tsx` — ထိပ်ဆုံးမှာ `<Tabs>` (Detail / Summary) ၂ ခု ထည့်ပြီး existing UI အားလုံးကို "Detail" tab အောက်ထဲ ထည့်လိုက်မယ်။ ဘယ် logic မှ မပြောင်း။
+Both surfaced on the logged-in home page in a **premium, clear, no-clutter** section with big obvious Download buttons.
 
-ဘယ် file မှ နောက်ထပ် မထိပါ။ (RecapVideoNV, upload, AV-SYNC, edge functions, RLS — အားလုံး လုံး၀ မပြင်)
+---
 
-## Data source (real, no fake)
-ရှိပြီးသား `AdminDataCollectionTab` သုံးနေတဲ့ source အတိုင်း — အသစ်ပိုမယူဘူး၊ စမ်းပြောင်းမှု မရှိ:
-- `profiles` (via `admin-actions` edge function) — NW / KYS prefix စစ်ဖို့
-- `credit_topups` — `topup_type` field
+## 1. Referral (5FRIENDS → 1 Month Premium)
 
-Buckets (၃ ခုသာ):
-| UI Label          | topup_type filter |
-| ----------------- | ----------------- |
-| Renew Total       | `renew`           |
-| Top-Up Total      | `topup`           |
-| New Account Total | `original`        |
+### Backend (migration only — no touching existing referral fields)
+- Reuse existing `profiles.referred_by` (already stores the referrer's user_id).
+- Add columns to `profiles` (nullable, non-breaking):
+  - `referral_code text unique` — short public code (e.g. `NOVA-AB12CD`), auto-generated on first fetch if null.
+  - `referral_reward_claimed boolean default false` — prevents double-claim.
+- New SECURITY DEFINER RPCs (public schema):
+  - `get_or_create_referral_code(_user_id uuid) returns text` — generates + returns the caller's own code.
+  - `count_referred_friends(_user_id uuid) returns int` — counts profiles where `referred_by = _user_id`.
+  - `claim_referral_reward(_user_id uuid) returns json` — server-side check: if count ≥ 5 AND not yet claimed → set `plan='premium'`, extend `credits_expires_at = greatest(now(), coalesce(credits_expires_at, now())) + interval '30 days'`, add configured referral bonus credits (reuse existing `referral_reward` app_settings key), flip `referral_reward_claimed=true`. Anti-abuse: only counts friends whose account is not banned.
 
-MMK = `SUM(amount) × 100`
+### Frontend — new component `src/components/RewardsCard.tsx`
+- Shows: user's referral code (copy button) + share link (`{origin}/order?ref=CODE`), progress ring `X / 5 friends`, and a **"Claim Free Premium (1 Month)"** button that lights up only when count ≥ 5.
+- Handles claim via RPC + refreshes profile.
 
-Bonus / Referral / unknown = လုံး၀ ထည့်မတွက်။ Soft-deleted (`is_deleted=true`) = ထည့်မတွက် (existing filter ပြန်သုံး)။
+### Auto-capture on order form (surgical)
+- `OrderFormPage.tsx`: read `?ref=` from URL, prefill an existing referrer field (already supported per referral memory). No logic rewrite.
 
-## UI
+---
 
-**Controls (Summary tab အပေါ်ဆုံး):**
-- View Select: `NW` · `KYS` · `NW – KYS Summary (Compare)`
-- Period Select: `Monthly` · `Yearly`
-- Year Select: 2025 – 2050 (hardcode range)
-- Month Select (Monthly မှသာ ပြ): Jan – Dec
-- Refresh button
+## 2. Recap History (14 days)
 
-Back-date — year/month စာရင်းမရှိရင်တောင် ရွေးလို့ရ၊ စာရင်းမရှိရင် "No records" empty state ပြ။
+### Backend (migration only)
+- Change `recap_history.expires_at` default from `now() + 1 hour` to `now() + 14 days`.
+- Existing cleanup function `cleanup_expired_recaps()` stays unchanged (it already deletes by `expires_at < now()`).
+- No changes to existing insert calls — new rows automatically get 14d. (Existing rows unaffected.)
 
-**NW or KYS တစ်ယောက်တည်း ရွေးတဲ့အခါ:**
+### Frontend — new component `src/components/MyRecapsCard.tsx`
+- Lists user's recaps from `recap_history` (title, date, size, expires-in badge).
+- **Download button** → creates a Supabase signed URL (`recap-videos` bucket, 1 hour) and triggers browser download.
+- **Copy share link** → same signed URL.
+- Empty state with friendly message. No editing of existing recap upload flow.
+
+---
+
+## 3. Where it shows (clean & premium)
+
+Add a single new section on **`src/pages/Index.tsx`** — only for logged-in users, placed above existing content, wrapped in `<Suspense>` and lazy-loaded so guests + performance are untouched:
+
+```text
+┌────────────────────────────────────────────────────────────┐
+│  ⭐ Your Rewards & Recaps                                  │
+├──────────────────────────┬─────────────────────────────────┤
+│  🎁 Refer 5 Friends      │  🎬 My Recap Videos             │
+│  Get 1 Month Premium     │  Saved 14 days · one-click DL   │
+│  [XX/5 progress ring]    │  [list with Download / Share]   │
+│  [Copy link] [Claim]     │                                 │
+└──────────────────────────┴─────────────────────────────────┘
 ```
-┌─────────────────────────────────────┐
-│ NW (Nay Win) — Jun 2026             │
-├─────────────────────────────────────┤
-│ 🔄 Renew Total       :  500,000 MMK │
-│                         (5,000 cr)  │
-│ 💰 Top-Up Total      :  435,000 MMK │
-│                         (4,350 cr)  │
-│ 👤 New Account Total : 1,000,000 MMK│
-│                         (10,000 cr) │
-├─────────────────────────────────────┤
-│ ✦ GRAND TOTAL        : 1,935,000 MMK│
-└─────────────────────────────────────┘
-```
 
-**Compare view (NW – KYS Summary):**
-- Side-by-side ၂ column (NW | KYS) — အပေါ်က ၃ ဘတ်စကိတ်အပြင် Grand Total ပါ ပြ
-- အောက်မှာ "Settlement Calculation" card:
-```
-NW  Total = 3,000,000 MMK
-KYS Total = 2,000,000 MMK
-─────────────────────────
-Difference (NW − KYS) = 1,000,000 MMK
-Share each side       = 500,000 MMK   ← (diff ÷ 2)
-→ NW owes KYS:        500,000 MMK
-(သို့မဟုတ် KYS ပိုရင် reverse direction ပြ)
-```
-Logic: `diff = abs(NW_total − KYS_total)`; `share = diff / 2`; ပိုတဲ့ဘက်က နည်းတဲ့ဘက်ကို ပေးရမယ်လို့ direction label ပြ။ ၂ ဘက် equal ဆို "Already balanced" ပြ။
+Design:
+- Uses existing midnight-blue + gold tokens (no new colors).
+- Two premium glass cards, big high-contrast text, single primary CTA per card.
+- Mobile: stacks vertically.
+- No changes to logo, nav, hero, footer, or any tool card.
 
-**Yearly mode:** လ ၁၂ လ စုစုပေါင်း — တွက်ပုံ formula တူတူ၊ filter က year တစ်ခုလုံး။
+---
 
-## Technical notes
-- ၃ buckets count အတွက် `topup_type.toLowerCase()` ကို `original` / `topup` / `renew` သာ accept။ `bonus`, `referral` = skip။
-- "New Account" အတွက် `original` row ပထမတစ်ခုကိုပဲ ယူဖို့ — existing `newUserAmountMap` pattern အတိုင်း သုံးမယ် (per user)။ ဒါမှ duplicate မဖြစ်။
-- Number format: `Intl.NumberFormat("en-US")` သုံးပြီး `1,000,000` style ပြ။
-- ဘယ် RLS / edge function မှ မပြောင်း။ Existing admin-only access အတိုင်း inherit။
+## Strict scope (will NOT touch)
+- RecapVideoNVPage.tsx and its 4 protected pipelines.
+- Any tool page (Transcribe, Translate, Voice, Thumbnail, Story, Novel, NovaCut, Transform, SRT, Recap variants).
+- Admin panel (data tab, revenue tabs, users, agents, orders, settings).
+- Auth flow, session enforcement, credit deduction, plan gating, RLS on other tables.
+- Existing referral admin UI in AdminSettingsTab.
 
-## Out of scope (do NOT touch)
-- RecapVideoNVPage, AV-SYNC, RECORD-PIPELINE, VOICE-GEN, AUTO-PIPELINE blocks
-- Upload functions (get-upload-url, upload-chunk)
-- Any other admin tab, tool, RLS policy, or migration
-- Existing Detail view layout / aggregation logic
+## Files
+- **New:** `src/components/RewardsCard.tsx`, `src/components/MyRecapsCard.tsx`, `src/components/HomeRewardsSection.tsx` (wrapper).
+- **Edited (surgical):** `src/pages/Index.tsx` (add one section for logged-in users), `src/pages/OrderFormPage.tsx` (read `?ref=` into existing referrer field only).
+- **Migration:** add 2 profile columns + 3 RPCs + change recap_history default. Includes GRANTs.
+
+## Verify
+- Type-check + browse Index logged-in to confirm section renders and no other UI shifted.

@@ -264,6 +264,8 @@ export type Database = {
           id: string
           is_banned: boolean
           plan: Database["public"]["Enums"]["subscription_plan"]
+          referral_code: string | null
+          referral_reward_claimed: boolean
           referred_by: string | null
           updated_at: string
           user_id: string
@@ -280,6 +282,8 @@ export type Database = {
           id?: string
           is_banned?: boolean
           plan?: Database["public"]["Enums"]["subscription_plan"]
+          referral_code?: string | null
+          referral_reward_claimed?: boolean
           referred_by?: string | null
           updated_at?: string
           user_id: string
@@ -296,6 +300,8 @@ export type Database = {
           id?: string
           is_banned?: boolean
           plan?: Database["public"]["Enums"]["subscription_plan"]
+          referral_code?: string | null
+          referral_reward_claimed?: boolean
           referred_by?: string | null
           updated_at?: string
           user_id?: string
@@ -665,7 +671,9 @@ export type Database = {
         Returns: boolean
       }
       check_admin_2fa_status: { Args: { _user_id: string }; Returns: Json }
+      claim_referral_reward: { Args: { _user_id: string }; Returns: Json }
       cleanup_expired_recaps: { Args: never; Returns: undefined }
+      count_referred_friends: { Args: { _user_id: string }; Returns: number }
       count_user_devices: { Args: { _user_id: string }; Returns: number }
       deduct_user_credits: {
         Args: {
@@ -678,6 +686,10 @@ export type Database = {
       }
       generate_order_number: {
         Args: { _payment_method: string }
+        Returns: string
+      }
+      get_or_create_referral_code: {
+        Args: { _user_id: string }
         Returns: string
       }
       has_role: {
