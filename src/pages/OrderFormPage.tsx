@@ -45,6 +45,17 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
     checkAuth();
   }, []);
 
+  // Prefill referrer from ?ref= URL param (surgical, non-invasive)
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const ref = params.get("ref");
+      if (ref) {
+        setFormData((prev) => (prev.referrerDisplayId ? prev : { ...prev, referrerDisplayId: ref.trim().substring(0, 50) }));
+      }
+    } catch {}
+  }, []);
+
   const handleSlipChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
