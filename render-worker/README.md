@@ -169,3 +169,68 @@ Service URL + RENDER_SECRET ၂ ခုရပြီဆိုရင် Lovable cha
 Cloud Run URL: https://render-worker-...run.app
 RENDER_SECRET: <SECRET hex string>
 ```
+
+---
+
+## Deploy on Replit (Free Tier) — Alternative to Cloud Run
+
+Replit Free plan က server-side render အတွက် အလုပ်ဖြစ်ပါတယ်။ Cloud Run နဲ့ code တူတူ — deploy config ပဲကွာပါတယ်။
+
+### Files ဒီ folder ထဲမှာ ရှိပြီး
+
+- `.replit` — run command + port
+- `replit.nix` — Node 20, ffmpeg, Chromium, Myanmar fonts
+- `.env.example` — required secrets list
+
+`server.js` / `Dockerfile` / `package.json` ကို **လုံး၀မထိပါ**။
+
+### Steps
+
+1. **Replit → Create Repl → Import from GitHub** → repo URL ထည့်ပါ။ Root ကို `render-worker/` folder ကို ရွေးပါ (သို့) subfolder shell command နဲ့ `cd render-worker` ဝင်ပါ။
+2. **Tools → Secrets** မှာ ဒါတွေထည့်ပါ (values က `.env.example` ကိုကြည့်ပါ):
+   - `RENDER_SHARED_SECRET` — Lovable secret ထဲက value အတိအကျ
+   - `GCS_BUCKET` — bucket name (e.g. `automationnova-render-output-2026`)
+   - `GOOGLE_APPLICATION_CREDENTIALS_JSON` — service account JSON အပြည့် (single line)
+3. **Shell tab** မှာ boot helper တစ်ခုထည့်ပါ — GCS credentials ကို file ထုတ်ဖို့:
+
+   ```bash
+   echo "$GOOGLE_APPLICATION_CREDENTIALS_JSON" > /tmp/gcp-sa.json
+   export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-sa.json
+   node server.js
+   ```
+
+   ဒါကို `.replit` ရဲ့ run command အစားထိုးလိုက်ရင် boot တိုင်း auto run ဖြစ်ပါလိမ့်မယ်။
+
+4. **Run** ကိုနှိပ်ပါ။ ပထမ boot က Nix packages (ffmpeg, chromium, fonts) install လုပ်ဖို့ 3–5 minutes ကြာနိုင်ပါတယ်။
+5. Replit က URL တစ်ခုပေးမယ် — `https://<repl-name>.<user>.repl.co` ပုံစံ။
+
+### Verify
+
+```bash
+curl https://<repl-name>.<user>.repl.co/healthz
+```
+
+Expected:
+
+```json
+{"ok":true,"startedAt":"...","ready":{"secret":true,"bucket":true}}
+```
+
+### Free tier reality check
+
+- **Sleep**: idle Repl က sleep ဖြစ်ပြီး request ဝင်လာမှ wake — cold start 10–20s
+- **CPU/RAM**: 1 shared vCPU + 1GB RAM → 720p `-preset ultrafast` fine
+- **Upload 1GB**: source video က client → Google Files API (chunked) တိုက်ရိုက်တင်တာဖြစ်လို့ Replit body size limit မထိပါ
+- **Concurrency**: 1 render at a time recommended — multiple users automatically queue in `JOBS` map
+- **Storage**: `/tmp` က ephemeral — finished MP4 က GCS ကို auto upload ဖြစ်ပြီး signed URL return ပြန်ပါတယ်
+
+### Wire to Lovable app
+
+Replit URL + `RENDER_SHARED_SECRET` ကို Lovable secrets ထဲမှာ ဒီလိုသုံးပါ:
+
+```text
+CLOUD_RUN_RENDER_URL     = https://<repl-name>.<user>.repl.co
+CLOUD_RUN_RENDER_SECRET  = <same value as Replit secret>
+```
+
+App code မပြောင်းရပါ — existing edge function က ဒီ URL ကို hit လုပ်ပါလိမ့်မယ်။
