@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 
-const EXTERNAL_URL = "https://replit.com/deployment-login";
+const EXTERNAL_URL =
+  "https://replit.com/deployment-login?goto=%2F__replshield%3Fredirect%3Dhttps%253A%252F%252Fsurgical-fixed-migration--ahmawpyay.replit.app%252F";
 
 export default function SmartRecapPage() {
   const navigate = useNavigate();
