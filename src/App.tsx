@@ -21,7 +21,6 @@ const lazyRetry = (importFn: () => Promise<any>) =>
 // Lazy-loaded pages for instant navigation
 const TranslatePage2 = lazyRetry(() => import("./pages/TranslatePage2"));
 const TranscribePage = lazyRetry(() => import("./pages/TranscribePage"));
-const VideoRecapPage = lazyRetry(() => import("./pages/VideoRecapPage"));
 const TransformativeVideoPage = lazyRetry(() => import("./pages/TransformativeVideoPage"));
 const RecapVideoPage = lazyRetry(() => import("./pages/RecapVideoPage"));
 const RecapVideoNVPage = lazyRetry(() => import("./pages/RecapVideoNVPage"));
@@ -61,7 +60,6 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/transcribe" element={<TranscribePage />} />
             <Route path="/translate" element={<TranslatePage2 />} />
-            <Route path="/video-recap" element={<VideoRecapPage />} />
             <Route path="/transformative" element={<TransformativeVideoPage />} />
             <Route path="/recap" element={<RecapVideoPage />} />
             <Route path="/recap-nv" element={<RecapVideoNVPage />} />
