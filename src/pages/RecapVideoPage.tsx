@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 
-const EXTERNAL_URL = "https://automationnova.replit.app/";
+const EXTERNAL_URL = "https://replit.com/@nerfspiderman20/Hello-World?settings.tab=usage";
 
 export default function SmartRecapPage() {
   const navigate = useNavigate();
