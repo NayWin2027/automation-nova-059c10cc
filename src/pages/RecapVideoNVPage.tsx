@@ -2272,25 +2272,27 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // Previously was nested inside isZoomEnabled â€” now runs always when freezeMode is ON
         if (freezeModeRef.current) {
           const t = audioEl.currentTime;
-          const FREEZE_SEC = 7;
-          const MOTION_SEC = 8;
+          const FREEZE_SEC = 2;
+          const MOTION_SEC = 12;
           const CYCLE_SEC = FREEZE_SEC + MOTION_SEC;
           const cyclePos = t % CYCLE_SEC;
           const isFreezeCycle = cyclePos < FREEZE_SEC;
 
           if (isFreezeCycle) {
-            // FREEZE PHASE: pause video + EXTREMELY subtle slow professional zoom-in + gentle pan
+            // FREEZE PHASE: pause video + professional slow-motion zoom-in (2s)
             const freezeProgress = cyclePos / FREEZE_SEC;
-            // Smooth ease-in-out: starts and ends slowly â€” cinematic, not jarring
+            // Smooth cubic ease-in-out: cinematic slow-motion feel â€” cinematic, not jarring
             const eased =
-              freezeProgress < 0.5 ? 2 * freezeProgress * freezeProgress : 1 - Math.pow(-2 * freezeProgress + 2, 2) / 2;
+              freezeProgress < 0.5
+                ? 4 * freezeProgress * freezeProgress * freezeProgress
+                : 1 - Math.pow(-2 * freezeProgress + 2, 3) / 2;
             // â”€â”€ SURGICAL EDIT: 1.5% MAX ZOOM ONLY! Extremely subtle, professional vibe, no jarring look â”€â”€
-            const freezeZoom = 1.0 + 0.015 * eased;
+            const freezeZoom = 1.0 + 0.08 * eased;
 
             // Extremely subtle gentle pan to add professional flow
             const t = audioEl.currentTime;
-            const panX = Math.sin(t * 0.05) * (srcCropW * 0.003);
-            const panY = Math.cos(t * 0.04) * (srcCropH * 0.003);
+            const panX = Math.sin(t * 0.08) * (srcCropW * 0.005);
+            const panY = Math.cos(t * 0.06) * (srcCropH * 0.004);
 
             zoomedSrcW = Math.max(2, Math.round(srcCropW / freezeZoom));
             zoomedSrcH = Math.max(2, Math.round(srcCropH / freezeZoom));
@@ -2993,7 +2995,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                           vv.playbackRate = targetPlaybackRate;
                           if (vv.paused) vv.play().catch(() => {});
                         } else {
-                          const isFreezeCycle = av.currentTime % (7 + 8) < 7;
+                          const isFreezeCycle = av.currentTime % (2 + 12) < 2;
                           if (!isFreezeCycle) {
                             vv.playbackRate = targetPlaybackRate;
                             vv.play().catch(() => {});
@@ -3018,7 +3020,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       if (vv.paused && !vv.ended) vv.play().catch(() => {});
                     } else {
                       // freezeMode ON: original freeze/pause logic preserved
-                      const isFreezeCycle = av.currentTime % (7 + 8) < 7;
+                      const isFreezeCycle = av.currentTime % (2 + 12) < 2;
                       const endMargin = 0.05;
                       if (isFreezeCycle) {
                         if (!vv.paused) vv.pause();
@@ -3084,7 +3086,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       vv.playbackRate = fbTargetRate;
                       if (vv.paused && !vv.ended) vv.play().catch(() => {});
                     } else {
-                      const fbFreeze = av.currentTime % (7 + 8) < 7;
+                      const fbFreeze = av.currentTime % (2 + 12) < 2;
                       if (fbFreeze) {
                         if (!vv.paused) vv.pause();
                       } else if (fbSourceEnd > 0 && vv.currentTime >= fbSourceEnd - 0.05) {
@@ -3193,7 +3195,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       if (videoRef.current) {
         videoRef.current.playbackRate = 1.0;
         // SURGICAL FIX: Only auto-play if NOT in a freeze cycle of freezeMode
-        const isFreezeCycle = freezeModeRef.current && audioRef.current!.currentTime % (7 + 8) < 7;
+        const isFreezeCycle = freezeModeRef.current && audioRef.current!.currentTime % (2 + 12) < 2;
         if (!isFreezeCycle) {
           videoRef.current.play().catch((err) => {
             // SURGICAL IOS FIX: Safely bypass the WebKit muted autoplay bug.
