@@ -674,8 +674,16 @@ ${transcript}
     let lastError = "";
     let activeModel = isOwnApi ? "gemini-2.5-flash" : MODEL;
 
+    // Total wall budget must stay under Supabase's 150s idle limit.
+    // Reserve ~10s for post-processing, credit deduction, and response send.
+    const WALL_BUDGET_MS = 140000;
+    const wallStart = Date.now();
+    const remainingBudget = () => Math.max(0, WALL_BUDGET_MS - (Date.now() - wallStart));
+
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 135000);
+    // Give the primary attempt the majority of the wall budget, leaving room for one fallback.
+    const primaryTimeout = Math.min(115000, remainingBudget() - 15000);
+    const timeoutId = setTimeout(() => controller.abort(), Math.max(5000, primaryTimeout));
     try {
       response = await fetch(`${GOOGLE_AI_API}/${activeModel}:generateContent?key=${activeApiKey}`, {
         method: "POST",
@@ -712,12 +720,18 @@ ${transcript}
       // Fallback if: no response (timeout/abort/network) OR response not ok and status warrants fallback
       if (response && response.ok) break;
       if (response && !shouldFallback(response.status)) break;
+      // Stop falling back if we don't have enough wall budget left for another attempt + response.
+      if (remainingBudget() < 12000) {
+        console.warn(`[recap-script-generator] Skipping remaining fallbacks — wall budget exhausted`);
+        break;
+      }
       activeModel = fallbackModel;
       console.warn(
         `[recap-script-generator] Previous attempt failed (${response?.status ?? "no-response"}). Falling back to ${activeModel}...`,
       );
       const fbController = new AbortController();
-      const fbTimeoutId = setTimeout(() => fbController.abort(), 135000);
+      const fbTimeout = Math.max(5000, Math.min(60000, remainingBudget() - 8000));
+      const fbTimeoutId = setTimeout(() => fbController.abort(), fbTimeout);
       try {
         response = await fetch(`${GOOGLE_AI_API}/${activeModel}:generateContent?key=${activeApiKey}`, {
           method: "POST",
