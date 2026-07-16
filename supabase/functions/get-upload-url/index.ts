@@ -44,18 +44,22 @@ serve(async (req) => {
       );
     }
 
-    // Build ordered key candidates: user's own key first, then app script-pool keys as fallback.
-    // This handles new AQ.* keys where user's project hasn't enabled generativelanguage API
-    // (Google returns 403 API_KEY_SERVICE_BLOCKED) — we transparently fall back to app keys.
+    // Key resolution:
+    //  - Own API Mode: user passes `apiKey` — use ONLY that key, never fall back to app keys.
+    //  - App Mode: no `apiKey` in body — use app script-pool with auto-rotate on 429.
+    const isOwnMode = !!apiKey;
     const candidates: string[] = [];
-    if (apiKey) candidates.push(apiKey);
-    const seen = new Set(candidates);
-    for (let i = 0; i < 4; i++) {
-      try {
-        const k = i === 0 ? getGeminiKey("script") : rotateKey("script");
-        if (!k) break;
-        if (!seen.has(k)) { candidates.push(k); seen.add(k); }
-      } catch { break; }
+    if (isOwnMode) {
+      candidates.push(apiKey);
+    } else {
+      const seen = new Set<string>();
+      for (let i = 0; i < 4; i++) {
+        try {
+          const k = i === 0 ? getGeminiKey("script") : rotateKey("script");
+          if (!k) break;
+          if (!seen.has(k)) { candidates.push(k); seen.add(k); }
+        } catch { break; }
+      }
     }
 
     if (candidates.length === 0) {
@@ -70,15 +74,22 @@ serve(async (req) => {
     let lastStatus = 0;
 
     for (const key of candidates) {
-      const resp = await fetch(`${GOOGLE_FILES_API}?key=${key}`, {
+      // New Google AI Studio keys (AQ.*) use header auth; legacy AIz.* keys accept query param.
+      // Sending both is safe and maximises compatibility across published/preview environments.
+      const isNewKey = key.startsWith("AQ.");
+      const url = isNewKey ? GOOGLE_FILES_API : `${GOOGLE_FILES_API}?key=${key}`;
+      const headers: Record<string, string> = {
+        "X-Goog-Upload-Protocol": "resumable",
+        "X-Goog-Upload-Command": "start",
+        "X-Goog-Upload-Header-Content-Length": fileSize.toString(),
+        "X-Goog-Upload-Header-Content-Type": mimeType,
+        "Content-Type": "application/json",
+      };
+      if (isNewKey) headers["x-goog-api-key"] = key;
+
+      const resp = await fetch(url, {
         method: "POST",
-        headers: {
-          "X-Goog-Upload-Protocol": "resumable",
-          "X-Goog-Upload-Command": "start",
-          "X-Goog-Upload-Header-Content-Length": fileSize.toString(),
-          "X-Goog-Upload-Header-Content-Type": mimeType,
-          "Content-Type": "application/json",
-        },
+        headers,
         body: JSON.stringify({
           file: {
             display_name: fileName.replace(/[\/\\:*?"<>|]/g, "_").substring(0, 255),
@@ -91,18 +102,16 @@ serve(async (req) => {
       const errText = await resp.text();
       lastErrorText = errText;
       lastStatus = resp.status;
-      console.error(`Google Files API error (key attempt): ${resp.status}`, errText.slice(0, 300));
+      console.error(`Google Files API error: ${resp.status}`, errText.slice(0, 300));
 
+      // In own-key mode, do NOT try any other key — surface Google's error directly.
+      if (isOwnMode) break;
+
+      // App mode: rotate on auth/service-blocked/rate-limit errors only
       const isServiceBlocked = /API_KEY_SERVICE_BLOCKED|SERVICE_DISABLED|PERMISSION_DENIED/i.test(errText);
       const isRateLimited = resp.status === 429;
       const isAuthError = resp.status === 401 || resp.status === 403 || isServiceBlocked;
-
-      // Only try next candidate on auth/service-blocked/rate-limit errors
-      if (!(isAuthError || isRateLimited)) {
-        // Non-recoverable (e.g., 400 malformed) — stop
-        break;
-      }
-      // else loop to next key
+      if (!(isAuthError || isRateLimited)) break;
     }
 
     if (!startResponse) {
@@ -112,14 +121,18 @@ serve(async (req) => {
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      if (lastStatus === 400 && /API[_ ]?KEY|api key/i.test(lastErrorText)) {
+      if (isOwnMode && (lastStatus === 401 || lastStatus === 403 || lastStatus === 400)) {
+        const isBlocked = /API_KEY_SERVICE_BLOCKED|SERVICE_DISABLED/i.test(lastErrorText);
+        const msg = isBlocked
+          ? "သင့် Google Cloud project မှာ Generative Language API မဖွင့်ရသေးပါ။ Google AI Studio (aistudio.google.com) ကနေ ရတဲ့ key ကို သုံးပါ။"
+          : `API key error: ${lastErrorText.slice(0, 300)}`;
         return new Response(
-          JSON.stringify({ error: "API key invalid. သင်ထည့်ထားသော Gemini API Key မမှန်ကန်ပါ။" }),
+          JSON.stringify({ error: msg }),
           { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       return new Response(
-        JSON.stringify({ error: `Failed to get upload URL: ${lastErrorText.slice(0, 200)}` }),
+        JSON.stringify({ error: `Failed to get upload URL: ${lastErrorText.slice(0, 300)}` }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
