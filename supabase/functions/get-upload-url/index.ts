@@ -44,62 +44,83 @@ serve(async (req) => {
       );
     }
 
-    // Use user's own API key or rotate through script-pool keys
-    let activeKey: string | null = apiKey || null;
-    if (!activeKey) {
-      try { activeKey = getGeminiKey("script"); } catch { activeKey = null; }
+    // Build ordered key candidates: user's own key first, then app script-pool keys as fallback.
+    // This handles new AQ.* keys where user's project hasn't enabled generativelanguage API
+    // (Google returns 403 API_KEY_SERVICE_BLOCKED) — we transparently fall back to app keys.
+    const candidates: string[] = [];
+    if (apiKey) candidates.push(apiKey);
+    const seen = new Set(candidates);
+    for (let i = 0; i < 4; i++) {
+      try {
+        const k = getGeminiKey("script");
+        if (k && !seen.has(k)) { candidates.push(k); seen.add(k); }
+        // rotate for next iteration
+        try { (await import("../_shared/geminiKeys.ts")).rotateKey("script"); } catch {}
+      } catch { break; }
     }
-    if (!activeKey) {
+
+    if (candidates.length === 0) {
       return new Response(
         JSON.stringify({ error: "No API key available" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Request resumable upload URL from Google Files API
-    const startResponse = await fetch(`${GOOGLE_FILES_API}?key=${activeKey}`, {
-      method: "POST",
-      headers: {
-        "X-Goog-Upload-Protocol": "resumable",
-        "X-Goog-Upload-Command": "start",
-        "X-Goog-Upload-Header-Content-Length": fileSize.toString(),
-        "X-Goog-Upload-Header-Content-Type": mimeType,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        file: {
-          display_name: fileName.replace(/[\/\\:*?"<>|]/g, "_").substring(0, 255),
+    let startResponse: Response | null = null;
+    let lastErrorText = "";
+    let lastStatus = 0;
+
+    for (const key of candidates) {
+      const resp = await fetch(`${GOOGLE_FILES_API}?key=${key}`, {
+        method: "POST",
+        headers: {
+          "X-Goog-Upload-Protocol": "resumable",
+          "X-Goog-Upload-Command": "start",
+          "X-Goog-Upload-Header-Content-Length": fileSize.toString(),
+          "X-Goog-Upload-Header-Content-Type": mimeType,
+          "Content-Type": "application/json",
         },
-      }),
-    });
+        body: JSON.stringify({
+          file: {
+            display_name: fileName.replace(/[\/\\:*?"<>|]/g, "_").substring(0, 255),
+          },
+        }),
+      });
 
-    if (!startResponse.ok) {
-      const errorText = await startResponse.text();
-      console.error("Google Files API error:", startResponse.status, errorText);
+      if (resp.ok) { startResponse = resp; break; }
 
-      if (startResponse.status === 429) {
+      const errText = await resp.text();
+      lastErrorText = errText;
+      lastStatus = resp.status;
+      console.error(`Google Files API error (key attempt): ${resp.status}`, errText.slice(0, 300));
+
+      const isServiceBlocked = /API_KEY_SERVICE_BLOCKED|SERVICE_DISABLED|PERMISSION_DENIED/i.test(errText);
+      const isRateLimited = resp.status === 429;
+      const isAuthError = resp.status === 401 || resp.status === 403 || isServiceBlocked;
+
+      // Only try next candidate on auth/service-blocked/rate-limit errors
+      if (!(isAuthError || isRateLimited)) {
+        // Non-recoverable (e.g., 400 malformed) — stop
+        break;
+      }
+      // else loop to next key
+    }
+
+    if (!startResponse) {
+      if (lastStatus === 429) {
         return new Response(
           JSON.stringify({ error: "Rate limit exceeded", retryable: true }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      if (startResponse.status === 401 || startResponse.status === 403) {
+      if (lastStatus === 400 && /API[_ ]?KEY|api key/i.test(lastErrorText)) {
         return new Response(
-          JSON.stringify({ error: "API key invalid" }),
+          JSON.stringify({ error: "API key invalid. သင်ထည့်ထားသော Gemini API Key မမှန်ကန်ပါ။" }),
           { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-
-      // Google returns 400 "API_KEY_INVALID" for bad keys — surface as auth error
-      if (startResponse.status === 400 && /API[_ ]?KEY|api key/i.test(errorText)) {
-        return new Response(
-          JSON.stringify({ error: "API key invalid. သင်ထည့်ထားသော Gemini API Key မမှန်ကန်ပါ။ Own API Key ကို စစ်ဆေးပါ။" }),
-          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
       return new Response(
-        JSON.stringify({ error: `Failed to get upload URL: ${errorText.slice(0, 200)}` }),
+        JSON.stringify({ error: `Failed to get upload URL: ${lastErrorText.slice(0, 200)}` }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
