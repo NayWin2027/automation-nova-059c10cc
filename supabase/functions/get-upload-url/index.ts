@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
-import { getGeminiKey } from "../_shared/geminiKeys.ts";
+import { getGeminiKey, rotateKey } from "../_shared/geminiKeys.ts";
 
 const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1beta/files";
 
@@ -52,10 +52,9 @@ serve(async (req) => {
     const seen = new Set(candidates);
     for (let i = 0; i < 4; i++) {
       try {
-        const k = getGeminiKey("script");
-        if (k && !seen.has(k)) { candidates.push(k); seen.add(k); }
-        // rotate for next iteration
-        try { (await import("../_shared/geminiKeys.ts")).rotateKey("script"); } catch {}
+        const k = i === 0 ? getGeminiKey("script") : rotateKey("script");
+        if (!k) break;
+        if (!seen.has(k)) { candidates.push(k); seen.add(k); }
       } catch { break; }
     }
 
