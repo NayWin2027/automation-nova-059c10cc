@@ -1436,41 +1436,32 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       };
       const totalWords = scriptData.segments.reduce((acc, s) => acc + getWordCount(s.text), 0);
       let wordCursor = 0;
-      // SURGICAL FIX: Track last valid timestamp so segments without timestamps
-      // don't incorrectly resolve to vStart=0 (wrong seek to video beginning).
-      // Forward-interpolate from last known anchor using word-count duration.
-      let lastValidVStart = 0;
+      // SURGICAL FIX: Timestamp accuracy - no word-count estimation.
+      // Missing timestamp uses previous segment's vEnd (exact video continuity).
+      // Timestamps that exist are parsed to exact seconds (source data precision).
+      let lastComputedVEnd = 0;
       return scriptData.segments.map((seg, i) => {
         const segWords = getWordCount(seg.text);
         const startWords = wordCursor;
         wordCursor += segWords;
-        // SURGICAL EDIT: Use exact timestamp â€” no offset for 100% AV sync accuracy
-        // SURGICAL FIX: Missing/blank timestamp guard
-        // parseTime("") = 0 wrongly seeks to video beginning.
-        // Forward-interpolate from last valid anchor when timestamp is absent.
+
+        // Use exact timestamp if present; otherwise use previous segment's vEnd (no estimation)
         const rawVStart = parseTime(seg.timestamp);
-        let vStart: number;
-        if (!seg.timestamp || rawVStart === 0) {
-          const estimatedClipSec = Math.max((segWords / 150) * 60, 3);
-          vStart = lastValidVStart + estimatedClipSec;
-        } else {
-          vStart = rawVStart;
-          lastValidVStart = rawVStart;
-        }
+        const vStart: number = seg.timestamp && rawVStart > 0 ? rawVStart : lastComputedVEnd;
+
         const nextSeg = scriptData.segments[i + 1];
         let vEnd: number;
         if (!nextSeg) {
           vEnd = -1;
         } else {
           const nextRaw = parseTime(nextSeg.timestamp);
-          const nextVStart = nextRaw > 0 ? nextRaw : vStart + Math.max((getWordCount(nextSeg.text) / 150) * 60, 3);
-          if (nextVStart > vStart) {
-            vEnd = nextVStart;
+          if (nextRaw > vStart) {
+            vEnd = nextRaw;
           } else {
-            const estimatedClipSec = Math.max((segWords / 150) * 60, 3);
-            vEnd = vStart + estimatedClipSec;
+            vEnd = vStart + 5;
           }
         }
+        lastComputedVEnd = vEnd === -1 ? vStart + 5 : vEnd;
         // SURGICAL EDIT: No duration cap â€” video segment plays full natural duration
         // for 100% voice-to-video accuracy (Pacing Intelligence caps removed)
         return {
@@ -2293,8 +2284,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // Previously was nested inside isZoomEnabled â€” now runs always when freezeMode is ON
         if (freezeModeRef.current) {
           const t = audioEl.currentTime;
-          const FREEZE_SEC = 2;
-          const MOTION_SEC = 12;
+          const FREEZE_SEC = 4; // 4s professional news-style zoom
+          const MOTION_SEC = 10;
           const CYCLE_SEC = FREEZE_SEC + MOTION_SEC;
           const cyclePos = t % CYCLE_SEC;
           const isFreezeCycle = cyclePos < FREEZE_SEC;
@@ -2305,35 +2296,38 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             // at cycle start, then draw that snapshot with animated zoom-in each frame.
             // Video element keeps playing — canvas recording never loses frames.
 
-            // Capture snapshot ONCE at the start of each new freeze cycle
-            if (frozenFrameCycleRef.current !== cycleIndex || !frozenFrameCapturedRef.current) {
-              if (!frozenFrameCanvasRef.current) {
-                frozenFrameCanvasRef.current = document.createElement("canvas");
-              }
-              const fc = frozenFrameCanvasRef.current;
-              fc.width = canvas.width;
-              fc.height = canvas.height;
-              const fctx = fc.getContext("2d");
-              if (fctx && videoEl.readyState >= 2) {
-                fctx.drawImage(videoEl, srcCropX, srcCropY, srcCropW, srcCropH, 0, 0, fc.width, fc.height);
-                frozenFrameCapturedRef.current = true;
-                frozenFrameCycleRef.current = cycleIndex;
+            // SURGICAL FIX: Content accuracy - capture frame tied to ACTIVE SEGMENT (not audio cycle).
+            // This ensures frozen photo = current narration content, 100% match.
+            const activeSegIdx = lastIndexRef.current;
+            if (activeSegIdx !== frozenFrameCycleRef.current || !frozenFrameCapturedRef.current) {
+              // New segment started: capture its vStart frame (after seek settles)
+              if (!seekPendingRef.current && videoEl.readyState >= 2) {
+                if (!frozenFrameCanvasRef.current) {
+                  frozenFrameCanvasRef.current = document.createElement("canvas");
+                }
+                const fc = frozenFrameCanvasRef.current;
+                fc.width = canvas.width;
+                fc.height = canvas.height;
+                const fctx = fc.getContext("2d");
+                if (fctx) {
+                  fctx.drawImage(videoEl, srcCropX, srcCropY, srcCropW, srcCropH, 0, 0, fc.width, fc.height);
+                  frozenFrameCapturedRef.current = true;
+                  frozenFrameCycleRef.current = activeSegIdx; // tied to segment, not audio cycle
+                }
               }
             }
 
-            // Animate zoom-in on frozen snapshot (cubic ease-in-out)
+            // NEWS-STYLE ZOOM: pure ease-out, slow smooth zoom 1.0 -> 1.12 over FREEZE_SEC
+            // No pan, no bounce — stable, professional, like CNN/BBC freeze frames
             const freezeProgress = cyclePos / FREEZE_SEC;
-            const eased =
-              freezeProgress < 0.5
-                ? 4 * freezeProgress * freezeProgress * freezeProgress
-                : 1 - Math.pow(-2 * freezeProgress + 2, 3) / 2;
-            const freezeZoom = 1.0 + 0.08 * eased;
-            const panX = Math.sin(t * 0.08) * (canvas.width * 0.005);
-            const panY = Math.cos(t * 0.06) * (canvas.height * 0.004);
+            // Pure ease-out: fast at start, slow at end (reverse of ease-in — natural deceleration)
+            const eased = 1 - Math.pow(1 - freezeProgress, 3);
+            const freezeZoom = 1.0 + 0.12 * eased; // 12% zoom, smooth deceleration
             const drawW = Math.max(2, Math.round(canvas.width / freezeZoom));
             const drawH = Math.max(2, Math.round(canvas.height / freezeZoom));
-            const drawX = Math.round((canvas.width - drawW) / 2) + Math.round(panX);
-            const drawY = Math.round((canvas.height - drawH) * 0.1) + Math.round(panY);
+            // Center perfectly — no pan (international news standard)
+            const drawX = Math.round((canvas.width - drawW) / 2);
+            const drawY = Math.round((canvas.height - drawH) / 2);
 
             if (frozenFrameCanvasRef.current && frozenFrameCapturedRef.current) {
               // Draw frozen snapshot with animated zoom-in crop
