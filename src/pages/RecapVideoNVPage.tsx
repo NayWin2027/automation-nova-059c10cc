@@ -1469,7 +1469,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           vEnd,
           aStartPct: totalWords > 0 ? startWords / totalWords : 0,
           aEndPct: totalWords > 0 ? wordCursor / totalWords : 1,
-          text: seg.text,
+          text: seg.text.replace(/\[\d{1,2}:\d{2}\]/g, "").trim(),
         };
       });
     }, [scriptData]);
@@ -3729,7 +3729,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                         };
                       })()}
                     >
-                      {currentSubtitle || scriptData.segments[0]?.text}
+                      {(currentSubtitle || scriptData.segments[0]?.text || "").replace(/\[\d{1,2}:\d{2}\]/g, "").trim()}
                     </div>
                   </div>
                 )}
@@ -5411,13 +5411,24 @@ const RecapVideoNVPage: React.FC = () => {
       const scriptBody: Record<string, unknown> = {
         fileUri,
         fileMimeType: mimeType,
-        niche: `You are an aggressive international professional YouTube recap editor. Analyze the uploaded movie/video and produce a condensed, fast-paced recap script in ${selectedLangName}. Length must be approximately 40-50% of the original duration when read aloud (never below 30%). Start with a shocking hook, build mystery, escalate tension, finish with a climactic payoff. Aggressively cut filler/travel/waiting scenes. Keep only plot twists, key character moments, conflicts, reveals, and the resolution. Write as ONE continuous gripping story with hook transitions between segments. Output each paragraph prefixed by [MM:SS] starting at [00:00] and ending close to the full duration. Use original wording — do NOT quote distinctive dialogue.${burmeseStyleBlock}`,
+        niche: `You are an aggressive international professional YouTube recap editor. Analyze the uploaded movie/video and produce a condensed, fast-paced recap script in ${selectedLangName}. Length must be approximately 40-50% of the original duration when read aloud (never below 30%). Start with a shocking hook, build mystery, escalate tension, finish with a climactic payoff. Aggressively cut filler/travel/waiting scenes. Keep only plot twists, key character moments, conflicts, reveals, and the resolution. Write as ONE continuous gripping story with hook transitions between segments. Use original wording — do NOT quote distinctive dialogue.
+
+TIMESTAMP FORMAT (CRITICAL — AV SYNC):
+Each paragraph MUST be prefixed with [MM:SS] where MM:SS is the EXACT timestamp in the SOURCE VIDEO where that specific scene/action physically occurs.
+This timestamp is a hard video seek point — the player will jump to exactly this source position to show the matching footage.
+- Do NOT distribute timestamps evenly or estimate spacing.
+- Do NOT use timestamps as output recap positions.
+- Scrub through the video and locate the PRECISE frame where each described event actually begins in the source.
+- Example: if Ko Naing kisses Ae Thint’s cheek at source video time 18:45, write [18:45], NOT [03:20].
+- Only use [00:00] if the described scene genuinely starts at the very beginning of the source video.
+- The final segment’s timestamp must reflect the actual source video position of that scene.${burmeseStyleBlock}`,
         language: selectedLangName,
         sourceDurationSec: duration,
         skipCreditDeduction: true,
         recapNvPipeline: true,
         apiMode: resolvedApiMode,
-        extraInstructions: `CRITICAL:\n- Output language MUST be ${selectedLangName} ONLY.\n- Cover the full story arc but stay at 40-50% of source duration (never below 30%, never above 50%).\n- For sources longer than 30 minutes, treat as 30-minute source and cap recap at 15 minutes.\n- Aggressively cut filler. Keep only plot-advancing moments.\n- Each segment must flow into the next with a hook/transition.\n- Never output a partial/incomplete script.${burmeseExtraStyle}`,
+        extraInstructions: `CRITICAL:\n- Output language MUST be ${selectedLangName} ONLY.\n- Cover the full story arc but stay at 40-50% of source duration (never below 30%, never above 50%).\n- For sources longer than 30 minutes, treat as 30-minute source and cap recap at 15 minutes.\n- Aggressively cut filler. Keep only plot-advancing moments.\n- Each segment must flow into the next with a hook/transition.\n- Never output a partial/incomplete script.
+- TIMESTAMP ACCURACY (AV SYNC CRITICAL): Every [MM:SS] prefix MUST be the exact source video position where that scene physically occurs. The video player hard-seeks to this timestamp to display matching footage. Verify each timestamp by analyzing the actual video frame for the described action.${burmeseExtraStyle}`,
         generationConfig: {
           maxOutputTokens,
           temperature: 0.7,
@@ -5874,9 +5885,14 @@ Actually edit the video by intelligently compressing the narrative while preserv
 LANGUAGE: Write the COMPLETE script in ${selectedLangName} language ONLY. Do NOT stop halfway; cover 100% of the story arc from start to finish.
 Never output partial/incomplete script.${burmeseStyleBlock}
 
-FORMAT (CRITICAL FOR SEGMENTING):
-Output each paragraph as one segment starting with a timestamp prefix like: [MM:SS] ... .
-The first segment should start at [00:00]. The last segment must reach close to the end of the full duration.
+FORMAT (CRITICAL FOR SEGMENTING — AV SYNC 100%):
+Output each paragraph as one segment prefixed with [MM:SS] where MM:SS is the EXACT timestamp in the SOURCE VIDEO where that specific scene/action physically occurs.
+CRITICAL: This timestamp is a hard video seek point. The player will immediately seek the source video to this exact position to show matching footage. Wrong timestamps = wrong footage shown on screen.
+- Do NOT space timestamps evenly or treat them as output recap positions.
+- Scrub the source video and find the PRECISE frame where each described event actually begins.
+- Example: if a character is kissed at source time 18:45, write [18:45] — NOT a made-up position like [03:20].
+- Use [00:00] ONLY if the scene genuinely starts at the very beginning of the source video.
+- The final segment’s timestamp must be the actual source video position of that final scene.
 
 ORIGINALITY:
 Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle text.`,
