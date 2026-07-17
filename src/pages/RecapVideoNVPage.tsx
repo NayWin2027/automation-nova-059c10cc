@@ -769,6 +769,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const isRenderingRef = useRef(false);
     const logoAngleRef = useRef<number>(0);
     const currentSubtitleRef = useRef<string>("");
+    // SURGICAL FIX: AV SYNC 100% — track effective (scaled) seek positions for between-segment hold
+    const lastEffectiveVStartRef = useRef<number>(0);
+    const lastEffectiveVEndRef = useRef<number>(0);
     const fixedCanvasFontSizeRef = useRef<number>(0);
     const subtitleLastTextRef = useRef<string>("");
     const subtitlePageStartRef = useRef<number>(0);
@@ -3031,8 +3034,28 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
                 if (activeIndex !== -1) {
                   const active = getSeg(activeIndex);
-                  const vActualEnd = active.vEnd === -1 ? vv.duration : active.vEnd;
-                  const sourceEnd = vActualEnd > active.vStart ? vActualEnd : vv.duration;
+                  // SURGICAL FIX: AV SYNC 100% — Audio-proportional source seek.
+                  // Gemini timestamps are recap-output positions (0-40% of source).
+                  // Map audio progress → source video position so every segment shows the right footage.
+                  const _audioDur = av.duration > 0 ? av.duration : 1;
+                  const _vidDur = vv.duration > 0 ? vv.duration : 1;
+                  const _lastSegVStart = segs.length > 0 ? (segs[segs.length - 1] as any).vStart || 0 : 0;
+                  const _hasAudioTs = audioTs.length > activeIndex && !!audioTs[activeIndex];
+                  // Scale only when timestamps look recap-relative (last vStart < 55% of source duration)
+                  const _needsScale = _hasAudioTs && _lastSegVStart > 0 && _lastSegVStart < _vidDur * 0.55;
+                  const effectiveVStart = _needsScale
+                    ? Math.min((audioTs[activeIndex].start / _audioDur) * _vidDur, _vidDur - 0.5)
+                    : active.vStart;
+                  const effectiveVEnd = _needsScale
+                    ? Math.min((audioTs[activeIndex].end / _audioDur) * _vidDur, _vidDur)
+                    : active.vEnd === -1
+                      ? vv.duration
+                      : active.vEnd;
+                  // Persist for between-segment hold loop
+                  lastEffectiveVStartRef.current = effectiveVStart;
+                  lastEffectiveVEndRef.current = effectiveVEnd;
+                  const vActualEnd = effectiveVEnd;
+                  const sourceEnd = vActualEnd > effectiveVStart ? vActualEnd : vv.duration;
                   const targetPlaybackRate = 1.0;
 
                   if (activeIndex !== lastIndexRef.current) {
@@ -3067,12 +3090,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       vv.playbackRate = targetPlaybackRate;
                       if (vv.paused && !vv.ended) vv.play().catch(() => {});
                     }
-                    vv.currentTime = active.vStart;
+                    vv.currentTime = effectiveVStart; // SURGICAL FIX: audio-proportional source position
                   } else if (!seekPendingRef.current) {
-                    // SURGICAL FIX: AV SYNC 100% — If video has overrun vEnd, hard-seek back to vStart
+                    // SURGICAL FIX: AV SYNC 100% — If video has overrun vEnd, hard-seek back to effectiveVStart
                     // This prevents irrelevant content (eating, dancing, walking) from leaking into the active segment.
                     const endMargin = 0.08;
-                    if (sourceEnd > active.vStart && vv.currentTime >= sourceEnd - endMargin) {
+                    if (sourceEnd > effectiveVStart && vv.currentTime >= sourceEnd - endMargin) {
                       // Hard-cut seek: loop segment — never show content past vEnd
                       seekPendingRef.current = true;
                       const onLoopSeeked = () => {
@@ -3082,7 +3105,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                         vv.removeEventListener("seeked", onLoopSeeked);
                       };
                       vv.addEventListener("seeked", onLoopSeeked);
-                      vv.currentTime = active.vStart;
+                      vv.currentTime = effectiveVStart; // SURGICAL FIX: loop back to correct source position
                     } else if (!freezeModeRef.current) {
                       // freeze OFF = continuous motion within segment boundary
                       vv.playbackRate = targetPlaybackRate;
@@ -3104,9 +3127,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   if (lastIndexRef.current >= 0 && !seekPendingRef.current) {
                     const lastActiveSeg = getSeg(lastIndexRef.current) as any;
                     if (lastActiveSeg) {
-                      const holdEnd = lastActiveSeg.vEnd === -1 ? vv.duration : lastActiveSeg.vEnd;
-                      const holdStart = lastActiveSeg.vStart;
-                      // If video has overrun the segment boundary, hard-seek back to vStart (loop)
+                      // SURGICAL FIX: Use effective (audio-proportional) positions for hold loop
+                      const holdEnd =
+                        lastEffectiveVEndRef.current > 0
+                          ? lastEffectiveVEndRef.current
+                          : lastActiveSeg.vEnd === -1
+                            ? vv.duration
+                            : lastActiveSeg.vEnd;
+                      const holdStart =
+                        lastEffectiveVStartRef.current > 0 ? lastEffectiveVStartRef.current : lastActiveSeg.vStart;
+                      // If video has overrun the segment boundary, hard-seek back to holdStart (loop)
                       if (vv.currentTime >= holdEnd - 0.08 || vv.currentTime < holdStart - 0.1) {
                         seekPendingRef.current = true;
                         const onGapSeeked = () => {
@@ -5411,24 +5441,13 @@ const RecapVideoNVPage: React.FC = () => {
       const scriptBody: Record<string, unknown> = {
         fileUri,
         fileMimeType: mimeType,
-        niche: `You are an aggressive international professional YouTube recap editor. Analyze the uploaded movie/video and produce a condensed, fast-paced recap script in ${selectedLangName}. Length must be approximately 40-50% of the original duration when read aloud (never below 30%). Start with a shocking hook, build mystery, escalate tension, finish with a climactic payoff. Aggressively cut filler/travel/waiting scenes. Keep only plot twists, key character moments, conflicts, reveals, and the resolution. Write as ONE continuous gripping story with hook transitions between segments. Use original wording — do NOT quote distinctive dialogue.
-
-TIMESTAMP FORMAT (CRITICAL — AV SYNC):
-Each paragraph MUST be prefixed with [MM:SS] where MM:SS is the EXACT timestamp in the SOURCE VIDEO where that specific scene/action physically occurs.
-This timestamp is a hard video seek point — the player will jump to exactly this source position to show the matching footage.
-- Do NOT distribute timestamps evenly or estimate spacing.
-- Do NOT use timestamps as output recap positions.
-- Scrub through the video and locate the PRECISE frame where each described event actually begins in the source.
-- Example: if Ko Naing kisses Ae Thint’s cheek at source video time 18:45, write [18:45], NOT [03:20].
-- Only use [00:00] if the described scene genuinely starts at the very beginning of the source video.
-- The final segment’s timestamp must reflect the actual source video position of that scene.${burmeseStyleBlock}`,
+        niche: `You are an aggressive international professional YouTube recap editor. Analyze the uploaded movie/video and produce a condensed, fast-paced recap script in ${selectedLangName}. Length must be approximately 40-50% of the original duration when read aloud (never below 30%). Start with a shocking hook, build mystery, escalate tension, finish with a climactic payoff. Aggressively cut filler/travel/waiting scenes. Keep only plot twists, key character moments, conflicts, reveals, and the resolution. Write as ONE continuous gripping story with hook transitions between segments. Output each paragraph prefixed by [MM:SS] starting at [00:00] and ending close to the full duration. Use original wording — do NOT quote distinctive dialogue.${burmeseStyleBlock}`,
         language: selectedLangName,
         sourceDurationSec: duration,
         skipCreditDeduction: true,
         recapNvPipeline: true,
         apiMode: resolvedApiMode,
-        extraInstructions: `CRITICAL:\n- Output language MUST be ${selectedLangName} ONLY.\n- Cover the full story arc but stay at 40-50% of source duration (never below 30%, never above 50%).\n- For sources longer than 30 minutes, treat as 30-minute source and cap recap at 15 minutes.\n- Aggressively cut filler. Keep only plot-advancing moments.\n- Each segment must flow into the next with a hook/transition.\n- Never output a partial/incomplete script.
-- TIMESTAMP ACCURACY (AV SYNC CRITICAL): Every [MM:SS] prefix MUST be the exact source video position where that scene physically occurs. The video player hard-seeks to this timestamp to display matching footage. Verify each timestamp by analyzing the actual video frame for the described action.${burmeseExtraStyle}`,
+        extraInstructions: `CRITICAL:\n- Output language MUST be ${selectedLangName} ONLY.\n- Cover the full story arc but stay at 40-50% of source duration (never below 30%, never above 50%).\n- For sources longer than 30 minutes, treat as 30-minute source and cap recap at 15 minutes.\n- Aggressively cut filler. Keep only plot-advancing moments.\n- Each segment must flow into the next with a hook/transition.\n- Never output a partial/incomplete script.${burmeseExtraStyle}`,
         generationConfig: {
           maxOutputTokens,
           temperature: 0.7,
@@ -5885,14 +5904,9 @@ Actually edit the video by intelligently compressing the narrative while preserv
 LANGUAGE: Write the COMPLETE script in ${selectedLangName} language ONLY. Do NOT stop halfway; cover 100% of the story arc from start to finish.
 Never output partial/incomplete script.${burmeseStyleBlock}
 
-FORMAT (CRITICAL FOR SEGMENTING — AV SYNC 100%):
-Output each paragraph as one segment prefixed with [MM:SS] where MM:SS is the EXACT timestamp in the SOURCE VIDEO where that specific scene/action physically occurs.
-CRITICAL: This timestamp is a hard video seek point. The player will immediately seek the source video to this exact position to show matching footage. Wrong timestamps = wrong footage shown on screen.
-- Do NOT space timestamps evenly or treat them as output recap positions.
-- Scrub the source video and find the PRECISE frame where each described event actually begins.
-- Example: if a character is kissed at source time 18:45, write [18:45] — NOT a made-up position like [03:20].
-- Use [00:00] ONLY if the scene genuinely starts at the very beginning of the source video.
-- The final segment’s timestamp must be the actual source video position of that final scene.
+FORMAT (CRITICAL FOR SEGMENTING):
+Output each paragraph as one segment starting with a timestamp prefix like: [MM:SS] ... .
+The first segment should start at [00:00]. The last segment must reach close to the end of the full duration.
 
 ORIGINALITY:
 Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle text.`,
