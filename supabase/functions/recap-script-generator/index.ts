@@ -892,6 +892,19 @@ ${transcript}
       });
     }
 
+    if (sourceDurationSec && !endsAtCompleteSentence(normalizedRawScript)) {
+      console.error("[recap-script-generator] Incomplete script output detected before length enforcement");
+      return new Response(
+        JSON.stringify({
+          error: "AI script က ဝါကျမဆုံးခင် တန်းလန်းရပ်သွားပါသည်။ Retry Script ကိုနှိပ်ပြီး ပြန် Generate လုပ်ပါ။",
+          retryable: true,
+          incompleteOutput: true,
+          retryAfterSeconds: 5,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     if (violatesTargetLanguage(normalizedRawScript, lang)) {
       console.error(`[recap-script-generator] Target language validation failed for ${lang}`);
       return new Response(
@@ -905,11 +918,11 @@ ${transcript}
     }
 
     const rawWordCount = normalizedRawScript.split(/\s+/).filter(Boolean).length;
-    const script = enforceScriptCoverage70(normalizedRawScript, sourceDurationSec);
+    const script = enforceScriptCoverage55(normalizedRawScript, sourceDurationSec);
     const finalWordCount = script.split(/\s+/).filter(Boolean).length;
 
     if (!script || script.trim().length < 10) {
-      console.error("[recap-script-generator] Script became invalid after 70% enforcement");
+      console.error("[recap-script-generator] Script became invalid after 55% enforcement");
       return new Response(JSON.stringify({ error: "Script generation failed after length enforcement" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
