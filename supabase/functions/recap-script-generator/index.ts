@@ -30,6 +30,34 @@ function buildGenerationConfig(model: string, requestedMaxOutputTokens: number |
   return config;
 }
 
+async function callGeminiGenerateContent(
+  model: string,
+  apiKey: string,
+  isOwnApi: boolean,
+  signal: AbortSignal,
+  systemPrompt: string,
+  contentParts: any[],
+  requestedMaxOutputTokens: number | null,
+): Promise<Response> {
+  const useHeaderAuth = isOwnApi && apiKey.startsWith("AQ.");
+  const url = useHeaderAuth
+    ? `${GOOGLE_AI_API}/${model}:generateContent`
+    : `${GOOGLE_AI_API}/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (useHeaderAuth) headers["x-goog-api-key"] = apiKey;
+
+  return fetch(url, {
+    method: "POST",
+    headers,
+    signal,
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ parts: contentParts }],
+      generationConfig: buildGenerationConfig(model, requestedMaxOutputTokens),
+    }),
+  });
+}
+
 async function uploadToGoogleFiles(
   apiKey: string,
   fileBytes: Uint8Array,
@@ -672,7 +700,16 @@ ${transcript}
 
     let response: Response | null = null;
     let lastError = "";
-    let activeModel = isOwnApi ? "gemini-2.5-flash" : MODEL;
+    const ownApiModels = [
+      "gemini-3.5-flash",
+      "gemini-3.1-flash",
+      "gemini-2.5-flash",
+      "gemini-2.0-flash",
+      "gemini-3-flash-preview",
+      "gemini-1.5-flash",
+      "gemini-2.0-flash-lite",
+    ];
+    let activeModel = isOwnApi ? ownApiModels[0] : MODEL;
 
     // Total wall budget must stay under Supabase's 150s idle limit.
     // Reserve ~10s for post-processing, credit deduction, and response send.
@@ -685,16 +722,15 @@ ${transcript}
     const primaryTimeout = Math.min(115000, remainingBudget() - 15000);
     const timeoutId = setTimeout(() => controller.abort(), Math.max(5000, primaryTimeout));
     try {
-      response = await fetch(`${GOOGLE_AI_API}/${activeModel}:generateContent?key=${activeApiKey}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: systemPrompt }] },
-          contents: [{ parts: contentParts }],
-          generationConfig: buildGenerationConfig(activeModel, requestedMaxOutputTokens),
-        }),
-      });
+      response = await callGeminiGenerateContent(
+        activeModel,
+        activeApiKey,
+        isOwnApi,
+        controller.signal,
+        systemPrompt,
+        contentParts,
+        requestedMaxOutputTokens,
+      );
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
       console.warn(`[recap-script-generator] Gemini fetch error (${activeModel}): ${lastError}`);
@@ -709,9 +745,9 @@ ${transcript}
       );
     }
 
-    // Surgical Own API fallback: preview models are free-tier during preview period.
+    // Surgical Own API fallback: try user-key models only; never fall back to app script-pool keys.
     const fallbackModels = isOwnApi
-      ? ["gemini-3-flash-preview", "gemini-1.5-flash", "gemini-2.0-flash-lite", "gemini-2.0-flash"]
+      ? ownApiModels.slice(1)
       : ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-flash-latest"];
     const shouldFallback = (status?: number) =>
       status === 503 || status === 504 || (isOwnApi && (status === 404 || status === 429 || status === 403));
@@ -733,16 +769,15 @@ ${transcript}
       const fbTimeout = Math.max(5000, Math.min(60000, remainingBudget() - 8000));
       const fbTimeoutId = setTimeout(() => fbController.abort(), fbTimeout);
       try {
-        response = await fetch(`${GOOGLE_AI_API}/${activeModel}:generateContent?key=${activeApiKey}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          signal: fbController.signal,
-          body: JSON.stringify({
-            system_instruction: { parts: [{ text: systemPrompt }] },
-            contents: [{ parts: contentParts }],
-            generationConfig: buildGenerationConfig(activeModel, requestedMaxOutputTokens),
-          }),
-        });
+        response = await callGeminiGenerateContent(
+          activeModel,
+          activeApiKey,
+          isOwnApi,
+          fbController.signal,
+          systemPrompt,
+          contentParts,
+          requestedMaxOutputTokens,
+        );
         if (response && !response.ok) {
           lastError = await response.text();
           console.warn(
