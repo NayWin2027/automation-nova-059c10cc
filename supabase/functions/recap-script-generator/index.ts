@@ -518,16 +518,18 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - Identify the subject matter, the niche, and the story being told through visuals/actions/music
 - Write a complete, engaging narration script based on your visual/audio analysis
 
-SCRIPT LENGTH RULE (CRITICAL — TRUE 40–50% RECAP / SUMMARY):
+SCRIPT LENGTH RULE (CRITICAL — TRUE 55% RECAP / SUMMARY):
 - This is a RECAP (summary), NOT a retelling. The narration MUST cover the full STORY ARC end-to-end but in a heavily compressed form.
-- HARD length target: about 40–50% of the source duration when read aloud (≈150 wpm for Burmese/Asian, ≈100 wpm for English). NEVER exceed 50%.
-- Word budget examples (Burmese/Asian @150wpm): a 3-min video → ~200 words; 10-min → ~675 words; 20-min → ~1350 words; 30-min → ~2025 words.
-- Word budget examples (English @100wpm): 3-min → ~135 words; 10-min → ~450 words; 20-min → ~900 words; 30-min → ~1350 words.
+- HARD length target: about 55% of the source duration when read aloud (≈150 wpm for Burmese/Asian, ≈100 wpm for English). Do not stop early.
+- Duration targets: 3-min source → about 1.5–2 min recap; 5-min → about 2.5–3 min; 10-min → about 5–6 min; 30-min → about 15–17 min.
+- Word budget examples (Burmese/Asian @150wpm): a 3-min video → ~250 words; 10-min → ~825 words; 20-min → ~1650 words; 30-min → ~2475 words.
+- Word budget examples (English @100wpm): 3-min → ~165 words; 10-min → ~550 words; 20-min → ~1100 words; 30-min → ~1650 words.
 - You MUST include the ending, but aggressively cut filler, repetition, side-beats, and low-stakes scenes.
 - Keep ONLY the main connected story beats and the highest-tension/climax scenes, in a tightly-linked narrative.
 - The FINAL paragraph MUST correspond to the FINAL scene of the source video (its timecode should be near the source's ending)
 - Every important beat from beginning, middle, AND end must appear — no part of the video may be skipped or left out
-- Avoid padding/repetition, but DO write enough paragraphs to truly cover the full duration end-to-end
+- Avoid padding/repetition, but DO write enough paragraphs to truly cover the full duration end-to-end.
+- The final sentence MUST be complete and end with sentence-ending punctuation. Never stop mid-sentence.
 
 VIRAL HOOK RULE (MANDATORY — FIRST 3 SECONDS):
 - The VERY FIRST sentence MUST be a 3-second viral hook designed to stop the scroll instantly
@@ -641,7 +643,7 @@ Below is a source video/audio file. Your job is to:
 3. If there is NO spoken dialogue, analyze visual elements, actions, music, settings, body language
 4. Identify ALL key moments, especially dramatic/shocking ones (confrontations, revelations, emotional scenes, physical actions like kisses/fights/tears)
 5. Write a complete professional ${nicheLabel} narration script that covers only the essential story beats
-6. A viewer reading your script aloud should finish in roughly 40–50% of the original source duration — NEVER longer.
+6. A viewer reading your script aloud should finish in roughly 55% of the original source duration and must cover the full source from beginning to end.
 7. Hook the audience immediately
 8. Use vivid, engaging ${lang} appropriate for "${nicheLabel}" content
 9. Be perfectly paced for voice narration
