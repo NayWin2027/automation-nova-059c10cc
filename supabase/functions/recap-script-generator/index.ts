@@ -205,18 +205,23 @@ function getMimeType(file: File): string {
   return mimeMap[ext || ""] || "audio/mpeg";
 }
 
-function enforceScriptCoverage70(script: string, sourceDurationSec?: number | null): string {
+const SENTENCE_END_RE = /[။.!?…。！？]$/;
+
+function endsAtCompleteSentence(text: string): boolean {
+  return SENTENCE_END_RE.test(text.trim().replace(/["'”’）\)]*$/, ""));
+}
+
+function enforceScriptCoverage55(script: string, sourceDurationSec?: number | null): string {
   const normalized = script.replace(/\r\n/g, "\n").trim();
   if (!normalized || !sourceDurationSec) return normalized || script;
 
-  const sentenceEndRe = /[။.!?…。！？]$/;
   const splitCompleteSentences = (text: string): string[] => {
     const sentences =
       text
         .replace(/\s+/g, " ")
         .match(/[^။.!?…。！？]+[။.!?…。！？]+(?:["'”’）\)]*)?/g)
         ?.map((s) => s.trim())
-        .filter((s) => sentenceEndRe.test(s.replace(/["'”’）\)]*$/, ""))) || [];
+        .filter((s) => endsAtCompleteSentence(s)) || [];
     return sentences;
   };
   const trimToCompleteSentences = (text: string, maxWordBudget: number): string => {
@@ -235,8 +240,8 @@ function enforceScriptCoverage70(script: string, sourceDurationSec?: number | nu
     return (kept.length ? kept.join(" ") : completeSentences[0]).trim();
   };
 
-  // True recap: target ~45% of source duration when read aloud (≈150 wpm).
-  const maxWords = Math.max(45, Math.floor((sourceDurationSec / 60) * 150 * 0.45));
+  // True recap: target ~55% of source duration when read aloud (≈150 wpm).
+  const maxWords = Math.max(55, Math.floor((sourceDurationSec / 60) * 150 * 0.55));
   const words = normalized.split(/\s+/).filter(Boolean);
   if (words.length <= maxWords) return normalized;
 
