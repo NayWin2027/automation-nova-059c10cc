@@ -205,18 +205,23 @@ function getMimeType(file: File): string {
   return mimeMap[ext || ""] || "audio/mpeg";
 }
 
-function enforceScriptCoverage70(script: string, sourceDurationSec?: number | null): string {
+const SENTENCE_END_RE = /[။.!?…。！？]$/;
+
+function endsAtCompleteSentence(text: string): boolean {
+  return SENTENCE_END_RE.test(text.trim().replace(/["'”’）\)]*$/, ""));
+}
+
+function enforceScriptCoverage55(script: string, sourceDurationSec?: number | null): string {
   const normalized = script.replace(/\r\n/g, "\n").trim();
   if (!normalized || !sourceDurationSec) return normalized || script;
 
-  const sentenceEndRe = /[။.!?…。！？]$/;
   const splitCompleteSentences = (text: string): string[] => {
     const sentences =
       text
         .replace(/\s+/g, " ")
         .match(/[^။.!?…。！？]+[။.!?…。！？]+(?:["'”’）\)]*)?/g)
         ?.map((s) => s.trim())
-        .filter((s) => sentenceEndRe.test(s.replace(/["'”’）\)]*$/, ""))) || [];
+        .filter((s) => endsAtCompleteSentence(s)) || [];
     return sentences;
   };
   const trimToCompleteSentences = (text: string, maxWordBudget: number): string => {
@@ -235,8 +240,8 @@ function enforceScriptCoverage70(script: string, sourceDurationSec?: number | nu
     return (kept.length ? kept.join(" ") : completeSentences[0]).trim();
   };
 
-  // True recap: target ~45% of source duration when read aloud (≈150 wpm).
-  const maxWords = Math.max(45, Math.floor((sourceDurationSec / 60) * 150 * 0.45));
+  // True recap: target ~55% of source duration when read aloud (≈150 wpm).
+  const maxWords = Math.max(55, Math.floor((sourceDurationSec / 60) * 150 * 0.55));
   const words = normalized.split(/\s+/).filter(Boolean);
   if (words.length <= maxWords) return normalized;
 
@@ -513,16 +518,18 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - Identify the subject matter, the niche, and the story being told through visuals/actions/music
 - Write a complete, engaging narration script based on your visual/audio analysis
 
-SCRIPT LENGTH RULE (CRITICAL — TRUE 40–50% RECAP / SUMMARY):
+SCRIPT LENGTH RULE (CRITICAL — TRUE 55% RECAP / SUMMARY):
 - This is a RECAP (summary), NOT a retelling. The narration MUST cover the full STORY ARC end-to-end but in a heavily compressed form.
-- HARD length target: about 40–50% of the source duration when read aloud (≈150 wpm for Burmese/Asian, ≈100 wpm for English). NEVER exceed 50%.
-- Word budget examples (Burmese/Asian @150wpm): a 3-min video → ~200 words; 10-min → ~675 words; 20-min → ~1350 words; 30-min → ~2025 words.
-- Word budget examples (English @100wpm): 3-min → ~135 words; 10-min → ~450 words; 20-min → ~900 words; 30-min → ~1350 words.
+- HARD length target: about 55% of the source duration when read aloud (≈150 wpm for Burmese/Asian, ≈100 wpm for English). Do not stop early.
+- Duration targets: 3-min source → about 1.5–2 min recap; 5-min → about 2.5–3 min; 10-min → about 5–6 min; 30-min → about 15–17 min.
+- Word budget examples (Burmese/Asian @150wpm): a 3-min video → ~250 words; 10-min → ~825 words; 20-min → ~1650 words; 30-min → ~2475 words.
+- Word budget examples (English @100wpm): 3-min → ~165 words; 10-min → ~550 words; 20-min → ~1100 words; 30-min → ~1650 words.
 - You MUST include the ending, but aggressively cut filler, repetition, side-beats, and low-stakes scenes.
 - Keep ONLY the main connected story beats and the highest-tension/climax scenes, in a tightly-linked narrative.
 - The FINAL paragraph MUST correspond to the FINAL scene of the source video (its timecode should be near the source's ending)
 - Every important beat from beginning, middle, AND end must appear — no part of the video may be skipped or left out
-- Avoid padding/repetition, but DO write enough paragraphs to truly cover the full duration end-to-end
+- Avoid padding/repetition, but DO write enough paragraphs to truly cover the full duration end-to-end.
+- The final sentence MUST be complete and end with sentence-ending punctuation. Never stop mid-sentence.
 
 VIRAL HOOK RULE (MANDATORY — FIRST 3 SECONDS):
 - The VERY FIRST sentence MUST be a 3-second viral hook designed to stop the scroll instantly
@@ -636,7 +643,7 @@ Below is a source video/audio file. Your job is to:
 3. If there is NO spoken dialogue, analyze visual elements, actions, music, settings, body language
 4. Identify ALL key moments, especially dramatic/shocking ones (confrontations, revelations, emotional scenes, physical actions like kisses/fights/tears)
 5. Write a complete professional ${nicheLabel} narration script that covers only the essential story beats
-6. A viewer reading your script aloud should finish in roughly 40–50% of the original source duration — NEVER longer.
+6. A viewer reading your script aloud should finish in roughly 55% of the original source duration and must cover the full source from beginning to end.
 7. Hook the audience immediately
 8. Use vivid, engaging ${lang} appropriate for "${nicheLabel}" content
 9. Be perfectly paced for voice narration
@@ -885,6 +892,19 @@ ${transcript}
       });
     }
 
+    if (sourceDurationSec && !endsAtCompleteSentence(normalizedRawScript)) {
+      console.error("[recap-script-generator] Incomplete script output detected before length enforcement");
+      return new Response(
+        JSON.stringify({
+          error: "AI script က ဝါကျမဆုံးခင် တန်းလန်းရပ်သွားပါသည်။ Retry Script ကိုနှိပ်ပြီး ပြန် Generate လုပ်ပါ။",
+          retryable: true,
+          incompleteOutput: true,
+          retryAfterSeconds: 5,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     if (violatesTargetLanguage(normalizedRawScript, lang)) {
       console.error(`[recap-script-generator] Target language validation failed for ${lang}`);
       return new Response(
@@ -898,11 +918,11 @@ ${transcript}
     }
 
     const rawWordCount = normalizedRawScript.split(/\s+/).filter(Boolean).length;
-    const script = enforceScriptCoverage70(normalizedRawScript, sourceDurationSec);
+    const script = enforceScriptCoverage55(normalizedRawScript, sourceDurationSec);
     const finalWordCount = script.split(/\s+/).filter(Boolean).length;
 
     if (!script || script.trim().length < 10) {
-      console.error("[recap-script-generator] Script became invalid after 70% enforcement");
+      console.error("[recap-script-generator] Script became invalid after 55% enforcement");
       return new Response(JSON.stringify({ error: "Script generation failed after length enforcement" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
