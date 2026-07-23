@@ -1222,7 +1222,7 @@ export default function App() {
         yPos: number,
         isNeon: boolean,
         fontStyle: string,
-        fontFamily: string = ''PannYeat', 'Aka02', 'Aka07', 'PhanTee', sans-serif',
+        fontFamily: string = '"PannYeat", "Aka02", "Aka07", "PhanTee", sans-serif',
         maxLines: number = 2,
       ): string => {
         const maxTextWidth = canvas.width * 0.9;
@@ -1336,7 +1336,7 @@ export default function App() {
           canvas.height * 0.82,
           true,
           "900",
-          ''PannYeat', 'Aka02', 'Aka07', 'PhanTee', sans-serif',
+          '"PannYeat", "Aka02", "Aka07", "PhanTee", sans-serif',
         );
       }
 
