@@ -615,6 +615,10 @@ export default function App() {
   }, [subOpacity]);
 
   useEffect(() => {
+    subTextColorRef.current = subTextColor;
+  }, [subTextColor]);
+
+  useEffect(() => {
     dragWatermarkPosRef.current = watermarkPos;
     if (watermarkBoxRef.current) {
       watermarkBoxRef.current.style.left = `${watermarkPos.x}%`;
