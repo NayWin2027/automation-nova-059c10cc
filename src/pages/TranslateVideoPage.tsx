@@ -2967,11 +2967,21 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                         backgroundColor: `rgba(0,0,0,${subOpacity / 100})`,
                         touchAction: "none",
                         willChange: "left, top, transform",
+                        backdropFilter: `blur(${Math.max(2, Math.round(subOpacity * 0.18))}px)`,
+                        WebkitBackdropFilter: `blur(${Math.max(2, Math.round(subOpacity * 0.18))}px)`,
+                        borderRadius: "12px",
                       }}
                       onPointerDown={(e) => handlePointerDown("sub", e, previewRef.current)}
+                      onTouchStart={handleSubTouchStart}
+                      onTouchMove={handleSubTouchMove}
+                      onTouchEnd={handleSubTouchEnd}
+                      onTouchCancel={handleSubTouchEnd}
                     >
-                      <span className="font-bold text-xs md:text-sm pointer-events-none text-center px-2 neon-text">
-                        Drag to Move
+                      <span
+                        className="font-bold text-xs md:text-sm pointer-events-none text-center px-2"
+                        style={{ color: subTextColor, textShadow: "0 1px 2px rgba(0,0,0,0.8)" }}
+                      >
+                        Drag / Pinch
                         <br />
                         Subtitle Box
                       </span>
