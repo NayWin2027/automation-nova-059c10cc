@@ -1695,74 +1695,120 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
 [{"start": 0.0, "end": 2.1, "text": "မင်္ဂလာပါခင်ဗျာ"}, {"start": 2.2, "end": 4.0, "text": "နေကောင်းကြရဲ့လား"}, ...]`,
           });
 
-          try {
-            let text = "[]";
-
-            if (apiMode === "own" && ownApiKey.trim()) {
-              // === OWN API MODE: Direct client-side Gemini call ===
-              const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
-              const ownParts: any[] = [{ inlineData: { mimeType: "audio/wav", data: chunk.base64 } }];
-              if (frameBase64) {
-                ownParts.push({ inlineData: { mimeType: "image/jpeg", data: frameBase64 } });
+          // === NO-SKIP RETRY LOOP: retry empty/failed chunks up to 3 attempts ===
+          const MAX_CHUNK_ATTEMPTS = 3;
+          let chunkAdded: { start: number; end: number; text: string }[] = [];
+          let lastErr: any = null;
+          for (let attempt = 1; attempt <= MAX_CHUNK_ATTEMPTS; attempt++) {
+            try {
+              if (attempt > 1) {
+                setProcessingStatus(`Retrying segment ${i + 1}/${audioChunks.length} (attempt ${attempt}/${MAX_CHUNK_ATTEMPTS})...`);
+                await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt - 2)));
               }
-              ownParts.push(parts[parts.length - 1]); // The prompt text part
+              let text = "[]";
 
-              const ownResult = await ai.models.generateContent({
-                model: "gemini-2.5-flash",
-                contents: [{ role: "user", parts: ownParts }],
-                config: {
-                  temperature: 0,
-                  maxOutputTokens: 8192,
-                  responseMimeType: "application/json",
-                },
+              if (apiMode === "own" && ownApiKey.trim()) {
+                // === OWN API MODE: Direct client-side Gemini call ===
+                const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
+                const ownParts: any[] = [{ inlineData: { mimeType: "audio/wav", data: chunk.base64 } }];
+                if (frameBase64) {
+                  ownParts.push({ inlineData: { mimeType: "image/jpeg", data: frameBase64 } });
+                }
+                ownParts.push(parts[parts.length - 1]); // The prompt text part
+
+                const ownResult = await ai.models.generateContent({
+                  model: "gemini-2.5-flash",
+                  contents: [{ role: "user", parts: ownParts }],
+                  config: {
+                    temperature: attempt === 1 ? 0 : 0.2,
+                    maxOutputTokens: 8192,
+                    responseMimeType: "application/json",
+                  },
+                });
+                text = ownResult.text || "[]";
+              } else {
+                // === APP API MODE: Server-side edge function (secure) ===
+                text = await invokeSubtitleTranslationChunk({
+                  audioBase64: chunk.base64,
+                  audioDuration: chunk.duration,
+                  targetLang,
+                  videoFrames: frameBase64 ? [frameBase64] : [],
+                });
+              }
+              const jsonMatch = text.match(/\[[\s\S]*\]/);
+              let chunkSubs = JSON.parse(jsonMatch ? jsonMatch[0] : "[]");
+              if (!Array.isArray(chunkSubs)) {
+                chunkSubs = [chunkSubs];
+              }
+
+              // Adjust timestamps by adding the EXACT segment offset (calculated by VAD)
+              // Clamp-not-drop: keep overshooting segments by clamping their end to chunk.duration
+              const adjustedSubs: { start: number; end: number; text: string }[] = chunkSubs
+                .filter((sub: any) => {
+                  const s = parseFloat(sub.start) || 0;
+                  const e = parseFloat(sub.end) || 0;
+                  // Widened tolerance: keep any segment that starts inside the chunk
+                  return e > s && s >= 0 && s < chunk.duration + 1.0;
+                })
+                .map((sub: any) => {
+                  const relStart = Math.max(0, Math.min(chunk.duration, parseFloat(sub.start) || 0));
+                  const relEnd = Math.min(chunk.duration, Math.max(relStart + 0.1, parseFloat(sub.end) || 0));
+                  return {
+                    start: parseFloat((relStart + chunk.offset).toFixed(3)),
+                    end: parseFloat((relEnd + chunk.offset).toFixed(3)),
+                    text: stripSpeakerName(sub.text || ""),
+                  };
+                })
+                .filter((sub: any) => sub.text.length > 0 && sub.end > sub.start);
+
+              // Relaxed script filter: only drop when text is 100% wrong-script (e.g. all Latin for Burmese target).
+              // Legitimate proper names / numbers / mixed lines are kept so no dialogue goes missing.
+              const kept = adjustedSubs.filter((sub) => {
+                if (!sub.text.trim()) return false;
+                const lang = targetLang.toLowerCase();
+                const hasBurmese = /[\u1000-\u109F\uAA60-\uAA7F]/.test(sub.text);
+                const hasThai = /[\u0E00-\u0E7F]/.test(sub.text);
+                const hasCjk = /[\u3400-\u9FFF\uF900-\uFAFF]/.test(sub.text);
+                const onlyLatin = /^[\sA-Za-z0-9\p{P}\p{S}]+$/u.test(sub.text);
+                if (lang.includes("burmese") || lang.includes("myanmar") || targetLang.includes("မြန်မာ")) {
+                  return hasBurmese || !onlyLatin ? true : false;
+                }
+                if (lang.includes("thai") || targetLang.includes("ไทย")) {
+                  return hasThai || !onlyLatin ? true : false;
+                }
+                if (lang.includes("chinese") || targetLang.includes("中文")) {
+                  return hasCjk || !onlyLatin ? true : false;
+                }
+                return true;
               });
-              text = ownResult.text || "[]";
-            } else {
-              // === APP API MODE: Server-side edge function (secure) ===
-              text = await invokeSubtitleTranslationChunk({
-                audioBase64: chunk.base64,
-                audioDuration: chunk.duration,
-                targetLang,
-                videoFrames: frameBase64 ? [frameBase64] : [],
-              });
-            }
-            const jsonMatch = text.match(/\[[\s\S]*\]/);
-            let chunkSubs = JSON.parse(jsonMatch ? jsonMatch[0] : "[]");
-            if (!Array.isArray(chunkSubs)) {
-              chunkSubs = [chunkSubs];
-            }
 
-            // Adjust timestamps by adding the EXACT segment offset (calculated by VAD)
-            // Also clamp and validate each subtitle to prevent timing bugs
-            const adjustedSubs: { start: number; end: number; text: string }[] = chunkSubs
-              .filter((sub: any) => {
-                const s = parseFloat(sub.start) || 0;
-                const e = parseFloat(sub.end) || 0;
-                return e > s && s >= 0 && e <= chunk.duration + 0.5; // allow 500ms tolerance
-              })
-              .map((sub: any) => {
-                const relStart = Math.max(0, parseFloat(sub.start) || 0);
-                const relEnd = Math.min(chunk.duration, parseFloat(sub.end) || 0);
-                return {
-                  start: parseFloat((relStart + chunk.offset).toFixed(3)),
-                  end: parseFloat((relEnd + chunk.offset).toFixed(3)),
-                  text: stripSpeakerName(sub.text || ""),
-                };
-              })
-              .filter((sub: any) => sub.text.length > 0 && sub.end > sub.start);
-
-            parsedSubtitles = [...parsedSubtitles, ...keepOnlyTargetLanguageSubtitles(adjustedSubs, targetLang)];
-          } catch (err: any) {
-            console.error(`Error processing chunk ${i}:`, err);
-            const isRateLimit =
-              err?.status === 429 ||
-              err?.message?.includes("429") ||
-              err?.message?.includes("RESOURCE_EXHAUSTED") ||
-              err?.status === "RESOURCE_EXHAUSTED";
-            if (isRateLimit) {
-              throw new Error(`API Quota Exceeded! The server API key has hit its rate limit. Please try again later.`);
+              if (kept.length === 0 && attempt < MAX_CHUNK_ATTEMPTS) {
+                // Empty result → retry instead of silent skip
+                lastErr = new Error("Empty translation result");
+                continue;
+              }
+              chunkAdded = kept;
+              lastErr = null;
+              break;
+            } catch (err: any) {
+              lastErr = err;
+              console.error(`Error processing chunk ${i} (attempt ${attempt}):`, err);
+              const isRateLimit =
+                err?.status === 429 ||
+                err?.message?.includes("429") ||
+                err?.message?.includes("RESOURCE_EXHAUSTED") ||
+                err?.status === "RESOURCE_EXHAUSTED";
+              if (isRateLimit) {
+                throw new Error(`API Quota Exceeded! The server API key has hit its rate limit. Please try again later.`);
+              }
+              if (attempt >= MAX_CHUNK_ATTEMPTS) {
+                throw new Error(`Failed to translate segment ${i + 1}. Subtitle မပါဘဲ render မလုပ်ပါဘူး။ ခဏနေရင် ပြန်စမ်းပါ။`);
+              }
             }
-            throw new Error(`Failed to translate segment ${i + 1}. Subtitle မပါဘဲ render မလုပ်ပါဘူး။ ခဏနေရင် ပြန်စမ်းပါ။`);
+          }
+          parsedSubtitles = [...parsedSubtitles, ...chunkAdded];
+          if (chunkAdded.length === 0) {
+            console.warn(`[TranslateVideo] Segment ${i + 1} returned empty after ${MAX_CHUNK_ATTEMPTS} attempts.`, lastErr);
           }
         }
       }
