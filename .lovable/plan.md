@@ -1,61 +1,40 @@
-## What I verified
+# Translate Video — Subtitle Style Match with Recap NV
 
-- The script cutoff is tied to `supabase/functions/recap-script-generator/index.ts` only.
-- The current length enforcement is at `enforceScriptCoverage70()` around lines 208-258.
-- That function currently trims scripts to about `45%` (`line 239`) and can cut down content after Gemini already generated it.
-- The prompt still says `40-50%` around lines 516-520 and 639, so it does not match your requested `55%` target.
-- The final script assignment happens around lines 900-902: raw Gemini output is passed through `enforceScriptCoverage70(...)` before returning.
-- Recent model/fallback changes are around lines 701-793. Those can make Gemini output different lengths, but the direct cutoff/trimming risk is the length enforcement function and prompt mismatch.
+## Goal
+Translate Video page ရဲ့ subtitle စာလုံးပုံစံ (Myanmar font + weight + stroke/shadow) ကို Recap NV နဲ့ 100% နီးပါးတူအောင် လုပ်မယ်။ Logic (translation, timing, sync, render pipeline, black "erase" box, drag/scale, opacity) ကို လုံးဝ မထိပါ။
 
-## Why this keeps coming back
+## Scope — Surgical Only
+**ပြင်မယ့်အပိုင်း (presentation only):**
+- Canvas subtitle draw ရာမှာ font-family, weight, stroke/shadow — Recap NV နဲ့တူအောင်
 
-The previous fixes likely prevented cutting in the middle of a sentence only when trimming happens, but the current code still has two conflicting rules:
+**လုံးဝ မထိတဲ့အပိုင်း:**
+- Translation / chunking / Gemini call flow
+- Subtitle timing, pagination, word-wrap logic
+- Black background box (မူရင်း subtitle ဖုံးဖို့ လိုတယ်)
+- Drag position, width/height/opacity sliders
+- Export / render / audio pipeline
+- Recap NV page (read-only reference)
 
-1. Prompt tells Gemini to produce `40-50%` recap.
-2. Backend enforcement hard-trims to about `45%`.
+## Changes
 
-So even if Gemini writes a longer, more complete script, the backend can still shorten it. If the model itself stops early because of token/time limits, the code currently accepts the incomplete script as long as it is non-empty and language-valid.
+### 1) New shared file: `src/lib/burmeseFonts.ts`
+Recap NV ထဲက base64-embedded Myanmar font loader (Aka02, Aka07, PannYeat, PhanTee, KoZ033 — ~685KB block) ကို extract လုပ်ပြီး `useBurmeseFonts()` hook တစ်ခုအဖြစ် ထုတ်မယ်။ Font data byte-for-byte identical copy — content မပြောင်း။
 
-## Surgical fix scope
+### 2) `src/pages/RecapVideoNVPage.tsx`
+Inline `BUILTIN_FONTS` useEffect (~line 1484-1610) နေရာမှာ shared `useBurmeseFonts()` ကို ခေါ်ရုံပဲ ပြောင်း။ Font list, style, behavior — identical ဖြစ်အောင် ဂရုစိုက်။ (Existing font selector UI, canvas draw — မထိ)
 
-Only edit `supabase/functions/recap-script-generator/index.ts`.
+### 3) `src/pages/TranslateVideoPage.tsx`
+- Top-level မှာ `useBurmeseFonts()` ခေါ်ပြီး Myanmar fonts load
+- Canvas subtitle rendering (line 2282 + 2347) ကို presentation swap:
+  - `"Inter", "Pyidaungsu", "Padauk"` → `'PannYeat', 'Aka02', 'Aka07', 'PhanTee', sans-serif`
+  - Weight/stroke calibration — Recap NV ရဲ့ modern subtitle style (bold white fill + dark stroke + subtle shadow) နဲ့ ကိုက်အောင်
+- Thumbnail generator (line 1223, 1337) ရဲ့ font — same swap (thumbnail text ကလည်း Recap NV vibe နဲ့ တူသင့်)
+- Preview overlay (React DOM) မှာ subtitle preview စာလုံးရှိရင် fontFamily တူအောင် align
 
-No changes to:
-- AV sync
-- browser rendering
-- server rendering
-- video output logic
-- upload logic
-- App API script-pool key fallback/rotation
-- Recap NV protected pipeline blocks
-- other tools/pages
+**မထိတာ:** black box fillRect, opacity, drag position, word-wrap loop, pagination, MAX_LINES, boxW/boxH ရဲ့ တွက်ချက်မှု တစ်ခုမှ မပြင်။
 
-## Planned changes
-
-1. Rename/adjust the internal length enforcement behavior in place:
-   - Change target from `45%` to `55%`.
-   - Keep sentence-boundary trimming only.
-   - Never return text ending mid-sentence when sentence-ending punctuation exists.
-
-2. Update prompt length wording only inside `recap-script-generator`:
-   - Replace `40-50%` guidance with `about 55%`.
-   - Update examples to match 55% coverage:
-     - 3 min source → about 1.5-2 min recap
-     - 5 min source → about 2.5-3 min recap
-     - 10 min source → about 5-6 min recap
-     - 30 min source → about 15-17 min recap
-
-3. Add incomplete-output detection after Gemini response:
-   - If output does not end with a sentence-ending mark (`။ . ! ? …`) and source duration exists, treat it as incomplete instead of returning a broken script.
-   - Return a retryable script error so the existing “Error — Solve to fix” box / Retry Script flow can handle it.
-   - This prevents users from receiving a script that stops halfway through a sentence.
-
-4. Keep existing Own API and App API key behavior unchanged:
-   - Own API uses only the user key.
-   - App API rotation/fallback remains exactly as-is.
-
-## Validation
-
-- Re-check the edited file to confirm only `recap-script-generator` changed.
-- Confirm no app script-pool fallback was added to Own API mode.
-- Confirm the returned script cannot end mid-sentence when sentence punctuation is detectable.
+## Verification
+- Build passes
+- Translate Video preview မှာ subtitle စာလုံး Myanmar font ကျရမယ်
+- Render output မှာ Recap NV နဲ့ တူတဲ့ font/stroke ဖြင့် စာတန်းထိုးထွက်ရမယ်
+- Recap NV render — regression မရှိစေရ (font behavior identical)
