@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { AppLogo } from "@/components/AppLogo";
 import { motion, AnimatePresence } from "framer-motion";
 import { useBurmeseFonts } from "@/lib/burmeseFonts";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Upload,
   Languages,
@@ -60,6 +61,17 @@ const PIPELINE_STEPS = [
   "Applying Audio Pitch & EQ (Copyright Bypass)...",
   "Applying {color} Color Grade...",
   "Rendering Final Video...",
+];
+
+// SURGICAL EDIT: Premium subtitle text color palette (presentation only)
+const SUB_TEXT_COLORS: { label: string; value: string }[] = [
+  { label: "White", value: "#FFFFFF" },
+  { label: "Neon Green", value: "#00FF88" },
+  { label: "Cyan", value: "#00E5FF" },
+  { label: "Yellow", value: "#FFD500" },
+  { label: "Rose", value: "#FF3B7A" },
+  { label: "Amber", value: "#FFB020" },
+  { label: "Black", value: "#000000" },
 ];
 
 async function extractSmartAudioSegments(
@@ -495,6 +507,8 @@ export default function App() {
   const [subWidth, setSubWidth] = useState(75);
   const [subHeight, setSubHeight] = useState(11);
   const [subOpacity, setSubOpacity] = useState(100);
+  // SURGICAL EDIT: Subtitle text color (presentation only)
+  const [subTextColor, setSubTextColor] = useState<string>("#FFFFFF");
 
   const [watermarkUrl, setWatermarkUrl] = useState<string | null>(null);
   const [watermarkImg, setWatermarkImg] = useState<HTMLImageElement | null>(null);
@@ -560,6 +574,9 @@ export default function App() {
   const subWidthRef = useRef(subWidth);
   const subHeightRef = useRef(subHeight);
   const subOpacityRef = useRef(subOpacity);
+  const subTextColorRef = useRef(subTextColor);
+  // SURGICAL EDIT: Pinch-to-resize state for subtitle box (touch gesture only)
+  const pinchStartRef = useRef<{ dist: number; w: number; h: number } | null>(null);
   const dragWatermarkPosRef = useRef(watermarkPos);
   const dragLogoPosRef = useRef(logoPos);
   const activePointerIdRef = useRef<number | null>(null);
@@ -607,6 +624,10 @@ export default function App() {
       subBoxRef.current.style.backgroundColor = `rgba(0,0,0,${subOpacity / 100})`;
     }
   }, [subOpacity]);
+
+  useEffect(() => {
+    subTextColorRef.current = subTextColor;
+  }, [subTextColor]);
 
   useEffect(() => {
     dragWatermarkPosRef.current = watermarkPos;
@@ -1429,6 +1450,59 @@ export default function App() {
     activeDragContainerRef.current = null;
     activePointerIdRef.current = null;
     setDragging(null);
+  };
+
+  // SURGICAL EDIT: Pinch-to-resize handlers for subtitle box (2-finger gesture only)
+  const handleSubTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.hypot(dx, dy) || 1;
+      pinchStartRef.current = {
+        dist,
+        w: subWidthRef.current,
+        h: subHeightRef.current,
+      };
+      // Cancel any active pointer drag so pinch doesn't fight it
+      if (
+        activePointerIdRef.current !== null &&
+        activeDragContainerRef.current?.hasPointerCapture(activePointerIdRef.current)
+      ) {
+        try {
+          activeDragContainerRef.current.releasePointerCapture(activePointerIdRef.current);
+        } catch {}
+      }
+      activePointerIdRef.current = null;
+      setDragging(null);
+      e.stopPropagation();
+    }
+  };
+
+  const handleSubTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 2 && pinchStartRef.current) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.hypot(dx, dy) || 1;
+      const ratio = dist / pinchStartRef.current.dist;
+      const newW = Math.max(10, Math.min(100, pinchStartRef.current.w * ratio));
+      const newH = Math.max(5, Math.min(50, pinchStartRef.current.h * ratio));
+      subWidthRef.current = newW;
+      subHeightRef.current = newH;
+      if (subBoxRef.current) {
+        subBoxRef.current.style.width = `${newW}%`;
+        subBoxRef.current.style.height = `${newH}%`;
+      }
+      e.stopPropagation();
+      e.preventDefault();
+    }
+  };
+
+  const handleSubTouchEnd = () => {
+    if (pinchStartRef.current) {
+      setSubWidth(subWidthRef.current);
+      setSubHeight(subHeightRef.current);
+      pinchStartRef.current = null;
+    }
   };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -2258,12 +2332,39 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
             const boxX = canvas.width * (liveSubPos.x / 100);
             const boxY = canvas.height * (liveSubPos.y / 100);
 
-            // Solid black background to "erase" original subtitles
-            ctx.fillStyle = `rgba(0, 0, 0, ${liveSubOpacity / 100})`;
-            ctx.shadowBlur = 0; // Reset shadow before drawing background
-            ctx.fillRect(boxX - boxW / 2, boxY - boxH / 2, boxW, boxH);
-
-            // Clean Professional Subtitle Box — no border, just the background
+            // SURGICAL EDIT: Recap NV-matched frosted-glass blur box (erases original subtitles)
+            const bx = boxX - boxW / 2;
+            const by = boxY - boxH / 2;
+            const blurIntensity = Math.max(1, liveSubOpacity); // reuse opacity slider as intensity
+            const actualBlurPx = Math.max(2, Math.round(blurIntensity * 0.3)); // 2-30px
+            const darkAlpha = Math.max(0.15, Math.min(0.95, blurIntensity / 110));
+            ctx.save();
+            ctx.shadowBlur = 0;
+            try {
+              ctx.beginPath();
+              if (typeof (ctx as any).roundRect === "function") {
+                (ctx as any).roundRect(bx, by, boxW, boxH, 12);
+              } else {
+                ctx.rect(bx, by, boxW, boxH);
+              }
+              ctx.clip();
+              // Step 1: blurred self-copy of what's already drawn (video)
+              ctx.filter = `blur(${actualBlurPx}px)`;
+              ctx.drawImage(canvas, bx, by, boxW, boxH, bx, by, boxW, boxH);
+              ctx.filter = "none";
+              // Step 2: dark tint to fully hide the original subtitles
+              ctx.fillStyle = `rgba(0, 0, 0, ${darkAlpha})`;
+              ctx.fillRect(bx, by, boxW, boxH);
+              // Step 3: subtle frosted edge glow
+              ctx.strokeStyle = `rgba(255, 255, 255, ${Math.max(0.05, 0.15 - blurIntensity / 500)})`;
+              ctx.lineWidth = 0.8;
+              ctx.stroke();
+            } catch {
+              // Fallback: solid dark rect if browser lacks ctx.filter / roundRect
+              ctx.fillStyle = `rgba(0, 0, 0, ${liveSubOpacity / 100})`;
+              ctx.fillRect(bx, by, boxW, boxH);
+            }
+            ctx.restore();
             ctx.shadowBlur = 0;
 
             console.log("Subtitle found:", currentSub.text, "at", currentTime);
@@ -2352,7 +2453,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
 
             const startY = boxY - ((displayLines.length - 1) * cachedLineHeight) / 2;
 
-            ctx.fillStyle = "#FFFFFF"; // Clean white text
+            ctx.fillStyle = subTextColorRef.current || "#FFFFFF"; // SURGICAL: user-selectable text color
             ctx.strokeStyle = "rgba(0, 0, 0, 0.85)"; // Subtle dark outline for contrast
             ctx.lineWidth = Math.max(2, Math.floor(canvas.width / 350));
 
@@ -2678,6 +2779,33 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                         className="w-full accent-indigo-500"
                       />
                     </div>
+                    <div>
+                      <label className="block text-xs text-zinc-400 mb-1">Text Color</label>
+                      <Select value={subTextColor} onValueChange={setSubTextColor}>
+                        <SelectTrigger className="w-full bg-zinc-800 border-zinc-700 text-zinc-100 h-9">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="inline-block w-4 h-4 rounded-full border border-zinc-600"
+                              style={{ background: subTextColor }}
+                            />
+                            <SelectValue />
+                          </div>
+                        </SelectTrigger>
+                        <SelectContent className="bg-zinc-900 border-zinc-700 text-zinc-100 z-50">
+                          {SUB_TEXT_COLORS.map((c) => (
+                            <SelectItem key={c.value} value={c.value}>
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className="inline-block w-4 h-4 rounded-full border border-zinc-600"
+                                  style={{ background: c.value }}
+                                />
+                                <span>{c.label}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <h4 className="text-sm font-medium text-zinc-300">Watermark</h4>
@@ -2877,11 +3005,21 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                         backgroundColor: `rgba(0,0,0,${subOpacity / 100})`,
                         touchAction: "none",
                         willChange: "left, top, transform",
+                        backdropFilter: `blur(${Math.max(2, Math.round(subOpacity * 0.18))}px)`,
+                        WebkitBackdropFilter: `blur(${Math.max(2, Math.round(subOpacity * 0.18))}px)`,
+                        borderRadius: "12px",
                       }}
                       onPointerDown={(e) => handlePointerDown("sub", e, previewRef.current)}
+                      onTouchStart={handleSubTouchStart}
+                      onTouchMove={handleSubTouchMove}
+                      onTouchEnd={handleSubTouchEnd}
+                      onTouchCancel={handleSubTouchEnd}
                     >
-                      <span className="font-bold text-xs md:text-sm pointer-events-none text-center px-2 neon-text">
-                        Drag to Move
+                      <span
+                        className="font-bold text-xs md:text-sm pointer-events-none text-center px-2"
+                        style={{ color: subTextColor, textShadow: "0 1px 2px rgba(0,0,0,0.8)" }}
+                      >
+                        Drag / Pinch
                         <br />
                         Subtitle Box
                       </span>
@@ -3168,6 +3306,33 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                         className="w-full accent-indigo-500"
                       />
                     </div>
+                    <div>
+                      <label className="block text-sm text-zinc-400 mb-1">Text Color</label>
+                      <Select value={subTextColor} onValueChange={setSubTextColor}>
+                        <SelectTrigger className="w-full bg-zinc-800 border-zinc-700 text-zinc-100">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="inline-block w-4 h-4 rounded-full border border-zinc-600"
+                              style={{ background: subTextColor }}
+                            />
+                            <SelectValue />
+                          </div>
+                        </SelectTrigger>
+                        <SelectContent className="bg-zinc-900 border-zinc-700 text-zinc-100 z-50">
+                          {SUB_TEXT_COLORS.map((c) => (
+                            <SelectItem key={c.value} value={c.value}>
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className="inline-block w-4 h-4 rounded-full border border-zinc-600"
+                                  style={{ background: c.value }}
+                                />
+                                <span>{c.label}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
 
                   {/* Watermark & Logo Controls */}
@@ -3416,11 +3581,21 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                             backgroundColor: `rgba(0,0,0,${subOpacity / 100})`,
                             touchAction: "none",
                             willChange: "left, top, transform",
+                            backdropFilter: `blur(${Math.max(2, Math.round(subOpacity * 0.18))}px)`,
+                            WebkitBackdropFilter: `blur(${Math.max(2, Math.round(subOpacity * 0.18))}px)`,
+                            borderRadius: "12px",
                           }}
                           onPointerDown={(e) => handlePointerDown("sub", e, renderPreviewRef.current)}
+                          onTouchStart={handleSubTouchStart}
+                          onTouchMove={handleSubTouchMove}
+                          onTouchEnd={handleSubTouchEnd}
+                          onTouchCancel={handleSubTouchEnd}
                         >
-                          <span className="font-bold text-xs md:text-sm pointer-events-none text-center px-2 neon-text">
-                            Drag to Move
+                          <span
+                            className="font-bold text-xs md:text-sm pointer-events-none text-center px-2"
+                            style={{ color: subTextColor, textShadow: "0 1px 2px rgba(0,0,0,0.8)" }}
+                          >
+                            Drag / Pinch
                             <br />
                             Subtitle Box
                           </span>
@@ -3471,6 +3646,33 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                       onChange={(e) => setSubOpacity(Number(e.target.value))}
                       className="w-full accent-indigo-500"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-zinc-400 mb-1">Text Color</label>
+                    <Select value={subTextColor} onValueChange={setSubTextColor}>
+                      <SelectTrigger className="w-full bg-zinc-800 border-zinc-700 text-zinc-100 h-9">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="inline-block w-4 h-4 rounded-full border border-zinc-600"
+                            style={{ background: subTextColor }}
+                          />
+                          <SelectValue />
+                        </div>
+                      </SelectTrigger>
+                      <SelectContent className="bg-zinc-900 border-zinc-700 text-zinc-100 z-50">
+                        {SUB_TEXT_COLORS.map((c) => (
+                          <SelectItem key={c.value} value={c.value}>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="inline-block w-4 h-4 rounded-full border border-zinc-600"
+                                style={{ background: c.value }}
+                              />
+                              <span>{c.label}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 
