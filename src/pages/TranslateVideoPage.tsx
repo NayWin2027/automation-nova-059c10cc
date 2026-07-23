@@ -2321,12 +2321,39 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
             const boxX = canvas.width * (liveSubPos.x / 100);
             const boxY = canvas.height * (liveSubPos.y / 100);
 
-            // Solid black background to "erase" original subtitles
-            ctx.fillStyle = `rgba(0, 0, 0, ${liveSubOpacity / 100})`;
-            ctx.shadowBlur = 0; // Reset shadow before drawing background
-            ctx.fillRect(boxX - boxW / 2, boxY - boxH / 2, boxW, boxH);
-
-            // Clean Professional Subtitle Box — no border, just the background
+            // SURGICAL EDIT: Recap NV-matched frosted-glass blur box (erases original subtitles)
+            const bx = boxX - boxW / 2;
+            const by = boxY - boxH / 2;
+            const blurIntensity = Math.max(1, liveSubOpacity); // reuse opacity slider as intensity
+            const actualBlurPx = Math.max(2, Math.round(blurIntensity * 0.3)); // 2-30px
+            const darkAlpha = Math.max(0.15, Math.min(0.95, blurIntensity / 110));
+            ctx.save();
+            ctx.shadowBlur = 0;
+            try {
+              ctx.beginPath();
+              if (typeof (ctx as any).roundRect === "function") {
+                (ctx as any).roundRect(bx, by, boxW, boxH, 12);
+              } else {
+                ctx.rect(bx, by, boxW, boxH);
+              }
+              ctx.clip();
+              // Step 1: blurred self-copy of what's already drawn (video)
+              ctx.filter = `blur(${actualBlurPx}px)`;
+              ctx.drawImage(canvas, bx, by, boxW, boxH, bx, by, boxW, boxH);
+              ctx.filter = "none";
+              // Step 2: dark tint to fully hide the original subtitles
+              ctx.fillStyle = `rgba(0, 0, 0, ${darkAlpha})`;
+              ctx.fillRect(bx, by, boxW, boxH);
+              // Step 3: subtle frosted edge glow
+              ctx.strokeStyle = `rgba(255, 255, 255, ${Math.max(0.05, 0.15 - blurIntensity / 500)})`;
+              ctx.lineWidth = 0.8;
+              ctx.stroke();
+            } catch {
+              // Fallback: solid dark rect if browser lacks ctx.filter / roundRect
+              ctx.fillStyle = `rgba(0, 0, 0, ${liveSubOpacity / 100})`;
+              ctx.fillRect(bx, by, boxW, boxH);
+            }
+            ctx.restore();
             ctx.shadowBlur = 0;
 
             console.log("Subtitle found:", currentSub.text, "at", currentTime);
