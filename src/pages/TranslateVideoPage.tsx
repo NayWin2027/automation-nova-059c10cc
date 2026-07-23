@@ -63,6 +63,17 @@ const PIPELINE_STEPS = [
   "Rendering Final Video...",
 ];
 
+// SURGICAL EDIT: Premium subtitle text color palette (presentation only)
+const SUB_TEXT_COLORS: { label: string; value: string }[] = [
+  { label: "White", value: "#FFFFFF" },
+  { label: "Neon Green", value: "#00FF88" },
+  { label: "Cyan", value: "#00E5FF" },
+  { label: "Yellow", value: "#FFD500" },
+  { label: "Rose", value: "#FF3B7A" },
+  { label: "Amber", value: "#FFB020" },
+  { label: "Black", value: "#000000" },
+];
+
 async function extractSmartAudioSegments(
   file: File,
   maxChunkDuration = 30,
