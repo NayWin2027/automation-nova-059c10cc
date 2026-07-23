@@ -2346,7 +2346,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
               displayLines = displayLines.slice(startIndex, startIndex + MAX_LINES);
             }
 
-            ctx.font = `700 ${cachedFontSize}px 'PannYeat', 'Aka02', 'Aka07', 'PhanTee', sans-serif`; // Clean semi-bold for readability
+            ctx.font = `bold ${cachedFontSize}px 'PannYeat', 'Aka02', 'Aka07', 'PhanTee', sans-serif`; // Recap NV-matched bold Myanmar type
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
 
