@@ -2442,7 +2442,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
 
             const startY = boxY - ((displayLines.length - 1) * cachedLineHeight) / 2;
 
-            ctx.fillStyle = "#FFFFFF"; // Clean white text
+            ctx.fillStyle = subTextColorRef.current || "#FFFFFF"; // SURGICAL: user-selectable text color
             ctx.strokeStyle = "rgba(0, 0, 0, 0.85)"; // Subtle dark outline for contrast
             ctx.lineWidth = Math.max(2, Math.floor(canvas.width / 350));
 
