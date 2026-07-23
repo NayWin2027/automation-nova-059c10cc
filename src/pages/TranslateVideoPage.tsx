@@ -453,6 +453,7 @@ async function invokeSubtitleTranslationChunk(body: {
 
 export default function App() {
   const navigate = useNavigate();
+  useBurmeseFonts();
   const { isAllowed, isLoading: authLoading } = useAuthGuard("video-transform");
   const { appApiAllowed, ownApiAllowed, defaultApiMode, isLoading: accessLoading } = useApiAccess();
   const { deductCredits } = useCreditDeduction();
