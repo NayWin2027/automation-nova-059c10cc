@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppLogo } from "@/components/AppLogo";
 import { motion, AnimatePresence } from "framer-motion";
+import { useBurmeseFonts } from "@/lib/burmeseFonts";
 import {
   Upload,
   Languages,
@@ -452,6 +453,7 @@ async function invokeSubtitleTranslationChunk(body: {
 
 export default function App() {
   const navigate = useNavigate();
+  useBurmeseFonts();
   const { isAllowed, isLoading: authLoading } = useAuthGuard("video-transform");
   const { appApiAllowed, ownApiAllowed, defaultApiMode, isLoading: accessLoading } = useApiAccess();
   const { deductCredits } = useCreditDeduction();
@@ -1220,7 +1222,7 @@ export default function App() {
         yPos: number,
         isNeon: boolean,
         fontStyle: string,
-        fontFamily: string = '"Inter", "Pyidaungsu", "Padauk", sans-serif',
+        fontFamily: string = '"PannYeat", "Aka02", "Aka07", "PhanTee", sans-serif',
         maxLines: number = 2,
       ): string => {
         const maxTextWidth = canvas.width * 0.9;
@@ -1334,7 +1336,7 @@ export default function App() {
           canvas.height * 0.82,
           true,
           "900",
-          '"Inter", "Pyidaungsu", "Padauk", sans-serif',
+          '"PannYeat", "Aka02", "Aka07", "PhanTee", sans-serif',
         );
       }
 
@@ -2279,7 +2281,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
             // Only recalculate text wrapping if text changes or box width changes
             if (text !== lastSubText || Math.abs(maxTextWidth - ((cachedLines as any)?._boxW || 0)) > 1) {
               while (fontSize >= minFontSize) {
-                ctx.font = `900 ${fontSize}px "Inter", "Pyidaungsu", "Padauk", sans-serif`;
+                ctx.font = `900 ${fontSize}px 'PannYeat', 'Aka02', 'Aka07', 'PhanTee', sans-serif`;
                 lines = [];
                 let wordTooLong = false;
 
@@ -2344,7 +2346,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
               displayLines = displayLines.slice(startIndex, startIndex + MAX_LINES);
             }
 
-            ctx.font = `700 ${cachedFontSize}px "Inter", "Pyidaungsu", "Padauk", sans-serif`; // Clean semi-bold for readability
+            ctx.font = `bold ${cachedFontSize}px 'PannYeat', 'Aka02', 'Aka07', 'PhanTee', sans-serif`; // Recap NV-matched bold Myanmar type
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
 
