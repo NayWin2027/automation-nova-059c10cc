@@ -496,6 +496,8 @@ export default function App() {
   const [subWidth, setSubWidth] = useState(75);
   const [subHeight, setSubHeight] = useState(11);
   const [subOpacity, setSubOpacity] = useState(100);
+  // SURGICAL EDIT: Subtitle text color (presentation only)
+  const [subTextColor, setSubTextColor] = useState<string>("#FFFFFF");
 
   const [watermarkUrl, setWatermarkUrl] = useState<string | null>(null);
   const [watermarkImg, setWatermarkImg] = useState<HTMLImageElement | null>(null);
