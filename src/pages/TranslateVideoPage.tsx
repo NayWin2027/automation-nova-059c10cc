@@ -576,7 +576,7 @@ export default function App() {
   const subOpacityRef = useRef(subOpacity);
   const subTextColorRef = useRef(subTextColor);
   // SURGICAL EDIT: Pinch-to-resize state for subtitle box (touch gesture only)
-  const pinchStartRef = useRef<{ dist: number; w: number; h: number } | null>(null);
+  const pinchStartRef = useRef<{ dx: number; dy: number; w: number; h: number } | null>(null);
   const dragWatermarkPosRef = useRef(watermarkPos);
   const dragLogoPosRef = useRef(logoPos);
   const activePointerIdRef = useRef<number | null>(null);
@@ -1455,11 +1455,11 @@ export default function App() {
   // SURGICAL EDIT: Pinch-to-resize handlers for subtitle box (2-finger gesture only)
   const handleSubTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     if (e.touches.length === 2) {
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      const dist = Math.hypot(dx, dy) || 1;
+      const dx = Math.abs(e.touches[0].clientX - e.touches[1].clientX) || 1;
+      const dy = Math.abs(e.touches[0].clientY - e.touches[1].clientY) || 1;
       pinchStartRef.current = {
-        dist,
+        dx,
+        dy,
         w: subWidthRef.current,
         h: subHeightRef.current,
       };
@@ -1480,12 +1480,12 @@ export default function App() {
 
   const handleSubTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
     if (e.touches.length === 2 && pinchStartRef.current) {
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      const dist = Math.hypot(dx, dy) || 1;
-      const ratio = dist / pinchStartRef.current.dist;
-      const newW = Math.max(10, Math.min(100, pinchStartRef.current.w * ratio));
-      const newH = Math.max(5, Math.min(50, pinchStartRef.current.h * ratio));
+      const dx = Math.abs(e.touches[0].clientX - e.touches[1].clientX) || 1;
+      const dy = Math.abs(e.touches[0].clientY - e.touches[1].clientY) || 1;
+      const ratioX = dx / pinchStartRef.current.dx;
+      const ratioY = dy / pinchStartRef.current.dy;
+      const newW = Math.max(10, Math.min(100, pinchStartRef.current.w * ratioX));
+      const newH = Math.max(5, Math.min(50, pinchStartRef.current.h * ratioY));
       subWidthRef.current = newW;
       subHeightRef.current = newH;
       if (subBoxRef.current) {
