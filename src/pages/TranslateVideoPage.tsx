@@ -2779,6 +2779,33 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                         className="w-full accent-indigo-500"
                       />
                     </div>
+                    <div>
+                      <label className="block text-xs text-zinc-400 mb-1">Text Color</label>
+                      <Select value={subTextColor} onValueChange={setSubTextColor}>
+                        <SelectTrigger className="w-full bg-zinc-800 border-zinc-700 text-zinc-100 h-9">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="inline-block w-4 h-4 rounded-full border border-zinc-600"
+                              style={{ background: subTextColor }}
+                            />
+                            <SelectValue />
+                          </div>
+                        </SelectTrigger>
+                        <SelectContent className="bg-zinc-900 border-zinc-700 text-zinc-100 z-50">
+                          {SUB_TEXT_COLORS.map((c) => (
+                            <SelectItem key={c.value} value={c.value}>
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className="inline-block w-4 h-4 rounded-full border border-zinc-600"
+                                  style={{ background: c.value }}
+                                />
+                                <span>{c.label}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <h4 className="text-sm font-medium text-zinc-300">Watermark</h4>
