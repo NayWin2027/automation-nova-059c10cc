@@ -563,6 +563,9 @@ export default function App() {
   const subWidthRef = useRef(subWidth);
   const subHeightRef = useRef(subHeight);
   const subOpacityRef = useRef(subOpacity);
+  const subTextColorRef = useRef(subTextColor);
+  // SURGICAL EDIT: Pinch-to-resize state for subtitle box (touch gesture only)
+  const pinchStartRef = useRef<{ dist: number; w: number; h: number } | null>(null);
   const dragWatermarkPosRef = useRef(watermarkPos);
   const dragLogoPosRef = useRef(logoPos);
   const activePointerIdRef = useRef<number | null>(null);
