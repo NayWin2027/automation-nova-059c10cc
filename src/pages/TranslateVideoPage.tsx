@@ -3915,6 +3915,25 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                     </div>
                   </div>
                 </div>
+                {/* Output Resolution */}
+                <div className="mt-4">
+                  <label className="block text-xs text-zinc-400 mb-2">Output Resolution</label>
+                  <Select value={outputResolution} onValueChange={(v) => setOutputResolution(v as any)}>
+                    <SelectTrigger className="w-full bg-zinc-900 border-zinc-800 text-zinc-100 h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-100">
+                      <SelectItem value="360p">360P (Default)</SelectItem>
+                      <SelectItem value="720p">720P HD</SelectItem>
+                      <SelectItem value="1080p">1080P Full HD</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {outputResolution === "1080p" && (
+                    <p className="text-[11px] text-amber-400/80 mt-1">
+                      ⚠ 1080P က high-end device မှာသာ smooth ဖြစ်ပါမယ်။
+                    </p>
+                  )}
+                </div>
               </div>
             </motion.div>
           )}
