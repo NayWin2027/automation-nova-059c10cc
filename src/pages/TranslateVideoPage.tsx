@@ -490,6 +490,7 @@ export default function App() {
   const [langDropdownOpen2, setLangDropdownOpen2] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<keyof typeof ASPECT_RATIOS>("3:4");
   const [colorGrade, setColorGrade] = useState<keyof typeof COLOR_GRADES>("cyberpunk");
+  const [outputResolution, setOutputResolution] = useState<"360p" | "720p" | "1080p">("360p");
   const [audioBypass, setAudioBypass] = useState(true);
   const [zoomEnabled, setZoomEnabled] = useState(false);
 
@@ -2017,7 +2018,9 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
 
         // Lower resolution to prevent Out-Of-Memory crashes on mobile/low-end devices
         let canvasW, canvasH;
-        const MAX_DIM = 640; // Reduced from 854 for better compatibility on Snapdragon 400/600
+        // User-selected output resolution (short-edge pixels). 360p is default for low-end compatibility.
+        const MAX_DIM =
+          outputResolution === "1080p" ? 1920 : outputResolution === "720p" ? 1280 : 640;
         if (targetRatio > 1) {
           canvasW = MAX_DIM;
           canvasH = Math.round(MAX_DIM / targetRatio);
@@ -2084,7 +2087,10 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
           }
         }
 
-        const recorder = new MediaRecorder(stream, options);
+        // Scale bitrate with chosen resolution so 720p/1080p aren't crushed by default bitrate.
+        const videoBitsPerSecond =
+          outputResolution === "1080p" ? 12_000_000 : outputResolution === "720p" ? 6_000_000 : 2_000_000;
+        const recorder = new MediaRecorder(stream, { ...options, videoBitsPerSecond });
         const chunks: BlobPart[] = [];
 
         recorder.ondataavailable = (e) => {
@@ -2779,6 +2785,28 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                 </div>
 
                 {/* Copyright Bypass */}
+                {/* Output Resolution */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                    <MonitorPlay size={14} className="text-indigo-400" /> Output Resolution
+                  </label>
+                  <Select value={outputResolution} onValueChange={(v) => setOutputResolution(v as any)}>
+                    <SelectTrigger className="w-full bg-zinc-900 border-zinc-800 text-zinc-100 h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-100">
+                      <SelectItem value="360p">360P (Default — အနိမ့်ဖုန်း အဆင်ပြေ)</SelectItem>
+                      <SelectItem value="720p">720P HD (အလတ်စား CPU)</SelectItem>
+                      <SelectItem value="1080p">1080P Full HD (အမြင့်စား CPU)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {outputResolution === "1080p" && (
+                    <p className="text-[11px] text-amber-400/80">
+                      ⚠ 1080P က high-end device (Snapdragon 8-gen / iPhone 12+) မှာသာ smooth ဖြစ်ပါမယ်။
+                    </p>
+                  )}
+                </div>
+
                 <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/50 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg">
