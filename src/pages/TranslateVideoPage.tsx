@@ -2087,7 +2087,10 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
           }
         }
 
-        const recorder = new MediaRecorder(stream, options);
+        // Scale bitrate with chosen resolution so 720p/1080p aren't crushed by default bitrate.
+        const videoBitsPerSecond =
+          outputResolution === "1080p" ? 12_000_000 : outputResolution === "720p" ? 6_000_000 : 2_000_000;
+        const recorder = new MediaRecorder(stream, { ...options, videoBitsPerSecond });
         const chunks: BlobPart[] = [];
 
         recorder.ondataavailable = (e) => {
