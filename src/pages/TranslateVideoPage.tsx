@@ -2785,6 +2785,28 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                 </div>
 
                 {/* Copyright Bypass */}
+                {/* Output Resolution */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                    <MonitorPlay size={14} className="text-indigo-400" /> Output Resolution
+                  </label>
+                  <Select value={outputResolution} onValueChange={(v) => setOutputResolution(v as any)}>
+                    <SelectTrigger className="w-full bg-zinc-900 border-zinc-800 text-zinc-100 h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-100">
+                      <SelectItem value="360p">360P (Default — အနိမ့်ဖုန်း အဆင်ပြေ)</SelectItem>
+                      <SelectItem value="720p">720P HD (အလတ်စား CPU)</SelectItem>
+                      <SelectItem value="1080p">1080P Full HD (အမြင့်စား CPU)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {outputResolution === "1080p" && (
+                    <p className="text-[11px] text-amber-400/80">
+                      ⚠ 1080P က high-end device (Snapdragon 8-gen / iPhone 12+) မှာသာ smooth ဖြစ်ပါမယ်။
+                    </p>
+                  )}
+                </div>
+
                 <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/50 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg">
