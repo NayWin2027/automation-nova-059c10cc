@@ -2018,7 +2018,9 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
 
         // Lower resolution to prevent Out-Of-Memory crashes on mobile/low-end devices
         let canvasW, canvasH;
-        const MAX_DIM = 640; // Reduced from 854 for better compatibility on Snapdragon 400/600
+        // User-selected output resolution (short-edge pixels). 360p is default for low-end compatibility.
+        const MAX_DIM =
+          outputResolution === "1080p" ? 1920 : outputResolution === "720p" ? 1280 : 640;
         if (targetRatio > 1) {
           canvasW = MAX_DIM;
           canvasH = Math.round(MAX_DIM / targetRatio);
