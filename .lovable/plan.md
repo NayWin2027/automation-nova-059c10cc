@@ -1,30 +1,41 @@
 ## Problem
-`TranslateVideoPage.tsx` chunk-based translation silently skips segments in three places:
+`TranslateVideoPage.tsx` renders output at a fixed `MAX_DIM = 640` (roughly 360p short edge), so Facebook/etc. compress it heavily and it looks blurry. No UI exists to pick a higher resolution.
 
-1. **Empty chunk response** — if Gemini returns `[]` for an audio chunk (rate throttle, safety block, or model uncertainty), the chunk is dropped with no retry. Whole 30–60s of dialogue vanishes.
-2. **Over-strict end-time filter** (line 1741) — `e <= chunk.duration + 0.5` drops any segment whose end timestamp overshoots the chunk by >0.5s (common when model rounds up). Currently no clamp-and-keep, just filter-out.
-3. **`keepOnlyTargetLanguageSubtitles`** (line 234 + `hasTargetScriptConflict` line 209) — drops any segment where target script isn't detected. Segments that are purely proper names, numbers, or interjections (legitimate spoken content) get erased silently. Also drops segments the model translated with too much Latin (>35%), which fires on lines like "OK Michael သွားပြီ".
+## Surgical Fix (UI + render pipeline only)
 
-## Surgical Fix (chunk-loop only, ~line 1690-1770)
+### 1. Add resolution state
+In `src/pages/TranslateVideoPage.tsx`, add:
+```ts
+const [outputResolution, setOutputResolution] = useState<"360p" | "720p" | "1080p">("360p");
+```
+Map to short-edge pixels:
+- `360p` → 640 (unchanged default, keeps low-end compatibility)
+- `720p` → 1280
+- `1080p` → 1920
 
-Do NOT touch: prompts, VAD chunking, rendering, UI, audio pipeline, SRT generator, own-API branch structure.
+### 2. Apply in render pipeline (around line 2019-2029)
+Replace the hardcoded `const MAX_DIM = 640;` with the mapped value based on `outputResolution`. Keep the aspect-ratio math exactly as-is so any `ASPECT_RATIOS` selection still produces the exact short-edge the user picked (e.g. 9:16 at 1080p → 1080×1920; 16:9 at 720p → 1280×720).
 
-Edits inside the chunk `for` loop only:
+Also raise `MediaRecorder`'s `videoBitsPerSecond` proportionally so 720p/1080p aren't crushed by the default bitrate:
+- 360p → 2 Mbps
+- 720p → 6 Mbps
+- 1080p → 12 Mbps
 
-1. **Retry empty/failed chunks up to 3 times** with exponential backoff (1s, 2s, 4s). If parse yields `[]` or throws, retry. Only after 3 empty attempts, log a warning and continue — never silently drop without trying.
+Pass into `new MediaRecorder(stream, { ...options, videoBitsPerSecond })`. Nothing else in the recorder/codec logic changes.
 
-2. **Clamp instead of drop** (replace filter at line 1737-1752):
-   - Keep segments where `e > s` and `s >= 0` and `s < chunk.duration + 1.0` (widened tolerance).
-   - Clamp `relEnd = Math.min(chunk.duration, e)` (already done).
-   - Do NOT drop segments where end overshoots — clamp them.
+### 3. Add UI dropdown
+Add a Professional `Select` (shadcn) labeled "Output Resolution" next to existing aspect ratio / color grade controls, with 3 options:
+- 360P (Default — အနိမ့်ဖုန်း အဆင်ပြေ)
+- 720P (HD — အလတ်စား CPU)
+- 1080P (Full HD — အမြင့်စား CPU)
 
-3. **Loosen language filter** for chunk pass: instead of calling `keepOnlyTargetLanguageSubtitles` (which uses `hasTargetScriptConflict`), only drop segments with empty text after `stripSpeakerName`. Script mismatch is legitimate for names/numbers.
-   - Alternative: keep `hasTargetScriptConflict` but relax to only drop when text is **100% wrong script** (e.g., all Latin when target is Burmese), not the 35% Latin threshold.
-
-4. **Add per-chunk retry counter to processing status** so user sees "Retrying chunk 3/12 (attempt 2)…" instead of silent skip.
-
-## Files touched
-- `src/pages/TranslateVideoPage.tsx` — only lines ~1690-1770 (chunk translate loop).
+Include a small warning line under the select for 1080p noting higher-end device recommended.
 
 ## Not touched
-Translation prompt, VAD, rendering, UI, subtitle box, fonts, audio, credit logic, edge functions.
+- Translation/subtitle logic, VAD, prompts, chunk retry loop
+- Aspect ratio math, canvas draw pipeline, subtitle rendering, blur box, fonts, color grade
+- Audio pipeline, audioBypass, MediaRecorder codec fallback chain
+- Credit deduction, edge functions, upload logic
+
+## Files touched
+- `src/pages/TranslateVideoPage.tsx` — add state, dropdown UI, swap `MAX_DIM`, add `videoBitsPerSecond`.
