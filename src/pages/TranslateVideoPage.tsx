@@ -490,6 +490,7 @@ export default function App() {
   const [langDropdownOpen2, setLangDropdownOpen2] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<keyof typeof ASPECT_RATIOS>("3:4");
   const [colorGrade, setColorGrade] = useState<keyof typeof COLOR_GRADES>("cyberpunk");
+  const [outputResolution, setOutputResolution] = useState<"360p" | "720p" | "1080p">("360p");
   const [audioBypass, setAudioBypass] = useState(true);
   const [zoomEnabled, setZoomEnabled] = useState(false);
 
