@@ -1907,13 +1907,11 @@ Audio duration: ${chunk.duration.toFixed(3)} seconds. Return ONLY a JSON array.`
 
         const stillMissing = missingChunkIndices.filter((i) => !repaired.includes(i));
         if (stillMissing.length > 0) {
-          toast({
-            title: "အချို့ segment များ ဘာသာမပြန်နိုင်ခဲ့ပါ",
+          toast.warning("အချို့ segment များ ဘာသာမပြန်နိုင်ခဲ့ပါ", {
             description: `Segment ${stillMissing.map((i) => i + 1).join(", ")} က silence/music/noise ဖြစ်နိုင်ပါသည်။ ကျန်တဲ့အပိုင်းများနှင့် render ဆက်လုပ်ပါမည်။`,
           });
         } else if (repaired.length > 0) {
-          toast({
-            title: "Repair pass အောင်မြင်ပါသည်",
+          toast.success("Repair pass အောင်မြင်ပါသည်", {
             description: `${repaired.length} segment ကို ပြန်ဘာသာပြန်ပြီးပါပြီ။`,
           });
         }
