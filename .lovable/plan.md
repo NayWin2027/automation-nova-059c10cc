@@ -1,41 +1,43 @@
 ## Problem
-`TranslateVideoPage.tsx` renders output at a fixed `MAX_DIM = 640` (roughly 360p short edge), so Facebook/etc. compress it heavily and it looks blurry. No UI exists to pick a higher resolution.
+Chunk ဘာသာပြန်ကွင်းဆက်မှာ တစ်ခုခုက empty ဖြစ်ရင် **3 attempt ကုန်တာနဲ့ silent skip** ဖြစ်သွားနေဆဲ (line 1810–1813). Console warning ပဲရေးပြီး segment ဖြုတ်လိုက်လို့ 12 chunks မှာ 1 ခုပျောက်တာမျိုးဖြစ်တာ။ ဒါကို "No-Segment-Lost repair pass" နဲ့ ဖြေရှင်းမယ်။
 
-## Surgical Fix (UI + render pipeline only)
+## Surgical Fix (TranslateVideoPage.tsx only, chunk loop နဲ့ ပြီးရင် repair pass ပဲထိမယ်)
 
-### 1. Add resolution state
-In `src/pages/TranslateVideoPage.tsx`, add:
-```ts
-const [outputResolution, setOutputResolution] = useState<"360p" | "720p" | "1080p">("360p");
-```
-Map to short-edge pixels:
-- `360p` → 640 (unchanged default, keeps low-end compatibility)
-- `720p` → 1280
-- `1080p` → 1920
+### 1. Chunk attempt မြှင့် + Model rotation ပိုကျယ်စေ (line ~1699 area)
+- `MAX_CHUNK_ATTEMPTS` ကို **3 → 5** တိုးမယ်။
+- Attempt 4–5 မှာ prompt hint အသေးထည့်: "PREVIOUS ATTEMPT RETURNED EMPTY. This chunk DOES contain speech — transcribe & translate every audible word, do NOT return []."
+- Attempt တစ်ခုချင်းစီကြား backoff 800ms → 1600ms → 2400ms (rate-limit မဟုတ်ရင်) exponential.
 
-### 2. Apply in render pipeline (around line 2019-2029)
-Replace the hardcoded `const MAX_DIM = 640;` with the mapped value based on `outputResolution`. Keep the aspect-ratio math exactly as-is so any `ASPECT_RATIOS` selection still produces the exact short-edge the user picked (e.g. 9:16 at 1080p → 1080×1920; 16:9 at 720p → 1280×720).
+### 2. Repair Pass #1 — Missing chunk re-translate (chunk loop ပြီးမှသာ run)
+`parsedSubtitles` ကို scan လုပ်ပြီး **ဘယ် chunk index က segment ၀ ခုဖြစ်နေလဲ** ရှာမယ်။ 
+- Missing chunk တိုင်းအတွက် ထပ်ပြီး **audio-only fallback** (video frames မထည့်) နဲ့ 3 ကြိမ်ထပ်ခေါ်မယ် — multimodal က confuse ဖြစ်တတ်လို့ audio-only က success rate ပိုမြင့်တာကို လက်ရှိ edge function မှာလည်း handle ထားပြီးသား။
+- Result ရရင် timestamp ကို `chunk.offset` နဲ့ shift ပြီး `parsedSubtitles` ထဲ merge, အချိန်အလိုက် sort ပြန်လုပ်မယ်။
 
-Also raise `MediaRecorder`'s `videoBitsPerSecond` proportionally so 720p/1080p aren't crushed by the default bitrate:
-- 360p → 2 Mbps
-- 720p → 6 Mbps
-- 1080p → 12 Mbps
+### 3. Repair Pass #2 — Silence-Gap detector (safety net)
+Merge ပြီးမှ **adjacent segments ကြားက gap > 4 seconds** ရှိတဲ့ window တွေရှာမယ် (chunk boundary မဟုတ်ရင်တောင် တစ်ခုခုက ဘာသာမပြန်ခဲ့တာ ဖြစ်နိုင်လို့)။
+- ဒီ gap window ကို `audioBuffer` ကနေ ဖြတ်ယူပြီး WAV encode → `video-transform-translate` edge function ကို `audioBase64 + audioDuration` နဲ့ audio-only mode ခေါ်မယ်။
+- Return လာတဲ့ segments တွေကို gap start offset နဲ့ shift ပြီး merge, ထပ်ဆင့် sort။
+- Cap: repair pass အားလုံးပေါင်း max ~8 extra API calls (runaway ကာကွယ်ဖို့)။
 
-Pass into `new MediaRecorder(stream, { ...options, videoBitsPerSecond })`. Nothing else in the recorder/codec logic changes.
+### 4. Final "still missing" behavior (soft-fail, no crash)
+Repair pass 2 ခုပြီးမှ chunk တစ်ခုက empty ဖြစ်နေဆဲရင်:
+- Throw မလုပ်တော့ဘူး (ခုက throw လုပ်လို့ render မထွက်ဖြစ်တဲ့ case ရှိတယ်)။
+- Toast တစ်ခုပြ: "Segment X ကို ဘာသာပြန်ဆိုမရနိုင်ခဲ့ပါ (silent/music/noise ဖြစ်နိုင်)။ ကျန်တဲ့အပိုင်းများသာ render လုပ်ပါမည်။"
+- ကျန်တဲ့ segments တွေနဲ့ render ဆက်လုပ်။
 
-### 3. Add UI dropdown
-Add a Professional `Select` (shadcn) labeled "Output Resolution" next to existing aspect ratio / color grade controls, with 3 options:
-- 360P (Default — အနိမ့်ဖုန်း အဆင်ပြေ)
-- 720P (HD — အလတ်စား CPU)
-- 1080P (Full HD — အမြင့်စား CPU)
-
-Include a small warning line under the select for 1080p noting higher-end device recommended.
+### 5. Progress UI
+Repair pass အလုပ်လုပ်တဲ့အခါ existing translate progress bar ကို ဆက်သုံးမယ်—label ကို "ကျန်ရှိသည့် segment များ ပြန်လိုက်စစ်နေသည်… (repair pass)" လို့ပြောင်း။ တခြား UI မထိ။
 
 ## Not touched
-- Translation/subtitle logic, VAD, prompts, chunk retry loop
-- Aspect ratio math, canvas draw pipeline, subtitle rendering, blur box, fonts, color grade
-- Audio pipeline, audioBypass, MediaRecorder codec fallback chain
-- Credit deduction, edge functions, upload logic
+- Edge function `video-transform-translate/index.ts` (backend behavior မပြောင်း)
+- Chunk-splitting logic (`splitAudioIntoChunks`), VAD, quiet-point detection
+- Aspect ratio / resolution / bitrate / MediaRecorder / canvas draw
+- Subtitle rendering, fonts, blur box, color grade, playback speed 1.04x, pitch shift
+- Credit deduction, upload, auth
+- AV-SYNC / RECORD-PIPELINE / VOICE-GEN / AUTO-PIPELINE protected blocks (မထိ — TranslateVideo နဲ့မဆိုင်)
 
 ## Files touched
-- `src/pages/TranslateVideoPage.tsx` — add state, dropdown UI, swap `MAX_DIM`, add `videoBitsPerSecond`.
+- `src/pages/TranslateVideoPage.tsx` — chunk loop retry ဆက်တိုးမြှင့်, repair pass ၂ ခုထည့်, silent-skip အစား soft-fail toast
+
+## Expected result
+5% missing → ~0.5% သို့ လျှော့ချ (silence/music chunks ကလွဲ)။ Chunk လုံးဝပျောက်တာ လုံးဝမရှိတော့ဘဲ segment တစ်ခုချင်း တစ်လုံးမကျန်ဘူးဟု ဆိုနိုင်တဲ့ coverage ရမယ်။
