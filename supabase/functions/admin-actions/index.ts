@@ -466,7 +466,6 @@ serve(async (req) => {
             const startedAt = new Date(currentProfile.credits_started_at);
             const expiry = new Date(startedAt);
             expiry.setMonth(expiry.getMonth() + 1);
-            expiry.setDate(expiry.getDate() + 7);
             if (expiry.getTime() < Date.now()) {
               // Past expiry: only renew can reset, so don't reset for topup/bonus
               // But still allow credits to be added (they'll be expired on next tool use)

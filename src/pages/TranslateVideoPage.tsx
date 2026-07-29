@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { AppLogo } from "@/components/AppLogo";
 import { motion, AnimatePresence } from "framer-motion";
 import { useBurmeseFonts } from "@/lib/burmeseFonts";
+import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Upload,
@@ -1566,6 +1567,8 @@ export default function App() {
       const audioChunks = await extractSmartAudioSegments(videoFile!, apiMode === "app" ? 30 : 30);
       setProcessingProgress(15);
 
+      // Track chunks that produced ZERO segments so we can repair them after the main pass
+      const missingChunkIndices: number[] = [];
       if (audioChunks.length > 0) {
         for (let i = 0; i < audioChunks.length; i++) {
           setProcessingStatus(`Translating to ${targetLang} via Gemini AI... (Segment ${i + 1}/${audioChunks.length})`);
@@ -1696,15 +1699,15 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
 [{"start": 0.0, "end": 2.1, "text": "မင်္ဂလာပါခင်ဗျာ"}, {"start": 2.2, "end": 4.0, "text": "နေကောင်းကြရဲ့လား"}, ...]`,
           });
 
-          // === NO-SKIP RETRY LOOP: retry empty/failed chunks up to 3 attempts ===
-          const MAX_CHUNK_ATTEMPTS = 3;
+          // === NO-SKIP RETRY LOOP: retry empty/failed chunks up to 5 attempts ===
+          const MAX_CHUNK_ATTEMPTS = 5;
           let chunkAdded: { start: number; end: number; text: string }[] = [];
           let lastErr: any = null;
           for (let attempt = 1; attempt <= MAX_CHUNK_ATTEMPTS; attempt++) {
             try {
               if (attempt > 1) {
                 setProcessingStatus(`Retrying segment ${i + 1}/${audioChunks.length} (attempt ${attempt}/${MAX_CHUNK_ATTEMPTS})...`);
-                await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt - 2)));
+                await new Promise((r) => setTimeout(r, Math.min(4000, 800 * attempt)));
               }
               let text = "[]";
 
@@ -1803,14 +1806,114 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                 throw new Error(`API Quota Exceeded! The server API key has hit its rate limit. Please try again later.`);
               }
               if (attempt >= MAX_CHUNK_ATTEMPTS) {
-                throw new Error(`Failed to translate segment ${i + 1}. Subtitle မပါဘဲ render မလုပ်ပါဘူး။ ခဏနေရင် ပြန်စမ်းပါ။`);
+                // Soft-fail: don't throw. Mark for repair pass instead of aborting entire render.
+                console.warn(`[TranslateVideo] Segment ${i + 1} failed after ${MAX_CHUNK_ATTEMPTS} attempts, will attempt repair pass.`);
+                break;
               }
             }
           }
           parsedSubtitles = [...parsedSubtitles, ...chunkAdded];
           if (chunkAdded.length === 0) {
-            console.warn(`[TranslateVideo] Segment ${i + 1} returned empty after ${MAX_CHUNK_ATTEMPTS} attempts.`, lastErr);
+            console.warn(`[TranslateVideo] Segment ${i + 1} returned empty after ${MAX_CHUNK_ATTEMPTS} attempts, queued for repair.`, lastErr);
+            missingChunkIndices.push(i);
           }
+        }
+      }
+
+      // === REPAIR PASS: Re-translate missing chunks with AUDIO-ONLY (no video frames) ===
+      // Multimodal frames sometimes confuse Gemini into returning []; audio-only tends to succeed.
+      if (missingChunkIndices.length > 0 && audioChunks.length > 0) {
+        setProcessingStatus(`ကျန်ရှိသည့် segment ${missingChunkIndices.length} ခုကို ပြန်ဘာသာပြန်နေသည်… (repair pass)`);
+        const REPAIR_MAX_ATTEMPTS = 3;
+        const repaired: number[] = [];
+        for (let idx = 0; idx < missingChunkIndices.length; idx++) {
+          const chunkIndex = missingChunkIndices[idx];
+          const chunk = audioChunks[chunkIndex];
+          setProcessingStatus(`Repair pass: segment ${chunkIndex + 1} (${idx + 1}/${missingChunkIndices.length})…`);
+          let repairAdded: { start: number; end: number; text: string }[] = [];
+          for (let attempt = 1; attempt <= REPAIR_MAX_ATTEMPTS; attempt++) {
+            try {
+              if (attempt > 1) {
+                await new Promise((r) => setTimeout(r, 1000 * attempt));
+              }
+              let text = "[]";
+              const repairPrompt = `Transcribe the audio and translate it to ${targetLang}.
+PREVIOUS ATTEMPT RETURNED EMPTY. This audio chunk DOES contain speech — transcribe & translate every audible word. Do NOT return [] unless the audio is 100% pure silence, music, or non-speech noise.
+TARGET LANGUAGE LOCK: EVERY 'text' MUST be ${targetLang} ONLY. Proper names stay unchanged.
+Break into short 2-3 second subtitle objects with 'start', 'end', 'text'.
+Audio duration: ${chunk.duration.toFixed(3)} seconds. Return ONLY a JSON array.`;
+
+              if (apiMode === "own" && ownApiKey.trim()) {
+                const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
+                const ownResult = await ai.models.generateContent({
+                  model: "gemini-2.5-flash",
+                  contents: [{ role: "user", parts: [
+                    { inlineData: { mimeType: "audio/wav", data: chunk.base64 } },
+                    { text: repairPrompt },
+                  ] }],
+                  config: {
+                    temperature: 0.3,
+                    maxOutputTokens: 8192,
+                    responseMimeType: "application/json",
+                  },
+                });
+                text = ownResult.text || "[]";
+              } else {
+                text = await invokeSubtitleTranslationChunk({
+                  audioBase64: chunk.base64,
+                  audioDuration: chunk.duration,
+                  targetLang,
+                  videoFrames: [], // AUDIO-ONLY: no frames
+                });
+              }
+
+              const jsonMatch = text.match(/\[[\s\S]*\]/);
+              let chunkSubs = JSON.parse(jsonMatch ? jsonMatch[0] : "[]");
+              if (!Array.isArray(chunkSubs)) chunkSubs = [chunkSubs];
+
+              const adjusted = chunkSubs
+                .filter((sub: any) => {
+                  const s = parseFloat(sub.start) || 0;
+                  const e = parseFloat(sub.end) || 0;
+                  return e > s && s >= 0 && s < chunk.duration + 1.0;
+                })
+                .map((sub: any) => {
+                  const relStart = Math.max(0, Math.min(chunk.duration, parseFloat(sub.start) || 0));
+                  const relEnd = Math.min(chunk.duration, Math.max(relStart + 0.1, parseFloat(sub.end) || 0));
+                  return {
+                    start: parseFloat((relStart + chunk.offset).toFixed(3)),
+                    end: parseFloat((relEnd + chunk.offset).toFixed(3)),
+                    text: stripSpeakerName(sub.text || ""),
+                  };
+                })
+                .filter((sub: any) => sub.text.length > 0 && sub.end > sub.start);
+
+              if (adjusted.length > 0) {
+                repairAdded = adjusted;
+                break;
+              }
+            } catch (repairErr) {
+              console.warn(`[TranslateVideo] Repair pass attempt ${attempt} for segment ${chunkIndex + 1} failed:`, repairErr);
+            }
+          }
+          if (repairAdded.length > 0) {
+            parsedSubtitles = [...parsedSubtitles, ...repairAdded];
+            repaired.push(chunkIndex);
+          }
+        }
+
+        // Re-sort merged subtitles chronologically after repair merges
+        parsedSubtitles.sort((a, b) => a.start - b.start);
+
+        const stillMissing = missingChunkIndices.filter((i) => !repaired.includes(i));
+        if (stillMissing.length > 0) {
+          toast.warning("အချို့ segment များ ဘာသာမပြန်နိုင်ခဲ့ပါ", {
+            description: `Segment ${stillMissing.map((i) => i + 1).join(", ")} က silence/music/noise ဖြစ်နိုင်ပါသည်။ ကျန်တဲ့အပိုင်းများနှင့် render ဆက်လုပ်ပါမည်။`,
+          });
+        } else if (repaired.length > 0) {
+          toast.success("Repair pass အောင်မြင်ပါသည်", {
+            description: `${repaired.length} segment ကို ပြန်ဘာသာပြန်ပြီးပါပြီ။`,
+          });
         }
       }
       if (parsedSubtitles.length === 0) {

@@ -1,41 +1,28 @@
-## Problem
-`TranslateVideoPage.tsx` renders output at a fixed `MAX_DIM = 640` (roughly 360p short edge), so Facebook/etc. compress it heavily and it looks blurry. No UI exists to pick a higher resolution.
+## ရည်ရွယ်ချက်
+Credit သက်တမ်းကို လက်ရှိ `1 month + 7 days grace` (~38 ရက်) အစား **တစ်လတိတိ (~30–31 ရက်)** အဖြစ် ပြောင်းမယ်။ ရှိပြီးသား user အဟောင်းရော အသစ်ပါ တပြိုင်နက် အကျိုးသက်ရောက်မယ်။
 
-## Surgical Fix (UI + render pipeline only)
+## Scope (1 migration, 2 functions)
+Migration အသစ်တစ်ခုနဲ့ အောက်ပါ function 2 ခုကို `CREATE OR REPLACE` လုပ်မယ်။
 
-### 1. Add resolution state
-In `src/pages/TranslateVideoPage.tsx`, add:
-```ts
-const [outputResolution, setOutputResolution] = useState<"360p" | "720p" | "1080p">("360p");
+### 1. `public.deduct_user_credits`
+လက်ရှိ:
+```sql
+_effective_expiry := _credits_started_at + INTERVAL '1 month' + INTERVAL '7 days';
 ```
-Map to short-edge pixels:
-- `360p` → 640 (unchanged default, keeps low-end compatibility)
-- `720p` → 1280
-- `1080p` → 1920
+အသစ်:
+```sql
+_effective_expiry := _credits_started_at + INTERVAL '1 month';
+```
 
-### 2. Apply in render pipeline (around line 2019-2029)
-Replace the hardcoded `const MAX_DIM = 640;` with the mapped value based on `outputResolution`. Keep the aspect-ratio math exactly as-is so any `ASPECT_RATIOS` selection still produces the exact short-edge the user picked (e.g. 9:16 at 1080p → 1080×1920; 16:9 at 720p → 1280×720).
+### 2. `public.handle_credits_started_at`
+7-day merge window ကို ဖြုတ်ပြီး တစ်လကျော်ရင် fresh start ဖြစ်စေမယ် (တစ်လနဲ့ ကိုက်အောင်)။
 
-Also raise `MediaRecorder`'s `videoBitsPerSecond` proportionally so 720p/1080p aren't crushed by the default bitrate:
-- 360p → 2 Mbps
-- 720p → 6 Mbps
-- 1080p → 12 Mbps
+## User အားလုံးအပေါ် အကျိုးသက်ရောက်မှု
+- **User အဟောင်း** — `credits_started_at` မပြောင်း၊ ဒါပေမယ့် formula ပြောင်းသွားလို့ next tool call ကနေစပြီး တစ်လကျော်တိုင်း expired ဖြစ်မယ်။
+- **User အသစ်** — credit ရတဲ့နေ့ကနေ တစ်လတိတိပဲ ရမယ်။
+- Migration deploy ချိန်မှာ `credits_started_at` က 30–38 ရက်ကြားရှိတဲ့ (grace ထဲ) user တွေ ချက်ချင်း expired ဖြစ်နိုင်တယ်။
+- Admin manual override (`credits_expires_at`) — မထိ၊ override အတိုင်း ဆက်အလုပ်လုပ်တယ်။
+- Renewal / topup — `credits_started_at` reset ဖြစ်ပြီး တစ်လ ပြန်စတွက်မယ်။
 
-Pass into `new MediaRecorder(stream, { ...options, videoBitsPerSecond })`. Nothing else in the recorder/codec logic changes.
-
-### 3. Add UI dropdown
-Add a Professional `Select` (shadcn) labeled "Output Resolution" next to existing aspect ratio / color grade controls, with 3 options:
-- 360P (Default — အနိမ့်ဖုန်း အဆင်ပြေ)
-- 720P (HD — အလတ်စား CPU)
-- 1080P (Full HD — အမြင့်စား CPU)
-
-Include a small warning line under the select for 1080p noting higher-end device recommended.
-
-## Not touched
-- Translation/subtitle logic, VAD, prompts, chunk retry loop
-- Aspect ratio math, canvas draw pipeline, subtitle rendering, blur box, fonts, color grade
-- Audio pipeline, audioBypass, MediaRecorder codec fallback chain
-- Credit deduction, edge functions, upload logic
-
-## Files touched
-- `src/pages/TranslateVideoPage.tsx` — add state, dropdown UI, swap `MAX_DIM`, add `videoBitsPerSecond`.
+## မထိတဲ့အရာ
+Credit deduction rules, admin exemption, own-api logic, access control, activity logs, RLS, တခြား DB function တွေ — အားလုံး လက်ရှိအတိုင်း။
