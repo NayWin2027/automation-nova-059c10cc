@@ -549,7 +549,7 @@ const AdminUsersTab: React.FC = () => {
               return exp;
             };
             const isCreditsExpired = profile.credits_started_at
-              ? (() => { const exp = getCalendarMonthExpiry(profile.credits_started_at); exp.setDate(exp.getDate() + 7); return exp.getTime() < Date.now(); })()
+              ? getCalendarMonthExpiry(profile.credits_started_at).getTime() < Date.now()
               : false;
             const startDate = profile.credits_started_at
               ? new Date(profile.credits_started_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
@@ -964,7 +964,6 @@ const AdminUsersTab: React.FC = () => {
                           const s = new Date(creditDetailProfile.credits_started_at);
                           exp = new Date(s);
                           exp.setMonth(exp.getMonth() + 1);
-                          exp.setDate(exp.getDate() + 7);
                         }
                         return exp && exp.getTime() < Date.now() ? 'text-red-400' : 'text-foreground';
                       })()}`}>
@@ -976,7 +975,6 @@ const AdminUsersTab: React.FC = () => {
                             const s = new Date(creditDetailProfile.credits_started_at);
                             exp = new Date(s);
                             exp.setMonth(exp.getMonth() + 1);
-                            exp.setDate(exp.getDate() + 7);
                           }
                           return exp ? exp.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
                         })()}
@@ -1015,7 +1013,7 @@ const AdminUsersTab: React.FC = () => {
                     </div>
                     <div className="space-y-1">
                       <Label className="text-2xs text-muted-foreground">
-                        Expiry Date <span className="text-[9px] text-amber-400">(override; leave blank = auto +1m+7d)</span>
+                        Expiry Date <span className="text-[9px] text-amber-400">(override; leave blank = auto +1 month)</span>
                       </Label>
                       <Input
                         type="date"
