@@ -233,6 +233,7 @@ const Index = () => {
         const startDate = new Date(profile.credits_started_at);
         expiryDate = new Date(startDate);
         expiryDate.setMonth(expiryDate.getMonth() + 1);
+        expiryDate.setDate(expiryDate.getDate() + 7);
       }
       // If we have a profile but no start AND no override → loophole; treat as expired
       const noDates = !!profile && !override && !profile.credits_started_at;
