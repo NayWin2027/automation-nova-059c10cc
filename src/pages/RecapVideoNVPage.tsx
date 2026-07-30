@@ -3064,6 +3064,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
                     const onSeeked = () => {
                       seekPendingRef.current = false;
+                      prewarmActiveRef.current = false;
                       if (!vv.ended) {
                         if (!freezeModeRef.current) {
                           // freeze OFF: ensure playing at correct rate after seek completes
@@ -3087,7 +3088,45 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       vv.playbackRate = targetPlaybackRate;
                       if (vv.paused && !vv.ended) vv.play().catch(() => {});
                     }
+
+                    // ── SURGICAL FIX: SCENE-CUT PREWARM — cover the decoder gap ──
+                    // If the prewarm buffer already holds this exact frame decoded, the draw loop
+                    // reads from it while the active element re-decodes. No timing change at all.
+                    const _pw = prewarmVideoRef.current;
+                    prewarmActiveRef.current = !!(
+                      _pw &&
+                      prewarmReadyRef.current &&
+                      _pw.readyState >= 2 &&
+                      Math.abs(prewarmTargetRef.current - effectiveVStart) < 0.12
+                    );
+
                     vv.currentTime = effectiveVStart; // SURGICAL FIX: audio-proportional source position
+
+                    // Pre-seek the buffer to the NEXT segment start (a full segment of lead time)
+                    try {
+                      const _nextIdx = activeIndex + 1;
+                      if (_pw && _nextIdx <= maxIdx) {
+                        const _nextSeg = getSeg(_nextIdx);
+                        const _nextStart =
+                          _needsScale && audioTs[_nextIdx]
+                            ? Math.min((audioTs[_nextIdx].start / _audioDur) * _vidDur, _vidDur - 0.5)
+                            : _nextSeg?.vStart;
+                        if (
+                          typeof _nextStart === "number" &&
+                          _nextStart >= 0 &&
+                          Math.abs(prewarmTargetRef.current - _nextStart) > 0.12
+                        ) {
+                          prewarmTargetRef.current = _nextStart;
+                          prewarmReadyRef.current = false;
+                          const onPwSeeked = () => {
+                            prewarmReadyRef.current = true;
+                            _pw.removeEventListener("seeked", onPwSeeked);
+                          };
+                          _pw.addEventListener("seeked", onPwSeeked);
+                          _pw.currentTime = _nextStart;
+                        }
+                      }
+                    } catch (_) {}
                   } else if (!seekPendingRef.current) {
                     // SURGICAL FIX: AV SYNC 100% — If video has overrun vEnd, hard-seek back to effectiveVStart
                     // This prevents irrelevant content (eating, dancing, walking) from leaking into the active segment.
