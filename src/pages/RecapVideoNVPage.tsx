@@ -2419,6 +2419,39 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         zoomedSrcX = Math.max(srcCropX, Math.min(srcCropX + (srcCropW - zoomedSrcW), zoomedSrcX));
         zoomedSrcY = Math.max(srcCropY, Math.min(srcCropY + (srcCropH - zoomedSrcH), zoomedSrcY));
 
+        // ── SURGICAL FIX: SCENE-CUT MICRO-PAUSE KILLER (desktop) ──
+        // (A) draw from the prewarm buffer while the active element re-decodes after a hard cut
+        const _pwEl = prewarmVideoRef.current;
+        const drawSrcEl: HTMLVideoElement =
+          seekPendingRef.current && prewarmActiveRef.current && _pwEl && _pwEl.readyState >= 2 ? _pwEl : videoEl;
+
+        // (B) residual gap mask — slow micro zoom-in (max 2%) so any held frame reads as motion
+        {
+          const _now = performance.now();
+          if (seekPendingRef.current) {
+            if (gapStartRef.current === 0) gapStartRef.current = _now;
+          } else {
+            gapStartRef.current = 0;
+          }
+          let gapZoom = 1;
+          if (gapStartRef.current > 0) {
+            const p = Math.min(1, (_now - gapStartRef.current) / 250);
+            gapZoom = 1 + 0.02 * (1 - Math.pow(1 - p, 3));
+            gapZoomHoldRef.current = gapZoom;
+          } else if (gapZoomHoldRef.current > 1.0001) {
+            gapZoomHoldRef.current = Math.max(1, gapZoomHoldRef.current - 0.0015);
+            gapZoom = gapZoomHoldRef.current;
+          }
+          if (gapZoom > 1.0001) {
+            const gW = Math.max(2, Math.round(zoomedSrcW / gapZoom));
+            const gH = Math.max(2, Math.round(zoomedSrcH / gapZoom));
+            zoomedSrcX = zoomedSrcX + Math.round((zoomedSrcW - gW) / 2);
+            zoomedSrcY = zoomedSrcY + Math.round((zoomedSrcH - gH) / 2);
+            zoomedSrcW = gW;
+            zoomedSrcH = gH;
+          }
+        }
+
         ctx.save();
         // Optional subtle rotation about center (no zoom via ctx.scale; zoom is handled by crop).
         ctx.translate(canvas.width / 2, canvas.height / 2);
@@ -2432,7 +2465,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             ctx.translate(canvas.width, 0);
             ctx.scale(-1, 1);
           }
-          ctx.drawImage(videoEl, zoomedSrcX, zoomedSrcY, zoomedSrcW, zoomedSrcH, 0, 0, canvas.width, canvas.height);
+          ctx.drawImage(drawSrcEl, zoomedSrcX, zoomedSrcY, zoomedSrcW, zoomedSrcH, 0, 0, canvas.width, canvas.height);
           ctx.restore();
 
           // â”€â”€ FEATURE: Professional scene-cut transition â€” smooth cinematic sweep â”€â”€
