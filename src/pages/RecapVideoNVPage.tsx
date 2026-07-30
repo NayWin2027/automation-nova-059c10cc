@@ -793,6 +793,18 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const segCutTimeRef = useRef<number>(0);
     // SURGICAL EDIT: Prevent re-seeking while HTML5 seek is still in progress (async)
     const seekPendingRef = useRef<boolean>(false);
+    // ── SURGICAL FIX: SCENE-CUT PREWARM (desktop micro-pause killer) ──
+    // Desktop Chrome flushes the decoder on every seek (50–150ms gap). A second hidden
+    // <video> pre-seeks to the NEXT segment start so the correct frame is already decoded.
+    // During the active element's seek gap we draw from this buffer instead of a stale frame.
+    // Timing math is untouched — only the pixel source changes.
+    const prewarmVideoRef = useRef<HTMLVideoElement | null>(null);
+    const prewarmTargetRef = useRef<number>(-1);
+    const prewarmReadyRef = useRef<boolean>(false);
+    const prewarmActiveRef = useRef<boolean>(false);
+    // Residual gap mask: slow micro zoom-in so any leftover hold reads as motion, not a stutter
+    const gapStartRef = useRef<number>(0);
+    const gapZoomHoldRef = useRef<number>(1);
     // SURGICAL EDIT: Track whether we're in active segment (true) or between segments (false)
     const videoInSegmentRef = useRef<boolean>(false);
     // SURGICAL FIX: Frozen frame refs for Freeze/Motion mode
