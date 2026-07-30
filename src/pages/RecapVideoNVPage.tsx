@@ -2020,6 +2020,21 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         isRenderingRef.current = false;
         setIsRecapPlaying(false);
 
+        // ── SURGICAL FIX: release scene-cut prewarm buffer ──
+        try {
+          const pw = prewarmVideoRef.current;
+          if (pw) {
+            pw.removeAttribute("src");
+            pw.load();
+          }
+          prewarmVideoRef.current = null;
+          prewarmTargetRef.current = -1;
+          prewarmReadyRef.current = false;
+          prewarmActiveRef.current = false;
+          gapStartRef.current = 0;
+          gapZoomHoldRef.current = 1;
+        } catch (_) {}
+
         try {
           const {
             data: { user },
