@@ -2048,6 +2048,26 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // â”€â”€ WARMUP: prime both draw and encode canvas GPU pipeline â”€â”€
       await new Promise<void>((resolve) => {
         videoEl.currentTime = 0;
+
+        // ── SURGICAL FIX: create scene-cut prewarm buffer (decode-gap killer) ──
+        try {
+          if (!prewarmVideoRef.current) {
+            const pw = document.createElement("video");
+            pw.muted = true;
+            pw.playsInline = true;
+            pw.preload = "auto";
+            pw.crossOrigin = videoEl.crossOrigin;
+            pw.src = videoEl.currentSrc || videoEl.src;
+            pw.load();
+            prewarmVideoRef.current = pw;
+          }
+          prewarmTargetRef.current = -1;
+          prewarmReadyRef.current = false;
+          prewarmActiveRef.current = false;
+          gapStartRef.current = 0;
+          gapZoomHoldRef.current = 1;
+        } catch (_) {}
+
         audioEl.currentTime = 0;
         let warmupFrames = 0;
         const warmupCtx = canvas.getContext("2d", { alpha: false })!;
