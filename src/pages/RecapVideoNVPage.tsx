@@ -793,6 +793,18 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const segCutTimeRef = useRef<number>(0);
     // SURGICAL EDIT: Prevent re-seeking while HTML5 seek is still in progress (async)
     const seekPendingRef = useRef<boolean>(false);
+    // ── SURGICAL FIX: SCENE-CUT PREWARM (desktop micro-pause killer) ──
+    // Desktop Chrome flushes the decoder on every seek (50–150ms gap). A second hidden
+    // <video> pre-seeks to the NEXT segment start so the correct frame is already decoded.
+    // During the active element's seek gap we draw from this buffer instead of a stale frame.
+    // Timing math is untouched — only the pixel source changes.
+    const prewarmVideoRef = useRef<HTMLVideoElement | null>(null);
+    const prewarmTargetRef = useRef<number>(-1);
+    const prewarmReadyRef = useRef<boolean>(false);
+    const prewarmActiveRef = useRef<boolean>(false);
+    // Residual gap mask: slow micro zoom-in so any leftover hold reads as motion, not a stutter
+    const gapStartRef = useRef<number>(0);
+    const gapZoomHoldRef = useRef<number>(1);
     // SURGICAL EDIT: Track whether we're in active segment (true) or between segments (false)
     const videoInSegmentRef = useRef<boolean>(false);
     // SURGICAL FIX: Frozen frame refs for Freeze/Motion mode
@@ -2008,6 +2020,21 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         isRenderingRef.current = false;
         setIsRecapPlaying(false);
 
+        // ── SURGICAL FIX: release scene-cut prewarm buffer ──
+        try {
+          const pw = prewarmVideoRef.current;
+          if (pw) {
+            pw.removeAttribute("src");
+            pw.load();
+          }
+          prewarmVideoRef.current = null;
+          prewarmTargetRef.current = -1;
+          prewarmReadyRef.current = false;
+          prewarmActiveRef.current = false;
+          gapStartRef.current = 0;
+          gapZoomHoldRef.current = 1;
+        } catch (_) {}
+
         try {
           const {
             data: { user },
@@ -2036,6 +2063,26 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // â”€â”€ WARMUP: prime both draw and encode canvas GPU pipeline â”€â”€
       await new Promise<void>((resolve) => {
         videoEl.currentTime = 0;
+
+        // ── SURGICAL FIX: create scene-cut prewarm buffer (decode-gap killer) ──
+        try {
+          if (!prewarmVideoRef.current) {
+            const pw = document.createElement("video");
+            pw.muted = true;
+            pw.playsInline = true;
+            pw.preload = "auto";
+            pw.crossOrigin = videoEl.crossOrigin;
+            pw.src = videoEl.currentSrc || videoEl.src;
+            pw.load();
+            prewarmVideoRef.current = pw;
+          }
+          prewarmTargetRef.current = -1;
+          prewarmReadyRef.current = false;
+          prewarmActiveRef.current = false;
+          gapStartRef.current = 0;
+          gapZoomHoldRef.current = 1;
+        } catch (_) {}
+
         audioEl.currentTime = 0;
         let warmupFrames = 0;
         const warmupCtx = canvas.getContext("2d", { alpha: false })!;
@@ -2372,6 +2419,39 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         zoomedSrcX = Math.max(srcCropX, Math.min(srcCropX + (srcCropW - zoomedSrcW), zoomedSrcX));
         zoomedSrcY = Math.max(srcCropY, Math.min(srcCropY + (srcCropH - zoomedSrcH), zoomedSrcY));
 
+        // ── SURGICAL FIX: SCENE-CUT MICRO-PAUSE KILLER (desktop) ──
+        // (A) draw from the prewarm buffer while the active element re-decodes after a hard cut
+        const _pwEl = prewarmVideoRef.current;
+        const drawSrcEl: HTMLVideoElement =
+          seekPendingRef.current && prewarmActiveRef.current && _pwEl && _pwEl.readyState >= 2 ? _pwEl : videoEl;
+
+        // (B) residual gap mask — slow micro zoom-in (max 2%) so any held frame reads as motion
+        {
+          const _now = performance.now();
+          if (seekPendingRef.current) {
+            if (gapStartRef.current === 0) gapStartRef.current = _now;
+          } else {
+            gapStartRef.current = 0;
+          }
+          let gapZoom = 1;
+          if (gapStartRef.current > 0) {
+            const p = Math.min(1, (_now - gapStartRef.current) / 250);
+            gapZoom = 1 + 0.02 * (1 - Math.pow(1 - p, 3));
+            gapZoomHoldRef.current = gapZoom;
+          } else if (gapZoomHoldRef.current > 1.0001) {
+            gapZoomHoldRef.current = Math.max(1, gapZoomHoldRef.current - 0.0015);
+            gapZoom = gapZoomHoldRef.current;
+          }
+          if (gapZoom > 1.0001) {
+            const gW = Math.max(2, Math.round(zoomedSrcW / gapZoom));
+            const gH = Math.max(2, Math.round(zoomedSrcH / gapZoom));
+            zoomedSrcX = zoomedSrcX + Math.round((zoomedSrcW - gW) / 2);
+            zoomedSrcY = zoomedSrcY + Math.round((zoomedSrcH - gH) / 2);
+            zoomedSrcW = gW;
+            zoomedSrcH = gH;
+          }
+        }
+
         ctx.save();
         // Optional subtle rotation about center (no zoom via ctx.scale; zoom is handled by crop).
         ctx.translate(canvas.width / 2, canvas.height / 2);
@@ -2385,7 +2465,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             ctx.translate(canvas.width, 0);
             ctx.scale(-1, 1);
           }
-          ctx.drawImage(videoEl, zoomedSrcX, zoomedSrcY, zoomedSrcW, zoomedSrcH, 0, 0, canvas.width, canvas.height);
+          ctx.drawImage(drawSrcEl, zoomedSrcX, zoomedSrcY, zoomedSrcW, zoomedSrcH, 0, 0, canvas.width, canvas.height);
           ctx.restore();
 
           // â”€â”€ FEATURE: Professional scene-cut transition â€” smooth cinematic sweep â”€â”€
@@ -3017,6 +3097,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
                     const onSeeked = () => {
                       seekPendingRef.current = false;
+                      prewarmActiveRef.current = false;
                       if (!vv.ended) {
                         if (!freezeModeRef.current) {
                           // freeze OFF: ensure playing at correct rate after seek completes
@@ -3040,7 +3121,45 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       vv.playbackRate = targetPlaybackRate;
                       if (vv.paused && !vv.ended) vv.play().catch(() => {});
                     }
+
+                    // ── SURGICAL FIX: SCENE-CUT PREWARM — cover the decoder gap ──
+                    // If the prewarm buffer already holds this exact frame decoded, the draw loop
+                    // reads from it while the active element re-decodes. No timing change at all.
+                    const _pw = prewarmVideoRef.current;
+                    prewarmActiveRef.current = !!(
+                      _pw &&
+                      prewarmReadyRef.current &&
+                      _pw.readyState >= 2 &&
+                      Math.abs(prewarmTargetRef.current - effectiveVStart) < 0.12
+                    );
+
                     vv.currentTime = effectiveVStart; // SURGICAL FIX: audio-proportional source position
+
+                    // Pre-seek the buffer to the NEXT segment start (a full segment of lead time)
+                    try {
+                      const _nextIdx = activeIndex + 1;
+                      if (_pw && _nextIdx <= maxIdx) {
+                        const _nextSeg = getSeg(_nextIdx);
+                        const _nextStart =
+                          _needsScale && audioTs[_nextIdx]
+                            ? Math.min((audioTs[_nextIdx].start / _audioDur) * _vidDur, _vidDur - 0.5)
+                            : _nextSeg?.vStart;
+                        if (
+                          typeof _nextStart === "number" &&
+                          _nextStart >= 0 &&
+                          Math.abs(prewarmTargetRef.current - _nextStart) > 0.12
+                        ) {
+                          prewarmTargetRef.current = _nextStart;
+                          prewarmReadyRef.current = false;
+                          const onPwSeeked = () => {
+                            prewarmReadyRef.current = true;
+                            _pw.removeEventListener("seeked", onPwSeeked);
+                          };
+                          _pw.addEventListener("seeked", onPwSeeked);
+                          _pw.currentTime = _nextStart;
+                        }
+                      }
+                    } catch (_) {}
                   } else if (!seekPendingRef.current) {
                     // SURGICAL FIX: AV SYNC 100% — If video has overrun vEnd, hard-seek back to effectiveVStart
                     // This prevents irrelevant content (eating, dancing, walking) from leaking into the active segment.
