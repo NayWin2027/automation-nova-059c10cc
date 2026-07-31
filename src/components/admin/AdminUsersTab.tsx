@@ -59,6 +59,7 @@ const AdminUsersTab: React.FC = () => {
   // Changed from email to userId for ID-based auth
   const [newUser, setNewUser] = useState({
     userId: "",
+    name: "",
     password: "",
     plan: "free" as "free" | "pro" | "premium",
     credits: 100,
@@ -181,6 +182,7 @@ const AdminUsersTab: React.FC = () => {
         action: 'create_user',
         email: internalEmail,
         password: newUser.password,
+        displayName: newUser.name.trim() || undefined,
         plan: newUser.plan,
         credits: newUser.credits,
         referrerId: newUser.referrerId.trim() || undefined,
@@ -201,7 +203,7 @@ const AdminUsersTab: React.FC = () => {
         description: `User "${newUser.userId}" has been added`
       });
       setAddUserOpen(false);
-      setNewUser({ userId: "", password: "", plan: "free", credits: 100, referrerId: "", paymentMethod: "kpay" });
+      setNewUser({ userId: "", name: "", password: "", plan: "free", credits: 100, referrerId: "", paymentMethod: "kpay" });
       fetchProfiles();
       fetchStats();
     }
@@ -429,6 +431,12 @@ const AdminUsersTab: React.FC = () => {
                 </div>
                 {/* Auto User ID */}
                 <div>
+                  <Label className="text-2xs text-muted-foreground">Full Name <span className="text-muted-foreground/50">(optional)</span></Label>
+                  <Input
+                    placeholder="e.g. Ko Nay Win"
+                    value={newUser.name}
+                    onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+                    className="h-8 text-xs bg-secondary/30 border-border/30 mb-3" />
                   <Label className="text-2xs text-muted-foreground">User ID <span className="text-emerald-400 text-[10px]">⚡ Auto</span></Label>
                   <div className="flex gap-1">
                     <Input
