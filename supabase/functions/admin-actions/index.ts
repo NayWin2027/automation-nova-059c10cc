@@ -232,6 +232,12 @@ serve(async (req) => {
             credits: credits || 100 
           };
 
+          // Optional display name provided by admin at creation time
+          const displayName = params.displayName;
+          if (displayName && typeof displayName === 'string' && displayName.trim()) {
+            updateObj.display_name = displayName.trim().slice(0, 100);
+          }
+
           // Handle referral (optional)
           const referrerId = params.referrerId;
           if (referrerId && typeof referrerId === 'string' && referrerId.trim()) {
