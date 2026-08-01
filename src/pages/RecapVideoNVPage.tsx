@@ -805,6 +805,14 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     // Residual gap mask: slow micro zoom-in so any leftover hold reads as motion, not a stutter
     const gapStartRef = useRef<number>(0);
     const gapZoomHoldRef = useRef<number>(1);
+    // SURGICAL FIX: visual-only loop cap. AV sync and hard-cut seeking continue untouched;
+    // after two visible wraps, canvas holds the final relevant frame with a slow news-style zoom.
+    const visibleLoopSegmentRef = useRef<number>(-1);
+    const visibleLoopCountRef = useRef<number>(0);
+    const visibleLoopLastTimeRef = useRef<number>(-1);
+    const visibleLoopMaskStartRef = useRef<number>(0);
+    const visibleLoopFrameRef = useRef<HTMLCanvasElement | null>(null);
+    const visibleLoopFrameReadyRef = useRef<boolean>(false);
     // SURGICAL EDIT: Track whether we're in active segment (true) or between segments (false)
     const videoInSegmentRef = useRef<boolean>(false);
     // SURGICAL FIX: Frozen frame refs for Freeze/Motion mode
@@ -2033,6 +2041,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           prewarmActiveRef.current = false;
           gapStartRef.current = 0;
           gapZoomHoldRef.current = 1;
+          visibleLoopSegmentRef.current = -1;
+          visibleLoopCountRef.current = 0;
+          visibleLoopLastTimeRef.current = -1;
+          visibleLoopMaskStartRef.current = 0;
+          visibleLoopFrameRef.current = null;
+          visibleLoopFrameReadyRef.current = false;
         } catch (_) {}
 
         try {
@@ -2081,6 +2095,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           prewarmActiveRef.current = false;
           gapStartRef.current = 0;
           gapZoomHoldRef.current = 1;
+          visibleLoopSegmentRef.current = -1;
+          visibleLoopCountRef.current = 0;
+          visibleLoopLastTimeRef.current = -1;
+          visibleLoopMaskStartRef.current = 0;
+          visibleLoopFrameReadyRef.current = false;
         } catch (_) {}
 
         audioEl.currentTime = 0;
@@ -2425,6 +2444,35 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         const drawSrcEl: HTMLVideoElement =
           seekPendingRef.current && prewarmActiveRef.current && _pwEl && _pwEl.readyState >= 2 ? _pwEl : videoEl;
 
+        // (A2) Canvas-only visible loop cap — observe backward wraps without changing seek/timing logic.
+        // A new scene resets the counter. The third wrap is hidden behind the last relevant frame.
+        const visualSegment = lastIndexRef.current;
+        if (visualSegment !== visibleLoopSegmentRef.current) {
+          visibleLoopSegmentRef.current = visualSegment;
+          visibleLoopCountRef.current = 0;
+          visibleLoopLastTimeRef.current = videoEl.currentTime;
+          visibleLoopMaskStartRef.current = 0;
+          visibleLoopFrameReadyRef.current = false;
+        } else {
+          const previousVisualTime = visibleLoopLastTimeRef.current;
+          const currentVisualTime = videoEl.currentTime;
+          if (previousVisualTime >= 0 && currentVisualTime < previousVisualTime - 0.35) {
+            visibleLoopCountRef.current += 1;
+            if (visibleLoopCountRef.current > 2 && visibleLoopMaskStartRef.current === 0) {
+              visibleLoopMaskStartRef.current = performance.now();
+            }
+          }
+          visibleLoopLastTimeRef.current = currentVisualTime;
+        }
+
+        const useVisibleLoopMask =
+          !freezeModeRef.current && visibleLoopCountRef.current > 2 && visibleLoopFrameReadyRef.current;
+        const useResidualFrameMask =
+          !useVisibleLoopMask &&
+          seekPendingRef.current &&
+          !prewarmActiveRef.current &&
+          visibleLoopFrameReadyRef.current;
+
         // (B) residual gap mask — slow micro zoom-in (max 2%) so any held frame reads as motion
         {
           const _now = performance.now();
@@ -2465,8 +2513,40 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             ctx.translate(canvas.width, 0);
             ctx.scale(-1, 1);
           }
-          ctx.drawImage(drawSrcEl, zoomedSrcX, zoomedSrcY, zoomedSrcW, zoomedSrcH, 0, 0, canvas.width, canvas.height);
+          const heldFrame = visibleLoopFrameRef.current;
+          if ((useVisibleLoopMask || useResidualFrameMask) && heldFrame) {
+            const maskElapsed =
+              useVisibleLoopMask && visibleLoopMaskStartRef.current > 0
+                ? performance.now() - visibleLoopMaskStartRef.current
+                : Math.max(0, performance.now() - gapStartRef.current);
+            const maskProgress = Math.min(1, maskElapsed / (useVisibleLoopMask ? 8000 : 320));
+            const maskEase = 1 - Math.pow(1 - maskProgress, 3);
+            const maskZoom = 1 + (useVisibleLoopMask ? 0.06 : 0.018) * maskEase;
+            const maskW = Math.max(2, Math.round(heldFrame.width / maskZoom));
+            const maskH = Math.max(2, Math.round(heldFrame.height / maskZoom));
+            const maskX = Math.round((heldFrame.width - maskW) / 2);
+            const maskY = Math.round((heldFrame.height - maskH) / 2);
+            ctx.drawImage(heldFrame, maskX, maskY, maskW, maskH, 0, 0, canvas.width, canvas.height);
+          } else {
+            ctx.drawImage(drawSrcEl, zoomedSrcX, zoomedSrcY, zoomedSrcW, zoomedSrcH, 0, 0, canvas.width, canvas.height);
+          }
           ctx.restore();
+
+          // Keep one clean, subtitle-free visual frame ready. During the second allowed loop this
+          // naturally advances to its final frame, which becomes the professional hold if needed.
+          if (!useVisibleLoopMask && !useResidualFrameMask && visualSegment >= 0) {
+            if (!visibleLoopFrameRef.current) visibleLoopFrameRef.current = document.createElement("canvas");
+            const heldFrame = visibleLoopFrameRef.current;
+            if (heldFrame) {
+              if (heldFrame.width !== canvas.width) heldFrame.width = canvas.width;
+              if (heldFrame.height !== canvas.height) heldFrame.height = canvas.height;
+              const heldCtx = heldFrame.getContext("2d", { alpha: false });
+              if (heldCtx) {
+                heldCtx.drawImage(canvas, 0, 0, canvas.width, canvas.height);
+                visibleLoopFrameReadyRef.current = true;
+              }
+            }
+          }
 
           // â”€â”€ FEATURE: Professional scene-cut transition â€” smooth cinematic sweep â”€â”€
           const TRANSITION_MS = 320;
