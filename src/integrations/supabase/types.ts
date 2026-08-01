@@ -711,6 +711,7 @@ export type Database = {
         Args: { _session_id: string; _user_id: string }
         Returns: undefined
       }
+      tutorials_are_public: { Args: never; Returns: boolean }
       verify_admin_secret: { Args: { secret_input: string }; Returns: boolean }
     }
     Enums: {
