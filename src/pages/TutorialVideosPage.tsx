@@ -4,6 +4,7 @@ import * as tus from "tus-js-client";
 import { supabase } from "@/integrations/supabase/client";
 import { useAdmin } from "@/hooks/useAdmin";
 import { useAuth } from "@/hooks/useAuth";
+import { useToolSettings } from "@/hooks/useToolSettings";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -173,6 +174,12 @@ const TutorialVideosPage: React.FC = () => {
   const { toast } = useToast();
   const { isAdmin, loading: adminLoading } = useAdmin();
   const { profile, loading: authLoading } = useAuth();
+  const { toolSettings, loading: toolSettingsLoading } = useToolSettings();
+  // Tutorial Videos page ON/OFF toggle (Tool Settings → tutorials):
+  // requires_auth = true  → Login Required (admin / premium only)
+  // requires_auth = false → Public (anyone can view)
+  const tutorialsSetting = toolSettings.find((t) => t.tool_id === "tutorials");
+  const tutorialsArePublic = tutorialsSetting ? tutorialsSetting.requires_auth === false : false;
 
   const [tutorials, setTutorials] = useState<Tutorial[]>([]);
   const [loading, setLoading] = useState(true);
@@ -215,8 +222,8 @@ const TutorialVideosPage: React.FC = () => {
     }
   };
 
-  const canView = isAdmin || (profile?.plan === "premium");
-  const accessLoading = adminLoading || authLoading;
+  const canView = isAdmin || profile?.plan === "premium" || tutorialsArePublic;
+  const accessLoading = adminLoading || authLoading || toolSettingsLoading;
 
   useEffect(() => {
     if (!loading && !accessLoading && !canView) {
