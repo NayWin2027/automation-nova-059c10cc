@@ -208,8 +208,9 @@ const Index = () => {
   }).
   filter((tool) => {
     if (tool.id === "tutorials") {
+      const tutorialSetting = toolSettings.find((s) => s.tool_id === "tutorials");
       // Public mode (Tool Settings → Tutorial Videos = Public) makes the card visible to everyone
-      return isAdmin || (isAuthenticated && profile?.plan === "premium") || setting?.requires_auth === false;
+      return isAdmin || (isAuthenticated && profile?.plan === "premium") || tutorialSetting?.requires_auth === false;
     }
     return true;
   });
