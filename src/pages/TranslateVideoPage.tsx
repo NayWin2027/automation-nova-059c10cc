@@ -584,18 +584,7 @@ export default function App() {
   const activeDragContainerRef = useRef<HTMLDivElement | null>(null);
   const [dragging, setDragging] = useState<"sub" | "watermark" | "logo" | null>(null);
 
-  // Auto-generate marketing content when reaching result step
-  const autoMarketingTriggered = useRef(false);
-  useEffect(() => {
-    if (step === "result" && !marketingContent && !isGeneratingMarketing && !autoMarketingTriggered.current) {
-      autoMarketingTriggered.current = true;
-      const timer = setTimeout(() => generateMarketingContent(), 1500);
-      return () => clearTimeout(timer);
-    }
-    if (step !== "result") {
-      autoMarketingTriggered.current = false;
-    }
-  }, [step, marketingContent, isGeneratingMarketing]);
+  // Marketing kit is MANUAL only — no auto-generation on result step.
 
   useEffect(() => {
     dragSubPosRef.current = subPos;
@@ -1371,16 +1360,6 @@ export default function App() {
 
       const thumbnailUrl = canvas.toDataURL("image/png");
       setMarketingContent({ title, description, thumbnailUrl });
-
-      // Auto-download the thumbnail
-      const a = document.createElement("a");
-      a.href = thumbnailUrl;
-      a.download = `viral_thumbnail_${Date.now()}.png`;
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        document.body.removeChild(a);
-      }, 100);
     } catch (error) {
       console.error("Error generating marketing content:", error);
     } finally {
@@ -4068,13 +4047,23 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                       </div>
                       <h3 className="text-xl font-bold text-white">Viral Marketing Kit</h3>
                     </div>
-                    {/* Auto-generating... no manual button needed */}
+                    {!marketingContent && !isGeneratingMarketing && (
+                      <button
+                        onClick={generateMarketingContent}
+                        className="flex items-center gap-2 px-5 py-3 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 rounded-2xl font-bold text-sm transition-all"
+                      >
+                        <Sparkles size={16} />
+                        Generate Marketing Kit
+                      </button>
+                    )}
                   </div>
 
                   {!marketingContent && !isGeneratingMarketing && (
                     <div className="bg-zinc-800/30 border border-zinc-800 rounded-3xl p-8 text-center">
-                      <Loader2 size={32} className="animate-spin text-indigo-500 mx-auto mb-3" />
-                      <p className="text-zinc-400 font-medium">Auto-generating marketing kit...</p>
+                      <p className="text-zinc-400 font-medium">
+                        Viral title နဲ့ thumbnail က optional ပါ။ လိုချင်မှသာ အပေါ်က "Generate Marketing Kit" ကို နှိပ်ပါ။
+                      </p>
+                      <p className="text-zinc-600 text-xs mt-2">Costs 4 CR (App API mode only)</p>
                     </div>
                   )}
 
