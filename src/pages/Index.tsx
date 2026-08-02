@@ -219,6 +219,16 @@ const Index = () => {
       return;
     }
 
+    // Tutorial Videos: when Tool Settings → Public (requires_auth = false),
+    // anyone (including guests) can open it without logging in.
+    if (tool.id === "tutorials") {
+      const tutorialSetting = toolSettings.find((s) => s.tool_id === "tutorials");
+      if (isAdmin || tutorialSetting?.requires_auth === false) {
+        navigate("/tutorials");
+        return;
+      }
+    }
+
     // PLAN MODE: Redirect all tool clicks to Plans tab
     if (accessControl.planMode && !isAdmin) {
       setActiveTab("premium");
@@ -480,7 +490,7 @@ const Index = () => {
           </div>
         </button>
 
-        {(isAdmin || profile?.plan === "premium") &&
+        {(isAdmin || profile?.plan === "premium" || toolSettings.find((s) => s.tool_id === "tutorials")?.requires_auth === false) &&
         <button
         onClick={() => navigate("/tutorials")}
         className="w-full p-2.5 rounded-lg border border-border/30 bg-card/50 text-left hover:bg-card transition-colors">
