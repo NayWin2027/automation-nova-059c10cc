@@ -490,7 +490,7 @@ const Index = () => {
           </div>
         </button>
 
-        {(isAdmin || profile?.plan === "premium") &&
+        {(isAdmin || profile?.plan === "premium" || toolSettings.find((s) => s.tool_id === "tutorials")?.requires_auth === false) &&
         <button
         onClick={() => navigate("/tutorials")}
         className="w-full p-2.5 rounded-lg border border-border/30 bg-card/50 text-left hover:bg-card transition-colors">
