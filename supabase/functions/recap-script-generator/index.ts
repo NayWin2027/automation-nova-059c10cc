@@ -893,7 +893,25 @@ ${transcript}
     }
 
     const data = await response.json();
-    const rawScript = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const rawModelText = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    // ===== SERIES: split off the optional story bible before any script validation =====
+    let storyBible: unknown = null;
+    let rawScript = rawModelText;
+    if (rawModelText.includes("===STORY_BIBLE===")) {
+      const idx = rawModelText.indexOf("===STORY_BIBLE===");
+      rawScript = rawModelText.slice(0, idx).trim();
+      const bibleRaw = rawModelText
+        .slice(idx + "===STORY_BIBLE===".length)
+        .replace(/```[a-zA-Z]*/g, "")
+        .trim();
+      try {
+        const start = bibleRaw.indexOf("{");
+        const end = bibleRaw.lastIndexOf("}");
+        if (start !== -1 && end > start) storyBible = JSON.parse(bibleRaw.slice(start, end + 1));
+      } catch (_e) {
+        console.warn("[recap-script-generator] story bible JSON parse failed");
+      }
+    }
     const stripHookPreamble = (txt: string): string => {
       let s = (txt || "").replace(/^\uFEFF/, "").trim();
       // Strip code fences if model wrapped output
@@ -1008,7 +1026,7 @@ ${transcript}
       niche: nicheLabel,
       language: lang,
     });
-    return new Response(JSON.stringify({ script }), {
+    return new Response(JSON.stringify({ script, storyBible }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
