@@ -6611,7 +6611,6 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
             </Popover>
           </div>
 
-          {/* Voice */}
           {/* ===== SERIES MODE (optional, additive) ===== */}
           <div className="space-y-2 rounded-xl border border-border bg-card/40 p-3">
             <div className="flex items-center justify-between">
