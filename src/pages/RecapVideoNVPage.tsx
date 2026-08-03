@@ -5715,6 +5715,7 @@ const RecapVideoNVPage: React.FC = () => {
       }
       const segments = scriptToSegments(scriptText, duration);
       setScriptData({ title: file.name.replace(/\.[^.]+$/, ""), full_script: scriptText, segments });
+      if (scriptResult.storyBible) void saveSeriesBible(scriptResult.storyBible);
       setProgressMsg("📝 Script generated! Now generating AI voice...");
       // Continue into the existing voice pipeline (VOICE-GEN-PIPELINE-v2)
       const segsForSync = segments.map((s) => ({ text: s.text }));
