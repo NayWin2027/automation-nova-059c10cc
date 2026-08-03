@@ -354,6 +354,8 @@ serve(async (req) => {
     let extraInstructions = "";
     let editorRules = "";
     let requestedMaxOutputTokens: number | null = null;
+    let seriesContext = "";
+    let emitStoryBible = false;
 
     const contentType = req.headers.get("content-type") || "";
     if (contentType.includes("multipart/form-data")) {
@@ -391,6 +393,9 @@ serve(async (req) => {
       skipCreditDeduction = !!body.skipCreditDeduction;
       extraInstructions = typeof body.extraInstructions === "string" ? body.extraInstructions : "";
       editorRules = typeof body.editorRules === "string" ? body.editorRules : "";
+      // ===== SERIES CONTINUITY (optional, additive) =====
+      if (typeof body.seriesContext === "string") seriesContext = body.seriesContext.slice(0, 6000);
+      emitStoryBible = !!body.emitStoryBible;
       // SEO mode: accept a raw seoPrompt as transcript input (used by client SEO metadata generator)
       if (body.seoMode && typeof body.seoPrompt === "string" && body.seoPrompt.trim()) {
         transcript = body.seoPrompt;
