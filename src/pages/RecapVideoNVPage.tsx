@@ -6187,6 +6187,11 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
         scriptBody.ownApiKey = resolvedOwnKey;
         scriptBody.apiKey = resolvedOwnKey;
       }
+      const seriesCtx2 = buildSeriesContext();
+      if (seriesEnabled && seriesName.trim()) {
+        if (seriesCtx2) scriptBody.seriesContext = seriesCtx2;
+        scriptBody.emitStoryBible = true;
+      }
 
       const scriptResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recap-script-generator`, {
         method: "POST",
@@ -6215,6 +6220,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
 
       const segments = scriptToSegments(scriptText, duration);
       setScriptData({ title: file.name.replace(/\.[^.]+$/, ""), full_script: scriptText, segments });
+      if (scriptResult.storyBible) void saveSeriesBible(scriptResult.storyBible);
       setProgressMsg("📝 Script generated! Now generating AI voice...");
 
       // â”€â”€ FEATURE: AI Hook Detector â€” LOCAL SCORING (no API, 100% reliable) â”€â”€
