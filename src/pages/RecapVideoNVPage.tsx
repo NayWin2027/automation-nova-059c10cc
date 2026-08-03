@@ -6673,6 +6673,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
             )}
           </div>
 
+          {/* Voice */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-neon-cyan">🎙️ အသံ (Voice)</label>
             <Select value={selectedVoice} onValueChange={setSelectedVoice}>
