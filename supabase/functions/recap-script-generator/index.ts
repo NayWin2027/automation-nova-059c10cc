@@ -774,7 +774,7 @@ ${transcript}
         activeApiKey,
         isOwnApi,
         controller.signal,
-        systemPrompt,
+        finalSystemPrompt,
         contentParts,
         requestedMaxOutputTokens,
       );
@@ -821,7 +821,7 @@ ${transcript}
           activeApiKey,
           isOwnApi,
           fbController.signal,
-          systemPrompt,
+          finalSystemPrompt,
           contentParts,
           requestedMaxOutputTokens,
         );
