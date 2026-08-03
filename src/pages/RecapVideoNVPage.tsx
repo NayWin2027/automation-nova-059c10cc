@@ -6612,6 +6612,68 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
           </div>
 
           {/* Voice */}
+          {/* ===== SERIES MODE (optional, additive) ===== */}
+          <div className="space-y-2 rounded-xl border border-border bg-card/40 p-3">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-neon-cyan">🎬 အပိုင်းဆက် (Series Mode)</label>
+              <button
+                type="button"
+                onClick={() => setSeriesEnabled((v) => !v)}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${
+                  seriesEnabled
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-secondary text-secondary-foreground border-border hover:opacity-80"
+                }`}
+              >
+                {seriesEnabled ? "ON" : "OFF"}
+              </button>
+            </div>
+            {seriesEnabled && (
+              <div className="space-y-2">
+                {seriesList.length > 0 && (
+                  <Select
+                    value={seriesList.some((s) => s.series_name === seriesName) ? seriesName : undefined}
+                    onValueChange={(v) => {
+                      setSeriesName(v);
+                      const row = seriesList.find((s) => s.series_name === v);
+                      setSeriesPart((row?.last_part || 0) + 1);
+                    }}
+                  >
+                    <SelectTrigger className="w-full bg-background border-border text-foreground text-xs h-9">
+                      <SelectValue placeholder="သိမ်းထားတဲ့ Series ရွေးပါ" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[220px] z-50">
+                      {seriesList.map((s) => (
+                        <SelectItem key={s.series_name} value={s.series_name} className="text-xs">
+                          {s.series_name} (Part {s.last_part})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={seriesName}
+                    onChange={(e) => setSeriesName(e.target.value)}
+                    placeholder="Series နာမည် (ဥပမာ - Nova Drama)"
+                    className="flex-1 h-9 rounded-md border border-border bg-background px-3 text-sm text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <input
+                    type="number"
+                    min={1}
+                    value={seriesPart}
+                    onChange={(e) => setSeriesPart(Math.max(1, Number(e.target.value) || 1))}
+                    className="w-20 h-9 rounded-md border border-border bg-background px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  ဇာတ်ကောင်နာမည်တွေ၊ ဇာတ်လမ်း context ကို မှတ်ထားပြီး နောက်အပိုင်းမှာ ဆက်စပ်အောင် ရေးပေးပါမယ်။
+                </p>
+              </div>
+            )}
+          </div>
+
           <div className="space-y-2">
             <label className="text-sm font-medium text-neon-cyan">🎙️ အသံ (Voice)</label>
             <Select value={selectedVoice} onValueChange={setSelectedVoice}>
