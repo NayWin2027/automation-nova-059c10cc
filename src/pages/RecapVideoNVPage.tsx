@@ -5363,6 +5363,75 @@ const RecapVideoNVPage: React.FC = () => {
   const [apiMode, setApiMode] = useState<"app" | "own">("own");
   const [ownApiKey, setOwnApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
+  // ===== SERIES CONTINUITY (additive, optional) =====
+  const [seriesEnabled, setSeriesEnabled] = useState(false);
+  const [seriesName, setSeriesName] = useState("");
+  const [seriesPart, setSeriesPart] = useState<number>(1);
+  const [seriesList, setSeriesList] = useState<
+    { series_name: string; last_part: number; story_bible: Record<string, unknown> | null }[]
+  >([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("recap_series")
+        .select("series_name,last_part,story_bible")
+        .order("updated_at", { ascending: false });
+      if (!cancelled && data) setSeriesList(data as any);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const buildSeriesContext = useCallback((): string => {
+    if (!seriesEnabled || !seriesName.trim() || seriesPart <= 1) return "";
+    const row = seriesList.find((s) => s.series_name === seriesName.trim());
+    const bible: any = row?.story_bible;
+    if (!bible || typeof bible !== "object" || Object.keys(bible).length === 0) return "";
+    const chars = Array.isArray(bible.characters)
+      ? bible.characters
+          .map((c: any) => `- ${c?.name || ""}${c?.role ? ` (${c.role})` : ""}${c?.note ? ` — ${c.note}` : ""}`)
+          .join("\n")
+      : "";
+    const rels = Array.isArray(bible.relationships) ? bible.relationships.map((r: any) => `- ${r}`).join("\n") : "";
+    return [
+      `SERIES: ${seriesName.trim()} — this is PART ${seriesPart}. Previous parts: 1..${seriesPart - 1}.`,
+      chars ? `CHARACTERS:\n${chars}` : "",
+      rels ? `RELATIONSHIPS:\n${rels}` : "",
+      bible.plot_so_far ? `STORY SO FAR:\n${bible.plot_so_far}` : "",
+      bible.last_scene_ending ? `HOW THE PREVIOUS PART ENDED:\n${bible.last_scene_ending}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+  }, [seriesEnabled, seriesName, seriesPart, seriesList]);
+  const saveSeriesBible = useCallback(
+    async (bible: unknown) => {
+      if (!seriesEnabled || !seriesName.trim() || !bible || typeof bible !== "object") return;
+      const { data: authData } = await supabase.auth.getUser();
+      const uid = authData?.user?.id;
+      if (!uid) return;
+      const name = seriesName.trim();
+      const { error } = await supabase.from("recap_series").upsert(
+        {
+          user_id: uid,
+          series_name: name,
+          last_part: seriesPart,
+          story_bible: bible as any,
+        },
+        { onConflict: "user_id,series_name" },
+      );
+      if (error) {
+        console.warn("[recap-series] save failed:", error.message);
+        return;
+      }
+      setSeriesList((prev) => {
+        const rest = prev.filter((s) => s.series_name !== name);
+        return [{ series_name: name, last_part: seriesPart, story_bible: bible as any }, ...rest];
+      });
+      setSeriesPart((p) => p + 1);
+    },
+    [seriesEnabled, seriesName, seriesPart],
+  );
   // SURGICAL: Restore blocking "Solve to fix" error dialog (per user request)
   const [errorBox, setErrorBox] = useState<{ title: string; message: string; suggestion: string } | null>(null);
   const showSolveToFixBox = useCallback((rawMessage: string) => {
@@ -5614,6 +5683,11 @@ const RecapVideoNVPage: React.FC = () => {
         scriptBody.ownApiKey = resolvedOwnKey;
         scriptBody.apiKey = resolvedOwnKey;
       }
+      const seriesCtx1 = buildSeriesContext();
+      if (seriesEnabled && seriesName.trim()) {
+        if (seriesCtx1) scriptBody.seriesContext = seriesCtx1;
+        scriptBody.emitStoryBible = true;
+      }
       const scriptResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recap-script-generator`, {
         method: "POST",
         headers: {
@@ -5641,6 +5715,7 @@ const RecapVideoNVPage: React.FC = () => {
       }
       const segments = scriptToSegments(scriptText, duration);
       setScriptData({ title: file.name.replace(/\.[^.]+$/, ""), full_script: scriptText, segments });
+      if (scriptResult.storyBible) void saveSeriesBible(scriptResult.storyBible);
       setProgressMsg("📝 Script generated! Now generating AI voice...");
       // Continue into the existing voice pipeline (VOICE-GEN-PIPELINE-v2)
       const segsForSync = segments.map((s) => ({ text: s.text }));
@@ -6112,6 +6187,11 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
         scriptBody.ownApiKey = resolvedOwnKey;
         scriptBody.apiKey = resolvedOwnKey;
       }
+      const seriesCtx2 = buildSeriesContext();
+      if (seriesEnabled && seriesName.trim()) {
+        if (seriesCtx2) scriptBody.seriesContext = seriesCtx2;
+        scriptBody.emitStoryBible = true;
+      }
 
       const scriptResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recap-script-generator`, {
         method: "POST",
@@ -6140,6 +6220,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
 
       const segments = scriptToSegments(scriptText, duration);
       setScriptData({ title: file.name.replace(/\.[^.]+$/, ""), full_script: scriptText, segments });
+      if (scriptResult.storyBible) void saveSeriesBible(scriptResult.storyBible);
       setProgressMsg("📝 Script generated! Now generating AI voice...");
 
       // â”€â”€ FEATURE: AI Hook Detector â€” LOCAL SCORING (no API, 100% reliable) â”€â”€
@@ -6528,6 +6609,68 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                 </Command>
               </PopoverContent>
             </Popover>
+          </div>
+
+          {/* ===== SERIES MODE (optional, additive) ===== */}
+          <div className="space-y-2 rounded-xl border border-border bg-card/40 p-3">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-neon-cyan">🎬 အပိုင်းဆက် (Series Mode)</label>
+              <button
+                type="button"
+                onClick={() => setSeriesEnabled((v) => !v)}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${
+                  seriesEnabled
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-secondary text-secondary-foreground border-border hover:opacity-80"
+                }`}
+              >
+                {seriesEnabled ? "ON" : "OFF"}
+              </button>
+            </div>
+            {seriesEnabled && (
+              <div className="space-y-2">
+                {seriesList.length > 0 && (
+                  <Select
+                    value={seriesList.some((s) => s.series_name === seriesName) ? seriesName : undefined}
+                    onValueChange={(v) => {
+                      setSeriesName(v);
+                      const row = seriesList.find((s) => s.series_name === v);
+                      setSeriesPart((row?.last_part || 0) + 1);
+                    }}
+                  >
+                    <SelectTrigger className="w-full bg-background border-border text-foreground text-xs h-9">
+                      <SelectValue placeholder="သိမ်းထားတဲ့ Series ရွေးပါ" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[220px] z-50">
+                      {seriesList.map((s) => (
+                        <SelectItem key={s.series_name} value={s.series_name} className="text-xs">
+                          {s.series_name} (Part {s.last_part})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={seriesName}
+                    onChange={(e) => setSeriesName(e.target.value)}
+                    placeholder="Series နာမည် (ဥပမာ - Nova Drama)"
+                    className="flex-1 h-9 rounded-md border border-border bg-background px-3 text-sm text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <input
+                    type="number"
+                    min={1}
+                    value={seriesPart}
+                    onChange={(e) => setSeriesPart(Math.max(1, Number(e.target.value) || 1))}
+                    className="w-20 h-9 rounded-md border border-border bg-background px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  ဇာတ်ကောင်နာမည်တွေ၊ ဇာတ်လမ်း context ကို မှတ်ထားပြီး နောက်အပိုင်းမှာ ဆက်စပ်အောင် ရေးပေးပါမယ်။
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Voice */}

@@ -354,6 +354,8 @@ serve(async (req) => {
     let extraInstructions = "";
     let editorRules = "";
     let requestedMaxOutputTokens: number | null = null;
+    let seriesContext = "";
+    let emitStoryBible = false;
 
     const contentType = req.headers.get("content-type") || "";
     if (contentType.includes("multipart/form-data")) {
@@ -391,6 +393,9 @@ serve(async (req) => {
       skipCreditDeduction = !!body.skipCreditDeduction;
       extraInstructions = typeof body.extraInstructions === "string" ? body.extraInstructions : "";
       editorRules = typeof body.editorRules === "string" ? body.editorRules : "";
+      // ===== SERIES CONTINUITY (optional, additive) =====
+      if (typeof body.seriesContext === "string") seriesContext = body.seriesContext.slice(0, 6000);
+      emitStoryBible = !!body.emitStoryBible;
       // SEO mode: accept a raw seoPrompt as transcript input (used by client SEO metadata generator)
       if (body.seoMode && typeof body.seoPrompt === "string" && body.seoPrompt.trim()) {
         transcript = body.seoPrompt;
@@ -561,6 +566,41 @@ ${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYL
 # FINAL ENFORCEMENT: YOUR ENTIRE OUTPUT MUST BE IN ${lang}.
 # NOT BURMESE. NOT MYANMAR. ONLY ${lang}. EVERY SINGLE WORD.
 ###############################################################`;
+
+    // ===== SERIES CONTINUITY BLOCK (appended only when the caller opts in) =====
+    const seriesBlock =
+      seriesContext || emitStoryBible
+        ? `
+
+###############################################################
+# SERIES CONTINUITY MODE (ADDITIVE — DOES NOT OVERRIDE LANGUAGE / LENGTH / TIMECODE RULES)
+###############################################################
+${
+  seriesContext
+    ? `PREVIOUS PARTS MEMORY (STORY BIBLE) — treat as absolute truth:
+${seriesContext}
+
+CONTINUITY RULES:
+- Use EXACTLY the same character names, roles, and relationships as the memory above. Never rename or re-describe a known character with a new generic label.
+- Begin the script with a short, natural 1-2 sentence "previously" bridge in ${lang} that reminds the audience where the last part ended. It MUST still start with a [MM:SS] timecode like every other paragraph, and it must feel like part of the story — not a formal summary.
+- Do NOT re-tell the whole previous part. Only the minimum needed to reconnect.
+- End this part with a cliffhanger/hook that pulls the audience into the next part.
+- Keep the same narration tone and style as a continuing series.`
+    : `This is PART 1 of a series. Write it as a self-contained recap, but end with a hook toward the next part.`
+}
+${
+  emitStoryBible
+    ? `
+AFTER the complete narration script, output a final line containing exactly ===STORY_BIBLE=== and then a single compact JSON object (no code fences, no commentary) with this shape:
+{"characters":[{"name":"","role":"","note":""}],"relationships":["..."],"plot_so_far":"","last_scene_ending":""}
+- Write the JSON VALUES in ${lang}.
+- Keep plot_so_far under 800 characters and last_scene_ending under 300 characters.
+- The JSON is metadata only — it is NOT part of the narration.`
+    : ""
+}
+###############################################################`
+        : "";
+    const finalSystemPrompt = systemPrompt + seriesBlock;
 
     // ===== BUILD GEMINI REQUEST =====
     let contentParts: any[] = [];
@@ -734,7 +774,7 @@ ${transcript}
         activeApiKey,
         isOwnApi,
         controller.signal,
-        systemPrompt,
+        finalSystemPrompt,
         contentParts,
         requestedMaxOutputTokens,
       );
@@ -781,7 +821,7 @@ ${transcript}
           activeApiKey,
           isOwnApi,
           fbController.signal,
-          systemPrompt,
+          finalSystemPrompt,
           contentParts,
           requestedMaxOutputTokens,
         );
@@ -853,7 +893,25 @@ ${transcript}
     }
 
     const data = await response.json();
-    const rawScript = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const rawModelText = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    // ===== SERIES: split off the optional story bible before any script validation =====
+    let storyBible: unknown = null;
+    let rawScript = rawModelText;
+    if (rawModelText.includes("===STORY_BIBLE===")) {
+      const idx = rawModelText.indexOf("===STORY_BIBLE===");
+      rawScript = rawModelText.slice(0, idx).trim();
+      const bibleRaw = rawModelText
+        .slice(idx + "===STORY_BIBLE===".length)
+        .replace(/```[a-zA-Z]*/g, "")
+        .trim();
+      try {
+        const start = bibleRaw.indexOf("{");
+        const end = bibleRaw.lastIndexOf("}");
+        if (start !== -1 && end > start) storyBible = JSON.parse(bibleRaw.slice(start, end + 1));
+      } catch (_e) {
+        console.warn("[recap-script-generator] story bible JSON parse failed");
+      }
+    }
     const stripHookPreamble = (txt: string): string => {
       let s = (txt || "").replace(/^\uFEFF/, "").trim();
       // Strip code fences if model wrapped output
@@ -968,7 +1026,7 @@ ${transcript}
       niche: nicheLabel,
       language: lang,
     });
-    return new Response(JSON.stringify({ script }), {
+    return new Response(JSON.stringify({ script, storyBible }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
