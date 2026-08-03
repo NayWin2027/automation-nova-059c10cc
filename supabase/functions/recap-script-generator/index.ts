@@ -567,6 +567,41 @@ ${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYL
 # NOT BURMESE. NOT MYANMAR. ONLY ${lang}. EVERY SINGLE WORD.
 ###############################################################`;
 
+    // ===== SERIES CONTINUITY BLOCK (appended only when the caller opts in) =====
+    const seriesBlock =
+      seriesContext || emitStoryBible
+        ? `
+
+###############################################################
+# SERIES CONTINUITY MODE (ADDITIVE — DOES NOT OVERRIDE LANGUAGE / LENGTH / TIMECODE RULES)
+###############################################################
+${
+  seriesContext
+    ? `PREVIOUS PARTS MEMORY (STORY BIBLE) — treat as absolute truth:
+${seriesContext}
+
+CONTINUITY RULES:
+- Use EXACTLY the same character names, roles, and relationships as the memory above. Never rename or re-describe a known character with a new generic label.
+- Begin the script with a short, natural 1-2 sentence "previously" bridge in ${lang} that reminds the audience where the last part ended. It MUST still start with a [MM:SS] timecode like every other paragraph, and it must feel like part of the story — not a formal summary.
+- Do NOT re-tell the whole previous part. Only the minimum needed to reconnect.
+- End this part with a cliffhanger/hook that pulls the audience into the next part.
+- Keep the same narration tone and style as a continuing series.`
+    : `This is PART 1 of a series. Write it as a self-contained recap, but end with a hook toward the next part.`
+}
+${
+  emitStoryBible
+    ? `
+AFTER the complete narration script, output a final line containing exactly ===STORY_BIBLE=== and then a single compact JSON object (no code fences, no commentary) with this shape:
+{"characters":[{"name":"","role":"","note":""}],"relationships":["..."],"plot_so_far":"","last_scene_ending":""}
+- Write the JSON VALUES in ${lang}.
+- Keep plot_so_far under 800 characters and last_scene_ending under 300 characters.
+- The JSON is metadata only — it is NOT part of the narration.`
+    : ""
+}
+###############################################################`
+        : "";
+    const finalSystemPrompt = systemPrompt + seriesBlock;
+
     // ===== BUILD GEMINI REQUEST =====
     let contentParts: any[] = [];
 
