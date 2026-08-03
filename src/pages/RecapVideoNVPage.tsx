@@ -5683,16 +5683,16 @@ const RecapVideoNVPage: React.FC = () => {
         scriptBody.ownApiKey = resolvedOwnKey;
         scriptBody.apiKey = resolvedOwnKey;
       }
+      const seriesCtx1 = buildSeriesContext();
+      if (seriesEnabled && seriesName.trim()) {
+        if (seriesCtx1) scriptBody.seriesContext = seriesCtx1;
+        scriptBody.emitStoryBible = true;
+      }
       const scriptResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recap-script-generator`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          Authorization: `Bearer ${userToken}`,
-          ...(resolvedOwnKey ? { "x-own-api-key": resolvedOwnKey } : {}),
-        },
-        body: JSON.stringify(scriptBody),
-      });
           Authorization: `Bearer ${userToken}`,
           ...(resolvedOwnKey ? { "x-own-api-key": resolvedOwnKey } : {}),
         },
