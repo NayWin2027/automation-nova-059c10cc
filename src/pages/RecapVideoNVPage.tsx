@@ -5363,6 +5363,75 @@ const RecapVideoNVPage: React.FC = () => {
   const [apiMode, setApiMode] = useState<"app" | "own">("own");
   const [ownApiKey, setOwnApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
+  // ===== SERIES CONTINUITY (additive, optional) =====
+  const [seriesEnabled, setSeriesEnabled] = useState(false);
+  const [seriesName, setSeriesName] = useState("");
+  const [seriesPart, setSeriesPart] = useState<number>(1);
+  const [seriesList, setSeriesList] = useState<
+    { series_name: string; last_part: number; story_bible: Record<string, unknown> | null }[]
+  >([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("recap_series")
+        .select("series_name,last_part,story_bible")
+        .order("updated_at", { ascending: false });
+      if (!cancelled && data) setSeriesList(data as any);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const buildSeriesContext = useCallback((): string => {
+    if (!seriesEnabled || !seriesName.trim() || seriesPart <= 1) return "";
+    const row = seriesList.find((s) => s.series_name === seriesName.trim());
+    const bible: any = row?.story_bible;
+    if (!bible || typeof bible !== "object" || Object.keys(bible).length === 0) return "";
+    const chars = Array.isArray(bible.characters)
+      ? bible.characters
+          .map((c: any) => `- ${c?.name || ""}${c?.role ? ` (${c.role})` : ""}${c?.note ? ` — ${c.note}` : ""}`)
+          .join("\n")
+      : "";
+    const rels = Array.isArray(bible.relationships) ? bible.relationships.map((r: any) => `- ${r}`).join("\n") : "";
+    return [
+      `SERIES: ${seriesName.trim()} — this is PART ${seriesPart}. Previous parts: 1..${seriesPart - 1}.`,
+      chars ? `CHARACTERS:\n${chars}` : "",
+      rels ? `RELATIONSHIPS:\n${rels}` : "",
+      bible.plot_so_far ? `STORY SO FAR:\n${bible.plot_so_far}` : "",
+      bible.last_scene_ending ? `HOW THE PREVIOUS PART ENDED:\n${bible.last_scene_ending}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+  }, [seriesEnabled, seriesName, seriesPart, seriesList]);
+  const saveSeriesBible = useCallback(
+    async (bible: unknown) => {
+      if (!seriesEnabled || !seriesName.trim() || !bible || typeof bible !== "object") return;
+      const { data: authData } = await supabase.auth.getUser();
+      const uid = authData?.user?.id;
+      if (!uid) return;
+      const name = seriesName.trim();
+      const { error } = await supabase.from("recap_series").upsert(
+        {
+          user_id: uid,
+          series_name: name,
+          last_part: seriesPart,
+          story_bible: bible as any,
+        },
+        { onConflict: "user_id,series_name" },
+      );
+      if (error) {
+        console.warn("[recap-series] save failed:", error.message);
+        return;
+      }
+      setSeriesList((prev) => {
+        const rest = prev.filter((s) => s.series_name !== name);
+        return [{ series_name: name, last_part: seriesPart, story_bible: bible as any }, ...rest];
+      });
+      setSeriesPart((p) => p + 1);
+    },
+    [seriesEnabled, seriesName, seriesPart],
+  );
   // SURGICAL: Restore blocking "Solve to fix" error dialog (per user request)
   const [errorBox, setErrorBox] = useState<{ title: string; message: string; suggestion: string } | null>(null);
   const showSolveToFixBox = useCallback((rawMessage: string) => {
