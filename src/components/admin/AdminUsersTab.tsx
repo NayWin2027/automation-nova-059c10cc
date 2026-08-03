@@ -436,7 +436,7 @@ const AdminUsersTab: React.FC = () => {
                     placeholder="e.g. Ko Nay Win"
                     value={newUser.name}
                     onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
-                    className="h-8 text-xs bg-secondary/30 border-border/30 mb-3" />
+                    className="h-8 text-xs bg-secondary/30 border-border/30 mb-3 text-white placeholder:text-white/60" />
                   <Label className="text-2xs text-muted-foreground">User ID <span className="text-emerald-400 text-[10px]">⚡ Auto</span></Label>
                   <div className="flex gap-1">
                     <Input
@@ -569,8 +569,8 @@ const AdminUsersTab: React.FC = () => {
           <div key={profile.id} className={`table-luxury-row grid grid-cols-6 gap-2 px-3 py-2 items-center ${isCreditsExpired ? 'border-l-2 border-l-red-500 bg-red-500/5' : ''}`}>
                 <div>
                   <div className="flex items-center gap-1">
-                    <p className={`font-medium truncate text-base ${isCreditsExpired ? 'text-red-400' : 'text-foreground'}`}>
-                      {profile.display_name || getUserDisplayId(profile.email)}
+                    <p className={`font-medium truncate text-base ${isCreditsExpired ? 'text-red-400' : 'text-yellow-200'}`}>
+                      {getUserDisplayId(profile.email)}
                     </p>
                     {isMasterAdmin && isUserMasterAdmin(profile.user_id) &&
                 <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-bold whitespace-nowrap flex items-center gap-0.5">
@@ -584,7 +584,11 @@ const AdminUsersTab: React.FC = () => {
                       </span>
                 }
                   </div>
-                  <p className="truncate text-base text-yellow-200">{getUserDisplayId(profile.email)}</p>
+                  {profile.display_name && (
+                    <p className={`truncate text-base ${isCreditsExpired ? 'text-red-400/70' : 'text-foreground'}`}>
+                      {profile.display_name}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <span className={`inline-flex items-center gap-1 rounded-full ${getPlanBadgeClass(profile.plan)}`}>
