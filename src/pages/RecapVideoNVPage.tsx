@@ -5693,6 +5693,11 @@ const RecapVideoNVPage: React.FC = () => {
         },
         body: JSON.stringify(scriptBody),
       });
+          Authorization: `Bearer ${userToken}`,
+          ...(resolvedOwnKey ? { "x-own-api-key": resolvedOwnKey } : {}),
+        },
+        body: JSON.stringify(scriptBody),
+      });
       if (!scriptResponse.ok) {
         const errData = await scriptResponse.json().catch(() => ({}));
         throw new Error(errData.error || `Script generation failed (${scriptResponse.status})`);
