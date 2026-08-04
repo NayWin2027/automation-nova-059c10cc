@@ -2458,7 +2458,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           const currentVisualTime = videoEl.currentTime;
           if (previousVisualTime >= 0 && currentVisualTime < previousVisualTime - 0.35) {
             visibleLoopCountRef.current += 1;
-            if (visibleLoopCountRef.current > 2 && visibleLoopMaskStartRef.current === 0) {
+            if (visibleLoopCountRef.current >= 1 && visibleLoopMaskStartRef.current === 0) {
               visibleLoopMaskStartRef.current = performance.now();
             }
           }
@@ -2466,7 +2466,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         }
 
         const useVisibleLoopMask =
-          !freezeModeRef.current && visibleLoopCountRef.current > 2 && visibleLoopFrameReadyRef.current;
+          !freezeModeRef.current && visibleLoopCountRef.current >= 1 && visibleLoopFrameReadyRef.current;
         const useResidualFrameMask =
           !useVisibleLoopMask &&
           seekPendingRef.current &&
