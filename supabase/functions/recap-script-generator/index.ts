@@ -592,8 +592,13 @@ ${
   emitStoryBible
     ? `
 AFTER the complete narration script, output a final line containing exactly ===STORY_BIBLE=== and then a single compact JSON object (no code fences, no commentary) with this shape:
-{"characters":[{"name":"","role":"","note":""}],"relationships":["..."],"plot_so_far":"","last_scene_ending":""}
+{"series_title":"","characters":[{"name":"","role":"","note":""}],"relationships":["..."],"plot_so_far":"","last_scene_ending":""}
 - Write the JSON VALUES in ${lang}.
+- SERIES TITLE RULES for "series_title":
+  * It MUST be grounded in the ACTUAL source video: its real movie/drama/content title if visible or inferable, otherwise its true subject matter.
+  * NEVER invent a fantasy or unrelated title. No fabricated names, no content that does not exist in the source.
+  * Make it magnetic and curiosity-driving so viewers feel they must watch — but keep it truthful, no exaggerated clickbait and no ALL-CAPS spam.
+  * 2-6 words, written in ${lang}. No episode/part number inside the title. No quotes, no emojis.
 - Keep plot_so_far under 800 characters and last_scene_ending under 300 characters.
 - The JSON is metadata only — it is NOT part of the narration.`
     : ""
