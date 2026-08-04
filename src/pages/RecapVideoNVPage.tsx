@@ -2458,7 +2458,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           const currentVisualTime = videoEl.currentTime;
           if (previousVisualTime >= 0 && currentVisualTime < previousVisualTime - 0.35) {
             visibleLoopCountRef.current += 1;
-            if (visibleLoopCountRef.current > 2 && visibleLoopMaskStartRef.current === 0) {
+            if (visibleLoopCountRef.current >= 1 && visibleLoopMaskStartRef.current === 0) {
               visibleLoopMaskStartRef.current = performance.now();
             }
           }
@@ -2466,7 +2466,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         }
 
         const useVisibleLoopMask =
-          !freezeModeRef.current && visibleLoopCountRef.current > 2 && visibleLoopFrameReadyRef.current;
+          !freezeModeRef.current && visibleLoopCountRef.current >= 1 && visibleLoopFrameReadyRef.current;
         const useResidualFrameMask =
           !useVisibleLoopMask &&
           seekPendingRef.current &&
@@ -2519,9 +2519,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               useVisibleLoopMask && visibleLoopMaskStartRef.current > 0
                 ? performance.now() - visibleLoopMaskStartRef.current
                 : Math.max(0, performance.now() - gapStartRef.current);
-            const maskProgress = Math.min(1, maskElapsed / (useVisibleLoopMask ? 8000 : 320));
-            const maskEase = 1 - Math.pow(1 - maskProgress, 3);
-            const maskZoom = 1 + (useVisibleLoopMask ? 0.06 : 0.018) * maskEase;
+            const maskProgress = Math.min(1, maskElapsed / (useVisibleLoopMask ? 14000 : 320));
+            const maskEase = useVisibleLoopMask
+              ? 1 - Math.pow(1 - maskProgress, 2) // gentle, visible ease-out (news-channel push-in)
+              : 1 - Math.pow(1 - maskProgress, 3);
+            const maskZoom = 1 + (useVisibleLoopMask ? 0.18 : 0.018) * maskEase;
             const maskW = Math.max(2, Math.round(heldFrame.width / maskZoom));
             const maskH = Math.max(2, Math.round(heldFrame.height / maskZoom));
             const maskX = Math.round((heldFrame.width - maskW) / 2);
