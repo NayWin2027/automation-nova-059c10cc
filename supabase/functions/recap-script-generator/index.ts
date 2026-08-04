@@ -581,10 +581,15 @@ ${
 ${seriesContext}
 
 CONTINUITY RULES:
-- Use EXACTLY the same character names, roles, and relationships as the memory above. Never rename or re-describe a known character with a new generic label.
-- Begin the script with a short, natural 1-2 sentence "previously" bridge in ${lang} that reminds the audience where the last part ended. It MUST still start with a [MM:SS] timecode like every other paragraph, and it must feel like part of the story — not a formal summary.
+- This series may be ANY niche (movie/drama, documentary, news, tutorial, tech, health, business, sport, vlog, history, true-crime, etc.). Read SERIES TYPE / SERIES FOCUS above and continue in that same lane.
+- Use EXACTLY the same names, terms, numbers and facts as the memory above (characters, key entities, key facts). Never rename or re-describe a known name/term with a new generic label, and never contradict a stated fact.
+- Do NOT repeat anything listed under TOPICS ALREADY COVERED. Move the series forward.
+- Where relevant, pay off or advance the OPEN THREADS.
+- Begin the script with a short, natural 1-2 sentence bridge in ${lang} that reconnects to where the previous part stopped. It MUST still start with a [MM:SS] timecode like every other paragraph, and it must feel organic — not a formal summary.
+  * If SERIES TYPE is a story/drama/film: a "previously" story bridge.
+  * Otherwise: a knowledge bridge like "last part we covered X — now we continue with Y", in natural ${lang}.
 - Do NOT re-tell the whole previous part. Only the minimum needed to reconnect.
-- End this part with a cliffhanger/hook that pulls the audience into the next part.
+- End this part with a hook that pulls the audience into the next part: a cliffhanger for stories, an open curiosity question for non-fiction.
 - Keep the same narration tone and style as a continuing series.`
     : `This is PART 1 of a series. Write it as a self-contained recap, but end with a hook toward the next part.`
 }
@@ -592,14 +597,19 @@ ${
   emitStoryBible
     ? `
 AFTER the complete narration script, output a final line containing exactly ===STORY_BIBLE=== and then a single compact JSON object (no code fences, no commentary) with this shape:
-{"series_title":"","characters":[{"name":"","role":"","note":""}],"relationships":["..."],"plot_so_far":"","last_scene_ending":""}
+{"series_title":"","content_type":"","series_focus":"","characters":[{"name":"","role":"","note":""}],"relationships":["..."],"key_entities":[{"name":"","role":"","note":""}],"topics_covered":["..."],"key_facts":["..."],"open_threads":["..."],"plot_so_far":"","last_scene_ending":"","last_point_ending":""}
 - Write the JSON VALUES in ${lang}.
+- "content_type": detect it yourself from the source video. Use "story" for movie/drama/film/anime/narrative content, or "topic" for documentary, news, tutorial, tech, health, business, sport, vlog, history, review and other non-fiction content.
+- "series_focus": one short line describing what this whole series is about.
+- If content_type is "story": fill characters, relationships, plot_so_far, last_scene_ending. Leave the non-fiction fields as empty arrays/strings.
+- If content_type is "topic": fill key_entities (real people, places, organizations, products, tools, terms), topics_covered (what this part actually explained), key_facts (numbers, dates, names, terminology that later parts must match), open_threads (what is still unanswered), and last_point_ending (where this part stopped). Leave characters/relationships empty if there are none.
+- Only record facts that ACTUALLY appear in the source video. Never invent entities, numbers or events.
 - SERIES TITLE RULES for "series_title":
-  * It MUST be grounded in the ACTUAL source video: its real movie/drama/content title if visible or inferable, otherwise its true subject matter.
+  * It MUST be grounded in the ACTUAL source video: its real movie/drama/content title if visible or inferable; if there is no such title (documentary, tutorial, news, vlog, etc.), build it from the true subject matter of the video.
   * NEVER invent a fantasy or unrelated title. No fabricated names, no content that does not exist in the source.
   * Make it magnetic and curiosity-driving so viewers feel they must watch — but keep it truthful, no exaggerated clickbait and no ALL-CAPS spam.
   * 2-6 words, written in ${lang}. No episode/part number inside the title. No quotes, no emojis.
-- Keep plot_so_far under 800 characters and last_scene_ending under 300 characters.
+- Keep plot_so_far under 800 characters, and last_scene_ending / last_point_ending under 300 characters each. Max 12 items per array.
 - The JSON is metadata only — it is NOT part of the narration.`
     : ""
 }

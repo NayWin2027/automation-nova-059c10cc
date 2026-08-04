@@ -5394,12 +5394,28 @@ const RecapVideoNVPage: React.FC = () => {
           .join("\n")
       : "";
     const rels = Array.isArray(bible.relationships) ? bible.relationships.map((r: any) => `- ${r}`).join("\n") : "";
+    const list = (v: any) =>
+      Array.isArray(v) ? v.map((x: any) => `- ${typeof x === "string" ? x : x?.name || JSON.stringify(x)}`).join("\n") : "";
+    const ents = Array.isArray(bible.key_entities)
+      ? bible.key_entities
+          .map((e: any) =>
+            typeof e === "string" ? `- ${e}` : `- ${e?.name || ""}${e?.role ? ` (${e.role})` : ""}${e?.note ? ` — ${e.note}` : ""}`,
+          )
+          .join("\n")
+      : "";
     return [
       `SERIES: ${seriesName.trim()} — this is PART ${seriesPart}. Previous parts: 1..${seriesPart - 1}.`,
+      bible.content_type ? `SERIES TYPE: ${bible.content_type}` : "",
+      bible.series_focus ? `SERIES FOCUS: ${bible.series_focus}` : "",
       chars ? `CHARACTERS:\n${chars}` : "",
       rels ? `RELATIONSHIPS:\n${rels}` : "",
+      ents ? `KEY ENTITIES (people, places, orgs, tools, terms):\n${ents}` : "",
+      list(bible.topics_covered) ? `TOPICS ALREADY COVERED (do NOT repeat):\n${list(bible.topics_covered)}` : "",
+      list(bible.key_facts) ? `KEY FACTS / NUMBERS / TERMS (must stay consistent):\n${list(bible.key_facts)}` : "",
+      list(bible.open_threads) ? `OPEN THREADS (still unanswered):\n${list(bible.open_threads)}` : "",
       bible.plot_so_far ? `STORY SO FAR:\n${bible.plot_so_far}` : "",
       bible.last_scene_ending ? `HOW THE PREVIOUS PART ENDED:\n${bible.last_scene_ending}` : "",
+      bible.last_point_ending ? `WHERE THE PREVIOUS PART STOPPED:\n${bible.last_point_ending}` : "",
     ]
       .filter(Boolean)
       .join("\n\n");
