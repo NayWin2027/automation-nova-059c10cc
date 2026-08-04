@@ -5406,11 +5406,18 @@ const RecapVideoNVPage: React.FC = () => {
   }, [seriesEnabled, seriesName, seriesPart, seriesList]);
   const saveSeriesBible = useCallback(
     async (bible: unknown) => {
-      if (!seriesEnabled || !seriesName.trim() || !bible || typeof bible !== "object") return;
+      if (!seriesEnabled || !bible || typeof bible !== "object") return;
+      // AUTO SERIES TITLE: if the user left the name empty, use the AI-written title from the story bible
+      const autoTitle = String((bible as any)?.series_title || "")
+        .replace(/["'“”‘’]/g, "")
+        .trim()
+        .slice(0, 80);
+      const name = (seriesName.trim() || autoTitle).trim();
+      if (!name) return;
+      if (!seriesName.trim()) setSeriesName(name);
       const { data: authData } = await supabase.auth.getUser();
       const uid = authData?.user?.id;
       if (!uid) return;
-      const name = seriesName.trim();
       const { error } = await supabase.from("recap_series").upsert(
         {
           user_id: uid,
@@ -5684,7 +5691,7 @@ const RecapVideoNVPage: React.FC = () => {
         scriptBody.apiKey = resolvedOwnKey;
       }
       const seriesCtx1 = buildSeriesContext();
-      if (seriesEnabled && seriesName.trim()) {
+      if (seriesEnabled) {
         if (seriesCtx1) scriptBody.seriesContext = seriesCtx1;
         scriptBody.emitStoryBible = true;
       }
@@ -6188,7 +6195,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
         scriptBody.apiKey = resolvedOwnKey;
       }
       const seriesCtx2 = buildSeriesContext();
-      if (seriesEnabled && seriesName.trim()) {
+      if (seriesEnabled) {
         if (seriesCtx2) scriptBody.seriesContext = seriesCtx2;
         scriptBody.emitStoryBible = true;
       }
@@ -6655,7 +6662,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                     type="text"
                     value={seriesName}
                     onChange={(e) => setSeriesName(e.target.value)}
-                    placeholder="Series နာမည် (ဥပမာ - Nova Drama)"
+                    placeholder="AI က auto ရေးပေးပါမယ် (လိုရင် ကိုယ်တိုင်ရိုက်လို့ရ)"
                     className="flex-1 h-9 rounded-md border border-border bg-background px-3 text-sm text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                   <input
@@ -6667,7 +6674,8 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                   />
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  ဇာတ်ကောင်နာမည်တွေ၊ ဇာတ်လမ်း context ကို မှတ်ထားပြီး နောက်အပိုင်းမှာ ဆက်စပ်အောင် ရေးပေးပါမယ်။
+                  နာမည်ကွက်လပ်ထားရင် AI က မူရင်း video ရဲ့ ဇာတ်ကားနာမည်/အကြောင်းအရာအပေါ် အခြေခံပြီး ဆွဲဆောင်မှုရှိတဲ့ Series
+                  နာမည်ကို auto ရေးပေးပါမယ်။ အပိုင်းနံပါတ်ကိုတော့ ကိုယ်တိုင် ထည့်ပါ။
                 </p>
               </div>
             )}
