@@ -2519,9 +2519,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               useVisibleLoopMask && visibleLoopMaskStartRef.current > 0
                 ? performance.now() - visibleLoopMaskStartRef.current
                 : Math.max(0, performance.now() - gapStartRef.current);
-            const maskProgress = Math.min(1, maskElapsed / (useVisibleLoopMask ? 8000 : 320));
-            const maskEase = 1 - Math.pow(1 - maskProgress, 3);
-            const maskZoom = 1 + (useVisibleLoopMask ? 0.06 : 0.018) * maskEase;
+            const maskProgress = Math.min(1, maskElapsed / (useVisibleLoopMask ? 14000 : 320));
+            const maskEase = useVisibleLoopMask
+              ? 1 - Math.pow(1 - maskProgress, 2) // gentle, visible ease-out (news-channel push-in)
+              : 1 - Math.pow(1 - maskProgress, 3);
+            const maskZoom = 1 + (useVisibleLoopMask ? 0.18 : 0.018) * maskEase;
             const maskW = Math.max(2, Math.round(heldFrame.width / maskZoom));
             const maskH = Math.max(2, Math.round(heldFrame.height / maskZoom));
             const maskX = Math.round((heldFrame.width - maskW) / 2);
