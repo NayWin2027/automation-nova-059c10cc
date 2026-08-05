@@ -5337,10 +5337,10 @@ const NARRATION_STYLE_OPTIONS: Record<
 function buildNarrationStyleBlock(style: "STORY" | "HYBRID" | "VIRAL", langName: string): string {
   const timingLockBlock = `\n\nDIALOGUE TIMING LOCK (HYBRID/VIRAL only):
 - When a character/person SPEAKS on screen, the translated voice-over MUST start at the EXACT moment their mouth opens and finish when their mouth closes.
-- For EVERY direct-speech paragraph, use the EXACT source timecode where the speaker begins talking.
-- Keep the translated line length so the TTS reads it in roughly the same duration as the original speech (do not make it much shorter or longer).
-- Prefix every direct-speech paragraph with [DIALOGUE] so the editor knows it must be time-locked to the source speaker.
-- Example: [02:15] [DIALOGUE] "သင်ဘယ်လောက်ခံစားရလဲ ဆိုတာ ငါသိတယ်" — use the real translated spoken words, timed to the original line.
+- For EVERY direct-speech paragraph, output BOTH start AND end source timecodes as a range, then prefix with [DIALOGUE].
+- Example: [02:15-02:19] [DIALOGUE] "သင်ဘယ်လောက်ခံစားရလဲ ဆိုတာ ငါသိတယ်" — real translated spoken words, timed to the original line.
+- WORD BUDGET (hard rule): slot length = (end - start) seconds. Write the line so it is spoken in exactly that time at normal pace — ~2.5 words/sec for space-separated languages, ~4 characters/sec for Burmese/Thai/Khmer/Lao/Chinese/Japanese. Condense if too long, add natural words if too short. NEVER exceed the slot.
+- Narrator (non-dialogue) paragraphs keep the normal single-timecode format: [02:15] narrator text...
 - If the source has no spoken dialogue at that moment, do NOT force [DIALOGUE]; stay in narrator voice.`;
   if (style === "HYBRID") {
     return `\n\nNARRATION STYLE — HYBRID (narration + direct speech):
