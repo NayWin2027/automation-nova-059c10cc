@@ -30,6 +30,7 @@ interface RecapSegment {
   text: string;
   isDialogue?: boolean;
   sourceDurationSec?: number;
+  emotion?: string;
   sourceStartSec?: number;
   sourceEndSec?: number;
 }
@@ -1486,7 +1487,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             ? seg.sourceEndSec
             : null;
         if (dialogueEnd !== null) {
-          vEnd = dialogueEnd;
+          // AUDIO-AWARE SLOT EXTENSION: the dialogue START stays locked to the source
+          // timecode, but the video window may run past the mouth-close timecode up to
+          // the next segment's start. This stops the picture from hard-cutting back
+          // while the translated line is still being spoken (source footage is available).
+          if (!nextSeg) {
+            vEnd = -1;
+          } else {
+            const nextRawD = parseTime(nextSeg.timestamp);
+            vEnd = nextRawD > dialogueEnd ? nextRawD : dialogueEnd;
+          }
         } else if (!nextSeg) {
           vEnd = -1;
         } else {
@@ -5345,8 +5355,9 @@ const NARRATION_STYLE_OPTIONS: Record<
 function buildNarrationStyleBlock(style: "STORY" | "HYBRID" | "VIRAL", langName: string): string {
   const timingLockBlock = `\n\nDIALOGUE TIMING LOCK (HYBRID/VIRAL only):
 - When a character/person SPEAKS on screen, the translated voice-over MUST start at the EXACT moment their mouth opens and finish when their mouth closes.
-- For EVERY direct-speech paragraph, output BOTH start AND end source timecodes as a range, then prefix with [DIALOGUE].
-- Example: [02:15-02:19] [DIALOGUE] "သင်ဘယ်လောက်ခံစားရလဲ ဆိုတာ ငါသိတယ်" — real translated spoken words, timed to the original line.
+- For EVERY direct-speech paragraph, output BOTH start AND end source timecodes as a range, then prefix with [DIALOGUE:EMOTION].
+- EMOTION must be exactly ONE of: ANGRY, SAD, CRYING, HAPPY, FEARFUL, SHOCKED, WHISPER, PLEADING, CALM — matching how the character truly sounds at that moment. Never write the emotion word inside the spoken line.
+- Example: [02:15-02:19] [DIALOGUE:SAD] "သင်ဘယ်လောက်ခံစားရလဲ ဆိုတာ ငါသိတယ်" — real translated spoken words, timed to the original line.
 - WORD BUDGET (hard rule): slot length = (end - start) seconds. Write the line so it is spoken in exactly that time at normal pace — ~2.5 words/sec for space-separated languages, ~4 characters/sec for Burmese/Thai/Khmer/Lao/Chinese/Japanese. Condense if too long, add natural words if too short. NEVER exceed the slot.
 - Narrator (non-dialogue) paragraphs keep the normal single-timecode format: [02:15] narrator text...
 - If the source has no spoken dialogue at that moment, do NOT force [DIALOGUE]; stay in narrator voice.`;
@@ -5856,7 +5867,8 @@ const RecapVideoNVPage: React.FC = () => {
     const paragraphs = scriptText.split("\n").filter((p) => p.trim().length > 0);
     if (paragraphs.length === 0) return [];
     const timecodeRegex = /^\[(\d{1,2}):(\d{2})(?:\s*[-–—]\s*(\d{1,2}):(\d{2}))?\]\s*/;
-    const dialogueRegex = /^\[DIALOGUE\]\s*/i;
+    // Accepts [DIALOGUE] and [DIALOGUE:ANGRY] / [DIALOGUE: crying] emotion-tagged form.
+    const dialogueRegex = /^\[DIALOGUE(?:\s*:\s*([A-Za-z _-]+))?\]\s*/i;
     const hasTimecodes = paragraphs.some((p) => timecodeRegex.test(p.trim()));
     if (hasTimecodes) {
       const parsed = paragraphs.map((rawText) => {
@@ -5872,9 +5884,14 @@ const RecapVideoNVPage: React.FC = () => {
           }
           text = trimmed.replace(timecodeRegex, "").trim();
         }
-        const isDialogue = dialogueRegex.test(text);
-        if (isDialogue) text = text.replace(dialogueRegex, "").trim();
-        return { timestamp, text, isDialogue, explicitEndSec };
+        const dMatch = text.match(dialogueRegex);
+        const isDialogue = !!dMatch;
+        let emotion: string | undefined;
+        if (dMatch) {
+          emotion = dMatch[1] ? dMatch[1].trim().toLowerCase() : undefined;
+          text = text.replace(dialogueRegex, "").trim();
+        }
+        return { timestamp, text, isDialogue, emotion, explicitEndSec };
       });
       // Source slot = explicit [start-end] range when the AI gave one (dialogue lock),
       // otherwise fall back to the gap to the next timecode.
@@ -6000,6 +6017,37 @@ const RecapVideoNVPage: React.FC = () => {
         },
       };
       if (useOwnKey) bodyPayload.ownApiKey = useOwnKey;
+      // ── DIALOGUE EMOTION MAP ──
+      // Narrator lines keep the restrained professional delivery. Direct-speech lines are
+      // acted out with the emotion the script AI tagged them with. Tags never enter the
+      // spoken text — they are sent only as style guidance.
+      if (fullSegments && fullSegments.length > 0) {
+        const emoLines = fullSegments
+          .map((s, i) => (s.isDialogue ? { i, emo: s.emotion || "natural in-character" } : null))
+          .filter(Boolean) as { i: number; emo: string }[];
+        if (emoLines.length > 0) {
+          const EMO_HINT: Record<string, string> = {
+            angry: "angry — sharper, harder attack, raised intensity",
+            sad: "sad — heavier, slower, softer, downward intonation",
+            crying: "crying — broken, trembling, catching breath",
+            happy: "happy — brighter, lighter, warm smiling tone",
+            fearful: "fearful — tight, unsteady, quicker breaths",
+            shocked: "shocked — sudden, wide-eyed disbelief",
+            whisper: "whispered — hushed, close, confidential",
+            pleading: "pleading — desperate, imploring, strained",
+            calm: "calm — steady, grounded, quiet confidence",
+          };
+          const map = emoLines
+            .map(({ i, emo }) => `Line ${i + 1}: ${EMO_HINT[emo] || emo}`)
+            .join("; ");
+          bodyPayload.styleInstructions =
+            `${bodyPayload.styleInstructions as string}` +
+            ` DIALOGUE ACTING (overrides the restrained policy for these lines ONLY): the listed lines are a character SPEAKING out loud, not narration. ` +
+            `Perform them like a real person in that moment — full natural emotional rise and fall, real intonation, breath and micro-pauses, ` +
+            `while staying the same voice and never turning cartoonish or theatrical. All other lines stay narrator-restrained. ` +
+            `Emotion map — ${map}.`;
+        }
+      }
       if (segsForSync && segsForSync.length > 0) bodyPayload.segments = segsForSync;
 
       // Edge-TTS branch: Microsoft Burmese neural voices (Thiha/Nilar). Free upstream,
