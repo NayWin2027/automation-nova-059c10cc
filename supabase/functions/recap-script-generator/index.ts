@@ -438,8 +438,10 @@ serve(async (req) => {
       narrationStyle === "HYBRID" || narrationStyle === "VIRAL"
         ? `\n\nDIALOGUE TIMING LOCK (mandatory for ${narrationStyle} mode):
 - When any character/person SPEAKS in the source, the translated voice-over must start when their mouth opens and end when their mouth closes.
-- For EVERY direct-speech paragraph, output BOTH the start AND the end source timecode as a range, then prefix the paragraph with [DIALOGUE].
-- Example format: [02:15-02:19] [DIALOGUE] translated spoken line here...
+- For EVERY direct-speech paragraph, output BOTH the start AND the end source timecode as a range, then prefix the paragraph with [DIALOGUE:EMOTION].
+- EMOTION must be exactly ONE of: ANGRY, SAD, CRYING, HAPPY, FEARFUL, SHOCKED, WHISPER, PLEADING, CALM — pick the one that matches how the character actually sounds in that moment.
+- Example format: [02:15-02:19] [DIALOGUE:ANGRY] translated spoken line here...
+- Never write the emotion word inside the spoken line itself; it belongs only in the tag.
 - The start timecode = the frame where the speaker's mouth opens. The end timecode = the frame where the speaker's mouth closes. Be accurate to the second.
 - WORD BUDGET (hard rule): the slot length is (end - start) seconds. Write the translated line so it is spoken in that exact time at a normal speaking pace — about 2.5 words per second for space-separated languages, about 4 characters per second for Burmese/Thai/Khmer/Lao/Chinese/Japanese. Count before you write. If the natural translation is too long, condense the meaning; if too short, add a few natural words. NEVER exceed the slot.
 - Narrator (non-dialogue) paragraphs keep the normal single-timecode format: [02:15] narrator text...
