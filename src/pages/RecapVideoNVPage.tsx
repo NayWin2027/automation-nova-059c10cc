@@ -5857,7 +5857,8 @@ const RecapVideoNVPage: React.FC = () => {
     const paragraphs = scriptText.split("\n").filter((p) => p.trim().length > 0);
     if (paragraphs.length === 0) return [];
     const timecodeRegex = /^\[(\d{1,2}):(\d{2})(?:\s*[-–—]\s*(\d{1,2}):(\d{2}))?\]\s*/;
-    const dialogueRegex = /^\[DIALOGUE\]\s*/i;
+    // Accepts [DIALOGUE] and [DIALOGUE:ANGRY] / [DIALOGUE: crying] emotion-tagged form.
+    const dialogueRegex = /^\[DIALOGUE(?:\s*:\s*([A-Za-z _-]+))?\]\s*/i;
     const hasTimecodes = paragraphs.some((p) => timecodeRegex.test(p.trim()));
     if (hasTimecodes) {
       const parsed = paragraphs.map((rawText) => {
@@ -5873,9 +5874,14 @@ const RecapVideoNVPage: React.FC = () => {
           }
           text = trimmed.replace(timecodeRegex, "").trim();
         }
-        const isDialogue = dialogueRegex.test(text);
-        if (isDialogue) text = text.replace(dialogueRegex, "").trim();
-        return { timestamp, text, isDialogue, explicitEndSec };
+        const dMatch = text.match(dialogueRegex);
+        const isDialogue = !!dMatch;
+        let emotion: string | undefined;
+        if (dMatch) {
+          emotion = dMatch[1] ? dMatch[1].trim().toLowerCase() : undefined;
+          text = text.replace(dialogueRegex, "").trim();
+        }
+        return { timestamp, text, isDialogue, emotion, explicitEndSec };
       });
       // Source slot = explicit [start-end] range when the AI gave one (dialogue lock),
       // otherwise fall back to the gap to the next timecode.
