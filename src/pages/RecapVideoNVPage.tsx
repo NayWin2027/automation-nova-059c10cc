@@ -5355,8 +5355,9 @@ const NARRATION_STYLE_OPTIONS: Record<
 function buildNarrationStyleBlock(style: "STORY" | "HYBRID" | "VIRAL", langName: string): string {
   const timingLockBlock = `\n\nDIALOGUE TIMING LOCK (HYBRID/VIRAL only):
 - When a character/person SPEAKS on screen, the translated voice-over MUST start at the EXACT moment their mouth opens and finish when their mouth closes.
-- For EVERY direct-speech paragraph, output BOTH start AND end source timecodes as a range, then prefix with [DIALOGUE].
-- Example: [02:15-02:19] [DIALOGUE] "သင်ဘယ်လောက်ခံစားရလဲ ဆိုတာ ငါသိတယ်" — real translated spoken words, timed to the original line.
+- For EVERY direct-speech paragraph, output BOTH start AND end source timecodes as a range, then prefix with [DIALOGUE:EMOTION].
+- EMOTION must be exactly ONE of: ANGRY, SAD, CRYING, HAPPY, FEARFUL, SHOCKED, WHISPER, PLEADING, CALM — matching how the character truly sounds at that moment. Never write the emotion word inside the spoken line.
+- Example: [02:15-02:19] [DIALOGUE:SAD] "သင်ဘယ်လောက်ခံစားရလဲ ဆိုတာ ငါသိတယ်" — real translated spoken words, timed to the original line.
 - WORD BUDGET (hard rule): slot length = (end - start) seconds. Write the line so it is spoken in exactly that time at normal pace — ~2.5 words/sec for space-separated languages, ~4 characters/sec for Burmese/Thai/Khmer/Lao/Chinese/Japanese. Condense if too long, add natural words if too short. NEVER exceed the slot.
 - Narrator (non-dialogue) paragraphs keep the normal single-timecode format: [02:15] narrator text...
 - If the source has no spoken dialogue at that moment, do NOT force [DIALOGUE]; stay in narrator voice.`;
