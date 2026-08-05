@@ -5682,8 +5682,8 @@ const RecapVideoNVPage: React.FC = () => {
     if (scriptData.full_script) {
       const resolvedOwnKey = apiMode === "own" ? ownApiKey.trim() : "";
       // Pass segments to ensure 100% script coverage in voice generation
-      const segments = scriptData.segments.map((s) => ({ text: s.text }));
-      generateVoice(scriptData.full_script, resolvedOwnKey || undefined, segments);
+      const segsForSync = scriptData.segments.map((s) => ({ text: s.text }));
+      generateVoice(scriptData.full_script, resolvedOwnKey || undefined, segsForSync, scriptData.segments);
     }
   };
 
