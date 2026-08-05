@@ -1,36 +1,61 @@
-# Hybrid / Viral Mode — Dialogue Lip-Timing (Dub-Style Alignment)
+# Hybrid / Viral Mode — Dialogue Timing Lock (Dub-Style Alignment)
 
-## အရင်ဆုံး ရှင်းလင်းချက် (အရေးကြီး)
+## ငါနားလည်တာ (အတည်ပြုချက်)
 
-နမူနာ video တွေမှာ တွေ့ရတဲ့ "ပါးစပ်နဲ့ ကွက်တိ" ဆိုတာ ဇာတ်ကောင်ရဲ့ **နှုတ်ခမ်းကို AI နဲ့ ပြန်ပုံဖော်ထားတာ မဟုတ်ဘူး** — မူရင်း ဇာတ်ကောင် စကားပြောတဲ့ **အချိန်ကွက်အတိအကျ** မှာ ဘာသာပြန်စကားကို ထည့်ထားလို့ ကွက်တိလိုက် မြင်ရတာ (dub-style timing)။
+Generative lip-sync (နှုတ်ခမ်း ပုံဖော်တာ) မလိုဘူး။
+**အဓိကကျတာ** — original source မှာ ဇာတ်ကောင် စပြောတဲ့ အချိန်နဲ့ ငါတို့ voice-over စပြောတဲ့ အချိန် တူညီရမယ်။ ဇာတ်ကောင် ပါးစပ်ပိတ်သွားတဲ့ အချိန်နဲ့ voice-over ပြီးသွားတဲ့ အချိန် တူညီရမယ်။
+ဘာသာစကား မတူတဲ့အတွက် နှုတ်ခမ်း 100% ကွက်တိမဖြစ်နိုင်ပေမယ့် timing တိုက်ဆိုင်ရင် viewer က "စကားပြောတုန်းမှာပဲ အသံထွက်နေတယ်" လို့ ခံစားရမယ်။
 
-ဘရောက်ဇာထဲမှာ နှုတ်ခမ်းပုံဖော်တဲ့ generative lip sync က မဖြစ်နိုင်ဘူး (server GPU / heygen လို API လိုပြီး ကုန်ကျစရိတ် အကြီးအကျယ် တက်မယ်)။ ဒါပေမယ့် **timing alignment နဲ့ တူညီတဲ့ အကျိုးရလဒ်** ကို ရအောင်လုပ်လို့ရတယ် — ဒါကို ဒီ plan မှာ လုပ်မယ်။
+ဒါကို **"Dialogue Timing Lock"** လို့ခေါ်မယ်။
 
-## လုပ်မယ့်အရာ — "DIALOGUE LOCK"
+## လုပ်မယ့်အရာ
 
-Hybrid နဲ့ Viral mode နှစ်ခုမှာသာ အလုပ်လုပ်မယ် (Story mode ခုအတိုင်း မထိ)။
+### ၁။ Script AI ဘက်
 
-**၁။ Script AI ဘက်**
-- စကားပြောတဲ့ paragraph တစ်ခုချင်းစီအတွက် ဇာတ်ကောင် **ပါးစပ်စလှုပ်တဲ့ အချိန်အတိအကျ** ကို timecode အဖြစ် သတ်မှတ်ခိုင်းမယ် (ခုက "သင့်တော်တဲ့ ပြကွက်" ပဲ ရွေးနေတာ)။
-- မူရင်း စကားပြော **ဘယ်နှစ်စက္ကန့်ကြာလဲ** ကို ခန့်မှန်းပြီး၊ ဘာသာပြန်စကားကို အဲဒီ စက္ကန့်နဲ့ **အံဝင်တဲ့ စာလုံးအရေအတွက်** နဲ့ ရေးခိုင်းမယ် (ရှည်လွန်း/တိုလွန်း မဖြစ်စေရ)။
-- Narrator စာကြောင်း (နောက်ခံ/ရှင်းပြချက်) ကတော့ ခုအတိုင်းပဲ — dialogue စာကြောင်းတွေကိုသာ lock လုပ်မယ်။
-- စကားပြော မရှိတဲ့ source ဆိုရင် narrator ဟန်ပဲ ဆက်သွားမယ် (အတင်း လုပ်ကြံ မထည့်)။
+Hybrid နဲ့ Viral mode နှစ်ခုအတွက်သာ။
 
-**၂။ Render ဘက်**
-- Dialogue segment တွေမှာ ပါးစပ်လှုပ်နေတဲ့ frame တွေ မလွတ်သွားအောင် slow zoom-in ကို ပိုနုးညံ့အောင် ချိန်မယ် (မျက်နှာ frame ထဲက မထွက်သွားအောင်)။
-- ပါးစပ်လှုပ်ပြီးသွားပြီးမှ အသံ ကျန်နေတာမျိုး မဖြစ်အောင် စကားပြောအရှည်နဲ့ segment အရှည် နီးစပ်အောင် ကိုက်ညှိမယ်။
-- Speed က 1.0x အတိုင်းပဲ၊ AV-SYNC engine ကို ကုတ်တစ်ကြောင်းမှ မထိဘူး။
+- **Dialogue paragraph** တိုင်းကို AI က အောက်ပါအချက်တွေနဲ့ သတ်မှတ်ပေးရမယ် —
+  - ဇာတ်ကောင် စပြောတဲ့ အချိန် `[MM:SS]` (start timecode)
+  - ဇာတ်ကောင် ပါးစပ်ပိတ်သွားတဲ့ အချိန် (end timecode / duration)
+  - မူရင်း စကားပြော ကြာချိန် = `D` စက္ကန့်
+  - voice-over စာသား အရှည် = `D` စက္ကန့်နဲ့ ကိုက်အောင် ရေးခိုင်းရမယ် (မတိုလွန်း၊ မရှည်လွန်း)
+- Narrator paragraph (နောက်ခံ/ရှင်းလျှင့်) ကတော့ ခုအတိုင်း ပုံမှန် scene-matching rule သုံးမယ်။
+- Source မှာ စကားပြော မရှိတဲ့ video (tutorial, vlog, music) ဆိုရင် narrator mode ပဲ ဆက်သွားမယ်။
+- **မလုပ်တာ**: ဇာတ်ကောင် အသံသီးသန့် ထုတ်မယ် (dual voice) — ခုထိ locked။
 
-## မလုပ်တာတွေ (ရှင်းအောင်)
+### ၂။ Segment Duration / TTS ဘက်
 
-- Generative lip sync (နှုတ်ခမ်း ပြန်ပုံဖော်တာ) — မလုပ်ဘူး၊ ဒီ architecture မှာ မဖြစ်နိုင်ဘူး။
-- Dual voice (ဇာတ်ကောင်အသံ သီးသန့်) — ဒီတစ်ခေါက် မလုပ်ဘူး။
-- AV-SYNC-9000-SMOOTH-v4, RECORD-PIPELINE-AUTO-v1, VOICE-GEN-PIPELINE-v2, AUTO-PIPELINE-v2 — ကုတ်တစ်ကြောင်းမှ မထိ။
-- Hard-cut seek, output resolution, hook logic, script length logic, credit logic, upload — ဘာမှ မထိ။
+- Dialogue paragraph တစ်ခုချင်းစီရဲ့ **TTS audio duration** ကို တိုင်းယူရမယ်။
+- မူရင်း dialogue duration `D` နဲ့ TTS duration `T` ကွာခြားချက်ကို တွက်ရမယ်။
+- `T > D` ဆိုရင် — voice-over ကို **နည်းနည်းမြန်အောင်** ဖတ်ခိုင်းရမယ် (1.0x ~ 1.15x အတွင်း)။
+- `T < D` ဆိုရင် — **အနားယူချိန်များ ထည့်ပြီး** `D` အထိ ဖြည့်ရမယ် (သို့မဟုတ် နောက်ထပ် detail ထည့်ရေး)။
+- Speed tweak က AV-sync engine မထိဘဲ၊ **per-segment playback rate** နဲ့ပဲ လုပ်မယ်။
+
+### ၃။ Render / Cut ဘက်
+
+- Dialogue segment ရဲ့ start timecode မှာ video cut ချိတ်ရမယ် (ခုက ပုံမှန် scene match ပဲ)။
+- Dialogue segment အတွင်း slow zoom-in ကို ပိုနုးညံ့အောင် ချိန်မယ် (မျက်နှာ frame ထဲက မထွက်အောင်)။
+- Dialogue အကြောင်းအရာအလိုက် zoom center က မျက်နှာပေါ်မှာပဲ ရှိအောင်။
+- Speed 1.0x ပုံမှန် motion ပဲ ထိန်းမယ်။
+
+## မထိတဲ့အပိုင်းများ (Locked)
+
+- AV-SYNC-9000-SMOOTH-v4
+- RECORD-PIPELINE-AUTO-v1
+- VOICE-GEN-PIPELINE-v2
+- AUTO-PIPELINE-v2
+- Hard-cut seek algorithm
+- Output resolution logic
+- Hook selection logic
+- Script length enforcement
+- Credit deduction / upload logic
 
 ## နည်းပညာအပိုင်း
 
-- `src/pages/RecapVideoNVPage.tsx` — `buildNarrationStyleBlock()` ထဲက HYBRID/VIRAL block ၂ ခုမှာ dialogue timecode + duration-matching စည်းမျဉ်း ထပ်ထည့်မယ်။ State အသစ်၊ UI အသစ် မလို။
-- `supabase/functions/recap-script-generator/index.ts` — scene-matching rule ထဲမှာ "dialogue paragraph ဆိုရင် ပါးစပ်စလှုပ်တဲ့ timecode ကို တိတိကျကျ ပေးရမယ်" ဆိုတဲ့ စည်းမျဉ်း ထပ်ထည့်မယ်။ Length enforcement, hook rule, story bible, fallback models — မထိ။
-- Zoom softening က dialogue segment အတွက်သာ — ရှိပြီးသား zoom function ထဲမှာ တန်ဖိုးတစ်ခုပဲ ချိန်မယ်၊ loop/seek logic မထိ။
+- `src/pages/RecapVideoNVPage.tsx`
+  - `buildNarrationStyleBlock()` ထဲက HYBRID / VIRAL block ၂ ခုမှာ dialogue timing lock စည်းမျဉ်း ထပ်ထည့်မယ်။
+  - TTS duration တိုင်းယူပြီး playback rate ကိုက်ညှိတဲ့ helper function တစ်ခု ထပ်ထည့်မယ်။
+- `supabase/functions/recap-script-generator/index.ts`
+  - Scene-matching rule ထဲမှာ dialogue paragraph အတွက် "စပြောချိန် + ကြာချိန်" ပါဝင်ရမယ်ဆိုတဲ့ စည်းမျဉ်း ထပ်ထည့်မယ်။
+  - Length enforcement, hook rule, story bible, fallback models — မထိ။
 - DB migration မလို။
