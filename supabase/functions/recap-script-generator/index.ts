@@ -438,8 +438,11 @@ serve(async (req) => {
       narrationStyle === "HYBRID" || narrationStyle === "VIRAL"
         ? `\n\nDIALOGUE TIMING LOCK (mandatory for ${narrationStyle} mode):
 - When any character/person SPEAKS in the source, the translated voice-over must start when their mouth opens and end when their mouth closes.
-- For EVERY direct-speech paragraph, output the EXACT source timecode where the speaker begins, then prefix the paragraph with [DIALOGUE].
-- Example format: [02:15] [DIALOGUE] translated spoken line here...
+- For EVERY direct-speech paragraph, output BOTH the start AND the end source timecode as a range, then prefix the paragraph with [DIALOGUE].
+- Example format: [02:15-02:19] [DIALOGUE] translated spoken line here...
+- The start timecode = the frame where the speaker's mouth opens. The end timecode = the frame where the speaker's mouth closes. Be accurate to the second.
+- WORD BUDGET (hard rule): the slot length is (end - start) seconds. Write the translated line so it is spoken in that exact time at a normal speaking pace — about 2.5 words per second for space-separated languages, about 4 characters per second for Burmese/Thai/Khmer/Lao/Chinese/Japanese. Count before you write. If the natural translation is too long, condense the meaning; if too short, add a few natural words. NEVER exceed the slot.
+- Narrator (non-dialogue) paragraphs keep the normal single-timecode format: [02:15] narrator text...
 - Keep the translated line length so that, when read aloud, it takes roughly the SAME duration as the original speech. Do not make it much shorter or much longer.
 - If the source has no spoken dialogue at that moment, do NOT use [DIALOGUE]; stay in narrator voice.
 - This is a dub-style timing lock, NOT generative lip-sync: the syllables do not need to match, but the start/end timing must align.`
