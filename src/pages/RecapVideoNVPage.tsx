@@ -5339,7 +5339,8 @@ function buildNarrationStyleBlock(style: "STORY" | "HYBRID" | "VIRAL", langName:
 - Direct speech must match the niche: for stories/dramas use the characters' real dialogue; for news/documentary use what the real person actually said; for tech/health/business/educational content speak DIRECTLY to the viewer ("မင်း အခုလုပ်နေတာက...").
 - Match the words to what is actually happening on screen at that moment (action, gesture, expression).
 - NEVER invent dialogue that does not exist in the source. If the source has no speech at that point, stay in narrator voice.
-- Keep the same total length rules as normal; this changes HOW it is written, not how much.`;
+- Keep the same total length rules as normal; this changes HOW it is written, not how much.
+- THIS OVERRIDES any earlier instruction that says to avoid quoting dialogue: quoting real spoken lines is REQUIRED in this style.`;
   }
   if (style === "VIRAL") {
     return `\n\nNARRATION STYLE — VIRAL (short-form, TikTok/Reels):
@@ -5349,7 +5350,8 @@ function buildNarrationStyleBlock(style: "STORY" | "HYBRID" | "VIRAL", langName:
 - Emotion must be raw and natural, exactly how real people talk when angry, shocked, or excited — not literary.
 - Match the words to the on-screen action at that moment.
 - NEVER invent dialogue that does not exist in the source.
-- For non-story niches (tech, news, health, business, educational), "conflict" means the myth being busted, the surprising number, the mistake people make — hit those hard and fast.`;
+- For non-story niches (tech, news, health, business, educational), "conflict" means the myth being busted, the surprising number, the mistake people make — hit those hard and fast.
+- THIS OVERRIDES any earlier instruction that says to avoid quoting dialogue: quoting real spoken lines is REQUIRED in this style.`;
   }
   return `\n\nNARRATION STYLE — STORY (full narrative, long-form):
 - Keep the classic complete narrator style: clear beginning-to-end storytelling with smooth flow and emotional depth.
