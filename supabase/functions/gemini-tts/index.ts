@@ -159,7 +159,10 @@ function detectNarrationProfile(text: string, langCode: string): string {
   return (
     `${profile}\n` +
     `EMOTION POLICY: Use only realistic, professionally restrained emotion that a real human native ${langCode.toUpperCase()} narrator would use. ` +
-    `Strictly NO over-acting, NO exaggeration, NO theatrical spikes. Keep emotional intensity low-to-medium throughout the ENTIRE script.`
+    `Strictly NO over-acting, NO exaggeration, NO theatrical spikes. Keep emotional intensity low-to-medium throughout the ENTIRE script. ` +
+    `DIALOGUE CARVE-OUT: this restraint applies to NARRATION. If the caller's style guidance marks specific lines as character dialogue, ` +
+    `those lines are performed as a real person speaking in that moment — genuine emotional rise and fall, real intonation, breath and micro-pauses — ` +
+    `still in the same voice, still believable, never cartoonish.`
   );
 }
 
