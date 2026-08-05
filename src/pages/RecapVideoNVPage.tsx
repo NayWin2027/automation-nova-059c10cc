@@ -5806,7 +5806,7 @@ const RecapVideoNVPage: React.FC = () => {
       setProgressMsg("📝 Script generated! Now generating AI voice...");
       // Continue into the existing voice pipeline (VOICE-GEN-PIPELINE-v2)
       const segsForSync = segments.map((s) => ({ text: s.text }));
-      generateVoice(scriptText, resolvedOwnKey || undefined, segsForSync);
+      generateVoice(scriptText, resolvedOwnKey || undefined, segsForSync, segments);
     } catch (err: any) {
       setStatus("error");
       setProgressMsg(`❌ Retry failed: ${err?.message || "Unknown error"}`);
