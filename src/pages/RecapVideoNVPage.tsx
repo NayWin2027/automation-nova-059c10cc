@@ -6229,6 +6229,7 @@ ORIGINALITY:
 Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle text.${buildNarrationStyleBlock(narrationStyle, selectedLangName)}`,
         language: selectedLangName,
         sourceDurationSec: duration,
+        narrationStyle,
         skipCreditDeduction: true,
         recapNvPipeline: true,
         apiMode: resolvedApiMode,
