@@ -397,6 +397,10 @@ serve(async (req) => {
       // ===== SERIES CONTINUITY (optional, additive) =====
       if (typeof body.seriesContext === "string") seriesContext = body.seriesContext.slice(0, 6000);
       emitStoryBible = !!body.emitStoryBible;
+      // ===== NARRATION STYLE (optional, additive) =====
+      if (body.narrationStyle === "HYBRID" || body.narrationStyle === "VIRAL" || body.narrationStyle === "STORY") {
+        narrationStyle = body.narrationStyle;
+      }
       // SEO mode: accept a raw seoPrompt as transcript input (used by client SEO metadata generator)
       if (body.seoMode && typeof body.seoPrompt === "string" && body.seoPrompt.trim()) {
         transcript = body.seoPrompt;
