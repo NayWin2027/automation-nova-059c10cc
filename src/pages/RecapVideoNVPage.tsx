@@ -28,6 +28,8 @@ import {
 interface RecapSegment {
   timestamp: string;
   text: string;
+  isDialogue?: boolean;
+  sourceDurationSec?: number;
 }
 
 interface RecapScript {
