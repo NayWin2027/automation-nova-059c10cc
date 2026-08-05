@@ -5836,13 +5836,20 @@ const RecapVideoNVPage: React.FC = () => {
     return cleaned;
   };
 
+  const parseTimecodeToSec = (ts: string): number => {
+    const parts = ts.split(":").map(Number);
+    if (parts.length !== 2 || Number.isNaN(parts[0]) || Number.isNaN(parts[1])) return 0;
+    return parts[0] * 60 + parts[1];
+  };
+
   const scriptToSegments = (scriptText: string, videoDuration: number): RecapSegment[] => {
     const paragraphs = scriptText.split("\n").filter((p) => p.trim().length > 0);
     if (paragraphs.length === 0) return [];
     const timecodeRegex = /^\[(\d{1,2}):(\d{2})\]\s*/;
+    const dialogueRegex = /^\[DIALOGUE\]\s*/i;
     const hasTimecodes = paragraphs.some((p) => timecodeRegex.test(p.trim()));
     if (hasTimecodes) {
-      return paragraphs.map((rawText) => {
+      const parsed = paragraphs.map((rawText) => {
         const trimmed = rawText.trim();
         const match = trimmed.match(timecodeRegex);
         let timestamp = "00:00";
@@ -5851,7 +5858,16 @@ const RecapVideoNVPage: React.FC = () => {
           timestamp = `${match[1].padStart(2, "0")}:${match[2]}`;
           text = trimmed.replace(timecodeRegex, "").trim();
         }
-        return { timestamp, text };
+        const isDialogue = dialogueRegex.test(text);
+        if (isDialogue) text = text.replace(dialogueRegex, "").trim();
+        return { timestamp, text, isDialogue };
+      });
+      // Estimate source duration for each segment from the gap to the next timecode.
+      return parsed.map((seg, i) => {
+        const currentSec = parseTimecodeToSec(seg.timestamp);
+        const nextSec = i + 1 < parsed.length ? parseTimecodeToSec(parsed[i + 1].timestamp) : videoDuration;
+        const sourceDurationSec = Math.max(1, nextSec - currentSec);
+        return { ...seg, sourceDurationSec };
       });
     }
     const totalChars = paragraphs.reduce((sum, p) => sum + p.length, 0);
