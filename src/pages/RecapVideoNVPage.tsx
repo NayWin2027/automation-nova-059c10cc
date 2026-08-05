@@ -6011,6 +6011,24 @@ const RecapVideoNVPage: React.FC = () => {
           start: seg.start || 0,
           end: seg.end || 0,
         }));
+        // DIALOGUE TIMING LOCK: validate that direct-speech segments fit inside their source slot.
+        if (fullSegments && fullSegments.length === data.segments.length) {
+          const langName = languages.find((l) => l.code === selectedLanguage)?.name || "BURMESE";
+          fullSegments.forEach((seg, idx) => {
+            if (!seg.isDialogue || !seg.sourceDurationSec) return;
+            const actual = (data.segments[idx]?.end || 0) - (data.segments[idx]?.start || 0);
+            const estimated = estimateSpokenDuration(seg.text, langName);
+            if (actual > seg.sourceDurationSec * 1.15 || estimated > seg.sourceDurationSec * 1.1) {
+              console.warn(
+                `[DIALOGUE-LOCK] segment ${idx} exceeds source slot: actual=${actual.toFixed(2)}s source=${seg.sourceDurationSec.toFixed(2)}s estimated=${estimated.toFixed(2)}s text="${seg.text.slice(0, 60)}"`,
+              );
+            } else if (actual < seg.sourceDurationSec * 0.5 || estimated < seg.sourceDurationSec * 0.4) {
+              console.warn(
+                `[DIALOGUE-LOCK] segment ${idx} is much shorter than source slot: actual=${actual.toFixed(2)}s source=${seg.sourceDurationSec.toFixed(2)}s estimated=${estimated.toFixed(2)}s text="${seg.text.slice(0, 60)}"`,
+              );
+            }
+          });
+        }
       } else {
         pageAudioTimestampsRef.current = [];
       }
