@@ -6538,6 +6538,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
         scriptTextForTTS,
         resolvedOwnKey || undefined,
         segments.map((s) => ({ text: s.text })),
+        segments,
       );
     } catch (err: any) {
       console.error("Pipeline error:", err);
