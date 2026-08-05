@@ -6016,6 +6016,37 @@ const RecapVideoNVPage: React.FC = () => {
         },
       };
       if (useOwnKey) bodyPayload.ownApiKey = useOwnKey;
+      // ── DIALOGUE EMOTION MAP ──
+      // Narrator lines keep the restrained professional delivery. Direct-speech lines are
+      // acted out with the emotion the script AI tagged them with. Tags never enter the
+      // spoken text — they are sent only as style guidance.
+      if (fullSegments && fullSegments.length > 0) {
+        const emoLines = fullSegments
+          .map((s, i) => (s.isDialogue ? { i, emo: s.emotion || "natural in-character" } : null))
+          .filter(Boolean) as { i: number; emo: string }[];
+        if (emoLines.length > 0) {
+          const EMO_HINT: Record<string, string> = {
+            angry: "angry — sharper, harder attack, raised intensity",
+            sad: "sad — heavier, slower, softer, downward intonation",
+            crying: "crying — broken, trembling, catching breath",
+            happy: "happy — brighter, lighter, warm smiling tone",
+            fearful: "fearful — tight, unsteady, quicker breaths",
+            shocked: "shocked — sudden, wide-eyed disbelief",
+            whisper: "whispered — hushed, close, confidential",
+            pleading: "pleading — desperate, imploring, strained",
+            calm: "calm — steady, grounded, quiet confidence",
+          };
+          const map = emoLines
+            .map(({ i, emo }) => `Line ${i + 1}: ${EMO_HINT[emo] || emo}`)
+            .join("; ");
+          bodyPayload.styleInstructions =
+            `${bodyPayload.styleInstructions as string}` +
+            ` DIALOGUE ACTING (overrides the restrained policy for these lines ONLY): the listed lines are a character SPEAKING out loud, not narration. ` +
+            `Perform them like a real person in that moment — full natural emotional rise and fall, real intonation, breath and micro-pauses, ` +
+            `while staying the same voice and never turning cartoonish or theatrical. All other lines stay narrator-restrained. ` +
+            `Emotion map — ${map}.`;
+        }
+      }
       if (segsForSync && segsForSync.length > 0) bodyPayload.segments = segsForSync;
 
       // Edge-TTS branch: Microsoft Burmese neural voices (Thiha/Nilar). Free upstream,
