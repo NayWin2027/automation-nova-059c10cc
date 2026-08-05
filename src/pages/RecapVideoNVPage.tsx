@@ -5308,6 +5308,54 @@ const VOICE_OPTIONS = [
   { value: "William", label: "William (Male)", gender: "Male" },
 ];
 
+// ===== NARRATION STYLE PRESETS (niche-agnostic, prompt-only) =====
+const NARRATION_STYLE_OPTIONS: Record<
+  "STORY" | "HYBRID" | "VIRAL",
+  { emoji: string; label: string; hint: string }
+> = {
+  STORY: {
+    emoji: "📖",
+    label: "Story Mode — အစအဆုံး ဇာတ်ကြောင်းပြန် (YouTube)",
+    hint: "Long-form YouTube အတွက် အကောင်းဆုံး (default)",
+  },
+  HYBRID: {
+    emoji: "🎭",
+    label: "Hybrid Mode — ဇာတ်ကြောင်း + တိုက်ရိုက်စကား",
+    hint: "အရေးကြီးအခိုက်တွေမှာ တိုက်ရိုက်စကား ဖောက်ထည့်",
+  },
+  VIRAL: {
+    emoji: "🔥",
+    label: "Viral Mode — မြန်ဆန်ပြင်းထန် (TikTok / Reels)",
+    hint: "Short-form အတွက် pacing မြန်၊ dialogue-first",
+  },
+};
+
+function buildNarrationStyleBlock(style: "STORY" | "HYBRID" | "VIRAL", langName: string): string {
+  if (style === "HYBRID") {
+    return `\n\nNARRATION STYLE — HYBRID (narration + direct speech):
+- Use narrator voice for background, context, and explanation.
+- At every HIGH-IMPACT moment (argument, confrontation, confession, decision, shocking reveal, punchline), switch to DIRECT SPEECH instead of describing it.
+- BAD: "သူက ဒေါသတကြီးနဲ့ ပြောလိုက်တယ်" → GOOD: the actual line spoken, translated into ${langName}.
+- Direct speech must match the niche: for stories/dramas use the characters' real dialogue; for news/documentary use what the real person actually said; for tech/health/business/educational content speak DIRECTLY to the viewer ("မင်း အခုလုပ်နေတာက...").
+- Match the words to what is actually happening on screen at that moment (action, gesture, expression).
+- NEVER invent dialogue that does not exist in the source. If the source has no speech at that point, stay in narrator voice.
+- Keep the same total length rules as normal; this changes HOW it is written, not how much.`;
+  }
+  if (style === "VIRAL") {
+    return `\n\nNARRATION STYLE — VIRAL (short-form, TikTok/Reels):
+- Fast pacing. Short punchy sentences. No slow setup, no filler, no throat-clearing.
+- Dialogue-first: whenever people speak on screen, use their translated words directly in ${langName} instead of describing them.
+- Keep tension continuous — every ~20 seconds of narration must land a new question, conflict, or surprise.
+- Emotion must be raw and natural, exactly how real people talk when angry, shocked, or excited — not literary.
+- Match the words to the on-screen action at that moment.
+- NEVER invent dialogue that does not exist in the source.
+- For non-story niches (tech, news, health, business, educational), "conflict" means the myth being busted, the surprising number, the mistake people make — hit those hard and fast.`;
+  }
+  return `\n\nNARRATION STYLE — STORY (full narrative, long-form):
+- Keep the classic complete narrator style: clear beginning-to-end storytelling with smooth flow and emotional depth.
+- Translate what people actually said when it matters, but stay primarily in narrator voice.`;
+}
+
 const RecapVideoNVPage: React.FC = () => {
   const navigate = useNavigate();
   const { isAllowed, isLoading: authLoading } = useAuthGuard("recap-nv");
