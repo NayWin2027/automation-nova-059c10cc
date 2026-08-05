@@ -5308,6 +5308,56 @@ const VOICE_OPTIONS = [
   { value: "William", label: "William (Male)", gender: "Male" },
 ];
 
+// ===== NARRATION STYLE PRESETS (niche-agnostic, prompt-only) =====
+const NARRATION_STYLE_OPTIONS: Record<
+  "STORY" | "HYBRID" | "VIRAL",
+  { emoji: string; label: string; hint: string }
+> = {
+  STORY: {
+    emoji: "📖",
+    label: "Story Mode — အစအဆုံး ဇာတ်ကြောင်းပြန် (YouTube)",
+    hint: "Long-form YouTube အတွက် အကောင်းဆုံး (default)",
+  },
+  HYBRID: {
+    emoji: "🎭",
+    label: "Hybrid Mode — ဇာတ်ကြောင်း + တိုက်ရိုက်စကား",
+    hint: "အရေးကြီးအခိုက်တွေမှာ တိုက်ရိုက်စကား ဖောက်ထည့်",
+  },
+  VIRAL: {
+    emoji: "🔥",
+    label: "Viral Mode — မြန်ဆန်ပြင်းထန် (TikTok / Reels)",
+    hint: "Short-form အတွက် pacing မြန်၊ dialogue-first",
+  },
+};
+
+function buildNarrationStyleBlock(style: "STORY" | "HYBRID" | "VIRAL", langName: string): string {
+  if (style === "HYBRID") {
+    return `\n\nNARRATION STYLE — HYBRID (narration + direct speech):
+- Use narrator voice for background, context, and explanation.
+- At every HIGH-IMPACT moment (argument, confrontation, confession, decision, shocking reveal, punchline), switch to DIRECT SPEECH instead of describing it.
+- BAD: "သူက ဒေါသတကြီးနဲ့ ပြောလိုက်တယ်" → GOOD: the actual line spoken, translated into ${langName}.
+- Direct speech must match the niche: for stories/dramas use the characters' real dialogue; for news/documentary use what the real person actually said; for tech/health/business/educational content speak DIRECTLY to the viewer ("မင်း အခုလုပ်နေတာက...").
+- Match the words to what is actually happening on screen at that moment (action, gesture, expression).
+- NEVER invent dialogue that does not exist in the source. If the source has no speech at that point, stay in narrator voice.
+- Keep the same total length rules as normal; this changes HOW it is written, not how much.
+- THIS OVERRIDES any earlier instruction that says to avoid quoting dialogue: quoting real spoken lines is REQUIRED in this style.`;
+  }
+  if (style === "VIRAL") {
+    return `\n\nNARRATION STYLE — VIRAL (short-form, TikTok/Reels):
+- Fast pacing. Short punchy sentences. No slow setup, no filler, no throat-clearing.
+- Dialogue-first: whenever people speak on screen, use their translated words directly in ${langName} instead of describing them.
+- Keep tension continuous — every ~20 seconds of narration must land a new question, conflict, or surprise.
+- Emotion must be raw and natural, exactly how real people talk when angry, shocked, or excited — not literary.
+- Match the words to the on-screen action at that moment.
+- NEVER invent dialogue that does not exist in the source.
+- For non-story niches (tech, news, health, business, educational), "conflict" means the myth being busted, the surprising number, the mistake people make — hit those hard and fast.
+- THIS OVERRIDES any earlier instruction that says to avoid quoting dialogue: quoting real spoken lines is REQUIRED in this style.`;
+  }
+  return `\n\nNARRATION STYLE — STORY (full narrative, long-form):
+- Keep the classic complete narrator style: clear beginning-to-end storytelling with smooth flow and emotional depth.
+- Translate what people actually said when it matters, but stay primarily in narrator voice.`;
+}
+
 const RecapVideoNVPage: React.FC = () => {
   const navigate = useNavigate();
   const { isAllowed, isLoading: authLoading } = useAuthGuard("recap-nv");
@@ -5351,6 +5401,8 @@ const RecapVideoNVPage: React.FC = () => {
   const [recapHistory, setRecapHistory] = useState<RecapHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState("my-MM");
+  // ===== NARRATION STYLE (additive — prompt-only, does not touch render/AV-sync) =====
+  const [narrationStyle, setNarrationStyle] = useState<"STORY" | "HYBRID" | "VIRAL">("STORY");
   const [selectedVoice, setSelectedVoice] = useState("edge:it-IT-GiuseppeMultilingualNeural");
 
   // Auto-update selected voice when selected language changes
@@ -5692,7 +5744,7 @@ const RecapVideoNVPage: React.FC = () => {
       const scriptBody: Record<string, unknown> = {
         fileUri,
         fileMimeType: mimeType,
-        niche: `You are an aggressive international professional YouTube recap editor. Analyze the uploaded movie/video and produce a condensed, fast-paced recap script in ${selectedLangName}. Length must be approximately 40-50% of the original duration when read aloud (never below 30%). Start with a shocking hook, build mystery, escalate tension, finish with a climactic payoff. Aggressively cut filler/travel/waiting scenes. Keep only plot twists, key character moments, conflicts, reveals, and the resolution. Write as ONE continuous gripping story with hook transitions between segments. Output each paragraph prefixed by [MM:SS] starting at [00:00] and ending close to the full duration. Use original wording — do NOT quote distinctive dialogue.${burmeseStyleBlock}`,
+        niche: `You are an aggressive international professional YouTube recap editor. Analyze the uploaded movie/video and produce a condensed, fast-paced recap script in ${selectedLangName}. Length must be approximately 40-50% of the original duration when read aloud (never below 30%). Start with a shocking hook, build mystery, escalate tension, finish with a climactic payoff. Aggressively cut filler/travel/waiting scenes. Keep only plot twists, key character moments, conflicts, reveals, and the resolution. Write as ONE continuous gripping story with hook transitions between segments. Output each paragraph prefixed by [MM:SS] starting at [00:00] and ending close to the full duration. Use original wording — do NOT quote distinctive dialogue.${burmeseStyleBlock}${buildNarrationStyleBlock(narrationStyle, selectedLangName)}`,
         language: selectedLangName,
         sourceDurationSec: duration,
         skipCreditDeduction: true,
@@ -6166,7 +6218,7 @@ Output each paragraph as one segment starting with a timestamp prefix like: [MM:
 The first segment should start at [00:00]. The last segment must reach close to the end of the full duration.
 
 ORIGINALITY:
-Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle text.`,
+Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle text.${buildNarrationStyleBlock(narrationStyle, selectedLangName)}`,
         language: selectedLangName,
         sourceDurationSec: duration,
         skipCreditDeduction: true,
@@ -6634,6 +6686,34 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                 </Command>
               </PopoverContent>
             </Popover>
+          </div>
+
+          {/* ===== NARRATION STYLE (additive, prompt-only) ===== */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-neon-cyan">🎙️ ဇာတ်ကြောင်းပြောစတိုင် (Narration Style)</label>
+            <Select value={narrationStyle} onValueChange={(v) => setNarrationStyle(v as "STORY" | "HYBRID" | "VIRAL")}>
+              <SelectTrigger className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-slate-100 shadow-[0_20px_50px_rgba(15,23,42,0.45)] transition hover:border-amber-400">
+                <span className="inline-flex items-center gap-2 truncate">
+                  <span>{NARRATION_STYLE_OPTIONS[narrationStyle].emoji}</span>
+                  <span className="truncate">{NARRATION_STYLE_OPTIONS[narrationStyle].label}</span>
+                </span>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-950 border border-slate-700 shadow-2xl z-50">
+                {(Object.keys(NARRATION_STYLE_OPTIONS) as Array<"STORY" | "HYBRID" | "VIRAL">).map((key) => (
+                  <SelectItem key={key} value={key} className="rounded-xl px-3 py-2 text-sm text-slate-100 transition hover:bg-slate-900">
+                    <span className="flex flex-col">
+                      <span className="inline-flex items-center gap-2 font-semibold">
+                        <span>{NARRATION_STYLE_OPTIONS[key].emoji}</span>
+                        <span>{NARRATION_STYLE_OPTIONS[key].label}</span>
+                      </span>
+                      <span className="text-xs text-slate-400">{NARRATION_STYLE_OPTIONS[key].hint}</span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-slate-400">{NARRATION_STYLE_OPTIONS[narrationStyle].hint}</p>
           </div>
 
           {/* ===== SERIES MODE (optional, additive) ===== */}
