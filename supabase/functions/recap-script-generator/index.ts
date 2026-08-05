@@ -540,7 +540,10 @@ VIRAL HOOK RULE (MANDATORY — FIRST 3 SECONDS):
 - The VERY FIRST sentence MUST be a 3-second viral hook designed to stop the scroll instantly
 - It must be shocking, provocative, or emotionally magnetic — NOT a generic intro
 - Great hook examples: "No one expected what happened next." / "This moment destroyed everything." / "She had no idea her whole life was about to collapse."
-- The hook MUST target the single most shocking/dramatic moment in the source
+- HOOK SELECTION (do this internally before writing): scan the WHOLE source and list the 3 highest-impact moments — the biggest shock, conflict, reveal, betrayal, surprising fact, or emotional peak. Rank them by how strongly a stranger would react in 3 seconds, then build the hook from the #1 ranked moment ONLY.
+- NEVER build the hook from an ordinary, calm, or setup moment just because it happens early. Position in the video is irrelevant — only impact matters.
+- This is niche-agnostic: for stories use the dramatic peak; for news/documentary the most shocking revelation; for tech/health/business/educational the most counter-intuitive fact, mistake, or result.
+- IF the source genuinely has no high-impact peak (calm tutorial, plain vlog, routine explainer), do NOT force a fake shocking hook. Instead open with the single most useful or curiosity-driving line of real substance from the content, and never invent drama that is not in the source.
 - After the hook, transition naturally into the story recap
 - ABSOLUTELY FORBIDDEN: Do NOT write ANY preamble, intro, acknowledgement, meta-comment, or framing sentence before the hook.
 - FORBIDDEN OPENERS include (but not limited to): "ဟုတ်ကဲ့", "ကောင်းပါပြီ", "ရပါပြီ", "အောက်မှာ ဖော်ပြပေး", "ဒီ ... ဗီဒီယိုလေးကို အခြေခံပြီး", "Here is", "Here's", "Below is", "Sure", "Okay", "Of course", or any sentence wrapped in ( ) / （ ） that describes what you are about to write.
