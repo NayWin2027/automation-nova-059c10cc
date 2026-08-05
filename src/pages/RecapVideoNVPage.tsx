@@ -1487,7 +1487,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             ? seg.sourceEndSec
             : null;
         if (dialogueEnd !== null) {
-          vEnd = dialogueEnd;
+          // AUDIO-AWARE SLOT EXTENSION: the dialogue START stays locked to the source
+          // timecode, but the video window may run past the mouth-close timecode up to
+          // the next segment's start. This stops the picture from hard-cutting back
+          // while the translated line is still being spoken (source footage is available).
+          if (!nextSeg) {
+            vEnd = -1;
+          } else {
+            const nextRawD = parseTime(nextSeg.timestamp);
+            vEnd = nextRawD > dialogueEnd ? nextRawD : dialogueEnd;
+          }
         } else if (!nextSeg) {
           vEnd = -1;
         } else {
