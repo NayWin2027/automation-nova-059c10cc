@@ -28,6 +28,8 @@ import {
 interface RecapSegment {
   timestamp: string;
   text: string;
+  isDialogue?: boolean;
+  sourceDurationSec?: number;
 }
 
 interface RecapScript {
@@ -5331,6 +5333,13 @@ const NARRATION_STYLE_OPTIONS: Record<
 };
 
 function buildNarrationStyleBlock(style: "STORY" | "HYBRID" | "VIRAL", langName: string): string {
+  const timingLockBlock = `\n\nDIALOGUE TIMING LOCK (HYBRID/VIRAL only):
+- When a character/person SPEAKS on screen, the translated voice-over MUST start at the EXACT moment their mouth opens and finish when their mouth closes.
+- For EVERY direct-speech paragraph, use the EXACT source timecode where the speaker begins talking.
+- Keep the translated line length so the TTS reads it in roughly the same duration as the original speech (do not make it much shorter or longer).
+- Prefix every direct-speech paragraph with [DIALOGUE] so the editor knows it must be time-locked to the source speaker.
+- Example: [02:15] [DIALOGUE] "သင်ဘယ်လောက်ခံစားရလဲ ဆိုတာ ငါသိတယ်" — use the real translated spoken words, timed to the original line.
+- If the source has no spoken dialogue at that moment, do NOT force [DIALOGUE]; stay in narrator voice.`;
   if (style === "HYBRID") {
     return `\n\nNARRATION STYLE — HYBRID (narration + direct speech):
 - Use narrator voice for background, context, and explanation.
@@ -5340,7 +5349,7 @@ function buildNarrationStyleBlock(style: "STORY" | "HYBRID" | "VIRAL", langName:
 - Match the words to what is actually happening on screen at that moment (action, gesture, expression).
 - NEVER invent dialogue that does not exist in the source. If the source has no speech at that point, stay in narrator voice.
 - Keep the same total length rules as normal; this changes HOW it is written, not how much.
-- THIS OVERRIDES any earlier instruction that says to avoid quoting dialogue: quoting real spoken lines is REQUIRED in this style.`;
+- THIS OVERRIDES any earlier instruction that says to avoid quoting dialogue: quoting real spoken lines is REQUIRED in this style.${timingLockBlock}`;
   }
   if (style === "VIRAL") {
     return `\n\nNARRATION STYLE — VIRAL (short-form, TikTok/Reels):
@@ -5351,7 +5360,7 @@ function buildNarrationStyleBlock(style: "STORY" | "HYBRID" | "VIRAL", langName:
 - Match the words to the on-screen action at that moment.
 - NEVER invent dialogue that does not exist in the source.
 - For non-story niches (tech, news, health, business, educational), "conflict" means the myth being busted, the surprising number, the mistake people make — hit those hard and fast.
-- THIS OVERRIDES any earlier instruction that says to avoid quoting dialogue: quoting real spoken lines is REQUIRED in this style.`;
+- THIS OVERRIDES any earlier instruction that says to avoid quoting dialogue: quoting real spoken lines is REQUIRED in this style.${timingLockBlock}`;
   }
   return `\n\nNARRATION STYLE — STORY (full narrative, long-form):
 - Keep the classic complete narrator style: clear beginning-to-end storytelling with smooth flow and emotional depth.
@@ -5673,8 +5682,8 @@ const RecapVideoNVPage: React.FC = () => {
     if (scriptData.full_script) {
       const resolvedOwnKey = apiMode === "own" ? ownApiKey.trim() : "";
       // Pass segments to ensure 100% script coverage in voice generation
-      const segments = scriptData.segments.map((s) => ({ text: s.text }));
-      generateVoice(scriptData.full_script, resolvedOwnKey || undefined, segments);
+      const segsForSync = scriptData.segments.map((s) => ({ text: s.text }));
+      generateVoice(scriptData.full_script, resolvedOwnKey || undefined, segsForSync, scriptData.segments);
     }
   };
 
@@ -5747,6 +5756,7 @@ const RecapVideoNVPage: React.FC = () => {
         niche: `You are an aggressive international professional YouTube recap editor. Analyze the uploaded movie/video and produce a condensed, fast-paced recap script in ${selectedLangName}. Length must be approximately 40-50% of the original duration when read aloud (never below 30%). Start with a shocking hook, build mystery, escalate tension, finish with a climactic payoff. Aggressively cut filler/travel/waiting scenes. Keep only plot twists, key character moments, conflicts, reveals, and the resolution. Write as ONE continuous gripping story with hook transitions between segments. Output each paragraph prefixed by [MM:SS] starting at [00:00] and ending close to the full duration. Use original wording — do NOT quote distinctive dialogue.${burmeseStyleBlock}${buildNarrationStyleBlock(narrationStyle, selectedLangName)}`,
         language: selectedLangName,
         sourceDurationSec: duration,
+        narrationStyle,
         skipCreditDeduction: true,
         recapNvPipeline: true,
         apiMode: resolvedApiMode,
@@ -5796,7 +5806,7 @@ const RecapVideoNVPage: React.FC = () => {
       setProgressMsg("📝 Script generated! Now generating AI voice...");
       // Continue into the existing voice pipeline (VOICE-GEN-PIPELINE-v2)
       const segsForSync = segments.map((s) => ({ text: s.text }));
-      generateVoice(scriptText, resolvedOwnKey || undefined, segsForSync);
+      generateVoice(scriptText, resolvedOwnKey || undefined, segsForSync, segments);
     } catch (err: any) {
       setStatus("error");
       setProgressMsg(`❌ Retry failed: ${err?.message || "Unknown error"}`);
@@ -5826,13 +5836,20 @@ const RecapVideoNVPage: React.FC = () => {
     return cleaned;
   };
 
+  const parseTimecodeToSec = (ts: string): number => {
+    const parts = ts.split(":").map(Number);
+    if (parts.length !== 2 || Number.isNaN(parts[0]) || Number.isNaN(parts[1])) return 0;
+    return parts[0] * 60 + parts[1];
+  };
+
   const scriptToSegments = (scriptText: string, videoDuration: number): RecapSegment[] => {
     const paragraphs = scriptText.split("\n").filter((p) => p.trim().length > 0);
     if (paragraphs.length === 0) return [];
     const timecodeRegex = /^\[(\d{1,2}):(\d{2})\]\s*/;
+    const dialogueRegex = /^\[DIALOGUE\]\s*/i;
     const hasTimecodes = paragraphs.some((p) => timecodeRegex.test(p.trim()));
     if (hasTimecodes) {
-      return paragraphs.map((rawText) => {
+      const parsed = paragraphs.map((rawText) => {
         const trimmed = rawText.trim();
         const match = trimmed.match(timecodeRegex);
         let timestamp = "00:00";
@@ -5841,7 +5858,16 @@ const RecapVideoNVPage: React.FC = () => {
           timestamp = `${match[1].padStart(2, "0")}:${match[2]}`;
           text = trimmed.replace(timecodeRegex, "").trim();
         }
-        return { timestamp, text };
+        const isDialogue = dialogueRegex.test(text);
+        if (isDialogue) text = text.replace(dialogueRegex, "").trim();
+        return { timestamp, text, isDialogue };
+      });
+      // Estimate source duration for each segment from the gap to the next timecode.
+      return parsed.map((seg, i) => {
+        const currentSec = parseTimecodeToSec(seg.timestamp);
+        const nextSec = i + 1 < parsed.length ? parseTimecodeToSec(parsed[i + 1].timestamp) : videoDuration;
+        const sourceDurationSec = Math.max(1, nextSec - currentSec);
+        return { ...seg, sourceDurationSec };
       });
     }
     const totalChars = paragraphs.reduce((sum, p) => sum + p.length, 0);
@@ -5857,7 +5883,29 @@ const RecapVideoNVPage: React.FC = () => {
     });
   };
 
-  const generateVoice = async (scriptText: string, useOwnKey?: string, segsForSync?: { text: string }[]) => {
+  // Estimate spoken duration for a line based on word/syllable counts.
+  // Used to warn when a translated dialogue line is likely too long/short for its source slot.
+  const estimateSpokenDuration = (text: string, langCode: string): number => {
+    const cleaned = text.replace(/\[.*?\]\s*/g, "").trim();
+    if (!cleaned) return 0;
+    // Burmese/Thai/Lao/Khmer/Japanese/Chinese: count characters as syllable proxies.
+    const isSyllabic = /\p{Script=Myanmar}|\p{Script=Thai}|\p{Script=Laoo}|\p{Script=Khmr}|\p{Script=Hani}|\p{Script=Hira}|\p{Script=Kana}/u.test(langCode) ||
+      ["MYANMAR (BURMESE)", "BURMESE", "CHINESE", "JAPANESE", "KOREAN", "THAI", "LAO", "KHMER"].includes(langCode.toUpperCase());
+    if (isSyllabic) {
+      // ~4 chars per second for Burmese/Chinese-style dense syllables
+      return cleaned.length / 4.0;
+    }
+    const words = cleaned.split(/\s+/).filter(Boolean);
+    // ~150 words per minute => 2.5 words/sec
+    return words.length / 2.5;
+  };
+
+  const generateVoice = async (
+    scriptText: string,
+    useOwnKey?: string,
+    segsForSync?: { text: string }[],
+    fullSegments?: RecapSegment[],
+  ) => {
     // Voice naturalness: keep Burmese punctuation so TTS can insert realistic micro-pauses.
     let speechTextForAPI = scriptText.replace(/\[.*?\]\s*/g, "");
     if (voiceMode === "normal") {
@@ -5963,6 +6011,24 @@ const RecapVideoNVPage: React.FC = () => {
           start: seg.start || 0,
           end: seg.end || 0,
         }));
+        // DIALOGUE TIMING LOCK: validate that direct-speech segments fit inside their source slot.
+        if (fullSegments && fullSegments.length === data.segments.length) {
+          const langName = languages.find((l) => l.code === selectedLanguage)?.name || "BURMESE";
+          fullSegments.forEach((seg, idx) => {
+            if (!seg.isDialogue || !seg.sourceDurationSec) return;
+            const actual = (data.segments[idx]?.end || 0) - (data.segments[idx]?.start || 0);
+            const estimated = estimateSpokenDuration(seg.text, langName);
+            if (actual > seg.sourceDurationSec * 1.15 || estimated > seg.sourceDurationSec * 1.1) {
+              console.warn(
+                `[DIALOGUE-LOCK] segment ${idx} exceeds source slot: actual=${actual.toFixed(2)}s source=${seg.sourceDurationSec.toFixed(2)}s estimated=${estimated.toFixed(2)}s text="${seg.text.slice(0, 60)}"`,
+              );
+            } else if (actual < seg.sourceDurationSec * 0.5 || estimated < seg.sourceDurationSec * 0.4) {
+              console.warn(
+                `[DIALOGUE-LOCK] segment ${idx} is much shorter than source slot: actual=${actual.toFixed(2)}s source=${seg.sourceDurationSec.toFixed(2)}s estimated=${estimated.toFixed(2)}s text="${seg.text.slice(0, 60)}"`,
+              );
+            }
+          });
+        }
       } else {
         pageAudioTimestampsRef.current = [];
       }
@@ -6221,6 +6287,7 @@ ORIGINALITY:
 Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle text.${buildNarrationStyleBlock(narrationStyle, selectedLangName)}`,
         language: selectedLangName,
         sourceDurationSec: duration,
+        narrationStyle,
         skipCreditDeduction: true,
         recapNvPipeline: true,
         apiMode: resolvedApiMode,
@@ -6471,6 +6538,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
         scriptTextForTTS,
         resolvedOwnKey || undefined,
         segments.map((s) => ({ text: s.text })),
+        segments,
       );
     } catch (err: any) {
       console.error("Pipeline error:", err);

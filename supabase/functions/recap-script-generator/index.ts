@@ -356,6 +356,7 @@ serve(async (req) => {
     let requestedMaxOutputTokens: number | null = null;
     let seriesContext = "";
     let emitStoryBible = false;
+    let narrationStyle = "STORY";
 
     const contentType = req.headers.get("content-type") || "";
     if (contentType.includes("multipart/form-data")) {
@@ -396,6 +397,10 @@ serve(async (req) => {
       // ===== SERIES CONTINUITY (optional, additive) =====
       if (typeof body.seriesContext === "string") seriesContext = body.seriesContext.slice(0, 6000);
       emitStoryBible = !!body.emitStoryBible;
+      // ===== NARRATION STYLE (optional, additive) =====
+      if (body.narrationStyle === "HYBRID" || body.narrationStyle === "VIRAL" || body.narrationStyle === "STORY") {
+        narrationStyle = body.narrationStyle;
+      }
       // SEO mode: accept a raw seoPrompt as transcript input (used by client SEO metadata generator)
       if (body.seoMode && typeof body.seoPrompt === "string" && body.seoPrompt.trim()) {
         transcript = body.seoPrompt;
@@ -428,6 +433,17 @@ serve(async (req) => {
     const nicheStyle =
       nicheLabel.length <= 80 && nicheStyles[nicheLabel] ? nicheStyles[nicheLabel] : nicheStyles["MOVIE RECAP"];
     const callerInstructionsBlock = [extraInstructions, editorRules].filter(Boolean).join("\n\n").trim();
+
+    const dialogueTimingLockBlock =
+      narrationStyle === "HYBRID" || narrationStyle === "VIRAL"
+        ? `\n\nDIALOGUE TIMING LOCK (mandatory for ${narrationStyle} mode):
+- When any character/person SPEAKS in the source, the translated voice-over must start when their mouth opens and end when their mouth closes.
+- For EVERY direct-speech paragraph, output the EXACT source timecode where the speaker begins, then prefix the paragraph with [DIALOGUE].
+- Example format: [02:15] [DIALOGUE] translated spoken line here...
+- Keep the translated line length so that, when read aloud, it takes roughly the SAME duration as the original speech. Do not make it much shorter or much longer.
+- If the source has no spoken dialogue at that moment, do NOT use [DIALOGUE]; stay in narrator voice.
+- This is a dub-style timing lock, NOT generative lip-sync: the syllables do not need to match, but the start/end timing must align.`
+        : "";
 
     console.log(`[recap-script-generator] Language: ${lang}, Niche: ${nicheLabel}, isOwnApi: ${isOwnApi}`);
 
@@ -563,7 +579,7 @@ STRUCTURE:
 - Climax: The single most shocking/dramatic moment at peak intensity
 - Resolution: Short, punchy ending that leaves viewers wanting more
 
-${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYLE/LENGTH DETAILS ABOVE WHEN CONFLICTING):\n${callerInstructionsBlock}\n` : ""}
+${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYLE/LENGTH DETAILS ABOVE WHEN CONFLICTING):\n${callerInstructionsBlock}\n` : ""}${dialogueTimingLockBlock}
 
 ###############################################################
 # FINAL ENFORCEMENT: YOUR ENTIRE OUTPUT MUST BE IN ${lang}.
