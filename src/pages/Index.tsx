@@ -40,6 +40,8 @@ import ToolLimitsBadge from "@/components/ToolLimitsBadge";
 import AccountInfoCard from "@/components/AccountInfoCard";
 import NotificationBell from "@/components/NotificationBell";
 import HomeRewardsSection from "@/components/HomeRewardsSection";
+import ReferralSpotlight from "@/components/ReferralSpotlight";
+import PremiumUnlockDialog from "@/components/PremiumUnlockDialog";
 const defaultTools = [
 {
   id: "recap-nv",
@@ -390,6 +392,8 @@ const Index = () => {
         }
         </div>
       </div>
+      {isAuthenticated && !isAdmin && <ReferralSpotlight />}
+      {isAuthenticated && !isAdmin && <PremiumUnlockDialog />}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 md:gap-5 max-w-2xl mx-auto">
         {tools.map((tool) => {
         const setting = toolSettings.find((s) => s.tool_id === tool.id);
@@ -412,7 +416,7 @@ const Index = () => {
       })}
 
       </div>
-      {isAuthenticated && !isAdmin && <div className="mt-4"><HomeRewardsSection /></div>}
+      {isAuthenticated && !isAdmin && <div id="referral-rewards" className="mt-4"><HomeRewardsSection /></div>}
     </>;
 
   const renderPremiumContent = () => <PlansView />;
