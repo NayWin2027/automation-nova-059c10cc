@@ -6688,8 +6688,35 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
             </Popover>
           </div>
 
-          {/* ===== SERIES MODE (optional, additive) ===== */}
           {/* ===== NARRATION STYLE (additive, prompt-only) ===== */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-neon-cyan">🎙️ ဇာတ်ကြောင်းပြောစတိုင် (Narration Style)</label>
+            <Select value={narrationStyle} onValueChange={(v) => setNarrationStyle(v as "STORY" | "HYBRID" | "VIRAL")}>
+              <SelectTrigger className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-slate-100 shadow-[0_20px_50px_rgba(15,23,42,0.45)] transition hover:border-amber-400">
+                <span className="inline-flex items-center gap-2 truncate">
+                  <span>{NARRATION_STYLE_OPTIONS[narrationStyle].emoji}</span>
+                  <span className="truncate">{NARRATION_STYLE_OPTIONS[narrationStyle].label}</span>
+                </span>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-950 border border-slate-700 shadow-2xl z-50">
+                {(Object.keys(NARRATION_STYLE_OPTIONS) as Array<"STORY" | "HYBRID" | "VIRAL">).map((key) => (
+                  <SelectItem key={key} value={key} className="rounded-xl px-3 py-2 text-sm text-slate-100 transition hover:bg-slate-900">
+                    <span className="flex flex-col">
+                      <span className="inline-flex items-center gap-2 font-semibold">
+                        <span>{NARRATION_STYLE_OPTIONS[key].emoji}</span>
+                        <span>{NARRATION_STYLE_OPTIONS[key].label}</span>
+                      </span>
+                      <span className="text-xs text-slate-400">{NARRATION_STYLE_OPTIONS[key].hint}</span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-slate-400">{NARRATION_STYLE_OPTIONS[narrationStyle].hint}</p>
+          </div>
+
+          {/* ===== SERIES MODE (optional, additive) ===== */}
           <div className="space-y-2 rounded-xl border border-border bg-card/40 p-3">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-neon-cyan">🎬 အပိုင်းဆက် (Series Mode)</label>
