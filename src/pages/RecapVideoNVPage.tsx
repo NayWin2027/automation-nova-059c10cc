@@ -5744,7 +5744,7 @@ const RecapVideoNVPage: React.FC = () => {
       const scriptBody: Record<string, unknown> = {
         fileUri,
         fileMimeType: mimeType,
-        niche: `You are an aggressive international professional YouTube recap editor. Analyze the uploaded movie/video and produce a condensed, fast-paced recap script in ${selectedLangName}. Length must be approximately 40-50% of the original duration when read aloud (never below 30%). Start with a shocking hook, build mystery, escalate tension, finish with a climactic payoff. Aggressively cut filler/travel/waiting scenes. Keep only plot twists, key character moments, conflicts, reveals, and the resolution. Write as ONE continuous gripping story with hook transitions between segments. Output each paragraph prefixed by [MM:SS] starting at [00:00] and ending close to the full duration. Use original wording — do NOT quote distinctive dialogue.${burmeseStyleBlock}`,
+        niche: `You are an aggressive international professional YouTube recap editor. Analyze the uploaded movie/video and produce a condensed, fast-paced recap script in ${selectedLangName}. Length must be approximately 40-50% of the original duration when read aloud (never below 30%). Start with a shocking hook, build mystery, escalate tension, finish with a climactic payoff. Aggressively cut filler/travel/waiting scenes. Keep only plot twists, key character moments, conflicts, reveals, and the resolution. Write as ONE continuous gripping story with hook transitions between segments. Output each paragraph prefixed by [MM:SS] starting at [00:00] and ending close to the full duration. Use original wording — do NOT quote distinctive dialogue.${burmeseStyleBlock}${buildNarrationStyleBlock(narrationStyle, selectedLangName)}`,
         language: selectedLangName,
         sourceDurationSec: duration,
         skipCreditDeduction: true,
@@ -6218,7 +6218,7 @@ Output each paragraph as one segment starting with a timestamp prefix like: [MM:
 The first segment should start at [00:00]. The last segment must reach close to the end of the full duration.
 
 ORIGINALITY:
-Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle text.`,
+Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle text.${buildNarrationStyleBlock(narrationStyle, selectedLangName)}`,
         language: selectedLangName,
         sourceDurationSec: duration,
         skipCreditDeduction: true,
