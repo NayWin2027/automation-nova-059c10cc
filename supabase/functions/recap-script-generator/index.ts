@@ -356,6 +356,7 @@ serve(async (req) => {
     let requestedMaxOutputTokens: number | null = null;
     let seriesContext = "";
     let emitStoryBible = false;
+    let narrationStyle = "STORY";
 
     const contentType = req.headers.get("content-type") || "";
     if (contentType.includes("multipart/form-data")) {
