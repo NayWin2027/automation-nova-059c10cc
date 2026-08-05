@@ -1479,7 +1479,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         const nextSeg = scriptData.segments[i + 1];
         let vEnd: number;
-        if (!nextSeg) {
+        // DIALOGUE TIMING LOCK: a dialogue segment owns its exact source slot
+        // [mouth opens .. mouth closes], so the video window ends at that timecode.
+        const dialogueEnd =
+          seg.isDialogue && typeof seg.sourceEndSec === "number" && seg.sourceEndSec > vStart
+            ? seg.sourceEndSec
+            : null;
+        if (dialogueEnd !== null) {
+          vEnd = dialogueEnd;
+        } else if (!nextSeg) {
           vEnd = -1;
         } else {
           const nextRaw = parseTime(nextSeg.timestamp);
