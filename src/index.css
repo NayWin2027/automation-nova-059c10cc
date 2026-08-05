@@ -855,3 +855,19 @@
   0%, 100% { box-shadow: 0 0 6px rgba(59, 130, 246, 0.3), 0 0 12px rgba(59, 130, 246, 0.1); }
   50% { box-shadow: 0 0 14px rgba(59, 130, 246, 0.6), 0 0 30px rgba(59, 130, 246, 0.25), 0 0 50px rgba(59, 130, 246, 0.1); }
 }
+
+/* Referral spotlight + premium unlock celebration (scoped) */
+@keyframes referral-sheen {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.animate-referral-sheen {
+  animation: referral-sheen 3.5s linear infinite;
+}
+@keyframes referral-marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.animate-referral-marquee {
+  animation: referral-marquee 18s linear infinite;
+}
