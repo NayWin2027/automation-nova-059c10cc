@@ -5900,7 +5900,12 @@ const RecapVideoNVPage: React.FC = () => {
     return words.length / 2.5;
   };
 
-  const generateVoice = async (scriptText: string, useOwnKey?: string, segsForSync?: { text: string }[]) => {
+  const generateVoice = async (
+    scriptText: string,
+    useOwnKey?: string,
+    segsForSync?: { text: string }[],
+    fullSegments?: RecapSegment[],
+  ) => {
     // Voice naturalness: keep Burmese punctuation so TTS can insert realistic micro-pauses.
     let speechTextForAPI = scriptText.replace(/\[.*?\]\s*/g, "");
     if (voiceMode === "normal") {
