@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Gift, Copy, Check, X, ChevronRight } from "lucide-react";
+import { Gift, Copy, Check, X, ChevronRight, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useReferralStatus } from "@/hooks/useReferralStatus";
 import { useAuth } from "@/hooks/useAuth";
@@ -9,16 +9,15 @@ const todayKey = () => `an_ref_spotlight_${new Date().toISOString().slice(0, 10)
 const ReferralSpotlight: React.FC = () => {
   const { user } = useAuth() as any;
   const { toast } = useToast();
-  const { count, goal, claimed, shareLink, loading } = useReferralStatus();
+  const { progressInCycle, goal, pending, shareLink, loading } = useReferralStatus();
   const [copied, setCopied] = useState(false);
   const [dismissed, setDismissed] = useState(
     () => typeof window !== "undefined" && localStorage.getItem(todayKey()) === "1"
   );
 
-  if (!user?.id || claimed || dismissed) return null;
+  if (!user?.id || dismissed) return null;
 
-  const progress = Math.min(count, goal);
-  const pct = (progress / goal) * 100;
+  const pct = (progressInCycle / goal) * 100;
 
   const dismiss = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -56,7 +55,7 @@ const ReferralSpotlight: React.FC = () => {
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-xs font-extrabold text-gold leading-tight truncate">
-            Refer 5 Friends → 1 Month Premium FREE
+            {pending ? "Reward request — Admin review စောင့်ဆိုင်းဆဲ" : "Refer 5 Friends → 1 Month Premium FREE"}
           </p>
           <div className="mt-1 flex items-center gap-2">
             <div className="h-1.5 flex-1 rounded-full bg-white/10 overflow-hidden">
@@ -65,8 +64,9 @@ const ReferralSpotlight: React.FC = () => {
                 style={{ width: `${pct}%` }}
               />
             </div>
-            <span className="text-2xs font-bold text-gold-light shrink-0">
-              {loading ? "…" : `${progress} / ${goal}`}
+            <span className="text-2xs font-bold text-gold-light shrink-0 flex items-center gap-1">
+              {pending && <Clock className="w-3 h-3" />}
+              {loading ? "…" : `${progressInCycle} / ${goal}`}
             </span>
           </div>
         </div>
