@@ -5351,6 +5351,8 @@ const RecapVideoNVPage: React.FC = () => {
   const [recapHistory, setRecapHistory] = useState<RecapHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState("my-MM");
+  // ===== NARRATION STYLE (additive — prompt-only, does not touch render/AV-sync) =====
+  const [narrationStyle, setNarrationStyle] = useState<"STORY" | "HYBRID" | "VIRAL">("STORY");
   const [selectedVoice, setSelectedVoice] = useState("edge:it-IT-GiuseppeMultilingualNeural");
 
   // Auto-update selected voice when selected language changes
