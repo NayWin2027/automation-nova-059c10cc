@@ -434,6 +434,17 @@ serve(async (req) => {
       nicheLabel.length <= 80 && nicheStyles[nicheLabel] ? nicheStyles[nicheLabel] : nicheStyles["MOVIE RECAP"];
     const callerInstructionsBlock = [extraInstructions, editorRules].filter(Boolean).join("\n\n").trim();
 
+    const dialogueTimingLockBlock =
+      narrationStyle === "HYBRID" || narrationStyle === "VIRAL"
+        ? `\n\nDIALOGUE TIMING LOCK (mandatory for ${narrationStyle} mode):
+- When any character/person SPEAKS in the source, the translated voice-over must start when their mouth opens and end when their mouth closes.
+- For EVERY direct-speech paragraph, output the EXACT source timecode where the speaker begins, then prefix the paragraph with [DIALOGUE].
+- Example format: [02:15] [DIALOGUE] translated spoken line here...
+- Keep the translated line length so that, when read aloud, it takes roughly the SAME duration as the original speech. Do not make it much shorter or much longer.
+- If the source has no spoken dialogue at that moment, do NOT use [DIALOGUE]; stay in narrator voice.
+- This is a dub-style timing lock, NOT generative lip-sync: the syllables do not need to match, but the start/end timing must align.`
+        : "";
+
     console.log(`[recap-script-generator] Language: ${lang}, Niche: ${nicheLabel}, isOwnApi: ${isOwnApi}`);
 
     // Map language name to a clear, unambiguous native label for the AI
