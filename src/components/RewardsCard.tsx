@@ -1,38 +1,27 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { Gift, Copy, Check, Crown, Users } from "lucide-react";
-
-const GOAL = 5;
+import { Gift, Copy, Check, Crown, Users, Clock } from "lucide-react";
+import { useReferralStatus } from "@/hooks/useReferralStatus";
 
 const RewardsCard: React.FC = () => {
-  const { user, profile, refreshProfile } = useAuth() as any;
+  const { user, refreshProfile } = useAuth() as any;
   const { toast } = useToast();
-  const [count, setCount] = useState<number>(0);
-  const [loading, setLoading] = useState(true);
-  const [claiming, setClaiming] = useState(false);
+  const {
+    count,
+    loading,
+    goal,
+    granted,
+    pending,
+    canRequest,
+    progressInCycle,
+    shareCode,
+    shareLink,
+    reload,
+  } = useReferralStatus();
+  const [sending, setSending] = useState(false);
   const [copied, setCopied] = useState<"code" | "link" | null>(null);
-
-  const shareCode = (profile?.email || "").split("@")[0] || "";
-  const shareLink =
-    typeof window !== "undefined" && shareCode
-      ? `${window.location.origin}/order?ref=${encodeURIComponent(shareCode)}`
-      : "";
-  const claimed = !!(profile as any)?.referral_reward_claimed;
-
-  useEffect(() => {
-    const load = async () => {
-      if (!user?.id) return;
-      setLoading(true);
-      const { data, error } = await supabase.rpc("count_referred_friends", {
-        _user_id: user.id,
-      });
-      if (!error) setCount(Number(data) || 0);
-      setLoading(false);
-    };
-    load();
-  }, [user?.id]);
 
   const copy = async (value: string, kind: "code" | "link") => {
     try {
@@ -45,36 +34,34 @@ const RewardsCard: React.FC = () => {
     }
   };
 
-  const claim = async () => {
+  const request = async () => {
     if (!user?.id) return;
-    setClaiming(true);
-    const { data, error } = await supabase.rpc("claim_referral_reward", {
-      _user_id: user.id,
-    });
-    setClaiming(false);
+    setSending(true);
+    const { data, error } = await supabase.rpc("claim_referral_reward", { _user_id: user.id });
+    setSending(false);
     const res = (data as any) || {};
     if (error || !res.success) {
       toast({
-        title: "⚠️ Cannot claim",
-        description: res.error === "ALREADY_CLAIMED"
-          ? "Reward already claimed"
-          : res.error === "NOT_ENOUGH_FRIENDS"
-            ? `Need ${GOAL} friends (you have ${res.count || 0})`
-            : "Try again later",
+        title: "⚠️ Cannot request",
+        description:
+          res.error === "ALREADY_PENDING"
+            ? "Admin review စောင့်ဆိုင်းနေဆဲပါ"
+            : res.error === "NOT_ENOUGH_FRIENDS"
+              ? `Need ${goal} friends (you have ${res.count || 0})`
+              : "Try again later",
         variant: "destructive",
       });
       return;
     }
     toast({
-      title: "🎉 Premium unlocked!",
-      description: "1 month Premium အောင်မြင်စွာ ရရှိပါပြီ",
+      title: "✅ Request sent",
+      description: "Admin approve ပြီးမှ 1 Month Premium ရပါမယ်",
     });
     refreshProfile?.();
+    reload();
   };
 
-  const progress = Math.min(count, GOAL);
-  const pct = (progress / GOAL) * 100;
-  const canClaim = count >= GOAL && !claimed;
+  const pct = (progressInCycle / goal) * 100;
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-gold/30 bg-gradient-to-br from-[#0a0a2e]/90 to-[#050524]/95 p-4 shadow-[0_0_24px_rgba(212,175,55,0.15)]">
@@ -86,7 +73,7 @@ const RewardsCard: React.FC = () => {
           </div>
           <div>
             <h3 className="text-base font-bold text-gold leading-tight">Refer 5 Friends</h3>
-            <p className="text-2xs text-foreground/70">Get 1 Month Premium FREE</p>
+            <p className="text-2xs text-foreground/70">Get 1 Month Premium FREE (every 5 friends)</p>
           </div>
         </div>
 
@@ -94,10 +81,10 @@ const RewardsCard: React.FC = () => {
         <div className="mb-3">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-2xs text-foreground/70 flex items-center gap-1">
-              <Users className="w-3 h-3" /> Friends joined
+              <Users className="w-3 h-3" /> Friends joined ({loading ? "…" : count} total)
             </span>
             <span className="text-xs font-bold text-gold">
-              {loading ? "…" : `${progress} / ${GOAL}`}
+              {loading ? "…" : `${progressInCycle} / ${goal}`}
             </span>
           </div>
           <div className="h-2 rounded-full bg-white/5 overflow-hidden">
@@ -106,6 +93,11 @@ const RewardsCard: React.FC = () => {
               style={{ width: `${pct}%` }}
             />
           </div>
+          {granted > 0 && (
+            <p className="mt-1 text-2xs text-emerald-300/80">
+              ✓ {granted} month{granted > 1 ? "s" : ""} Premium approved so far
+            </p>
+          )}
         </div>
 
         {/* Code + Share */}
@@ -130,25 +122,32 @@ const RewardsCard: React.FC = () => {
           </button>
         </div>
 
-        {/* Claim */}
-        {claimed ? (
-          <div className="w-full px-3 py-2.5 rounded-xl bg-emerald-500/15 border border-emerald-400/40 text-emerald-300 text-xs font-bold text-center flex items-center justify-center gap-1.5">
-            <Crown className="w-4 h-4" /> Premium Claimed
+        {/* Request */}
+        {pending ? (
+          <div className="w-full px-3 py-2.5 rounded-xl bg-amber-500/15 border border-amber-400/40 text-amber-200 text-xs font-bold text-center flex items-center justify-center gap-1.5">
+            <Clock className="w-4 h-4" /> Waiting for admin approval
           </div>
         ) : (
           <button
-            onClick={claim}
-            disabled={!canClaim || claiming}
+            onClick={request}
+            disabled={!canRequest || sending}
             className={`w-full px-3 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-              canClaim
+              canRequest
                 ? "bg-gradient-to-r from-gold to-amber-500 text-black shadow-[0_0_16px_rgba(212,175,55,0.5)] hover:brightness-110"
                 : "bg-white/5 border border-white/10 text-foreground/40 cursor-not-allowed"
             }`}
           >
             <Crown className="w-4 h-4" />
-            {claiming ? "Claiming…" : canClaim ? "Claim 1 Month Premium" : `Invite ${GOAL - progress} more`}
+            {sending
+              ? "Sending…"
+              : canRequest
+                ? "Request 1 Month Premium"
+                : `Invite ${goal - progressInCycle} more`}
           </button>
         )}
+        <p className="mt-1.5 text-center text-[10px] text-foreground/45">
+          Admin approve ပြီးမှ Premium အလိုအလျောက် ရပါမယ်
+        </p>
       </div>
     </div>
   );

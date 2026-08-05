@@ -266,6 +266,7 @@ export type Database = {
           plan: Database["public"]["Enums"]["subscription_plan"]
           referral_code: string | null
           referral_reward_claimed: boolean
+          referral_rewards_granted: number
           referred_by: string | null
           updated_at: string
           user_id: string
@@ -284,6 +285,7 @@ export type Database = {
           plan?: Database["public"]["Enums"]["subscription_plan"]
           referral_code?: string | null
           referral_reward_claimed?: boolean
+          referral_rewards_granted?: number
           referred_by?: string | null
           updated_at?: string
           user_id: string
@@ -302,6 +304,7 @@ export type Database = {
           plan?: Database["public"]["Enums"]["subscription_plan"]
           referral_code?: string | null
           referral_reward_claimed?: boolean
+          referral_rewards_granted?: number
           referred_by?: string | null
           updated_at?: string
           user_id?: string
@@ -399,6 +402,45 @@ export type Database = {
           last_part?: number
           series_name?: string
           story_bible?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      referral_reward_requests: {
+        Row: {
+          admin_note: string | null
+          created_at: string
+          friend_count: number
+          id: string
+          milestone: number
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          admin_note?: string | null
+          created_at?: string
+          friend_count?: number
+          id?: string
+          milestone: number
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          admin_note?: string | null
+          created_at?: string
+          friend_count?: number
+          id?: string
+          milestone?: number
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
           updated_at?: string
           user_id?: string
         }
@@ -696,6 +738,10 @@ export type Database = {
       }
     }
     Functions: {
+      approve_referral_reward: {
+        Args: { _approve: boolean; _note?: string; _request_id: string }
+        Returns: Json
+      }
       check_active_session: {
         Args: { _session_id: string; _user_id: string }
         Returns: boolean

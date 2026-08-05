@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Crown, Sparkles } from "lucide-react";
+import { Crown, Clock } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -11,27 +11,27 @@ const MARQUEE = "1 MONTH PREMIUM FREE  •  REFERRAL REWARD UNLOCKED  •  CONGR
 const PremiumUnlockDialog: React.FC = () => {
   const { user, refreshProfile } = useAuth() as any;
   const { toast } = useToast();
-  const { unlocked, count, goal, reload } = useReferralStatus();
+  const { canRequest, nextMilestone, count, goal, reload } = useReferralStatus();
   const [open, setOpen] = useState(false);
-  const [claiming, setClaiming] = useState(false);
+  const [sending, setSending] = useState(false);
   const [done, setDone] = useState(false);
 
   useEffect(() => {
-    if (unlocked) setOpen(true);
-  }, [unlocked]);
+    if (canRequest) setOpen(true);
+  }, [canRequest]);
 
-  const claim = async () => {
+  const request = async () => {
     if (!user?.id) return;
-    setClaiming(true);
+    setSending(true);
     const { data, error } = await supabase.rpc("claim_referral_reward", { _user_id: user.id });
-    setClaiming(false);
+    setSending(false);
     const res = (data as any) || {};
     if (error || !res.success) {
       toast({
-        title: "⚠️ Cannot claim",
+        title: "⚠️ Cannot request",
         description:
-          res.error === "ALREADY_CLAIMED"
-            ? "Reward already claimed"
+          res.error === "ALREADY_PENDING"
+            ? "Admin review စောင့်ဆိုင်းနေဆဲပါ"
             : res.error === "NOT_ENOUGH_FRIENDS"
               ? `Need ${goal} friends (you have ${res.count || 0})`
               : "Try again later",
@@ -55,7 +55,7 @@ const PremiumUnlockDialog: React.FC = () => {
             </div>
             <h2 className="text-lg font-black tracking-wide text-gold">PREMIUM UNLOCKED</h2>
             <p className="mt-1 text-2xs text-foreground/70">
-              သူငယ်ချင်း {Math.min(count, goal)} ယောက် ဖိတ်ခေါ်မှု ပြည့်သွားပါပြီ
+              သူငယ်ချင်း {Math.min(count, nextMilestone)} ယောက် ဖိတ်ခေါ်မှု ပြည့်သွားပါပြီ
             </p>
 
             {/* Marquee ribbon */}
@@ -67,18 +67,18 @@ const PremiumUnlockDialog: React.FC = () => {
             </div>
 
             {done ? (
-              <div className="flex items-center justify-center gap-1.5 rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-3 py-2.5 text-xs font-bold text-emerald-300">
-                <Sparkles className="h-4 w-4" /> 1 Month Premium ရရှိပါပြီ
+              <div className="flex items-center justify-center gap-1.5 rounded-xl border border-amber-400/40 bg-amber-500/15 px-3 py-2.5 text-xs font-bold text-amber-200">
+                <Clock className="h-4 w-4" /> Admin approve စောင့်ဆိုင်းပါ
               </div>
             ) : (
               <div className="space-y-2">
                 <button
-                  onClick={claim}
-                  disabled={claiming}
+                  onClick={request}
+                  disabled={sending}
                   className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-gold to-amber-500 px-3 py-2.5 text-xs font-bold text-black shadow-[0_0_18px_rgba(212,175,55,0.5)] transition hover:brightness-110 disabled:opacity-60"
                 >
                   <Crown className="h-4 w-4" />
-                  {claiming ? "Claiming…" : "Claim 1 Month Premium"}
+                  {sending ? "Sending…" : "Request 1 Month Premium"}
                 </button>
                 <button
                   onClick={() => setOpen(false)}
