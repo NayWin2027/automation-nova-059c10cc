@@ -5847,7 +5847,7 @@ const RecapVideoNVPage: React.FC = () => {
   const scriptToSegments = (scriptText: string, videoDuration: number): RecapSegment[] => {
     const paragraphs = scriptText.split("\n").filter((p) => p.trim().length > 0);
     if (paragraphs.length === 0) return [];
-    const timecodeRegex = /^\[(\d{1,2}):(\d{2})\]\s*/;
+    const timecodeRegex = /^\[(\d{1,2}):(\d{2})(?:\s*[-–—]\s*(\d{1,2}):(\d{2}))?\]\s*/;
     const dialogueRegex = /^\[DIALOGUE\]\s*/i;
     const hasTimecodes = paragraphs.some((p) => timecodeRegex.test(p.trim()));
     if (hasTimecodes) {
@@ -5856,20 +5856,32 @@ const RecapVideoNVPage: React.FC = () => {
         const match = trimmed.match(timecodeRegex);
         let timestamp = "00:00";
         let text = trimmed;
+        let explicitEndSec: number | undefined;
         if (match) {
           timestamp = `${match[1].padStart(2, "0")}:${match[2]}`;
+          if (match[3] !== undefined && match[4] !== undefined) {
+            explicitEndSec = Number(match[3]) * 60 + Number(match[4]);
+          }
           text = trimmed.replace(timecodeRegex, "").trim();
         }
         const isDialogue = dialogueRegex.test(text);
         if (isDialogue) text = text.replace(dialogueRegex, "").trim();
-        return { timestamp, text, isDialogue };
+        return { timestamp, text, isDialogue, explicitEndSec };
       });
-      // Estimate source duration for each segment from the gap to the next timecode.
+      // Source slot = explicit [start-end] range when the AI gave one (dialogue lock),
+      // otherwise fall back to the gap to the next timecode.
       return parsed.map((seg, i) => {
+        const { explicitEndSec, ...rest } = seg;
         const currentSec = parseTimecodeToSec(seg.timestamp);
         const nextSec = i + 1 < parsed.length ? parseTimecodeToSec(parsed[i + 1].timestamp) : videoDuration;
-        const sourceDurationSec = Math.max(1, nextSec - currentSec);
-        return { ...seg, sourceDurationSec };
+        const gapEnd = Math.max(currentSec + 1, nextSec);
+        const sourceEndSec = explicitEndSec && explicitEndSec > currentSec ? explicitEndSec : gapEnd;
+        return {
+          ...rest,
+          sourceStartSec: currentSec,
+          sourceEndSec,
+          sourceDurationSec: Math.max(1, sourceEndSec - currentSec),
+        };
       });
     }
     const totalChars = paragraphs.reduce((sum, p) => sum + p.length, 0);
