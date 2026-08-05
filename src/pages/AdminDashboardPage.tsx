@@ -19,6 +19,7 @@ import AdminCreditAgentTab from "@/components/admin/AdminCreditAgentTab";
 import AdminOrdersTab from "@/components/admin/AdminOrdersTab";
 import AdminUsageRecordsTab from "@/components/admin/AdminUsageRecordsTab";
 import AdminDataCollectionTab from "@/components/admin/AdminDataCollectionTab";
+import AdminReferralTab from "@/components/admin/AdminReferralTab";
 
 const AdminDashboardPage: React.FC = () => {
   const navigate = useNavigate();
@@ -201,7 +202,7 @@ const AdminDashboardPage: React.FC = () => {
 
         {/* Main Tabs */}
         <Tabs defaultValue="orders" className="mt-4">
-          <TabsList className="grid w-full max-w-5xl grid-cols-10 mb-4 bg-secondary/30 p-0.5 h-8">
+          <TabsList className="grid w-full max-w-5xl grid-cols-11 mb-4 bg-secondary/30 p-0.5 h-8">
             <TabsTrigger value="orders" className="flex items-center gap-1.5 text-2xs data-[state=active]:bg-card">
               <FileText className="w-3 h-3" />
               Orders
@@ -221,6 +222,10 @@ const AdminDashboardPage: React.FC = () => {
             <TabsTrigger value="data-collection" className="flex items-center gap-1.5 text-2xs data-[state=active]:bg-card">
               <Database className="w-3 h-3" />
               Data
+            </TabsTrigger>
+            <TabsTrigger value="referrals" className="flex items-center gap-1.5 text-2xs data-[state=active]:bg-card">
+              <Gift className="w-3 h-3" />
+              Referral
             </TabsTrigger>
             <TabsTrigger value="insights" className="flex items-center gap-1.5 text-2xs data-[state=active]:bg-card">
               <TrendingUp className="w-3 h-3" />
@@ -262,6 +267,10 @@ const AdminDashboardPage: React.FC = () => {
 
           <TabsContent value="data-collection">
             <AdminDataCollectionTab />
+          </TabsContent>
+
+          <TabsContent value="referrals">
+            <AdminReferralTab />
           </TabsContent>
 
           <TabsContent value="insights">
