@@ -30,6 +30,8 @@ interface RecapSegment {
   text: string;
   isDialogue?: boolean;
   sourceDurationSec?: number;
+  sourceStartSec?: number;
+  sourceEndSec?: number;
 }
 
 interface RecapScript {
