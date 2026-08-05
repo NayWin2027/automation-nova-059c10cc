@@ -6689,6 +6689,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
           </div>
 
           {/* ===== SERIES MODE (optional, additive) ===== */}
+          {/* ===== NARRATION STYLE (additive, prompt-only) ===== */}
           <div className="space-y-2 rounded-xl border border-border bg-card/40 p-3">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-neon-cyan">🎬 အပိုင်းဆက် (Series Mode)</label>
