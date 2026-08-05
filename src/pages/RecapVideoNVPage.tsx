@@ -30,6 +30,7 @@ interface RecapSegment {
   text: string;
   isDialogue?: boolean;
   sourceDurationSec?: number;
+  emotion?: string;
   sourceStartSec?: number;
   sourceEndSec?: number;
 }
