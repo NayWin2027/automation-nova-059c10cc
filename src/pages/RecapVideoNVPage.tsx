@@ -5883,6 +5883,23 @@ const RecapVideoNVPage: React.FC = () => {
     });
   };
 
+  // Estimate spoken duration for a line based on word/syllable counts.
+  // Used to warn when a translated dialogue line is likely too long/short for its source slot.
+  const estimateSpokenDuration = (text: string, langCode: string): number => {
+    const cleaned = text.replace(/\[.*?\]\s*/g, "").trim();
+    if (!cleaned) return 0;
+    // Burmese/Thai/Lao/Khmer/Japanese/Chinese: count characters as syllable proxies.
+    const isSyllabic = /\p{Script=Myanmar}|\p{Script=Thai}|\p{Script=Laoo}|\p{Script=Khmr}|\p{Script=Hani}|\p{Script=Hira}|\p{Script=Kana}/u.test(langCode) ||
+      ["MYANMAR (BURMESE)", "BURMESE", "CHINESE", "JAPANESE", "KOREAN", "THAI", "LAO", "KHMER"].includes(langCode.toUpperCase());
+    if (isSyllabic) {
+      // ~4 chars per second for Burmese/Chinese-style dense syllables
+      return cleaned.length / 4.0;
+    }
+    const words = cleaned.split(/\s+/).filter(Boolean);
+    // ~150 words per minute => 2.5 words/sec
+    return words.length / 2.5;
+  };
+
   const generateVoice = async (scriptText: string, useOwnKey?: string, segsForSync?: { text: string }[]) => {
     // Voice naturalness: keep Burmese punctuation so TTS can insert realistic micro-pauses.
     let speechTextForAPI = scriptText.replace(/\[.*?\]\s*/g, "");
