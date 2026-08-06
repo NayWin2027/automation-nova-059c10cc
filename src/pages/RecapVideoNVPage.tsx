@@ -294,6 +294,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const hookSegmentIdxRef = useRef<number>(-1);
     const hookTitleRef = useRef<string>("");
     const recStartTimeRef = useRef<number>(0); // Recording start timestamp for hook overlay timing
+    const hookPhaseEndedRef = useRef<boolean>(false); // SURGICAL FIX: force one clean resync after hook phase
     const [renderedBlobUrl, setRenderedBlobUrl] = useState<string | null>(null);
     const [serverRenderProgress, setServerRenderProgress] = useState<string>("");
     const subNeonHueRef = useRef(0);
@@ -1480,24 +1481,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         const nextSeg = scriptData.segments[i + 1];
         let vEnd: number;
-        // DIALOGUE TIMING LOCK: a dialogue segment owns its exact source slot
-        // [mouth opens .. mouth closes], so the video window ends at that timecode.
-        const dialogueEnd =
-          seg.isDialogue && typeof seg.sourceEndSec === "number" && seg.sourceEndSec > vStart
-            ? seg.sourceEndSec
-            : null;
-        if (dialogueEnd !== null) {
-          // AUDIO-AWARE SLOT EXTENSION: the dialogue START stays locked to the source
-          // timecode, but the video window may run past the mouth-close timecode up to
-          // the next segment's start. This stops the picture from hard-cutting back
-          // while the translated line is still being spoken (source footage is available).
-          if (!nextSeg) {
-            vEnd = -1;
-          } else {
-            const nextRawD = parseTime(nextSeg.timestamp);
-            vEnd = nextRawD > dialogueEnd ? nextRawD : dialogueEnd;
-          }
-        } else if (!nextSeg) {
+        // SURGICAL ROLLBACK: gap-based window only (next segment's timecode = vEnd).
+        // Dialogue segments no longer own their source slot — that broke AV timing.
+        if (!nextSeg) {
           vEnd = -1;
         } else {
           const nextRaw = parseTime(nextSeg.timestamp);
@@ -2144,6 +2130,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       isRenderingRef.current = true;
       // â”€â”€ FEATURE: Track recording start time for hook intro overlay â”€â”€
       recStartTimeRef.current = performance.now();
+      hookPhaseEndedRef.current = false; // SURGICAL FIX: fresh hook phase per recording
       // â”€â”€ BONUS FIX: Reset mid-video teaser so it fires on every recording â”€â”€
       midTeaserShownRef.current = false;
       midTeaserStartRef.current = 0;
@@ -3108,10 +3095,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             // â”€â”€ HOOK PHASE AV SYNC OVERRIDE â”€â”€
             // During first 4s of recording, show hook segment's VIDEO (not segment 0)
             // This ensures hook overlay text MATCHES the actual dramatic video scene
-            const HOOK_SYNC_MS = 4000;
-            const recAgeSync = recStartTimeRef.current > 0 ? performance.now() - recStartTimeRef.current : Infinity;
+            // SURGICAL FIX: hook phase is driven by AUDIO position (not wall clock) and can never
+            // outlive the hook line's own TTS slot — this stops the hook scene from staying on
+            // screen while the voice-over has already moved into the story.
+            const HOOK_SYNC_SEC = 4;
             const hookIdx = hookSegmentIdxRef.current;
-            const isHookPhase = recAgeSync < HOOK_SYNC_MS && hookIdx >= 0 && segs.length > hookIdx;
+            const hookAudioLimit =
+              audioTs.length > 0 && audioTs[0] && audioTs[0].end > 0
+                ? Math.min(HOOK_SYNC_SEC, audioTs[0].end)
+                : HOOK_SYNC_SEC;
+            const isHookPhase = currentTime < hookAudioLimit && hookIdx >= 0 && segs.length > hookIdx;
 
             if (isHookPhase) {
               // Override: seek video to hook segment's vStart â€” show the dramatic scene
@@ -3145,7 +3138,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               // Skip normal sync during hook phase â€” subtitle handled by canvas overlay
             } else {
               // â”€â”€ After hook phase: force clean resync to segment 0 â”€â”€
-              if (recAgeSync >= HOOK_SYNC_MS && recAgeSync < HOOK_SYNC_MS + 200 && lastIndexRef.current >= 0) {
+              if (!hookPhaseEndedRef.current) {
+                hookPhaseEndedRef.current = true;
                 lastIndexRef.current = -1; // Reset so first real segment gets a clean hard seek
               }
 
@@ -5354,19 +5348,19 @@ const NARRATION_STYLE_OPTIONS: Record<
 
 function buildNarrationStyleBlock(style: "STORY" | "HYBRID" | "VIRAL", langName: string): string {
   const timingLockBlock = `\n\nDIALOGUE TIMING LOCK (HYBRID/VIRAL only):
-- When a character/person SPEAKS on screen, the translated voice-over MUST start at the EXACT moment their mouth opens and finish when their mouth closes.
-- For EVERY direct-speech paragraph, output BOTH start AND end source timecodes as a range, then prefix with [DIALOGUE:EMOTION].
+- When a character/person SPEAKS on screen, the translated voice-over should start close to the moment they begin speaking.
+- For EVERY direct-speech paragraph, output the source start timecode, then prefix with [DIALOGUE:EMOTION].
 - EMOTION must be exactly ONE of: ANGRY, SHOUTING, SAD, CRYING, HAPPY, EXCITED, FEARFUL, NERVOUS, SHOCKED, MOCKING, DISGUSTED, PLEADING, WHISPER, PROUD, RELIEVED, CALM — matching how the character truly sounds at that moment. Never write the emotion word inside the spoken line.
-- Example: [02:15-02:19] [DIALOGUE:SAD] "သင်ဘယ်လောက်ခံစားရလဲ ဆိုတာ ငါသိတယ်" — real translated spoken words, timed to the original line.
-- WORD BUDGET (hard rule): slot length = (end - start) seconds. Write the line so it is spoken in exactly that time at normal pace — ~2.5 words/sec for space-separated languages, ~4 characters/sec for Burmese/Thai/Khmer/Lao/Chinese/Japanese. Condense if too long, add natural words if too short. NEVER exceed the slot.
+- Example: [02:15] [DIALOGUE:SAD] "သင်ဘယ်လောက်ခံစားရလဲ ဆိုတာ ငါသိတယ်" — real translated spoken words.
+- Write the FULL natural translation of what was said — never truncate or squeeze a line to fit a time slot. Clarity and story flow come first.
 - Narrator (non-dialogue) paragraphs keep the normal single-timecode format: [02:15] narrator text...
 - If the source has no spoken dialogue at that moment, do NOT force [DIALOGUE]; stay in narrator voice.
 
 DIALOGUE COMPLETENESS (HYBRID/VIRAL only):
 - EVERY spoken line in the source must appear as a real translated [DIALOGUE:EMOTION] line — do not sample, do not keep "only the important ones".
 - FORBIDDEN to replace a spoken line with a description of it. Write the actual words the character said.
-- In back-and-forth exchanges, each speaker's line is its own paragraph with its own timecode range and emotion tag. Never merge two speakers.
-- Dialogue has priority over narration. Total length does NOT change: shorten narrator sentences to short connective lines to make room.
+- In back-and-forth exchanges, each speaker's line is its own paragraph with its own timecode and emotion tag. Never merge two speakers.
+- Dialogue has priority over narration. Total length does NOT change: shorten narrator sentences to short connective lines to make room — but the plot must ALWAYS stay understandable to someone who never saw the source. Never sacrifice story coherence for brevity.
 
 ACTION & FACE EXPRESSION (HYBRID/VIRAL only):
 - In no-speech moments, state the CONCRETE physical action with a precise verb (what was swung, kicked, stomped, grabbed, thrown), not a vague summary like "ဒေါသထွက်သွားတယ်".
@@ -6099,24 +6093,6 @@ const RecapVideoNVPage: React.FC = () => {
           start: seg.start || 0,
           end: seg.end || 0,
         }));
-        // DIALOGUE TIMING LOCK: validate that direct-speech segments fit inside their source slot.
-        if (fullSegments && fullSegments.length === data.segments.length) {
-          const langName = languages.find((l) => l.code === selectedLanguage)?.name || "BURMESE";
-          fullSegments.forEach((seg, idx) => {
-            if (!seg.isDialogue || !seg.sourceDurationSec) return;
-            const actual = (data.segments[idx]?.end || 0) - (data.segments[idx]?.start || 0);
-            const estimated = estimateSpokenDuration(seg.text, langName);
-            if (actual > seg.sourceDurationSec * 1.15 || estimated > seg.sourceDurationSec * 1.1) {
-              console.warn(
-                `[DIALOGUE-LOCK] segment ${idx} exceeds source slot: actual=${actual.toFixed(2)}s source=${seg.sourceDurationSec.toFixed(2)}s estimated=${estimated.toFixed(2)}s text="${seg.text.slice(0, 60)}"`,
-              );
-            } else if (actual < seg.sourceDurationSec * 0.5 || estimated < seg.sourceDurationSec * 0.4) {
-              console.warn(
-                `[DIALOGUE-LOCK] segment ${idx} is much shorter than source slot: actual=${actual.toFixed(2)}s source=${seg.sourceDurationSec.toFixed(2)}s estimated=${estimated.toFixed(2)}s text="${seg.text.slice(0, 60)}"`,
-              );
-            }
-          });
-        }
       } else {
         pageAudioTimestampsRef.current = [];
       }

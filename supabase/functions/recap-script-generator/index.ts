@@ -437,24 +437,22 @@ serve(async (req) => {
     const dialogueTimingLockBlock =
       narrationStyle === "HYBRID" || narrationStyle === "VIRAL"
         ? `\n\nDIALOGUE TIMING LOCK (mandatory for ${narrationStyle} mode):
-- When any character/person SPEAKS in the source, the translated voice-over must start when their mouth opens and end when their mouth closes.
-- For EVERY direct-speech paragraph, output BOTH the start AND the end source timecode as a range, then prefix the paragraph with [DIALOGUE:EMOTION].
+- When any character/person SPEAKS in the source, the translated voice-over should start close to the moment they start speaking.
+- For EVERY direct-speech paragraph, output the source start timecode, then prefix the paragraph with [DIALOGUE:EMOTION].
 - EMOTION must be exactly ONE of: ANGRY, SHOUTING, SAD, CRYING, HAPPY, EXCITED, FEARFUL, NERVOUS, SHOCKED, MOCKING, DISGUSTED, PLEADING, WHISPER, PROUD, RELIEVED, CALM — pick the one that matches how the character actually sounds in that moment.
-- Example format: [02:15-02:19] [DIALOGUE:ANGRY] translated spoken line here...
+- Example format: [02:15] [DIALOGUE:ANGRY] translated spoken line here...
 - Never write the emotion word inside the spoken line itself; it belongs only in the tag.
-- The start timecode = the frame where the speaker's mouth opens. The end timecode = the frame where the speaker's mouth closes. Be accurate to the second.
-- WORD BUDGET (hard rule): the slot length is (end - start) seconds. Write the translated line so it is spoken in that exact time at a normal speaking pace — about 2.5 words per second for space-separated languages, about 4 characters per second for Burmese/Thai/Khmer/Lao/Chinese/Japanese. Count before you write. If the natural translation is too long, condense the meaning; if too short, add a few natural words. NEVER exceed the slot.
 - Narrator (non-dialogue) paragraphs keep the normal single-timecode format: [02:15] narrator text...
-- Keep the translated line length so that, when read aloud, it takes roughly the SAME duration as the original speech. Do not make it much shorter or much longer.
+- Write the full natural translation of what was said — never truncate a line to fit a time slot. Clarity and story flow come first.
 - If the source has no spoken dialogue at that moment, do NOT use [DIALOGUE]; stay in narrator voice.
-- This is a dub-style timing lock, NOT generative lip-sync: the syllables do not need to match, but the start/end timing must align.
+- This is dub-style alignment, NOT generative lip-sync: the syllables do not need to match.
 
 DIALOGUE COMPLETENESS (mandatory for ${narrationStyle} mode):
 - EVERY spoken line in the source must appear in the script as a real translated [DIALOGUE:EMOTION] line. Do NOT sample or pick "only the important ones".
 - It is FORBIDDEN to replace a spoken line with a description of it. BAD: "သူက ဒေါသတကြီး ပြောလိုက်တယ်" — GOOD: the actual translated words the character said.
 - For back-and-forth exchanges, write EACH speaker's line as its own separate paragraph with its own timecode range and its own emotion tag. Never merge two speakers into one paragraph.
 - Dialogue has priority over narration. Total script length does NOT change: to make room for the full dialogue, cut narrator sentences down to short connective lines only.
-- Narrator paragraphs exist only to bridge, set context, or explain what dialogue cannot — keep them minimal.
+- Narrator paragraphs exist to bridge, set context, and explain what dialogue cannot — keep them short but ALWAYS keep the story understandable. A viewer who never saw the source must follow the plot from start to finish; never sacrifice story coherence for brevity.
 
 ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
 - In moments with no speech, the narrator line must state the CONCRETE physical action with a precise verb: what was picked up, swung, kicked, stomped, thrown, grabbed, pushed. Example style: "စက်ဘီးကို ဘေ့စ်ဘောတုတ်နဲ့ ရိုက်ချလိုက်တယ်၊ ပြီးတော့ ခြေနဲ့ တက်နင်းလိုက်တယ်".
