@@ -242,7 +242,7 @@ function enforceScriptCoverage55(script: string, sourceDurationSec?: number | nu
     return (kept.length ? kept.join(" ") : completeSentences[0]).trim();
   };
 
-  // True recap: target ~55% of source duration when read aloud (≈150 wpm).
+  // True recap: target ~65% of source duration when read aloud (≈150 wpm).
   const maxWords = Math.max(55, Math.floor((sourceDurationSec / 60) * 150 * 0.55));
   const words = normalized.split(/\s+/).filter(Boolean);
   if (words.length <= maxWords) return normalized;
@@ -560,9 +560,9 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - Identify the subject matter, the niche, and the story being told through visuals/actions/music
 - Write a complete, engaging narration script based on your visual/audio analysis
 
-SCRIPT LENGTH RULE (CRITICAL — TRUE 55% RECAP / SUMMARY):
+SCRIPT LENGTH RULE (CRITICAL — TRUE 65% RECAP / SUMMARY):
 - This is a RECAP (summary), NOT a retelling. The narration MUST cover the full STORY ARC end-to-end but in a heavily compressed form.
-- HARD length target: about 55% of the source duration when read aloud (≈150 wpm for Burmese/Asian, ≈100 wpm for English). Do not stop early.
+- HARD length target: about 65% of the source duration when read aloud (≈150 wpm for Burmese/Asian, ≈100 wpm for English). Do not stop early.
 - Duration targets: 3-min source → about 1.5–2 min recap; 5-min → about 2.5–3 min; 10-min → about 5–6 min; 30-min → about 15–17 min.
 - Word budget examples (Burmese/Asian @150wpm): a 3-min video → ~250 words; 10-min → ~825 words; 20-min → ~1650 words; 30-min → ~2475 words.
 - Word budget examples (English @100wpm): 3-min → ~165 words; 10-min → ~550 words; 20-min → ~1100 words; 30-min → ~1650 words.
@@ -738,7 +738,7 @@ Below is a source video/audio file. Your job is to:
 3. If there is NO spoken dialogue, analyze visual elements, actions, music, settings, body language
 4. Identify ALL key moments, especially dramatic/shocking ones (confrontations, revelations, emotional scenes, physical actions like kisses/fights/tears)
 5. Write a complete professional ${nicheLabel} narration script that covers only the essential story beats
-6. A viewer reading your script aloud should finish in roughly 55% of the original source duration and must cover the full source from beginning to end.
+6. A viewer reading your script aloud should finish in roughly 65% of the original source duration and must cover the full source from beginning to end.
 7. Hook the audience immediately
 8. Use vivid, engaging ${lang} appropriate for "${nicheLabel}" content
 9. Be perfectly paced for voice narration
@@ -841,9 +841,7 @@ ${transcript}
     }
 
     // Own API must fail fast on its own key. Fallback and key rotation belong to App API only.
-    const fallbackModels = isOwnApi
-      ? []
-      : ["gemini-pro-latest", "gemini-2.5-flash", "gemini-2.5-pro"];
+    const fallbackModels = isOwnApi ? [] : ["gemini-pro-latest", "gemini-2.5-flash", "gemini-2.5-pro"];
     const shouldFallback = (status?: number) =>
       !isOwnApi && (status === 404 || status === 429 || status === 503 || status === 504);
 
@@ -1031,7 +1029,7 @@ ${transcript}
     const finalWordCount = script.split(/\s+/).filter(Boolean).length;
 
     if (!script || script.trim().length < 10) {
-      console.error("[recap-script-generator] Script became invalid after 55% enforcement");
+      console.error("[recap-script-generator] Script became invalid after 65% enforcement");
       return new Response(JSON.stringify({ error: "Script generation failed after length enforcement" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
