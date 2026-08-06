@@ -294,6 +294,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const hookSegmentIdxRef = useRef<number>(-1);
     const hookTitleRef = useRef<string>("");
     const recStartTimeRef = useRef<number>(0); // Recording start timestamp for hook overlay timing
+    const hookPhaseEndedRef = useRef<boolean>(false); // SURGICAL FIX: force one clean resync after hook phase
     const [renderedBlobUrl, setRenderedBlobUrl] = useState<string | null>(null);
     const [serverRenderProgress, setServerRenderProgress] = useState<string>("");
     const subNeonHueRef = useRef(0);
