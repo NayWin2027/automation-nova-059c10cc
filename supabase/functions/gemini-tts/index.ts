@@ -847,11 +847,25 @@ serve(async (req) => {
         const pcmBytes = Math.floor(finalAudio.length * 0.75);
         const pcmDuration = pcmBytes / (pcmSampleRate * 1 * 2);
         if (pcmDuration > 0) {
-          const countWords = (t: string): number => {
-            const words = (t || "").split(/\s+/).filter(Boolean);
-            return Math.max(words.length, 1);
+          const countSpeechWeight = (t: string): number => {
+            const value = String(t || "");
+            let weight = 0;
+            for (const char of value) {
+              if (/\p{Script=Myanmar}/u.test(char)) {
+                weight += /[\u102B-\u103E\u1056-\u1059\u1062-\u1064\u1067-\u106D\u1082\u1083-\u1086\u109D]/u.test(char)
+                  ? 0.35
+                  : 1;
+              } else if (/\p{L}|\p{N}/u.test(char)) {
+                weight += 0.22;
+              } else if (/[.!?။]/u.test(char)) {
+                weight += 1.1;
+              } else if (/[,;:၊]/u.test(char)) {
+                weight += 0.45;
+              }
+            }
+            return Math.max(weight, 1);
           };
-          const segWeights = (segments as { text: string }[]).map((s) => countWords(s.text));
+          const segWeights = (segments as { text: string }[]).map((s) => countSpeechWeight(s.text));
           const totalWeight = segWeights.reduce((sum, w) => sum + w, 0);
           let cur = 0;
           segmentTimestamps = (segments as { text: string }[]).map((_seg, idx) => {
@@ -875,6 +889,13 @@ serve(async (req) => {
         sampleRate: pcmSampleRate,
         voice: usedVoice,
         segmentTimestamps,
+        // The browser prepends 200ms PCM silence to prevent first-syllable clipping.
+        // Keep the legacy `segments` contract and align every boundary to that padded audio.
+        segments: segmentTimestamps.map((segment) => ({
+          ...segment,
+          start: Number((segment.start + 0.2).toFixed(3)),
+          end: Number((segment.end + 0.2).toFixed(3)),
+        })),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

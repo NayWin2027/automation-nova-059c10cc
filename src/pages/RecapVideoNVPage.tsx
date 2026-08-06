@@ -1501,7 +1501,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           vEnd,
           aStartPct: totalWords > 0 ? startWords / totalWords : 0,
           aEndPct: totalWords > 0 ? wordCursor / totalWords : 1,
-          text: seg.text.replace(/\[\d{1,2}:\d{2}\]/g, "").trim(),
+          text: stripDialogueMetadata(seg.text).replace(/\[\d{1,2}:\d{2}\]/g, "").trim(),
         };
       });
     }, [scriptData]);
@@ -1523,7 +1523,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           date.setSeconds(s);
           return date.toISOString().substr(11, 8) + ",000";
         };
-        srtContent += `${index + 1}\n${formatTime(startSec)} --> ${formatTime(endSec)}\n${seg.text}\n\n`;
+        srtContent += `${index + 1}\n${formatTime(startSec)} --> ${formatTime(endSec)}\n${stripDialogueMetadata(seg.text)}\n\n`;
       });
       const blob = new Blob([srtContent], { type: "text/plain" });
       const url = URL.createObjectURL(blob);
@@ -3934,7 +3934,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                         };
                       })()}
                     >
-                      {(currentSubtitle || scriptData.segments[0]?.text || "").replace(/\[\d{1,2}:\d{2}\]/g, "").trim()}
+                      {stripDialogueMetadata(currentSubtitle || scriptData.segments[0]?.text || "")
+                        .replace(/\[\d{1,2}:\d{2}\]/g, "")
+                        .trim()}
                     </div>
                   </div>
                 )}
@@ -5701,8 +5703,17 @@ const RecapVideoNVPage: React.FC = () => {
     } catch (_) {}
   };
 
+  const DIALOGUE_METADATA_PATTERN =
+    /(?:\[|\{|\(|［|｛|（)\s*DIALOG(?:UE|UAGE)(?:\s*:\s*[A-Za-z _-]+)?\s*(?:\]|\}|\)|］|｝|）)/gi;
+
+  const stripDialogueMetadata = (text: string): string =>
+    String(text || "")
+      .replace(DIALOGUE_METADATA_PATTERN, "")
+      .replace(/[ \t]{2,}/g, " ")
+      .trim();
+
   const handleUpdateScript = (newScript: string) => {
-    setScriptData((prev) => ({ ...prev, full_script: newScript }));
+    setScriptData((prev) => ({ ...prev, full_script: stripDialogueMetadata(newScript) }));
   };
 
   const handleGenerateVoice = () => {
@@ -5710,7 +5721,7 @@ const RecapVideoNVPage: React.FC = () => {
       const resolvedOwnKey = apiMode === "own" ? ownApiKey.trim() : "";
       // Pass segments to ensure 100% script coverage in voice generation
       const segsForSync = scriptData.segments.map((s) => ({ text: s.text }));
-      generateVoice(scriptData.full_script, resolvedOwnKey || undefined, segsForSync, scriptData.segments);
+      generateVoice(stripDialogueMetadata(scriptData.full_script), resolvedOwnKey || undefined, segsForSync, scriptData.segments);
     }
   };
 
@@ -5828,12 +5839,12 @@ const RecapVideoNVPage: React.FC = () => {
         throw new Error("AI script generation returned empty result");
       }
       const segments = scriptToSegments(scriptText, duration);
-      setScriptData({ title: file.name.replace(/\.[^.]+$/, ""), full_script: scriptText, segments });
+      setScriptData({ title: file.name.replace(/\.[^.]+$/, ""), full_script: stripDialogueMetadata(scriptText), segments });
       if (scriptResult.storyBible) void saveSeriesBible(scriptResult.storyBible);
       setProgressMsg("📝 Script generated! Now generating AI voice...");
       // Continue into the existing voice pipeline (VOICE-GEN-PIPELINE-v2)
       const segsForSync = segments.map((s) => ({ text: s.text }));
-      generateVoice(scriptText, resolvedOwnKey || undefined, segsForSync, segments);
+      generateVoice(stripDialogueMetadata(scriptText), resolvedOwnKey || undefined, segsForSync, segments);
     } catch (err: any) {
       setStatus("error");
       setProgressMsg(`❌ Retry failed: ${err?.message || "Unknown error"}`);
@@ -5875,7 +5886,8 @@ const RecapVideoNVPage: React.FC = () => {
     const timecodeRegex = /^\[(\d{1,2}):(\d{2})(?:\s*[-–—]\s*(\d{1,2}):(\d{2}))?\]\s*/;
     // Accept the intended marker plus common AI variants/misspelling, in [] or {}, even
     // when Gemini puts it after a quote. The marker is metadata and must never reach subtitles/TTS.
-    const dialogueRegex = /[\[{]\s*DIALOG(?:UE|UAGE)(?:\s*:\s*([A-Za-z _-]+))?\s*[\]}]/i;
+    const dialogueCaptureRegex =
+      /(?:\[|\{|\(|［|｛|（)\s*DIALOG(?:UE|UAGE)(?:\s*:\s*([A-Za-z _-]+))?\s*(?:\]|\}|\)|］|｝|）)/i;
     const hasTimecodes = paragraphs.some((p) => timecodeRegex.test(p.trim()));
     if (hasTimecodes) {
       const parsed = paragraphs.map((rawText) => {
@@ -5891,12 +5903,12 @@ const RecapVideoNVPage: React.FC = () => {
           }
           text = trimmed.replace(timecodeRegex, "").trim();
         }
-        const dMatch = text.match(dialogueRegex);
+        const dMatch = text.match(dialogueCaptureRegex);
         const isDialogue = !!dMatch;
         let emotion: string | undefined;
         if (dMatch) {
           emotion = dMatch[1] ? dMatch[1].trim().toLowerCase() : undefined;
-          text = text.replace(dialogueRegex, "").trim();
+          text = stripDialogueMetadata(text);
         }
         return { timestamp, text, isDialogue, emotion, explicitEndSec };
       });
@@ -5925,10 +5937,10 @@ const RecapVideoNVPage: React.FC = () => {
       timeCursor += segDuration;
       const mins = Math.floor(startSec / 60);
       const secs = Math.floor(startSec % 60);
-      const dMatch = text.match(dialogueRegex);
+      const dMatch = text.match(dialogueCaptureRegex);
       return {
         timestamp: `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`,
-        text: text.replace(dialogueRegex, "").trim(),
+        text: stripDialogueMetadata(text),
         isDialogue: !!dMatch,
         emotion: dMatch?.[1]?.trim().toLowerCase(),
       };
@@ -6435,7 +6447,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
       if (!scriptText || scriptText.trim().length < 10) throw new Error("AI script generation returned empty result");
 
       const segments = scriptToSegments(scriptText, duration);
-      setScriptData({ title: file.name.replace(/\.[^.]+$/, ""), full_script: scriptText, segments });
+      setScriptData({ title: file.name.replace(/\.[^.]+$/, ""), full_script: stripDialogueMetadata(scriptText), segments });
       if (scriptResult.storyBible) void saveSeriesBible(scriptResult.storyBible);
       setProgressMsg("📝 Script generated! Now generating AI voice...");
 
@@ -6605,7 +6617,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
           console.warn("[YT SEO] Failed (non-critical):", e);
         }
       })();
-      const scriptTextForTTS = scriptText.replace(/\[.*?\]\s*/g, "");
+      const scriptTextForTTS = stripDialogueMetadata(scriptText).replace(/\[.*?\]\s*/g, "");
       await generateVoice(
         scriptTextForTTS,
         resolvedOwnKey || undefined,
