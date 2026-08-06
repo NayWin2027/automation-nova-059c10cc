@@ -6039,13 +6039,20 @@ const RecapVideoNVPage: React.FC = () => {
         if (emoLines.length > 0) {
           const EMO_HINT: Record<string, string> = {
             angry: "angry — sharper, harder attack, raised intensity",
+            shouting: "shouting — projected, loud, forceful but not screeching",
             sad: "sad — heavier, slower, softer, downward intonation",
             crying: "crying — broken, trembling, catching breath",
             happy: "happy — brighter, lighter, warm smiling tone",
+            excited: "excited — quicker, lifted pitch, eager energy",
             fearful: "fearful — tight, unsteady, quicker breaths",
+            nervous: "nervous — hesitant, uneven pacing, small catches",
             shocked: "shocked — sudden, wide-eyed disbelief",
+            mocking: "mocking — sardonic lilt, drawn-out, edge of contempt",
+            disgusted: "disgusted — clipped, recoiling, sour tone",
             whisper: "whispered — hushed, close, confidential",
             pleading: "pleading — desperate, imploring, strained",
+            proud: "proud — chest-open, steady, quietly triumphant",
+            relieved: "relieved — exhaled, softening, weight lifting",
             calm: "calm — steady, grounded, quiet confidence",
           };
           const map = emoLines
