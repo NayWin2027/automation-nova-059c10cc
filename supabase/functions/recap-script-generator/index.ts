@@ -800,10 +800,9 @@ ${transcript}
 
     let response: Response | null = null;
     let lastError = "";
-    // Own API must use the same stable model as App API. Do not probe nonexistent
-    // model names or fan one user action out across many models on quota errors.
-    const ownApiModels = [MODEL, "gemini-flash-latest"];
-    let activeModel = isOwnApi ? ownApiModels[0] : MODEL;
+    // Own API is strictly isolated: use only the user's key and never enter any
+    // fallback path that can rotate into the paid App API key pool.
+    let activeModel = MODEL;
 
     // Total wall budget must stay under Supabase's 150s idle limit.
     // Reserve ~10s for post-processing, credit deduction, and response send.
@@ -839,12 +838,12 @@ ${transcript}
       );
     }
 
-    // Surgical Own API fallback: try user-key models only; never fall back to app script-pool keys.
+    // Own API must fail fast on its own key. Fallback and key rotation belong to App API only.
     const fallbackModels = isOwnApi
-      ? ownApiModels.slice(1)
+      ? []
       : ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-flash-latest"];
     const shouldFallback = (status?: number) =>
-      status === 503 || status === 504 || (!isOwnApi && status === 429) || (isOwnApi && status === 404);
+      !isOwnApi && (status === 429 || status === 503 || status === 504);
 
     for (const fallbackModel of fallbackModels) {
       // Fallback if: no response (timeout/abort/network) OR response not ok and status warrants fallback
