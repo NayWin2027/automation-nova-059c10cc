@@ -437,11 +437,13 @@ serve(async (req) => {
     const dialogueTimingLockBlock =
       narrationStyle === "HYBRID" || narrationStyle === "VIRAL"
         ? `\n\nDIALOGUE TIMING LOCK (mandatory for ${narrationStyle} mode):
-- When any character/person SPEAKS in the source, the translated voice-over should start close to the moment they start speaking.
+- For each real spoken line, inspect the source frame-by-frame and use the EXACT source time where the speaker's first audible syllable begins (normally the first mouth movement). Never use a nearby reaction shot, an earlier establishing shot, or an approximate scene time.
+- Keep every speaker turn separate. When the speaker changes, begin a new paragraph at that new speaker's exact source start time.
 - For EVERY direct-speech paragraph, output the source start timecode, then prefix the paragraph with [DIALOGUE:EMOTION].
 - EMOTION must be exactly ONE of: ANGRY, SHOUTING, SAD, CRYING, HAPPY, EXCITED, FEARFUL, NERVOUS, SHOCKED, MOCKING, DISGUSTED, PLEADING, WHISPER, PROUD, RELIEVED, CALM — pick the one that matches how the character actually sounds in that moment.
 - Example format: [02:15] [DIALOGUE:ANGRY] translated spoken line here...
 - Never write the emotion word inside the spoken line itself; it belongs only in the tag.
+- Put the [DIALOGUE:EMOTION] tag immediately after [MM:SS], exactly once. Never put it at the end or middle of the spoken text, and never use braces such as {DIALOGUE}.
 - Narrator (non-dialogue) paragraphs keep the normal single-timecode format: [02:15] narrator text...
 - Write the full natural translation of what was said — never truncate a line to fit a time slot. Clarity and story flow come first.
 - If the source has no spoken dialogue at that moment, do NOT use [DIALOGUE]; stay in narrator voice.

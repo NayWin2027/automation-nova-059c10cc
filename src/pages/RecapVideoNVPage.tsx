@@ -5348,7 +5348,8 @@ const NARRATION_STYLE_OPTIONS: Record<
 
 function buildNarrationStyleBlock(style: "STORY" | "HYBRID" | "VIRAL", langName: string): string {
   const timingLockBlock = `\n\nDIALOGUE TIMING LOCK (HYBRID/VIRAL only):
-- When a character/person SPEAKS on screen, the translated voice-over should start close to the moment they begin speaking.
+- For each real spoken line, inspect the source carefully and use the EXACT source frame where the speaker's first audible syllable begins (normally the first mouth movement). Do not use a nearby reaction shot, an earlier establishing shot, or an approximate scene time.
+- Keep each speaker turn separate. When the speaker changes, start a new paragraph at that new speaker's exact source start time.
 - For EVERY direct-speech paragraph, output the source start timecode, then prefix with [DIALOGUE:EMOTION].
 - EMOTION must be exactly ONE of: ANGRY, SHOUTING, SAD, CRYING, HAPPY, EXCITED, FEARFUL, NERVOUS, SHOCKED, MOCKING, DISGUSTED, PLEADING, WHISPER, PROUD, RELIEVED, CALM — matching how the character truly sounds at that moment. Never write the emotion word inside the spoken line.
 - Example: [02:15] [DIALOGUE:SAD] "သင်ဘယ်လောက်ခံစားရလဲ ဆိုတာ ငါသိတယ်" — real translated spoken words.
@@ -5872,8 +5873,9 @@ const RecapVideoNVPage: React.FC = () => {
     const paragraphs = scriptText.split("\n").filter((p) => p.trim().length > 0);
     if (paragraphs.length === 0) return [];
     const timecodeRegex = /^\[(\d{1,2}):(\d{2})(?:\s*[-–—]\s*(\d{1,2}):(\d{2}))?\]\s*/;
-    // Accepts [DIALOGUE] and [DIALOGUE:ANGRY] / [DIALOGUE: crying] emotion-tagged form.
-    const dialogueRegex = /^\[DIALOGUE(?:\s*:\s*([A-Za-z _-]+))?\]\s*/i;
+    // Accept the intended marker plus common AI variants/misspelling, in [] or {}, even
+    // when Gemini puts it after a quote. The marker is metadata and must never reach subtitles/TTS.
+    const dialogueRegex = /[\[{]\s*DIALOG(?:UE|UAGE)(?:\s*:\s*([A-Za-z _-]+))?\s*[\]}]/i;
     const hasTimecodes = paragraphs.some((p) => timecodeRegex.test(p.trim()));
     if (hasTimecodes) {
       const parsed = paragraphs.map((rawText) => {
@@ -5923,7 +5925,13 @@ const RecapVideoNVPage: React.FC = () => {
       timeCursor += segDuration;
       const mins = Math.floor(startSec / 60);
       const secs = Math.floor(startSec % 60);
-      return { timestamp: `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`, text: text.trim() };
+      const dMatch = text.match(dialogueRegex);
+      return {
+        timestamp: `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`,
+        text: text.replace(dialogueRegex, "").trim(),
+        isDialogue: !!dMatch,
+        emotion: dMatch?.[1]?.trim().toLowerCase(),
+      };
     });
   };
 
