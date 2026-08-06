@@ -707,12 +707,6 @@ export default function App() {
   };
 
   const generateMarketingContent = async () => {
-    // === OWN API GUARD: never fall back to app paid key when own mode has no key ===
-    if (apiMode === "own" && !ownApiKey.trim()) {
-      setIsGeneratingMarketing(false);
-      alert("Own API Mode ရွေးထားပါသည်။ Google API Key ထည့်ပေးပါ။");
-      return;
-    }
     setIsGeneratingMarketing(true);
     try {
       // === CREDIT DEDUCTION: 4CR per poster generation (skip for Own API) ===
