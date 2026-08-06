@@ -844,7 +844,7 @@ ${transcript}
       ? ownApiModels.slice(1)
       : ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-flash-latest"];
     const shouldFallback = (status?: number) =>
-      status === 503 || status === 504 || (isOwnApi && status === 404);
+      status === 503 || status === 504 || (!isOwnApi && status === 429) || (isOwnApi && status === 404);
 
     for (const fallbackModel of fallbackModels) {
       // Fallback if: no response (timeout/abort/network) OR response not ok and status warrants fallback
@@ -863,7 +863,9 @@ ${transcript}
       const fbTimeout = Math.max(5000, Math.min(60000, remainingBudget() - 8000));
       const fbTimeoutId = setTimeout(() => fbController.abort(), fbTimeout);
       try {
-      if (!isOwnApi && response?.status === 429) { activeApiKey = rotateKey() || activeApiKey; }
+        if (!isOwnApi && response?.status === 429) {
+          activeApiKey = rotateKey("script") || activeApiKey;
+        }
         response = await callGeminiGenerateContent(
           activeModel,
           activeApiKey,
