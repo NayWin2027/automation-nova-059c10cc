@@ -5348,19 +5348,19 @@ const NARRATION_STYLE_OPTIONS: Record<
 
 function buildNarrationStyleBlock(style: "STORY" | "HYBRID" | "VIRAL", langName: string): string {
   const timingLockBlock = `\n\nDIALOGUE TIMING LOCK (HYBRID/VIRAL only):
-- When a character/person SPEAKS on screen, the translated voice-over MUST start at the EXACT moment their mouth opens and finish when their mouth closes.
-- For EVERY direct-speech paragraph, output BOTH start AND end source timecodes as a range, then prefix with [DIALOGUE:EMOTION].
+- When a character/person SPEAKS on screen, the translated voice-over should start close to the moment they begin speaking.
+- For EVERY direct-speech paragraph, output the source start timecode, then prefix with [DIALOGUE:EMOTION].
 - EMOTION must be exactly ONE of: ANGRY, SHOUTING, SAD, CRYING, HAPPY, EXCITED, FEARFUL, NERVOUS, SHOCKED, MOCKING, DISGUSTED, PLEADING, WHISPER, PROUD, RELIEVED, CALM — matching how the character truly sounds at that moment. Never write the emotion word inside the spoken line.
-- Example: [02:15-02:19] [DIALOGUE:SAD] "သင်ဘယ်လောက်ခံစားရလဲ ဆိုတာ ငါသိတယ်" — real translated spoken words, timed to the original line.
-- WORD BUDGET (hard rule): slot length = (end - start) seconds. Write the line so it is spoken in exactly that time at normal pace — ~2.5 words/sec for space-separated languages, ~4 characters/sec for Burmese/Thai/Khmer/Lao/Chinese/Japanese. Condense if too long, add natural words if too short. NEVER exceed the slot.
+- Example: [02:15] [DIALOGUE:SAD] "သင်ဘယ်လောက်ခံစားရလဲ ဆိုတာ ငါသိတယ်" — real translated spoken words.
+- Write the FULL natural translation of what was said — never truncate or squeeze a line to fit a time slot. Clarity and story flow come first.
 - Narrator (non-dialogue) paragraphs keep the normal single-timecode format: [02:15] narrator text...
 - If the source has no spoken dialogue at that moment, do NOT force [DIALOGUE]; stay in narrator voice.
 
 DIALOGUE COMPLETENESS (HYBRID/VIRAL only):
 - EVERY spoken line in the source must appear as a real translated [DIALOGUE:EMOTION] line — do not sample, do not keep "only the important ones".
 - FORBIDDEN to replace a spoken line with a description of it. Write the actual words the character said.
-- In back-and-forth exchanges, each speaker's line is its own paragraph with its own timecode range and emotion tag. Never merge two speakers.
-- Dialogue has priority over narration. Total length does NOT change: shorten narrator sentences to short connective lines to make room.
+- In back-and-forth exchanges, each speaker's line is its own paragraph with its own timecode and emotion tag. Never merge two speakers.
+- Dialogue has priority over narration. Total length does NOT change: shorten narrator sentences to short connective lines to make room — but the plot must ALWAYS stay understandable to someone who never saw the source. Never sacrifice story coherence for brevity.
 
 ACTION & FACE EXPRESSION (HYBRID/VIRAL only):
 - In no-speech moments, state the CONCRETE physical action with a precise verb (what was swung, kicked, stomped, grabbed, thrown), not a vague summary like "ဒေါသထွက်သွားတယ်".
