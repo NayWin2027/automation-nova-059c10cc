@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logToolActivity } from "../_shared/activityLog.ts";
-import { getGeminiKey } from "../_shared/geminiKeys.ts";
+import { getGeminiKey, rotateKey } from "../_shared/geminiKeys.ts";
 
 import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
 
@@ -800,15 +800,9 @@ ${transcript}
 
     let response: Response | null = null;
     let lastError = "";
-    const ownApiModels = [
-      "gemini-3.5-flash",
-      "gemini-3.1-flash",
-      "gemini-2.5-flash",
-      "gemini-2.0-flash",
-      "gemini-3-flash-preview",
-      "gemini-1.5-flash",
-      "gemini-2.0-flash-lite",
-    ];
+    // Own API must use the same stable model as App API. Do not probe nonexistent
+    // model names or fan one user action out across many models on quota errors.
+    const ownApiModels = [MODEL, "gemini-flash-latest"];
     let activeModel = isOwnApi ? ownApiModels[0] : MODEL;
 
     // Total wall budget must stay under Supabase's 150s idle limit.
@@ -850,7 +844,7 @@ ${transcript}
       ? ownApiModels.slice(1)
       : ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-flash-latest"];
     const shouldFallback = (status?: number) =>
-      status === 503 || status === 504 || (isOwnApi && (status === 404 || status === 429 || status === 403));
+      status === 503 || status === 504 || (!isOwnApi && status === 429) || (isOwnApi && status === 404);
 
     for (const fallbackModel of fallbackModels) {
       // Fallback if: no response (timeout/abort/network) OR response not ok and status warrants fallback
@@ -869,6 +863,9 @@ ${transcript}
       const fbTimeout = Math.max(5000, Math.min(60000, remainingBudget() - 8000));
       const fbTimeoutId = setTimeout(() => fbController.abort(), fbTimeout);
       try {
+        if (!isOwnApi && response?.status === 429) {
+          activeApiKey = rotateKey("script") || activeApiKey;
+        }
         response = await callGeminiGenerateContent(
           activeModel,
           activeApiKey,
