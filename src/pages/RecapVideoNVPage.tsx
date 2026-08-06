@@ -5356,11 +5356,22 @@ function buildNarrationStyleBlock(style: "STORY" | "HYBRID" | "VIRAL", langName:
   const timingLockBlock = `\n\nDIALOGUE TIMING LOCK (HYBRID/VIRAL only):
 - When a character/person SPEAKS on screen, the translated voice-over MUST start at the EXACT moment their mouth opens and finish when their mouth closes.
 - For EVERY direct-speech paragraph, output BOTH start AND end source timecodes as a range, then prefix with [DIALOGUE:EMOTION].
-- EMOTION must be exactly ONE of: ANGRY, SAD, CRYING, HAPPY, FEARFUL, SHOCKED, WHISPER, PLEADING, CALM — matching how the character truly sounds at that moment. Never write the emotion word inside the spoken line.
+- EMOTION must be exactly ONE of: ANGRY, SHOUTING, SAD, CRYING, HAPPY, EXCITED, FEARFUL, NERVOUS, SHOCKED, MOCKING, DISGUSTED, PLEADING, WHISPER, PROUD, RELIEVED, CALM — matching how the character truly sounds at that moment. Never write the emotion word inside the spoken line.
 - Example: [02:15-02:19] [DIALOGUE:SAD] "သင်ဘယ်လောက်ခံစားရလဲ ဆိုတာ ငါသိတယ်" — real translated spoken words, timed to the original line.
 - WORD BUDGET (hard rule): slot length = (end - start) seconds. Write the line so it is spoken in exactly that time at normal pace — ~2.5 words/sec for space-separated languages, ~4 characters/sec for Burmese/Thai/Khmer/Lao/Chinese/Japanese. Condense if too long, add natural words if too short. NEVER exceed the slot.
 - Narrator (non-dialogue) paragraphs keep the normal single-timecode format: [02:15] narrator text...
-- If the source has no spoken dialogue at that moment, do NOT force [DIALOGUE]; stay in narrator voice.`;
+- If the source has no spoken dialogue at that moment, do NOT force [DIALOGUE]; stay in narrator voice.
+
+DIALOGUE COMPLETENESS (HYBRID/VIRAL only):
+- EVERY spoken line in the source must appear as a real translated [DIALOGUE:EMOTION] line — do not sample, do not keep "only the important ones".
+- FORBIDDEN to replace a spoken line with a description of it. Write the actual words the character said.
+- In back-and-forth exchanges, each speaker's line is its own paragraph with its own timecode range and emotion tag. Never merge two speakers.
+- Dialogue has priority over narration. Total length does NOT change: shorten narrator sentences to short connective lines to make room.
+
+ACTION & FACE EXPRESSION (HYBRID/VIRAL only):
+- In no-speech moments, state the CONCRETE physical action with a precise verb (what was swung, kicked, stomped, grabbed, thrown), not a vague summary like "ဒေါသထွက်သွားတယ်".
+- Add the visible face/body reaction: eyes widening, hands shaking, jaw clenching, tears welling, stepping back.
+- Keep each action/expression line SHORT (1-2 sentences) so it never crowds out dialogue.`;
   if (style === "HYBRID") {
     return `\n\nNARRATION STYLE — HYBRID (narration + direct speech):
 - Use narrator voice for background, context, and explanation.
@@ -6028,13 +6039,20 @@ const RecapVideoNVPage: React.FC = () => {
         if (emoLines.length > 0) {
           const EMO_HINT: Record<string, string> = {
             angry: "angry — sharper, harder attack, raised intensity",
+            shouting: "shouting — projected, loud, forceful but not screeching",
             sad: "sad — heavier, slower, softer, downward intonation",
             crying: "crying — broken, trembling, catching breath",
             happy: "happy — brighter, lighter, warm smiling tone",
+            excited: "excited — quicker, lifted pitch, eager energy",
             fearful: "fearful — tight, unsteady, quicker breaths",
+            nervous: "nervous — hesitant, uneven pacing, small catches",
             shocked: "shocked — sudden, wide-eyed disbelief",
+            mocking: "mocking — sardonic lilt, drawn-out, edge of contempt",
+            disgusted: "disgusted — clipped, recoiling, sour tone",
             whisper: "whispered — hushed, close, confidential",
             pleading: "pleading — desperate, imploring, strained",
+            proud: "proud — chest-open, steady, quietly triumphant",
+            relieved: "relieved — exhaled, softening, weight lifting",
             calm: "calm — steady, grounded, quiet confidence",
           };
           const map = emoLines
