@@ -41,6 +41,15 @@ interface RecapScript {
   segments: RecapSegment[];
 }
 
+const DIALOGUE_METADATA_PATTERN =
+  /(?:\[|\{|\(|［|｛|（)\s*DIALOG(?:UE|UAGE)(?:\s*:\s*[A-Za-z _-]+)?\s*(?:\]|\}|\)|］|｝|）)/gi;
+
+const stripDialogueMetadata = (text: string): string =>
+  String(text || "")
+    .replace(DIALOGUE_METADATA_PATTERN, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+
 type ProcessingStatus = "idle" | "processing" | "done" | "error";
 
 interface ResultViewProps {
@@ -5703,15 +5712,6 @@ const RecapVideoNVPage: React.FC = () => {
     } catch (_) {}
   };
 
-  const DIALOGUE_METADATA_PATTERN =
-    /(?:\[|\{|\(|［|｛|（)\s*DIALOG(?:UE|UAGE)(?:\s*:\s*[A-Za-z _-]+)?\s*(?:\]|\}|\)|］|｝|）)/gi;
-
-  const stripDialogueMetadata = (text: string): string =>
-    String(text || "")
-      .replace(DIALOGUE_METADATA_PATTERN, "")
-      .replace(/[ \t]{2,}/g, " ")
-      .trim();
-
   const handleUpdateScript = (newScript: string) => {
     setScriptData((prev) => ({ ...prev, full_script: stripDialogueMetadata(newScript) }));
   };
@@ -6107,18 +6107,20 @@ const RecapVideoNVPage: React.FC = () => {
       if (data.useClientTTS || !data.audio) throw new Error(data.message || data.error || "TTS generation failed");
 
       // Use API timestamps if available (for 100% AV sync accuracy), otherwise fallback to client-side calculation
-      if (data.segments && Array.isArray(data.segments)) {
-        pageAudioTimestampsRef.current = data.segments.map((seg: any, idx: number) => ({
+      const mt = String(data.mimeType || "").toLowerCase();
+      const preciseTimestamps = Array.isArray(data.segmentTimestamps) ? data.segmentTimestamps : data.segments;
+      const pcmLeadIn = Array.isArray(data.segmentTimestamps) && (mt.includes("audio/pcm") || mt.includes("audio/l16")) ? 0.2 : 0;
+      if (Array.isArray(preciseTimestamps)) {
+        pageAudioTimestampsRef.current = preciseTimestamps.map((seg: any, idx: number) => ({
           index: idx,
-          start: seg.start || 0,
-          end: seg.end || 0,
+          start: Number(((Number(seg.start) || 0) + pcmLeadIn).toFixed(3)),
+          end: Number(((Number(seg.end) || 0) + pcmLeadIn).toFixed(3)),
         }));
       } else {
         pageAudioTimestampsRef.current = [];
       }
 
       let audioBlob: Blob;
-      const mt = String(data.mimeType || "").toLowerCase();
       if (mt.includes("audio/pcm") || mt.includes("audio/l16")) {
         const rateMatch = mt.match(/rate=(\d+)/);
         const sampleRate = data.sampleRate || (rateMatch ? parseInt(rateMatch[1], 10) : 24000);
