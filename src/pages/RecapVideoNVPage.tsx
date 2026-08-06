@@ -1480,24 +1480,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         const nextSeg = scriptData.segments[i + 1];
         let vEnd: number;
-        // DIALOGUE TIMING LOCK: a dialogue segment owns its exact source slot
-        // [mouth opens .. mouth closes], so the video window ends at that timecode.
-        const dialogueEnd =
-          seg.isDialogue && typeof seg.sourceEndSec === "number" && seg.sourceEndSec > vStart
-            ? seg.sourceEndSec
-            : null;
-        if (dialogueEnd !== null) {
-          // AUDIO-AWARE SLOT EXTENSION: the dialogue START stays locked to the source
-          // timecode, but the video window may run past the mouth-close timecode up to
-          // the next segment's start. This stops the picture from hard-cutting back
-          // while the translated line is still being spoken (source footage is available).
-          if (!nextSeg) {
-            vEnd = -1;
-          } else {
-            const nextRawD = parseTime(nextSeg.timestamp);
-            vEnd = nextRawD > dialogueEnd ? nextRawD : dialogueEnd;
-          }
-        } else if (!nextSeg) {
+        // SURGICAL ROLLBACK: gap-based window only (next segment's timecode = vEnd).
+        // Dialogue segments no longer own their source slot — that broke AV timing.
+        if (!nextSeg) {
           vEnd = -1;
         } else {
           const nextRaw = parseTime(nextSeg.timestamp);
