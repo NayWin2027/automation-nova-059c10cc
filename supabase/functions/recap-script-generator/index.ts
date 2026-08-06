@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logToolActivity } from "../_shared/activityLog.ts";
-import { getGeminiKey } from "../_shared/geminiKeys.ts";
+import { getGeminiKey, rotateKey } from "../_shared/geminiKeys.ts";
 
 import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
 
@@ -437,17 +437,31 @@ serve(async (req) => {
     const dialogueTimingLockBlock =
       narrationStyle === "HYBRID" || narrationStyle === "VIRAL"
         ? `\n\nDIALOGUE TIMING LOCK (mandatory for ${narrationStyle} mode):
-- When any character/person SPEAKS in the source, the translated voice-over must start when their mouth opens and end when their mouth closes.
-- For EVERY direct-speech paragraph, output BOTH the start AND the end source timecode as a range, then prefix the paragraph with [DIALOGUE:EMOTION].
-- EMOTION must be exactly ONE of: ANGRY, SAD, CRYING, HAPPY, FEARFUL, SHOCKED, WHISPER, PLEADING, CALM — pick the one that matches how the character actually sounds in that moment.
-- Example format: [02:15-02:19] [DIALOGUE:ANGRY] translated spoken line here...
+- For each real spoken line, inspect the source frame-by-frame and use the EXACT source time where the speaker's first audible syllable begins (normally the first mouth movement). Never use a nearby reaction shot, an earlier establishing shot, or an approximate scene time.
+- Keep every speaker turn separate. When the speaker changes, begin a new paragraph at that new speaker's exact source start time.
+- For EVERY direct-speech paragraph, output the source start timecode, then prefix the paragraph with [DIALOGUE:EMOTION].
+- EMOTION must be exactly ONE of: ANGRY, SHOUTING, SAD, CRYING, HAPPY, EXCITED, FEARFUL, NERVOUS, SHOCKED, MOCKING, DISGUSTED, PLEADING, WHISPER, PROUD, RELIEVED, CALM — pick the one that matches how the character actually sounds in that moment.
+- Example format: [02:15] [DIALOGUE:ANGRY] translated spoken line here...
 - Never write the emotion word inside the spoken line itself; it belongs only in the tag.
-- The start timecode = the frame where the speaker's mouth opens. The end timecode = the frame where the speaker's mouth closes. Be accurate to the second.
-- WORD BUDGET (hard rule): the slot length is (end - start) seconds. Write the translated line so it is spoken in that exact time at a normal speaking pace — about 2.5 words per second for space-separated languages, about 4 characters per second for Burmese/Thai/Khmer/Lao/Chinese/Japanese. Count before you write. If the natural translation is too long, condense the meaning; if too short, add a few natural words. NEVER exceed the slot.
+- Put the [DIALOGUE:EMOTION] tag immediately after [MM:SS], exactly once. Never put it at the end or middle of the spoken text, and never use braces such as {DIALOGUE}.
 - Narrator (non-dialogue) paragraphs keep the normal single-timecode format: [02:15] narrator text...
-- Keep the translated line length so that, when read aloud, it takes roughly the SAME duration as the original speech. Do not make it much shorter or much longer.
+- Write the full natural translation of what was said — never truncate a line to fit a time slot. Clarity and story flow come first.
 - If the source has no spoken dialogue at that moment, do NOT use [DIALOGUE]; stay in narrator voice.
-- This is a dub-style timing lock, NOT generative lip-sync: the syllables do not need to match, but the start/end timing must align.`
+- This is dub-style alignment, NOT generative lip-sync: the syllables do not need to match.
+
+DIALOGUE COMPLETENESS (mandatory for ${narrationStyle} mode):
+- EVERY spoken line in the source must appear in the script as a real translated [DIALOGUE:EMOTION] line. Do NOT sample or pick "only the important ones".
+- It is FORBIDDEN to replace a spoken line with a description of it. BAD: "သူက ဒေါသတကြီး ပြောလိုက်တယ်" — GOOD: the actual translated words the character said.
+- For back-and-forth exchanges, write EACH speaker's line as its own separate paragraph with its own timecode range and its own emotion tag. Never merge two speakers into one paragraph.
+- Dialogue has priority over narration. Total script length does NOT change: to make room for the full dialogue, cut narrator sentences down to short connective lines only.
+- Narrator paragraphs exist to bridge, set context, and explain what dialogue cannot — keep them short but ALWAYS keep the story understandable. A viewer who never saw the source must follow the plot from start to finish; never sacrifice story coherence for brevity.
+
+ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
+- In moments with no speech, the narrator line must state the CONCRETE physical action with a precise verb: what was picked up, swung, kicked, stomped, thrown, grabbed, pushed. Example style: "စက်ဘီးကို ဘေ့စ်ဘောတုတ်နဲ့ ရိုက်ချလိုက်တယ်၊ ပြီးတော့ ခြေနဲ့ တက်နင်းလိုက်တယ်".
+- Never replace an action with a vague summary like "ဒေါသထွက်သွားတယ်" or "အခြေအနေ ဆိုးသွားတယ်".
+- Add the character's FACE and BODY reaction where it is visible: eyes widening, hands shaking, jaw clenching, tears welling, stepping back, head dropping.
+- Keep each action/expression line SHORT (1-2 sentences). They must never crowd out dialogue.
+- Goal: the viewer feels pity, anger, tension, or satisfaction as it happens — because they hear the real words and see the described reaction, not a summary.`
         : "";
 
     console.log(`[recap-script-generator] Language: ${lang}, Niche: ${nicheLabel}, isOwnApi: ${isOwnApi}`);
@@ -786,16 +800,9 @@ ${transcript}
 
     let response: Response | null = null;
     let lastError = "";
-    const ownApiModels = [
-      "gemini-3.5-flash",
-      "gemini-3.1-flash",
-      "gemini-2.5-flash",
-      "gemini-2.0-flash",
-      "gemini-3-flash-preview",
-      "gemini-1.5-flash",
-      "gemini-2.0-flash-lite",
-    ];
-    let activeModel = isOwnApi ? ownApiModels[0] : MODEL;
+    // Own API is strictly isolated: use only the user's key and never enter any
+    // fallback path that can rotate into the paid App API key pool.
+    let activeModel = MODEL;
 
     // Total wall budget must stay under Supabase's 150s idle limit.
     // Reserve ~10s for post-processing, credit deduction, and response send.
@@ -831,12 +838,12 @@ ${transcript}
       );
     }
 
-    // Surgical Own API fallback: try user-key models only; never fall back to app script-pool keys.
+    // Own API must fail fast on its own key. Fallback and key rotation belong to App API only.
     const fallbackModels = isOwnApi
-      ? ownApiModels.slice(1)
+      ? []
       : ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-flash-latest"];
     const shouldFallback = (status?: number) =>
-      status === 503 || status === 504 || (isOwnApi && (status === 404 || status === 429 || status === 403));
+      !isOwnApi && (status === 429 || status === 503 || status === 504);
 
     for (const fallbackModel of fallbackModels) {
       // Fallback if: no response (timeout/abort/network) OR response not ok and status warrants fallback
@@ -855,6 +862,9 @@ ${transcript}
       const fbTimeout = Math.max(5000, Math.min(60000, remainingBudget() - 8000));
       const fbTimeoutId = setTimeout(() => fbController.abort(), fbTimeout);
       try {
+        if (!isOwnApi && response?.status === 429) {
+          activeApiKey = rotateKey("script") || activeApiKey;
+        }
         response = await callGeminiGenerateContent(
           activeModel,
           activeApiKey,
