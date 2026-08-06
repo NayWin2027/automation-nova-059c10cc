@@ -69,6 +69,32 @@ function toBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+function estimateSegmentTimestamps(segments: unknown[], durationSec: number) {
+  const weights = segments.map((segment) => {
+    const text = typeof segment === "object" && segment !== null && "text" in segment
+      ? String((segment as { text?: unknown }).text ?? "")
+      : "";
+    const compact = humanizeBurmese(text).replace(/\s+/g, "");
+    let weight = 0;
+    for (const char of compact) {
+      const code = char.charCodeAt(0);
+      weight += code >= 0x1000 && code <= 0x109f ? 2.8 : 1;
+    }
+    return Math.max(weight, 1);
+  });
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  let cursor = 0;
+  return weights.map((weight, index) => {
+    const start = cursor;
+    cursor = index === weights.length - 1 ? durationSec : cursor + (weight / totalWeight) * durationSec;
+    return {
+      index,
+      start: Number(start.toFixed(3)),
+      end: Number(cursor.toFixed(3)),
+    };
+  });
+}
+
 Deno.serve(async (req) => {
   const pre = handleCorsPreflightOrReject(req);
   if (pre) return pre;
@@ -111,6 +137,7 @@ Deno.serve(async (req) => {
     const pitch: string = (body.pitch ?? "-2Hz").toString();
     const volume: string = (body.volume ?? "+0%").toString();
     const skipCreditDeduction: boolean = body.skipCreditDeduction === true;
+    const segments: unknown[] = Array.isArray(body.segments) ? body.segments : [];
 
     if (!text || text.length > 20000) {
       return new Response(JSON.stringify({ error: "Text must be 1–20000 chars" }), {
@@ -154,6 +181,11 @@ Deno.serve(async (req) => {
     }
 
     const audio = await synthesize(text, voice, rate, pitch, volume);
+    // Edge TTS returns MP3. MPEG-1 Layer III at the service's 48 kbps output rate is
+    // 6000 bytes/sec, so the encoded payload gives a stable duration for segment boundaries.
+    // The final segment is forced to the exact calculated end to prevent hook-slot overrun.
+    const durationSec = audio.length / 6000;
+    const segmentTimestamps = segments.length > 0 ? estimateSegmentTimestamps(segments, durationSec) : undefined;
 
     return new Response(
       JSON.stringify({
@@ -162,6 +194,7 @@ Deno.serve(async (req) => {
         audio: toBase64(audio),
         mimeType: "audio/mpeg",
         sampleRate: 24000,
+        segmentTimestamps,
         balance: (rpcResult as any)?.balance,
         deducted: (rpcResult as any)?.deducted,
       }),
