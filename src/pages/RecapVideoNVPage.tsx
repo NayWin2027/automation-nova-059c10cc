@@ -2130,6 +2130,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       isRenderingRef.current = true;
       // â”€â”€ FEATURE: Track recording start time for hook intro overlay â”€â”€
       recStartTimeRef.current = performance.now();
+      hookPhaseEndedRef.current = false; // SURGICAL FIX: fresh hook phase per recording
       // â”€â”€ BONUS FIX: Reset mid-video teaser so it fires on every recording â”€â”€
       midTeaserShownRef.current = false;
       midTeaserStartRef.current = 0;
