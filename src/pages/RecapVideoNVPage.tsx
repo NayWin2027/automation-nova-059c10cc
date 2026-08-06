@@ -3137,7 +3137,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               // Skip normal sync during hook phase â€” subtitle handled by canvas overlay
             } else {
               // â”€â”€ After hook phase: force clean resync to segment 0 â”€â”€
-              if (recAgeSync >= HOOK_SYNC_MS && recAgeSync < HOOK_SYNC_MS + 200 && lastIndexRef.current >= 0) {
+              if (!hookPhaseEndedRef.current) {
+                hookPhaseEndedRef.current = true;
                 lastIndexRef.current = -1; // Reset so first real segment gets a clean hard seek
               }
 
