@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logToolActivity } from "../_shared/activityLog.ts";
-import { getGeminiKey } from "../_shared/geminiKeys.ts";
+import { getGeminiKey, rotateKey } from "../_shared/geminiKeys.ts";
 
 import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
 
@@ -863,6 +863,7 @@ ${transcript}
       const fbTimeout = Math.max(5000, Math.min(60000, remainingBudget() - 8000));
       const fbTimeoutId = setTimeout(() => fbController.abort(), fbTimeout);
       try {
+      if (!isOwnApi && response?.status === 429) { activeApiKey = rotateKey() || activeApiKey; }
         response = await callGeminiGenerateContent(
           activeModel,
           activeApiKey,
