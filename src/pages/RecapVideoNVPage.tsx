@@ -3094,10 +3094,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             // â”€â”€ HOOK PHASE AV SYNC OVERRIDE â”€â”€
             // During first 4s of recording, show hook segment's VIDEO (not segment 0)
             // This ensures hook overlay text MATCHES the actual dramatic video scene
-            const HOOK_SYNC_MS = 4000;
-            const recAgeSync = recStartTimeRef.current > 0 ? performance.now() - recStartTimeRef.current : Infinity;
+            // SURGICAL FIX: hook phase is driven by AUDIO position (not wall clock) and can never
+            // outlive the hook line's own TTS slot — this stops the hook scene from staying on
+            // screen while the voice-over has already moved into the story.
+            const HOOK_SYNC_SEC = 4;
             const hookIdx = hookSegmentIdxRef.current;
-            const isHookPhase = recAgeSync < HOOK_SYNC_MS && hookIdx >= 0 && segs.length > hookIdx;
+            const hookAudioLimit =
+              audioTs.length > 0 && audioTs[0] && audioTs[0].end > 0
+                ? Math.min(HOOK_SYNC_SEC, audioTs[0].end)
+                : HOOK_SYNC_SEC;
+            const isHookPhase = currentTime < hookAudioLimit && hookIdx >= 0 && segs.length > hookIdx;
 
             if (isHookPhase) {
               // Override: seek video to hook segment's vStart â€” show the dramatic scene
