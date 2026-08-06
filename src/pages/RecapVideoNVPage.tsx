@@ -6112,6 +6112,10 @@ const RecapVideoNVPage: React.FC = () => {
             text: speechTextForAPI,
             voice: selectedVoice.slice("edge:".length),
             skipCreditDeduction: true,
+            // Keep the renderer's subtitle/video segment indexes aligned with Edge TTS.
+            // Without these timestamps the first (viral-hook) source slot can remain active
+            // for the whole render when the fallback boundary calculation drifts.
+            segments: segsForSync,
           }
         : bodyPayload;
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${ttsFnName}`, {
