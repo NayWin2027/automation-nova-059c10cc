@@ -54,6 +54,7 @@ type ProcessingStatus = "idle" | "processing" | "done" | "error";
 
 interface ResultViewProps {
   scriptData: RecapScript;
+  narrationStyle: "STORY" | "HYBRID" | "VIRAL";
   onUpdateScript: (newScript: string) => void;
   onGenerateVoice: () => void;
   voiceMode: "modern" | "normal";
@@ -277,6 +278,7 @@ const fixWebmDuration = (buffer: ArrayBuffer, durationMs: number): ArrayBuffer |
 export const ResultView: React.FC<ResultViewProps> = React.memo(
   ({
     scriptData,
+    narrationStyle,
     onUpdateScript,
     onGenerateVoice,
     onRecapSaved,
@@ -1486,13 +1488,31 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         // Use exact timestamp if present; otherwise use previous segment's vEnd (no estimation)
         const rawVStart = parseTime(seg.timestamp);
-        const vStart: number = seg.timestamp && rawVStart > 0 ? rawVStart : lastComputedVEnd;
+        // SURGICAL FIX: Hybrid/Viral dialogue lines already carry their exact source slot.
+        // Story mode and narrator lines keep the existing gap-based timing unchanged.
+        const dialogueSourceStart =
+          narrationStyle !== "STORY" &&
+          seg.isDialogue === true &&
+          typeof seg.sourceStartSec === "number" &&
+          Number.isFinite(seg.sourceStartSec)
+            ? seg.sourceStartSec
+            : null;
+        const vStart: number =
+          dialogueSourceStart ??
+          (seg.timestamp && rawVStart > 0
+            ? rawVStart
+            : lastComputedVEnd);
 
         const nextSeg = scriptData.segments[i + 1];
         let vEnd: number;
-        // SURGICAL ROLLBACK: gap-based window only (next segment's timecode = vEnd).
-        // Dialogue segments no longer own their source slot — that broke AV timing.
-        if (!nextSeg) {
+        if (
+          dialogueSourceStart !== null &&
+          typeof seg.sourceEndSec === "number" &&
+          Number.isFinite(seg.sourceEndSec) &&
+          seg.sourceEndSec > vStart
+        ) {
+          vEnd = seg.sourceEndSec;
+        } else if (!nextSeg) {
           vEnd = -1;
         } else {
           const nextRaw = parseTime(nextSeg.timestamp);
@@ -1513,7 +1533,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           text: stripDialogueMetadata(seg.text).replace(/\[\d{1,2}:\d{2}\]/g, "").trim(),
         };
       });
-    }, [scriptData]);
+    }, [scriptData, narrationStyle]);
 
     useEffect(() => {
       syncSegmentsRef.current = syncSegments;
@@ -7311,6 +7331,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
         {(scriptData.segments.length > 0 || videoUrl) && (
           <ResultView
             scriptData={scriptData}
+            narrationStyle={narrationStyle}
             onUpdateScript={handleUpdateScript}
             onGenerateVoice={handleGenerateVoice}
             onRecapSaved={loadRecapHistory}
