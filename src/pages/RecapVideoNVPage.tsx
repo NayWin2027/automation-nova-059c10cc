@@ -1490,21 +1490,23 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         const rawVStart = parseTime(seg.timestamp);
         // SURGICAL FIX: Hybrid/Viral dialogue lines already carry their exact source slot.
         // Story mode and narrator lines keep the existing gap-based timing unchanged.
-        const useDialogueSourceSlot =
+        const dialogueSourceStart =
           narrationStyle !== "STORY" &&
           seg.isDialogue === true &&
           typeof seg.sourceStartSec === "number" &&
-          Number.isFinite(seg.sourceStartSec);
-        const vStart: number = useDialogueSourceSlot
-          ? seg.sourceStartSec
-          : seg.timestamp && rawVStart > 0
+          Number.isFinite(seg.sourceStartSec)
+            ? seg.sourceStartSec
+            : null;
+        const vStart: number =
+          dialogueSourceStart ??
+          (seg.timestamp && rawVStart > 0
             ? rawVStart
-            : lastComputedVEnd;
+            : lastComputedVEnd);
 
         const nextSeg = scriptData.segments[i + 1];
         let vEnd: number;
         if (
-          useDialogueSourceSlot &&
+          dialogueSourceStart !== null &&
           typeof seg.sourceEndSec === "number" &&
           Number.isFinite(seg.sourceEndSec) &&
           seg.sourceEndSec > vStart
