@@ -1378,6 +1378,96 @@ ${workingScript}`;
     }
 
     const rawWordCount = lengthAdjustedScript.split(/\s+/).filter(Boolean).length;
+
+    // ---- Ending coverage pass ------------------------------------------------
+    // Length can be on target while the model still rushed or skipped the finale
+    // (final fight, climax outcome, closing scene). If the last written timecode
+    // stops well before the source ends, request ONLY the missing tail. Paragraphs
+    // are accepted solely when strictly later than the current last timecode, so AV
+    // mapping cannot be corrupted.
+    if (sourceDurationSec && endsAtCompleteSentence(lengthAdjustedScript) && remainingBudget() > 20000) {
+      const tailParas = lengthAdjustedScript.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+      let lastTc = 0;
+      for (const p of tailParas) {
+        const t = paraTimecodeSec(p);
+        if (t !== null && t > lastTc) lastTc = t;
+      }
+      const endThreshold = sourceDurationSec * 0.88;
+      if (lastTc > 0 && lastTc < endThreshold && sourceDurationSec - lastTc >= 20) {
+        const tail = tailParas.slice(-2).join("\n\n");
+        const endPrompt = `*** ENDING COVERAGE PASS — COVER ONLY ${tc(lastTc)} to ${tc(sourceDurationSec)} ***
+
+The recap narration below stops at [${tc(lastTc)}], but the source runs until [${tc(sourceDurationSec)}]. The final part of the story — the last confrontation/fight, the climax, its outcome and the closing scene — is missing or rushed.
+
+WHERE WE LEFT OFF (continue straight on from here, same story, same characters):
+${tail}
+
+Rules:
+- Re-watch the source from ${tc(Math.max(0, lastTc - 5))} to the very end, then narrate everything that happens after [${tc(lastTc)}] in full detail.
+- Write ONLY the new paragraphs. Do NOT repeat, restate or rewrite anything already written. No new hook, no re-introduction, no summary of earlier parts.
+- Every paragraph MUST start with [MM:SS] STRICTLY LATER than [${tc(lastTc)}] and keep increasing. Nothing after [${tc(sourceDurationSec)}].
+- The final fight/climax must get its own paragraphs — never compressed into one sentence.
+- The LAST paragraph must correspond to the source's final scene and end the story properly.
+- Same language (${lang}), same tone, same narrator voice and same [MM:SS] format. Never [HH:MM:SS], never ranges.
+- Finish with a complete sentence.
+
+ALREADY WRITTEN (do not repeat):
+${lengthAdjustedScript}`;
+        const endParts = [{ text: endPrompt }, ...contentParts.slice(1)];
+        const endController = new AbortController();
+        const endTimeoutId = setTimeout(
+          () => endController.abort(),
+          Math.max(5000, Math.min(45000, remainingBudget() - 10000)),
+        );
+        try {
+          const endRes = await callGeminiGenerateContent(
+            activeModel,
+            activeApiKey,
+            isOwnApi,
+            endController.signal,
+            finalSystemPrompt,
+            endParts,
+            requestedMaxOutputTokens,
+          );
+          if (endRes.ok) {
+            const endData = await endRes.json();
+            const endText: string = endData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+            const acceptedEnd: string[] = [];
+            let cursor = lastTc;
+            for (const p of endText.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean)) {
+              const t = paraTimecodeSec(p);
+              if (t === null || t <= cursor) continue;
+              if (t > sourceDurationSec + 5) continue;
+              acceptedEnd.push(p);
+              cursor = t;
+            }
+            if (acceptedEnd.length) {
+              const merged = `${lengthAdjustedScript}\n\n${acceptedEnd.join("\n\n")}`.trim();
+              if (endsAtCompleteSentence(merged) && !violatesTargetLanguage(merged, lang)) {
+                lengthAdjustedScript = merged;
+                toppedUp = true;
+              }
+            }
+            console.log(
+              `[recap-script-generator] Ending coverage pass: ${acceptedEnd.length} paragraph(s) accepted (lastTc=${lastTc}s, sourceEnd=${Math.round(
+                sourceDurationSec,
+              )}s)`,
+            );
+          } else {
+            console.warn(`[recap-script-generator] Ending coverage pass failed: ${endRes.status}`);
+          }
+        } catch (endErr) {
+          console.warn(
+            `[recap-script-generator] Ending coverage pass error: ${
+              endErr instanceof Error ? endErr.message : String(endErr)
+            }`,
+          );
+        } finally {
+          clearTimeout(endTimeoutId);
+        }
+      }
+    }
+
     const script = enforceScriptCoverage100(lengthAdjustedScript, sourceDurationSec);
     const finalWordCount = script.split(/\s+/).filter(Boolean).length;
     const finalSpokenSec = estimateSpokenSeconds(script);
