@@ -3194,8 +3194,22 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   const _vidDur = vv.duration > 0 ? vv.duration : 1;
                   const _lastSegVStart = segs.length > 0 ? (segs[segs.length - 1] as any).vStart || 0 : 0;
                   const _hasAudioTs = audioTs.length > activeIndex && !!audioTs[activeIndex];
-                  // Scale only when timestamps look recap-relative (last vStart < 55% of source duration)
-                  const _needsScale = _hasAudioTs && _lastSegVStart > 0 && _lastSegVStart < _vidDur * 0.55;
+                  // SURGICAL FIX (exact segment lock): use each segment's REAL source timecode.
+                  // Proportional re-mapping is a fallback ONLY when the script timecodes are
+                  // genuinely unusable (all zero / never increasing) — otherwise TTS segment n
+                  // must always show source scene n, with zero re-scaling.
+                  let _timecodesUsable = false;
+                  if (segs.length > 0) {
+                    let increasing = false;
+                    let prev = -1;
+                    for (let _i = 0; _i < segs.length; _i++) {
+                      const _vs = Number((segs[_i] as any).vStart) || 0;
+                      if (_vs > prev) increasing = true;
+                      prev = Math.max(prev, _vs);
+                    }
+                    _timecodesUsable = increasing && _lastSegVStart > 0;
+                  }
+                  const _needsScale = _hasAudioTs && !_timecodesUsable;
                   const effectiveVStart = _needsScale
                     ? Math.min((audioTs[activeIndex].start / _audioDur) * _vidDur, _vidDur - 0.5)
                     : active.vStart;
