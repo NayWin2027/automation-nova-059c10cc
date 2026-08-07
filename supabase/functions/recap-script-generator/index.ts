@@ -240,11 +240,12 @@ function speechWeights(text: string): { asian: number; latin: number } {
   return { asian, latin };
 }
 
-// Weight → seconds. Asian ≈ 6.8 weight units/sec (~4.5 syllables/sec),
-// Latin ≈ 1.9 weight units/sec (~100 wpm narration pace).
+// Weight → seconds. These rates match the generated narration more closely;
+// the previous 6.8 divisor substantially overestimated Burmese spoken time and
+// allowed scripts shorter than two minutes to pass for a five-minute source.
 function estimateSpokenSeconds(text: string): number {
   const { asian, latin } = speechWeights(stripTimecodes(text));
-  return asian / 6.8 + latin / 1.9;
+  return asian / 10.5 + latin / 2.2;
 }
 
 const LENGTH_TARGET_RATIO = 0.7;
@@ -299,8 +300,15 @@ function enforceScriptCoverage55(script: string, sourceDurationSec?: number | nu
     if (count >= targetSeconds) break;
   }
   const paragraphTrimmed = kept.length ? kept.join("\n\n") : trimToCompleteSentences(normalized, maxSeconds);
+  // Never let coarse paragraph trimming turn an otherwise complete script into
+  // an under-length result. Keeping the complete script is safer than deleting
+  // a whole timed scene and preserves its source-timecode mapping.
+  if (estimateSpokenSeconds(paragraphTrimmed) < sourceDurationSec * LENGTH_MIN_RATIO) return normalized;
   if (estimateSpokenSeconds(paragraphTrimmed) <= maxSeconds) return paragraphTrimmed;
-  return trimToCompleteSentences(paragraphTrimmed, maxSeconds);
+  const sentenceTrimmed = trimToCompleteSentences(paragraphTrimmed, maxSeconds);
+  return estimateSpokenSeconds(sentenceTrimmed) >= sourceDurationSec * LENGTH_MIN_RATIO
+    ? sentenceTrimmed
+    : normalized;
 }
 
 function countMatches(text: string, pattern: RegExp): number {
