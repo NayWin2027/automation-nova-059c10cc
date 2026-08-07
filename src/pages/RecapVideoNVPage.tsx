@@ -5630,6 +5630,15 @@ const RecapVideoNVPage: React.FC = () => {
     } else if (lower.includes("billing")) {
       suggestion =
         "ဤ API Key တွင် Billing မဖွင့်ထားပါ။ Google Cloud Console တွင် Billing enable လုပ်ပါ၊ မဖြစ်ရင် App API Mode သို့ ပြောင်းပါ။";
+    } else if (
+      lower.includes("503") ||
+      lower.includes("unavailable") ||
+      lower.includes("overload") ||
+      lower.includes("high demand") ||
+      lower.includes("မအားသေးပါ")
+    ) {
+      suggestion =
+        "Google AI model က ယာယီ demand များနေပါသည် (503)။ ဒီ request မှာ credit မဖြတ်ပါ။ ၁–၂ မိနစ်စောင့်ပြီး အောက်က 🔁 Retry Script ကို နှိပ်ပါ (Video ပြန်တင်စရာမလိုပါ)။";
     } else if (lower.includes("upload") || lower.includes("chunk")) {
       suggestion = "Video upload မအောင်မြင်ပါ။ ဖိုင်အရွယ်အစား/Network ကို စစ်ဆေးပြီး ပြန်ကြိုးစားပါ။";
     }
