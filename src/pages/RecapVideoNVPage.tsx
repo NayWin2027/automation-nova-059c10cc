@@ -3116,6 +3116,17 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         if (av && vv) {
           if (av.duration > 0 && vv.duration > 0) {
             const currentTime = av.currentTime;
+            // ── SURGICAL FIX: SEEK WATCHDOG ──
+            if (seekPendingRef.current) {
+              if (seekPendingSinceRef.current === 0) seekPendingSinceRef.current = timestamp;
+              else if (timestamp - seekPendingSinceRef.current > 600) {
+                seekPendingRef.current = false;
+                prewarmActiveRef.current = false;
+                seekPendingSinceRef.current = 0;
+              }
+            } else {
+              seekPendingSinceRef.current = 0;
+            }
             const segs = syncSegmentsRef.current as typeof syncSegments;
             const audioTs = audioTimestampsRef.current;
             let activeIndex = -1;
