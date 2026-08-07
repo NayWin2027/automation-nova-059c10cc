@@ -1497,11 +1497,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           Number.isFinite(seg.sourceStartSec)
             ? seg.sourceStartSec
             : null;
-        const vStart: number =
-          dialogueSourceStart ??
-          (seg.timestamp && rawVStart > 0
-            ? rawVStart
-            : lastComputedVEnd);
+        const vStart: number = dialogueSourceStart ?? (seg.timestamp && rawVStart > 0 ? rawVStart : lastComputedVEnd);
 
         const nextSeg = scriptData.segments[i + 1];
         let vEnd: number;
@@ -1525,12 +1521,22 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         lastComputedVEnd = vEnd === -1 ? vStart + 5 : vEnd;
         // SURGICAL EDIT: No duration cap â€” video segment plays full natural duration
         // for 100% voice-to-video accuracy (Pacing Intelligence caps removed)
+        // SURGICAL FIX: Propagate isDialogue + exact source positions to syncAndDraw loop
+        // so dialogue segments always use sourceStartSec/sourceEndSec — never scaled/overridden.
         return {
           vStart,
           vEnd,
+          isDialogue: dialogueSourceStart !== null,
+          rawSourceStart: dialogueSourceStart ?? null,
+          rawSourceEnd:
+            dialogueSourceStart !== null && typeof seg.sourceEndSec === "number" && Number.isFinite(seg.sourceEndSec)
+              ? seg.sourceEndSec
+              : null,
           aStartPct: totalWords > 0 ? startWords / totalWords : 0,
           aEndPct: totalWords > 0 ? wordCursor / totalWords : 1,
-          text: stripDialogueMetadata(seg.text).replace(/\[\d{1,2}:\d{2}\]/g, "").trim(),
+          text: stripDialogueMetadata(seg.text)
+            .replace(/\[\d{1,2}:\d{2}\]/g, "")
+            .trim(),
         };
       });
     }, [scriptData, narrationStyle]);
@@ -3200,14 +3206,31 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   const _hasAudioTs = audioTs.length > activeIndex && !!audioTs[activeIndex];
                   // Scale only when timestamps look recap-relative (last vStart < 55% of source duration)
                   const _needsScale = _hasAudioTs && _lastSegVStart > 0 && _lastSegVStart < _vidDur * 0.55;
-                  const effectiveVStart = _needsScale
-                    ? Math.min((audioTs[activeIndex].start / _audioDur) * _vidDur, _vidDur - 0.5)
-                    : active.vStart;
-                  const effectiveVEnd = _needsScale
-                    ? Math.min((audioTs[activeIndex].end / _audioDur) * _vidDur, _vidDur)
-                    : active.vEnd === -1
-                      ? vv.duration
-                      : active.vEnd;
+                  // SURGICAL FIX: AV SYNC 100% DIALOGUE ACCURACY
+                  // Dialogue segments (Hybrid/Viral) carry exact sourceStartSec/sourceEndSec from AI.
+                  // These MUST bypass _needsScale entirely — scaling would produce wrong video positions
+                  // causing TTS voice to play over mismatched footage (lip-sync broken).
+                  // Only narrator/story segments use the proportional scale path.
+                  const _isDialogueSeg =
+                    active.isDialogue === true &&
+                    typeof active.rawSourceStart === "number" &&
+                    Number.isFinite(active.rawSourceStart);
+                  const effectiveVStart = _isDialogueSeg
+                    ? (active.rawSourceStart as number)
+                    : _needsScale
+                      ? Math.min((audioTs[activeIndex].start / _audioDur) * _vidDur, _vidDur - 0.5)
+                      : active.vStart;
+                  const effectiveVEnd =
+                    _isDialogueSeg &&
+                    typeof active.rawSourceEnd === "number" &&
+                    Number.isFinite(active.rawSourceEnd) &&
+                    (active.rawSourceEnd as number) > effectiveVStart
+                      ? (active.rawSourceEnd as number)
+                      : _needsScale
+                        ? Math.min((audioTs[activeIndex].end / _audioDur) * _vidDur, _vidDur)
+                        : active.vEnd === -1
+                          ? vv.duration
+                          : active.vEnd;
                   // Persist for between-segment hold loop
                   lastEffectiveVStartRef.current = effectiveVStart;
                   lastEffectiveVEndRef.current = effectiveVEnd;
@@ -3298,7 +3321,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   } else if (!seekPendingRef.current) {
                     // SURGICAL FIX: AV SYNC 100% — If video has overrun vEnd, hard-seek back to effectiveVStart
                     // This prevents irrelevant content (eating, dancing, walking) from leaking into the active segment.
-                    const endMargin = 0.08;
+                    // SURGICAL FIX: Dialogue segments use ZERO end-margin — must cut EXACTLY at sourceEndSec.
+                    // Non-dialogue keeps 80ms tolerance for smooth decoder transitions.
+                    const endMargin = _isDialogueSeg ? 0 : 0.08;
                     if (sourceEnd > effectiveVStart && vv.currentTime >= sourceEnd - endMargin) {
                       // Hard-cut seek: loop segment — never show content past vEnd
                       seekPendingRef.current = true;
@@ -5356,10 +5381,7 @@ const VOICE_OPTIONS = [
 ];
 
 // ===== NARRATION STYLE PRESETS (niche-agnostic, prompt-only) =====
-const NARRATION_STYLE_OPTIONS: Record<
-  "STORY" | "HYBRID" | "VIRAL",
-  { emoji: string; label: string; hint: string }
-> = {
+const NARRATION_STYLE_OPTIONS: Record<"STORY" | "HYBRID" | "VIRAL", { emoji: string; label: string; hint: string }> = {
   STORY: {
     emoji: "📖",
     label: "Story Mode — အစအဆုံး ဇာတ်ကြောင်းပြန် (YouTube)",
@@ -5516,11 +5538,15 @@ const RecapVideoNVPage: React.FC = () => {
       : "";
     const rels = Array.isArray(bible.relationships) ? bible.relationships.map((r: any) => `- ${r}`).join("\n") : "";
     const list = (v: any) =>
-      Array.isArray(v) ? v.map((x: any) => `- ${typeof x === "string" ? x : x?.name || JSON.stringify(x)}`).join("\n") : "";
+      Array.isArray(v)
+        ? v.map((x: any) => `- ${typeof x === "string" ? x : x?.name || JSON.stringify(x)}`).join("\n")
+        : "";
     const ents = Array.isArray(bible.key_entities)
       ? bible.key_entities
           .map((e: any) =>
-            typeof e === "string" ? `- ${e}` : `- ${e?.name || ""}${e?.role ? ` (${e.role})` : ""}${e?.note ? ` — ${e.note}` : ""}`,
+            typeof e === "string"
+              ? `- ${e}`
+              : `- ${e?.name || ""}${e?.role ? ` (${e.role})` : ""}${e?.note ? ` — ${e.note}` : ""}`,
           )
           .join("\n")
       : "";
@@ -5741,7 +5767,12 @@ const RecapVideoNVPage: React.FC = () => {
       const resolvedOwnKey = apiMode === "own" ? ownApiKey.trim() : "";
       // Pass segments to ensure 100% script coverage in voice generation
       const segsForSync = scriptData.segments.map((s) => ({ text: s.text }));
-      generateVoice(stripDialogueMetadata(scriptData.full_script), resolvedOwnKey || undefined, segsForSync, scriptData.segments);
+      generateVoice(
+        stripDialogueMetadata(scriptData.full_script),
+        resolvedOwnKey || undefined,
+        segsForSync,
+        scriptData.segments,
+      );
     }
   };
 
@@ -5859,7 +5890,11 @@ const RecapVideoNVPage: React.FC = () => {
         throw new Error("AI script generation returned empty result");
       }
       const segments = scriptToSegments(scriptText, duration);
-      setScriptData({ title: file.name.replace(/\.[^.]+$/, ""), full_script: stripDialogueMetadata(scriptText), segments });
+      setScriptData({
+        title: file.name.replace(/\.[^.]+$/, ""),
+        full_script: stripDialogueMetadata(scriptText),
+        segments,
+      });
       if (scriptResult.storyBible) void saveSeriesBible(scriptResult.storyBible);
       setProgressMsg("📝 Script generated! Now generating AI voice...");
       // Continue into the existing voice pipeline (VOICE-GEN-PIPELINE-v2)
@@ -5973,8 +6008,13 @@ const RecapVideoNVPage: React.FC = () => {
     const cleaned = text.replace(/\[.*?\]\s*/g, "").trim();
     if (!cleaned) return 0;
     // Burmese/Thai/Lao/Khmer/Japanese/Chinese: count characters as syllable proxies.
-    const isSyllabic = /\p{Script=Myanmar}|\p{Script=Thai}|\p{Script=Laoo}|\p{Script=Khmr}|\p{Script=Hani}|\p{Script=Hira}|\p{Script=Kana}/u.test(langCode) ||
-      ["MYANMAR (BURMESE)", "BURMESE", "CHINESE", "JAPANESE", "KOREAN", "THAI", "LAO", "KHMER"].includes(langCode.toUpperCase());
+    const isSyllabic =
+      /\p{Script=Myanmar}|\p{Script=Thai}|\p{Script=Laoo}|\p{Script=Khmr}|\p{Script=Hani}|\p{Script=Hira}|\p{Script=Kana}/u.test(
+        langCode,
+      ) ||
+      ["MYANMAR (BURMESE)", "BURMESE", "CHINESE", "JAPANESE", "KOREAN", "THAI", "LAO", "KHMER"].includes(
+        langCode.toUpperCase(),
+      );
     if (isSyllabic) {
       // ~4 chars per second for Burmese/Chinese-style dense syllables
       return cleaned.length / 4.0;
@@ -6089,9 +6129,7 @@ const RecapVideoNVPage: React.FC = () => {
             relieved: "relieved — exhaled, softening, weight lifting",
             calm: "calm — steady, grounded, quiet confidence",
           };
-          const map = emoLines
-            .map(({ i, emo }) => `Line ${i + 1}: ${EMO_HINT[emo] || emo}`)
-            .join("; ");
+          const map = emoLines.map(({ i, emo }) => `Line ${i + 1}: ${EMO_HINT[emo] || emo}`).join("; ");
           bodyPayload.styleInstructions =
             `${bodyPayload.styleInstructions as string}` +
             ` DIALOGUE ACTING (overrides the restrained policy for these lines ONLY): the listed lines are a character SPEAKING out loud, not narration. ` +
@@ -6133,7 +6171,8 @@ const RecapVideoNVPage: React.FC = () => {
       // Use API timestamps if available (for 100% AV sync accuracy), otherwise fallback to client-side calculation
       const mt = String(data.mimeType || "").toLowerCase();
       const preciseTimestamps = Array.isArray(data.segmentTimestamps) ? data.segmentTimestamps : data.segments;
-      const pcmLeadIn = Array.isArray(data.segmentTimestamps) && (mt.includes("audio/pcm") || mt.includes("audio/l16")) ? 0.2 : 0;
+      const pcmLeadIn =
+        Array.isArray(data.segmentTimestamps) && (mt.includes("audio/pcm") || mt.includes("audio/l16")) ? 0.2 : 0;
       if (Array.isArray(preciseTimestamps)) {
         pageAudioTimestampsRef.current = preciseTimestamps.map((seg: any, idx: number) => ({
           index: idx,
@@ -6473,7 +6512,11 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
       if (!scriptText || scriptText.trim().length < 10) throw new Error("AI script generation returned empty result");
 
       const segments = scriptToSegments(scriptText, duration);
-      setScriptData({ title: file.name.replace(/\.[^.]+$/, ""), full_script: stripDialogueMetadata(scriptText), segments });
+      setScriptData({
+        title: file.name.replace(/\.[^.]+$/, ""),
+        full_script: stripDialogueMetadata(scriptText),
+        segments,
+      });
       if (scriptResult.storyBible) void saveSeriesBible(scriptResult.storyBible);
       setProgressMsg("📝 Script generated! Now generating AI voice...");
 
@@ -6879,7 +6922,11 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
               </SelectTrigger>
               <SelectContent className="bg-slate-950 border border-slate-700 shadow-2xl z-50">
                 {(Object.keys(NARRATION_STYLE_OPTIONS) as Array<"STORY" | "HYBRID" | "VIRAL">).map((key) => (
-                  <SelectItem key={key} value={key} className="rounded-xl px-3 py-2 text-sm text-slate-100 transition hover:bg-slate-900">
+                  <SelectItem
+                    key={key}
+                    value={key}
+                    className="rounded-xl px-3 py-2 text-sm text-slate-100 transition hover:bg-slate-900"
+                  >
                     <span className="flex flex-col">
                       <span className="inline-flex items-center gap-2 font-semibold">
                         <span>{NARRATION_STYLE_OPTIONS[key].emoji}</span>
@@ -6950,8 +6997,8 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                   />
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  နာမည်ကွက်လပ်ထားရင် AI က မူရင်း video ရဲ့ ဇာတ်ကားနာမည်/အကြောင်းအရာအပေါ် အခြေခံပြီး ဆွဲဆောင်မှုရှိတဲ့ Series
-                  နာမည်ကို auto ရေးပေးပါမယ်။ အပိုင်းနံပါတ်ကိုတော့ ကိုယ်တိုင် ထည့်ပါ။
+                  နာမည်ကွက်လပ်ထားရင် AI က မူရင်း video ရဲ့ ဇာတ်ကားနာမည်/အကြောင်းအရာအပေါ် အခြေခံပြီး ဆွဲဆောင်မှုရှိတဲ့
+                  Series နာမည်ကို auto ရေးပေးပါမယ်။ အပိုင်းနံပါတ်ကိုတော့ ကိုယ်တိုင် ထည့်ပါ။
                 </p>
               </div>
             )}
