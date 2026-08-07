@@ -5911,7 +5911,10 @@ const RecapVideoNVPage: React.FC = () => {
   const scriptToSegments = (scriptText: string, videoDuration: number): RecapSegment[] => {
     const paragraphs = scriptText.split("\n").filter((p) => p.trim().length > 0);
     if (paragraphs.length === 0) return [];
-    const timecodeRegex = /^\[(\d{1,2}):(\d{2})(?:\s*[-–—]\s*(\d{1,2}):(\d{2}))?\]\s*/;
+    // SURGICAL FIX: accept [M:SS], [HH:MM:SS] and both range forms so timecodes are
+    // always parsed (and removed) instead of leaking into subtitles with a 0s start.
+    const timecodeRegex =
+      /^\[\s*(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*[-–—]\s*(\d{1,2}):(\d{2})(?::(\d{2}))?)?\s*\]\s*/;
     // Accept the intended marker plus common AI variants/misspelling, in [] or {}, even
     // when Gemini puts it after a quote. The marker is metadata and must never reach subtitles/TTS.
     const dialogueCaptureRegex =
@@ -5925,9 +5928,15 @@ const RecapVideoNVPage: React.FC = () => {
         let text = trimmed;
         let explicitEndSec: number | undefined;
         if (match) {
-          timestamp = `${match[1].padStart(2, "0")}:${match[2]}`;
-          if (match[3] !== undefined && match[4] !== undefined) {
-            explicitEndSec = Number(match[3]) * 60 + Number(match[4]);
+          timestamp =
+            match[3] !== undefined
+              ? `${match[1].padStart(2, "0")}:${match[2]}:${match[3]}`
+              : `${match[1].padStart(2, "0")}:${match[2]}`;
+          if (match[4] !== undefined && match[5] !== undefined) {
+            explicitEndSec =
+              match[6] !== undefined
+                ? Number(match[4]) * 3600 + Number(match[5]) * 60 + Number(match[6])
+                : Number(match[4]) * 60 + Number(match[5]);
           }
           text = trimmed.replace(timecodeRegex, "").trim();
         }
