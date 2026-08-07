@@ -3181,6 +3181,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               if (!hookPhaseEndedRef.current) {
                 hookPhaseEndedRef.current = true;
                 lastIndexRef.current = -1; // Reset so first real segment gets a clean hard seek
+                // SURGICAL FIX: clear any hook-phase seek still marked pending so the very
+                // first story segment is allowed to hard-cut immediately.
+                seekPendingRef.current = false;
+                seekPendingSinceRef.current = 0;
               }
 
               // â”€â”€ TRUE RECAP HARD-CUT SYNC â”€â”€
