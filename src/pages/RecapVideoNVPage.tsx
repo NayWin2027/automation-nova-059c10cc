@@ -44,6 +44,11 @@ interface RecapScript {
 const DIALOGUE_METADATA_PATTERN =
   /(?:\[|\{|\(|［|｛|（)\s*DIALOG(?:UE|UAGE)(?:\s*:\s*[A-Za-z _-]+)?\s*(?:\]|\}|\)|］|｝|）)/gi;
 
+// SURGICAL FIX: strip every timecode shape the AI may emit ([M:SS], [HH:MM:SS], ranges)
+// so timestamps never leak into subtitles.
+const TIMECODE_STRIP_RE =
+  /\[\s*\d{1,2}:\d{2}(?::\d{2})?(?:\s*[-–—]\s*\d{1,2}:\d{2}(?::\d{2})?)?\s*\]/g;
+
 const stripDialogueMetadata = (text: string): string =>
   String(text || "")
     .replace(DIALOGUE_METADATA_PATTERN, "")
@@ -1490,14 +1495,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         const rawVStart = parseTime(seg.timestamp);
         // SURGICAL FIX: Hybrid/Viral dialogue lines already carry their exact source slot.
         // Story mode and narrator lines keep the existing gap-based timing unchanged.
-        const dialogueSourceStart =
-          narrationStyle !== "STORY" &&
-          seg.isDialogue === true &&
-          typeof seg.sourceStartSec === "number" &&
-          Number.isFinite(seg.sourceStartSec)
-            ? seg.sourceStartSec
-            : null;
-        const vStart: number = dialogueSourceStart ?? (seg.timestamp && rawVStart > 0 ? rawVStart : lastComputedVEnd);
+        // SURGICAL ROLLBACK: gap-based timing for all modes (exact-range override removed).
+        const dialogueSourceStart: number | null = null;
+        const vStart: number = seg.timestamp && rawVStart > 0 ? rawVStart : lastComputedVEnd;
 
         const nextSeg = scriptData.segments[i + 1];
         let vEnd: number;
@@ -1526,9 +1526,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           vEnd,
           aStartPct: totalWords > 0 ? startWords / totalWords : 0,
           aEndPct: totalWords > 0 ? wordCursor / totalWords : 1,
-          text: stripDialogueMetadata(seg.text)
-            .replace(/\[\d{1,2}:\d{2}\]/g, "")
-            .trim(),
+          text: stripDialogueMetadata(seg.text).replace(TIMECODE_STRIP_RE, "").trim(),
         };
       });
     }, [scriptData, narrationStyle]);
@@ -3962,7 +3960,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       })()}
                     >
                       {stripDialogueMetadata(currentSubtitle || scriptData.segments[0]?.text || "")
-                        .replace(/\[\d{1,2}:\d{2}\]/g, "")
+                        .replace(TIMECODE_STRIP_RE, "")
                         .trim()}
                     </div>
                   </div>
@@ -5897,21 +5895,26 @@ const RecapVideoNVPage: React.FC = () => {
         .trim();
       cleaned = cleaned.replace(/^\s*(?:#+\s*)?(?:Recap Script|Narration Script|Script|Output)\s*:?\s*\n+/i, "").trim();
     }
-    const firstTimestamp = cleaned.search(/\[\d{1,2}:\d{2}\]/);
+    const firstTimestamp = cleaned.search(/\[\s*\d{1,2}:\d{2}(?::\d{2})?/);
     if (firstTimestamp > 0) cleaned = cleaned.slice(firstTimestamp).trim();
     return cleaned;
   };
 
   const parseTimecodeToSec = (ts: string): number => {
     const parts = ts.split(":").map(Number);
-    if (parts.length !== 2 || Number.isNaN(parts[0]) || Number.isNaN(parts[1])) return 0;
-    return parts[0] * 60 + parts[1];
+    if (parts.some((n) => Number.isNaN(n))) return 0;
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    return 0;
   };
 
   const scriptToSegments = (scriptText: string, videoDuration: number): RecapSegment[] => {
     const paragraphs = scriptText.split("\n").filter((p) => p.trim().length > 0);
     if (paragraphs.length === 0) return [];
-    const timecodeRegex = /^\[(\d{1,2}):(\d{2})(?:\s*[-–—]\s*(\d{1,2}):(\d{2}))?\]\s*/;
+    // SURGICAL FIX: accept [M:SS], [HH:MM:SS] and both range forms so timecodes are
+    // always parsed (and removed) instead of leaking into subtitles with a 0s start.
+    const timecodeRegex =
+      /^\[\s*(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*[-–—]\s*(\d{1,2}):(\d{2})(?::(\d{2}))?)?\s*\]\s*/;
     // Accept the intended marker plus common AI variants/misspelling, in [] or {}, even
     // when Gemini puts it after a quote. The marker is metadata and must never reach subtitles/TTS.
     const dialogueCaptureRegex =
@@ -5925,9 +5928,15 @@ const RecapVideoNVPage: React.FC = () => {
         let text = trimmed;
         let explicitEndSec: number | undefined;
         if (match) {
-          timestamp = `${match[1].padStart(2, "0")}:${match[2]}`;
-          if (match[3] !== undefined && match[4] !== undefined) {
-            explicitEndSec = Number(match[3]) * 60 + Number(match[4]);
+          timestamp =
+            match[3] !== undefined
+              ? `${match[1].padStart(2, "0")}:${match[2]}:${match[3]}`
+              : `${match[1].padStart(2, "0")}:${match[2]}`;
+          if (match[4] !== undefined && match[5] !== undefined) {
+            explicitEndSec =
+              match[6] !== undefined
+                ? Number(match[4]) * 3600 + Number(match[5]) * 60 + Number(match[6])
+                : Number(match[4]) * 60 + Number(match[5]);
           }
           text = trimmed.replace(timecodeRegex, "").trim();
         }
@@ -5938,6 +5947,8 @@ const RecapVideoNVPage: React.FC = () => {
           emotion = dMatch[1] ? dMatch[1].trim().toLowerCase() : undefined;
           text = stripDialogueMetadata(text);
         }
+        // Any stray timecode left inside the line must never reach subtitles/TTS.
+        text = text.replace(TIMECODE_STRIP_RE, " ").replace(/[ \t]{2,}/g, " ").trim();
         return { timestamp, text, isDialogue, emotion, explicitEndSec };
       });
       // Source slot = explicit [start-end] range when the AI gave one (dialogue lock),

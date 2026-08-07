@@ -245,9 +245,9 @@ function estimateSpokenSeconds(text: string): number {
   return asian / 6.8 + latin / 1.9;
 }
 
-const LENGTH_TARGET_RATIO = 0.8;
-const LENGTH_MAX_RATIO = 0.85;
-const LENGTH_MIN_RATIO = 0.75;
+const LENGTH_TARGET_RATIO = 0.7;
+const LENGTH_MAX_RATIO = 0.75;
+const LENGTH_MIN_RATIO = 0.65;
 
 function enforceScriptCoverage55(script: string, sourceDurationSec?: number | null): string {
   const normalized = script.replace(/\r\n/g, "\n").trim();
@@ -807,6 +807,7 @@ OUTPUT FORMAT:
 - Each paragraph MUST start with [MM:SS] — the source video timecode of the best matching scene
 - After the timecode, write the narration text as a natural spoken paragraph
 - Example: [01:23] narration paragraph text here...
+- Timecode format is EXACTLY [MM:SS]. Never use [HH:MM:SS] and never a range like [01:23-01:30]. Only ONE timecode per paragraph, at the very start.
 - Each paragraph = one scene cut in the final video
 - The timecode tells the video editor WHICH part of the source video to show during this narration
 
@@ -838,6 +839,7 @@ OUTPUT FORMAT:
 - Each paragraph MUST start with [MM:SS] — an estimated timecode of the matching scene
 - After the timecode, write the narration text as a natural spoken paragraph
 - Example: [01:23] narration paragraph text here...
+- Timecode format is EXACTLY [MM:SS]. Never use [HH:MM:SS] and never a range like [01:23-01:30]. Only ONE timecode per paragraph, at the very start.
 
 RAW TRANSCRIPT:
 ${transcript}
@@ -1095,15 +1097,9 @@ ${transcript}
     }
 
     if (sourceDurationSec && finalSpokenSec < sourceDurationSec * LENGTH_MIN_RATIO) {
-      console.error(`[recap-script-generator] Rejecting under-length script before credit deduction`);
-      return new Response(
-        JSON.stringify({
-          error: "AI script အရှည်က source video ရဲ့ 65% မပြည့်သေးလို့ credit မဖြတ်ပါ။ ပြန် Generate လုပ်ပါ။",
-          retryable: true,
-          underLength: true,
-          retryAfterSeconds: 5,
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      // Log only — never reject a valid script for being slightly short.
+      console.warn(
+        `[recap-script-generator] Under-length script kept (${((finalSpokenSec / sourceDurationSec) * 100).toFixed(1)}% < ${LENGTH_MIN_RATIO * 100}%)`,
       );
     }
 
