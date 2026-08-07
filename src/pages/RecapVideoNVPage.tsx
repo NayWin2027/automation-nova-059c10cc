@@ -5947,6 +5947,8 @@ const RecapVideoNVPage: React.FC = () => {
           emotion = dMatch[1] ? dMatch[1].trim().toLowerCase() : undefined;
           text = stripDialogueMetadata(text);
         }
+        // Any stray timecode left inside the line must never reach subtitles/TTS.
+        text = text.replace(TIMECODE_STRIP_RE, " ").replace(/[ \t]{2,}/g, " ").trim();
         return { timestamp, text, isDialogue, emotion, explicitEndSec };
       });
       // Source slot = explicit [start-end] range when the AI gave one (dialogue lock),
