@@ -772,10 +772,11 @@ AFTER the complete narration script, output a final line containing exactly ===S
         }
       }
 
-      // ---- Long source (>12 min): split into 2 windows so one model call never
-      // has to produce the whole 70% narration (token + wall-budget limit).
-      const windowMode = !!sourceDurationSec && sourceDurationSec > 720;
-      const windowSplitSec = windowMode ? Math.floor((sourceDurationSec as number) / 2) : 0;
+      // ---- Long source: split into 2 (12-20 min) or 3 (>20 min) windows so one
+      // model call never has to produce the whole 70% narration.
+      const windowCount = !sourceDurationSec ? 1 : sourceDurationSec > 1200 ? 3 : sourceDurationSec > 720 ? 2 : 1;
+      const windowMode = windowCount > 1;
+      const windowSplitSec = windowMode ? Math.floor((sourceDurationSec as number) / windowCount) : 0;
       const fmtTc = (sec: number) =>
         `${String(Math.floor(Math.max(0, sec) / 60)).padStart(2, "0")}:${String(Math.round(Math.max(0, sec)) % 60).padStart(2, "0")}`;
       const windowOneSec = windowMode ? windowSplitSec : sourceDurationSec || 0;
@@ -783,10 +784,10 @@ AFTER the complete narration script, output a final line containing exactly ===S
       const durationHint = sourceDurationSec
         ? `\nSOURCE VIDEO DURATION: ${Math.floor(sourceDurationSec / 60)} minutes ${Math.round(sourceDurationSec % 60)} seconds` +
           (windowMode
-            ? `\n\n*** PART 1 OF 2 — COVER ONLY 00:00 to ${fmtTc(windowSplitSec)} ***` +
+            ? `\n\n*** PART 1 OF ${windowCount} — COVER ONLY 00:00 to ${fmtTc(windowSplitSec)} ***` +
               `\nThis is a long source, so you are writing PART 1 only. Cover the source from 00:00 up to ${fmtTc(windowSplitSec)} and STOP there.` +
-              `\nDo NOT narrate anything after ${fmtTc(windowSplitSec)}. Do NOT write an ending, conclusion, moral or wrap-up line — the ENDING belongs ONLY to Part 2.` +
-              `\nStop mid-story on an unresolved beat so Part 2 can continue the same arc seamlessly.` +
+              `\nDo NOT narrate anything after ${fmtTc(windowSplitSec)}. Do NOT write an ending, conclusion, moral or wrap-up line — the ENDING belongs ONLY to the LAST part.` +
+              `\nStop mid-story on an unresolved beat (a character still moving, a question still open) so the next part can continue the same arc seamlessly.` +
               `\nAll timecodes must be between [00:00] and [${fmtTc(windowSplitSec)}].` +
               `\nREQUIRED NARRATION LENGTH for PART 1 (spoken aloud): ${Math.floor((windowOneSec * LENGTH_TARGET_RATIO) / 60)} minutes ${Math.round(
                 (windowOneSec * LENGTH_TARGET_RATIO) % 60,
