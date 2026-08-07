@@ -772,11 +772,27 @@ AFTER the complete narration script, output a final line containing exactly ===S
         }
       }
 
+      // ---- Long source (>12 min): split into 2 windows so one model call never
+      // has to produce the whole 70% narration (token + wall-budget limit).
+      const windowMode = !!sourceDurationSec && sourceDurationSec > 720;
+      const windowSplitSec = windowMode ? Math.floor((sourceDurationSec as number) / 2) : 0;
+      const fmtTc = (sec: number) =>
+        `${String(Math.floor(Math.max(0, sec) / 60)).padStart(2, "0")}:${String(Math.round(Math.max(0, sec)) % 60).padStart(2, "0")}`;
+      const windowOneSec = windowMode ? windowSplitSec : sourceDurationSec || 0;
+
       const durationHint = sourceDurationSec
         ? `\nSOURCE VIDEO DURATION: ${Math.floor(sourceDurationSec / 60)} minutes ${Math.round(sourceDurationSec % 60)} seconds` +
-          `\nREQUIRED NARRATION LENGTH (spoken aloud): ${Math.floor((sourceDurationSec * LENGTH_TARGET_RATIO) / 60)} minutes ${Math.round(
-            (sourceDurationSec * LENGTH_TARGET_RATIO) % 60,
-          )} seconds (= 70% of the source). Shorter than this is a FAILED output.`
+          (windowMode
+            ? `\n\n*** PART 1 OF 2 — COVER ONLY 00:00 to ${fmtTc(windowSplitSec)} ***` +
+              `\nThis is a long source, so you are writing PART 1 only. Cover the source from 00:00 up to ${fmtTc(windowSplitSec)} and STOP there.` +
+              `\nDo NOT narrate anything after ${fmtTc(windowSplitSec)}. Do NOT write an ending or conclusion — Part 2 continues later.` +
+              `\nAll timecodes must be between [00:00] and [${fmtTc(windowSplitSec)}].` +
+              `\nREQUIRED NARRATION LENGTH for PART 1 (spoken aloud): ${Math.floor((windowOneSec * LENGTH_TARGET_RATIO) / 60)} minutes ${Math.round(
+                (windowOneSec * LENGTH_TARGET_RATIO) % 60,
+              )} seconds (= 70% of this part). Shorter than this is a FAILED output.`
+            : `\nREQUIRED NARRATION LENGTH (spoken aloud): ${Math.floor((sourceDurationSec * LENGTH_TARGET_RATIO) / 60)} minutes ${Math.round(
+                (sourceDurationSec * LENGTH_TARGET_RATIO) % 60,
+              )} seconds (= 70% of the source). Shorter than this is a FAILED output.`)
         : "";
 
       const userPrompt = `[LANGUAGE: ${lang} — ${langLabel}]
