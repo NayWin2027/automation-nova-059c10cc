@@ -362,7 +362,8 @@ const Index = () => {
         <button
         onClick={() => setIsLightMode(!isLightMode)}
         className="w-7 h-7 rounded-lg bg-card/60 border border-gold/20 flex items-center justify-center hover:bg-card transition-colors"
-        title={isLightMode ? 'Switch to Dark Mode' : 'Switch to Light Mode'}>
+        title={isLightMode ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+        aria-label={isLightMode ? 'Switch to Dark Mode' : 'Switch to Light Mode'}>
 
           {isLightMode ? <Moon className="w-3.5 h-3.5 text-foreground" /> : <Sun className="w-3.5 h-3.5 text-amber-400" />}
         </button>
