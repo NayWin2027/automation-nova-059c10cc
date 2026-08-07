@@ -238,13 +238,11 @@ function speechWeights(text: string): { asian: number; latin: number } {
   return { asian, latin };
 }
 
-// Weight → seconds. Asian ≈ 4.2 weight units/sec (empirically calibrated for Myanmar Edge TTS;
-// original 6.8 underestimated spoken duration by ~38%, causing output video to be only 40%
-// of target length). Latin ≈ 1.9 weight units/sec (~100 wpm narration pace).
-// SURGICAL FIX: 6.8 → 4.2 to align estimator with actual Myanmar TTS output duration.
+// Weight → seconds. Asian ≈ 6.8 weight units/sec (~4.5 syllables/sec),
+// Latin ≈ 1.9 weight units/sec (~100 wpm narration pace).
 function estimateSpokenSeconds(text: string): number {
   const { asian, latin } = speechWeights(stripTimecodes(text));
-  return asian / 4.2 + latin / 1.9;
+  return asian / 6.8 + latin / 1.9;
 }
 
 const LENGTH_TARGET_RATIO = 0.8;
@@ -490,23 +488,22 @@ serve(async (req) => {
       narrationStyle === "HYBRID" || narrationStyle === "VIRAL"
         ? `\n\nDIALOGUE TIMING LOCK (mandatory for ${narrationStyle} mode):
 - For each real spoken line, inspect the source frame-by-frame and use the EXACT source time where the speaker's first audible syllable begins (normally the first mouth movement). Never use a nearby reaction shot, an earlier establishing shot, or an approximate scene time.
-- MILLISECOND PRECISION IS MANDATORY: every timecode MUST use [MM:SS.mmm] format with exactly 3 decimal digits. Example: [02:15.340] [01:07.820] [00:45.060]. Never output [MM:SS] without milliseconds for dialogue lines.
-- Keep every speaker turn separate. When the speaker changes, begin a new paragraph at that new speaker's exact source start time including milliseconds.
+- Keep every speaker turn separate. When the speaker changes, begin a new paragraph at that new speaker's exact source start time.
 - For EVERY direct-speech paragraph, output the source start timecode, then prefix the paragraph with [DIALOGUE:EMOTION].
 - EMOTION must be exactly ONE of: ANGRY, SHOUTING, SAD, CRYING, HAPPY, EXCITED, FEARFUL, NERVOUS, SHOCKED, MOCKING, DISGUSTED, PLEADING, WHISPER, PROUD, RELIEVED, CALM — pick the one that matches how the character actually sounds in that moment.
-- Example format: [02:15.340] [DIALOGUE:ANGRY] translated spoken line here...
+- Example format: [02:15] [DIALOGUE:ANGRY] translated spoken line here...
 - Never write the emotion word inside the spoken line itself; it belongs only in the tag.
-- Put the [DIALOGUE:EMOTION] tag immediately after [MM:SS.mmm], exactly once. Never put it at the end or middle of the spoken text, and never use braces such as {DIALOGUE}.
-- Narrator (non-dialogue) paragraphs also use millisecond format: [02:15.340] narrator text...
+- Put the [DIALOGUE:EMOTION] tag immediately after [MM:SS], exactly once. Never put it at the end or middle of the spoken text, and never use braces such as {DIALOGUE}.
+- Narrator (non-dialogue) paragraphs keep the normal single-timecode format: [02:15] narrator text...
 - Write the full natural translation of what was said — never truncate a line to fit a time slot. Clarity and story flow come first.
 - If the source has no spoken dialogue at that moment, do NOT use [DIALOGUE]; stay in narrator voice.
 - This is dub-style alignment, NOT generative lip-sync: the syllables do not need to match.
 
-DIALOGUE COMPLETENESS — ABSOLUTE RULE (mandatory for ${narrationStyle} mode):
+DIALOGUE COMPLETENESS (mandatory for ${narrationStyle} mode):
 - EVERY spoken line in the source must appear in the script as a real translated [DIALOGUE:EMOTION] line. Do NOT sample or pick "only the important ones".
 - It is FORBIDDEN to replace a spoken line with a description of it. BAD: "သူက ဒေါသတကြီး ပြောလိုက်တယ်" — GOOD: the actual translated words the character said.
-- For back-and-forth exchanges, write EACH speaker's line as its own separate paragraph with its own timecode and its own emotion tag. Never merge two speakers into one paragraph.
-- DIALOGUE IS SACRED — it CANNOT be omitted under any circumstance, including token budget pressure. If space is tight, reduce narrator bridge lines to 3-5 words maximum, but NEVER cut even one dialogue line. A script missing any dialogue line is considered INVALID and will be REJECTED.
+- For back-and-forth exchanges, write EACH speaker's line as its own separate paragraph with its own timecode range and its own emotion tag. Never merge two speakers into one paragraph.
+- Dialogue has priority over narration. Total script length does NOT change: to make room for the full dialogue, cut narrator sentences down to short connective lines only.
 - Narrator paragraphs exist to bridge, set context, and explain what dialogue cannot — keep them short but ALWAYS keep the story understandable. A viewer who never saw the source must follow the plot from start to finish; never sacrifice story coherence for brevity.
 
 ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
@@ -611,10 +608,10 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - Identify the subject matter, the niche, and the story being told through visuals/actions/music
 - Write a complete, engaging narration script based on your visual/audio analysis
 
-SCRIPT LENGTH RULE (CRITICAL — TRUE 80% RECAP / SUMMARY):
+SCRIPT LENGTH RULE (CRITICAL — TRUE 70% RECAP / SUMMARY):
 - This is a RECAP (summary), NOT a retelling. The narration MUST cover the full STORY ARC end-to-end but in a heavily compressed form.
-- HARD length target: the narration MUST take about 80% of the source duration when read aloud at a normal narration pace. This is a FIXED target, not a suggestion. Do not stop early.
-- Duration targets: 3-min source → about 2.4 min recap; 5-min → about 4 min; 6-min → about 4.8 min; 10-min → about 8 min; 30-min → about 24 min.
+- HARD length target: the narration MUST take about 70% of the source duration when read aloud at a normal narration pace. This is a FIXED target, not a suggestion. Do not stop early.
+- Duration targets: 3-min source → about 2 min recap; 5-min → about 3.5 min; 6-min → about 4.2 min; 10-min → about 7 min; 30-min → about 21 min.
 - Judge length by SPOKEN TIME, not by word or character count.
 - You MUST include the ending, but aggressively cut filler, repetition, side-beats, and low-stakes scenes.
 - Keep ONLY the main connected story beats and the highest-tension/climax scenes, in a tightly-linked narrative.
@@ -800,17 +797,16 @@ YOU ARE A PROFESSIONAL HOLLYWOOD VIDEO EDITOR:
 - For EACH paragraph, identify which scene/moment in the SOURCE VIDEO best matches the narration content
 - Assign the EXACT video timecode [MM:SS] where that matching scene appears in the source
 - Do NOT follow chronological/sequential order — JUMP to wherever the BEST MATCHING scene is
-- Example: If narrating about a tiger running and the tiger scene is at 02:15.340, write: [02:15.340] narration text
-- Example: If narrating about stock market data and that scene is at 00:45.820, write: [00:45.820] narration text
+- Example: If narrating about a tiger running and the tiger scene is at 02:15, write: [02:15] narration text
+- Example: If narrating about stock market data and that scene is at 00:45, write: [00:45] narration text  
 - Think like a professional editor cutting between scenes — pick the MOST RELEVANT visual for each narration beat
 - If the narration describes an emotion/action, find the video moment that SHOWS that emotion/action
 - NEVER just assign sequential timestamps — that defeats the purpose of intelligent scene matching
 
 OUTPUT FORMAT:
-- Each paragraph MUST start with [MM:SS.mmm] — the source video timecode WITH millisecond precision (3 decimal digits)
-- SURGICAL REQUIREMENT: Use [MM:SS.mmm] format ALWAYS. Example: [01:23.450] not [01:23]. This enables frame-accurate AV sync.
+- Each paragraph MUST start with [MM:SS] — the source video timecode of the best matching scene
 - After the timecode, write the narration text as a natural spoken paragraph
-- Example: [01:23.450] narration paragraph text here...
+- Example: [01:23] narration paragraph text here...
 - Each paragraph = one scene cut in the final video
 - The timecode tells the video editor WHICH part of the source video to show during this narration
 
