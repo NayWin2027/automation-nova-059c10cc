@@ -1521,17 +1521,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         lastComputedVEnd = vEnd === -1 ? vStart + 5 : vEnd;
         // SURGICAL EDIT: No duration cap â€” video segment plays full natural duration
         // for 100% voice-to-video accuracy (Pacing Intelligence caps removed)
-        // SURGICAL FIX: Propagate isDialogue + exact source positions to syncAndDraw loop
-        // so dialogue segments always use sourceStartSec/sourceEndSec — never scaled/overridden.
         return {
           vStart,
           vEnd,
-          isDialogue: dialogueSourceStart !== null,
-          rawSourceStart: dialogueSourceStart ?? null,
-          rawSourceEnd:
-            dialogueSourceStart !== null && typeof seg.sourceEndSec === "number" && Number.isFinite(seg.sourceEndSec)
-              ? seg.sourceEndSec
-              : null,
           aStartPct: totalWords > 0 ? startWords / totalWords : 0,
           aEndPct: totalWords > 0 ? wordCursor / totalWords : 1,
           text: stripDialogueMetadata(seg.text)
@@ -3206,31 +3198,14 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   const _hasAudioTs = audioTs.length > activeIndex && !!audioTs[activeIndex];
                   // Scale only when timestamps look recap-relative (last vStart < 55% of source duration)
                   const _needsScale = _hasAudioTs && _lastSegVStart > 0 && _lastSegVStart < _vidDur * 0.55;
-                  // SURGICAL FIX: AV SYNC 100% DIALOGUE ACCURACY
-                  // Dialogue segments (Hybrid/Viral) carry exact sourceStartSec/sourceEndSec from AI.
-                  // These MUST bypass _needsScale entirely — scaling would produce wrong video positions
-                  // causing TTS voice to play over mismatched footage (lip-sync broken).
-                  // Only narrator/story segments use the proportional scale path.
-                  const _isDialogueSeg =
-                    active.isDialogue === true &&
-                    typeof active.rawSourceStart === "number" &&
-                    Number.isFinite(active.rawSourceStart);
-                  const effectiveVStart = _isDialogueSeg
-                    ? (active.rawSourceStart as number)
-                    : _needsScale
-                      ? Math.min((audioTs[activeIndex].start / _audioDur) * _vidDur, _vidDur - 0.5)
-                      : active.vStart;
-                  const effectiveVEnd =
-                    _isDialogueSeg &&
-                    typeof active.rawSourceEnd === "number" &&
-                    Number.isFinite(active.rawSourceEnd) &&
-                    (active.rawSourceEnd as number) > effectiveVStart
-                      ? (active.rawSourceEnd as number)
-                      : _needsScale
-                        ? Math.min((audioTs[activeIndex].end / _audioDur) * _vidDur, _vidDur)
-                        : active.vEnd === -1
-                          ? vv.duration
-                          : active.vEnd;
+                  const effectiveVStart = _needsScale
+                    ? Math.min((audioTs[activeIndex].start / _audioDur) * _vidDur, _vidDur - 0.5)
+                    : active.vStart;
+                  const effectiveVEnd = _needsScale
+                    ? Math.min((audioTs[activeIndex].end / _audioDur) * _vidDur, _vidDur)
+                    : active.vEnd === -1
+                      ? vv.duration
+                      : active.vEnd;
                   // Persist for between-segment hold loop
                   lastEffectiveVStartRef.current = effectiveVStart;
                   lastEffectiveVEndRef.current = effectiveVEnd;
@@ -3321,9 +3296,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   } else if (!seekPendingRef.current) {
                     // SURGICAL FIX: AV SYNC 100% — If video has overrun vEnd, hard-seek back to effectiveVStart
                     // This prevents irrelevant content (eating, dancing, walking) from leaking into the active segment.
-                    // SURGICAL FIX: Dialogue segments use ZERO end-margin — must cut EXACTLY at sourceEndSec.
-                    // Non-dialogue keeps 80ms tolerance for smooth decoder transitions.
-                    const endMargin = _isDialogueSeg ? 0 : 0.08;
+                    const endMargin = 0.08;
                     if (sourceEnd > effectiveVStart && vv.currentTime >= sourceEnd - endMargin) {
                       // Hard-cut seek: loop segment — never show content past vEnd
                       seekPendingRef.current = true;
@@ -5630,15 +5603,6 @@ const RecapVideoNVPage: React.FC = () => {
     } else if (lower.includes("billing")) {
       suggestion =
         "ဤ API Key တွင် Billing မဖွင့်ထားပါ။ Google Cloud Console တွင် Billing enable လုပ်ပါ၊ မဖြစ်ရင် App API Mode သို့ ပြောင်းပါ။";
-    } else if (
-      lower.includes("503") ||
-      lower.includes("unavailable") ||
-      lower.includes("overload") ||
-      lower.includes("high demand") ||
-      lower.includes("မအားသေးပါ")
-    ) {
-      suggestion =
-        "Google AI model က ယာယီ demand များနေပါသည် (503)။ ဒီ request မှာ credit မဖြတ်ပါ။ ၁–၂ မိနစ်စောင့်ပြီး အောက်က 🔁 Retry Script ကို နှိပ်ပါ (Video ပြန်တင်စရာမလိုပါ)။";
     } else if (lower.includes("upload") || lower.includes("chunk")) {
       suggestion = "Video upload မအောင်မြင်ပါ။ ဖိုင်အရွယ်အစား/Network ကို စစ်ဆေးပြီး ပြန်ကြိုးစားပါ။";
     }
