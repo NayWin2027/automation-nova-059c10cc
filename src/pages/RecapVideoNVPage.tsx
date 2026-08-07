@@ -2622,7 +2622,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           // â”€â”€ FEATURE: AI Hook Intro â€” cinematic title card overlay for first 4s of recording â”€â”€
           // Shows most dramatic scene title + film strip effect at recording start
           const HOOK_DURATION_MS = 4000;
-          const recAge = recStartTimeRef.current > 0 ? performance.now() - recStartTimeRef.current : Infinity;
+          // SURGICAL FIX: drive the hook overlay from the AUDIO clock so the title card and the
+          // hook video override start and end at exactly the same instant (wall clock drifted
+          // whenever audio playback started later than the recorder).
+          const _hookAudioEl = audioRef.current;
+          const recAge =
+            _hookAudioEl && _hookAudioEl.duration > 0
+              ? _hookAudioEl.currentTime * 1000
+              : recStartTimeRef.current > 0
+                ? performance.now() - recStartTimeRef.current
+                : Infinity;
           const hookIdx = hookSegmentIdxRef.current;
           const hookTitle = hookTitleRef.current;
           if (recAge < HOOK_DURATION_MS && hookIdx >= 0 && hookTitle) {
