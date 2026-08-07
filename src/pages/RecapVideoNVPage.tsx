@@ -1531,9 +1531,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           vEnd,
           aStartPct: totalWords > 0 ? startWords / totalWords : 0,
           aEndPct: totalWords > 0 ? wordCursor / totalWords : 1,
-          text: stripDialogueMetadata(seg.text)
-            .replace(/\[\d{1,2}:\d{2}\]/g, "")
-            .trim(),
+          text: stripDialogueMetadata(seg.text).replace(TIMECODE_STRIP_RE, "").trim(),
         };
       });
     }, [scriptData, narrationStyle]);
