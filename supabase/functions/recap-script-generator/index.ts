@@ -1183,7 +1183,7 @@ ${normalizedRawScript}`;
           const contData = await contRes.json();
           const contText: string = contData.candidates?.[0]?.content?.parts?.[0]?.text || "";
           const accepted: string[] = [];
-          let cursor = isWindowMode ? Math.max(0, windowStart - 1) : lastTc;
+          let cursor = isWindowMode ? Math.max(lastTc, windowStart - 1) : lastTc;
           for (const p of contText.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean)) {
             const t = paraTimecodeSec(p);
             if (t === null || t <= cursor) continue;
