@@ -1218,7 +1218,10 @@ ${normalizedRawScript}`;
           if (t !== null && t > lastTc) lastTc = t;
         }
         const boundaryStart = isWindowMode ? Math.floor((sourceDurationSec * (partNo - 1)) / windowTotal) : lastTc;
-        const windowStart = Math.max(lastTc, boundaryStart);
+        // Resume from the last scene actually written. Using max(lastTc, boundaryStart)
+        // silently skipped the whole gap whenever an earlier part stopped short of its
+        // planned boundary, which is exactly where important middle scenes disappeared.
+        const windowStart = isWindowMode ? lastTc : boundaryStart;
         const windowEnd = isLastWindow
           ? sourceDurationSec
           : Math.floor((sourceDurationSec * partNo) / windowTotal);
