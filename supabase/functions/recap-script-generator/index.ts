@@ -240,12 +240,11 @@ function speechWeights(text: string): { asian: number; latin: number } {
   return { asian, latin };
 }
 
-// Weight → seconds. These rates match the generated narration more closely;
-// the previous 6.8 divisor substantially overestimated Burmese spoken time and
-// allowed scripts shorter than two minutes to pass for a five-minute source.
+// Weight → seconds. Asian ≈ 6.8 weight units/sec (~4.5 syllables/sec),
+// Latin ≈ 1.9 weight units/sec (~100 wpm narration pace).
 function estimateSpokenSeconds(text: string): number {
   const { asian, latin } = speechWeights(stripTimecodes(text));
-  return asian / 10.5 + latin / 2.2;
+  return asian / 6.8 + latin / 1.9;
 }
 
 const LENGTH_TARGET_RATIO = 0.7;
@@ -294,15 +293,21 @@ function enforceScriptCoverage55(script: string, sourceDurationSec?: number | nu
   let count = 0;
   for (const paragraph of paragraphs) {
     const paragraphSeconds = estimateSpokenSeconds(paragraph);
-    if (count + paragraphSeconds > targetSeconds && kept.length > 0) break;
+    if (count + paragraphSeconds > targetSeconds && kept.length > 0) {
+      const remainingSeconds = Math.max(0, maxSeconds - count);
+      const partialParagraph = trimToCompleteSentences(paragraph, remainingSeconds);
+      if (partialParagraph && estimateSpokenSeconds(partialParagraph) <= remainingSeconds) {
+        kept.push(partialParagraph);
+        count += estimateSpokenSeconds(partialParagraph);
+      }
+      break;
+    }
     kept.push(paragraph);
     count += paragraphSeconds;
     if (count >= targetSeconds) break;
   }
   const paragraphTrimmed = kept.length ? kept.join("\n\n") : trimToCompleteSentences(normalized, maxSeconds);
-  // Never let coarse paragraph trimming turn an otherwise complete script into
-  // an under-length result. Keeping the complete script is safer than deleting
-  // a whole timed scene and preserves its source-timecode mapping.
+  // Never let trimming turn a complete script into an under-length result.
   if (estimateSpokenSeconds(paragraphTrimmed) < sourceDurationSec * LENGTH_MIN_RATIO) return normalized;
   if (estimateSpokenSeconds(paragraphTrimmed) <= maxSeconds) return paragraphTrimmed;
   const sentenceTrimmed = trimToCompleteSentences(paragraphTrimmed, maxSeconds);
@@ -1073,66 +1078,11 @@ ${transcript}
       );
     }
 
-    // ===== LENGTH TOP-UP: if the script is far below the fixed 70% target, ask the
-    // model once to continue from where it stopped. Keeps output length consistent
-    // across repeated generations of the same source. =====
+    // Never append a second continuation to an already complete timed script:
+    // restarted/duplicate source timecodes can corrupt downstream AV mapping.
     let lengthAdjustedScript = normalizedRawScript;
     const rawSpokenSec = estimateSpokenSeconds(normalizedRawScript);
-    let toppedUp = false;
-    if (sourceDurationSec && rawSpokenSec < sourceDurationSec * LENGTH_MIN_RATIO && remainingBudget() > 25000) {
-      const targetSec = sourceDurationSec * LENGTH_TARGET_RATIO;
-      const missingSec = Math.max(0, targetSec - rawSpokenSec);
-      const contController = new AbortController();
-      const contTimeout = Math.max(8000, Math.min(60000, remainingBudget() - 12000));
-      const contTimeoutId = setTimeout(() => contController.abort(), contTimeout);
-      try {
-        const continuationParts = [
-          ...contentParts,
-          {
-            text: `CONTINUATION TASK (same source, same ${lang} language, same [MM:SS] paragraph format):
-You already wrote the narration below, but it is TOO SHORT. It reads aloud in about ${Math.round(rawSpokenSec)} seconds, while the required length is about ${Math.round(targetSec)} seconds (70% of the source).
-
-Write ONLY the CONTINUATION — roughly ${Math.round(missingSec)} more seconds of narration:
-- Continue naturally from the last sentence below. Do NOT repeat, rewrite, or summarize what is already written.
-- Cover the source parts that are still missing, and make sure the FINAL paragraph matches the FINAL scene of the source.
-- Keep the exact same output format: every paragraph starts with [MM:SS].
-- Do NOT add any preamble, heading, or explanation. Output narration paragraphs only.
-- End with a complete sentence.
-
-ALREADY WRITTEN NARRATION:
-${normalizedRawScript}`,
-          },
-        ];
-        const contResponse = await callGeminiGenerateContent(
-          activeModel,
-          activeApiKey,
-          isOwnApi,
-          contController.signal,
-          finalSystemPrompt,
-          continuationParts,
-          requestedMaxOutputTokens,
-        );
-        if (contResponse?.ok) {
-          const contData = await contResponse.json();
-          const contText = stripHookPreamble(contData.candidates?.[0]?.content?.parts?.[0]?.text || "");
-          if (contText && contText.length > 20 && !violatesTargetLanguage(contText, lang)) {
-            const merged = `${normalizedRawScript}\n\n${contText}`.trim();
-            lengthAdjustedScript = endsAtCompleteSentence(merged)
-              ? merged
-              : `${normalizedRawScript}\n\n${contText.replace(/[^\n]*$/, "").trim()}`.trim() || normalizedRawScript;
-            toppedUp = true;
-          }
-        } else {
-          console.warn(`[recap-script-generator] Length top-up failed: ${contResponse?.status}`);
-        }
-      } catch (err) {
-        console.warn(
-          `[recap-script-generator] Length top-up error: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      } finally {
-        clearTimeout(contTimeoutId);
-      }
-    }
+    const toppedUp = false;
 
     const rawWordCount = lengthAdjustedScript.split(/\s+/).filter(Boolean).length;
     const script = enforceScriptCoverage55(lengthAdjustedScript, sourceDurationSec);
@@ -1145,6 +1095,19 @@ ${normalizedRawScript}`,
         )}s final=${Math.round(finalSpokenSec)}s ratio=${((finalSpokenSec / sourceDurationSec) * 100).toFixed(
           1,
         )}% target=70% toppedUp=${toppedUp}`,
+      );
+    }
+
+    if (sourceDurationSec && finalSpokenSec < sourceDurationSec * LENGTH_MIN_RATIO) {
+      console.error(`[recap-script-generator] Rejecting under-length script before credit deduction`);
+      return new Response(
+        JSON.stringify({
+          error: "AI script အရှည်က source video ရဲ့ 65% မပြည့်သေးလို့ credit မဖြတ်ပါ။ ပြန် Generate လုပ်ပါ။",
+          retryable: true,
+          underLength: true,
+          retryAfterSeconds: 5,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
