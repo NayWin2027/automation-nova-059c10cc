@@ -611,12 +611,12 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - Write a complete, engaging narration script based on your visual/audio analysis
 
 SCRIPT LENGTH RULE (CRITICAL — TRUE 70% RECAP / SUMMARY):
-- This is a RECAP (summary), NOT a retelling. The narration MUST cover the full STORY ARC end-to-end but in a heavily compressed form.
+ - This is a RECAP, but it MUST be detailed enough to occupy the full 70% spoken-time target while covering the complete STORY ARC end-to-end.
 - HARD length target: the narration MUST take about 70% of the source duration when read aloud at a normal narration pace. This is a FIXED target, not a suggestion. Do not stop early.
 - Duration targets: 3-min source → about 2 min recap; 5-min → about 3.5 min; 6-min → about 4.2 min; 10-min → about 7 min; 30-min → about 21 min.
 - Judge length by SPOKEN TIME, not by word or character count.
-- You MUST include the ending, but aggressively cut filler, repetition, side-beats, and low-stakes scenes.
-- Keep ONLY the main connected story beats and the highest-tension/climax scenes, in a tightly-linked narrative.
+ - You MUST include the ending. Cut only genuine filler and repetition; never cut a scene that introduces a decision, conflict, relationship change, reveal, consequence, climax, or resolution.
+ - Keep every connected essential beat and the highest-tension/climax scenes in a tightly-linked narrative. If the draft is short, expand coverage with omitted source scenes, never with repeated wording.
 - The FINAL paragraph MUST correspond to the FINAL scene of the source video (its timecode should be near the source's ending)
 - Every important beat from beginning, middle, AND end must appear — no part of the video may be skipped or left out
 - Avoid padding/repetition, but DO write enough paragraphs to truly cover the full duration end-to-end.
@@ -816,12 +816,12 @@ Below is a source video/audio file. Your job is to:
 YOU ARE A PROFESSIONAL HOLLYWOOD VIDEO EDITOR:
 - For EACH paragraph, identify which scene/moment in the SOURCE VIDEO best matches the narration content
 - Assign the EXACT video timecode [MM:SS] where that matching scene appears in the source
-- Do NOT follow chronological/sequential order — JUMP to wherever the BEST MATCHING scene is
+ - Follow the source story in chronological order so beginning, middle, and ending are all covered; for each paragraph still select the EXACT matching source scene
 - Example: If narrating about a tiger running and the tiger scene is at 02:15, write: [02:15] narration text
 - Example: If narrating about stock market data and that scene is at 00:45, write: [00:45] narration text  
 - Think like a professional editor cutting between scenes — pick the MOST RELEVANT visual for each narration beat
 - If the narration describes an emotion/action, find the video moment that SHOWS that emotion/action
-- NEVER just assign sequential timestamps — that defeats the purpose of intelligent scene matching
+ - Timecodes must keep increasing because the recap follows the story, but each one must still point to the genuinely matching source scene rather than an invented evenly-spaced timestamp
 
 FULL COVERAGE RULE (MANDATORY):
 - Before writing, mentally list EVERY essential story beat in the source: setup, each major turning point, confrontations, revelations/confessions, decisions, climax and the ENDING. None of them may be missing.
@@ -891,9 +891,9 @@ ${transcript}
     const remainingBudget = () => Math.max(0, WALL_BUDGET_MS - (Date.now() - wallStart));
 
     const controller = new AbortController();
-    // Give the primary attempt the majority of the wall budget, leaving room for one fallback.
-    // 3-window sources (>20 min) need room for two continuation passes.
-    const primaryCap = sourceDurationSec && sourceDurationSec > 1200 ? 70000 : 115000;
+    // Always reserve real wall time for mandatory length repair/window passes. The old
+    // 115s primary cap left <35s, so the repair condition below could never run.
+    const primaryCap = sourceDurationSec && sourceDurationSec > 1200 ? 55000 : sourceDurationSec && sourceDurationSec > 720 ? 70000 : 85000;
     const primaryTimeout = Math.min(primaryCap, remainingBudget() - 15000);
     const timeoutId = setTimeout(() => controller.abort(), Math.max(5000, primaryTimeout));
     try {
@@ -1108,6 +1108,75 @@ ${transcript}
     const rawSpokenSec = estimateSpokenSeconds(normalizedRawScript);
     let toppedUp = false;
 
+    // A prompt rule alone cannot enforce duration. If a single-pass result is below
+    // the accepted 65% floor, make one media-grounded full rewrite while enough wall
+    // time remains. Rewriting (rather than appending after the final timecode) lets the
+    // model restore important scenes skipped anywhere in the beginning/middle/end.
+    const initialWindowTotal = !sourceDurationSec ? 1 : sourceDurationSec > 1200 ? 3 : sourceDurationSec > 720 ? 2 : 1;
+    if (
+      sourceDurationSec &&
+      initialWindowTotal === 1 &&
+      rawSpokenSec < sourceDurationSec * LENGTH_MIN_RATIO &&
+      remainingBudget() > 24000
+    ) {
+      const targetSec = Math.round(sourceDurationSec * LENGTH_TARGET_RATIO);
+      const repairPrompt = `LENGTH REPAIR — REWRITE THE ENTIRE SCRIPT FROM SCRATCH.
+
+The previous draft below is only about ${Math.round(rawSpokenSec)} seconds when spoken, but the mandatory target is about ${targetSec} seconds (acceptable range ${Math.round(
+        sourceDurationSec * LENGTH_MIN_RATIO,
+      )}-${Math.round(sourceDurationSec * LENGTH_MAX_RATIO)} seconds).
+
+Re-watch the attached source from beginning to end. Before writing, internally build a chronological beat ledger containing every setup, decision, confrontation, relationship change, reveal, consequence, climax, and ending. Then write a NEW complete script that includes every ledger beat.
+
+Rules:
+- Do not continue or pad the old draft; replace it completely.
+- Cover beginning, middle, last third, climax, and ending proportionally. Important scenes must not be omitted.
+- Reach the spoken-time range by adding omitted source events and concrete actions/dialogue, never repetition or filler.
+- Keep exact, strictly increasing [MM:SS] source timecodes and finish with a complete sentence.
+- Output only the rewritten script in ${lang}; no ledger, headings, notes, or explanation.
+
+UNDER-LENGTH DRAFT TO REPLACE:
+${normalizedRawScript}`;
+      const repairParts = [{ text: repairPrompt }, ...contentParts.slice(1)];
+      const repairController = new AbortController();
+      const repairTimeoutId = setTimeout(
+        () => repairController.abort(),
+        Math.max(5000, Math.min(45000, remainingBudget() - 10000)),
+      );
+      try {
+        const repairRes = await callGeminiGenerateContent(
+          activeModel,
+          activeApiKey,
+          isOwnApi,
+          repairController.signal,
+          finalSystemPrompt,
+          repairParts,
+          requestedMaxOutputTokens,
+        );
+        if (repairRes.ok) {
+          const repairData = await repairRes.json();
+          const repaired = stripHookPreamble(repairData.candidates?.[0]?.content?.parts?.[0]?.text || "");
+          const repairedSpokenSec = estimateSpokenSeconds(repaired);
+          if (
+            repaired &&
+            endsAtCompleteSentence(repaired) &&
+            !violatesTargetLanguage(repaired, lang) &&
+            repairedSpokenSec > rawSpokenSec
+          ) {
+            lengthAdjustedScript = repaired;
+            toppedUp = true;
+            console.log(`[recap-script-generator] Full length repair accepted: ${Math.round(rawSpokenSec)}s -> ${Math.round(repairedSpokenSec)}s`);
+          } else {
+            console.warn(`[recap-script-generator] Full length repair rejected: ${Math.round(repairedSpokenSec)}s`);
+          }
+        }
+      } catch (repairErr) {
+        console.warn(`[recap-script-generator] Full length repair failed: ${repairErr instanceof Error ? repairErr.message : String(repairErr)}`);
+      } finally {
+        clearTimeout(repairTimeoutId);
+      }
+    }
+
     // ---- Safe continuation / window passes ---------------------------------
     // Long sources are generated as 2 or 3 windows; short-but-incomplete scripts get
     // one top-up pass. Any paragraph whose timecode is not strictly greater than the
@@ -1124,19 +1193,19 @@ ${transcript}
     const stripTc = (s: string) => s.replace(/^\s*\[\d{1,2}:\d{2}\]\s*/, "").trim();
     if (
       sourceDurationSec &&
-      (isWindowMode || rawSpokenSec < sourceDurationSec * 0.55) &&
-      endsAtCompleteSentence(normalizedRawScript) &&
-      remainingBudget() > 35000
+      (isWindowMode || estimateSpokenSeconds(lengthAdjustedScript) < sourceDurationSec * LENGTH_MIN_RATIO) &&
+      endsAtCompleteSentence(lengthAdjustedScript) &&
+      remainingBudget() > 22000
     ) {
       // Pass 1 already covered window 1. Run one pass per remaining window (or a
       // single top-up pass when the source is short but the script came out thin).
       const passCount = isWindowMode ? windowTotal - 1 : 1;
-      let workingScript = normalizedRawScript;
+      let workingScript = lengthAdjustedScript;
 
       for (let pass = 1; pass <= passCount; pass++) {
         const partNo = pass + 1;
         const isLastWindow = !isWindowMode || partNo === windowTotal;
-        if (remainingBudget() < 30000) {
+        if (remainingBudget() < 18000) {
           console.log(`[recap-script-generator] Skipping window pass ${partNo}: budget exhausted`);
           break;
         }
@@ -1149,7 +1218,10 @@ ${transcript}
           if (t !== null && t > lastTc) lastTc = t;
         }
         const boundaryStart = isWindowMode ? Math.floor((sourceDurationSec * (partNo - 1)) / windowTotal) : lastTc;
-        const windowStart = Math.max(lastTc, boundaryStart);
+        // Resume from the last scene actually written. Using max(lastTc, boundaryStart)
+        // silently skipped the whole gap whenever an earlier part stopped short of its
+        // planned boundary, which is exactly where important middle scenes disappeared.
+        const windowStart = isWindowMode ? lastTc : boundaryStart;
         const windowEnd = isLastWindow
           ? sourceDurationSec
           : Math.floor((sourceDurationSec * partNo) / windowTotal);
