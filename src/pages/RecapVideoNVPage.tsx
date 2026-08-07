@@ -5855,14 +5855,14 @@ const RecapVideoNVPage: React.FC = () => {
       const scriptBody: Record<string, unknown> = {
         fileUri,
         fileMimeType: mimeType,
-        niche: `You are an aggressive international professional YouTube recap editor. Analyze the uploaded movie/video and produce a condensed, fast-paced recap script in ${selectedLangName}. Length must be approximately 40-50% of the original duration when read aloud (never below 30%). Start with a shocking hook, build mystery, escalate tension, finish with a climactic payoff. Aggressively cut filler/travel/waiting scenes. Keep only plot twists, key character moments, conflicts, reveals, and the resolution. Write as ONE continuous gripping story with hook transitions between segments. Output each paragraph prefixed by [MM:SS] starting at [00:00] and ending close to the full duration. Use original wording — do NOT quote distinctive dialogue.${burmeseStyleBlock}${buildNarrationStyleBlock(narrationStyle, selectedLangName)}`,
+        niche: `You are an aggressive international professional YouTube recap editor. Analyze the uploaded movie/video and produce a condensed, fast-paced recap script in ${selectedLangName}. Length must be approximately 70% of the original duration when read aloud (band 65-75%, never below 65%). Start with a shocking hook, build mystery, escalate tension, finish with a climactic payoff. Aggressively cut filler/travel/waiting scenes. Keep only plot twists, key character moments, conflicts, reveals, and the resolution. Write as ONE continuous gripping story with hook transitions between segments. Output each paragraph prefixed by [MM:SS] starting at [00:00] and ending close to the full duration. Use original wording — do NOT quote distinctive dialogue.${burmeseStyleBlock}${buildNarrationStyleBlock(narrationStyle, selectedLangName)}`,
         language: selectedLangName,
         sourceDurationSec: duration,
         narrationStyle,
         skipCreditDeduction: true,
         recapNvPipeline: true,
         apiMode: resolvedApiMode,
-        extraInstructions: `CRITICAL:\n- Output language MUST be ${selectedLangName} ONLY.\n- Cover the full story arc but stay at 40-50% of source duration (never below 30%, never above 50%).\n- For sources longer than 30 minutes, treat as 30-minute source and cap recap at 15 minutes.\n- Aggressively cut filler. Keep only plot-advancing moments.\n- Each segment must flow into the next with a hook/transition.\n- Never output a partial/incomplete script.${burmeseExtraStyle}`,
+        extraInstructions: `CRITICAL:\n- Output language MUST be ${selectedLangName} ONLY.\n- Cover the full story arc at about 70% of source duration (never below 65%, never above 75%).\n- Aggressively cut filler. Keep only plot-advancing moments.\n- Each segment must flow into the next with a hook/transition.\n- Never output a partial/incomplete script.${burmeseExtraStyle}`,
         generationConfig: {
           maxOutputTokens,
           temperature: 0.7,
@@ -6409,13 +6409,13 @@ The narration must feel like a non-stop thriller story, NOT a boring lecture, do
 
 STRICT LENGTH RULE:
 This is a surgical recap, not a summary. Do NOT retain most of the source or produce a detailed retelling.
-The output script MUST be approximately 40-50% of the original video duration when read aloud.
+The output script MUST be approximately 70% of the original video duration when read aloud (acceptable band: 65-75%).
 MINIMUM WORD COUNT (CRITICAL â€” DO NOT GO BELOW THIS):
-  * Source 5 min â†’ minimum 350 words, target ~500 words
-  * Source 10 min â†’ minimum 700 words, target ~1200 words
-  * Source 15 min â†’ minimum 1000 words, target ~1800 words
-  * Source 20 min â†’ minimum 1500 words, target ~2500 words
-  * Source 30 min â†’ minimum 2000 words, target ~3500 words
+  * Source 5 min â†’ minimum 500 words, target ~700 words
+  * Source 10 min â†’ minimum 1000 words, target ~1400 words
+  * Source 15 min â†’ minimum 1500 words, target ~2100 words
+  * Source 20 min â†’ minimum 2000 words, target ~2800 words
+  * Source 30 min â†’ minimum 3000 words, target ~4200 words
 If your script is shorter than the MINIMUM, you MUST add more story detail until you reach it.
 A 20-minute source producing only 2 minutes of narration = FAILURE.
 
@@ -6439,13 +6439,12 @@ INSTRUCTIONS:
 - Skip over setup/buildup scenes and jump straight to the payoff.
 
 PACING & DURATION RULE (CRITICAL):
-- The recap MUST be approximately 40-50% of the original video duration. NOT shorter, NOT longer.
-- The app is built for source videos up to 30 minutes. If the source is longer than 30 minutes, treat it like a 30-minute source.
-  * Source up to 30 min â†’ recap 40-50% of source duration (e.g. 20 min â†’ 8-10 min recap).
-  * Source under 15 min â†’ recap about 40-50% of the length.
-  * Source under 10 min â†’ recap about 40-50% of the length.
-  * Source under 5 min â†’ recap about 40-50% of the length.
-- IMPORTANT: Going BELOW 30% is just as bad as exceeding 50%. A recap that is too short feels incomplete.
+- The recap MUST be approximately 70% of the original video duration (band 65-75%). NOT shorter, NOT longer.
+  * Source 30 min â†’ recap about 21 min.
+  * Source 20 min â†’ recap about 14 min.
+  * Source 10 min â†’ recap about 7 min.
+  * Source 5 min â†’ recap about 3.5 min.
+- IMPORTANT: Going BELOW 65% is just as bad as exceeding 75%. A recap that is too short feels incomplete.
 - If your narration word count falls below the MINIMUM, ADD more story details until you reach it.
 - The viewer should feel like they watched a complete, exciting, condensed version â€” NOT a 30-second summary.
 
@@ -6471,16 +6470,15 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
         apiMode: resolvedApiMode,
         extraInstructions: `CRITICAL:
 - Output language MUST be ${selectedLangName} ONLY. Do NOT switch to any other language even if the video's spoken dialogue is in a different language.
-- Script must cover the story arc from beginning to end, BUT must be HEAVILY CONDENSED and no more than 50% of the source duration.
-  * For a 30-minute source, aim for 10-15 minutes and never exceed 15 minutes.
-  * If the source is longer than 30 minutes, treat it like a 30-minute source and keep the recap at 15 minutes max.
-  * For a source under 15 minutes, aim for about half the length, never exceed 50%.
-  * For a source under 10 minutes, aim for about half the length, never exceed 50%.
-  * For a source under 5 minutes, aim for about half the length, never exceed 50%.
+- Script must cover the story arc from beginning to end, condensed to about 70% of the source duration (never below 65%, never above 75%).
+  * For a 30-minute source, aim for about 21 minutes.
+  * For a 20-minute source, aim for about 14 minutes.
+  * For a 10-minute source, aim for about 7 minutes.
+  * For a 5-minute source, aim for about 3.5 minutes.
 - This is not a detailed summary or review. Do not include non-essential scene descriptions, explanatory pauses, or secondary character chatter.
 - If the story can be told in fewer segments, do that. Use as few segments as necessary to keep the full arc intact.
-- If the script exceeds 50% of source duration, condense low-priority scenes. But NEVER go below 30%.
-- Balance is key: aim for exactly 40-50% of the source duration.
+- If the script exceeds 75% of source duration, condense low-priority scenes. But NEVER go below 65%.
+- Balance is key: aim for exactly 70% of the source duration.
 - Each segment must flow smoothly into the next.
 - If token pressure appears, condense remaining story into brief segments instead of stopping.
 
