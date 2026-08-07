@@ -240,11 +240,13 @@ function speechWeights(text: string): { asian: number; latin: number } {
   return { asian, latin };
 }
 
-// Weight → seconds. Asian ≈ 6.8 weight units/sec (~4.5 syllables/sec),
-// Latin ≈ 1.9 weight units/sec (~100 wpm narration pace).
+// Weight → seconds at the Recap NV voice engine's actual 1.3x narration pace.
+// The old normal-speed divisors made a script that was logged as 70% play in
+// only ~54% after TTS (70 / 1.3), so the length guard falsely accepted it.
+// Asian: 6.8 * 1.3 = 8.84 units/sec; Latin: 1.9 * 1.3 = 2.47 units/sec.
 function estimateSpokenSeconds(text: string): number {
   const { asian, latin } = speechWeights(stripTimecodes(text));
-  return asian / 6.8 + latin / 1.9;
+  return asian / 8.84 + latin / 2.47;
 }
 
 const LENGTH_TARGET_RATIO = 0.7;
