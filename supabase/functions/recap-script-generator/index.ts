@@ -1137,20 +1137,41 @@ ${transcript}
         ? Math.round((sourceDurationSec - windowStart) * LENGTH_TARGET_RATIO)
         : Math.round(sourceDurationSec * LENGTH_TARGET_RATIO - rawSpokenSec);
       const contPrompt = isWindowMode
-        ? `*** PART 2 OF 2 — COVER ONLY ${tc(windowStart)} to ${tc(sourceDurationSec)} ***
+        ? (() => {
+            const tail = existingParas.slice(-3).join("\n\n");
+            const nameCounts = new Map<string, number>();
+            for (const m of normalizedRawScript.matchAll(/\b[A-Z][\p{L}'’-]{1,}\b/gu)) {
+              const w = m[0];
+              nameCounts.set(w, (nameCounts.get(w) || 0) + 1);
+            }
+            const knownNames = [...nameCounts.entries()]
+              .filter(([, c]) => c >= 2)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 12)
+              .map(([w]) => w);
+            const namesLine = knownNames.length
+              ? `\nCHARACTERS/NAMES ALREADY INTRODUCED IN PART 1 (use these EXACT spellings, never re-introduce them as new): ${knownNames.join(", ")}\n`
+              : "";
+            return `*** PART 2 OF 2 — COVER ONLY ${tc(windowStart)} to ${tc(sourceDurationSec)} ***
 
-PART 1 of this recap narration is below. Now write PART 2 from the SAME source video.
+PART 2 is a DIRECT CONTINUATION of PART 1 of the SAME recap narration. It is ONE single story, not a new recap.
+${namesLine}
+WHERE WE LEFT OFF (last lines of Part 1 — continue straight on from here):
+${tail}
 
 Rules:
 - Watch the source from ${tc(windowStart)} to the very END (${tc(sourceDurationSec)}) and narrate that part.
 - Write ONLY the new paragraphs. Do NOT repeat, restate or rewrite anything from Part 1.
+- Your FIRST sentence must continue directly from the last sentence of Part 1. No new hook, no new opening line, no "this story is about...", no re-introduction of the premise, no summary of Part 1.
+- Keep the exact same character names, spellings, relationships, narrator voice, tense and pronoun style as Part 1.
 - Every paragraph MUST start with [MM:SS] STRICTLY LATER than [${tc(windowStart)}] and keep increasing.
 - Cover every essential beat of this part including the ENDING/climax. Nothing important may be skipped.
 - Same language (${lang}), same tone, same [MM:SS] format. Never [HH:MM:SS], never ranges.
 - Target about ${missingSec} seconds of spoken narration. Finish with complete sentences.
 
 PART 1 (already written — do not repeat):
-${normalizedRawScript}`
+${normalizedRawScript}`;
+          })()
         : `The recap narration below is INCOMPLETE — it is about ${missingSec} seconds of speech too short and it skipped important scenes from the source.
 
 CONTINUE the script. Rules:
