@@ -3962,7 +3962,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       })()}
                     >
                       {stripDialogueMetadata(currentSubtitle || scriptData.segments[0]?.text || "")
-                        .replace(/\[\d{1,2}:\d{2}\]/g, "")
+                        .replace(TIMECODE_STRIP_RE, "")
                         .trim()}
                     </div>
                   </div>
