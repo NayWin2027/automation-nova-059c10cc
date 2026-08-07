@@ -1095,15 +1095,9 @@ ${transcript}
     }
 
     if (sourceDurationSec && finalSpokenSec < sourceDurationSec * LENGTH_MIN_RATIO) {
-      console.error(`[recap-script-generator] Rejecting under-length script before credit deduction`);
-      return new Response(
-        JSON.stringify({
-          error: "AI script အရှည်က source video ရဲ့ 65% မပြည့်သေးလို့ credit မဖြတ်ပါ။ ပြန် Generate လုပ်ပါ။",
-          retryable: true,
-          underLength: true,
-          retryAfterSeconds: 5,
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      // Log only — never reject a valid script for being slightly short.
+      console.warn(
+        `[recap-script-generator] Under-length script kept (${((finalSpokenSec / sourceDurationSec) * 100).toFixed(1)}% < ${LENGTH_MIN_RATIO * 100}%)`,
       );
     }
 
