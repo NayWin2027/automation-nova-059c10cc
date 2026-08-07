@@ -1065,9 +1065,80 @@ ${transcript}
       );
     }
 
-    const rawWordCount = normalizedRawScript.split(/\s+/).filter(Boolean).length;
-    const script = enforceScriptCoverage55(normalizedRawScript, sourceDurationSec);
+    // ===== LENGTH TOP-UP: if the script is far below the fixed 70% target, ask the
+    // model once to continue from where it stopped. Keeps output length consistent
+    // across repeated generations of the same source. =====
+    let lengthAdjustedScript = normalizedRawScript;
+    const rawSpokenSec = estimateSpokenSeconds(normalizedRawScript);
+    let toppedUp = false;
+    if (sourceDurationSec && rawSpokenSec < sourceDurationSec * LENGTH_MIN_RATIO && remainingBudget() > 25000) {
+      const targetSec = sourceDurationSec * LENGTH_TARGET_RATIO;
+      const missingSec = Math.max(0, targetSec - rawSpokenSec);
+      const contController = new AbortController();
+      const contTimeout = Math.max(8000, Math.min(60000, remainingBudget() - 12000));
+      const contTimeoutId = setTimeout(() => contController.abort(), contTimeout);
+      try {
+        const continuationParts = [
+          ...contentParts,
+          {
+            text: `CONTINUATION TASK (same source, same ${lang} language, same [MM:SS] paragraph format):
+You already wrote the narration below, but it is TOO SHORT. It reads aloud in about ${Math.round(rawSpokenSec)} seconds, while the required length is about ${Math.round(targetSec)} seconds (70% of the source).
+
+Write ONLY the CONTINUATION — roughly ${Math.round(missingSec)} more seconds of narration:
+- Continue naturally from the last sentence below. Do NOT repeat, rewrite, or summarize what is already written.
+- Cover the source parts that are still missing, and make sure the FINAL paragraph matches the FINAL scene of the source.
+- Keep the exact same output format: every paragraph starts with [MM:SS].
+- Do NOT add any preamble, heading, or explanation. Output narration paragraphs only.
+- End with a complete sentence.
+
+ALREADY WRITTEN NARRATION:
+${normalizedRawScript}`,
+          },
+        ];
+        const contResponse = await callGeminiGenerateContent(
+          activeModel,
+          activeApiKey,
+          isOwnApi,
+          contController.signal,
+          finalSystemPrompt,
+          continuationParts,
+          requestedMaxOutputTokens,
+        );
+        if (contResponse?.ok) {
+          const contData = await contResponse.json();
+          const contText = stripHookPreamble(contData.candidates?.[0]?.content?.parts?.[0]?.text || "");
+          if (contText && contText.length > 20 && !violatesTargetLanguage(contText, lang)) {
+            const merged = `${normalizedRawScript}\n\n${contText}`.trim();
+            lengthAdjustedScript = endsAtCompleteSentence(merged)
+              ? merged
+              : `${normalizedRawScript}\n\n${contText.replace(/[^\n]*$/, "").trim()}`.trim() || normalizedRawScript;
+            toppedUp = true;
+          }
+        } else {
+          console.warn(`[recap-script-generator] Length top-up failed: ${contResponse?.status}`);
+        }
+      } catch (err) {
+        console.warn(
+          `[recap-script-generator] Length top-up error: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      } finally {
+        clearTimeout(contTimeoutId);
+      }
+    }
+
+    const rawWordCount = lengthAdjustedScript.split(/\s+/).filter(Boolean).length;
+    const script = enforceScriptCoverage55(lengthAdjustedScript, sourceDurationSec);
     const finalWordCount = script.split(/\s+/).filter(Boolean).length;
+    const finalSpokenSec = estimateSpokenSeconds(script);
+    if (sourceDurationSec) {
+      console.log(
+        `[recap-script-generator] LENGTH sourceDur=${Math.round(sourceDurationSec)}s raw=${Math.round(
+          rawSpokenSec,
+        )}s final=${Math.round(finalSpokenSec)}s ratio=${((finalSpokenSec / sourceDurationSec) * 100).toFixed(
+          1,
+        )}% target=70% toppedUp=${toppedUp}`,
+      );
+    }
 
     if (!script || script.trim().length < 10) {
       console.error("[recap-script-generator] Script became invalid after 70% enforcement");
