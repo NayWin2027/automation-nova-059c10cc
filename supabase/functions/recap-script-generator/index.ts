@@ -892,7 +892,9 @@ ${transcript}
 
     const controller = new AbortController();
     // Give the primary attempt the majority of the wall budget, leaving room for one fallback.
-    const primaryTimeout = Math.min(115000, remainingBudget() - 15000);
+    // 3-window sources (>20 min) need room for two continuation passes.
+    const primaryCap = sourceDurationSec && sourceDurationSec > 1200 ? 70000 : 115000;
+    const primaryTimeout = Math.min(primaryCap, remainingBudget() - 15000);
     const timeoutId = setTimeout(() => controller.abort(), Math.max(5000, primaryTimeout));
     try {
       response = await callGeminiGenerateContent(
