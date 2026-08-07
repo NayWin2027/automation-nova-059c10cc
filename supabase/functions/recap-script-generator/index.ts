@@ -213,6 +213,44 @@ function endsAtCompleteSentence(text: string): boolean {
   return SENTENCE_END_RE.test(text.trim().replace(/["'”’）\)]*$/, ""));
 }
 
+// ===== SPOKEN-LENGTH METRIC (language aware) =====
+// Whitespace word counting is wrong for Burmese/CJK/Thai (no spaces between words),
+// which made the old length enforcement a no-op. We estimate spoken seconds instead.
+function stripTimecodes(text: string): string {
+  return (text || "").replace(/\[\d{1,2}:\d{2}(?::\d{2})?\]/g, " ");
+}
+
+// Mirrors gemini-tts `countSpeechWeight` so script length and TTS length agree.
+function speechWeights(text: string): { asian: number; latin: number } {
+  let asian = 0;
+  let latin = 0;
+  for (const char of String(text || "")) {
+    if (/\p{Script=Myanmar}|[\u3400-\u9FFF\u3040-\u30FF\uAC00-\uD7AF\u0E00-\u0E7F]/u.test(char)) {
+      asian += /[\u102B-\u103E\u1056-\u1059\u1062-\u1064\u1067-\u106D\u1082\u1083-\u1086\u109D]/u.test(char)
+        ? 0.35
+        : 1;
+    } else if (/\p{L}|\p{N}/u.test(char)) {
+      latin += 0.22;
+    } else if (/[.!?။]/u.test(char)) {
+      asian += 1.1;
+    } else if (/[,;:၊]/u.test(char)) {
+      asian += 0.45;
+    }
+  }
+  return { asian, latin };
+}
+
+// Weight → seconds. Asian ≈ 6.8 weight units/sec (~4.5 syllables/sec),
+// Latin ≈ 1.9 weight units/sec (~100 wpm narration pace).
+function estimateSpokenSeconds(text: string): number {
+  const { asian, latin } = speechWeights(stripTimecodes(text));
+  return asian / 6.8 + latin / 1.9;
+}
+
+const LENGTH_TARGET_RATIO = 0.7;
+const LENGTH_MAX_RATIO = 0.75;
+const LENGTH_MIN_RATIO = 0.65;
+
 function enforceScriptCoverage55(script: string, sourceDurationSec?: number | null): string {
   const normalized = script.replace(/\r\n/g, "\n").trim();
   if (!normalized || !sourceDurationSec) return normalized || script;
@@ -226,26 +264,26 @@ function enforceScriptCoverage55(script: string, sourceDurationSec?: number | nu
         .filter((s) => endsAtCompleteSentence(s)) || [];
     return sentences;
   };
-  const trimToCompleteSentences = (text: string, maxWordBudget: number): string => {
+  const trimToCompleteSentences = (text: string, maxSecondsBudget: number): string => {
     const completeSentences = splitCompleteSentences(text);
     if (!completeSentences.length) return text.trim();
 
     const kept: string[] = [];
     let count = 0;
     for (const sentence of completeSentences) {
-      const sentenceWords = sentence.split(/\s+/).filter(Boolean);
-      if (kept.length > 0 && count + sentenceWords.length > maxWordBudget) break;
+      const sentenceSeconds = estimateSpokenSeconds(sentence);
+      if (kept.length > 0 && count + sentenceSeconds > maxSecondsBudget) break;
       kept.push(sentence);
-      count += sentenceWords.length;
-      if (count >= maxWordBudget) break;
+      count += sentenceSeconds;
+      if (count >= maxSecondsBudget) break;
     }
     return (kept.length ? kept.join(" ") : completeSentences[0]).trim();
   };
 
-  // True recap: target ~70% of source duration when read aloud (≈150 wpm).
-  const maxWords = Math.max(55, Math.floor((sourceDurationSec / 60) * 150 * 0.55));
-  const words = normalized.split(/\s+/).filter(Boolean);
-  if (words.length <= maxWords) return normalized;
+  // True recap: fixed 70% of source duration when read aloud; only trim above 75%.
+  const maxSeconds = Math.max(8, sourceDurationSec * LENGTH_MAX_RATIO);
+  const targetSeconds = Math.max(8, sourceDurationSec * LENGTH_TARGET_RATIO);
+  if (estimateSpokenSeconds(normalized) <= maxSeconds) return normalized;
 
   const paragraphs = normalized
     .split(/\n{2,}/)
@@ -254,14 +292,15 @@ function enforceScriptCoverage55(script: string, sourceDurationSec?: number | nu
   const kept: string[] = [];
   let count = 0;
   for (const paragraph of paragraphs) {
-    const paragraphWords = paragraph.split(/\s+/).filter(Boolean);
-    if (count + paragraphWords.length > maxWords && kept.length > 0) break;
+    const paragraphSeconds = estimateSpokenSeconds(paragraph);
+    if (count + paragraphSeconds > targetSeconds && kept.length > 0) break;
     kept.push(paragraph);
-    count += paragraphWords.length;
-    if (count >= maxWords) break;
+    count += paragraphSeconds;
+    if (count >= targetSeconds) break;
   }
-  const paragraphTrimmed = kept.length ? kept.join("\n\n") : trimToCompleteSentences(normalized, maxWords);
-  return trimToCompleteSentences(paragraphTrimmed, maxWords);
+  const paragraphTrimmed = kept.length ? kept.join("\n\n") : trimToCompleteSentences(normalized, maxSeconds);
+  if (estimateSpokenSeconds(paragraphTrimmed) <= maxSeconds) return paragraphTrimmed;
+  return trimToCompleteSentences(paragraphTrimmed, maxSeconds);
 }
 
 function countMatches(text: string, pattern: RegExp): number {
@@ -562,10 +601,9 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 
 SCRIPT LENGTH RULE (CRITICAL — TRUE 70% RECAP / SUMMARY):
 - This is a RECAP (summary), NOT a retelling. The narration MUST cover the full STORY ARC end-to-end but in a heavily compressed form.
-- HARD length target: about 70% of the source duration when read aloud (≈150 wpm for Burmese/Asian, ≈100 wpm for English). Do not stop early.
-- Duration targets: 3-min source → about 1.5–2 min recap; 5-min → about 2.5–3 min; 10-min → about 5–6 min; 30-min → about 15–17 min.
-- Word budget examples (Burmese/Asian @150wpm): a 3-min video → ~250 words; 10-min → ~825 words; 20-min → ~1650 words; 30-min → ~2475 words.
-- Word budget examples (English @100wpm): 3-min → ~165 words; 10-min → ~550 words; 20-min → ~1100 words; 30-min → ~1650 words.
+- HARD length target: the narration MUST take about 70% of the source duration when read aloud at a normal narration pace. This is a FIXED target, not a suggestion. Do not stop early.
+- Duration targets: 3-min source → about 2 min recap; 5-min → about 3.5 min; 6-min → about 4.2 min; 10-min → about 7 min; 30-min → about 21 min.
+- Judge length by SPOKEN TIME, not by word or character count.
 - You MUST include the ending, but aggressively cut filler, repetition, side-beats, and low-stakes scenes.
 - Keep ONLY the main connected story beats and the highest-tension/climax scenes, in a tightly-linked narrative.
 - The FINAL paragraph MUST correspond to the FINAL scene of the source video (its timecode should be near the source's ending)
@@ -724,7 +762,10 @@ AFTER the complete narration script, output a final line containing exactly ===S
       }
 
       const durationHint = sourceDurationSec
-        ? `\nSOURCE VIDEO DURATION: ${Math.floor(sourceDurationSec / 60)} minutes ${Math.round(sourceDurationSec % 60)} seconds`
+        ? `\nSOURCE VIDEO DURATION: ${Math.floor(sourceDurationSec / 60)} minutes ${Math.round(sourceDurationSec % 60)} seconds` +
+          `\nREQUIRED NARRATION LENGTH (spoken aloud): ${Math.floor((sourceDurationSec * LENGTH_TARGET_RATIO) / 60)} minutes ${Math.round(
+            (sourceDurationSec * LENGTH_TARGET_RATIO) % 60,
+          )} seconds (= 70% of the source). Shorter than this is a FAILED output.`
         : "";
 
       const userPrompt = `[LANGUAGE: ${lang} — ${langLabel}]
@@ -738,7 +779,7 @@ Below is a source video/audio file. Your job is to:
 3. If there is NO spoken dialogue, analyze visual elements, actions, music, settings, body language
 4. Identify ALL key moments, especially dramatic/shocking ones (confrontations, revelations, emotional scenes, physical actions like kisses/fights/tears)
 5. Write a complete professional ${nicheLabel} narration script that covers only the essential story beats
-6. A viewer reading your script aloud should finish in roughly 70% of the original source duration and must cover the full source from beginning to end.
+6. A viewer reading your script aloud MUST finish in about 70% of the original source duration (see REQUIRED NARRATION LENGTH above) and must cover the full source from beginning to end.
 7. Hook the audience immediately
 8. Use vivid, engaging ${lang} appropriate for "${nicheLabel}" content
 9. Be perfectly paced for voice narration
@@ -1024,9 +1065,80 @@ ${transcript}
       );
     }
 
-    const rawWordCount = normalizedRawScript.split(/\s+/).filter(Boolean).length;
-    const script = enforceScriptCoverage55(normalizedRawScript, sourceDurationSec);
+    // ===== LENGTH TOP-UP: if the script is far below the fixed 70% target, ask the
+    // model once to continue from where it stopped. Keeps output length consistent
+    // across repeated generations of the same source. =====
+    let lengthAdjustedScript = normalizedRawScript;
+    const rawSpokenSec = estimateSpokenSeconds(normalizedRawScript);
+    let toppedUp = false;
+    if (sourceDurationSec && rawSpokenSec < sourceDurationSec * LENGTH_MIN_RATIO && remainingBudget() > 25000) {
+      const targetSec = sourceDurationSec * LENGTH_TARGET_RATIO;
+      const missingSec = Math.max(0, targetSec - rawSpokenSec);
+      const contController = new AbortController();
+      const contTimeout = Math.max(8000, Math.min(60000, remainingBudget() - 12000));
+      const contTimeoutId = setTimeout(() => contController.abort(), contTimeout);
+      try {
+        const continuationParts = [
+          ...contentParts,
+          {
+            text: `CONTINUATION TASK (same source, same ${lang} language, same [MM:SS] paragraph format):
+You already wrote the narration below, but it is TOO SHORT. It reads aloud in about ${Math.round(rawSpokenSec)} seconds, while the required length is about ${Math.round(targetSec)} seconds (70% of the source).
+
+Write ONLY the CONTINUATION — roughly ${Math.round(missingSec)} more seconds of narration:
+- Continue naturally from the last sentence below. Do NOT repeat, rewrite, or summarize what is already written.
+- Cover the source parts that are still missing, and make sure the FINAL paragraph matches the FINAL scene of the source.
+- Keep the exact same output format: every paragraph starts with [MM:SS].
+- Do NOT add any preamble, heading, or explanation. Output narration paragraphs only.
+- End with a complete sentence.
+
+ALREADY WRITTEN NARRATION:
+${normalizedRawScript}`,
+          },
+        ];
+        const contResponse = await callGeminiGenerateContent(
+          activeModel,
+          activeApiKey,
+          isOwnApi,
+          contController.signal,
+          finalSystemPrompt,
+          continuationParts,
+          requestedMaxOutputTokens,
+        );
+        if (contResponse?.ok) {
+          const contData = await contResponse.json();
+          const contText = stripHookPreamble(contData.candidates?.[0]?.content?.parts?.[0]?.text || "");
+          if (contText && contText.length > 20 && !violatesTargetLanguage(contText, lang)) {
+            const merged = `${normalizedRawScript}\n\n${contText}`.trim();
+            lengthAdjustedScript = endsAtCompleteSentence(merged)
+              ? merged
+              : `${normalizedRawScript}\n\n${contText.replace(/[^\n]*$/, "").trim()}`.trim() || normalizedRawScript;
+            toppedUp = true;
+          }
+        } else {
+          console.warn(`[recap-script-generator] Length top-up failed: ${contResponse?.status}`);
+        }
+      } catch (err) {
+        console.warn(
+          `[recap-script-generator] Length top-up error: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      } finally {
+        clearTimeout(contTimeoutId);
+      }
+    }
+
+    const rawWordCount = lengthAdjustedScript.split(/\s+/).filter(Boolean).length;
+    const script = enforceScriptCoverage55(lengthAdjustedScript, sourceDurationSec);
     const finalWordCount = script.split(/\s+/).filter(Boolean).length;
+    const finalSpokenSec = estimateSpokenSeconds(script);
+    if (sourceDurationSec) {
+      console.log(
+        `[recap-script-generator] LENGTH sourceDur=${Math.round(sourceDurationSec)}s raw=${Math.round(
+          rawSpokenSec,
+        )}s final=${Math.round(finalSpokenSec)}s ratio=${((finalSpokenSec / sourceDurationSec) * 100).toFixed(
+          1,
+        )}% target=70% toppedUp=${toppedUp}`,
+      );
+    }
 
     if (!script || script.trim().length < 10) {
       console.error("[recap-script-generator] Script became invalid after 70% enforcement");
