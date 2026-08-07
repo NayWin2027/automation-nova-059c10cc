@@ -5902,8 +5902,10 @@ const RecapVideoNVPage: React.FC = () => {
 
   const parseTimecodeToSec = (ts: string): number => {
     const parts = ts.split(":").map(Number);
-    if (parts.length !== 2 || Number.isNaN(parts[0]) || Number.isNaN(parts[1])) return 0;
-    return parts[0] * 60 + parts[1];
+    if (parts.some((n) => Number.isNaN(n))) return 0;
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    return 0;
   };
 
   const scriptToSegments = (scriptText: string, videoDuration: number): RecapSegment[] => {
