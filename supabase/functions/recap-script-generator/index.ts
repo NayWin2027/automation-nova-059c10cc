@@ -897,7 +897,7 @@ ${transcript}
     // Own API: model-only fallback using the SAME user key (never key rotation, never App keys).
     // 429 stays non-retryable for own keys so the user sees their own quota error directly.
     const fallbackModels = isOwnApi
-      ? ["gemini-2.5-flash", "gemini-flash-lite-latest"]
+      ? ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.1-flash", "gemini-2.5-flash", "gemini-flash-lite-latest"]
       : ["gemini-pro-latest", "gemini-2.5-flash", "gemini-2.5-pro"];
     const shouldFallback = (status?: number) =>
       isOwnApi
