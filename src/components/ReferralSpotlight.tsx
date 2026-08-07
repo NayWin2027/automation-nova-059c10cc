@@ -55,7 +55,7 @@ const ReferralSpotlight: React.FC = () => {
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-xs font-extrabold text-gold leading-tight truncate">
-            {pending ? "Reward request — Admin review စောင့်ဆိုင်းဆဲ" : "Refer 5 Friends → 1 Month Premium FREE"}
+            {pending ? "Reward request — Admin review စောင့်ဆိုင်းဆဲ" : "Refer 5 Friends → 1 Month Premium FREE-"Users အသစ်ငါးယောက်ခေါ်တိုင်း Premium Plan တစ်လစာ Free ရပါမည်။ New Users-10 ယောက်-2Months Free,15 Users-3Month Free"}
           </p>
           <div className="mt-1 flex items-center gap-2">
             <div className="h-1.5 flex-1 rounded-full bg-white/10 overflow-hidden">
