@@ -829,6 +829,7 @@ FULL COVERAGE RULE (MANDATORY):
 - Before writing, mentally list EVERY essential story beat in the source: setup, each major turning point, confrontations, revelations/confessions, decisions, climax and the ENDING. None of them may be missing.
 - Your paragraph timecodes MUST spread from near 00:00 all the way to the END of the source. The final paragraph's timecode must be close to the source's last minute.
 - Never cover the first half in detail and compress or skip the second half. The last third of the source is just as important.
+- ENDING COVERAGE (HARD RULE): the LAST 15% of the source duration MUST have its own paragraphs. The final confrontation/fight, the climax, its outcome and the closing scene must each be narrated in full detail — never compressed into one rushed sentence and never summarised away. Your last paragraph's timecode must fall inside that final 15%.
 - Never pad with repeated or restated sentences to reach the length — add MISSING scenes instead.
 
 OUTPUT FORMAT:
