@@ -44,6 +44,11 @@ interface RecapScript {
 const DIALOGUE_METADATA_PATTERN =
   /(?:\[|\{|\(|［|｛|（)\s*DIALOG(?:UE|UAGE)(?:\s*:\s*[A-Za-z _-]+)?\s*(?:\]|\}|\)|］|｝|）)/gi;
 
+// SURGICAL FIX: strip every timecode shape the AI may emit ([M:SS], [HH:MM:SS], ranges)
+// so timestamps never leak into subtitles.
+const TIMECODE_STRIP_RE =
+  /\[\s*\d{1,2}:\d{2}(?::\d{2})?(?:\s*[-–—]\s*\d{1,2}:\d{2}(?::\d{2})?)?\s*\]/g;
+
 const stripDialogueMetadata = (text: string): string =>
   String(text || "")
     .replace(DIALOGUE_METADATA_PATTERN, "")
