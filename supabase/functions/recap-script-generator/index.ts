@@ -785,7 +785,8 @@ AFTER the complete narration script, output a final line containing exactly ===S
           (windowMode
             ? `\n\n*** PART 1 OF 2 — COVER ONLY 00:00 to ${fmtTc(windowSplitSec)} ***` +
               `\nThis is a long source, so you are writing PART 1 only. Cover the source from 00:00 up to ${fmtTc(windowSplitSec)} and STOP there.` +
-              `\nDo NOT narrate anything after ${fmtTc(windowSplitSec)}. Do NOT write an ending or conclusion — Part 2 continues later.` +
+              `\nDo NOT narrate anything after ${fmtTc(windowSplitSec)}. Do NOT write an ending, conclusion, moral or wrap-up line — the ENDING belongs ONLY to Part 2.` +
+              `\nStop mid-story on an unresolved beat so Part 2 can continue the same arc seamlessly.` +
               `\nAll timecodes must be between [00:00] and [${fmtTc(windowSplitSec)}].` +
               `\nREQUIRED NARRATION LENGTH for PART 1 (spoken aloud): ${Math.floor((windowOneSec * LENGTH_TARGET_RATIO) / 60)} minutes ${Math.round(
                 (windowOneSec * LENGTH_TARGET_RATIO) % 60,
@@ -1136,20 +1137,41 @@ ${transcript}
         ? Math.round((sourceDurationSec - windowStart) * LENGTH_TARGET_RATIO)
         : Math.round(sourceDurationSec * LENGTH_TARGET_RATIO - rawSpokenSec);
       const contPrompt = isWindowMode
-        ? `*** PART 2 OF 2 — COVER ONLY ${tc(windowStart)} to ${tc(sourceDurationSec)} ***
+        ? (() => {
+            const tail = existingParas.slice(-3).join("\n\n");
+            const nameCounts = new Map<string, number>();
+            for (const m of normalizedRawScript.matchAll(/\b[A-Z][\p{L}'’-]{1,}\b/gu)) {
+              const w = m[0];
+              nameCounts.set(w, (nameCounts.get(w) || 0) + 1);
+            }
+            const knownNames = [...nameCounts.entries()]
+              .filter(([, c]) => c >= 2)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 12)
+              .map(([w]) => w);
+            const namesLine = knownNames.length
+              ? `\nCHARACTERS/NAMES ALREADY INTRODUCED IN PART 1 (use these EXACT spellings, never re-introduce them as new): ${knownNames.join(", ")}\n`
+              : "";
+            return `*** PART 2 OF 2 — COVER ONLY ${tc(windowStart)} to ${tc(sourceDurationSec)} ***
 
-PART 1 of this recap narration is below. Now write PART 2 from the SAME source video.
+PART 2 is a DIRECT CONTINUATION of PART 1 of the SAME recap narration. It is ONE single story, not a new recap.
+${namesLine}
+WHERE WE LEFT OFF (last lines of Part 1 — continue straight on from here):
+${tail}
 
 Rules:
 - Watch the source from ${tc(windowStart)} to the very END (${tc(sourceDurationSec)}) and narrate that part.
 - Write ONLY the new paragraphs. Do NOT repeat, restate or rewrite anything from Part 1.
+- Your FIRST sentence must continue directly from the last sentence of Part 1. No new hook, no new opening line, no "this story is about...", no re-introduction of the premise, no summary of Part 1.
+- Keep the exact same character names, spellings, relationships, narrator voice, tense and pronoun style as Part 1.
 - Every paragraph MUST start with [MM:SS] STRICTLY LATER than [${tc(windowStart)}] and keep increasing.
 - Cover every essential beat of this part including the ENDING/climax. Nothing important may be skipped.
 - Same language (${lang}), same tone, same [MM:SS] format. Never [HH:MM:SS], never ranges.
 - Target about ${missingSec} seconds of spoken narration. Finish with complete sentences.
 
 PART 1 (already written — do not repeat):
-${normalizedRawScript}`
+${normalizedRawScript}`;
+          })()
         : `The recap narration below is INCOMPLETE — it is about ${missingSec} seconds of speech too short and it skipped important scenes from the source.
 
 CONTINUE the script. Rules:
@@ -1184,10 +1206,29 @@ ${normalizedRawScript}`;
           const contText: string = contData.candidates?.[0]?.content?.parts?.[0]?.text || "";
           const accepted: string[] = [];
           let cursor = isWindowMode ? Math.max(lastTc, windowStart - 1) : lastTc;
+          // Seam guard: a Part 2 that opens with a restart/hook instead of continuing
+          // is dropped so the merged script reads as one continuous arc.
+          const stripTc = (s: string) => s.replace(/^\s*\[\d{1,2}:\d{2}\]\s*/, "").trim();
+          const partOneOpening = stripTc(existingParas[0] || "").slice(0, 40);
+          const looksLikeRestart = (p: string) => {
+            const body = stripTc(p);
+            if (partOneOpening && body.slice(0, 40) === partOneOpening) return true;
+            return /^(this (story|film|movie|drama|video)|the story (begins|starts)|in this (recap|video|story)|once upon a time)/i.test(
+              body,
+            );
+          };
+          let seamChecked = false;
           for (const p of contText.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean)) {
             const t = paraTimecodeSec(p);
             if (t === null || t <= cursor) continue;
             if (sourceDurationSec && t > sourceDurationSec + 5) continue;
+            if (isWindowMode && !seamChecked) {
+              seamChecked = true;
+              if (looksLikeRestart(p)) {
+                cursor = t;
+                continue;
+              }
+            }
             accepted.push(p);
             cursor = t;
           }
