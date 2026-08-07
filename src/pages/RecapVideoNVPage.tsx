@@ -815,6 +815,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const segCutTimeRef = useRef<number>(0);
     // SURGICAL EDIT: Prevent re-seeking while HTML5 seek is still in progress (async)
     const seekPendingRef = useRef<boolean>(false);
+    // SURGICAL FIX: seek watchdog — if the browser never fires "seeked" (decode stall),
+    // seekPendingRef would stay true forever and every later hard cut would be skipped,
+    // leaving the hook scene on screen for many seconds. Auto-clear after 600ms.
+    const seekPendingSinceRef = useRef<number>(0);
     // ── SURGICAL FIX: SCENE-CUT PREWARM (desktop micro-pause killer) ──
     // Desktop Chrome flushes the decoder on every seek (50–150ms gap). A second hidden
     // <video> pre-seeks to the NEXT segment start so the correct frame is already decoded.
