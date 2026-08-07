@@ -226,9 +226,7 @@ function speechWeights(text: string): { asian: number; latin: number } {
   let latin = 0;
   for (const char of String(text || "")) {
     if (/\p{Script=Myanmar}|[\u3400-\u9FFF\u3040-\u30FF\uAC00-\uD7AF\u0E00-\u0E7F]/u.test(char)) {
-      asian += /[\u102B-\u103E\u1056-\u1059\u1062-\u1064\u1067-\u106D\u1082\u1083-\u1086\u109D]/u.test(char)
-        ? 0.35
-        : 1;
+      asian += /[\u102B-\u103E\u1056-\u1059\u1062-\u1064\u1067-\u106D\u1082\u1083-\u1086\u109D]/u.test(char) ? 0.35 : 1;
     } else if (/\p{L}|\p{N}/u.test(char)) {
       latin += 0.22;
     } else if (/[.!?။]/u.test(char)) {
@@ -247,9 +245,9 @@ function estimateSpokenSeconds(text: string): number {
   return asian / 6.8 + latin / 1.9;
 }
 
-const LENGTH_TARGET_RATIO = 0.7;
-const LENGTH_MAX_RATIO = 0.75;
-const LENGTH_MIN_RATIO = 0.65;
+const LENGTH_TARGET_RATIO = 0.8;
+const LENGTH_MAX_RATIO = 0.85;
+const LENGTH_MIN_RATIO = 0.75;
 
 function enforceScriptCoverage55(script: string, sourceDurationSec?: number | null): string {
   const normalized = script.replace(/\r\n/g, "\n").trim();
@@ -311,9 +309,7 @@ function enforceScriptCoverage55(script: string, sourceDurationSec?: number | nu
   if (estimateSpokenSeconds(paragraphTrimmed) < sourceDurationSec * LENGTH_MIN_RATIO) return normalized;
   if (estimateSpokenSeconds(paragraphTrimmed) <= maxSeconds) return paragraphTrimmed;
   const sentenceTrimmed = trimToCompleteSentences(paragraphTrimmed, maxSeconds);
-  return estimateSpokenSeconds(sentenceTrimmed) >= sourceDurationSec * LENGTH_MIN_RATIO
-    ? sentenceTrimmed
-    : normalized;
+  return estimateSpokenSeconds(sentenceTrimmed) >= sourceDurationSec * LENGTH_MIN_RATIO ? sentenceTrimmed : normalized;
 }
 
 function countMatches(text: string, pattern: RegExp): number {
