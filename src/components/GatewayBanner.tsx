@@ -37,7 +37,7 @@ export function GatewayBanner() {
 
           Automation Nova AI
         </span>
-      </h2>
+      </h1>
     </div>);
 
 }
