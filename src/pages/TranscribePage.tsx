@@ -532,9 +532,9 @@ export default function TranscriptionView() {
 
       {/* HEADER SECTION */}
       <div className="space-y-4">
-        <h2 className="font-black text-white uppercase tracking-wider text-3xl">
+        <h1 className="font-black text-white uppercase tracking-wider text-3xl">
           <EditableText value={s.pageTitle} onChange={(v) => setEditSettings({ ...editSettings, pageTitle: v })} />
-        </h2>
+        </h1>
 
         <div className="space-y-2">
           <label className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">

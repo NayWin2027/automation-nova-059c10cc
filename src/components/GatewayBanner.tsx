@@ -22,7 +22,7 @@ export function GatewayBanner() {
         <AppLogo size={72} />
       </div>
 
-      <h2 className="relative text-center font-black tracking-[0.12em] text-7xl">
+      <h1 className="relative text-center font-black tracking-[0.12em] text-7xl">
         <span
           className="bg-clip-text text-transparent text-4xl"
           style={{
@@ -37,7 +37,7 @@ export function GatewayBanner() {
 
           Automation Nova AI
         </span>
-      </h2>
+      </h1>
     </div>);
 
 }
