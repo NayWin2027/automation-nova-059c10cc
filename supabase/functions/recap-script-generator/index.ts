@@ -1206,10 +1206,29 @@ ${normalizedRawScript}`;
           const contText: string = contData.candidates?.[0]?.content?.parts?.[0]?.text || "";
           const accepted: string[] = [];
           let cursor = isWindowMode ? Math.max(lastTc, windowStart - 1) : lastTc;
+          // Seam guard: a Part 2 that opens with a restart/hook instead of continuing
+          // is dropped so the merged script reads as one continuous arc.
+          const stripTc = (s: string) => s.replace(/^\s*\[\d{1,2}:\d{2}\]\s*/, "").trim();
+          const partOneOpening = stripTc(existingParas[0] || "").slice(0, 40);
+          const looksLikeRestart = (p: string) => {
+            const body = stripTc(p);
+            if (partOneOpening && body.slice(0, 40) === partOneOpening) return true;
+            return /^(this (story|film|movie|drama|video)|the story (begins|starts)|in this (recap|video|story)|once upon a time)/i.test(
+              body,
+            );
+          };
+          let seamChecked = false;
           for (const p of contText.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean)) {
             const t = paraTimecodeSec(p);
             if (t === null || t <= cursor) continue;
             if (sourceDurationSec && t > sourceDurationSec + 5) continue;
+            if (isWindowMode && !seamChecked) {
+              seamChecked = true;
+              if (looksLikeRestart(p)) {
+                cursor = t;
+                continue;
+              }
+            }
             accepted.push(p);
             cursor = t;
           }
