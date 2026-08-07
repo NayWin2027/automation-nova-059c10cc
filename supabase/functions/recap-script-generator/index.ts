@@ -805,6 +805,12 @@ YOU ARE A PROFESSIONAL HOLLYWOOD VIDEO EDITOR:
 - If the narration describes an emotion/action, find the video moment that SHOWS that emotion/action
 - NEVER just assign sequential timestamps — that defeats the purpose of intelligent scene matching
 
+FULL COVERAGE RULE (MANDATORY):
+- Before writing, mentally list EVERY essential story beat in the source: setup, each major turning point, confrontations, revelations/confessions, decisions, climax and the ENDING. None of them may be missing.
+- Your paragraph timecodes MUST spread from near 00:00 all the way to the END of the source. The final paragraph's timecode must be close to the source's last minute.
+- Never cover the first half in detail and compress or skip the second half. The last third of the source is just as important.
+- Never pad with repeated or restated sentences to reach the length — add MISSING scenes instead.
+
 OUTPUT FORMAT:
 - Each paragraph MUST start with [MM:SS] — the source video timecode of the best matching scene
 - After the timecode, write the narration text as a natural spoken paragraph
