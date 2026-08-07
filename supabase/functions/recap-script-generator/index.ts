@@ -12,10 +12,12 @@ const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
 const MODEL = "gemini-flash-latest";
 
 function buildGenerationConfig(model: string, requestedMaxOutputTokens: number | null): Record<string, unknown> {
+  // Burmese/CJK narration costs 2-3 tokens per syllable: an 8192 cap truncated
+  // long recaps and dropped the middle/ending beats. Give the model real room.
   const maxOutputTokens =
     model === "gemini-flash-latest"
-      ? Math.min(requestedMaxOutputTokens || 8192, 8192)
-      : requestedMaxOutputTokens || 12288;
+      ? Math.max(requestedMaxOutputTokens || 0, 32768)
+      : Math.max(requestedMaxOutputTokens || 0, 24576);
 
   const config: Record<string, unknown> = {
     temperature: 0.55,
