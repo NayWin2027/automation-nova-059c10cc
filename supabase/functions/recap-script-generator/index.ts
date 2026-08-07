@@ -253,7 +253,7 @@ const LENGTH_TARGET_RATIO = 0.7;
 const LENGTH_MAX_RATIO = 0.75;
 const LENGTH_MIN_RATIO = 0.65;
 
-function enforceScriptCoverage100(script: string, sourceDurationSec?: number | null): string {
+function enforcefullScriptCoverage(script: string, sourceDurationSec?: number | null): string {
   const normalized = script.replace(/\r\n/g, "\n").trim();
   if (!normalized || !sourceDurationSec) return normalized || script;
 
@@ -896,7 +896,12 @@ ${transcript}
     const controller = new AbortController();
     // Always reserve real wall time for mandatory length repair/window passes. The old
     // 115s primary cap left <35s, so the repair condition below could never run.
-    const primaryCap = sourceDurationSec && sourceDurationSec > 1200 ? 55000 : sourceDurationSec && sourceDurationSec > 720 ? 70000 : 85000;
+    const primaryCap =
+      sourceDurationSec && sourceDurationSec > 1200
+        ? 55000
+        : sourceDurationSec && sourceDurationSec > 720
+          ? 70000
+          : 85000;
     const primaryTimeout = Math.min(primaryCap, remainingBudget() - 15000);
     const timeoutId = setTimeout(() => controller.abort(), Math.max(5000, primaryTimeout));
     try {
@@ -1168,13 +1173,17 @@ ${normalizedRawScript}`;
           ) {
             lengthAdjustedScript = repaired;
             toppedUp = true;
-            console.log(`[recap-script-generator] Full length repair accepted: ${Math.round(rawSpokenSec)}s -> ${Math.round(repairedSpokenSec)}s`);
+            console.log(
+              `[recap-script-generator] Full length repair accepted: ${Math.round(rawSpokenSec)}s -> ${Math.round(repairedSpokenSec)}s`,
+            );
           } else {
             console.warn(`[recap-script-generator] Full length repair rejected: ${Math.round(repairedSpokenSec)}s`);
           }
         }
       } catch (repairErr) {
-        console.warn(`[recap-script-generator] Full length repair failed: ${repairErr instanceof Error ? repairErr.message : String(repairErr)}`);
+        console.warn(
+          `[recap-script-generator] Full length repair failed: ${repairErr instanceof Error ? repairErr.message : String(repairErr)}`,
+        );
       } finally {
         clearTimeout(repairTimeoutId);
       }
@@ -1214,7 +1223,10 @@ ${normalizedRawScript}`;
         }
         if (!endsAtCompleteSentence(workingScript)) break;
 
-        const existingParas = workingScript.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+        const existingParas = workingScript
+          .split(/\n{2,}/)
+          .map((p) => p.trim())
+          .filter(Boolean);
         let lastTc = 0;
         for (const p of existingParas) {
           const t = paraTimecodeSec(p);
@@ -1225,9 +1237,7 @@ ${normalizedRawScript}`;
         // silently skipped the whole gap whenever an earlier part stopped short of its
         // planned boundary, which is exactly where important middle scenes disappeared.
         const windowStart = isWindowMode ? lastTc : boundaryStart;
-        const windowEnd = isLastWindow
-          ? sourceDurationSec
-          : Math.floor((sourceDurationSec * partNo) / windowTotal);
+        const windowEnd = isLastWindow ? sourceDurationSec : Math.floor((sourceDurationSec * partNo) / windowTotal);
         if (windowEnd - windowStart < 20) break;
         // Small overlap so the model sees the exact moment the previous part stopped on.
         const watchFrom = Math.max(0, windowStart - 5);
@@ -1239,11 +1249,12 @@ ${normalizedRawScript}`;
         const contPrompt = isWindowMode
           ? (() => {
               const tail = existingParas.slice(-3).join("\n\n");
-              const lastSentence =
-                (stripTc(existingParas[existingParas.length - 1] || "")
+              const lastSentence = (
+                stripTc(existingParas[existingParas.length - 1] || "")
                   .split(/(?<=[.!?။])\s+/)
                   .filter(Boolean)
-                  .pop() || "").trim();
+                  .pop() || ""
+              ).trim();
               const nameCounts = new Map<string, number>();
               for (const m of workingScript.matchAll(/\b[A-Z][\p{L}'’-]{1,}\b/gu)) {
                 const w = m[0];
@@ -1336,7 +1347,10 @@ ${workingScript}`;
               );
             };
             let seamChecked = false;
-            for (const p of contText.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean)) {
+            for (const p of contText
+              .split(/\n{2,}/)
+              .map((s) => s.trim())
+              .filter(Boolean)) {
               const t = paraTimecodeSec(p);
               if (t === null || t <= cursor) continue;
               if (sourceDurationSec && t > sourceDurationSec + 5) continue;
@@ -1386,7 +1400,10 @@ ${workingScript}`;
     // are accepted solely when strictly later than the current last timecode, so AV
     // mapping cannot be corrupted.
     if (sourceDurationSec && endsAtCompleteSentence(lengthAdjustedScript) && remainingBudget() > 20000) {
-      const tailParas = lengthAdjustedScript.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+      const tailParas = lengthAdjustedScript
+        .split(/\n{2,}/)
+        .map((p) => p.trim())
+        .filter(Boolean);
       let lastTc = 0;
       for (const p of tailParas) {
         const t = paraTimecodeSec(p);
@@ -1434,7 +1451,10 @@ ${lengthAdjustedScript}`;
             const endText: string = endData.candidates?.[0]?.content?.parts?.[0]?.text || "";
             const acceptedEnd: string[] = [];
             let cursor = lastTc;
-            for (const p of endText.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean)) {
+            for (const p of endText
+              .split(/\n{2,}/)
+              .map((s) => s.trim())
+              .filter(Boolean)) {
               const t = paraTimecodeSec(p);
               if (t === null || t <= cursor) continue;
               if (t > sourceDurationSec + 5) continue;
