@@ -249,7 +249,7 @@ const LENGTH_TARGET_RATIO = 0.7;
 const LENGTH_MAX_RATIO = 0.75;
 const LENGTH_MIN_RATIO = 0.65;
 
-function enforceScriptCoverage55(script: string, sourceDurationSec?: number | null): string {
+function enforceScriptCoverage100(script: string, sourceDurationSec?: number | null): string {
   const normalized = script.replace(/\r\n/g, "\n").trim();
   if (!normalized || !sourceDurationSec) return normalized || script;
 
@@ -1083,7 +1083,7 @@ ${transcript}
     const toppedUp = false;
 
     const rawWordCount = lengthAdjustedScript.split(/\s+/).filter(Boolean).length;
-    const script = enforceScriptCoverage55(lengthAdjustedScript, sourceDurationSec);
+    const script = enforceScriptCoverage100(lengthAdjustedScript, sourceDurationSec);
     const finalWordCount = script.split(/\s+/).filter(Boolean).length;
     const finalSpokenSec = estimateSpokenSeconds(script);
     if (sourceDurationSec) {
