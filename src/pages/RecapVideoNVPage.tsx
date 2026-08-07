@@ -815,6 +815,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const segCutTimeRef = useRef<number>(0);
     // SURGICAL EDIT: Prevent re-seeking while HTML5 seek is still in progress (async)
     const seekPendingRef = useRef<boolean>(false);
+    // SURGICAL FIX: seek watchdog — if the browser never fires "seeked" (decode stall),
+    // seekPendingRef would stay true forever and every later hard cut would be skipped,
+    // leaving the hook scene on screen for many seconds. Auto-clear after 600ms.
+    const seekPendingSinceRef = useRef<number>(0);
     // ── SURGICAL FIX: SCENE-CUT PREWARM (desktop micro-pause killer) ──
     // Desktop Chrome flushes the decoder on every seek (50–150ms gap). A second hidden
     // <video> pre-seeks to the NEXT segment start so the correct frame is already decoded.
@@ -2618,7 +2622,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           // â”€â”€ FEATURE: AI Hook Intro â€” cinematic title card overlay for first 4s of recording â”€â”€
           // Shows most dramatic scene title + film strip effect at recording start
           const HOOK_DURATION_MS = 4000;
-          const recAge = recStartTimeRef.current > 0 ? performance.now() - recStartTimeRef.current : Infinity;
+          // SURGICAL FIX: drive the hook overlay from the AUDIO clock so the title card and the
+          // hook video override start and end at exactly the same instant (wall clock drifted
+          // whenever audio playback started later than the recorder).
+          const _hookAudioEl = audioRef.current;
+          const recAge =
+            _hookAudioEl && _hookAudioEl.duration > 0
+              ? _hookAudioEl.currentTime * 1000
+              : recStartTimeRef.current > 0
+                ? performance.now() - recStartTimeRef.current
+                : Infinity;
           const hookIdx = hookSegmentIdxRef.current;
           const hookTitle = hookTitleRef.current;
           if (recAge < HOOK_DURATION_MS && hookIdx >= 0 && hookTitle) {
@@ -3112,6 +3125,17 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         if (av && vv) {
           if (av.duration > 0 && vv.duration > 0) {
             const currentTime = av.currentTime;
+            // ── SURGICAL FIX: SEEK WATCHDOG ──
+            if (seekPendingRef.current) {
+              if (seekPendingSinceRef.current === 0) seekPendingSinceRef.current = timestamp;
+              else if (timestamp - seekPendingSinceRef.current > 600) {
+                seekPendingRef.current = false;
+                prewarmActiveRef.current = false;
+                seekPendingSinceRef.current = 0;
+              }
+            } else {
+              seekPendingSinceRef.current = 0;
+            }
             const segs = syncSegmentsRef.current as typeof syncSegments;
             const audioTs = audioTimestampsRef.current;
             let activeIndex = -1;
@@ -3166,6 +3190,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               if (!hookPhaseEndedRef.current) {
                 hookPhaseEndedRef.current = true;
                 lastIndexRef.current = -1; // Reset so first real segment gets a clean hard seek
+                // SURGICAL FIX: clear any hook-phase seek still marked pending so the very
+                // first story segment is allowed to hard-cut immediately.
+                seekPendingRef.current = false;
+                seekPendingSinceRef.current = 0;
               }
 
               // â”€â”€ TRUE RECAP HARD-CUT SYNC â”€â”€
@@ -3194,8 +3222,22 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   const _vidDur = vv.duration > 0 ? vv.duration : 1;
                   const _lastSegVStart = segs.length > 0 ? (segs[segs.length - 1] as any).vStart || 0 : 0;
                   const _hasAudioTs = audioTs.length > activeIndex && !!audioTs[activeIndex];
-                  // Scale only when timestamps look recap-relative (last vStart < 55% of source duration)
-                  const _needsScale = _hasAudioTs && _lastSegVStart > 0 && _lastSegVStart < _vidDur * 0.55;
+                  // SURGICAL FIX (exact segment lock): use each segment's REAL source timecode.
+                  // Proportional re-mapping is a fallback ONLY when the script timecodes are
+                  // genuinely unusable (all zero / never increasing) — otherwise TTS segment n
+                  // must always show source scene n, with zero re-scaling.
+                  let _timecodesUsable = false;
+                  if (segs.length > 0) {
+                    let increasing = false;
+                    let prev = -1;
+                    for (let _i = 0; _i < segs.length; _i++) {
+                      const _vs = Number((segs[_i] as any).vStart) || 0;
+                      if (_vs > prev) increasing = true;
+                      prev = Math.max(prev, _vs);
+                    }
+                    _timecodesUsable = increasing && _lastSegVStart > 0;
+                  }
+                  const _needsScale = _hasAudioTs && !_timecodesUsable;
                   const effectiveVStart = _needsScale
                     ? Math.min((audioTs[activeIndex].start / _audioDur) * _vidDur, _vidDur - 0.5)
                     : active.vStart;
