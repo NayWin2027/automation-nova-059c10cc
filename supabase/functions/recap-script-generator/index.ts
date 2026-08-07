@@ -12,10 +12,12 @@ const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
 const MODEL = "gemini-flash-latest";
 
 function buildGenerationConfig(model: string, requestedMaxOutputTokens: number | null): Record<string, unknown> {
+  // Burmese/CJK narration costs 2-3 tokens per syllable: an 8192 cap truncated
+  // long recaps and dropped the middle/ending beats. Give the model real room.
   const maxOutputTokens =
     model === "gemini-flash-latest"
-      ? Math.min(requestedMaxOutputTokens || 8192, 8192)
-      : requestedMaxOutputTokens || 12288;
+      ? Math.max(requestedMaxOutputTokens || 0, 32768)
+      : Math.max(requestedMaxOutputTokens || 0, 24576);
 
   const config: Record<string, unknown> = {
     temperature: 0.55,
@@ -803,6 +805,12 @@ YOU ARE A PROFESSIONAL HOLLYWOOD VIDEO EDITOR:
 - If the narration describes an emotion/action, find the video moment that SHOWS that emotion/action
 - NEVER just assign sequential timestamps — that defeats the purpose of intelligent scene matching
 
+FULL COVERAGE RULE (MANDATORY):
+- Before writing, mentally list EVERY essential story beat in the source: setup, each major turning point, confrontations, revelations/confessions, decisions, climax and the ENDING. None of them may be missing.
+- Your paragraph timecodes MUST spread from near 00:00 all the way to the END of the source. The final paragraph's timecode must be close to the source's last minute.
+- Never cover the first half in detail and compress or skip the second half. The last third of the source is just as important.
+- Never pad with repeated or restated sentences to reach the length — add MISSING scenes instead.
+
 OUTPUT FORMAT:
 - Each paragraph MUST start with [MM:SS] — the source video timecode of the best matching scene
 - After the timecode, write the narration text as a natural spoken paragraph
@@ -1076,11 +1084,91 @@ ${transcript}
       );
     }
 
-    // Never append a second continuation to an already complete timed script:
-    // restarted/duplicate source timecodes can corrupt downstream AV mapping.
     let lengthAdjustedScript = normalizedRawScript;
     const rawSpokenSec = estimateSpokenSeconds(normalizedRawScript);
-    const toppedUp = false;
+    let toppedUp = false;
+
+    // ---- Safe continuation (ONE pass only) --------------------------------
+    // Only when the script is badly short (<55%). Any continuation paragraph whose
+    // timecode is not strictly greater than the last existing one is discarded, so
+    // duplicate/restarted timecodes can never corrupt downstream AV mapping.
+    const paraTimecodeSec = (line: string): number | null => {
+      const m = line.match(/^\s*\[(\d{1,2}):(\d{2})\]/);
+      if (!m) return null;
+      return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+    };
+    if (
+      sourceDurationSec &&
+      rawSpokenSec < sourceDurationSec * 0.55 &&
+      endsAtCompleteSentence(normalizedRawScript) &&
+      remainingBudget() > 35000
+    ) {
+      const existingParas = normalizedRawScript.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+      let lastTc = 0;
+      for (const p of existingParas) {
+        const t = paraTimecodeSec(p);
+        if (t !== null && t > lastTc) lastTc = t;
+      }
+      const missingSec = Math.round(sourceDurationSec * LENGTH_TARGET_RATIO - rawSpokenSec);
+      const contPrompt = `The recap narration below is INCOMPLETE — it is about ${missingSec} seconds of speech too short and it skipped important scenes from the source.
+
+CONTINUE the script. Rules:
+- Write ONLY the new paragraphs. Do NOT repeat or rewrite anything already written.
+- Every new paragraph MUST start with a timecode [MM:SS] that is STRICTLY LATER than [${String(Math.floor(lastTc / 60)).padStart(2, "0")}:${String(lastTc % 60).padStart(2, "0")}] and must keep increasing.
+- Cover the remaining source content through to the ENDING. Include the beats that were skipped.
+- Same language (${lang}), same tone and same [MM:SS] format. Never use [HH:MM:SS] or ranges.
+- Finish with complete sentences. Add roughly ${missingSec} seconds of spoken narration.
+
+EXISTING SCRIPT:
+${normalizedRawScript}`;
+      const contController = new AbortController();
+      const contTimeoutId = setTimeout(
+        () => contController.abort(),
+        Math.max(5000, Math.min(45000, remainingBudget() - 12000)),
+      );
+      try {
+        const contRes = await callGeminiGenerateContent(
+          activeModel,
+          activeApiKey,
+          isOwnApi,
+          contController.signal,
+          finalSystemPrompt,
+          [{ text: contPrompt }],
+          requestedMaxOutputTokens,
+        );
+        if (contRes.ok) {
+          const contData = await contRes.json();
+          const contText: string = contData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          const accepted: string[] = [];
+          let cursor = lastTc;
+          for (const p of contText.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean)) {
+            const t = paraTimecodeSec(p);
+            if (t === null || t <= cursor) continue;
+            if (sourceDurationSec && t > sourceDurationSec + 5) continue;
+            accepted.push(p);
+            cursor = t;
+          }
+          if (accepted.length) {
+            const merged = `${normalizedRawScript}\n\n${accepted.join("\n\n")}`.trim();
+            if (endsAtCompleteSentence(merged)) {
+              lengthAdjustedScript = merged;
+              toppedUp = true;
+            }
+          }
+          console.log(
+            `[recap-script-generator] Continuation pass: ${accepted.length} paragraph(s) accepted (lastTc=${lastTc}s)`,
+          );
+        } else {
+          console.warn(`[recap-script-generator] Continuation pass failed: ${contRes.status}`);
+        }
+      } catch (contErr) {
+        console.warn(
+          `[recap-script-generator] Continuation pass error: ${contErr instanceof Error ? contErr.message : String(contErr)}`,
+        );
+      } finally {
+        clearTimeout(contTimeoutId);
+      }
+    }
 
     const rawWordCount = lengthAdjustedScript.split(/\s+/).filter(Boolean).length;
     const script = enforceScriptCoverage100(lengthAdjustedScript, sourceDurationSec);
