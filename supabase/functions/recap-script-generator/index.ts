@@ -772,10 +772,11 @@ AFTER the complete narration script, output a final line containing exactly ===S
         }
       }
 
-      // ---- Long source (>12 min): split into 2 windows so one model call never
-      // has to produce the whole 70% narration (token + wall-budget limit).
-      const windowMode = !!sourceDurationSec && sourceDurationSec > 720;
-      const windowSplitSec = windowMode ? Math.floor((sourceDurationSec as number) / 2) : 0;
+      // ---- Long source: split into 2 (12-20 min) or 3 (>20 min) windows so one
+      // model call never has to produce the whole 70% narration.
+      const windowCount = !sourceDurationSec ? 1 : sourceDurationSec > 1200 ? 3 : sourceDurationSec > 720 ? 2 : 1;
+      const windowMode = windowCount > 1;
+      const windowSplitSec = windowMode ? Math.floor((sourceDurationSec as number) / windowCount) : 0;
       const fmtTc = (sec: number) =>
         `${String(Math.floor(Math.max(0, sec) / 60)).padStart(2, "0")}:${String(Math.round(Math.max(0, sec)) % 60).padStart(2, "0")}`;
       const windowOneSec = windowMode ? windowSplitSec : sourceDurationSec || 0;
@@ -783,10 +784,10 @@ AFTER the complete narration script, output a final line containing exactly ===S
       const durationHint = sourceDurationSec
         ? `\nSOURCE VIDEO DURATION: ${Math.floor(sourceDurationSec / 60)} minutes ${Math.round(sourceDurationSec % 60)} seconds` +
           (windowMode
-            ? `\n\n*** PART 1 OF 2 — COVER ONLY 00:00 to ${fmtTc(windowSplitSec)} ***` +
+            ? `\n\n*** PART 1 OF ${windowCount} — COVER ONLY 00:00 to ${fmtTc(windowSplitSec)} ***` +
               `\nThis is a long source, so you are writing PART 1 only. Cover the source from 00:00 up to ${fmtTc(windowSplitSec)} and STOP there.` +
-              `\nDo NOT narrate anything after ${fmtTc(windowSplitSec)}. Do NOT write an ending, conclusion, moral or wrap-up line — the ENDING belongs ONLY to Part 2.` +
-              `\nStop mid-story on an unresolved beat so Part 2 can continue the same arc seamlessly.` +
+              `\nDo NOT narrate anything after ${fmtTc(windowSplitSec)}. Do NOT write an ending, conclusion, moral or wrap-up line — the ENDING belongs ONLY to the LAST part.` +
+              `\nStop mid-story on an unresolved beat (a character still moving, a question still open) so the next part can continue the same arc seamlessly.` +
               `\nAll timecodes must be between [00:00] and [${fmtTc(windowSplitSec)}].` +
               `\nREQUIRED NARRATION LENGTH for PART 1 (spoken aloud): ${Math.floor((windowOneSec * LENGTH_TARGET_RATIO) / 60)} minutes ${Math.round(
                 (windowOneSec * LENGTH_TARGET_RATIO) % 60,
@@ -891,7 +892,9 @@ ${transcript}
 
     const controller = new AbortController();
     // Give the primary attempt the majority of the wall budget, leaving room for one fallback.
-    const primaryTimeout = Math.min(115000, remainingBudget() - 15000);
+    // 3-window sources (>20 min) need room for two continuation passes.
+    const primaryCap = sourceDurationSec && sourceDurationSec > 1200 ? 70000 : 115000;
+    const primaryTimeout = Math.min(primaryCap, remainingBudget() - 15000);
     const timeoutId = setTimeout(() => controller.abort(), Math.max(5000, primaryTimeout));
     try {
       response = await callGeminiGenerateContent(
@@ -1105,74 +1108,113 @@ ${transcript}
     const rawSpokenSec = estimateSpokenSeconds(normalizedRawScript);
     let toppedUp = false;
 
-    // ---- Safe continuation (ONE pass only) --------------------------------
-    // Only when the script is badly short (<55%). Any continuation paragraph whose
-    // timecode is not strictly greater than the last existing one is discarded, so
-    // duplicate/restarted timecodes can never corrupt downstream AV mapping.
+    // ---- Safe continuation / window passes ---------------------------------
+    // Long sources are generated as 2 or 3 windows; short-but-incomplete scripts get
+    // one top-up pass. Any paragraph whose timecode is not strictly greater than the
+    // last existing one is discarded, so timecodes can never corrupt AV mapping.
     const paraTimecodeSec = (line: string): number | null => {
       const m = line.match(/^\s*\[(\d{1,2}):(\d{2})\]/);
       if (!m) return null;
       return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
     };
-    // Long sources are generated as 2 windows: pass 1 covered the first half,
-    // this pass covers the second half from the same uploaded file.
-    const isWindowMode = !!sourceDurationSec && sourceDurationSec > 720;
-    const windowSplit = isWindowMode ? Math.floor((sourceDurationSec as number) / 2) : 0;
+    const windowTotal = !sourceDurationSec ? 1 : sourceDurationSec > 1200 ? 3 : sourceDurationSec > 720 ? 2 : 1;
+    const isWindowMode = windowTotal > 1;
     const tc = (sec: number) =>
       `${String(Math.floor(Math.max(0, sec) / 60)).padStart(2, "0")}:${String(Math.round(Math.max(0, sec)) % 60).padStart(2, "0")}`;
+    const stripTc = (s: string) => s.replace(/^\s*\[\d{1,2}:\d{2}\]\s*/, "").trim();
     if (
       sourceDurationSec &&
       (isWindowMode || rawSpokenSec < sourceDurationSec * 0.55) &&
       endsAtCompleteSentence(normalizedRawScript) &&
       remainingBudget() > 35000
     ) {
-      const existingParas = normalizedRawScript.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
-      let lastTc = 0;
-      for (const p of existingParas) {
-        const t = paraTimecodeSec(p);
-        if (t !== null && t > lastTc) lastTc = t;
-      }
-      const windowStart = isWindowMode ? Math.max(lastTc, windowSplit) : lastTc;
-      const missingSec = isWindowMode
-        ? Math.round((sourceDurationSec - windowStart) * LENGTH_TARGET_RATIO)
-        : Math.round(sourceDurationSec * LENGTH_TARGET_RATIO - rawSpokenSec);
-      const contPrompt = isWindowMode
-        ? (() => {
-            const tail = existingParas.slice(-3).join("\n\n");
-            const nameCounts = new Map<string, number>();
-            for (const m of normalizedRawScript.matchAll(/\b[A-Z][\p{L}'’-]{1,}\b/gu)) {
-              const w = m[0];
-              nameCounts.set(w, (nameCounts.get(w) || 0) + 1);
-            }
-            const knownNames = [...nameCounts.entries()]
-              .filter(([, c]) => c >= 2)
-              .sort((a, b) => b[1] - a[1])
-              .slice(0, 12)
-              .map(([w]) => w);
-            const namesLine = knownNames.length
-              ? `\nCHARACTERS/NAMES ALREADY INTRODUCED IN PART 1 (use these EXACT spellings, never re-introduce them as new): ${knownNames.join(", ")}\n`
-              : "";
-            return `*** PART 2 OF 2 — COVER ONLY ${tc(windowStart)} to ${tc(sourceDurationSec)} ***
+      // Pass 1 already covered window 1. Run one pass per remaining window (or a
+      // single top-up pass when the source is short but the script came out thin).
+      const passCount = isWindowMode ? windowTotal - 1 : 1;
+      let workingScript = normalizedRawScript;
 
-PART 2 is a DIRECT CONTINUATION of PART 1 of the SAME recap narration. It is ONE single story, not a new recap.
+      for (let pass = 1; pass <= passCount; pass++) {
+        const partNo = pass + 1;
+        const isLastWindow = !isWindowMode || partNo === windowTotal;
+        if (remainingBudget() < 30000) {
+          console.log(`[recap-script-generator] Skipping window pass ${partNo}: budget exhausted`);
+          break;
+        }
+        if (!endsAtCompleteSentence(workingScript)) break;
+
+        const existingParas = workingScript.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+        let lastTc = 0;
+        for (const p of existingParas) {
+          const t = paraTimecodeSec(p);
+          if (t !== null && t > lastTc) lastTc = t;
+        }
+        const boundaryStart = isWindowMode ? Math.floor((sourceDurationSec * (partNo - 1)) / windowTotal) : lastTc;
+        const windowStart = Math.max(lastTc, boundaryStart);
+        const windowEnd = isLastWindow
+          ? sourceDurationSec
+          : Math.floor((sourceDurationSec * partNo) / windowTotal);
+        if (windowEnd - windowStart < 20) break;
+        // Small overlap so the model sees the exact moment the previous part stopped on.
+        const watchFrom = Math.max(0, windowStart - 5);
+        const workingSpokenSec = estimateSpokenSeconds(workingScript);
+        const missingSec = isWindowMode
+          ? Math.round((windowEnd - windowStart) * LENGTH_TARGET_RATIO)
+          : Math.round(sourceDurationSec * LENGTH_TARGET_RATIO - workingSpokenSec);
+
+        const contPrompt = isWindowMode
+          ? (() => {
+              const tail = existingParas.slice(-3).join("\n\n");
+              const lastSentence =
+                (stripTc(existingParas[existingParas.length - 1] || "")
+                  .split(/(?<=[.!?။])\s+/)
+                  .filter(Boolean)
+                  .pop() || "").trim();
+              const nameCounts = new Map<string, number>();
+              for (const m of workingScript.matchAll(/\b[A-Z][\p{L}'’-]{1,}\b/gu)) {
+                const w = m[0];
+                nameCounts.set(w, (nameCounts.get(w) || 0) + 1);
+              }
+              const knownNames = [...nameCounts.entries()]
+                .filter(([, c]) => c >= 2)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 12)
+                .map(([w]) => w);
+              const namesLine = knownNames.length
+                ? `\nCHARACTERS/NAMES ALREADY INTRODUCED (use these EXACT spellings, never re-introduce them as new): ${knownNames.join(", ")}\n`
+                : "";
+              return `*** PART ${partNo} OF ${windowTotal} — COVER ONLY ${tc(windowStart)} to ${tc(windowEnd)} ***
+
+PART ${partNo} is a DIRECT CONTINUATION of PART ${partNo - 1} of the SAME recap narration. It is ONE single story, not a new recap.
 ${namesLine}
-WHERE WE LEFT OFF (last lines of Part 1 — continue straight on from here):
+WHERE WE LEFT OFF (last lines already written — continue straight on from here):
 ${tail}
 
+LAST SENTENCE ALREADY WRITTEN:
+"${lastSentence}"
+
+HANDOFF CONTRACT (most important rule):
+- Your very FIRST sentence must be the direct next action of that LAST SENTENCE — same scene, same characters, no gap.
+- Example of the required feel: if the last sentence was "Maung Maung rode his bicycle to school", your first sentence must be what happens when he ARRIVES at school (e.g. he walks straight into the classroom) — NOT a new scene, NOT a re-introduction, NOT a summary.
+- Whatever characters or actions were still in motion at the cut must be continued/resolved first.
+
 Rules:
-- Watch the source from ${tc(windowStart)} to the very END (${tc(sourceDurationSec)}) and narrate that part.
-- Write ONLY the new paragraphs. Do NOT repeat, restate or rewrite anything from Part 1.
-- Your FIRST sentence must continue directly from the last sentence of Part 1. No new hook, no new opening line, no "this story is about...", no re-introduction of the premise, no summary of Part 1.
-- Keep the exact same character names, spellings, relationships, narrator voice, tense and pronoun style as Part 1.
-- Every paragraph MUST start with [MM:SS] STRICTLY LATER than [${tc(windowStart)}] and keep increasing.
-- Cover every essential beat of this part including the ENDING/climax. Nothing important may be skipped.
+- Re-watch the source from ${tc(watchFrom)} so you see the exact moment we stopped on, then narrate from ${tc(windowStart)} to ${tc(windowEnd)}.
+- Write ONLY the new paragraphs. Do NOT repeat, restate or rewrite anything already written.
+- No new hook, no new opening line, no "this story is about...", no re-introduction of the premise, no summary of earlier parts.
+- Keep the exact same character names, spellings, relationships, narrator voice, tense and pronoun style.
+- Every paragraph MUST start with [MM:SS] STRICTLY LATER than [${tc(windowStart)}] and keep increasing. Nothing after [${tc(windowEnd)}].
+${
+  isLastWindow
+    ? "- This is the FINAL part: cover every remaining beat including the ENDING/climax."
+    : "- This is a MIDDLE part: do NOT write an ending or conclusion — stop mid-story on an unresolved beat."
+}
 - Same language (${lang}), same tone, same [MM:SS] format. Never [HH:MM:SS], never ranges.
 - Target about ${missingSec} seconds of spoken narration. Finish with complete sentences.
 
-PART 1 (already written — do not repeat):
-${normalizedRawScript}`;
-          })()
-        : `The recap narration below is INCOMPLETE — it is about ${missingSec} seconds of speech too short and it skipped important scenes from the source.
+ALREADY WRITTEN (do not repeat):
+${workingScript}`;
+            })()
+          : `The recap narration below is INCOMPLETE — it is about ${missingSec} seconds of speech too short and it skipped important scenes from the source.
 
 CONTINUE the script. Rules:
 - Write ONLY the new paragraphs. Do NOT repeat or rewrite anything already written.
@@ -1182,75 +1224,81 @@ CONTINUE the script. Rules:
 - Finish with complete sentences. Add roughly ${missingSec} seconds of spoken narration.
 
 EXISTING SCRIPT:
-${normalizedRawScript}`;
-      // Re-attach the already-uploaded media (no re-upload) so pass 2 can actually
-      // watch the second half of the source.
-      const contParts = [{ text: contPrompt }, ...contentParts.slice(1)];
-      const contController = new AbortController();
-      const contTimeoutId = setTimeout(
-        () => contController.abort(),
-        Math.max(5000, Math.min(isWindowMode ? 60000 : 45000, remainingBudget() - 12000)),
-      );
-      try {
-        const contRes = await callGeminiGenerateContent(
-          activeModel,
-          activeApiKey,
-          isOwnApi,
-          contController.signal,
-          finalSystemPrompt,
-          contParts,
-          requestedMaxOutputTokens,
+${workingScript}`;
+
+        // Re-attach the already-uploaded media (no re-upload) so this pass can watch
+        // the corresponding part of the source.
+        const contParts = [{ text: contPrompt }, ...contentParts.slice(1)];
+        const contController = new AbortController();
+        const perPassCap = isWindowMode ? (windowTotal >= 3 ? 45000 : 60000) : 45000;
+        const contTimeoutId = setTimeout(
+          () => contController.abort(),
+          Math.max(5000, Math.min(perPassCap, remainingBudget() - 12000)),
         );
-        if (contRes.ok) {
-          const contData = await contRes.json();
-          const contText: string = contData.candidates?.[0]?.content?.parts?.[0]?.text || "";
-          const accepted: string[] = [];
-          let cursor = isWindowMode ? Math.max(lastTc, windowStart - 1) : lastTc;
-          // Seam guard: a Part 2 that opens with a restart/hook instead of continuing
-          // is dropped so the merged script reads as one continuous arc.
-          const stripTc = (s: string) => s.replace(/^\s*\[\d{1,2}:\d{2}\]\s*/, "").trim();
-          const partOneOpening = stripTc(existingParas[0] || "").slice(0, 40);
-          const looksLikeRestart = (p: string) => {
-            const body = stripTc(p);
-            if (partOneOpening && body.slice(0, 40) === partOneOpening) return true;
-            return /^(this (story|film|movie|drama|video)|the story (begins|starts)|in this (recap|video|story)|once upon a time)/i.test(
-              body,
-            );
-          };
-          let seamChecked = false;
-          for (const p of contText.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean)) {
-            const t = paraTimecodeSec(p);
-            if (t === null || t <= cursor) continue;
-            if (sourceDurationSec && t > sourceDurationSec + 5) continue;
-            if (isWindowMode && !seamChecked) {
+        try {
+          const contRes = await callGeminiGenerateContent(
+            activeModel,
+            activeApiKey,
+            isOwnApi,
+            contController.signal,
+            finalSystemPrompt,
+            contParts,
+            requestedMaxOutputTokens,
+          );
+          if (contRes.ok) {
+            const contData = await contRes.json();
+            const contText: string = contData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+            const accepted: string[] = [];
+            let cursor = isWindowMode ? Math.max(lastTc, windowStart - 1) : lastTc;
+            // Seam guard: a part that opens with a restart/hook instead of continuing
+            // is dropped so the merged script reads as one continuous arc.
+            const firstOpening = stripTc(existingParas[0] || "").slice(0, 40);
+            const looksLikeRestart = (p: string) => {
+              const body = stripTc(p);
+              if (firstOpening && body.slice(0, 40) === firstOpening) return true;
+              return /^(this (story|film|movie|drama|video)|the story (begins|starts)|in this (recap|video|story)|once upon a time)/i.test(
+                body,
+              );
+            };
+            let seamChecked = false;
+            for (const p of contText.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean)) {
+              const t = paraTimecodeSec(p);
+              if (t === null || t <= cursor) continue;
+              if (sourceDurationSec && t > sourceDurationSec + 5) continue;
+              accepted.push(p);
+              cursor = t;
+            }
+            if (isWindowMode && accepted.length > 1 && !seamChecked) {
               seamChecked = true;
-              if (looksLikeRestart(p)) {
-                cursor = t;
-                continue;
+              if (looksLikeRestart(accepted[0])) accepted.shift();
+            }
+            if (accepted.length) {
+              const merged = `${workingScript}\n\n${accepted.join("\n\n")}`.trim();
+              if (endsAtCompleteSentence(merged)) {
+                workingScript = merged;
+                lengthAdjustedScript = merged;
+                toppedUp = true;
               }
             }
-            accepted.push(p);
-            cursor = t;
+            console.log(
+              `[recap-script-generator] ${
+                isWindowMode ? `Window pass ${partNo}/${windowTotal}` : "Continuation pass"
+              }: ${accepted.length} paragraph(s) accepted (lastTc=${lastTc}s, start=${windowStart}s, end=${windowEnd}s)`,
+            );
+          } else {
+            console.warn(`[recap-script-generator] Continuation pass ${partNo} failed: ${contRes.status}`);
+            break;
           }
-          if (accepted.length) {
-            const merged = `${normalizedRawScript}\n\n${accepted.join("\n\n")}`.trim();
-            if (endsAtCompleteSentence(merged)) {
-              lengthAdjustedScript = merged;
-              toppedUp = true;
-            }
-          }
-          console.log(
-            `[recap-script-generator] ${isWindowMode ? "Window pass 2" : "Continuation pass"}: ${accepted.length} paragraph(s) accepted (lastTc=${lastTc}s, start=${windowStart}s)`,
+        } catch (contErr) {
+          console.warn(
+            `[recap-script-generator] Continuation pass ${partNo} error: ${
+              contErr instanceof Error ? contErr.message : String(contErr)
+            }`,
           );
-        } else {
-          console.warn(`[recap-script-generator] Continuation pass failed: ${contRes.status}`);
+          break;
+        } finally {
+          clearTimeout(contTimeoutId);
         }
-      } catch (contErr) {
-        console.warn(
-          `[recap-script-generator] Continuation pass error: ${contErr instanceof Error ? contErr.message : String(contErr)}`,
-        );
-      } finally {
-        clearTimeout(contTimeoutId);
       }
     }
 
