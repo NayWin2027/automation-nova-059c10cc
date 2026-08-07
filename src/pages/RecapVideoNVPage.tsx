@@ -6294,6 +6294,9 @@ const RecapVideoNVPage: React.FC = () => {
         );
       }
       videoDurationRef.current = duration;
+      if (duration > 1320) {
+        toast.warning("Source ၂၂ မိနစ်ကျော်နေလို့ script က ရည်မှန်းချက်ထက် တိုနိုင်ပါတယ်။ ၂၀ မိနစ်အောက် အကောင်းဆုံးပါ။");
+      }
       const videoBlob = URL.createObjectURL(file);
       setVideoUrl(videoBlob);
 
