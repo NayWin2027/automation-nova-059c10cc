@@ -785,7 +785,8 @@ AFTER the complete narration script, output a final line containing exactly ===S
           (windowMode
             ? `\n\n*** PART 1 OF 2 — COVER ONLY 00:00 to ${fmtTc(windowSplitSec)} ***` +
               `\nThis is a long source, so you are writing PART 1 only. Cover the source from 00:00 up to ${fmtTc(windowSplitSec)} and STOP there.` +
-              `\nDo NOT narrate anything after ${fmtTc(windowSplitSec)}. Do NOT write an ending or conclusion — Part 2 continues later.` +
+              `\nDo NOT narrate anything after ${fmtTc(windowSplitSec)}. Do NOT write an ending, conclusion, moral or wrap-up line — the ENDING belongs ONLY to Part 2.` +
+              `\nStop mid-story on an unresolved beat so Part 2 can continue the same arc seamlessly.` +
               `\nAll timecodes must be between [00:00] and [${fmtTc(windowSplitSec)}].` +
               `\nREQUIRED NARRATION LENGTH for PART 1 (spoken aloud): ${Math.floor((windowOneSec * LENGTH_TARGET_RATIO) / 60)} minutes ${Math.round(
                 (windowOneSec * LENGTH_TARGET_RATIO) % 60,
