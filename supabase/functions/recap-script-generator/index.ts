@@ -1113,9 +1113,15 @@ ${transcript}
       if (!m) return null;
       return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
     };
+    // Long sources are generated as 2 windows: pass 1 covered the first half,
+    // this pass covers the second half from the same uploaded file.
+    const isWindowMode = !!sourceDurationSec && sourceDurationSec > 720;
+    const windowSplit = isWindowMode ? Math.floor((sourceDurationSec as number) / 2) : 0;
+    const tc = (sec: number) =>
+      `${String(Math.floor(Math.max(0, sec) / 60)).padStart(2, "0")}:${String(Math.round(Math.max(0, sec)) % 60).padStart(2, "0")}`;
     if (
       sourceDurationSec &&
-      rawSpokenSec < sourceDurationSec * 0.55 &&
+      (isWindowMode || rawSpokenSec < sourceDurationSec * 0.55) &&
       endsAtCompleteSentence(normalizedRawScript) &&
       remainingBudget() > 35000
     ) {
@@ -1125,22 +1131,43 @@ ${transcript}
         const t = paraTimecodeSec(p);
         if (t !== null && t > lastTc) lastTc = t;
       }
-      const missingSec = Math.round(sourceDurationSec * LENGTH_TARGET_RATIO - rawSpokenSec);
-      const contPrompt = `The recap narration below is INCOMPLETE — it is about ${missingSec} seconds of speech too short and it skipped important scenes from the source.
+      const windowStart = isWindowMode ? Math.max(lastTc, windowSplit) : lastTc;
+      const missingSec = isWindowMode
+        ? Math.round((sourceDurationSec - windowStart) * LENGTH_TARGET_RATIO)
+        : Math.round(sourceDurationSec * LENGTH_TARGET_RATIO - rawSpokenSec);
+      const contPrompt = isWindowMode
+        ? `*** PART 2 OF 2 — COVER ONLY ${tc(windowStart)} to ${tc(sourceDurationSec)} ***
+
+PART 1 of this recap narration is below. Now write PART 2 from the SAME source video.
+
+Rules:
+- Watch the source from ${tc(windowStart)} to the very END (${tc(sourceDurationSec)}) and narrate that part.
+- Write ONLY the new paragraphs. Do NOT repeat, restate or rewrite anything from Part 1.
+- Every paragraph MUST start with [MM:SS] STRICTLY LATER than [${tc(windowStart)}] and keep increasing.
+- Cover every essential beat of this part including the ENDING/climax. Nothing important may be skipped.
+- Same language (${lang}), same tone, same [MM:SS] format. Never [HH:MM:SS], never ranges.
+- Target about ${missingSec} seconds of spoken narration. Finish with complete sentences.
+
+PART 1 (already written — do not repeat):
+${normalizedRawScript}`
+        : `The recap narration below is INCOMPLETE — it is about ${missingSec} seconds of speech too short and it skipped important scenes from the source.
 
 CONTINUE the script. Rules:
 - Write ONLY the new paragraphs. Do NOT repeat or rewrite anything already written.
-- Every new paragraph MUST start with a timecode [MM:SS] that is STRICTLY LATER than [${String(Math.floor(lastTc / 60)).padStart(2, "0")}:${String(lastTc % 60).padStart(2, "0")}] and must keep increasing.
+- Every new paragraph MUST start with a timecode [MM:SS] that is STRICTLY LATER than [${tc(lastTc)}] and must keep increasing.
 - Cover the remaining source content through to the ENDING. Include the beats that were skipped.
 - Same language (${lang}), same tone and same [MM:SS] format. Never use [HH:MM:SS] or ranges.
 - Finish with complete sentences. Add roughly ${missingSec} seconds of spoken narration.
 
 EXISTING SCRIPT:
 ${normalizedRawScript}`;
+      // Re-attach the already-uploaded media (no re-upload) so pass 2 can actually
+      // watch the second half of the source.
+      const contParts = [{ text: contPrompt }, ...contentParts.slice(1)];
       const contController = new AbortController();
       const contTimeoutId = setTimeout(
         () => contController.abort(),
-        Math.max(5000, Math.min(45000, remainingBudget() - 12000)),
+        Math.max(5000, Math.min(isWindowMode ? 60000 : 45000, remainingBudget() - 12000)),
       );
       try {
         const contRes = await callGeminiGenerateContent(
@@ -1149,14 +1176,14 @@ ${normalizedRawScript}`;
           isOwnApi,
           contController.signal,
           finalSystemPrompt,
-          [{ text: contPrompt }],
+          contParts,
           requestedMaxOutputTokens,
         );
         if (contRes.ok) {
           const contData = await contRes.json();
           const contText: string = contData.candidates?.[0]?.content?.parts?.[0]?.text || "";
           const accepted: string[] = [];
-          let cursor = lastTc;
+          let cursor = isWindowMode ? Math.max(0, windowStart - 1) : lastTc;
           for (const p of contText.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean)) {
             const t = paraTimecodeSec(p);
             if (t === null || t <= cursor) continue;
@@ -1172,7 +1199,7 @@ ${normalizedRawScript}`;
             }
           }
           console.log(
-            `[recap-script-generator] Continuation pass: ${accepted.length} paragraph(s) accepted (lastTc=${lastTc}s)`,
+            `[recap-script-generator] ${isWindowMode ? "Window pass 2" : "Continuation pass"}: ${accepted.length} paragraph(s) accepted (lastTc=${lastTc}s, start=${windowStart}s)`,
           );
         } else {
           console.warn(`[recap-script-generator] Continuation pass failed: ${contRes.status}`);
