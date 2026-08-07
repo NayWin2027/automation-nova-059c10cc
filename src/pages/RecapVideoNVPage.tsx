@@ -5895,7 +5895,7 @@ const RecapVideoNVPage: React.FC = () => {
         .trim();
       cleaned = cleaned.replace(/^\s*(?:#+\s*)?(?:Recap Script|Narration Script|Script|Output)\s*:?\s*\n+/i, "").trim();
     }
-    const firstTimestamp = cleaned.search(/\[\d{1,2}:\d{2}\]/);
+    const firstTimestamp = cleaned.search(/\[\s*\d{1,2}:\d{2}(?::\d{2})?/);
     if (firstTimestamp > 0) cleaned = cleaned.slice(firstTimestamp).trim();
     return cleaned;
   };
