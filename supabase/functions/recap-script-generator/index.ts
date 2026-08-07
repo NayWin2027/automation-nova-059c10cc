@@ -807,6 +807,7 @@ OUTPUT FORMAT:
 - Each paragraph MUST start with [MM:SS] — the source video timecode of the best matching scene
 - After the timecode, write the narration text as a natural spoken paragraph
 - Example: [01:23] narration paragraph text here...
+- Timecode format is EXACTLY [MM:SS]. Never use [HH:MM:SS] and never a range like [01:23-01:30]. Only ONE timecode per paragraph, at the very start.
 - Each paragraph = one scene cut in the final video
 - The timecode tells the video editor WHICH part of the source video to show during this narration
 
@@ -838,6 +839,7 @@ OUTPUT FORMAT:
 - Each paragraph MUST start with [MM:SS] — an estimated timecode of the matching scene
 - After the timecode, write the narration text as a natural spoken paragraph
 - Example: [01:23] narration paragraph text here...
+- Timecode format is EXACTLY [MM:SS]. Never use [HH:MM:SS] and never a range like [01:23-01:30]. Only ONE timecode per paragraph, at the very start.
 
 RAW TRANSCRIPT:
 ${transcript}
