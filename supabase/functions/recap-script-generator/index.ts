@@ -1538,6 +1538,34 @@ ${lengthAdjustedScript}`;
       }
     }
 
+    // Never return a script that only appears complete because its last timestamp
+    // jumped to the ending. Validate distribution across the whole source timeline.
+    // A failed repair is retryable; returning a known-partial script would permanently
+    // omit source scenes regardless of how accurate its narration-length estimate is.
+    if (sourceDurationSec) {
+      const finalCoverage = sourceCoverageStats(lengthAdjustedScript, sourceDurationSec);
+      const incompleteCoverage =
+        finalCoverage.coveredBuckets < 8 ||
+        finalCoverage.lastTimecodeSec < sourceDurationSec * 0.85 ||
+        finalCoverage.largestGapSec > sourceDurationSec * 0.18;
+      console.log(
+        `[recap-script-generator] COVERAGE buckets=${finalCoverage.coveredBuckets}/10 lastTc=${Math.round(
+          finalCoverage.lastTimecodeSec,
+        )}s largestGap=${Math.round(finalCoverage.largestGapSec)}s complete=${!incompleteCoverage}`,
+      );
+      if (incompleteCoverage) {
+        return new Response(
+          JSON.stringify({
+            error: "AI script က source video အစ၊ အလယ်၊ အဆုံး အပြည့်မဖုံးနိုင်သေးပါ။ ခဏနေရင် အလိုအလျောက် ပြန်ကြိုးစားပါမယ်။",
+            retryable: true,
+            incompleteCoverage: true,
+            retryAfterSeconds: 5,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
+
     const script = enforceScriptCoverage100(lengthAdjustedScript, sourceDurationSec);
     const finalWordCount = script.split(/\s+/).filter(Boolean).length;
     const finalSpokenSec = estimateSpokenSeconds(script);
