@@ -933,9 +933,9 @@ ${transcript}
     // 115s primary cap left <35s, so the repair condition below could never run.
     const primaryCap =
       sourceDurationSec && sourceDurationSec > 1200
-        ? 55000
+        ? 45000
         : sourceDurationSec && sourceDurationSec > 720
-          ? 70000
+          ? 60000
           : 85000;
     const primaryTimeout = Math.min(primaryCap, remainingBudget() - 15000);
     const timeoutId = setTimeout(() => controller.abort(), Math.max(5000, primaryTimeout));
@@ -1272,7 +1272,7 @@ ${normalizedRawScript}`;
       for (let pass = 1; pass <= passCount; pass++) {
         const partNo = pass + 1;
         const isLastWindow = !isWindowMode || partNo === windowTotal;
-        if (remainingBudget() < 18000) {
+        if (remainingBudget() < 12000) {
           console.log(`[recap-script-generator] Skipping window pass ${partNo}: budget exhausted`);
           break;
         }
@@ -1371,7 +1371,10 @@ ${workingScript}`;
         // the corresponding part of the source.
         const contParts = [{ text: contPrompt }, ...contentParts.slice(1)];
         const contController = new AbortController();
-        const perPassCap = isWindowMode ? (windowTotal >= 3 ? 45000 : 60000) : 45000;
+        const passesIncludingCurrent = passCount - pass + 1;
+        const perPassCap = isWindowMode
+          ? Math.max(10000, Math.min(45000, Math.floor((remainingBudget() - 12000) / passesIncludingCurrent)))
+          : 45000;
         const contTimeoutId = setTimeout(
           () => contController.abort(),
           Math.max(5000, Math.min(perPassCap, remainingBudget() - 12000)),
@@ -1431,7 +1434,10 @@ ${workingScript}`;
             );
           } else {
             console.warn(`[recap-script-generator] Continuation pass ${partNo} failed: ${contRes.status}`);
-            break;
+            // A failed middle window must never cancel the final source window.
+            // The next pass resumes from the last accepted timestamp and covers the
+            // remaining range through the ending.
+            continue;
           }
         } catch (contErr) {
           console.warn(
@@ -1439,7 +1445,9 @@ ${workingScript}`;
               contErr instanceof Error ? contErr.message : String(contErr)
             }`,
           );
-          break;
+          // Keep advancing so a transient middle-window failure cannot permanently
+          // drop the climax/ending window.
+          continue;
         } finally {
           clearTimeout(contTimeoutId);
         }
