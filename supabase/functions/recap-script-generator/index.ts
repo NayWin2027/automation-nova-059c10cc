@@ -1488,7 +1488,7 @@ ${lengthAdjustedScript}`;
       }
     }
 
-    const script = enforceScriptCoverage100(lengthAdjustedScript, sourceDurationSec);
+    const script = enforcefullScriptCoverage(lengthAdjustedScript, sourceDurationSec);
     const finalWordCount = script.split(/\s+/).filter(Boolean).length;
     const finalSpokenSec = estimateSpokenSeconds(script);
     if (sourceDurationSec) {
