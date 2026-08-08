@@ -15,7 +15,7 @@ function buildGenerationConfig(model: string, requestedMaxOutputTokens: number |
   // Burmese/CJK narration costs 2-3 tokens per syllable: an 8192 cap truncated
   // long recaps and dropped the middle/ending beats. Give the model real room.
   const maxOutputTokens =
-    model === "gemini-3.6-flash"
+    model === "gemini-flash-latest"
       ? Math.max(requestedMaxOutputTokens || 0, 32768)
       : Math.max(requestedMaxOutputTokens || 0, 24576);
 
@@ -253,33 +253,7 @@ const LENGTH_TARGET_RATIO = 0.7;
 const LENGTH_MAX_RATIO = 0.75;
 const LENGTH_MIN_RATIO = 0.65;
 
-function sourceCoverageStats(
-  script: string,
-  sourceDurationSec: number,
-): {
-  coveredBuckets: number;
-  missingBuckets: number[];
-  lastTimecodeSec: number;
-  largestGapSec: number;
-} {
-  const timecodes = [...script.matchAll(/^\s*\[(\d{1,2}):(\d{2})\]/gm)]
-    .map((match) => parseInt(match[1], 10) * 60 + parseInt(match[2], 10))
-    .filter((seconds) => Number.isFinite(seconds) && seconds >= 0 && seconds <= sourceDurationSec + 5)
-    .sort((a, b) => a - b);
-  const buckets = new Set(
-    timecodes.map((seconds) => Math.min(9, Math.floor((seconds / Math.max(1, sourceDurationSec)) * 10))),
-  );
-  let largestGapSec = timecodes.length ? timecodes[0] : sourceDurationSec;
-  for (let index = 1; index < timecodes.length; index++) {
-    largestGapSec = Math.max(largestGapSec, timecodes[index] - timecodes[index - 1]);
-  }
-  const lastTimecodeSec = timecodes[timecodes.length - 1] || 0;
-  largestGapSec = Math.max(largestGapSec, sourceDurationSec - lastTimecodeSec);
-  const missingBuckets = Array.from({ length: 10 }, (_, index) => index).filter((index) => !buckets.has(index));
-  return { coveredBuckets: buckets.size, missingBuckets, lastTimecodeSec, largestGapSec };
-}
-
-function enforceScriptCoverage100(script: string, sourceDurationSec?: number | null): string {
+function enforcefullScriptCoverage(script: string, sourceDurationSec?: number | null): string {
   const normalized = script.replace(/\r\n/g, "\n").trim();
   if (!normalized || !sourceDurationSec) return normalized || script;
 
@@ -337,17 +311,6 @@ function enforceScriptCoverage100(script: string, sourceDurationSec?: number | n
   const paragraphTrimmed = kept.length ? kept.join("\n\n") : trimToCompleteSentences(normalized, maxSeconds);
   // Never let trimming turn a complete script into an under-length result.
   if (estimateSpokenSeconds(paragraphTrimmed) < sourceDurationSec * LENGTH_MIN_RATIO) return normalized;
-  // Never remove the ending merely to hit the narration ceiling. Full chronological
-  // source coverage has priority over trimming, otherwise an appended climax/ending
-  // can be silently cut off again here.
-  const originalCoverage = sourceCoverageStats(normalized, sourceDurationSec);
-  const trimmedCoverage = sourceCoverageStats(paragraphTrimmed, sourceDurationSec);
-  if (
-    originalCoverage.lastTimecodeSec >= sourceDurationSec * 0.85 &&
-    trimmedCoverage.lastTimecodeSec < sourceDurationSec * 0.85
-  ) {
-    return normalized;
-  }
   if (estimateSpokenSeconds(paragraphTrimmed) <= maxSeconds) return paragraphTrimmed;
   const sentenceTrimmed = trimToCompleteSentences(paragraphTrimmed, maxSeconds);
   return estimateSpokenSeconds(sentenceTrimmed) >= sourceDurationSec * LENGTH_MIN_RATIO ? sentenceTrimmed : normalized;
@@ -398,9 +361,6 @@ serve(async (req) => {
   if (_corsBlock) return _corsBlock;
 
   const corsHeaders = getCorsHeaders(req);
-  // Anchor the wall clock at the very start of the request so that time spent
-  // waiting for the uploaded file to become ACTIVE also counts against the budget.
-  const requestStart = Date.now();
 
   try {
     // ===== AUTHENTICATION =====
@@ -868,7 +828,6 @@ YOU ARE A PROFESSIONAL HOLLYWOOD VIDEO EDITOR:
 FULL COVERAGE RULE (MANDATORY):
 - Before writing, mentally list EVERY essential story beat in the source: setup, each major turning point, confrontations, revelations/confessions, decisions, climax and the ENDING. None of them may be missing.
 - Your paragraph timecodes MUST spread from near 00:00 all the way to the END of the source. The final paragraph's timecode must be close to the source's last minute.
-- COVERAGE CHECKPOINTS: Divide the source timeline into TEN consecutive 10% sections. Every one of the ten sections MUST have at least one narration paragraph whose [MM:SS] points to a real event inside that section. Never jump over a section, even when the narration has already reached its 70% spoken-time target.
 - Never cover the first half in detail and compress or skip the second half. The last third of the source is just as important.
 - ENDING COVERAGE (HARD RULE): the LAST 15% of the source duration MUST have its own paragraphs. The final confrontation/fight, the climax, its outcome and the closing scene must each be narrated in full detail — never compressed into one rushed sentence and never summarised away. Your last paragraph's timecode must fall inside that final 15%.
 - Never pad with repeated or restated sentences to reach the length — add MISSING scenes instead.
@@ -930,8 +889,8 @@ ${transcript}
 
     // Total wall budget must stay under Supabase's 150s idle limit.
     // Reserve ~10s for post-processing, credit deduction, and response send.
-    const WALL_BUDGET_MS = 125000;
-    const wallStart = requestStart;
+    const WALL_BUDGET_MS = 140000;
+    const wallStart = Date.now();
     const remainingBudget = () => Math.max(0, WALL_BUDGET_MS - (Date.now() - wallStart));
 
     const controller = new AbortController();
@@ -939,9 +898,9 @@ ${transcript}
     // 115s primary cap left <35s, so the repair condition below could never run.
     const primaryCap =
       sourceDurationSec && sourceDurationSec > 1200
-        ? 45000
+        ? 55000
         : sourceDurationSec && sourceDurationSec > 720
-          ? 60000
+          ? 70000
           : 85000;
     const primaryTimeout = Math.min(primaryCap, remainingBudget() - 15000);
     const timeoutId = setTimeout(() => controller.abort(), Math.max(5000, primaryTimeout));
@@ -969,13 +928,10 @@ ${transcript}
       );
     }
 
-    // Own API model fallback stays strictly on the SAME user-provided key.
-    // Never rotate into App API keys; only move past unavailable/overloaded models.
-    const fallbackModels = isOwnApi
-      ? ["gemini-flash-latest", "gemini-3.5-flash", "gemini-2.5-flash", "gemini-flash-lite-latest"]
-      : ["gemini-pro-latest", "gemini-2.5-flash", "gemini-2.5-pro"];
+    // Own API must fail fast on its own key. Fallback and key rotation belong to App API only.
+    const fallbackModels = isOwnApi ? [] : ["gemini-pro-latest", "gemini-2.5-flash", "gemini-2.5-pro"];
     const shouldFallback = (status?: number) =>
-      status === 404 || status === 503 || status === 504 || (!isOwnApi && status === 429);
+      !isOwnApi && (status === 404 || status === 429 || status === 503 || status === 504);
 
     for (const fallbackModel of fallbackModels) {
       // Fallback if: no response (timeout/abort/network) OR response not ok and status warrants fallback
@@ -1158,14 +1114,6 @@ ${transcript}
 
     let lengthAdjustedScript = normalizedRawScript;
     const rawSpokenSec = estimateSpokenSeconds(normalizedRawScript);
-    const rawCoverage = sourceDurationSec ? sourceCoverageStats(normalizedRawScript, sourceDurationSec) : null;
-    const hasChronologyHole = Boolean(
-      sourceDurationSec &&
-      rawCoverage &&
-      (rawCoverage.coveredBuckets < 10 ||
-        rawCoverage.lastTimecodeSec < sourceDurationSec * 0.85 ||
-        rawCoverage.largestGapSec > sourceDurationSec * 0.18),
-    );
     let toppedUp = false;
 
     // A prompt rule alone cannot enforce duration. If a single-pass result is below
@@ -1177,7 +1125,6 @@ ${transcript}
       sourceDurationSec &&
       initialWindowTotal === 1 &&
       rawSpokenSec < sourceDurationSec * LENGTH_MIN_RATIO &&
-      !hasChronologyHole &&
       remainingBudget() > 24000
     ) {
       const targetSec = Math.round(sourceDurationSec * LENGTH_TARGET_RATIO);
@@ -1192,7 +1139,6 @@ Re-watch the attached source from beginning to end. Before writing, internally b
 Rules:
 - Do not continue or pad the old draft; replace it completely.
 - Cover beginning, middle, last third, climax, and ending proportionally. Important scenes must not be omitted.
-- Divide the source into TEN consecutive 10% timeline sections. Include at least one real, correctly timecoded narration paragraph from EVERY section. A timestamp jump over any section is forbidden.
 - Reach the spoken-time range by adding omitted source events and concrete actions/dialogue, never repetition or filler.
 - Keep exact, strictly increasing [MM:SS] source timecodes and finish with a complete sentence.
 - Output only the rewritten script in ${lang}; no ledger, headings, notes, or explanation.
@@ -1223,15 +1169,7 @@ ${normalizedRawScript}`;
             repaired &&
             endsAtCompleteSentence(repaired) &&
             !violatesTargetLanguage(repaired, lang) &&
-            repairedSpokenSec >= Math.min(rawSpokenSec, sourceDurationSec * LENGTH_MIN_RATIO) &&
-            (() => {
-              const repairedCoverage = sourceCoverageStats(repaired, sourceDurationSec);
-              return (
-                repairedCoverage.coveredBuckets > (rawCoverage?.coveredBuckets || 0) &&
-                repairedCoverage.lastTimecodeSec >= sourceDurationSec * 0.85 &&
-                repairedCoverage.largestGapSec <= sourceDurationSec * 0.18
-              );
-            })()
+            repairedSpokenSec > rawSpokenSec
           ) {
             lengthAdjustedScript = repaired;
             toppedUp = true;
@@ -1267,9 +1205,7 @@ ${normalizedRawScript}`;
     const stripTc = (s: string) => s.replace(/^\s*\[\d{1,2}:\d{2}\]\s*/, "").trim();
     if (
       sourceDurationSec &&
-      (isWindowMode ||
-        estimateSpokenSeconds(lengthAdjustedScript) < sourceDurationSec * LENGTH_MIN_RATIO ||
-        sourceCoverageStats(lengthAdjustedScript, sourceDurationSec).lastTimecodeSec < sourceDurationSec * 0.85) &&
+      (isWindowMode || estimateSpokenSeconds(lengthAdjustedScript) < sourceDurationSec * LENGTH_MIN_RATIO) &&
       endsAtCompleteSentence(lengthAdjustedScript) &&
       remainingBudget() > 22000
     ) {
@@ -1281,7 +1217,7 @@ ${normalizedRawScript}`;
       for (let pass = 1; pass <= passCount; pass++) {
         const partNo = pass + 1;
         const isLastWindow = !isWindowMode || partNo === windowTotal;
-        if (remainingBudget() < 12000) {
+        if (remainingBudget() < 18000) {
           console.log(`[recap-script-generator] Skipping window pass ${partNo}: budget exhausted`);
           break;
         }
@@ -1380,10 +1316,7 @@ ${workingScript}`;
         // the corresponding part of the source.
         const contParts = [{ text: contPrompt }, ...contentParts.slice(1)];
         const contController = new AbortController();
-        const passesIncludingCurrent = passCount - pass + 1;
-        const perPassCap = isWindowMode
-          ? Math.max(10000, Math.min(45000, Math.floor((remainingBudget() - 12000) / passesIncludingCurrent)))
-          : 45000;
+        const perPassCap = isWindowMode ? (windowTotal >= 3 ? 45000 : 60000) : 45000;
         const contTimeoutId = setTimeout(
           () => contController.abort(),
           Math.max(5000, Math.min(perPassCap, remainingBudget() - 12000)),
@@ -1443,10 +1376,7 @@ ${workingScript}`;
             );
           } else {
             console.warn(`[recap-script-generator] Continuation pass ${partNo} failed: ${contRes.status}`);
-            // A failed middle window must never cancel the final source window.
-            // The next pass resumes from the last accepted timestamp and covers the
-            // remaining range through the ending.
-            continue;
+            break;
           }
         } catch (contErr) {
           console.warn(
@@ -1454,9 +1384,7 @@ ${workingScript}`;
               contErr instanceof Error ? contErr.message : String(contErr)
             }`,
           );
-          // Keep advancing so a transient middle-window failure cannot permanently
-          // drop the climax/ending window.
-          continue;
+          break;
         } finally {
           clearTimeout(contTimeoutId);
         }
@@ -1465,10 +1393,12 @@ ${workingScript}`;
 
     const rawWordCount = lengthAdjustedScript.split(/\s+/).filter(Boolean).length;
 
-    // ---- Missing chronology coverage pass ------------------------------------
-    // A length target does not prove source coverage. Repair every empty 10% timeline
-    // interval in one media-grounded pass, then merge by source timecode. This repairs
-    // missing middle scenes as well as a missing ending without rewriting good scenes.
+    // ---- Ending coverage pass ------------------------------------------------
+    // Length can be on target while the model still rushed or skipped the finale
+    // (final fight, climax outcome, closing scene). If the last written timecode
+    // stops well before the source ends, request ONLY the missing tail. Paragraphs
+    // are accepted solely when strictly later than the current last timecode, so AV
+    // mapping cannot be corrupted.
     if (sourceDurationSec && endsAtCompleteSentence(lengthAdjustedScript) && remainingBudget() > 20000) {
       const tailParas = lengthAdjustedScript
         .split(/\n{2,}/)
@@ -1479,28 +1409,22 @@ ${workingScript}`;
         const t = paraTimecodeSec(p);
         if (t !== null && t > lastTc) lastTc = t;
       }
-      const beforeRepair = sourceCoverageStats(lengthAdjustedScript, sourceDurationSec);
-      if (beforeRepair.missingBuckets.length > 0 || lastTc < sourceDurationSec * 0.88) {
+      const endThreshold = sourceDurationSec * 0.88;
+      if (lastTc > 0 && lastTc < endThreshold && sourceDurationSec - lastTc >= 20) {
         const tail = tailParas.slice(-2).join("\n\n");
-        const missingIntervals = beforeRepair.missingBuckets
-          .map((bucket) => `[${tc((sourceDurationSec * bucket) / 10)}–${tc((sourceDurationSec * (bucket + 1)) / 10)}]`)
-          .join(", ");
-        const endPrompt = `*** FULL SOURCE COVERAGE REPAIR ***
+        const endPrompt = `*** ENDING COVERAGE PASS — COVER ONLY ${tc(lastTc)} to ${tc(sourceDurationSec)} ***
 
-The existing recap has chronology holes. Re-watch the ENTIRE attached source and write the omitted real events from EACH missing timeline interval.
-
-MISSING INTERVALS THAT MUST ALL BE FILLED: ${missingIntervals || `[${tc(lastTc)}–${tc(sourceDurationSec)}]`}
+The recap narration below stops at [${tc(lastTc)}], but the source runs until [${tc(sourceDurationSec)}]. The final part of the story — the last confrontation/fight, the climax, its outcome and the closing scene — is missing or rushed.
 
 WHERE WE LEFT OFF (continue straight on from here, same story, same characters):
 ${tail}
 
 Rules:
-- Write at least one substantial paragraph for EVERY listed missing interval; include every essential event in that interval.
-- Write ONLY omitted paragraphs. Do NOT repeat, restate or rewrite existing narration. No new hook, no re-introduction.
-- Every paragraph MUST start with the exact matching source [MM:SS]. Keep the repair paragraphs strictly increasing and inside the listed intervals.
-- It is valid for a repair timestamp to be earlier than the existing script's last timestamp; the server will insert it chronologically.
+- Re-watch the source from ${tc(Math.max(0, lastTc - 5))} to the very end, then narrate everything that happens after [${tc(lastTc)}] in full detail.
+- Write ONLY the new paragraphs. Do NOT repeat, restate or rewrite anything already written. No new hook, no re-introduction, no summary of earlier parts.
+- Every paragraph MUST start with [MM:SS] STRICTLY LATER than [${tc(lastTc)}] and keep increasing. Nothing after [${tc(sourceDurationSec)}].
 - The final fight/climax must get its own paragraphs — never compressed into one sentence.
-- If the final 10% interval is listed, the LAST repair paragraph must correspond to the source's final scene and end the story properly.
+- The LAST paragraph must correspond to the source's final scene and end the story properly.
 - Same language (${lang}), same tone, same narrator voice and same [MM:SS] format. Never [HH:MM:SS], never ranges.
 - Finish with a complete sentence.
 
@@ -1526,7 +1450,7 @@ ${lengthAdjustedScript}`;
             const endData = await endRes.json();
             const endText: string = endData.candidates?.[0]?.content?.parts?.[0]?.text || "";
             const acceptedEnd: string[] = [];
-            let cursor = -1;
+            let cursor = lastTc;
             for (const p of endText
               .split(/\n{2,}/)
               .map((s) => s.trim())
@@ -1534,30 +1458,18 @@ ${lengthAdjustedScript}`;
               const t = paraTimecodeSec(p);
               if (t === null || t <= cursor) continue;
               if (t > sourceDurationSec + 5) continue;
-              const bucket = Math.min(9, Math.floor((t / Math.max(1, sourceDurationSec)) * 10));
-              if (!beforeRepair.missingBuckets.includes(bucket) && !(bucket === 9 && lastTc < sourceDurationSec * 0.88))
-                continue;
               acceptedEnd.push(p);
               cursor = t;
             }
             if (acceptedEnd.length) {
-              const merged = [...tailParas, ...acceptedEnd]
-                .map((paragraph, order) => ({ paragraph, order, timecode: paraTimecodeSec(paragraph) }))
-                .sort(
-                  (a, b) =>
-                    (a.timecode ?? Number.MAX_SAFE_INTEGER) - (b.timecode ?? Number.MAX_SAFE_INTEGER) ||
-                    a.order - b.order,
-                )
-                .map(({ paragraph }) => paragraph)
-                .join("\n\n")
-                .trim();
+              const merged = `${lengthAdjustedScript}\n\n${acceptedEnd.join("\n\n")}`.trim();
               if (endsAtCompleteSentence(merged) && !violatesTargetLanguage(merged, lang)) {
                 lengthAdjustedScript = merged;
                 toppedUp = true;
               }
             }
             console.log(
-              `[recap-script-generator] Full coverage repair: ${acceptedEnd.length} paragraph(s) accepted (missing=${beforeRepair.missingBuckets.join(",")}, lastTc=${lastTc}s, sourceEnd=${Math.round(
+              `[recap-script-generator] Ending coverage pass: ${acceptedEnd.length} paragraph(s) accepted (lastTc=${lastTc}s, sourceEnd=${Math.round(
                 sourceDurationSec,
               )}s)`,
             );
@@ -1573,35 +1485,6 @@ ${lengthAdjustedScript}`;
         } finally {
           clearTimeout(endTimeoutId);
         }
-      }
-    }
-
-    // Never return a script that only appears complete because its last timestamp
-    // jumped to the ending. Validate distribution across the whole source timeline.
-    // A failed repair is retryable; returning a known-partial script would permanently
-    // omit source scenes regardless of how accurate its narration-length estimate is.
-    if (sourceDurationSec) {
-      const finalCoverage = sourceCoverageStats(lengthAdjustedScript, sourceDurationSec);
-      const incompleteCoverage =
-        finalCoverage.coveredBuckets < 10 ||
-        finalCoverage.lastTimecodeSec < sourceDurationSec * 0.85 ||
-        finalCoverage.largestGapSec > sourceDurationSec * 0.18;
-      console.log(
-        `[recap-script-generator] COVERAGE buckets=${finalCoverage.coveredBuckets}/10 lastTc=${Math.round(
-          finalCoverage.lastTimecodeSec,
-        )}s largestGap=${Math.round(finalCoverage.largestGapSec)}s complete=${!incompleteCoverage}`,
-      );
-      if (incompleteCoverage) {
-        return new Response(
-          JSON.stringify({
-            error:
-              "AI script က source video အစ၊ အလယ်၊ အဆုံး အပြည့်မဖုံးနိုင်သေးပါ။ ခဏနေရင် အလိုအလျောက် ပြန်ကြိုးစားပါမယ်။",
-            retryable: true,
-            incompleteCoverage: true,
-            retryAfterSeconds: 5,
-          }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
       }
     }
 
