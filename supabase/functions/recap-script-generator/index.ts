@@ -395,6 +395,9 @@ serve(async (req) => {
   if (_corsBlock) return _corsBlock;
 
   const corsHeaders = getCorsHeaders(req);
+  // Anchor the wall clock at the very start of the request so that time spent
+  // waiting for the uploaded file to become ACTIVE also counts against the budget.
+  const requestStart = Date.now();
 
   try {
     // ===== AUTHENTICATION =====
@@ -924,8 +927,8 @@ ${transcript}
 
     // Total wall budget must stay under Supabase's 150s idle limit.
     // Reserve ~10s for post-processing, credit deduction, and response send.
-    const WALL_BUDGET_MS = 140000;
-    const wallStart = Date.now();
+    const WALL_BUDGET_MS = 125000;
+    const wallStart = requestStart;
     const remainingBudget = () => Math.max(0, WALL_BUDGET_MS - (Date.now() - wallStart));
 
     const controller = new AbortController();
