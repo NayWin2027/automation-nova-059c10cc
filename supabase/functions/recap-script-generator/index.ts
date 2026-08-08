@@ -972,7 +972,7 @@ ${transcript}
     // Own API model fallback stays strictly on the SAME user-provided key.
     // Never rotate into App API keys; only move past unavailable/overloaded models.
     const fallbackModels = isOwnApi
-      ? ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-2.5-flash", "gemini-flash-lite-latest"]
+      ? ["gemini-flash-latest", "gemini-3.5-flash", "gemini-2.5-flash", "gemini-flash-lite-latest"]
       : ["gemini-pro-latest", "gemini-2.5-flash", "gemini-2.5-pro"];
     const shouldFallback = (status?: number) =>
       status === 404 || status === 503 || status === 504 || (!isOwnApi && status === 429);
