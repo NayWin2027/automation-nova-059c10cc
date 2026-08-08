@@ -395,6 +395,9 @@ serve(async (req) => {
   if (_corsBlock) return _corsBlock;
 
   const corsHeaders = getCorsHeaders(req);
+  // Anchor the wall clock at the very start of the request so that time spent
+  // waiting for the uploaded file to become ACTIVE also counts against the budget.
+  const requestStart = Date.now();
 
   try {
     // ===== AUTHENTICATION =====
