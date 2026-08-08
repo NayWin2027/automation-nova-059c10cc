@@ -253,7 +253,28 @@ const LENGTH_TARGET_RATIO = 0.7;
 const LENGTH_MAX_RATIO = 0.75;
 const LENGTH_MIN_RATIO = 0.65;
 
-function enforcefullScriptCoverage(script: string, sourceDurationSec?: number | null): string {
+function sourceCoverageStats(script: string, sourceDurationSec: number): {
+  coveredBuckets: number;
+  lastTimecodeSec: number;
+  largestGapSec: number;
+} {
+  const timecodes = [...script.matchAll(/^\s*\[(\d{1,2}):(\d{2})\]/gm)]
+    .map((match) => parseInt(match[1], 10) * 60 + parseInt(match[2], 10))
+    .filter((seconds) => Number.isFinite(seconds) && seconds >= 0 && seconds <= sourceDurationSec + 5)
+    .sort((a, b) => a - b);
+  const buckets = new Set(
+    timecodes.map((seconds) => Math.min(9, Math.floor((seconds / Math.max(1, sourceDurationSec)) * 10))),
+  );
+  let largestGapSec = timecodes.length ? timecodes[0] : sourceDurationSec;
+  for (let index = 1; index < timecodes.length; index++) {
+    largestGapSec = Math.max(largestGapSec, timecodes[index] - timecodes[index - 1]);
+  }
+  const lastTimecodeSec = timecodes[timecodes.length - 1] || 0;
+  largestGapSec = Math.max(largestGapSec, sourceDurationSec - lastTimecodeSec);
+  return { coveredBuckets: buckets.size, lastTimecodeSec, largestGapSec };
+}
+
+function enforceScriptCoverage100(script: string, sourceDurationSec?: number | null): string {
   const normalized = script.replace(/\r\n/g, "\n").trim();
   if (!normalized || !sourceDurationSec) return normalized || script;
 
@@ -311,6 +332,17 @@ function enforcefullScriptCoverage(script: string, sourceDurationSec?: number | 
   const paragraphTrimmed = kept.length ? kept.join("\n\n") : trimToCompleteSentences(normalized, maxSeconds);
   // Never let trimming turn a complete script into an under-length result.
   if (estimateSpokenSeconds(paragraphTrimmed) < sourceDurationSec * LENGTH_MIN_RATIO) return normalized;
+  // Never remove the ending merely to hit the narration ceiling. Full chronological
+  // source coverage has priority over trimming, otherwise an appended climax/ending
+  // can be silently cut off again here.
+  const originalCoverage = sourceCoverageStats(normalized, sourceDurationSec);
+  const trimmedCoverage = sourceCoverageStats(paragraphTrimmed, sourceDurationSec);
+  if (
+    originalCoverage.lastTimecodeSec >= sourceDurationSec * 0.85 &&
+    trimmedCoverage.lastTimecodeSec < sourceDurationSec * 0.85
+  ) {
+    return normalized;
+  }
   if (estimateSpokenSeconds(paragraphTrimmed) <= maxSeconds) return paragraphTrimmed;
   const sentenceTrimmed = trimToCompleteSentences(paragraphTrimmed, maxSeconds);
   return estimateSpokenSeconds(sentenceTrimmed) >= sourceDurationSec * LENGTH_MIN_RATIO ? sentenceTrimmed : normalized;
@@ -828,6 +860,7 @@ YOU ARE A PROFESSIONAL HOLLYWOOD VIDEO EDITOR:
 FULL COVERAGE RULE (MANDATORY):
 - Before writing, mentally list EVERY essential story beat in the source: setup, each major turning point, confrontations, revelations/confessions, decisions, climax and the ENDING. None of them may be missing.
 - Your paragraph timecodes MUST spread from near 00:00 all the way to the END of the source. The final paragraph's timecode must be close to the source's last minute.
+- COVERAGE CHECKPOINTS: Divide the source timeline into TEN consecutive 10% sections. Every one of the ten sections MUST have at least one narration paragraph whose [MM:SS] points to a real event inside that section. Never jump over a section, even when the narration has already reached its 70% spoken-time target.
 - Never cover the first half in detail and compress or skip the second half. The last third of the source is just as important.
 - ENDING COVERAGE (HARD RULE): the LAST 15% of the source duration MUST have its own paragraphs. The final confrontation/fight, the climax, its outcome and the closing scene must each be narrated in full detail — never compressed into one rushed sentence and never summarised away. Your last paragraph's timecode must fall inside that final 15%.
 - Never pad with repeated or restated sentences to reach the length — add MISSING scenes instead.
@@ -1114,6 +1147,14 @@ ${transcript}
 
     let lengthAdjustedScript = normalizedRawScript;
     const rawSpokenSec = estimateSpokenSeconds(normalizedRawScript);
+    const rawCoverage = sourceDurationSec ? sourceCoverageStats(normalizedRawScript, sourceDurationSec) : null;
+    const hasChronologyHole = Boolean(
+      sourceDurationSec &&
+        rawCoverage &&
+        (rawCoverage.coveredBuckets < 8 ||
+          rawCoverage.lastTimecodeSec < sourceDurationSec * 0.85 ||
+          rawCoverage.largestGapSec > sourceDurationSec * 0.18),
+    );
     let toppedUp = false;
 
     // A prompt rule alone cannot enforce duration. If a single-pass result is below
@@ -1124,7 +1165,7 @@ ${transcript}
     if (
       sourceDurationSec &&
       initialWindowTotal === 1 &&
-      rawSpokenSec < sourceDurationSec * LENGTH_MIN_RATIO &&
+      (rawSpokenSec < sourceDurationSec * LENGTH_MIN_RATIO || hasChronologyHole) &&
       remainingBudget() > 24000
     ) {
       const targetSec = Math.round(sourceDurationSec * LENGTH_TARGET_RATIO);
@@ -1139,6 +1180,7 @@ Re-watch the attached source from beginning to end. Before writing, internally b
 Rules:
 - Do not continue or pad the old draft; replace it completely.
 - Cover beginning, middle, last third, climax, and ending proportionally. Important scenes must not be omitted.
+- Divide the source into TEN consecutive 10% timeline sections. Include at least one real, correctly timecoded narration paragraph from EVERY section. A timestamp jump over any section is forbidden.
 - Reach the spoken-time range by adding omitted source events and concrete actions/dialogue, never repetition or filler.
 - Keep exact, strictly increasing [MM:SS] source timecodes and finish with a complete sentence.
 - Output only the rewritten script in ${lang}; no ledger, headings, notes, or explanation.
@@ -1169,7 +1211,15 @@ ${normalizedRawScript}`;
             repaired &&
             endsAtCompleteSentence(repaired) &&
             !violatesTargetLanguage(repaired, lang) &&
-            repairedSpokenSec > rawSpokenSec
+            repairedSpokenSec >= Math.min(rawSpokenSec, sourceDurationSec * LENGTH_MIN_RATIO) &&
+            (() => {
+              const repairedCoverage = sourceCoverageStats(repaired, sourceDurationSec);
+              return (
+                repairedCoverage.coveredBuckets > (rawCoverage?.coveredBuckets || 0) &&
+                repairedCoverage.lastTimecodeSec >= sourceDurationSec * 0.85 &&
+                repairedCoverage.largestGapSec <= sourceDurationSec * 0.18
+              );
+            })()
           ) {
             lengthAdjustedScript = repaired;
             toppedUp = true;
@@ -1485,6 +1535,34 @@ ${lengthAdjustedScript}`;
         } finally {
           clearTimeout(endTimeoutId);
         }
+      }
+    }
+
+    // Never return a script that only appears complete because its last timestamp
+    // jumped to the ending. Validate distribution across the whole source timeline.
+    // A failed repair is retryable; returning a known-partial script would permanently
+    // omit source scenes regardless of how accurate its narration-length estimate is.
+    if (sourceDurationSec) {
+      const finalCoverage = sourceCoverageStats(lengthAdjustedScript, sourceDurationSec);
+      const incompleteCoverage =
+        finalCoverage.coveredBuckets < 8 ||
+        finalCoverage.lastTimecodeSec < sourceDurationSec * 0.85 ||
+        finalCoverage.largestGapSec > sourceDurationSec * 0.18;
+      console.log(
+        `[recap-script-generator] COVERAGE buckets=${finalCoverage.coveredBuckets}/10 lastTc=${Math.round(
+          finalCoverage.lastTimecodeSec,
+        )}s largestGap=${Math.round(finalCoverage.largestGapSec)}s complete=${!incompleteCoverage}`,
+      );
+      if (incompleteCoverage) {
+        return new Response(
+          JSON.stringify({
+            error: "AI script က source video အစ၊ အလယ်၊ အဆုံး အပြည့်မဖုံးနိုင်သေးပါ။ ခဏနေရင် အလိုအလျောက် ပြန်ကြိုးစားပါမယ်။",
+            retryable: true,
+            incompleteCoverage: true,
+            retryAfterSeconds: 5,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
       }
     }
 
