@@ -15,7 +15,7 @@ function buildGenerationConfig(model: string, requestedMaxOutputTokens: number |
   // Burmese/CJK narration costs 2-3 tokens per syllable: an 8192 cap truncated
   // long recaps and dropped the middle/ending beats. Give the model real room.
   const maxOutputTokens =
-    model === "gemini-flash-latest"
+    model === "gemini-3.5-flash-lite"
       ? Math.max(requestedMaxOutputTokens || 0, 32768)
       : Math.max(requestedMaxOutputTokens || 0, 24576);
 
@@ -253,7 +253,10 @@ const LENGTH_TARGET_RATIO = 0.7;
 const LENGTH_MAX_RATIO = 0.75;
 const LENGTH_MIN_RATIO = 0.65;
 
-function sourceCoverageStats(script: string, sourceDurationSec: number): {
+function sourceCoverageStats(
+  script: string,
+  sourceDurationSec: number,
+): {
   coveredBuckets: number;
   missingBuckets: number[];
   lastTimecodeSec: number;
@@ -1158,10 +1161,10 @@ ${transcript}
     const rawCoverage = sourceDurationSec ? sourceCoverageStats(normalizedRawScript, sourceDurationSec) : null;
     const hasChronologyHole = Boolean(
       sourceDurationSec &&
-        rawCoverage &&
-        (rawCoverage.coveredBuckets < 10 ||
-          rawCoverage.lastTimecodeSec < sourceDurationSec * 0.85 ||
-          rawCoverage.largestGapSec > sourceDurationSec * 0.18),
+      rawCoverage &&
+      (rawCoverage.coveredBuckets < 10 ||
+        rawCoverage.lastTimecodeSec < sourceDurationSec * 0.85 ||
+        rawCoverage.largestGapSec > sourceDurationSec * 0.18),
     );
     let toppedUp = false;
 
@@ -1532,14 +1535,19 @@ ${lengthAdjustedScript}`;
               if (t === null || t <= cursor) continue;
               if (t > sourceDurationSec + 5) continue;
               const bucket = Math.min(9, Math.floor((t / Math.max(1, sourceDurationSec)) * 10));
-              if (!beforeRepair.missingBuckets.includes(bucket) && !(bucket === 9 && lastTc < sourceDurationSec * 0.88)) continue;
+              if (!beforeRepair.missingBuckets.includes(bucket) && !(bucket === 9 && lastTc < sourceDurationSec * 0.88))
+                continue;
               acceptedEnd.push(p);
               cursor = t;
             }
             if (acceptedEnd.length) {
               const merged = [...tailParas, ...acceptedEnd]
                 .map((paragraph, order) => ({ paragraph, order, timecode: paraTimecodeSec(paragraph) }))
-                .sort((a, b) => (a.timecode ?? Number.MAX_SAFE_INTEGER) - (b.timecode ?? Number.MAX_SAFE_INTEGER) || a.order - b.order)
+                .sort(
+                  (a, b) =>
+                    (a.timecode ?? Number.MAX_SAFE_INTEGER) - (b.timecode ?? Number.MAX_SAFE_INTEGER) ||
+                    a.order - b.order,
+                )
                 .map(({ paragraph }) => paragraph)
                 .join("\n\n")
                 .trim();
@@ -1586,7 +1594,8 @@ ${lengthAdjustedScript}`;
       if (incompleteCoverage) {
         return new Response(
           JSON.stringify({
-            error: "AI script က source video အစ၊ အလယ်၊ အဆုံး အပြည့်မဖုံးနိုင်သေးပါ။ ခဏနေရင် အလိုအလျောက် ပြန်ကြိုးစားပါမယ်။",
+            error:
+              "AI script က source video အစ၊ အလယ်၊ အဆုံး အပြည့်မဖုံးနိုင်သေးပါ။ ခဏနေရင် အလိုအလျောက် ပြန်ကြိုးစားပါမယ်။",
             retryable: true,
             incompleteCoverage: true,
             retryAfterSeconds: 5,
