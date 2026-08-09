@@ -28,11 +28,6 @@ import {
 interface RecapSegment {
   timestamp: string;
   text: string;
-  isDialogue?: boolean;
-  sourceDurationSec?: number;
-  emotion?: string;
-  sourceStartSec?: number;
-  sourceEndSec?: number;
 }
 
 interface RecapScript {
@@ -41,24 +36,10 @@ interface RecapScript {
   segments: RecapSegment[];
 }
 
-const DIALOGUE_METADATA_PATTERN =
-  /(?:\[|\{|\(|［|｛|（)\s*DIALOG(?:UE|UAGE)(?:\s*:\s*[A-Za-z _-]+)?\s*(?:\]|\}|\)|］|｝|）)/gi;
-
-// SURGICAL FIX: strip every timecode shape the AI may emit ([M:SS], [HH:MM:SS], ranges)
-// so timestamps never leak into subtitles.
-const TIMECODE_STRIP_RE = /\[\s*\d{1,2}:\d{2}(?::\d{2})?(?:\s*[-–—]\s*\d{1,2}:\d{2}(?::\d{2})?)?\s*\]/g;
-
-const stripDialogueMetadata = (text: string): string =>
-  String(text || "")
-    .replace(DIALOGUE_METADATA_PATTERN, "")
-    .replace(/[ \t]{2,}/g, " ")
-    .trim();
-
 type ProcessingStatus = "idle" | "processing" | "done" | "error";
 
 interface ResultViewProps {
   scriptData: RecapScript;
-  narrationStyle: "STORY" | "HYBRID" | "VIRAL";
   onUpdateScript: (newScript: string) => void;
   onGenerateVoice: () => void;
   voiceMode: "modern" | "normal";
@@ -282,7 +263,6 @@ const fixWebmDuration = (buffer: ArrayBuffer, durationMs: number): ArrayBuffer |
 export const ResultView: React.FC<ResultViewProps> = React.memo(
   ({
     scriptData,
-    narrationStyle,
     onUpdateScript,
     onGenerateVoice,
     onRecapSaved,
@@ -309,7 +289,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const hookSegmentIdxRef = useRef<number>(-1);
     const hookTitleRef = useRef<string>("");
     const recStartTimeRef = useRef<number>(0); // Recording start timestamp for hook overlay timing
-    const hookPhaseEndedRef = useRef<boolean>(false); // SURGICAL FIX: force one clean resync after hook phase
     const [renderedBlobUrl, setRenderedBlobUrl] = useState<string | null>(null);
     const [serverRenderProgress, setServerRenderProgress] = useState<string>("");
     const subNeonHueRef = useRef(0);
@@ -814,10 +793,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const segCutTimeRef = useRef<number>(0);
     // SURGICAL EDIT: Prevent re-seeking while HTML5 seek is still in progress (async)
     const seekPendingRef = useRef<boolean>(false);
-    // SURGICAL FIX: seek watchdog — if the browser never fires "seeked" (decode stall),
-    // seekPendingRef would stay true forever and every later hard cut would be skipped,
-    // leaving the hook scene on screen for many seconds. Auto-clear after 600ms.
-    const seekPendingSinceRef = useRef<number>(0);
     // ── SURGICAL FIX: SCENE-CUT PREWARM (desktop micro-pause killer) ──
     // Desktop Chrome flushes the decoder on every seek (50–150ms gap). A second hidden
     // <video> pre-seeks to the NEXT segment start so the correct frame is already decoded.
@@ -1496,22 +1471,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         // Use exact timestamp if present; otherwise use previous segment's vEnd (no estimation)
         const rawVStart = parseTime(seg.timestamp);
-        // SURGICAL FIX: Hybrid/Viral dialogue lines already carry their exact source slot.
-        // Story mode and narrator lines keep the existing gap-based timing unchanged.
-        // SURGICAL ROLLBACK: gap-based timing for all modes (exact-range override removed).
-        const dialogueSourceStart: number | null = null;
         const vStart: number = seg.timestamp && rawVStart > 0 ? rawVStart : lastComputedVEnd;
 
         const nextSeg = scriptData.segments[i + 1];
         let vEnd: number;
-        if (
-          dialogueSourceStart !== null &&
-          typeof seg.sourceEndSec === "number" &&
-          Number.isFinite(seg.sourceEndSec) &&
-          seg.sourceEndSec > vStart
-        ) {
-          vEnd = seg.sourceEndSec;
-        } else if (!nextSeg) {
+        if (!nextSeg) {
           vEnd = -1;
         } else {
           const nextRaw = parseTime(nextSeg.timestamp);
@@ -1529,10 +1493,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           vEnd,
           aStartPct: totalWords > 0 ? startWords / totalWords : 0,
           aEndPct: totalWords > 0 ? wordCursor / totalWords : 1,
-          text: stripDialogueMetadata(seg.text).replace(TIMECODE_STRIP_RE, "").trim(),
+          text: seg.text.replace(/\[\d{1,2}:\d{2}\]/g, "").trim(),
         };
       });
-    }, [scriptData, narrationStyle]);
+    }, [scriptData]);
 
     useEffect(() => {
       syncSegmentsRef.current = syncSegments;
@@ -1551,7 +1515,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           date.setSeconds(s);
           return date.toISOString().substr(11, 8) + ",000";
         };
-        srtContent += `${index + 1}\n${formatTime(startSec)} --> ${formatTime(endSec)}\n${stripDialogueMetadata(seg.text)}\n\n`;
+        srtContent += `${index + 1}\n${formatTime(startSec)} --> ${formatTime(endSec)}\n${seg.text}\n\n`;
       });
       const blob = new Blob([srtContent], { type: "text/plain" });
       const url = URL.createObjectURL(blob);
@@ -2158,7 +2122,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       isRenderingRef.current = true;
       // â”€â”€ FEATURE: Track recording start time for hook intro overlay â”€â”€
       recStartTimeRef.current = performance.now();
-      hookPhaseEndedRef.current = false; // SURGICAL FIX: fresh hook phase per recording
       // â”€â”€ BONUS FIX: Reset mid-video teaser so it fires on every recording â”€â”€
       midTeaserShownRef.current = false;
       midTeaserStartRef.current = 0;
@@ -2621,16 +2584,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           // â”€â”€ FEATURE: AI Hook Intro â€” cinematic title card overlay for first 4s of recording â”€â”€
           // Shows most dramatic scene title + film strip effect at recording start
           const HOOK_DURATION_MS = 4000;
-          // SURGICAL FIX: drive the hook overlay from the AUDIO clock so the title card and the
-          // hook video override start and end at exactly the same instant (wall clock drifted
-          // whenever audio playback started later than the recorder).
-          const _hookAudioEl = audioRef.current;
-          const recAge =
-            _hookAudioEl && _hookAudioEl.duration > 0
-              ? _hookAudioEl.currentTime * 1000
-              : recStartTimeRef.current > 0
-                ? performance.now() - recStartTimeRef.current
-                : Infinity;
+          const recAge = recStartTimeRef.current > 0 ? performance.now() - recStartTimeRef.current : Infinity;
           const hookIdx = hookSegmentIdxRef.current;
           const hookTitle = hookTitleRef.current;
           if (recAge < HOOK_DURATION_MS && hookIdx >= 0 && hookTitle) {
@@ -3124,17 +3078,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         if (av && vv) {
           if (av.duration > 0 && vv.duration > 0) {
             const currentTime = av.currentTime;
-            // ── SURGICAL FIX: SEEK WATCHDOG ──
-            if (seekPendingRef.current) {
-              if (seekPendingSinceRef.current === 0) seekPendingSinceRef.current = timestamp;
-              else if (timestamp - seekPendingSinceRef.current > 600) {
-                seekPendingRef.current = false;
-                prewarmActiveRef.current = false;
-                seekPendingSinceRef.current = 0;
-              }
-            } else {
-              seekPendingSinceRef.current = 0;
-            }
             const segs = syncSegmentsRef.current as typeof syncSegments;
             const audioTs = audioTimestampsRef.current;
             let activeIndex = -1;
@@ -3143,16 +3086,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             // â”€â”€ HOOK PHASE AV SYNC OVERRIDE â”€â”€
             // During first 4s of recording, show hook segment's VIDEO (not segment 0)
             // This ensures hook overlay text MATCHES the actual dramatic video scene
-            // SURGICAL FIX: hook phase is driven by AUDIO position (not wall clock) and can never
-            // outlive the hook line's own TTS slot — this stops the hook scene from staying on
-            // screen while the voice-over has already moved into the story.
-            const HOOK_SYNC_SEC = 4;
+            const HOOK_SYNC_MS = 4000;
+            const recAgeSync = recStartTimeRef.current > 0 ? performance.now() - recStartTimeRef.current : Infinity;
             const hookIdx = hookSegmentIdxRef.current;
-            const hookAudioLimit =
-              audioTs.length > 0 && audioTs[0] && audioTs[0].end > 0
-                ? Math.min(HOOK_SYNC_SEC, audioTs[0].end)
-                : HOOK_SYNC_SEC;
-            const isHookPhase = currentTime < hookAudioLimit && hookIdx >= 0 && segs.length > hookIdx;
+            const isHookPhase = recAgeSync < HOOK_SYNC_MS && hookIdx >= 0 && segs.length > hookIdx;
 
             if (isHookPhase) {
               // Override: seek video to hook segment's vStart â€” show the dramatic scene
@@ -3186,13 +3123,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               // Skip normal sync during hook phase â€” subtitle handled by canvas overlay
             } else {
               // â”€â”€ After hook phase: force clean resync to segment 0 â”€â”€
-              if (!hookPhaseEndedRef.current) {
-                hookPhaseEndedRef.current = true;
+              if (recAgeSync >= HOOK_SYNC_MS && recAgeSync < HOOK_SYNC_MS + 200 && lastIndexRef.current >= 0) {
                 lastIndexRef.current = -1; // Reset so first real segment gets a clean hard seek
-                // SURGICAL FIX: clear any hook-phase seek still marked pending so the very
-                // first story segment is allowed to hard-cut immediately.
-                seekPendingRef.current = false;
-                seekPendingSinceRef.current = 0;
               }
 
               // â”€â”€ TRUE RECAP HARD-CUT SYNC â”€â”€
@@ -3221,22 +3153,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   const _vidDur = vv.duration > 0 ? vv.duration : 1;
                   const _lastSegVStart = segs.length > 0 ? (segs[segs.length - 1] as any).vStart || 0 : 0;
                   const _hasAudioTs = audioTs.length > activeIndex && !!audioTs[activeIndex];
-                  // SURGICAL FIX (exact segment lock): use each segment's REAL source timecode.
-                  // Proportional re-mapping is a fallback ONLY when the script timecodes are
-                  // genuinely unusable (all zero / never increasing) — otherwise TTS segment n
-                  // must always show source scene n, with zero re-scaling.
-                  let _timecodesUsable = false;
-                  if (segs.length > 0) {
-                    let increasing = false;
-                    let prev = -1;
-                    for (let _i = 0; _i < segs.length; _i++) {
-                      const _vs = Number((segs[_i] as any).vStart) || 0;
-                      if (_vs > prev) increasing = true;
-                      prev = Math.max(prev, _vs);
-                    }
-                    _timecodesUsable = increasing && _lastSegVStart > 0;
-                  }
-                  const _needsScale = _hasAudioTs && !_timecodesUsable;
+                  // Scale only when timestamps look recap-relative (last vStart < 55% of source duration)
+                  const _needsScale = _hasAudioTs && _lastSegVStart > 0 && _lastSegVStart < _vidDur * 0.55;
                   const effectiveVStart = _needsScale
                     ? Math.min((audioTs[activeIndex].start / _audioDur) * _vidDur, _vidDur - 0.5)
                     : active.vStart;
@@ -4000,9 +3918,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                         };
                       })()}
                     >
-                      {stripDialogueMetadata(currentSubtitle || scriptData.segments[0]?.text || "")
-                        .replace(TIMECODE_STRIP_RE, "")
-                        .trim()}
+                      {(currentSubtitle || scriptData.segments[0]?.text || "").replace(/\[\d{1,2}:\d{2}\]/g, "").trim()}
                     </div>
                   </div>
                 )}
@@ -5392,73 +5308,6 @@ const VOICE_OPTIONS = [
   { value: "William", label: "William (Male)", gender: "Male" },
 ];
 
-// ===== NARRATION STYLE PRESETS (niche-agnostic, prompt-only) =====
-const NARRATION_STYLE_OPTIONS: Record<"STORY" | "HYBRID" | "VIRAL", { emoji: string; label: string; hint: string }> = {
-  STORY: {
-    emoji: "📖",
-    label: "Story Mode — အစအဆုံး ဇာတ်ကြောင်းပြန် (YouTube)",
-    hint: "Long-form YouTube အတွက် အကောင်းဆုံး (default)",
-  },
-  HYBRID: {
-    emoji: "🎭",
-    label: "Hybrid Mode — ဇာတ်ကြောင်း + တိုက်ရိုက်စကား",
-    hint: "အရေးကြီးအခိုက်တွေမှာ တိုက်ရိုက်စကား ဖောက်ထည့်",
-  },
-  VIRAL: {
-    emoji: "🔥",
-    label: "Viral Mode — မြန်ဆန်ပြင်းထန် (TikTok / Reels)",
-    hint: "Short-form အတွက် pacing မြန်၊ dialogue-first",
-  },
-};
-
-function buildNarrationStyleBlock(style: "STORY" | "HYBRID" | "VIRAL", langName: string): string {
-  const timingLockBlock = `\n\nDIALOGUE TIMING LOCK (HYBRID/VIRAL only):
-- For each real spoken line, inspect the source carefully and use the EXACT source frame where the speaker's first audible syllable begins (normally the first mouth movement). Do not use a nearby reaction shot, an earlier establishing shot, or an approximate scene time.
-- Keep each speaker turn separate. When the speaker changes, start a new paragraph at that new speaker's exact source start time.
-- For EVERY direct-speech paragraph, output the source start timecode, then prefix with [DIALOGUE:EMOTION].
-- EMOTION must be exactly ONE of: ANGRY, SHOUTING, SAD, CRYING, HAPPY, EXCITED, FEARFUL, NERVOUS, SHOCKED, MOCKING, DISGUSTED, PLEADING, WHISPER, PROUD, RELIEVED, CALM — matching how the character truly sounds at that moment. Never write the emotion word inside the spoken line.
-- Example: [02:15] [DIALOGUE:SAD] "သင်ဘယ်လောက်ခံစားရလဲ ဆိုတာ ငါသိတယ်" — real translated spoken words.
-- Write the FULL natural translation of what was said — never truncate or squeeze a line to fit a time slot. Clarity and story flow come first.
-- Narrator (non-dialogue) paragraphs keep the normal single-timecode format: [02:15] narrator text...
-- If the source has no spoken dialogue at that moment, do NOT force [DIALOGUE]; stay in narrator voice.
-
-DIALOGUE COMPLETENESS (HYBRID/VIRAL only):
-- EVERY spoken line in the source must appear as a real translated [DIALOGUE:EMOTION] line — do not sample, do not keep "only the important ones".
-- FORBIDDEN to replace a spoken line with a description of it. Write the actual words the character said.
-- In back-and-forth exchanges, each speaker's line is its own paragraph with its own timecode and emotion tag. Never merge two speakers.
-- Dialogue has priority over narration. Total length does NOT change: shorten narrator sentences to short connective lines to make room — but the plot must ALWAYS stay understandable to someone who never saw the source. Never sacrifice story coherence for brevity.
-
-ACTION & FACE EXPRESSION (HYBRID/VIRAL only):
-- In no-speech moments, state the CONCRETE physical action with a precise verb (what was swung, kicked, stomped, grabbed, thrown), not a vague summary like "ဒေါသထွက်သွားတယ်".
-- Add the visible face/body reaction: eyes widening, hands shaking, jaw clenching, tears welling, stepping back.
-- Keep each action/expression line SHORT (1-2 sentences) so it never crowds out dialogue.`;
-  if (style === "HYBRID") {
-    return `\n\nNARRATION STYLE — HYBRID (narration + direct speech):
-- Use narrator voice for background, context, and explanation.
-- At every HIGH-IMPACT moment (argument, confrontation, confession, decision, shocking reveal, punchline), switch to DIRECT SPEECH instead of describing it.
-- BAD: "သူက ဒေါသတကြီးနဲ့ ပြောလိုက်တယ်" → GOOD: the actual line spoken, translated into ${langName}.
-- Direct speech must match the niche: for stories/dramas use the characters' real dialogue; for news/documentary use what the real person actually said; for tech/health/business/educational content speak DIRECTLY to the viewer ("မင်း အခုလုပ်နေတာက...").
-- Match the words to what is actually happening on screen at that moment (action, gesture, expression).
-- NEVER invent dialogue that does not exist in the source. If the source has no speech at that point, stay in narrator voice.
-- Keep the same total length rules as normal; this changes HOW it is written, not how much.
-- THIS OVERRIDES any earlier instruction that says to avoid quoting dialogue: quoting real spoken lines is REQUIRED in this style.${timingLockBlock}`;
-  }
-  if (style === "VIRAL") {
-    return `\n\nNARRATION STYLE — VIRAL (short-form, TikTok/Reels):
-- Fast pacing. Short punchy sentences. No slow setup, no filler, no throat-clearing.
-- Dialogue-first: whenever people speak on screen, use their translated words directly in ${langName} instead of describing them.
-- Keep tension continuous — every ~20 seconds of narration must land a new question, conflict, or surprise.
-- Emotion must be raw and natural, exactly how real people talk when angry, shocked, or excited — not literary.
-- Match the words to the on-screen action at that moment.
-- NEVER invent dialogue that does not exist in the source.
-- For non-story niches (tech, news, health, business, educational), "conflict" means the myth being busted, the surprising number, the mistake people make — hit those hard and fast.
-- THIS OVERRIDES any earlier instruction that says to avoid quoting dialogue: quoting real spoken lines is REQUIRED in this style.${timingLockBlock}`;
-  }
-  return `\n\nNARRATION STYLE — STORY (full narrative, long-form):
-- Keep the classic complete narrator style: clear beginning-to-end storytelling with smooth flow and emotional depth.
-- Translate what people actually said when it matters, but stay primarily in narrator voice.`;
-}
-
 const RecapVideoNVPage: React.FC = () => {
   const navigate = useNavigate();
   const { isAllowed, isLoading: authLoading } = useAuthGuard("recap-nv");
@@ -5502,8 +5351,6 @@ const RecapVideoNVPage: React.FC = () => {
   const [recapHistory, setRecapHistory] = useState<RecapHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState("my-MM");
-  // ===== NARRATION STYLE (additive — prompt-only, does not touch render/AV-sync) =====
-  const [narrationStyle, setNarrationStyle] = useState<"STORY" | "HYBRID" | "VIRAL">("STORY");
   const [selectedVoice, setSelectedVoice] = useState("edge:it-IT-GiuseppeMultilingualNeural");
 
   // Auto-update selected voice when selected language changes
@@ -5771,20 +5618,15 @@ const RecapVideoNVPage: React.FC = () => {
   };
 
   const handleUpdateScript = (newScript: string) => {
-    setScriptData((prev) => ({ ...prev, full_script: stripDialogueMetadata(newScript) }));
+    setScriptData((prev) => ({ ...prev, full_script: newScript }));
   };
 
   const handleGenerateVoice = () => {
     if (scriptData.full_script) {
       const resolvedOwnKey = apiMode === "own" ? ownApiKey.trim() : "";
       // Pass segments to ensure 100% script coverage in voice generation
-      const segsForSync = scriptData.segments.map((s) => ({ text: s.text }));
-      generateVoice(
-        stripDialogueMetadata(scriptData.full_script),
-        resolvedOwnKey || undefined,
-        segsForSync,
-        scriptData.segments,
-      );
+      const segments = scriptData.segments.map((s) => ({ text: s.text }));
+      generateVoice(scriptData.full_script, resolvedOwnKey || undefined, segments);
     }
   };
 
@@ -5854,14 +5696,13 @@ const RecapVideoNVPage: React.FC = () => {
       const scriptBody: Record<string, unknown> = {
         fileUri,
         fileMimeType: mimeType,
-        niche: `You are an aggressive international professional YouTube recap editor. Analyze the uploaded movie/video and produce a condensed, fast-paced recap script in ${selectedLangName}. Length must be approximately 70% of the original duration when read aloud (band 65-75%, never below 65%). Start with a shocking hook, build mystery, escalate tension, finish with a climactic payoff. Aggressively cut filler/travel/waiting scenes. Keep only plot twists, key character moments, conflicts, reveals, and the resolution. Write as ONE continuous gripping story with hook transitions between segments. Output each paragraph prefixed by [MM:SS] starting at [00:00] and ending close to the full duration. Use original wording — do NOT quote distinctive dialogue.${burmeseStyleBlock}${buildNarrationStyleBlock(narrationStyle, selectedLangName)}`,
+        niche: `You are an aggressive international professional YouTube recap editor. Analyze the uploaded movie/video and produce a condensed, fast-paced recap script in ${selectedLangName}. Length must be approximately 40-50% of the original duration when read aloud (never below 30%). Start with a shocking hook, build mystery, escalate tension, finish with a climactic payoff. Aggressively cut filler/travel/waiting scenes. Keep only plot twists, key character moments, conflicts, reveals, and the resolution. Write as ONE continuous gripping story with hook transitions between segments. Output each paragraph prefixed by [MM:SS] starting at [00:00] and ending close to the full duration. Use original wording — do NOT quote distinctive dialogue.${burmeseStyleBlock}`,
         language: selectedLangName,
         sourceDurationSec: duration,
-        narrationStyle,
         skipCreditDeduction: true,
         recapNvPipeline: true,
         apiMode: resolvedApiMode,
-        extraInstructions: `CRITICAL:\n- Output language MUST be ${selectedLangName} ONLY.\n- Cover the full story arc at about 70% of source duration (never below 65%, never above 75%).\n- Aggressively cut filler. Keep only plot-advancing moments.\n- Each segment must flow into the next with a hook/transition.\n- Never output a partial/incomplete script.${burmeseExtraStyle}`,
+        extraInstructions: `CRITICAL:\n- Output language MUST be ${selectedLangName} ONLY.\n- Cover the full story arc but stay at 40-50% of source duration (never below 30%, never above 50%).\n- For sources longer than 30 minutes, treat as 30-minute source and cap recap at 15 minutes.\n- Aggressively cut filler. Keep only plot-advancing moments.\n- Each segment must flow into the next with a hook/transition.\n- Never output a partial/incomplete script.${burmeseExtraStyle}`,
         generationConfig: {
           maxOutputTokens,
           temperature: 0.7,
@@ -5902,16 +5743,12 @@ const RecapVideoNVPage: React.FC = () => {
         throw new Error("AI script generation returned empty result");
       }
       const segments = scriptToSegments(scriptText, duration);
-      setScriptData({
-        title: file.name.replace(/\.[^.]+$/, ""),
-        full_script: stripDialogueMetadata(scriptText),
-        segments,
-      });
+      setScriptData({ title: file.name.replace(/\.[^.]+$/, ""), full_script: scriptText, segments });
       if (scriptResult.storyBible) void saveSeriesBible(scriptResult.storyBible);
       setProgressMsg("📝 Script generated! Now generating AI voice...");
       // Continue into the existing voice pipeline (VOICE-GEN-PIPELINE-v2)
       const segsForSync = segments.map((s) => ({ text: s.text }));
-      generateVoice(stripDialogueMetadata(scriptText), resolvedOwnKey || undefined, segsForSync, segments);
+      generateVoice(scriptText, resolvedOwnKey || undefined, segsForSync);
     } catch (err: any) {
       setStatus("error");
       setProgressMsg(`❌ Retry failed: ${err?.message || "Unknown error"}`);
@@ -5936,78 +5773,27 @@ const RecapVideoNVPage: React.FC = () => {
         .trim();
       cleaned = cleaned.replace(/^\s*(?:#+\s*)?(?:Recap Script|Narration Script|Script|Output)\s*:?\s*\n+/i, "").trim();
     }
-    const firstTimestamp = cleaned.search(/\[\s*\d{1,2}:\d{2}(?::\d{2})?/);
+    const firstTimestamp = cleaned.search(/\[\d{1,2}:\d{2}\]/);
     if (firstTimestamp > 0) cleaned = cleaned.slice(firstTimestamp).trim();
     return cleaned;
-  };
-
-  const parseTimecodeToSec = (ts: string): number => {
-    const parts = ts.split(":").map(Number);
-    if (parts.some((n) => Number.isNaN(n))) return 0;
-    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
-    if (parts.length === 2) return parts[0] * 60 + parts[1];
-    return 0;
   };
 
   const scriptToSegments = (scriptText: string, videoDuration: number): RecapSegment[] => {
     const paragraphs = scriptText.split("\n").filter((p) => p.trim().length > 0);
     if (paragraphs.length === 0) return [];
-    // SURGICAL FIX: accept [M:SS], [HH:MM:SS] and both range forms so timecodes are
-    // always parsed (and removed) instead of leaking into subtitles with a 0s start.
-    const timecodeRegex = /^\[\s*(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*[-–—]\s*(\d{1,2}):(\d{2})(?::(\d{2}))?)?\s*\]\s*/;
-    // Accept the intended marker plus common AI variants/misspelling, in [] or {}, even
-    // when Gemini puts it after a quote. The marker is metadata and must never reach subtitles/TTS.
-    const dialogueCaptureRegex =
-      /(?:\[|\{|\(|［|｛|（)\s*DIALOG(?:UE|UAGE)(?:\s*:\s*([A-Za-z _-]+))?\s*(?:\]|\}|\)|］|｝|）)/i;
+    const timecodeRegex = /^\[(\d{1,2}):(\d{2})\]\s*/;
     const hasTimecodes = paragraphs.some((p) => timecodeRegex.test(p.trim()));
     if (hasTimecodes) {
-      const parsed = paragraphs.map((rawText) => {
+      return paragraphs.map((rawText) => {
         const trimmed = rawText.trim();
         const match = trimmed.match(timecodeRegex);
         let timestamp = "00:00";
         let text = trimmed;
-        let explicitEndSec: number | undefined;
         if (match) {
-          timestamp =
-            match[3] !== undefined
-              ? `${match[1].padStart(2, "0")}:${match[2]}:${match[3]}`
-              : `${match[1].padStart(2, "0")}:${match[2]}`;
-          if (match[4] !== undefined && match[5] !== undefined) {
-            explicitEndSec =
-              match[6] !== undefined
-                ? Number(match[4]) * 3600 + Number(match[5]) * 60 + Number(match[6])
-                : Number(match[4]) * 60 + Number(match[5]);
-          }
+          timestamp = `${match[1].padStart(2, "0")}:${match[2]}`;
           text = trimmed.replace(timecodeRegex, "").trim();
         }
-        const dMatch = text.match(dialogueCaptureRegex);
-        const isDialogue = !!dMatch;
-        let emotion: string | undefined;
-        if (dMatch) {
-          emotion = dMatch[1] ? dMatch[1].trim().toLowerCase() : undefined;
-          text = stripDialogueMetadata(text);
-        }
-        // Any stray timecode left inside the line must never reach subtitles/TTS.
-        text = text
-          .replace(TIMECODE_STRIP_RE, " ")
-          .replace(/[ \t]{2,}/g, " ")
-          .trim();
-        return { timestamp, text, isDialogue, emotion, explicitEndSec };
-      });
-      // Source slot = explicit [start-end] range when the AI gave one (dialogue lock),
-      // otherwise fall back to the gap to the next timecode.
-      return parsed.map((seg, i) => {
-        const { explicitEndSec, ...rest } = seg;
-        const currentSec = parseTimecodeToSec(seg.timestamp);
-        const nextSec = i + 1 < parsed.length ? parseTimecodeToSec(parsed[i + 1].timestamp) : videoDuration;
-        const gapEnd = Math.max(currentSec + 1, nextSec);
-        const sourceEndSec = explicitEndSec && explicitEndSec > currentSec ? explicitEndSec : gapEnd;
-        return {
-          ...rest,
-          sourceStartSec: currentSec,
-          sourceEndSec,
-          sourceDurationSec: Math.max(1, sourceEndSec - currentSec),
-        };
+        return { timestamp, text };
       });
     }
     const totalChars = paragraphs.reduce((sum, p) => sum + p.length, 0);
@@ -6019,44 +5805,11 @@ const RecapVideoNVPage: React.FC = () => {
       timeCursor += segDuration;
       const mins = Math.floor(startSec / 60);
       const secs = Math.floor(startSec % 60);
-      const dMatch = text.match(dialogueCaptureRegex);
-      return {
-        timestamp: `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`,
-        text: stripDialogueMetadata(text),
-        isDialogue: !!dMatch,
-        emotion: dMatch?.[1]?.trim().toLowerCase(),
-      };
+      return { timestamp: `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`, text: text.trim() };
     });
   };
 
-  // Estimate spoken duration for a line based on word/syllable counts.
-  // Used to warn when a translated dialogue line is likely too long/short for its source slot.
-  const estimateSpokenDuration = (text: string, langCode: string): number => {
-    const cleaned = text.replace(/\[.*?\]\s*/g, "").trim();
-    if (!cleaned) return 0;
-    // Burmese/Thai/Lao/Khmer/Japanese/Chinese: count characters as syllable proxies.
-    const isSyllabic =
-      /\p{Script=Myanmar}|\p{Script=Thai}|\p{Script=Laoo}|\p{Script=Khmr}|\p{Script=Hani}|\p{Script=Hira}|\p{Script=Kana}/u.test(
-        langCode,
-      ) ||
-      ["MYANMAR (BURMESE)", "BURMESE", "CHINESE", "JAPANESE", "KOREAN", "THAI", "LAO", "KHMER"].includes(
-        langCode.toUpperCase(),
-      );
-    if (isSyllabic) {
-      // ~4 chars per second for Burmese/Chinese-style dense syllables
-      return cleaned.length / 4.0;
-    }
-    const words = cleaned.split(/\s+/).filter(Boolean);
-    // ~150 words per minute => 2.5 words/sec
-    return words.length / 2.5;
-  };
-
-  const generateVoice = async (
-    scriptText: string,
-    useOwnKey?: string,
-    segsForSync?: { text: string }[],
-    fullSegments?: RecapSegment[],
-  ) => {
+  const generateVoice = async (scriptText: string, useOwnKey?: string, segsForSync?: { text: string }[]) => {
     // Voice naturalness: keep Burmese punctuation so TTS can insert realistic micro-pauses.
     let speechTextForAPI = scriptText.replace(/\[.*?\]\s*/g, "");
     if (voiceMode === "normal") {
@@ -6129,42 +5882,6 @@ const RecapVideoNVPage: React.FC = () => {
         },
       };
       if (useOwnKey) bodyPayload.ownApiKey = useOwnKey;
-      // ── DIALOGUE EMOTION MAP ──
-      // Narrator lines keep the restrained professional delivery. Direct-speech lines are
-      // acted out with the emotion the script AI tagged them with. Tags never enter the
-      // spoken text — they are sent only as style guidance.
-      if (fullSegments && fullSegments.length > 0) {
-        const emoLines = fullSegments
-          .map((s, i) => (s.isDialogue ? { i, emo: s.emotion || "natural in-character" } : null))
-          .filter(Boolean) as { i: number; emo: string }[];
-        if (emoLines.length > 0) {
-          const EMO_HINT: Record<string, string> = {
-            angry: "angry — sharper, harder attack, raised intensity",
-            shouting: "shouting — projected, loud, forceful but not screeching",
-            sad: "sad — heavier, slower, softer, downward intonation",
-            crying: "crying — broken, trembling, catching breath",
-            happy: "happy — brighter, lighter, warm smiling tone",
-            excited: "excited — quicker, lifted pitch, eager energy",
-            fearful: "fearful — tight, unsteady, quicker breaths",
-            nervous: "nervous — hesitant, uneven pacing, small catches",
-            shocked: "shocked — sudden, wide-eyed disbelief",
-            mocking: "mocking — sardonic lilt, drawn-out, edge of contempt",
-            disgusted: "disgusted — clipped, recoiling, sour tone",
-            whisper: "whispered — hushed, close, confidential",
-            pleading: "pleading — desperate, imploring, strained",
-            proud: "proud — chest-open, steady, quietly triumphant",
-            relieved: "relieved — exhaled, softening, weight lifting",
-            calm: "calm — steady, grounded, quiet confidence",
-          };
-          const map = emoLines.map(({ i, emo }) => `Line ${i + 1}: ${EMO_HINT[emo] || emo}`).join("; ");
-          bodyPayload.styleInstructions =
-            `${bodyPayload.styleInstructions as string}` +
-            ` DIALOGUE ACTING (overrides the restrained policy for these lines ONLY): the listed lines are a character SPEAKING out loud, not narration. ` +
-            `Perform them like a real person in that moment — full natural emotional rise and fall, real intonation, breath and micro-pauses, ` +
-            `while staying the same voice and never turning cartoonish or theatrical. All other lines stay narrator-restrained. ` +
-            `Emotion map — ${map}.`;
-        }
-      }
       if (segsForSync && segsForSync.length > 0) bodyPayload.segments = segsForSync;
 
       // Edge-TTS branch: Microsoft Burmese neural voices (Thiha/Nilar). Free upstream,
@@ -6177,10 +5894,6 @@ const RecapVideoNVPage: React.FC = () => {
             text: speechTextForAPI,
             voice: selectedVoice.slice("edge:".length),
             skipCreditDeduction: true,
-            // Keep the renderer's subtitle/video segment indexes aligned with Edge TTS.
-            // Without these timestamps the first (viral-hook) source slot can remain active
-            // for the whole render when the fallback boundary calculation drifts.
-            segments: segsForSync,
           }
         : bodyPayload;
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${ttsFnName}`, {
@@ -6196,21 +5909,18 @@ const RecapVideoNVPage: React.FC = () => {
       if (data.useClientTTS || !data.audio) throw new Error(data.message || data.error || "TTS generation failed");
 
       // Use API timestamps if available (for 100% AV sync accuracy), otherwise fallback to client-side calculation
-      const mt = String(data.mimeType || "").toLowerCase();
-      const preciseTimestamps = Array.isArray(data.segmentTimestamps) ? data.segmentTimestamps : data.segments;
-      const pcmLeadIn =
-        Array.isArray(data.segmentTimestamps) && (mt.includes("audio/pcm") || mt.includes("audio/l16")) ? 0.2 : 0;
-      if (Array.isArray(preciseTimestamps)) {
-        pageAudioTimestampsRef.current = preciseTimestamps.map((seg: any, idx: number) => ({
+      if (data.segments && Array.isArray(data.segments)) {
+        pageAudioTimestampsRef.current = data.segments.map((seg: any, idx: number) => ({
           index: idx,
-          start: Number(((Number(seg.start) || 0) + pcmLeadIn).toFixed(3)),
-          end: Number(((Number(seg.end) || 0) + pcmLeadIn).toFixed(3)),
+          start: seg.start || 0,
+          end: seg.end || 0,
         }));
       } else {
         pageAudioTimestampsRef.current = [];
       }
 
       let audioBlob: Blob;
+      const mt = String(data.mimeType || "").toLowerCase();
       if (mt.includes("audio/pcm") || mt.includes("audio/l16")) {
         const rateMatch = mt.match(/rate=(\d+)/);
         const sampleRate = data.sampleRate || (rateMatch ? parseInt(rateMatch[1], 10) : 24000);
@@ -6295,11 +6005,6 @@ const RecapVideoNVPage: React.FC = () => {
         );
       }
       videoDurationRef.current = duration;
-      if (duration > 1320) {
-        toast.warning(
-          "Source ၂၂ မိနစ်ကျော်နေလို့ script က ရည်မှန်းချက်ထက် တိုနိုင်ပါတယ်။ ၂၀ မိနစ်အောက် အကောင်းဆုံးပါ။",
-        );
-      }
       const videoBlob = URL.createObjectURL(file);
       setVideoUrl(videoBlob);
 
@@ -6412,13 +6117,13 @@ The narration must feel like a non-stop thriller story, NOT a boring lecture, do
 
 STRICT LENGTH RULE:
 This is a surgical recap, not a summary. Do NOT retain most of the source or produce a detailed retelling.
-The output script MUST be approximately 70% of the original video duration when read aloud (acceptable band: 65-75%).
+The output script MUST be approximately 40-50% of the original video duration when read aloud.
 MINIMUM WORD COUNT (CRITICAL â€” DO NOT GO BELOW THIS):
-  * Source 5 min â†’ minimum 500 words, target ~700 words
-  * Source 10 min â†’ minimum 1000 words, target ~1400 words
-  * Source 15 min â†’ minimum 1500 words, target ~2100 words
-  * Source 20 min â†’ minimum 2000 words, target ~2800 words
-  * Source 30 min â†’ minimum 3000 words, target ~4200 words
+  * Source 5 min â†’ minimum 350 words, target ~500 words
+  * Source 10 min â†’ minimum 700 words, target ~1200 words
+  * Source 15 min â†’ minimum 1000 words, target ~1800 words
+  * Source 20 min â†’ minimum 1500 words, target ~2500 words
+  * Source 30 min â†’ minimum 2000 words, target ~3500 words
 If your script is shorter than the MINIMUM, you MUST add more story detail until you reach it.
 A 20-minute source producing only 2 minutes of narration = FAILURE.
 
@@ -6442,12 +6147,13 @@ INSTRUCTIONS:
 - Skip over setup/buildup scenes and jump straight to the payoff.
 
 PACING & DURATION RULE (CRITICAL):
-- The recap MUST be approximately 70% of the original video duration (band 65-75%). NOT shorter, NOT longer.
-  * Source 30 min â†’ recap about 21 min.
-  * Source 20 min â†’ recap about 14 min.
-  * Source 10 min â†’ recap about 7 min.
-  * Source 5 min â†’ recap about 3.5 min.
-- IMPORTANT: Going BELOW 65% is just as bad as exceeding 75%. A recap that is too short feels incomplete.
+- The recap MUST be approximately 40-50% of the original video duration. NOT shorter, NOT longer.
+- The app is built for source videos up to 30 minutes. If the source is longer than 30 minutes, treat it like a 30-minute source.
+  * Source up to 30 min â†’ recap 40-50% of source duration (e.g. 20 min â†’ 8-10 min recap).
+  * Source under 15 min â†’ recap about 40-50% of the length.
+  * Source under 10 min â†’ recap about 40-50% of the length.
+  * Source under 5 min â†’ recap about 40-50% of the length.
+- IMPORTANT: Going BELOW 30% is just as bad as exceeding 50%. A recap that is too short feels incomplete.
 - If your narration word count falls below the MINIMUM, ADD more story details until you reach it.
 - The viewer should feel like they watched a complete, exciting, condensed version â€” NOT a 30-second summary.
 
@@ -6464,24 +6170,24 @@ Output each paragraph as one segment starting with a timestamp prefix like: [MM:
 The first segment should start at [00:00]. The last segment must reach close to the end of the full duration.
 
 ORIGINALITY:
-Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle text.${buildNarrationStyleBlock(narrationStyle, selectedLangName)}`,
+Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle text.`,
         language: selectedLangName,
         sourceDurationSec: duration,
-        narrationStyle,
         skipCreditDeduction: true,
         recapNvPipeline: true,
         apiMode: resolvedApiMode,
         extraInstructions: `CRITICAL:
 - Output language MUST be ${selectedLangName} ONLY. Do NOT switch to any other language even if the video's spoken dialogue is in a different language.
-- Script must cover the story arc from beginning to end, condensed to about 70% of the source duration (never below 65%, never above 75%).
-  * For a 30-minute source, aim for about 21 minutes.
-  * For a 20-minute source, aim for about 14 minutes.
-  * For a 10-minute source, aim for about 7 minutes.
-  * For a 5-minute source, aim for about 3.5 minutes.
+- Script must cover the story arc from beginning to end, BUT must be HEAVILY CONDENSED and no more than 50% of the source duration.
+  * For a 30-minute source, aim for 10-15 minutes and never exceed 15 minutes.
+  * If the source is longer than 30 minutes, treat it like a 30-minute source and keep the recap at 15 minutes max.
+  * For a source under 15 minutes, aim for about half the length, never exceed 50%.
+  * For a source under 10 minutes, aim for about half the length, never exceed 50%.
+  * For a source under 5 minutes, aim for about half the length, never exceed 50%.
 - This is not a detailed summary or review. Do not include non-essential scene descriptions, explanatory pauses, or secondary character chatter.
 - If the story can be told in fewer segments, do that. Use as few segments as necessary to keep the full arc intact.
-- If the script exceeds 75% of source duration, condense low-priority scenes. But NEVER go below 65%.
-- Balance is key: aim for exactly 70% of the source duration.
+- If the script exceeds 50% of source duration, condense low-priority scenes. But NEVER go below 30%.
+- Balance is key: aim for exactly 40-50% of the source duration.
 - Each segment must flow smoothly into the next.
 - If token pressure appears, condense remaining story into brief segments instead of stopping.
 
@@ -6542,11 +6248,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
       if (!scriptText || scriptText.trim().length < 10) throw new Error("AI script generation returned empty result");
 
       const segments = scriptToSegments(scriptText, duration);
-      setScriptData({
-        title: file.name.replace(/\.[^.]+$/, ""),
-        full_script: stripDialogueMetadata(scriptText),
-        segments,
-      });
+      setScriptData({ title: file.name.replace(/\.[^.]+$/, ""), full_script: scriptText, segments });
       if (scriptResult.storyBible) void saveSeriesBible(scriptResult.storyBible);
       setProgressMsg("📝 Script generated! Now generating AI voice...");
 
@@ -6716,12 +6418,11 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
           console.warn("[YT SEO] Failed (non-critical):", e);
         }
       })();
-      const scriptTextForTTS = stripDialogueMetadata(scriptText).replace(/\[.*?\]\s*/g, "");
+      const scriptTextForTTS = scriptText.replace(/\[.*?\]\s*/g, "");
       await generateVoice(
         scriptTextForTTS,
         resolvedOwnKey || undefined,
         segments.map((s) => ({ text: s.text })),
-        segments,
       );
     } catch (err: any) {
       console.error("Pipeline error:", err);
@@ -6937,38 +6638,6 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                 </Command>
               </PopoverContent>
             </Popover>
-          </div>
-
-          {/* ===== NARRATION STYLE (additive, prompt-only) ===== */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-neon-cyan">🎙️ ဇာတ်ကြောင်းပြောစတိုင် (Narration Style)</label>
-            <Select value={narrationStyle} onValueChange={(v) => setNarrationStyle(v as "STORY" | "HYBRID" | "VIRAL")}>
-              <SelectTrigger className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-slate-100 shadow-[0_20px_50px_rgba(15,23,42,0.45)] transition hover:border-amber-400">
-                <span className="inline-flex items-center gap-2 truncate">
-                  <span>{NARRATION_STYLE_OPTIONS[narrationStyle].emoji}</span>
-                  <span className="truncate">{NARRATION_STYLE_OPTIONS[narrationStyle].label}</span>
-                </span>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-slate-950 border border-slate-700 shadow-2xl z-50">
-                {(Object.keys(NARRATION_STYLE_OPTIONS) as Array<"STORY" | "HYBRID" | "VIRAL">).map((key) => (
-                  <SelectItem
-                    key={key}
-                    value={key}
-                    className="rounded-xl px-3 py-2 text-sm text-slate-100 transition hover:bg-slate-900"
-                  >
-                    <span className="flex flex-col">
-                      <span className="inline-flex items-center gap-2 font-semibold">
-                        <span>{NARRATION_STYLE_OPTIONS[key].emoji}</span>
-                        <span>{NARRATION_STYLE_OPTIONS[key].label}</span>
-                      </span>
-                      <span className="text-xs text-slate-400">{NARRATION_STYLE_OPTIONS[key].hint}</span>
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-slate-400">{NARRATION_STYLE_OPTIONS[narrationStyle].hint}</p>
           </div>
 
           {/* ===== SERIES MODE (optional, additive) ===== */}
@@ -7412,7 +7081,6 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
         {(scriptData.segments.length > 0 || videoUrl) && (
           <ResultView
             scriptData={scriptData}
-            narrationStyle={narrationStyle}
             onUpdateScript={handleUpdateScript}
             onGenerateVoice={handleGenerateVoice}
             onRecapSaved={loadRecapHistory}
