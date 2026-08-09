@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from "react"
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLogo } from "@/components/AppLogo";
-import { useAuthGuard } from "@/hooks/useaAuthGuard";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useBurmeseFonts } from "@/lib/burmeseFonts";
 import { useApiAccess } from "@/hooks/useApiAccess";
 import { preCheckCredits } from "@/utils/creditPreCheck";
