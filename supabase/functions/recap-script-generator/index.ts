@@ -1111,7 +1111,9 @@ ${transcript}
       );
     }
 
-    let lengthAdjustedScript = normalizedRawScript;
+    // Apply the 75% ceiling before any missing-middle/ending paragraphs are merged.
+    // Final trimming must never remove the repaired ending from a chronologically complete script.
+    let lengthAdjustedScript = enforcefullScriptCoverage(normalizedRawScript, sourceDurationSec);
     const rawSpokenSec = estimateSpokenSeconds(normalizedRawScript);
     let toppedUp = false;
 
