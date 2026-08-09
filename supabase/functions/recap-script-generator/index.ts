@@ -1398,7 +1398,7 @@ ${workingScript}`;
     // stops well before the source ends, request ONLY the missing tail. Paragraphs
     // are accepted solely when strictly later than the current last timecode, so AV
     // mapping cannot be corrupted.
-    if (sourceDurationSec && endsAtCompleteSentence(lengthAdjustedScript) && remainingBudget() > 20000) {
+    if (sourceDurationSec && endsAtCompleteSentence(lengthAdjustedScript) && remainingBudget() > 8000) {
       const tailParas = lengthAdjustedScript
         .split(/\n{2,}/)
         .map((p) => p.trim())
@@ -1433,7 +1433,7 @@ ${lengthAdjustedScript}`;
         const endController = new AbortController();
         const endTimeoutId = setTimeout(
           () => endController.abort(),
-          Math.max(5000, Math.min(45000, remainingBudget() - 10000)),
+          Math.max(5000, Math.min(45000, remainingBudget() - 3000)),
         );
         try {
           const endRes = await callGeminiGenerateContent(
@@ -1487,7 +1487,10 @@ ${lengthAdjustedScript}`;
       }
     }
 
-    const script = enforcefullScriptCoverage(lengthAdjustedScript, sourceDurationSec);
+    // Preserve the chronology through the source ending. The old length trimmer kept
+    // paragraphs from the beginning until 70% and then stopped, which could delete the
+    // newly repaired climax/ending even though total spoken length looked correct.
+    const script = lengthAdjustedScript;
     const finalWordCount = script.split(/\s+/).filter(Boolean).length;
     const finalSpokenSec = estimateSpokenSeconds(script);
     if (sourceDurationSec) {
