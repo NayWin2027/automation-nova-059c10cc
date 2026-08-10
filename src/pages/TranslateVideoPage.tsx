@@ -2148,6 +2148,27 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
         const source = audioCtx.createMediaElementSource(video);
         const dest = audioCtx.createMediaStreamDestination();
 
+        // DUB MODE: original audio passes through a gain node we can duck during speech.
+        const dubClips = dubEnabled ? dubClipsRef.current : [];
+        const originalGain = audioCtx.createGain();
+        originalGain.gain.value = dubEnabled ? dubBgVolume / 100 : 1;
+        const dubGain = audioCtx.createGain();
+        dubGain.gain.value = dubVolume / 100;
+        if (dubEnabled) {
+          dubGain.connect(dest);
+          dubGain.connect(audioCtx.destination);
+        }
+        const tail = (node: AudioNode) => {
+          if (dubEnabled) {
+            node.connect(originalGain);
+            originalGain.connect(dest);
+            originalGain.connect(audioCtx.destination);
+          } else {
+            node.connect(dest);
+            node.connect(audioCtx.destination);
+          }
+        };
+
         if (audioBypass) {
           // AI Auto Copyright Bypass: Subtle speed & pitch shift + Multi-band EQ
           (video as any).preservesPitch = false;
@@ -2173,11 +2194,9 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
           source.connect(lowShelf);
           lowShelf.connect(highShelf);
           highShelf.connect(peaking);
-          peaking.connect(dest);
-          peaking.connect(audioCtx.destination);
+          tail(peaking);
         } else {
-          source.connect(dest);
-          source.connect(audioCtx.destination);
+          tail(source);
         }
 
         const stream = canvas.captureStream(30);
