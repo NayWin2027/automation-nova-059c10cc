@@ -4,7 +4,29 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Communicate } from "npm:edge-tts-universal@1.4.0";
 import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
 
-const ALLOWED_VOICES = new Set(["my-MM-ThihaNeural", "my-MM-NilarNeural", "it-IT-GiuseppeMultilingualNeural"]);
+const ALLOWED_VOICES = new Set([
+  "my-MM-ThihaNeural",
+  "my-MM-NilarNeural",
+  "it-IT-GiuseppeMultilingualNeural",
+  // Multilingual (works for most target languages)
+  "en-US-AndrewMultilingualNeural",
+  "en-US-AvaMultilingualNeural",
+  "en-US-BrianMultilingualNeural",
+  "en-US-EmmaMultilingualNeural",
+  // Common target languages for Translate Video dub
+  "en-US-GuyNeural",
+  "en-US-JennyNeural",
+  "th-TH-NiwatNeural",
+  "th-TH-PremwadeeNeural",
+  "zh-CN-YunxiNeural",
+  "zh-CN-XiaoxiaoNeural",
+  "fil-PH-AngeloNeural",
+  "fil-PH-BlessicaNeural",
+  "ko-KR-InJoonNeural",
+  "ko-KR-SunHiNeural",
+  "ja-JP-KeitaNeural",
+  "ja-JP-NanamiNeural",
+]);
 
 // SURGICAL: Make Burmese Edge TTS sound natural (human-like, not robotic).
 // Burmese uses ၊ (comma) and ။ (full stop). Microsoft Edge TTS does NOT detect
