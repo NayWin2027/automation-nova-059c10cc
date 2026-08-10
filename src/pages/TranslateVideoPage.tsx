@@ -494,6 +494,16 @@ export default function App() {
   const [audioBypass, setAudioBypass] = useState(true);
   const [zoomEnabled, setZoomEnabled] = useState(false);
 
+  // === AI VOICE OVER (DUB) MODE — additive, default OFF ===
+  const [dubEnabled, setDubEnabled] = useState(false);
+  const [dubVoice, setDubVoice] = useState("Puck");
+  const [dubVolume, setDubVolume] = useState(100); // dub track volume %
+  const [dubBgVolume, setDubBgVolume] = useState(85); // original audio volume %
+  const [dubDuckLevel, setDubDuckLevel] = useState(12); // original volume % while speaking
+  const [dubProgress, setDubProgress] = useState<{ done: number; total: number } | null>(null);
+  const [isGeneratingDub, setIsGeneratingDub] = useState(false);
+  const dubClipsRef = useRef<{ start: number; end: number; buffer: AudioBuffer }[]>([]);
+
   const [processingProgress, setProcessingProgress] = useState(0);
   const [isProcessingActive, setIsProcessingActive] = useState(false);
   const [processingStatus, setProcessingStatus] = useState("");
@@ -1831,6 +1841,11 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
       await new Promise((r) => setTimeout(r, 1000));
       setProcessingProgress(75);
 
+      if (dubEnabled) {
+        setProcessingStatus("Generating AI Voice Over (Dub)...");
+        await generateDubTracks(finalSubs);
+      }
+
       setProcessingStatus("Rendering Final Video...");
       await renderVideo(finalSubs);
 
@@ -1905,6 +1920,11 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
       await new Promise((r) => setTimeout(r, 1000));
       setProcessingProgress(75);
 
+      if (dubEnabled) {
+        setProcessingStatus("Generating AI Voice Over (Dub)...");
+        await generateDubTracks(finalSubs);
+      }
+
       setProcessingStatus("Rendering Final Video...");
       await renderVideo(finalSubs);
       setStep("result");
@@ -1913,6 +1933,110 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
       setProcessingStatus(error.message || "Error occurred during rendering. Please try again.");
       setProcessingProgress(-1); // Use -1 to indicate error state
     }
+  };
+
+  // ===== AI VOICE OVER (DUB) — generate one TTS clip per translated subtitle line =====
+  const resolveDubLanguageCode = () => {
+    const match = ALL_LANGUAGES.find(
+      (l) => l.name.toLowerCase() === targetLang.toLowerCase() || l.nativeName.toLowerCase() === targetLang.toLowerCase(),
+    );
+    return match?.bcp47 || "en-US";
+  };
+
+  const decodeTtsToBuffer = async (ctx: AudioContext, data: any): Promise<AudioBuffer | null> => {
+    if (!data?.audio) return null;
+    const mt = String(data.mimeType || "").toLowerCase();
+    const raw = Uint8Array.from(atob(data.audio), (c) => c.charCodeAt(0));
+    let bytes: Uint8Array = raw;
+    if (mt.includes("audio/pcm") || mt.includes("audio/l16")) {
+      const rateMatch = mt.match(/rate=(\d+)/);
+      const sampleRate = Number(data.sampleRate) || (rateMatch ? parseInt(rateMatch[1], 10) : 24000);
+      const numChannels = 1;
+      const bitsPerSample = 16;
+      const dataLength = raw.length;
+      const wav = new Uint8Array(44 + dataLength);
+      const view = new DataView(wav.buffer);
+      wav.set([0x52, 0x49, 0x46, 0x46], 0);
+      view.setUint32(4, 36 + dataLength, true);
+      wav.set([0x57, 0x41, 0x56, 0x45], 8);
+      wav.set([0x66, 0x6d, 0x74, 0x20], 12);
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, numChannels, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * numChannels * (bitsPerSample / 8), true);
+      view.setUint16(32, numChannels * (bitsPerSample / 8), true);
+      view.setUint16(34, bitsPerSample, true);
+      wav.set([0x64, 0x61, 0x74, 0x61], 36);
+      view.setUint32(40, dataLength, true);
+      wav.set(raw, 44);
+      bytes = wav;
+    }
+    const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+    try {
+      return await ctx.decodeAudioData(arrayBuffer);
+    } catch (e) {
+      console.warn("[dub] decode failed", e);
+      return null;
+    }
+  };
+
+  const generateDubTracks = async (subs: { start: number; end: number; text: string }[]) => {
+    dubClipsRef.current = [];
+    const lines = subs.filter((s) => s.text && s.text.trim());
+    if (lines.length === 0) return;
+
+    setIsGeneratingDub(true);
+    setDubProgress({ done: 0, total: lines.length });
+
+    const decodeCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const languageCode = resolveDubLanguageCode();
+    const results: ({ start: number; end: number; buffer: AudioBuffer } | null)[] = new Array(lines.length).fill(null);
+    let done = 0;
+
+    const runOne = async (idx: number) => {
+      const line = lines[idx];
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const body: Record<string, unknown> = {
+            text: line.text.replace(/\s+/g, " ").trim(),
+            voiceName: dubVoice,
+            languageCode,
+            // Charged once per video-minute by this tool — don't double-charge per line.
+            skipCreditDeduction: true,
+          };
+          if (apiMode === "own" && ownApiKey.trim()) body.ownApiKey = ownApiKey.trim();
+          const { data, error } = await supabase.functions.invoke("gemini-tts", { body });
+          if (error) throw new Error(error.message || "TTS failed");
+          const buffer = await decodeTtsToBuffer(decodeCtx, data);
+          if (buffer) {
+            results[idx] = { start: line.start, end: line.end, buffer };
+            return;
+          }
+          throw new Error("No audio returned");
+        } catch (e) {
+          if (attempt === 1) console.warn(`[dub] line ${idx + 1} skipped:`, e);
+          else await new Promise((r) => setTimeout(r, 900));
+        }
+      }
+    };
+
+    const CONCURRENCY = 3;
+    let cursor = 0;
+    const workers = Array.from({ length: Math.min(CONCURRENCY, lines.length) }, async () => {
+      while (cursor < lines.length) {
+        const myIdx = cursor;
+        cursor += 1;
+        await runOne(myIdx);
+        done += 1;
+        setDubProgress({ done, total: lines.length });
+      }
+    });
+    await Promise.all(workers);
+
+    dubClipsRef.current = results.filter(Boolean) as { start: number; end: number; buffer: AudioBuffer }[];
+    if (decodeCtx.state !== "closed") void decodeCtx.close().catch(() => undefined);
+    setIsGeneratingDub(false);
   };
 
   const renderVideo = (subs: { start: number; end: number; text: string }[]) => {
@@ -2034,6 +2158,27 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
         const source = audioCtx.createMediaElementSource(video);
         const dest = audioCtx.createMediaStreamDestination();
 
+        // DUB MODE: original audio passes through a gain node we can duck during speech.
+        const dubClips = dubEnabled ? dubClipsRef.current : [];
+        const originalGain = audioCtx.createGain();
+        originalGain.gain.value = dubEnabled ? dubBgVolume / 100 : 1;
+        const dubGain = audioCtx.createGain();
+        dubGain.gain.value = dubVolume / 100;
+        if (dubEnabled) {
+          dubGain.connect(dest);
+          dubGain.connect(audioCtx.destination);
+        }
+        const tail = (node: AudioNode) => {
+          if (dubEnabled) {
+            node.connect(originalGain);
+            originalGain.connect(dest);
+            originalGain.connect(audioCtx.destination);
+          } else {
+            node.connect(dest);
+            node.connect(audioCtx.destination);
+          }
+        };
+
         if (audioBypass) {
           // AI Auto Copyright Bypass: Subtle speed & pitch shift + Multi-band EQ
           (video as any).preservesPitch = false;
@@ -2059,11 +2204,9 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
           source.connect(lowShelf);
           lowShelf.connect(highShelf);
           highShelf.connect(peaking);
-          peaking.connect(dest);
-          peaking.connect(audioCtx.destination);
+          tail(peaking);
         } else {
-          source.connect(dest);
-          source.connect(audioCtx.destination);
+          tail(source);
         }
 
         const stream = canvas.captureStream(30);
@@ -2164,15 +2307,52 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
 
         // Ensure video is ready and play it
         video.currentTime = 0;
+
+        // Schedule every dub clip + ducking envelope on the AudioContext timeline.
+        // Anchored to the exact moment playback starts => no drift.
+        const scheduleDub = () => {
+          if (!dubEnabled || dubClips.length === 0) return;
+          const rate = video.playbackRate || 1;
+          const t0 = audioCtx.currentTime + 0.06;
+          const bgLevel = dubBgVolume / 100;
+          const duckLevel = Math.min(bgLevel, dubDuckLevel / 100);
+          originalGain.gain.setValueAtTime(bgLevel, audioCtx.currentTime);
+
+          dubClips.forEach((clip, i) => {
+            const slotStart = clip.start / rate;
+            const nextStart = i + 1 < dubClips.length ? dubClips[i + 1].start / rate : Number.POSITIVE_INFINITY;
+            // Never push the next line: allowed room = up to next line's start (minus 60ms guard).
+            const room = Math.max(0.2, Math.min(nextStart - slotStart - 0.06, Number.MAX_SAFE_INTEGER));
+            const dur = clip.buffer.duration;
+            // Only mild time-compression so pitch stays natural.
+            const playbackRate = dur > room ? Math.min(1.18, dur / room) : 1;
+            const realDur = dur / playbackRate;
+
+            const src = audioCtx.createBufferSource();
+            src.buffer = clip.buffer;
+            src.playbackRate.value = playbackRate;
+            src.connect(dubGain);
+            src.start(t0 + slotStart);
+
+            // Duck the original audio around the spoken window.
+            const duckIn = t0 + Math.max(0, slotStart - 0.12);
+            const duckOut = t0 + slotStart + realDur + 0.2;
+            originalGain.gain.setTargetAtTime(duckLevel, duckIn, 0.05);
+            originalGain.gain.setTargetAtTime(bgLevel, duckOut, 0.12);
+          });
+        };
+
         const playVideo = async () => {
           try {
             await video.play();
+            scheduleDub();
           } catch (err) {
             console.warn("Unmuted play blocked by browser, retrying muted (audio still captured via Web Audio):", err);
             video.muted = true;
             await audioCtx.resume().catch(() => undefined);
             try {
               await video.play();
+              scheduleDub();
             } catch (e) {
               console.error("Video play retry failed:", e);
               resolve();
@@ -3355,6 +3535,99 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                       className={`w-6 h-6 rounded-full bg-white absolute top-1 transition-all shadow-sm ${zoomEnabled ? "left-7" : "left-1"}`}
                     />
                   </button>
+                </div>
+
+                {/* AI Voice Over (Dub) */}
+                <div className="p-5 rounded-2xl border border-zinc-800 bg-zinc-900/50 space-y-5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 bg-indigo-500/20 text-indigo-400 rounded-xl">
+                        <Music size={24} />
+                      </div>
+                      <div>
+                        <h4 className="text-base font-medium text-zinc-100 mb-1">AI Voice Over (Dub)</h4>
+                        <p className="text-sm text-zinc-500">
+                          {dubEnabled
+                            ? "ON — ဘာသာပြန်စာကို TTS နဲ့ အသံထည့်၊ စကားပြောချိန် မူရင်းအသံ auto လျှော့"
+                            : "OFF — မူရင်းအသံအတိုင်း (subtitle သီးသန့်)"}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setDubEnabled(!dubEnabled)}
+                      className={`w-14 h-8 rounded-full transition-colors relative shrink-0 ${dubEnabled ? "bg-indigo-500" : "bg-zinc-700"}`}
+                    >
+                      <div
+                        className={`w-6 h-6 rounded-full bg-white absolute top-1 transition-all shadow-sm ${dubEnabled ? "left-7" : "left-1"}`}
+                      />
+                    </button>
+                  </div>
+
+                  {dubEnabled && (
+                    <div className="space-y-4 pt-2 border-t border-zinc-800">
+                      <div>
+                        <label className="block text-sm text-zinc-400 mb-1">Voice</label>
+                        <Select value={dubVoice} onValueChange={setDubVoice}>
+                          <SelectTrigger className="w-full bg-zinc-900 border-zinc-800 text-zinc-100 h-11">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-100">
+                            <SelectItem value="Puck">Puck — Warm Male (Default)</SelectItem>
+                            <SelectItem value="Charon">Charon — Deep Male</SelectItem>
+                            <SelectItem value="Fenrir">Fenrir — Strong Male</SelectItem>
+                            <SelectItem value="Orus">Orus — Calm Male</SelectItem>
+                            <SelectItem value="Kore">Kore — Clear Female</SelectItem>
+                            <SelectItem value="Aoede">Aoede — Soft Female</SelectItem>
+                            <SelectItem value="Leda">Leda — Bright Female</SelectItem>
+                            <SelectItem value="Zephyr">Zephyr — Light Female</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="block text-sm text-zinc-400 mb-1">Dub Volume ({dubVolume}%)</label>
+                        <input
+                          type="range"
+                          min="20"
+                          max="150"
+                          value={dubVolume}
+                          onChange={(e) => setDubVolume(Number(e.target.value))}
+                          className="w-full accent-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-zinc-400 mb-1">
+                          Background (မူရင်းအသံ) Volume ({dubBgVolume}%)
+                        </label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={dubBgVolume}
+                          onChange={(e) => setDubBgVolume(Number(e.target.value))}
+                          className="w-full accent-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-zinc-400 mb-1">
+                          Ducking Level — စကားပြောချိန် မူရင်းအသံ ({dubDuckLevel}%)
+                        </label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="60"
+                          value={dubDuckLevel}
+                          onChange={(e) => setDubDuckLevel(Number(e.target.value))}
+                          className="w-full accent-indigo-500"
+                        />
+                      </div>
+                      {(isGeneratingDub || dubProgress) && (
+                        <p className="text-[12px] text-indigo-300">
+                          {isGeneratingDub ? "Generating voice… " : "Voice ready — "}
+                          {dubProgress ? `${dubProgress.done}/${dubProgress.total} lines` : ""}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Layout & Watermark Settings */}
