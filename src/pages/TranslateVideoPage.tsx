@@ -496,7 +496,7 @@ export default function App() {
 
   // === AI VOICE OVER (DUB) MODE — additive, default OFF ===
   const [dubEnabled, setDubEnabled] = useState(false);
-  const [dubVoice, setDubVoice] = useState("Puck");
+  const [dubVoice, setDubVoice] = useState("it-IT-GiuseppeMultilingualNeural");
   const [dubVolume, setDubVolume] = useState(100); // dub track volume %
   const [dubBgVolume, setDubBgVolume] = useState(85); // original audio volume %
   const [dubDuckLevel, setDubDuckLevel] = useState(12); // original volume % while speaking
@@ -2000,13 +2000,11 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
         try {
           const body: Record<string, unknown> = {
             text: line.text.replace(/\s+/g, " ").trim(),
-            voiceName: dubVoice,
-            languageCode,
+            voice: dubVoice,
             // Charged once per video-minute by this tool — don't double-charge per line.
             skipCreditDeduction: true,
           };
-          if (apiMode === "own" && ownApiKey.trim()) body.ownApiKey = ownApiKey.trim();
-          const { data, error } = await supabase.functions.invoke("gemini-tts", { body });
+          const { data, error } = await supabase.functions.invoke("edge-tts", { body });
           if (error) throw new Error(error.message || "TTS failed");
           const buffer = await decodeTtsToBuffer(decodeCtx, data);
           if (buffer) {
