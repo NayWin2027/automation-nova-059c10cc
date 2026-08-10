@@ -2342,8 +2342,9 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
             // Never push the next line: allowed room = up to next line's start (minus 60ms guard).
             const room = Math.max(0.2, Math.min(nextStart - slotStart - 0.06, Number.MAX_SAFE_INTEGER));
             const dur = clip.buffer.duration;
-            // Only mild time-compression so pitch stays natural.
-            const playbackRate = dur > room ? Math.min(1.18, dur / room) : 1;
+            // Voice identity lock: only a barely-audible client-side nudge (<=6%).
+            // Real fitting is done server-side at generation time (pitch preserved).
+            const playbackRate = dur > room ? Math.min(1.06, dur / room) : 1;
             const realDur = dur / playbackRate;
 
             const src = audioCtx.createBufferSource();
@@ -2351,6 +2352,11 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
             src.playbackRate.value = playbackRate;
             src.connect(dubGain);
             src.start(t0 + slotStart);
+            // Anti-overlap guard: never let a line still be talking when the next one starts.
+            if (Number.isFinite(nextStart)) {
+              const hardStop = t0 + Math.max(slotStart + 0.15, nextStart - 0.04);
+              if (slotStart + realDur > nextStart - 0.04) src.stop(hardStop);
+            }
 
             // Duck the original audio around the spoken window.
             const duckIn = t0 + Math.max(0, slotStart - 0.12);
