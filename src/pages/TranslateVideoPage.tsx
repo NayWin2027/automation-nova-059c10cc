@@ -494,6 +494,16 @@ export default function App() {
   const [audioBypass, setAudioBypass] = useState(true);
   const [zoomEnabled, setZoomEnabled] = useState(false);
 
+  // === AI VOICE OVER (DUB) MODE — additive, default OFF ===
+  const [dubEnabled, setDubEnabled] = useState(false);
+  const [dubVoice, setDubVoice] = useState("Puck");
+  const [dubVolume, setDubVolume] = useState(100); // dub track volume %
+  const [dubBgVolume, setDubBgVolume] = useState(85); // original audio volume %
+  const [dubDuckLevel, setDubDuckLevel] = useState(12); // original volume % while speaking
+  const [dubProgress, setDubProgress] = useState<{ done: number; total: number } | null>(null);
+  const [isGeneratingDub, setIsGeneratingDub] = useState(false);
+  const dubClipsRef = useRef<{ start: number; end: number; buffer: AudioBuffer }[]>([]);
+
   const [processingProgress, setProcessingProgress] = useState(0);
   const [isProcessingActive, setIsProcessingActive] = useState(false);
   const [processingStatus, setProcessingStatus] = useState("");
