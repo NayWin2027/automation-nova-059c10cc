@@ -1996,11 +1996,23 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
 
     const runOne = async (idx: number) => {
       const line = lines[idx];
+      const nextStart = idx + 1 < lines.length ? lines[idx + 1].start : Number.POSITIVE_INFINITY;
+      const videoRate = audioBypass ? 1.04 : 1;
+      // Room available for this line in real (rendered) seconds, with a small guard
+      // so one line can never bleed into the next one.
+      const room = Math.max(0.4, (nextStart - line.start) / videoRate - 0.1);
+      // VOICE IDENTITY LOCK — identical prosody settings to Recap Video NV so the
+      // same speaker (e.g. Thiha) always sounds like the same person.
+      const BASE_RATE = "+0%";
+      const BASE_PITCH = "-2Hz";
+      let speedTag = BASE_RATE;
       for (let attempt = 0; attempt < 2; attempt += 1) {
         try {
           const body: Record<string, unknown> = {
             text: line.text.replace(/\s+/g, " ").trim(),
             voice: dubVoice,
+            rate: speedTag,
+            pitch: BASE_PITCH,
             // Charged once per video-minute by this tool — don't double-charge per line.
             skipCreditDeduction: true,
           };
@@ -2008,6 +2020,14 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
           if (error) throw new Error(error.message || "TTS failed");
           const buffer = await decodeTtsToBuffer(decodeCtx, data);
           if (buffer) {
+            // If the line overruns its slot, re-speak it FASTER on the server instead of
+            // resampling on the client: Edge TTS rate keeps the original pitch/timbre,
+            // so the voice identity never changes and no two lines overlap.
+            if (Number.isFinite(room) && buffer.duration > room * 1.02 && speedTag === BASE_RATE) {
+              const needed = Math.min(30, Math.max(4, Math.round((buffer.duration / room - 1) * 100)));
+              speedTag = `+${needed}%`;
+              continue;
+            }
             results[idx] = { start: line.start, end: line.end, buffer };
             return;
           }
