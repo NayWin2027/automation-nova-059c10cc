@@ -3537,6 +3537,99 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                   </button>
                 </div>
 
+                {/* AI Voice Over (Dub) */}
+                <div className="p-5 rounded-2xl border border-zinc-800 bg-zinc-900/50 space-y-5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 bg-indigo-500/20 text-indigo-400 rounded-xl">
+                        <Music size={24} />
+                      </div>
+                      <div>
+                        <h4 className="text-base font-medium text-zinc-100 mb-1">AI Voice Over (Dub)</h4>
+                        <p className="text-sm text-zinc-500">
+                          {dubEnabled
+                            ? "ON — ဘာသာပြန်စာကို TTS နဲ့ အသံထည့်၊ စကားပြောချိန် မူရင်းအသံ auto လျှော့"
+                            : "OFF — မူရင်းအသံအတိုင်း (subtitle သီးသန့်)"}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setDubEnabled(!dubEnabled)}
+                      className={`w-14 h-8 rounded-full transition-colors relative shrink-0 ${dubEnabled ? "bg-indigo-500" : "bg-zinc-700"}`}
+                    >
+                      <div
+                        className={`w-6 h-6 rounded-full bg-white absolute top-1 transition-all shadow-sm ${dubEnabled ? "left-7" : "left-1"}`}
+                      />
+                    </button>
+                  </div>
+
+                  {dubEnabled && (
+                    <div className="space-y-4 pt-2 border-t border-zinc-800">
+                      <div>
+                        <label className="block text-sm text-zinc-400 mb-1">Voice</label>
+                        <Select value={dubVoice} onValueChange={setDubVoice}>
+                          <SelectTrigger className="w-full bg-zinc-900 border-zinc-800 text-zinc-100 h-11">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-100">
+                            <SelectItem value="Puck">Puck — Warm Male (Default)</SelectItem>
+                            <SelectItem value="Charon">Charon — Deep Male</SelectItem>
+                            <SelectItem value="Fenrir">Fenrir — Strong Male</SelectItem>
+                            <SelectItem value="Orus">Orus — Calm Male</SelectItem>
+                            <SelectItem value="Kore">Kore — Clear Female</SelectItem>
+                            <SelectItem value="Aoede">Aoede — Soft Female</SelectItem>
+                            <SelectItem value="Leda">Leda — Bright Female</SelectItem>
+                            <SelectItem value="Zephyr">Zephyr — Light Female</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="block text-sm text-zinc-400 mb-1">Dub Volume ({dubVolume}%)</label>
+                        <input
+                          type="range"
+                          min="20"
+                          max="150"
+                          value={dubVolume}
+                          onChange={(e) => setDubVolume(Number(e.target.value))}
+                          className="w-full accent-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-zinc-400 mb-1">
+                          Background (မူရင်းအသံ) Volume ({dubBgVolume}%)
+                        </label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={dubBgVolume}
+                          onChange={(e) => setDubBgVolume(Number(e.target.value))}
+                          className="w-full accent-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-zinc-400 mb-1">
+                          Ducking Level — စကားပြောချိန် မူရင်းအသံ ({dubDuckLevel}%)
+                        </label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="60"
+                          value={dubDuckLevel}
+                          onChange={(e) => setDubDuckLevel(Number(e.target.value))}
+                          className="w-full accent-indigo-500"
+                        />
+                      </div>
+                      {(isGeneratingDub || dubProgress) && (
+                        <p className="text-[12px] text-indigo-300">
+                          {isGeneratingDub ? "Generating voice… " : "Voice ready — "}
+                          {dubProgress ? `${dubProgress.done}/${dubProgress.total} lines` : ""}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 {/* Layout & Watermark Settings */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4 border-t border-zinc-800">
                   {/* Subtitle Controls */}
