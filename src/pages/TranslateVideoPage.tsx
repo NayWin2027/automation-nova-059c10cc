@@ -3570,14 +3570,22 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-100">
-                            <SelectItem value="Puck">Puck — Warm Male (Default)</SelectItem>
-                            <SelectItem value="Charon">Charon — Deep Male</SelectItem>
-                            <SelectItem value="Fenrir">Fenrir — Strong Male</SelectItem>
-                            <SelectItem value="Orus">Orus — Calm Male</SelectItem>
-                            <SelectItem value="Kore">Kore — Clear Female</SelectItem>
-                            <SelectItem value="Aoede">Aoede — Soft Female</SelectItem>
-                            <SelectItem value="Leda">Leda — Bright Female</SelectItem>
-                            <SelectItem value="Zephyr">Zephyr — Light Female</SelectItem>
+                            <SelectItem value="it-IT-GiuseppeMultilingualNeural">Giuseppe — Multilingual Male (Default)</SelectItem>
+                            <SelectItem value="en-US-AndrewMultilingualNeural">Andrew — Multilingual Male</SelectItem>
+                            <SelectItem value="en-US-AvaMultilingualNeural">Ava — Multilingual Female</SelectItem>
+                            <SelectItem value="en-US-EmmaMultilingualNeural">Emma — Multilingual Female</SelectItem>
+                            <SelectItem value="my-MM-ThihaNeural">Thiha — Burmese Male</SelectItem>
+                            <SelectItem value="my-MM-NilarNeural">Nilar — Burmese Female</SelectItem>
+                            <SelectItem value="th-TH-NiwatNeural">Niwat — Thai Male</SelectItem>
+                            <SelectItem value="th-TH-PremwadeeNeural">Premwadee — Thai Female</SelectItem>
+                            <SelectItem value="zh-CN-YunxiNeural">Yunxi — Chinese Male</SelectItem>
+                            <SelectItem value="zh-CN-XiaoxiaoNeural">Xiaoxiao — Chinese Female</SelectItem>
+                            <SelectItem value="fil-PH-AngeloNeural">Angelo — Filipino Male</SelectItem>
+                            <SelectItem value="fil-PH-BlessicaNeural">Blessica — Filipino Female</SelectItem>
+                            <SelectItem value="ko-KR-InJoonNeural">InJoon — Korean Male</SelectItem>
+                            <SelectItem value="ja-JP-NanamiNeural">Nanami — Japanese Female</SelectItem>
+                            <SelectItem value="en-US-GuyNeural">Guy — English Male</SelectItem>
+                            <SelectItem value="en-US-JennyNeural">Jenny — English Female</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
