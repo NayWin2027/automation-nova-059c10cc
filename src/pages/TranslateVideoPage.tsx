@@ -1915,6 +1915,11 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
       await new Promise((r) => setTimeout(r, 1000));
       setProcessingProgress(75);
 
+      if (dubEnabled) {
+        setProcessingStatus("Generating AI Voice Over (Dub)...");
+        await generateDubTracks(finalSubs);
+      }
+
       setProcessingStatus("Rendering Final Video...");
       await renderVideo(finalSubs);
       setStep("result");
