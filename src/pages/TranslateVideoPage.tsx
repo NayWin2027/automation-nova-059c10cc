@@ -1925,6 +1925,110 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
     }
   };
 
+  // ===== AI VOICE OVER (DUB) — generate one TTS clip per translated subtitle line =====
+  const resolveDubLanguageCode = () => {
+    const match = ALL_LANGUAGES.find(
+      (l) => l.name.toLowerCase() === targetLang.toLowerCase() || l.nativeName.toLowerCase() === targetLang.toLowerCase(),
+    );
+    return match?.bcp47 || "en-US";
+  };
+
+  const decodeTtsToBuffer = async (ctx: AudioContext, data: any): Promise<AudioBuffer | null> => {
+    if (!data?.audio) return null;
+    const mt = String(data.mimeType || "").toLowerCase();
+    const raw = Uint8Array.from(atob(data.audio), (c) => c.charCodeAt(0));
+    let bytes: Uint8Array = raw;
+    if (mt.includes("audio/pcm") || mt.includes("audio/l16")) {
+      const rateMatch = mt.match(/rate=(\d+)/);
+      const sampleRate = Number(data.sampleRate) || (rateMatch ? parseInt(rateMatch[1], 10) : 24000);
+      const numChannels = 1;
+      const bitsPerSample = 16;
+      const dataLength = raw.length;
+      const wav = new Uint8Array(44 + dataLength);
+      const view = new DataView(wav.buffer);
+      wav.set([0x52, 0x49, 0x46, 0x46], 0);
+      view.setUint32(4, 36 + dataLength, true);
+      wav.set([0x57, 0x41, 0x56, 0x45], 8);
+      wav.set([0x66, 0x6d, 0x74, 0x20], 12);
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, numChannels, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * numChannels * (bitsPerSample / 8), true);
+      view.setUint16(32, numChannels * (bitsPerSample / 8), true);
+      view.setUint16(34, bitsPerSample, true);
+      wav.set([0x64, 0x61, 0x74, 0x61], 36);
+      view.setUint32(40, dataLength, true);
+      wav.set(raw, 44);
+      bytes = wav;
+    }
+    const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+    try {
+      return await ctx.decodeAudioData(arrayBuffer);
+    } catch (e) {
+      console.warn("[dub] decode failed", e);
+      return null;
+    }
+  };
+
+  const generateDubTracks = async (subs: { start: number; end: number; text: string }[]) => {
+    dubClipsRef.current = [];
+    const lines = subs.filter((s) => s.text && s.text.trim());
+    if (lines.length === 0) return;
+
+    setIsGeneratingDub(true);
+    setDubProgress({ done: 0, total: lines.length });
+
+    const decodeCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const languageCode = resolveDubLanguageCode();
+    const results: ({ start: number; end: number; buffer: AudioBuffer } | null)[] = new Array(lines.length).fill(null);
+    let done = 0;
+
+    const runOne = async (idx: number) => {
+      const line = lines[idx];
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const body: Record<string, unknown> = {
+            text: line.text.replace(/\s+/g, " ").trim(),
+            voiceName: dubVoice,
+            languageCode,
+            // Charged once per video-minute by this tool — don't double-charge per line.
+            skipCreditDeduction: true,
+          };
+          if (apiMode === "own" && ownApiKey.trim()) body.ownApiKey = ownApiKey.trim();
+          const { data, error } = await supabase.functions.invoke("gemini-tts", { body });
+          if (error) throw new Error(error.message || "TTS failed");
+          const buffer = await decodeTtsToBuffer(decodeCtx, data);
+          if (buffer) {
+            results[idx] = { start: line.start, end: line.end, buffer };
+            return;
+          }
+          throw new Error("No audio returned");
+        } catch (e) {
+          if (attempt === 1) console.warn(`[dub] line ${idx + 1} skipped:`, e);
+          else await new Promise((r) => setTimeout(r, 900));
+        }
+      }
+    };
+
+    const CONCURRENCY = 3;
+    let cursor = 0;
+    const workers = Array.from({ length: Math.min(CONCURRENCY, lines.length) }, async () => {
+      while (cursor < lines.length) {
+        const myIdx = cursor;
+        cursor += 1;
+        await runOne(myIdx);
+        done += 1;
+        setDubProgress({ done, total: lines.length });
+      }
+    });
+    await Promise.all(workers);
+
+    dubClipsRef.current = results.filter(Boolean) as { start: number; end: number; buffer: AudioBuffer }[];
+    if (decodeCtx.state !== "closed") void decodeCtx.close().catch(() => undefined);
+    setIsGeneratingDub(false);
+  };
+
   const renderVideo = (subs: { start: number; end: number; text: string }[]) => {
     console.log("renderVideo called with subs:", subs);
     return new Promise<void>(async (resolve) => {
