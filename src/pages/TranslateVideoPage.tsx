@@ -2297,15 +2297,52 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
 
         // Ensure video is ready and play it
         video.currentTime = 0;
+
+        // Schedule every dub clip + ducking envelope on the AudioContext timeline.
+        // Anchored to the exact moment playback starts => no drift.
+        const scheduleDub = () => {
+          if (!dubEnabled || dubClips.length === 0) return;
+          const rate = video.playbackRate || 1;
+          const t0 = audioCtx.currentTime + 0.06;
+          const bgLevel = dubBgVolume / 100;
+          const duckLevel = Math.min(bgLevel, dubDuckLevel / 100);
+          originalGain.gain.setValueAtTime(bgLevel, audioCtx.currentTime);
+
+          dubClips.forEach((clip, i) => {
+            const slotStart = clip.start / rate;
+            const nextStart = i + 1 < dubClips.length ? dubClips[i + 1].start / rate : Number.POSITIVE_INFINITY;
+            // Never push the next line: allowed room = up to next line's start (minus 60ms guard).
+            const room = Math.max(0.2, Math.min(nextStart - slotStart - 0.06, Number.MAX_SAFE_INTEGER));
+            const dur = clip.buffer.duration;
+            // Only mild time-compression so pitch stays natural.
+            const playbackRate = dur > room ? Math.min(1.18, dur / room) : 1;
+            const realDur = dur / playbackRate;
+
+            const src = audioCtx.createBufferSource();
+            src.buffer = clip.buffer;
+            src.playbackRate.value = playbackRate;
+            src.connect(dubGain);
+            src.start(t0 + slotStart);
+
+            // Duck the original audio around the spoken window.
+            const duckIn = t0 + Math.max(0, slotStart - 0.12);
+            const duckOut = t0 + slotStart + realDur + 0.2;
+            originalGain.gain.setTargetAtTime(duckLevel, duckIn, 0.05);
+            originalGain.gain.setTargetAtTime(bgLevel, duckOut, 0.12);
+          });
+        };
+
         const playVideo = async () => {
           try {
             await video.play();
+            scheduleDub();
           } catch (err) {
             console.warn("Unmuted play blocked by browser, retrying muted (audio still captured via Web Audio):", err);
             video.muted = true;
             await audioCtx.resume().catch(() => undefined);
             try {
               await video.play();
+              scheduleDub();
             } catch (e) {
               console.error("Video play retry failed:", e);
               resolve();
