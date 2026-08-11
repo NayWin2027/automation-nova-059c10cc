@@ -928,7 +928,7 @@ ${transcript}
     }
 
     // Own API must fail fast on its own key. Fallback and key rotation belong to App API only.
-    const fallbackModels = isOwnApi ? [] : ["gemini-pro-latest", "gemini-2.5-flash", "gemini-2.5-pro"];
+    const fallbackModels = isOwnApi ? [] : ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.5-pro",""gemini-3.5-flash","gemini-3.5-flash-lite"];
     const shouldFallback = (status?: number) =>
       !isOwnApi && (status === 404 || status === 429 || status === 503 || status === 504);
 
