@@ -1406,7 +1406,7 @@ ${workingScript}`;
     // stops well before the source ends, request ONLY the missing tail. Paragraphs
     // are accepted solely when strictly later than the current last timecode, so AV
     // mapping cannot be corrupted.
-    if (sourceDurationSec && endsAtCompleteSentence(lengthAdjustedScript) && remainingBudget() > 8000) {
+    if (sourceDurationSec && endsAtCompleteSentence(lengthAdjustedScript) && remainingBudget() > 15000) {
       const tailParas = lengthAdjustedScript
         .split(/\n{2,}/)
         .map((p) => p.trim())
@@ -1441,7 +1441,7 @@ ${lengthAdjustedScript}`;
         const endController = new AbortController();
         const endTimeoutId = setTimeout(
           () => endController.abort(),
-          Math.max(5000, Math.min(45000, remainingBudget() - 3000)),
+          Math.max(5000, Math.min(45000, remainingBudget() - 8000)),
         );
         try {
           const endRes = await callGeminiGenerateContent(
