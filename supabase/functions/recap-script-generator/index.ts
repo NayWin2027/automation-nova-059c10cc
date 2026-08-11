@@ -359,6 +359,10 @@ serve(async (req) => {
   const _corsBlock = handleCorsPreflightOrReject(req);
   if (_corsBlock) return _corsBlock;
 
+  // Wall clock starts at REQUEST ENTRY (not after parsing/auth/credit checks),
+  // so the total time can never drift past Supabase's 150s idle limit.
+  const reqStart = Date.now();
+
   const corsHeaders = getCorsHeaders(req);
 
   try {
@@ -886,10 +890,10 @@ ${transcript}
     // fallback path that can rotate into the paid App API key pool.
     let activeModel = MODEL;
 
-    // Total wall budget must stay under Supabase's 150s idle limit.
-    // Reserve ~10s for post-processing, credit deduction, and response send.
-    const WALL_BUDGET_MS = 140000;
-    const wallStart = Date.now();
+    // Total wall budget must stay under Supabase's 150s idle limit, measured from
+    // REQUEST ENTRY. Reserve ~28s for post-processing, credit deduction and response send.
+    const WALL_BUDGET_MS = 122000;
+    const wallStart = reqStart;
     const remainingBudget = () => Math.max(0, WALL_BUDGET_MS - (Date.now() - wallStart));
 
     const controller = new AbortController();
@@ -1402,7 +1406,7 @@ ${workingScript}`;
     // stops well before the source ends, request ONLY the missing tail. Paragraphs
     // are accepted solely when strictly later than the current last timecode, so AV
     // mapping cannot be corrupted.
-    if (sourceDurationSec && endsAtCompleteSentence(lengthAdjustedScript) && remainingBudget() > 8000) {
+    if (sourceDurationSec && endsAtCompleteSentence(lengthAdjustedScript) && remainingBudget() > 15000) {
       const tailParas = lengthAdjustedScript
         .split(/\n{2,}/)
         .map((p) => p.trim())
@@ -1437,7 +1441,7 @@ ${lengthAdjustedScript}`;
         const endController = new AbortController();
         const endTimeoutId = setTimeout(
           () => endController.abort(),
-          Math.max(5000, Math.min(45000, remainingBudget() - 3000)),
+          Math.max(5000, Math.min(45000, remainingBudget() - 8000)),
         );
         try {
           const endRes = await callGeminiGenerateContent(
