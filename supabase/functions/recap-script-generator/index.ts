@@ -928,7 +928,9 @@ ${transcript}
     }
 
     // Own API must fail fast on its own key. Fallback and key rotation belong to App API only.
-    const fallbackModels = isOwnApi ? [] : ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.5-pro",""gemini-3.5-flash","gemini-3.5-flash-lite"];
+    const fallbackModels = isOwnApi
+      ? []
+      : ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-3.5-flash", "gemini-3.5-flash-lite"];
     const shouldFallback = (status?: number) =>
       !isOwnApi && (status === 404 || status === 429 || status === 503 || status === 504);
 
@@ -1199,7 +1201,7 @@ ${normalizedRawScript}`;
       if (!m) return null;
       return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
     };
-    const windowTotal = !sourceDurationSec ? 1 : sourceDurationSec > 1200 ? 3 : sourceDurationSec > 720 ? 2 : 1;
+    const windowTotal = !sourceDurationSec ? 1 : sourceDurationSec >= 1200 ? 3 : sourceDurationSec > 360 ? 2 : 1;
     const isWindowMode = windowTotal > 1;
     const tc = (sec: number) =>
       `${String(Math.floor(Math.max(0, sec) / 60)).padStart(2, "0")}:${String(Math.round(Math.max(0, sec)) % 60).padStart(2, "0")}`;
