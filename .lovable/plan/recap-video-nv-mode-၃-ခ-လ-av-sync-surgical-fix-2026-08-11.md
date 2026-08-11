@@ -1,30 +1,27 @@
 # Recap Video NV — Mode ၃ ခုလုံး AV Sync Surgical Fix
 
-## လက်ရှိအတည်ပြုချက်
+## အတည်ပြုပြီးသားအချက်
 
-- နောက်ဆုံး **504 IDLE_TIMEOUT fix** က `supabase/functions/recap-script-generator/index.ts` ရဲ့ request wall-time budget / abort timing ကိုပဲ ပြင်ထားတယ်။ AV sync render loop၊ hard-cut seek၊ timestamp parser ကို မပြင်ထားဘူး။
-- Mode ၃ ခုလုံးက `RecapVideoNVPage.tsx` ထဲက shared pipeline ကို သုံးတယ်:
-  1. AI script timecode → `scriptToSegments`
-  2. segment source range → `syncSegments`
-  3. TTS actual timestamps → hard-cut render loop
-- Mode သုံးခုလုံးလွဲစေတဲ့ အကြောင်းရင်းကို လက်ရှိ evidence မပြည့်သေးလို့ မခန့်မှန်းဘဲ generated script၊ parsed segment၊ TTS timestamp count/order တို့ကို တစ်ဆင့်ချင်းစစ်ပြီးမှ shared fault တစ်နေရာတည်းကို ပြင်မယ်။
+- နောက်ဆုံး `504 IDLE_TIMEOUT` fix က `recap-script-generator` ရဲ့ request budget တန်ဖိုးတွေပဲ ပြင်ထားပြီး AV sync/render code ကို မထိထားပါ။
+- Story, Hybrid, Viral mode ၃ ခုလုံးက တူညီတဲ့ script timecode parser၊ TTS segment timestamps နဲ့ shared segment mapping ကို သုံးထားပါတယ်။ ဒါကြောင့် mode ၃ ခုလုံးတစ်ပြိုင်နက်လွဲတာကို shared timestamp chain မှာပဲ စစ်ရပါမယ်။
+- လက်ရှိ static code တစ်ခုတည်းနဲ့ exact fault ကို မသေချာသေးပါ။ Generated `[MM:SS]` segments၊ TTS timestamp count/boundaries နဲ့ mapped source segments ကို တူညီတဲ့ run တစ်ခုမှာ တိုက်စစ်ပြီးမှ အကြောင်းရင်းကို အတည်ပြုမယ်။
 
-## Implementation
+## ပြင်မယ့်အဆင့်
 
-1. **Shared timestamp chain ကို diagnose လုပ်မယ်**
-   - Script `[MM:SS]` timecodes တိုးစဉ်မှန်/မမှန်
-   - Parsed segment count/order နဲ့ TTS timestamp count/order တူ/မတူ
-   - `syncSegments` ရဲ့ `vStart/vEnd` က source timecode ကို မပျက်ဘဲယူ/မယူ
-   - Hook ပြီးတဲ့နောက် segment 0 မှာ clean resync ဖြစ်/မဖြစ်
+1. **Shared boundary ကို အတည်ပြုမယ်**
+   - Parsed script segment count/order
+   - TTS `segmentTimestamps` count/start/end
+   - Render မစခင် source `vStart/vEnd` mapping
+   ဒီသုံးခုကို test run တစ်ခုမှာ index အလိုက်တိုက်စစ်မယ်။
 
-2. **Confirmed shared fault ကိုသာ surgical fix လုပ်မယ်**
-   - Story / Hybrid / Viral သုံးခုလုံးအတွက် source segment `n` ↔ TTS timestamp `n` mapping မရွေ့အောင် ချိတ်မယ်။
-   - Invalid/missing timecode ရှိမှသာ fallback သုံးပြီး valid source timecode ကို proportional remap မလုပ်စေဘူး။
-   - Segment count မတူရင် index shift မဖြစ်စေတဲ့ deterministic guard ထည့်မယ်။
+2. **Fault ရှိတဲ့ shared mapping တစ်နေရာတည်းကိုပဲ ပြင်မယ်**
+   - TTS timestamp count နဲ့ script segment count တူရင် index `n ↔ n` ကို deterministic lock လုပ်မယ်။
+   - Count မတူတာ၊ missing/invalid timestamp ဖြစ်တာတွေမှာသာ လက်ရှိ safe fallback သုံးမယ်။
+   - Valid source timecodes ကို proportional rescale မလုပ်စေဘဲ မူရင်း source scene range ကို ဆက်ထိန်းမယ်။
 
-3. **Script generator scope**
-   - Script generator က duplicate၊ non-increasing၊ out-of-range timecode ထုတ်နေတာ evidence နဲ့အတည်ပြုရင် timecode normalization အပိုင်းကိုသာ ပြင်မယ်။
-   - 70% length၊ coverage၊ model၊ Own API/App API၊ retry/timeout budget ကို မပြင်ဘူး။
+3. **Generator ကို evidence ရှိမှသာ ထိမယ်**
+   - Duplicate/non-increasing `[MM:SS]` သို့ continuation merge ကြောင့် segment shift ဖြစ်ကြောင်း test data က အတည်ပြုမှ normalization guard တစ်ခုပဲ ထည့်မယ်။
+   - 40–50%/70% length logic၊ ending coverage၊ model/API logic မပြောင်းပါ။
 
 ## လုံးဝမထိမယ့်အပိုင်း
 
@@ -33,16 +30,11 @@
 - `VOICE-GEN-PIPELINE-v2`
 - `AUTO-PIPELINE-v2`
 - Professional hard-cut seek algorithm
-- Output resolution / codec
-- Hook duration / design
-- Freeze/Motion, playback speed, subtitle style
-- Credits, auth, upload/chunk logic
-- 70% script-length and coverage rules
+- Hook, output resolution/codec, subtitle style
+- Upload, credit, auth, API mode logic
 
-## Verification
+## စစ်ဆေးခြင်း
 
-- Story, Hybrid, Viral sample တစ်ခုစီမှာ script segment count = TTS timestamp count ဖြစ်ကြောင်း စစ်မယ်။
-- Segment တိုင်း TTS စချိန်မှာ သက်ဆိုင်ရာ source `vStart` ကို hard-cut ရောက်ကြောင်း စစ်မယ်။
-- Hook ကုန်ပြီး ပထမ normal segment ကို ချက်ချင်း resync ဖြစ်ကြောင်း စစ်မယ်။
-- Protected block ၄ ခုမှာ diff လုံးဝမရှိကြောင်း စစ်မယ်။
-- Type/build validation နဲ့ final targeted diff review လုပ်မယ်။
+- Story, Hybrid, Viral mode တစ်ခုစီမှာ segment index/order နဲ့ source scene mapping တိကျကြောင်း စစ်မယ်။
+- First/middle/last segments မှာ TTS boundary ပြောင်းချိန်နဲ့ hard-cut scene ပြောင်းချိန် တစ်ထပ်တည်းဖြစ်ကြောင်း စစ်မယ်။
+- Protected blocks နဲ့ unrelated files မှာ diff မရှိကြောင်း နောက်ဆုံးအတည်ပြုမယ်။
