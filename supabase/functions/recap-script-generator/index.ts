@@ -9,13 +9,13 @@ const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1bet
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
 // gemini-2.5-flash is no longer served to newer API keys (404 NOT_FOUND).
 // Use the rolling "latest" alias which stays available for both old and new keys.
-const MODEL = "gemini-flash-lite-latest";
+const MODEL = "gemini-flash-latest";
 
 function buildGenerationConfig(model: string, requestedMaxOutputTokens: number | null): Record<string, unknown> {
   // Burmese/CJK narration costs 2-3 tokens per syllable: an 8192 cap truncated
   // long recaps and dropped the middle/ending beats. Give the model real room.
   const maxOutputTokens =
-    model === "gemini-flash-lite-latest"
+    model === "gemini-flash-latest"
       ? Math.max(requestedMaxOutputTokens || 0, 32768)
       : Math.max(requestedMaxOutputTokens || 0, 24576);
 
@@ -358,10 +358,6 @@ const nicheStyles: Record<string, string> = {
 serve(async (req) => {
   const _corsBlock = handleCorsPreflightOrReject(req);
   if (_corsBlock) return _corsBlock;
-
-  // Wall clock starts at REQUEST ENTRY (not after parsing/auth/credit checks),
-  // so the total time can never drift past Supabase's 150s idle limit.
-  const reqStart = Date.now();
 
   const corsHeaders = getCorsHeaders(req);
 
@@ -890,10 +886,10 @@ ${transcript}
     // fallback path that can rotate into the paid App API key pool.
     let activeModel = MODEL;
 
-    // Total wall budget must stay under Supabase's 150s idle limit, measured from
-    // REQUEST ENTRY. Reserve ~28s for post-processing, credit deduction and response send.
-    const WALL_BUDGET_MS = 122000;
-    const wallStart = reqStart;
+    // Total wall budget must stay under Supabase's 150s idle limit.
+    // Reserve ~10s for post-processing, credit deduction, and response send.
+    const WALL_BUDGET_MS = 140000;
+    const wallStart = Date.now();
     const remainingBudget = () => Math.max(0, WALL_BUDGET_MS - (Date.now() - wallStart));
 
     const controller = new AbortController();
@@ -932,9 +928,7 @@ ${transcript}
     }
 
     // Own API must fail fast on its own key. Fallback and key rotation belong to App API only.
-    const fallbackModels = isOwnApi
-      ? []
-      : ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-3.5-flash", "gemini-3.5-flash-lite"];
+    const fallbackModels = isOwnApi ? [] : ["gemini-pro-latest", "gemini-2.5-flash", "gemini-2.5-pro"];
     const shouldFallback = (status?: number) =>
       !isOwnApi && (status === 404 || status === 429 || status === 503 || status === 504);
 
@@ -1205,7 +1199,7 @@ ${normalizedRawScript}`;
       if (!m) return null;
       return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
     };
-    const windowTotal = !sourceDurationSec ? 1 : sourceDurationSec >= 1200 ? 3 : sourceDurationSec > 360 ? 2 : 1;
+    const windowTotal = !sourceDurationSec ? 1 : sourceDurationSec > 1200 ? 3 : sourceDurationSec > 720 ? 2 : 1;
     const isWindowMode = windowTotal > 1;
     const tc = (sec: number) =>
       `${String(Math.floor(Math.max(0, sec) / 60)).padStart(2, "0")}:${String(Math.round(Math.max(0, sec)) % 60).padStart(2, "0")}`;
@@ -1406,7 +1400,7 @@ ${workingScript}`;
     // stops well before the source ends, request ONLY the missing tail. Paragraphs
     // are accepted solely when strictly later than the current last timecode, so AV
     // mapping cannot be corrupted.
-    if (sourceDurationSec && endsAtCompleteSentence(lengthAdjustedScript) && remainingBudget() > 15000) {
+    if (sourceDurationSec && endsAtCompleteSentence(lengthAdjustedScript) && remainingBudget() > 8000) {
       const tailParas = lengthAdjustedScript
         .split(/\n{2,}/)
         .map((p) => p.trim())
@@ -1441,7 +1435,7 @@ ${lengthAdjustedScript}`;
         const endController = new AbortController();
         const endTimeoutId = setTimeout(
           () => endController.abort(),
-          Math.max(5000, Math.min(45000, remainingBudget() - 8000)),
+          Math.max(5000, Math.min(45000, remainingBudget() - 3000)),
         );
         try {
           const endRes = await callGeminiGenerateContent(
