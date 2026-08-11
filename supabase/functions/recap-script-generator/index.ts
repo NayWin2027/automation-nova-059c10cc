@@ -9,13 +9,13 @@ const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1bet
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
 // gemini-2.5-flash is no longer served to newer API keys (404 NOT_FOUND).
 // Use the rolling "latest" alias which stays available for both old and new keys.
-const MODEL = "gemini-flash-latest";
+const MODEL = "gemini-flash-lite-latest";
 
 function buildGenerationConfig(model: string, requestedMaxOutputTokens: number | null): Record<string, unknown> {
   // Burmese/CJK narration costs 2-3 tokens per syllable: an 8192 cap truncated
   // long recaps and dropped the middle/ending beats. Give the model real room.
   const maxOutputTokens =
-    model === "gemini-flash-latest"
+    model === "gemini-flash-lite-latest"
       ? Math.max(requestedMaxOutputTokens || 0, 32768)
       : Math.max(requestedMaxOutputTokens || 0, 24576);
 
