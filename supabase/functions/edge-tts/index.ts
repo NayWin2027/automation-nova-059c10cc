@@ -99,8 +99,20 @@ function estimateSegmentTimestamps(segments: unknown[], durationSec: number) {
     const compact = humanizeBurmese(text).replace(/\s+/g, "");
     let weight = 0;
     for (const char of compact) {
-      const code = char.charCodeAt(0);
-      weight += code >= 0x1000 && code <= 0x109f ? 2.8 : 1;
+      if (/\p{Script=Myanmar}/u.test(char)) {
+        // Burmese combining vowels/medials/tones do not create separate spoken beats.
+        // Counting every code point as 2.8x shifted all later TTS boundaries, so the
+        // shared Story/Hybrid/Viral renderer cut to the wrong source scene.
+        weight += /[\u102B-\u103E\u1056-\u1059\u1062-\u1064\u1067-\u106D\u1082\u1083-\u1086\u109D]/u.test(char)
+          ? 0.35
+          : 1;
+      } else if (/\p{L}|\p{N}/u.test(char)) {
+        weight += 0.22;
+      } else if (/[.!?။]/u.test(char)) {
+        weight += 1.1;
+      } else if (/[,;:၊]/u.test(char)) {
+        weight += 0.45;
+      }
     }
     return Math.max(weight, 1);
   });
