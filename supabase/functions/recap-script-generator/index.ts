@@ -359,6 +359,10 @@ serve(async (req) => {
   const _corsBlock = handleCorsPreflightOrReject(req);
   if (_corsBlock) return _corsBlock;
 
+  // Wall clock starts at REQUEST ENTRY (not after parsing/auth/credit checks),
+  // so the total time can never drift past Supabase's 150s idle limit.
+  const reqStart = Date.now();
+
   const corsHeaders = getCorsHeaders(req);
 
   try {
