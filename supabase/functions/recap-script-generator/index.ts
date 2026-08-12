@@ -27,7 +27,7 @@ function buildGenerationConfig(model: string, requestedMaxOutputTokens: number |
   // NOTE: Do NOT force thinkingBudget:0 on flash/flash-lite — it causes the model
   // to degenerate into repetitive loops ("မင်းဘာလုပ်နေတာလဲ / ဟုတ်ကဲ့...") on long
   // multimodal video inputs. Allow Gemini's default thinking budget.
-  if (model === "gemini-3.6-flash") {
+  if (model === "gemini-2.5-flash-lite") {
     config.thinkingConfig = { thinkingBudget: 0 };
   }
 
@@ -886,10 +886,9 @@ ${transcript}
     // fallback path that can rotate into the paid App API key pool.
     let activeModel = MODEL;
 
-    // Total wall budget. Supabase edge functions allow a long wall clock while the
-    // request is actively awaiting network I/O, so allow enough room for the repeated
-    // ending-coverage passes that guarantee full source coverage.
-    const WALL_BUDGET_MS = 260000;
+    // Total wall budget must stay under Supabase's 150s idle limit.
+    // Reserve ~10s for post-processing, credit deduction, and response send.
+    const WALL_BUDGET_MS = 140000;
     const wallStart = Date.now();
     const remainingBudget = () => Math.max(0, WALL_BUDGET_MS - (Date.now() - wallStart));
 
@@ -1401,12 +1400,7 @@ ${workingScript}`;
     // stops well before the source ends, request ONLY the missing tail. Paragraphs
     // are accepted solely when strictly later than the current last timecode, so AV
     // mapping cannot be corrupted.
-    // Repeat the pass (max 4 rounds) so a 10-minute source that only reached 4 minutes
-    // keeps getting its missing tail written, chunk after chunk, until it truly reaches
-    // the end. Acceptance stays strictly increasing-timecode only, so AV mapping and
-    // hard-cut seek behaviour are untouched.
-    for (let endRound = 0; endRound < 4; endRound++) {
-      if (!sourceDurationSec || !endsAtCompleteSentence(lengthAdjustedScript) || remainingBudget() < 20000) break;
+    if (sourceDurationSec && endsAtCompleteSentence(lengthAdjustedScript) && remainingBudget() > 8000) {
       const tailParas = lengthAdjustedScript
         .split(/\n{2,}/)
         .map((p) => p.trim())
@@ -1417,8 +1411,7 @@ ${workingScript}`;
         if (t !== null && t > lastTc) lastTc = t;
       }
       const endThreshold = sourceDurationSec * 0.88;
-      if (!(lastTc > 0 && lastTc < endThreshold && sourceDurationSec - lastTc >= 20)) break;
-      {
+      if (lastTc > 0 && lastTc < endThreshold && sourceDurationSec - lastTc >= 20) {
         const tail = tailParas.slice(-2).join("\n\n");
         const endPrompt = `*** ENDING COVERAGE PASS — COVER ONLY ${tc(lastTc)} to ${tc(sourceDurationSec)} ***
 
@@ -1442,9 +1435,8 @@ ${lengthAdjustedScript}`;
         const endController = new AbortController();
         const endTimeoutId = setTimeout(
           () => endController.abort(),
-          Math.max(5000, Math.min(45000, remainingBudget() - 6000)),
+          Math.max(5000, Math.min(45000, remainingBudget() - 3000)),
         );
-        let acceptedCount = 0;
         try {
           const endRes = await callGeminiGenerateContent(
             activeModel,
@@ -1470,7 +1462,6 @@ ${lengthAdjustedScript}`;
               acceptedEnd.push(p);
               cursor = t;
             }
-            acceptedCount = acceptedEnd.length;
             if (acceptedEnd.length) {
               const merged = `${lengthAdjustedScript}\n\n${acceptedEnd.join("\n\n")}`.trim();
               if (endsAtCompleteSentence(merged) && !violatesTargetLanguage(merged, lang)) {
@@ -1485,7 +1476,6 @@ ${lengthAdjustedScript}`;
             );
           } else {
             console.warn(`[recap-script-generator] Ending coverage pass failed: ${endRes.status}`);
-            break;
           }
         } catch (endErr) {
           console.warn(
@@ -1493,12 +1483,9 @@ ${lengthAdjustedScript}`;
               endErr instanceof Error ? endErr.message : String(endErr)
             }`,
           );
-          clearTimeout(endTimeoutId);
-          break;
         } finally {
           clearTimeout(endTimeoutId);
         }
-        if (acceptedCount === 0) break;
       }
     }
 
