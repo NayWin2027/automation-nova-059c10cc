@@ -1401,7 +1401,12 @@ ${workingScript}`;
     // stops well before the source ends, request ONLY the missing tail. Paragraphs
     // are accepted solely when strictly later than the current last timecode, so AV
     // mapping cannot be corrupted.
-    if (sourceDurationSec && endsAtCompleteSentence(lengthAdjustedScript) && remainingBudget() > 8000) {
+    // Repeat the pass (max 4 rounds) so a 10-minute source that only reached 4 minutes
+    // keeps getting its missing tail written, chunk after chunk, until it truly reaches
+    // the end. Acceptance stays strictly increasing-timecode only, so AV mapping and
+    // hard-cut seek behaviour are untouched.
+    for (let endRound = 0; endRound < 4; endRound++) {
+      if (!sourceDurationSec || !endsAtCompleteSentence(lengthAdjustedScript) || remainingBudget() < 20000) break;
       const tailParas = lengthAdjustedScript
         .split(/\n{2,}/)
         .map((p) => p.trim())
@@ -1412,7 +1417,8 @@ ${workingScript}`;
         if (t !== null && t > lastTc) lastTc = t;
       }
       const endThreshold = sourceDurationSec * 0.88;
-      if (lastTc > 0 && lastTc < endThreshold && sourceDurationSec - lastTc >= 20) {
+      if (!(lastTc > 0 && lastTc < endThreshold && sourceDurationSec - lastTc >= 20)) break;
+      {
         const tail = tailParas.slice(-2).join("\n\n");
         const endPrompt = `*** ENDING COVERAGE PASS — COVER ONLY ${tc(lastTc)} to ${tc(sourceDurationSec)} ***
 
@@ -1436,8 +1442,9 @@ ${lengthAdjustedScript}`;
         const endController = new AbortController();
         const endTimeoutId = setTimeout(
           () => endController.abort(),
-          Math.max(5000, Math.min(45000, remainingBudget() - 3000)),
+          Math.max(5000, Math.min(45000, remainingBudget() - 6000)),
         );
+        let acceptedCount = 0;
         try {
           const endRes = await callGeminiGenerateContent(
             activeModel,
@@ -1463,6 +1470,7 @@ ${lengthAdjustedScript}`;
               acceptedEnd.push(p);
               cursor = t;
             }
+            acceptedCount = acceptedEnd.length;
             if (acceptedEnd.length) {
               const merged = `${lengthAdjustedScript}\n\n${acceptedEnd.join("\n\n")}`.trim();
               if (endsAtCompleteSentence(merged) && !violatesTargetLanguage(merged, lang)) {
@@ -1477,6 +1485,7 @@ ${lengthAdjustedScript}`;
             );
           } else {
             console.warn(`[recap-script-generator] Ending coverage pass failed: ${endRes.status}`);
+            break;
           }
         } catch (endErr) {
           console.warn(
@@ -1484,9 +1493,12 @@ ${lengthAdjustedScript}`;
               endErr instanceof Error ? endErr.message : String(endErr)
             }`,
           );
+          clearTimeout(endTimeoutId);
+          break;
         } finally {
           clearTimeout(endTimeoutId);
         }
+        if (acceptedCount === 0) break;
       }
     }
 
