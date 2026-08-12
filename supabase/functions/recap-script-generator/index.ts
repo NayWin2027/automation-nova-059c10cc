@@ -886,9 +886,10 @@ ${transcript}
     // fallback path that can rotate into the paid App API key pool.
     let activeModel = MODEL;
 
-    // Total wall budget must stay under Supabase's 150s idle limit.
-    // Reserve ~10s for post-processing, credit deduction, and response send.
-    const WALL_BUDGET_MS = 140000;
+    // Total wall budget. Supabase edge functions allow a long wall clock while the
+    // request is actively awaiting network I/O, so allow enough room for the repeated
+    // ending-coverage passes that guarantee full source coverage.
+    const WALL_BUDGET_MS = 260000;
     const wallStart = Date.now();
     const remainingBudget = () => Math.max(0, WALL_BUDGET_MS - (Date.now() - wallStart));
 
