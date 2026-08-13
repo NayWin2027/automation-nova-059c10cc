@@ -46,8 +46,7 @@ const DIALOGUE_METADATA_PATTERN =
 
 // SURGICAL FIX: strip every timecode shape the AI may emit ([M:SS], [HH:MM:SS], ranges)
 // so timestamps never leak into subtitles.
-const TIMECODE_STRIP_RE =
-  /\[\s*\d{1,2}:\d{2}(?::\d{2})?(?:\s*[-–—]\s*\d{1,2}:\d{2}(?::\d{2})?)?\s*\]/g;
+const TIMECODE_STRIP_RE = /\[\s*\d{1,2}:\d{2}(?::\d{2})?(?:\s*[-–—]\s*\d{1,2}:\d{2}(?::\d{2})?)?\s*\]/g;
 
 const stripDialogueMetadata = (text: string): string =>
   String(text || "")
@@ -5955,8 +5954,7 @@ const RecapVideoNVPage: React.FC = () => {
     if (rawLines.length === 0) return [];
     // SURGICAL FIX: accept [M:SS], [HH:MM:SS] and both range forms so timecodes are
     // always parsed (and removed) instead of leaking into subtitles with a 0s start.
-    const timecodeRegex =
-      /^\[\s*(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*[-–—]\s*(\d{1,2}):(\d{2})(?::(\d{2}))?)?\s*\]\s*/;
+    const timecodeRegex = /^\[\s*(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*[-–—]\s*(\d{1,2}):(\d{2})(?::(\d{2}))?)?\s*\]\s*/;
     // Accept the intended marker plus common AI variants/misspelling, in [] or {}, even
     // when Gemini puts it after a quote. The marker is metadata and must never reach subtitles/TTS.
     const dialogueCaptureRegex =
@@ -6005,7 +6003,10 @@ const RecapVideoNVPage: React.FC = () => {
           text = stripDialogueMetadata(text);
         }
         // Any stray timecode left inside the line must never reach subtitles/TTS.
-        text = text.replace(TIMECODE_STRIP_RE, " ").replace(/[ \t]{2,}/g, " ").trim();
+        text = text
+          .replace(TIMECODE_STRIP_RE, " ")
+          .replace(/[ \t]{2,}/g, " ")
+          .trim();
         return { timestamp, text, isDialogue, emotion, explicitEndSec };
       });
       // Source slot = explicit [start-end] range when the AI gave one (dialogue lock),
@@ -6303,12 +6304,17 @@ const RecapVideoNVPage: React.FC = () => {
         };
         v.src = tempUrl;
       });
-      if (duration > 600) {
+      if (duration > 1800) {
         throw new Error(
-          "Source video က ၁၀ မိနစ် (600 စက္ကန့်) ထက် ကျော်လို့ မရပါ။ ၁၀ မိနစ်အောက် video ကိုသာ ရွေးပေးပါ။",
+          "ဒီ app မှာ 30 မိနစ်ထက်ကျော်တဲ့ video ကို recap မလုပ်နိုင်သေးပါ။ 30 မိနစ်အောက် video ကိုရွေးပေးပါ။",
         );
       }
       videoDurationRef.current = duration;
+      if (duration > 1320) {
+        toast.warning(
+          "Source ၂၂ မိနစ်ကျော်နေလို့ script က ရည်မှန်းချက်ထက် တိုနိုင်ပါတယ်။ ၂၀ မိနစ်အောက် အကောင်းဆုံးပါ။",
+        );
+      }
       const videoBlob = URL.createObjectURL(file);
       setVideoUrl(videoBlob);
 
@@ -6424,7 +6430,7 @@ This is a surgical recap, not a summary. Do NOT retain most of the source or pro
 The output script MUST be approximately 70% of the original video duration when read aloud (acceptable band: 65-75%).
 MINIMUM WORD COUNT (CRITICAL â€” DO NOT GO BELOW THIS):
   * Source 5 min â†’ minimum 500 words, target ~700 words
-  * Source 10 min â†’ minimum 1000 words, target ~1400 words
+  * Source 10 min â†’ minimum 1500 words, target ~2000 words
   * Source 15 min â†’ minimum 1500 words, target ~2100 words
   * Source 20 min â†’ minimum 2000 words, target ~2800 words
   * Source 30 min â†’ minimum 3000 words, target ~4200 words
@@ -6743,34 +6749,6 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
   const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      // SURGICAL: hard 10-minute (600s) source limit — no tolerance
-      const pickedDuration = await new Promise<number>((resolve) => {
-        const tempUrl = URL.createObjectURL(file);
-        const v = document.createElement("video");
-        v.preload = "metadata";
-        v.onloadedmetadata = () => {
-          const d = v.duration || 0;
-          URL.revokeObjectURL(tempUrl);
-          resolve(d);
-        };
-        v.onerror = () => {
-          URL.revokeObjectURL(tempUrl);
-          resolve(0);
-        };
-        v.src = tempUrl;
-      });
-      if (pickedDuration > 600) {
-        e.target.value = "";
-        setVideoFile(null);
-        videoFileRef.current = null;
-        setVideoUrl("");
-        setStatus("idle");
-        setProgressMsg("");
-        toast.error(
-          `Source video ${Math.floor(pickedDuration / 60)}:${String(Math.round(pickedDuration % 60)).padStart(2, "0")} ရှိပါတယ်။ ၁၀ မိနစ် (600s) ထက် ကျော်လို့ လုံးဝ မရပါ။`,
-        );
-        return;
-      }
       // SURGICAL EDIT: Only store file, do NOT auto-start pipeline
       // User must click Generate button to start
       setVideoFile(file);
