@@ -9,13 +9,13 @@ const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1bet
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
 // gemini-2.5-flash is no longer served to newer API keys (404 NOT_FOUND).
 // Use the rolling "latest" alias which stays available for both old and new keys.
-const MODEL = "gemini-2.5-flash";
+const MODEL = "gemini-flash-latest";
 
 function buildGenerationConfig(model: string, requestedMaxOutputTokens: number | null): Record<string, unknown> {
   // Burmese/CJK narration costs 2-3 tokens per syllable: an 8192 cap truncated
   // long recaps and dropped the middle/ending beats. Give the model real room.
   const maxOutputTokens =
-    model === "gemini-2.5-flash"
+    model === "gemini-flash-latest"
       ? Math.max(requestedMaxOutputTokens || 0, 32768)
       : Math.max(requestedMaxOutputTokens || 0, 24576);
 
@@ -27,7 +27,7 @@ function buildGenerationConfig(model: string, requestedMaxOutputTokens: number |
   // NOTE: Do NOT force thinkingBudget:0 on flash/flash-lite — it causes the model
   // to degenerate into repetitive loops ("မင်းဘာလုပ်နေတာလဲ / ဟုတ်ကဲ့...") on long
   // multimodal video inputs. Allow Gemini's default thinking budget.
-  if (model === "gemini-flash-latest") {
+  if (model === "gemini-2.5-flash-lite") {
     config.thinkingConfig = { thinkingBudget: 0 };
   }
 
@@ -775,7 +775,7 @@ AFTER the complete narration script, output a final line containing exactly ===S
 
       // ---- Long source: split into 2 (12-20 min) or 3 (>20 min) windows so one
       // model call never has to produce the whole 70% narration.
-      const windowCount = 1; /* SINGLE-WINDOW ONLY (windowed generation disabled) */
+      const windowCount = !sourceDurationSec ? 1 : sourceDurationSec > 1200 ? 3 : sourceDurationSec > 720 ? 2 : 1;
       const windowMode = windowCount > 1;
       const windowSplitSec = windowMode ? Math.floor((sourceDurationSec as number) / windowCount) : 0;
       const fmtTc = (sec: number) =>
@@ -928,18 +928,7 @@ ${transcript}
     }
 
     // Own API must fail fast on its own key. Fallback and key rotation belong to App API only.
-    const fallbackModels = isOwnApi
-      ? []
-      : [
-          "gemini-3.5-flash",
-          "gemini-3.1-flash",
-          "gemini-2.5-flash",
-          "gemini-flash-latest",
-          "gemini-flash-lite-latest",
-          "gemini-3.1-flash-lite",
-          "gemini-3.5-flash-lite",
-          "gemini-2.5-flash-lite",
-        ];
+    const fallbackModels = isOwnApi ? [] : ["gemini-pro-latest", "gemini-2.5-flash", "gemini-2.5-pro"];
     const shouldFallback = (status?: number) =>
       !isOwnApi && (status === 404 || status === 429 || status === 503 || status === 504);
 
@@ -1132,7 +1121,7 @@ ${transcript}
     // the accepted 65% floor, make one media-grounded full rewrite while enough wall
     // time remains. Rewriting (rather than appending after the final timecode) lets the
     // model restore important scenes skipped anywhere in the beginning/middle/end.
-    const initialWindowTotal = 1; /* SINGLE-WINDOW ONLY (windowed generation disabled) */
+    const initialWindowTotal = !sourceDurationSec ? 1 : sourceDurationSec > 1200 ? 3 : sourceDurationSec > 720 ? 2 : 1;
     if (
       sourceDurationSec &&
       initialWindowTotal === 1 &&
@@ -1210,7 +1199,7 @@ ${normalizedRawScript}`;
       if (!m) return null;
       return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
     };
-    const windowTotal = 1; /* SINGLE-WINDOW ONLY (windowed generation disabled) */
+    const windowTotal = !sourceDurationSec ? 1 : sourceDurationSec > 1200 ? 3 : sourceDurationSec > 720 ? 2 : 1;
     const isWindowMode = windowTotal > 1;
     const tc = (sec: number) =>
       `${String(Math.floor(Math.max(0, sec) / 60)).padStart(2, "0")}:${String(Math.round(Math.max(0, sec)) % 60).padStart(2, "0")}`;
