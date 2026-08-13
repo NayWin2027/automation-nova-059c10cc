@@ -27,7 +27,7 @@ function buildGenerationConfig(model: string, requestedMaxOutputTokens: number |
   // NOTE: Do NOT force thinkingBudget:0 on flash/flash-lite — it causes the model
   // to degenerate into repetitive loops ("မင်းဘာလုပ်နေတာလဲ / ဟုတ်ကဲ့...") on long
   // multimodal video inputs. Allow Gemini's default thinking budget.
-  if (model === "gemini-flash-latest") {
+  if (model === "gemini-flash-lite-latest") {
     config.thinkingConfig = { thinkingBudget: 0 };
   }
 
