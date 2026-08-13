@@ -6303,15 +6303,12 @@ const RecapVideoNVPage: React.FC = () => {
         };
         v.src = tempUrl;
       });
-      if (duration > 1800) {
+      if (duration > 600) {
         throw new Error(
-          "ဒီ app မှာ 30 မိနစ်ထက်ကျော်တဲ့ video ကို recap မလုပ်နိုင်သေးပါ။ 30 မိနစ်အောက် video ကိုရွေးပေးပါ။",
+          "Source video က ၁၀ မိနစ် (600 စက္ကန့်) ထက် ကျော်လို့ မရပါ။ ၁၀ မိနစ်အောက် video ကိုသာ ရွေးပေးပါ။",
         );
       }
       videoDurationRef.current = duration;
-      if (duration > 1320) {
-        toast.warning("Source ၂၂ မိနစ်ကျော်နေလို့ script က ရည်မှန်းချက်ထက် တိုနိုင်ပါတယ်။ ၂၀ မိနစ်အောက် အကောင်းဆုံးပါ။");
-      }
       const videoBlob = URL.createObjectURL(file);
       setVideoUrl(videoBlob);
 
