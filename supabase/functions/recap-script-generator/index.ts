@@ -1490,7 +1490,7 @@ ${lengthAdjustedScript}`;
     }
 
     // Preserve the chronology through the source ending. The old length trimmer kept
-    // paragraphs from the beginning until 70% and then stopped, which could delete the
+    // paragraphs from the beginning until 100% and then stopped, which could delete the
     // newly repaired climax/ending even though total spoken length looked correct.
     const script = lengthAdjustedScript;
     const finalWordCount = script.split(/\s+/).filter(Boolean).length;
