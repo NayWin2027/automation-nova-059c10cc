@@ -775,7 +775,7 @@ AFTER the complete narration script, output a final line containing exactly ===S
 
       // ---- Long source: split into 2 (12-20 min) or 3 (>20 min) windows so one
       // model call never has to produce the whole 70% narration.
-      const windowCount = 1 /* SINGLE-WINDOW ONLY (windowed generation disabled) */;
+      const windowCount = 1; /* SINGLE-WINDOW ONLY (windowed generation disabled) */
       const windowMode = windowCount > 1;
       const windowSplitSec = windowMode ? Math.floor((sourceDurationSec as number) / windowCount) : 0;
       const fmtTc = (sec: number) =>
@@ -930,7 +930,16 @@ ${transcript}
     // Own API must fail fast on its own key. Fallback and key rotation belong to App API only.
     const fallbackModels = isOwnApi
       ? []
-      : ["gemini-3.5-flash", "gemini-3.1-flash", "gemini-2.5-flash", "gemini-flash-latest", "gemini-flash-lite-latest"];
+      : [
+          "gemini-3.5-flash",
+          "gemini-3.1-flash",
+          "gemini-2.5-flash",
+          "gemini-flash-latest",
+          "gemini-flash-lite-latest",
+          "gemini-3.1-flash-lite",
+          "gemini-3.5-flash-lite",
+          "gemini-2.5-flash-lite",
+        ];
     const shouldFallback = (status?: number) =>
       !isOwnApi && (status === 404 || status === 429 || status === 503 || status === 504);
 
@@ -1123,7 +1132,7 @@ ${transcript}
     // the accepted 65% floor, make one media-grounded full rewrite while enough wall
     // time remains. Rewriting (rather than appending after the final timecode) lets the
     // model restore important scenes skipped anywhere in the beginning/middle/end.
-    const initialWindowTotal = 1 /* SINGLE-WINDOW ONLY (windowed generation disabled) */;
+    const initialWindowTotal = 1; /* SINGLE-WINDOW ONLY (windowed generation disabled) */
     if (
       sourceDurationSec &&
       initialWindowTotal === 1 &&
@@ -1201,7 +1210,7 @@ ${normalizedRawScript}`;
       if (!m) return null;
       return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
     };
-    const windowTotal = 1 /* SINGLE-WINDOW ONLY (windowed generation disabled) */;
+    const windowTotal = 1; /* SINGLE-WINDOW ONLY (windowed generation disabled) */
     const isWindowMode = windowTotal > 1;
     const tc = (sec: number) =>
       `${String(Math.floor(Math.max(0, sec) / 60)).padStart(2, "0")}:${String(Math.round(Math.max(0, sec)) % 60).padStart(2, "0")}`;
