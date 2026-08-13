@@ -6303,15 +6303,12 @@ const RecapVideoNVPage: React.FC = () => {
         };
         v.src = tempUrl;
       });
-      if (duration > 1800) {
+      if (duration > 600) {
         throw new Error(
-          "ဒီ app မှာ 30 မိနစ်ထက်ကျော်တဲ့ video ကို recap မလုပ်နိုင်သေးပါ။ 30 မိနစ်အောက် video ကိုရွေးပေးပါ။",
+          "Source video က ၁၀ မိနစ် (600 စက္ကန့်) ထက် ကျော်လို့ မရပါ။ ၁၀ မိနစ်အောက် video ကိုသာ ရွေးပေးပါ။",
         );
       }
       videoDurationRef.current = duration;
-      if (duration > 1320) {
-        toast.warning("Source ၂၂ မိနစ်ကျော်နေလို့ script က ရည်မှန်းချက်ထက် တိုနိုင်ပါတယ်။ ၂၀ မိနစ်အောက် အကောင်းဆုံးပါ။");
-      }
       const videoBlob = URL.createObjectURL(file);
       setVideoUrl(videoBlob);
 
@@ -6746,6 +6743,34 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
   const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      // SURGICAL: hard 10-minute (600s) source limit — no tolerance
+      const pickedDuration = await new Promise<number>((resolve) => {
+        const tempUrl = URL.createObjectURL(file);
+        const v = document.createElement("video");
+        v.preload = "metadata";
+        v.onloadedmetadata = () => {
+          const d = v.duration || 0;
+          URL.revokeObjectURL(tempUrl);
+          resolve(d);
+        };
+        v.onerror = () => {
+          URL.revokeObjectURL(tempUrl);
+          resolve(0);
+        };
+        v.src = tempUrl;
+      });
+      if (pickedDuration > 600) {
+        e.target.value = "";
+        setVideoFile(null);
+        videoFileRef.current = null;
+        setVideoUrl("");
+        setStatus("idle");
+        setProgressMsg("");
+        toast.error(
+          `Source video ${Math.floor(pickedDuration / 60)}:${String(Math.round(pickedDuration % 60)).padStart(2, "0")} ရှိပါတယ်။ ၁၀ မိနစ် (600s) ထက် ကျော်လို့ လုံးဝ မရပါ။`,
+        );
+        return;
+      }
       // SURGICAL EDIT: Only store file, do NOT auto-start pipeline
       // User must click Generate button to start
       setVideoFile(file);
