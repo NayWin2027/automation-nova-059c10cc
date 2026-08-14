@@ -1183,128 +1183,19 @@ ${normalizedRawScript}`;
       }
     }
 
-    // ---- Safe continuation / window passes ---------------------------------
-    // Long sources are generated as 2 or 3 windows; short-but-incomplete scripts get
-    // one top-up pass. Any paragraph whose timecode is not strictly greater than the
-    // last existing one is discarded, so timecodes can never corrupt AV mapping.
-    const paraTimecodeSec = (line: string): number | null => {
-      const m = line.match(/^\s*\[(\d{1,2}):(\d{2})\]/);
-      if (!m) return null;
-      return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
-    };
-    const windowTotal = !sourceDurationSec ? 1 : sourceDurationSec > 1200 ? 3 : sourceDurationSec > 720 ? 2 : 1;
-    const isWindowMode = windowTotal > 1;
-    const tc = (sec: number) =>
-      `${String(Math.floor(Math.max(0, sec) / 60)).padStart(2, "0")}:${String(Math.round(Math.max(0, sec)) % 60).padStart(2, "0")}`;
-    const stripTc = (s: string) => s.replace(/^\s*\[\d{1,2}:\d{2}\]\s*/, "").trim();
-    if (
-      sourceDurationSec &&
-      (isWindowMode || estimateSpokenSeconds(lengthAdjustedScript) < sourceDurationSec * LENGTH_MIN_RATIO) &&
-      endsAtCompleteSentence(lengthAdjustedScript) &&
-      remainingBudget() > 22000
-    ) {
-      // Pass 1 already covered window 1. Run one pass per remaining window (or a
-      // single top-up pass when the source is short but the script came out thin).
-      const passCount = isWindowMode ? windowTotal - 1 : 1;
-      let workingScript = lengthAdjustedScript;
+    // Window mode အားလုံးကို ပိတ်လိုက်ပြီး တစ်ခါတည်း အဆုံးထိ ရေးခိုင်းရန်
+      const windowMode = false;
+      const windowCount = 1;
+      
+      const fmtTc = (sec: number) =>
+        `${String(Math.floor(Math.max(0, sec) / 60)).padStart(2, "0")}:${String(Math.round(Math.max(0, sec)) % 60).padStart(2, "0")}`;
+      
+      const windowOneSec = sourceDurationSec || 0;
 
-      for (let pass = 1; pass <= passCount; pass++) {
-        const partNo = pass + 1;
-        const isLastWindow = !isWindowMode || partNo === windowTotal;
-        if (remainingBudget() < 18000) {
-          console.log(`[recap-script-generator] Skipping window pass ${partNo}: budget exhausted`);
-          break;
-        }
-        if (!endsAtCompleteSentence(workingScript)) break;
-
-        const existingParas = workingScript
-          .split(/\n{2,}/)
-          .map((p) => p.trim())
-          .filter(Boolean);
-        let lastTc = 0;
-        for (const p of existingParas) {
-          const t = paraTimecodeSec(p);
-          if (t !== null && t > lastTc) lastTc = t;
-        }
-        const boundaryStart = isWindowMode ? Math.floor((sourceDurationSec * (partNo - 1)) / windowTotal) : lastTc;
-        // Resume from the last scene actually written. Using max(lastTc, boundaryStart)
-        // silently skipped the whole gap whenever an earlier part stopped short of its
-        // planned boundary, which is exactly where important middle scenes disappeared.
-        const windowStart = isWindowMode ? lastTc : boundaryStart;
-        const windowEnd = isLastWindow ? sourceDurationSec : Math.floor((sourceDurationSec * partNo) / windowTotal);
-        if (windowEnd - windowStart < 20) break;
-        // Small overlap so the model sees the exact moment the previous part stopped on.
-        const watchFrom = Math.max(0, windowStart - 5);
-        const workingSpokenSec = estimateSpokenSeconds(workingScript);
-        const missingSec = isWindowMode
-          ? Math.round((windowEnd - windowStart) * LENGTH_TARGET_RATIO)
-          : Math.round(sourceDurationSec * LENGTH_TARGET_RATIO - workingSpokenSec);
-
-        const contPrompt = isWindowMode
-          ? (() => {
-              const tail = existingParas.slice(-3).join("\n\n");
-              const lastSentence = (
-                stripTc(existingParas[existingParas.length - 1] || "")
-                  .split(/(?<=[.!?။])\s+/)
-                  .filter(Boolean)
-                  .pop() || ""
-              ).trim();
-              const nameCounts = new Map<string, number>();
-              for (const m of workingScript.matchAll(/\b[A-Z][\p{L}'’-]{1,}\b/gu)) {
-                const w = m[0];
-                nameCounts.set(w, (nameCounts.get(w) || 0) + 1);
-              }
-              const knownNames = [...nameCounts.entries()]
-                .filter(([, c]) => c >= 2)
-                .sort((a, b) => b[1] - a[1])
-                .slice(0, 12)
-                .map(([w]) => w);
-              const namesLine = knownNames.length
-                ? `\nCHARACTERS/NAMES ALREADY INTRODUCED (use these EXACT spellings, never re-introduce them as new): ${knownNames.join(", ")}\n`
-                : "";
-              return `*** PART ${partNo} OF ${windowTotal} — COVER ONLY ${tc(windowStart)} to ${tc(windowEnd)} ***
-
-PART ${partNo} is a DIRECT CONTINUATION of PART ${partNo - 1} of the SAME recap narration. It is ONE single story, not a new recap.
-${namesLine}
-WHERE WE LEFT OFF (last lines already written — continue straight on from here):
-${tail}
-
-LAST SENTENCE ALREADY WRITTEN:
-"${lastSentence}"
-
-HANDOFF CONTRACT (most important rule):
-- Your very FIRST sentence must be the direct next action of that LAST SENTENCE — same scene, same characters, no gap.
-- Example of the required feel: if the last sentence was "Maung Maung rode his bicycle to school", your first sentence must be what happens when he ARRIVES at school (e.g. he walks straight into the classroom) — NOT a new scene, NOT a re-introduction, NOT a summary.
-- Whatever characters or actions were still in motion at the cut must be continued/resolved first.
-
-Rules:
-- Re-watch the source from ${tc(watchFrom)} so you see the exact moment we stopped on, then narrate from ${tc(windowStart)} to ${tc(windowEnd)}.
-- Write ONLY the new paragraphs. Do NOT repeat, restate or rewrite anything already written.
-- No new hook, no new opening line, no "this story is about...", no re-introduction of the premise, no summary of earlier parts.
-- Keep the exact same character names, spellings, relationships, narrator voice, tense and pronoun style.
-- Every paragraph MUST start with [MM:SS] STRICTLY LATER than [${tc(windowStart)}] and keep increasing. Nothing after [${tc(windowEnd)}].
-${
-  isLastWindow
-    ? "- This is the FINAL part: cover every remaining beat including the ENDING/climax."
-    : "- This is a MIDDLE part: do NOT write an ending or conclusion — stop mid-story on an unresolved beat."
-}
-- Same language (${lang}), same tone, same [MM:SS] format. Never [HH:MM:SS], never ranges.
-- Target about ${missingSec} seconds of spoken narration. Finish with complete sentences.
-
-ALREADY WRITTEN (do not repeat):
-${workingScript}`;
-            })()
-          : `The recap narration below is INCOMPLETE — it is about ${missingSec} seconds of speech too short and it skipped important scenes from the source.
-
-CONTINUE the script. Rules:
-- Write ONLY the new paragraphs. Do NOT repeat or rewrite anything already written.
-- Every new paragraph MUST start with a timecode [MM:SS] that is STRICTLY LATER than [${tc(lastTc)}] and must keep increasing.
-- Cover the remaining source content through to the ENDING. Include the beats that were skipped.
-- Same language (${lang}), same tone and same [MM:SS] format. Never use [HH:MM:SS] or ranges.
-- Finish with complete sentences. Add roughly ${missingSec} seconds of spoken narration.
-
-EXISTING SCRIPT:
-${workingScript}`;
+      const durationHint = sourceDurationSec
+        ? `\nSOURCE VIDEO DURATION: ${Math.floor(sourceDurationSec / 60)} minutes ${Math.round(sourceDurationSec % 60)} seconds` +
+          `\nCRITICAL: YOU MUST ANALYZE THE ENTIRE VIDEO FROM 00:00 TO THE VERY END. DO NOT STOP EARLY.`
+        : "";
 
         // Re-attach the already-uploaded media (no re-upload) so this pass can watch
         // the corresponding part of the source.
