@@ -5494,6 +5494,10 @@ const RecapVideoNVPage: React.FC = () => {
   const [videoLink, setVideoLink] = useState<string>("");
   const videoDurationRef = useRef<number>(0);
   const sourceFileUriRef = useRef<string | null>(null);
+  // Tracks which API key the source video was uploaded with.
+  // Google Files API scopes uploaded files to the uploading key, so re-using a
+  // fileUri with a different key returns 403 PERMISSION_DENIED.
+  const sourceFileUploadKeyRef = useRef<string>("");
   const videoFileRef = useRef<File | null>(null);
   const pageAudioTimestampsRef = useRef<{ index: number; start: number; end: number }[]>([]);
   const hookSegmentIdxRef = useRef<number>(-1);
