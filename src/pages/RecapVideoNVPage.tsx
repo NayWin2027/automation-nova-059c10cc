@@ -6374,6 +6374,7 @@ const RecapVideoNVPage: React.FC = () => {
       }
       if (!fileUri) throw new Error("File URI ရယူ၍ မအောင်မြင်ပါ");
       sourceFileUriRef.current = fileUri;
+      sourceFileUploadKeyRef.current = resolvedOwnKey || "__app__";
 
       setProgressMsg("🧠 AI is watching the video and writing script...");
       const {
