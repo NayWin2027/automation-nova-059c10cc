@@ -16,8 +16,8 @@ function buildGenerationConfig(model: string, requestedMaxOutputTokens: number |
   // long recaps and dropped the middle/ending beats. Give the model real room.
   const maxOutputTokens =
     model === "gemini-1.5-flash"
-      ? Math.max(requestedMaxOutputTokens || 0, 32768)
-      : Math.max(requestedMaxOutputTokens || 0, 24576);
+      ? Math.max(requestedMaxOutputTokens || 0, 80000)
+      : Math.max(requestedMaxOutputTokens || 0, 60000);
 
   const config: Record<string, unknown> = {
     temperature: 0.55,
