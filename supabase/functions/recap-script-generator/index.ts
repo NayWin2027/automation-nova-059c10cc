@@ -349,6 +349,7 @@ const nicheStyles: Record<string, string> = {
 };
 
 serve(async (req) => {
+  const requestStart = Date.now();
   const _corsBlock = handleCorsPreflightOrReject(req);
   if (_corsBlock) return _corsBlock;
 
