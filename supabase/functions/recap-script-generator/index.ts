@@ -1062,8 +1062,11 @@ ${transcript}
         const isKeyInvalid = errText.includes("API_KEY_INVALID") || errText.includes("API KEY NOT VALID");
         const isServiceDisabled = errText.includes("SERVICE_DISABLED") || errText.includes("HAS NOT BEEN USED") ||
           errText.includes("GENERATIVELANGUAGE.GOOGLEAPIS.COM");
-        const isFilePermission = errText.includes("PERMISSION_DENIED") &&
-          (errText.includes("FILES/") || errText.includes("YOU DO NOT HAVE PERMISSION"));
+        // Generic PERMISSION_DENIED / "caller does not have permission" means the uploaded
+        // file belongs to a different API key than the one generating — not a billing issue.
+        const isFilePermission = errText.includes("PERMISSION_DENIED") ||
+          errText.includes("CALLER DOES NOT HAVE PERMISSION") ||
+          errText.includes("YOU DO NOT HAVE PERMISSION");
         const isBilling = errText.includes("BILLING") || errText.includes("FREE TIER") ||
           errText.includes("QUOTA") || (!isKeyInvalid && !isServiceDisabled && !isFilePermission);
 
