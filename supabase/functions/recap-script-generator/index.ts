@@ -9,7 +9,7 @@ const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1bet
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
 // gemini-2.5-flash is no longer served to newer API keys (404 NOT_FOUND).
 // Use the rolling "latest" alias which stays available for both old and new keys.
-const MODEL = "gemini-2.5-flash"";
+const MODEL = "gemini-2.5-flash";
 
 function buildGenerationConfig(model: string, requestedMaxOutputTokens: number | null): Record<string, unknown> {
   // Burmese/CJK narration costs 2-3 tokens per syllable: an 8192 cap truncated
@@ -928,7 +928,19 @@ ${transcript}
     }
 
     // Own API must fail fast on its own key. Fallback and key rotation belong to App API only.
-    const fallbackModels = isOwnApi ? [] : ["gemini-3.1-flash", "gemini-2.5-flash", "gemini-flash-latest","gemini-3.1-flash-lite","gemini-3.5-flash-lite","gemini-2.5-flash-lite","gemini-3.6-flash","gemini-flash-latest","gemini-flash-lite-latest"];
+    const fallbackModels = isOwnApi
+      ? []
+      : [
+          "gemini-3.1-flash",
+          "gemini-2.5-flash",
+          "gemini-flash-latest",
+          "gemini-3.1-flash-lite",
+          "gemini-3.5-flash-lite",
+          "gemini-2.5-flash-lite",
+          "gemini-3.6-flash",
+          "gemini-flash-latest",
+          "gemini-flash-lite-latest",
+        ];
     const shouldFallback = (status?: number) =>
       !isOwnApi && (status === 404 || status === 429 || status === 503 || status === 504);
 
