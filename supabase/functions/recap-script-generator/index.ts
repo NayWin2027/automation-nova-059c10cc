@@ -799,7 +799,9 @@ AFTER the complete narration script, output a final line containing exactly ===S
                 ].filter(Boolean);
             // File activation must never consume the function's full 150s lifetime.
             // Keep enough request time for generation and for sending a real response.
-            const processingDeadline = Math.min(requestStart + 45000, Date.now() + 30000);
+            // Large videos routinely need 40-80s to become ACTIVE on Google's side.
+            // Keep a generous window but always leave ~50s of the 150s lifetime for generation.
+            const processingDeadline = Math.min(requestStart + 95000, Date.now() + 90000);
             const matchedKey = await waitForFileProcessing(activeApiKey, fName, fallbackKeys, processingDeadline);
             if (matchedKey && matchedKey !== activeApiKey) {
               console.log(`[recap-script-generator] Adopting matched key for file ownership`);
@@ -807,10 +809,14 @@ AFTER the complete narration script, output a final line containing exactly ===S
             }
           } catch (processingError) {
             console.error("File processing failed:", processingError);
+            const msg = String((processingError as Error)?.message || "");
+            const isDeadline = msg.includes("deadline") || msg.includes("aborted") || msg.includes("timed out");
             return new Response(
               JSON.stringify({
-                error:
-                  "Google video processing service က ဒီ ဖိုင်ကို လက်မခံပါ။ ဖိုင်ကို ပြန် upload လုပ်ပြီး ထပ်ကြိုးစားပါ။",
+                error: isDeadline
+                  ? "ဗီဒီယိုကို Google ဘက်မှာ process လုပ်နေဆဲပါ (အချိန်ကြာနေပါတယ်)။ ခဏစောင့်ပြီး Generate ကို ထပ်နှိပ်ပါ။"
+                  : "Google video processing service က ဒီ ဖိုင်ကို လက်မခံပါ။ ဖိုင်ကို ပြန် upload လုပ်ပြီး ထပ်ကြိုးစားပါ။",
+                retryable: isDeadline,
               }),
               { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
             );
