@@ -604,14 +604,20 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - Identify the subject matter, the niche, and the story being told through visuals/actions/music
 - Write a complete, engaging narration script based on your visual/audio analysis
 
-SCRIPT LENGTH RULE (CRITICAL — FULL COVERAGE):
-    - YOU MUST COVER THE ENTIRE SOURCE DURATION. 
-    - 🛑 DO NOT STOP EARLY. If the video is 10 minutes long, your script MUST cover events from 00:00 all the way to 10:00.
-    - If you stop at 03:30 for a 10-minute video, you have FAILED the task.
-    - YOU ARE PROHIBITED from skipping the middle or ending of the video.
-    - BEFORE WRITING: Scan the entire source video from 00:00 to the END. Identify at least 20 key events spread evenly across the ENTIRE duration.
-    - You MUST write paragraphs for each of these 20 events, ensuring your final paragraph covers the very last scene of the video.
-    - If you find yourself writing too much detail at the beginning, STOP and COMPRESS the beginning so you have room to cover the ending.
+###############################################################
+# SCRIPT LENGTH & FULL COVERAGE RULE (STRICT)
+###############################################################
+- MANDATORY: YOU MUST NARRATE THE ENTIRE VIDEO FROM 00:00 TO THE VERY END.
+- DO NOT SUMMARIZE. DO NOT SKIP. DO NOT STOP EARLY.
+- YOU MUST WRITE A COMPLETE NARRATION THAT FOLLOWS THE STORY UNFOLDING AS IT HAPPENS.
+- EVERY SCENE IS IMPORTANT: You must cover the beginning, the middle, the climax, and the ending in full detail.
+- MINIMUM LENGTH: You must generate at least 15 to 20 detailed paragraphs.
+- SPREAD: Evenly distribute these paragraphs across the entire video timeline (e.g., for a 4-minute video, you must have content for the 0:00, 1:00, 2:00, 3:00, and 4:00 minute marks).
+- IF YOU OMIT THE SECOND HALF OF THE VIDEO, YOUR OUTPUT IS REJECTED.
+- TOKEN MANAGEMENT: If you find yourself writing too much detail at the start, STOP and COMPRESS the beginning so you have enough space to finish the entire story.
+- FINAL PARAGRAPH: The final paragraph must have a timecode [MM:SS] that is very close to the actual end of the video.
+- THIS IS THE #1 HIGHEST PRIORITY RULE.
+###############################################################
 
 VIRAL HOOK RULE (MANDATORY — FIRST 3 SECONDS):
 - The VERY FIRST sentence MUST be a 3-second viral hook designed to stop the scroll instantly
