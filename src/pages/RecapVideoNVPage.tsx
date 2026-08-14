@@ -5816,6 +5816,18 @@ const RecapVideoNVPage: React.FC = () => {
       showSolveToFixBox("Own API mode ရွေးထားပါသည်။ Google API Key ထည့်ပေးပါ။");
       return;
     }
+    // Google Files API ties an uploaded file to the key that uploaded it.
+    // If the user switched mode/key after upload, retrying with the old fileUri
+    // returns 403 PERMISSION_DENIED — so require a fresh upload instead.
+    const currentUploadKey = resolvedOwnKey || "__app__";
+    if (sourceFileUploadKeyRef.current && sourceFileUploadKeyRef.current !== currentUploadKey) {
+      sourceFileUriRef.current = null;
+      showSolveToFixBox(
+        "API Key/Mode ပြောင်းထားပါသည်။ အရင် upload လုပ်ထားတဲ့ ဗီဒီယိုကို ဒီ Key နဲ့ ဖတ်ခွင့်မရှိပါ — ဗီဒီယိုကို ပြန်ရွေးပြီး ထပ်စလုပ်ပါ။",
+      );
+      setStatus("error");
+      return;
+    }
     activePipelineApiModeRef.current = resolvedApiMode;
     activePipelineOwnKeyRef.current = resolvedOwnKey;
     setStatus("processing");
