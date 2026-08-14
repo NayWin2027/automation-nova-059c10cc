@@ -5494,10 +5494,6 @@ const RecapVideoNVPage: React.FC = () => {
   const [videoLink, setVideoLink] = useState<string>("");
   const videoDurationRef = useRef<number>(0);
   const sourceFileUriRef = useRef<string | null>(null);
-  // Tracks which API key the source video was uploaded with.
-  // Google Files API scopes uploaded files to the uploading key, so re-using a
-  // fileUri with a different key returns 403 PERMISSION_DENIED.
-  const sourceFileUploadKeyRef = useRef<string>("");
   const videoFileRef = useRef<File | null>(null);
   const pageAudioTimestampsRef = useRef<{ index: number; start: number; end: number }[]>([]);
   const hookSegmentIdxRef = useRef<number>(-1);
@@ -5814,18 +5810,6 @@ const RecapVideoNVPage: React.FC = () => {
     const resolvedOwnKey = apiMode === "own" ? ownApiKey.trim() : "";
     if (resolvedApiMode === "own" && !resolvedOwnKey) {
       showSolveToFixBox("Own API mode ရွေးထားပါသည်။ Google API Key ထည့်ပေးပါ။");
-      return;
-    }
-    // Google Files API ties an uploaded file to the key that uploaded it.
-    // If the user switched mode/key after upload, retrying with the old fileUri
-    // returns 403 PERMISSION_DENIED — so require a fresh upload instead.
-    const currentUploadKey = resolvedOwnKey || "__app__";
-    if (sourceFileUploadKeyRef.current && sourceFileUploadKeyRef.current !== currentUploadKey) {
-      sourceFileUriRef.current = null;
-      showSolveToFixBox(
-        "API Key/Mode ပြောင်းထားပါသည်။ အရင် upload လုပ်ထားတဲ့ ဗီဒီယိုကို ဒီ Key နဲ့ ဖတ်ခွင့်မရှိပါ — ဗီဒီယိုကို ပြန်ရွေးပြီး ထပ်စလုပ်ပါ။",
-      );
-      setStatus("error");
       return;
     }
     activePipelineApiModeRef.current = resolvedApiMode;
@@ -6386,7 +6370,6 @@ const RecapVideoNVPage: React.FC = () => {
       }
       if (!fileUri) throw new Error("File URI ရယူ၍ မအောင်မြင်ပါ");
       sourceFileUriRef.current = fileUri;
-      sourceFileUploadKeyRef.current = resolvedOwnKey || "__app__";
 
       setProgressMsg("🧠 AI is watching the video and writing script...");
       const {
