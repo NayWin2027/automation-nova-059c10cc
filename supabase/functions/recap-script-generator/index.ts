@@ -1110,9 +1110,8 @@ ${transcript}
       );
     }
 
-    // Apply the 75% ceiling before any missing-middle/ending paragraphs are merged.
-    // Final trimming must never remove the repaired ending from a chronologically complete script.
-    let lengthAdjustedScript = enforcefullScriptCoverage(normalizedRawScript, sourceDurationSec);
+    // Skip premature trimming — let continuation passes complete first, trim at the end only
+    let lengthAdjustedScript = normalizedRawScript;
     const rawSpokenSec = estimateSpokenSeconds(normalizedRawScript);
     let toppedUp = false;
 
@@ -1203,9 +1202,22 @@ ${normalizedRawScript}`;
     const tc = (sec: number) =>
       `${String(Math.floor(Math.max(0, sec) / 60)).padStart(2, "0")}:${String(Math.round(Math.max(0, sec)) % 60).padStart(2, "0")}`;
     const stripTc = (s: string) => s.replace(/^\s*\[\d{1,2}:\d{2}\]\s*/, "").trim();
+    // Check if script coverage is incomplete by examining the last written timecode
+    const _preCheckParas = lengthAdjustedScript
+      .split(/\n{2,}/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+    let _preCheckLastTc = 0;
+    for (const p of _preCheckParas) {
+      const t = paraTimecodeSec(p);
+      if (t !== null && t > _preCheckLastTc) _preCheckLastTc = t;
+    }
+    const coverageIncomplete = sourceDurationSec ? _preCheckLastTc < sourceDurationSec * 0.85 : false;
     if (
       sourceDurationSec &&
-      (isWindowMode || estimateSpokenSeconds(lengthAdjustedScript) < sourceDurationSec * LENGTH_MIN_RATIO) &&
+      (isWindowMode ||
+        estimateSpokenSeconds(lengthAdjustedScript) < sourceDurationSec * LENGTH_MIN_RATIO ||
+        coverageIncomplete) &&
       endsAtCompleteSentence(lengthAdjustedScript) &&
       remainingBudget() > 22000
     ) {
@@ -1484,9 +1496,7 @@ ${lengthAdjustedScript}`;
       }
     }
 
-    // Preserve the chronology through the source ending. The old length trimmer kept
-    // paragraphs from the beginning until 100% and then stopped, which could delete the
-    // newly repaired climax/ending even though total spoken length looked correct.
+    // No trimming — full content coverage is the priority
     const script = lengthAdjustedScript;
     const finalWordCount = script.split(/\s+/).filter(Boolean).length;
     const finalSpokenSec = estimateSpokenSeconds(script);
