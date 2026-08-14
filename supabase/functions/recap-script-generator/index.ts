@@ -1057,12 +1057,55 @@ ${transcript}
         );
       }
       if (isOwnApi && response?.status === 403) {
+        const errText = (lastError || "").toUpperCase();
+        // 403 has several distinct causes — don't blanket-blame billing.
+        const isKeyInvalid = errText.includes("API_KEY_INVALID") || errText.includes("API KEY NOT VALID");
+        const isServiceDisabled = errText.includes("SERVICE_DISABLED") || errText.includes("HAS NOT BEEN USED") ||
+          errText.includes("GENERATIVELANGUAGE.GOOGLEAPIS.COM");
+        const isFilePermission = errText.includes("PERMISSION_DENIED") &&
+          (errText.includes("FILES/") || errText.includes("YOU DO NOT HAVE PERMISSION"));
+        const isBilling = errText.includes("BILLING") || errText.includes("FREE TIER") ||
+          errText.includes("QUOTA") || (!isKeyInvalid && !isServiceDisabled && !isFilePermission);
+
+        if (isKeyInvalid) {
+          return new Response(
+            JSON.stringify({
+              error: "သင့် Gemini API Key မမှန်ကန်ပါ။ Google AI Studio မှာ Key အသစ်တစ်ခု ထုတ်ပြီး ပြန်ထည့်ပါ။",
+              retryable: false,
+              keyInvalid: true,
+            }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+        if (isServiceDisabled) {
+          return new Response(
+            JSON.stringify({
+              error:
+                "သင့် Key ရဲ့ Google Cloud project မှာ Generative Language API ကို ဖွင့်မထားပါ။ Google AI Studio / Cloud Console မှာ API ကို Enable လုပ်ပေးပါ။",
+              retryable: false,
+              serviceDisabled: true,
+            }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+        if (isFilePermission) {
+          return new Response(
+            JSON.stringify({
+              error:
+                "Upload လုပ်ထားတဲ့ ဗီဒီယိုဖိုင်ကို ဒီ API Key နဲ့ ဖတ်ခွင့်မရှိပါ။ ဖိုင်ကို ပြန် upload လုပ်ပြီး ထပ်ကြိုးစားပါ။",
+              retryable: true,
+              retryAfterSeconds: 5,
+            }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
         return new Response(
           JSON.stringify({
             error:
               "သင့် Gemini API Key ကို Google AI Studio မှာ Billing မဖွင့်သေးပါ။ aistudio.google.com သို့ ဝင်ပြီး Billing/Payment ဖွင့်ပေးပါ။ (Free tier ကို Billing ဖွင့်ပြီးမှ ရနိုင်ပါသည်)",
             retryable: false,
             billingRequired: true,
+            upstreamDetail: (lastError || "").substring(0, 300),
           }),
           { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
