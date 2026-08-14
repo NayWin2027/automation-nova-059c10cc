@@ -765,27 +765,18 @@ AFTER the complete narration script, output a final line containing exactly ===S
 
       // ---- Long source: split into 2 (12-20 min) or 3 (>20 min) windows so one
       // model call never has to produce the whole 70% narration.
-      const windowCount = !sourceDurationSec ? 1 : sourceDurationSec > 1200 ? 3 : sourceDurationSec > 720 ? 2 : 1;
-      const windowMode = windowCount > 1;
-      const windowSplitSec = windowMode ? Math.floor((sourceDurationSec as number) / windowCount) : 0;
+      // Window mode အားလုံးကို အပြီးပိတ်လိုက်ပါပြီ
+      const windowMode = false;
+      const windowCount = 1;
+
       const fmtTc = (sec: number) =>
         `${String(Math.floor(Math.max(0, sec) / 60)).padStart(2, "0")}:${String(Math.round(Math.max(0, sec)) % 60).padStart(2, "0")}`;
-      const windowOneSec = windowMode ? windowSplitSec : sourceDurationSec || 0;
+
+      const windowOneSec = sourceDurationSec || 0;
 
       const durationHint = sourceDurationSec
         ? `\nSOURCE VIDEO DURATION: ${Math.floor(sourceDurationSec / 60)} minutes ${Math.round(sourceDurationSec % 60)} seconds` +
-          (windowMode
-            ? `\n\n*** PART 1 OF ${windowCount} — COVER ONLY 00:00 to ${fmtTc(windowSplitSec)} ***` +
-              `\nThis is a long source, so you are writing PART 1 only. Cover the source from 00:00 up to ${fmtTc(windowSplitSec)} and STOP there.` +
-              `\nDo NOT narrate anything after ${fmtTc(windowSplitSec)}. Do NOT write an ending, conclusion, moral or wrap-up line — the ENDING belongs ONLY to the LAST part.` +
-              `\nStop mid-story on an unresolved beat (a character still moving, a question still open) so the next part can continue the same arc seamlessly.` +
-              `\nAll timecodes must be between [00:00] and [${fmtTc(windowSplitSec)}].` +
-              `\nREQUIRED NARRATION LENGTH for PART 1 (spoken aloud): ${Math.floor((windowOneSec * LENGTH_TARGET_RATIO) / 60)} minutes ${Math.round(
-                (windowOneSec * LENGTH_TARGET_RATIO) % 60,
-              )} seconds (= 70% of this part). Shorter than this is a FAILED output.`
-            : `\nREQUIRED NARRATION LENGTH (spoken aloud): ${Math.floor((sourceDurationSec * LENGTH_TARGET_RATIO) / 60)} minutes ${Math.round(
-                (sourceDurationSec * LENGTH_TARGET_RATIO) % 60,
-              )} seconds (= 70% of the source). Shorter than this is a FAILED output.`)
+          `\nCRITICAL: YOU MUST ANALYZE THE ENTIRE VIDEO FROM 00:00 TO THE VERY END. DO NOT STOP EARLY.`
         : "";
 
       const userPrompt = `[LANGUAGE: ${lang} — ${langLabel}]
