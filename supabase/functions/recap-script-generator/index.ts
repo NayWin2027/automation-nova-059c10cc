@@ -60,10 +60,23 @@ async function uploadToGoogleFiles(
   fileBytes: Uint8Array,
   mimeType: string,
   fileName: string,
+  deadlineMs = Date.now() + 30000,
 ): Promise<string> {
   console.log("Uploading file to Google Files API...", fileName, fileBytes.length, mimeType);
 
-  const startResponse = await fetch(`${GOOGLE_FILES_API}?key=${apiKey}`, {
+  const fetchWithDeadline = async (url: string, init: RequestInit): Promise<Response> => {
+    const remainingMs = deadlineMs - Date.now();
+    if (remainingMs <= 0) throw new Error("File upload deadline reached");
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), remainingMs);
+    try {
+      return await fetch(url, { ...init, signal: controller.signal });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  };
+
+  const startResponse = await fetchWithDeadline(`${GOOGLE_FILES_API}?key=${apiKey}`, {
     method: "POST",
     headers: {
       "X-Goog-Upload-Protocol": "resumable",
@@ -84,7 +97,7 @@ async function uploadToGoogleFiles(
   const uploadUrl = startResponse.headers.get("X-Goog-Upload-URL");
   if (!uploadUrl) throw new Error("No upload URL received from Google");
 
-  const uploadResponse = await fetch(uploadUrl, {
+  const uploadResponse = await fetchWithDeadline(uploadUrl, {
     method: "POST",
     headers: {
       "X-Goog-Upload-Offset": "0",
@@ -749,7 +762,13 @@ AFTER the complete narration script, output a final line containing exactly ===S
         );
 
         try {
-          resolvedFileUri = await uploadToGoogleFiles(activeApiKey, fileBytes, resolvedMimeType, fileObj.name);
+          resolvedFileUri = await uploadToGoogleFiles(
+            activeApiKey,
+            fileBytes,
+            resolvedMimeType,
+            fileObj.name,
+            Math.min(requestStart + 40000, Date.now() + 30000),
+          );
         } catch (uploadError) {
           console.error("File upload failed:", uploadError);
           return new Response(JSON.stringify({ error: "ဖိုင် upload မအောင်မြင်ပါ။ ပြန်စမ်းပါ။" }), {
