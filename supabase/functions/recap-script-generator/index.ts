@@ -604,17 +604,14 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - Identify the subject matter, the niche, and the story being told through visuals/actions/music
 - Write a complete, engaging narration script based on your visual/audio analysis
 
-SCRIPT LENGTH RULE (CRITICAL — TRUE 70% RECAP / SUMMARY):
- - This is a RECAP, but it MUST be detailed enough to occupy the full 70% spoken-time target while covering the complete STORY ARC end-to-end.
-- HARD length target: the narration MUST take about 70% of the source duration when read aloud at a normal narration pace. This is a FIXED target, not a suggestion. Do not stop early.
-- Duration targets: 3-min source → about 2 min recap; 5-min → about 3.5 min; 6-min → about 4.2 min; 10-min → about 7 min; 30-min → about 21 min.
-- Judge length by SPOKEN TIME, not by word or character count.
- - You MUST include the ending. Cut only genuine filler and repetition; never cut a scene that introduces a decision, conflict, relationship change, reveal, consequence, climax, or resolution.
- - Keep every connected essential beat and the highest-tension/climax scenes in a tightly-linked narrative. If the draft is short, expand coverage with omitted source scenes, never with repeated wording.
-- The FINAL paragraph MUST correspond to the FINAL scene of the source video (its timecode should be near the source's ending)
-- Every important beat from beginning, middle, AND end must appear — no part of the video may be skipped or left out
-- Avoid padding/repetition, but DO write enough paragraphs to truly cover the full duration end-to-end.
-- The final sentence MUST be complete and end with sentence-ending punctuation. Never stop mid-sentence.
+SCRIPT LENGTH RULE (CRITICAL — FULL COVERAGE):
+    - YOU MUST COVER THE ENTIRE SOURCE DURATION. 
+    - 🛑 DO NOT STOP EARLY. If the video is 10 minutes long, your script MUST cover events from 00:00 all the way to 10:00.
+    - If you stop at 03:30 for a 10-minute video, you have FAILED the task.
+    - YOU ARE PROHIBITED from skipping the middle or ending of the video.
+    - BEFORE WRITING: Scan the entire source video from 00:00 to the END. Identify at least 20 key events spread evenly across the ENTIRE duration.
+    - You MUST write paragraphs for each of these 20 events, ensuring your final paragraph covers the very last scene of the video.
+    - If you find yourself writing too much detail at the beginning, STOP and COMPRESS the beginning so you have room to cover the ending.
 
 VIRAL HOOK RULE (MANDATORY — FIRST 3 SECONDS):
 - The VERY FIRST sentence MUST be a 3-second viral hook designed to stop the scroll instantly
