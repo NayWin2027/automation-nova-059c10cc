@@ -105,9 +105,34 @@ async function uploadToGoogleFiles(
   return uploadResult.file?.uri || uploadResult.file?.name;
 }
 
-async function waitForFileProcessing(apiKey: string, fileName: string, fallbackKeys: string[] = []): Promise<string> {
+async function waitForFileProcessing(
+  apiKey: string,
+  fileName: string,
+  fallbackKeys: string[] = [],
+  deadlineMs = Date.now() + 45000,
+): Promise<string> {
   const maxAttempts = 150;
   const delay = 2000;
+
+  const fetchFileState = async (key: string): Promise<Response> => {
+    const remainingMs = deadlineMs - Date.now();
+    if (remainingMs <= 0) throw new Error("File processing deadline reached");
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), Math.min(8000, remainingMs));
+    try {
+      return await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${key}`, {
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  };
+
+  const waitBeforeRetry = async () => {
+    const remainingMs = deadlineMs - Date.now();
+    if (remainingMs <= 0) throw new Error("File processing deadline reached");
+    await new Promise((resolve) => setTimeout(resolve, Math.min(delay, remainingMs)));
+  };
 
   // Try all candidate keys (the file was uploaded with ONE key in the script pool,
   // but this function may have been cold-started with a different key from the pool).
@@ -118,10 +143,11 @@ async function waitForFileProcessing(apiKey: string, fileName: string, fallbackK
   let failedStreak = 0;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (Date.now() >= deadlineMs) throw new Error("File processing deadline reached");
     if (!probed) {
       let found = false;
       for (const k of candidates) {
-        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${k}`);
+        const r = await fetchFileState(k);
         if (r.status === 404 || r.status === 403) {
           try {
             await r.body?.cancel();
@@ -141,7 +167,7 @@ async function waitForFileProcessing(apiKey: string, fileName: string, fallbackK
             failedStreak++;
             if (failedStreak >= 3) throw new Error("File processing failed");
             probed = true;
-            await new Promise((r) => setTimeout(r, delay));
+              await waitBeforeRetry();
             break;
           }
           failedStreak = 0;
@@ -155,16 +181,16 @@ async function waitForFileProcessing(apiKey: string, fileName: string, fallbackK
       probed = found;
       if (!found) {
         // None of the keys can see the file yet — it may still be appearing. Wait and retry.
-        await new Promise((r) => setTimeout(r, delay));
+        await waitBeforeRetry();
         continue;
       }
-      await new Promise((r) => setTimeout(r, delay));
+      await waitBeforeRetry();
       continue;
     }
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${activeKey}`);
+    const response = await fetchFileState(activeKey);
     if (!response.ok) {
-      await new Promise((r) => setTimeout(r, delay));
+      await waitBeforeRetry();
       continue;
     }
     const fileInfo = await response.json();
@@ -173,11 +199,11 @@ async function waitForFileProcessing(apiKey: string, fileName: string, fallbackK
     if (fileInfo.state === "FAILED") {
       failedStreak++;
       if (failedStreak >= 3) throw new Error("File processing failed");
-      await new Promise((r) => setTimeout(r, delay));
+      await waitBeforeRetry();
       continue;
     }
     failedStreak = 0;
-    await new Promise((r) => setTimeout(r, delay));
+    await waitBeforeRetry();
   }
   throw new Error("File processing timeout");
 }
@@ -752,7 +778,10 @@ AFTER the complete narration script, output a final line containing exactly ===S
                   Deno.env.get("GEMINI_API_KEY_2") || "",
                   Deno.env.get("GEMINI_API_KEY_3") || "",
                 ].filter(Boolean);
-            const matchedKey = await waitForFileProcessing(activeApiKey, fName, fallbackKeys);
+            // File activation must never consume the function's full 150s lifetime.
+            // Keep enough request time for generation and for sending a real response.
+            const processingDeadline = Math.min(requestStart + 45000, Date.now() + 30000);
+            const matchedKey = await waitForFileProcessing(activeApiKey, fName, fallbackKeys, processingDeadline);
             if (matchedKey && matchedKey !== activeApiKey) {
               console.log(`[recap-script-generator] Adopting matched key for file ownership`);
               activeApiKey = matchedKey;
