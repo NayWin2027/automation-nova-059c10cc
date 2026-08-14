@@ -349,6 +349,7 @@ const nicheStyles: Record<string, string> = {
 };
 
 serve(async (req) => {
+  const requestStart = Date.now();
   const _corsBlock = handleCorsPreflightOrReject(req);
   if (_corsBlock) return _corsBlock;
 
@@ -875,8 +876,10 @@ ${transcript}
 
     // Total wall budget must stay under Supabase's 150s idle limit.
     // Reserve ~10s for post-processing, credit deduction, and response send.
-    const WALL_BUDGET_MS = 140000;
-    const wallStart = Date.now();
+    // Measured from the START OF THE REQUEST (not after file-activation polling),
+    // otherwise upload/ACTIVE waiting time is invisible and the 150s idle limit is hit.
+    const WALL_BUDGET_MS = 132000;
+    const wallStart = requestStart;
     const remainingBudget = () => Math.max(0, WALL_BUDGET_MS - (Date.now() - wallStart));
 
     const controller = new AbortController();
