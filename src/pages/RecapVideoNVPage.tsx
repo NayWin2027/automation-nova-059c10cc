@@ -831,6 +831,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const gapStartRef = useRef<number>(0);
     const gapZoomHoldRef = useRef<number>(1);
     // Clean visual frame cache used only to mask a brief decoder gap during a hard cut.
+    const visualFrameSegmentRef = useRef<number>(-1);
     const visibleLoopFrameRef = useRef<HTMLCanvasElement | null>(null);
     const visibleLoopFrameReadyRef = useRef<boolean>(false);
     // SURGICAL EDIT: Track whether we're in active segment (true) or between segments (false)
@@ -2072,10 +2073,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           prewarmActiveRef.current = false;
           gapStartRef.current = 0;
           gapZoomHoldRef.current = 1;
-          visibleLoopSegmentRef.current = -1;
-          visibleLoopCountRef.current = 0;
-          visibleLoopLastTimeRef.current = -1;
-          visibleLoopMaskStartRef.current = 0;
+          visualFrameSegmentRef.current = -1;
           visibleLoopFrameRef.current = null;
           visibleLoopFrameReadyRef.current = false;
         } catch (_) {}
@@ -2126,10 +2124,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           prewarmActiveRef.current = false;
           gapStartRef.current = 0;
           gapZoomHoldRef.current = 1;
-          visibleLoopSegmentRef.current = -1;
-          visibleLoopCountRef.current = 0;
-          visibleLoopLastTimeRef.current = -1;
-          visibleLoopMaskStartRef.current = 0;
+          visualFrameSegmentRef.current = -1;
           visibleLoopFrameReadyRef.current = false;
         } catch (_) {}
 
@@ -2478,7 +2473,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         // Track the current visual scene only so a stale cached frame is never reused across cuts.
         const visualSegment = lastIndexRef.current;
-        if (visualSegment !== frozenFrameCycleRef.current) {
+        if (visualSegment !== visualFrameSegmentRef.current) {
+          visualFrameSegmentRef.current = visualSegment;
           visibleLoopFrameReadyRef.current = false;
         }
 
