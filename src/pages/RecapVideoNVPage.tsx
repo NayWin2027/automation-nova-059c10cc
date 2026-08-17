@@ -46,7 +46,8 @@ const DIALOGUE_METADATA_PATTERN =
 
 // SURGICAL FIX: strip every timecode shape the AI may emit ([M:SS], [HH:MM:SS], ranges)
 // so timestamps never leak into subtitles.
-const TIMECODE_STRIP_RE = /\[\s*\d{1,2}:\d{2}(?::\d{2})?(?:\s*[-–—]\s*\d{1,2}:\d{2}(?::\d{2})?)?\s*\]/g;
+const TIMECODE_STRIP_RE =
+  /\[\s*\d{1,2}:\d{2}(?::\d{2})?(?:\s*[-–—]\s*\d{1,2}:\d{2}(?::\d{2})?)?\s*\]/g;
 
 const stripDialogueMetadata = (text: string): string =>
   String(text || "")
@@ -5954,7 +5955,8 @@ const RecapVideoNVPage: React.FC = () => {
     if (rawLines.length === 0) return [];
     // SURGICAL FIX: accept [M:SS], [HH:MM:SS] and both range forms so timecodes are
     // always parsed (and removed) instead of leaking into subtitles with a 0s start.
-    const timecodeRegex = /^\[\s*(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*[-–—]\s*(\d{1,2}):(\d{2})(?::(\d{2}))?)?\s*\]\s*/;
+    const timecodeRegex =
+      /^\[\s*(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*[-–—]\s*(\d{1,2}):(\d{2})(?::(\d{2}))?)?\s*\]\s*/;
     // Accept the intended marker plus common AI variants/misspelling, in [] or {}, even
     // when Gemini puts it after a quote. The marker is metadata and must never reach subtitles/TTS.
     const dialogueCaptureRegex =
@@ -6003,10 +6005,7 @@ const RecapVideoNVPage: React.FC = () => {
           text = stripDialogueMetadata(text);
         }
         // Any stray timecode left inside the line must never reach subtitles/TTS.
-        text = text
-          .replace(TIMECODE_STRIP_RE, " ")
-          .replace(/[ \t]{2,}/g, " ")
-          .trim();
+        text = text.replace(TIMECODE_STRIP_RE, " ").replace(/[ \t]{2,}/g, " ").trim();
         return { timestamp, text, isDialogue, emotion, explicitEndSec };
       });
       // Source slot = explicit [start-end] range when the AI gave one (dialogue lock),
@@ -6311,9 +6310,7 @@ const RecapVideoNVPage: React.FC = () => {
       }
       videoDurationRef.current = duration;
       if (duration > 1320) {
-        toast.warning(
-          "Source ၂၂ မိနစ်ကျော်နေလို့ script က ရည်မှန်းချက်ထက် တိုနိုင်ပါတယ်။ ၂၀ မိနစ်အောက် အကောင်းဆုံးပါ။",
-        );
+        toast.warning("Source ၂၂ မိနစ်ကျော်နေလို့ script က ရည်မှန်းချက်ထက် တိုနိုင်ပါတယ်။ ၂၀ မိနစ်အောက် အကောင်းဆုံးပါ။");
       }
       const videoBlob = URL.createObjectURL(file);
       setVideoUrl(videoBlob);
