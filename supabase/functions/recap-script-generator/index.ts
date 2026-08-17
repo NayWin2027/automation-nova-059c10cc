@@ -917,9 +917,17 @@ ${transcript}
       );
     }
 
-    // Own API must fail fast on its own key. Fallback and key rotation belong to App API only.
+    // Own API: model-level fallback is allowed, but ONLY on the user's own key.
+    // Key rotation into the paid App pool stays App-API-only.
     const fallbackModels = isOwnApi
-      ? []
+      ? [
+          "gemini-2.5-flash",
+          "gemini-flash-latest",
+          "gemini-2.0-flash",
+          "gemini-2.5-flash-lite",
+          "gemini-flash-lite-latest",
+          "gemini-2.0-flash-lite",
+        ]
       : [
           "gemini-3.1-flash",
           "gemini-2.5-flash",
@@ -932,7 +940,7 @@ ${transcript}
           "gemini-flash-lite-latest",
         ];
     const shouldFallback = (status?: number) =>
-      !isOwnApi && (status === 404 || status === 429 || status === 503 || status === 504);
+      status === 404 || status === 400 || status === 429 || status === 503 || status === 504;
 
     for (const fallbackModel of fallbackModels) {
       // Fallback if: no response (timeout/abort/network) OR response not ok and status warrants fallback
