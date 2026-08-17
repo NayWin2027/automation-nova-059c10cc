@@ -940,7 +940,7 @@ ${transcript}
           "gemini-flash-lite-latest",
         ];
     const shouldFallback = (status?: number) =>
-      status === 404 || status === 400 || status === 429 || status === 503 || status === 504;
+      status === 404 || status === 429 || status === 503 || status === 504;
 
     for (const fallbackModel of fallbackModels) {
       // Fallback if: no response (timeout/abort/network) OR response not ok and status warrants fallback
