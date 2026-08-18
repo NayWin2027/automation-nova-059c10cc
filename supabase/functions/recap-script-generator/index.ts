@@ -612,7 +612,10 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - DO NOT SUMMARIZE. DO NOT SKIP. DO NOT STOP EARLY.
 - YOU MUST WRITE A COMPLETE NARRATION THAT FOLLOWS THE STORY UNFOLDING AS IT HAPPENS.
 - EVERY SCENE IS IMPORTANT: You must cover the beginning, the middle, the climax, and the ending in full detail.
-- MINIMUM LENGTH: You must generate at least 15 to 20 detailed paragraphs.
+- SOURCE-ONLY RULE (HIGHEST PRIORITY): Narrate ONLY what actually happens in the source. NEVER invent, imagine, guess, embellish or add scenes, dialogue, backstory, motives, emotions or events that are not clearly seen/heard in the source. If something is unclear, describe it plainly or skip it — do NOT fabricate.
+- LENGTH CEILING (HARD): The spoken narration MUST NOT be longer than the source duration. A 10-minute source must NEVER produce more than 10 minutes of narration. Shorter is acceptable; longer is REJECTED.
+- Do NOT stretch, pad, repeat or over-describe to make the script longer. Length comes from real source content only.
+- PARAGRAPH COUNT: Write as many paragraphs as the real source beats require (typically 15-20 for a full-length source). Never add filler paragraphs just to reach a count.
 - SPREAD: Evenly distribute these paragraphs across the entire video timeline (e.g., for a 4-minute video, you must have content for the 0:00, 1:00, 2:00, 3:00, and 4:00 minute marks).
 - IF YOU OMIT THE SECOND HALF OF THE VIDEO, YOUR OUTPUT IS REJECTED.
 - TOKEN MANAGEMENT: If you find yourself writing too much detail at the start, STOP and COMPRESS the beginning so you have enough space to finish the entire story.
