@@ -786,6 +786,11 @@ AFTER the complete narration script, output a final line containing exactly ===S
 
       const durationHint = sourceDurationSec
         ? `\nSOURCE VIDEO DURATION: ${Math.floor(sourceDurationSec / 60)} minutes ${Math.round(sourceDurationSec % 60)} seconds` +
+          `\nREQUIRED NARRATION LENGTH: about ${Math.floor((sourceDurationSec * LENGTH_TARGET_RATIO) / 60)} minutes ${Math.round(
+            (sourceDurationSec * LENGTH_TARGET_RATIO) % 60,
+          )} seconds when spoken (acceptable range ${Math.round((sourceDurationSec * LENGTH_MIN_RATIO) / 60)}-${Math.round(
+            (sourceDurationSec * LENGTH_MAX_RATIO) / 60,
+          )} minutes). Writing shorter than this range is REJECTED.` +
           `\nCRITICAL: YOU MUST ANALYZE THE ENTIRE VIDEO FROM 00:00 TO THE VERY END. DO NOT STOP EARLY.`
         : "";
 
