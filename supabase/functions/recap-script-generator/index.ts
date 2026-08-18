@@ -820,7 +820,7 @@ FULL COVERAGE RULE (MANDATORY):
 - Your paragraph timecodes MUST spread from near 00:00 all the way to the END of the source. The final paragraph's timecode must be close to the source's last minute.
 - Never cover the first half in detail and compress or skip the second half. The last third of the source is just as important.
 - ENDING COVERAGE (HARD RULE): the LAST 15% of the source duration MUST have its own paragraphs. The final confrontation/fight, the climax, its outcome and the closing scene must each be narrated in full detail — never compressed into one rushed sentence and never summarised away. Your last paragraph's timecode must fall inside that final 15%.
-- Never pad with repeated or restated sentences to reach the length — add MISSING scenes instead.
+- Never pad with repeated or restated sentences to reach the length — add MISSING real scenes instead, and never invent scenes that do not exist in the source.
 
 OUTPUT FORMAT:
 - Each paragraph MUST start with [MM:SS] — the source video timecode of the best matching scene
