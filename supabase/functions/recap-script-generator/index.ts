@@ -613,9 +613,9 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - YOU MUST WRITE A COMPLETE NARRATION THAT FOLLOWS THE STORY UNFOLDING AS IT HAPPENS.
 - EVERY SCENE IS IMPORTANT: You must cover the beginning, the middle, the climax, and the ending in full detail.
 - SOURCE-ONLY RULE (HIGHEST PRIORITY): Narrate ONLY what actually happens in the source. NEVER invent, imagine, guess, embellish or add scenes, dialogue, backstory, motives, emotions or events that are not clearly seen/heard in the source. If something is unclear, describe it plainly or skip it — do NOT fabricate.
-- LENGTH CEILING (HARD): The spoken narration MUST NOT be longer than the source duration. A 10-minute source must NEVER produce more than 10 minutes of narration. Shorter is acceptable; longer is REJECTED.
-- Do NOT stretch, pad, repeat or over-describe to make the script longer. Length comes from real source content only.
-- PARAGRAPH COUNT: Write as many paragraphs as the real source beats require (typically 15-20 for a full-length source). Never add filler paragraphs just to reach a count.
+- LENGTH TARGET (HARD, BOTH DIRECTIONS): The spoken narration MUST be about 70% of the source duration — never below 65% and never above 75%. A 10-minute source must produce roughly 7 minutes of narration. Too SHORT is rejected exactly like too LONG.
+- Do NOT stretch, pad, repeat or over-describe to reach the target. Reach it by covering MORE real source beats in full detail — never by filler or invention.
+- PARAGRAPH COUNT: Write as many paragraphs as the real source beats require (minimum 15-20 for a full-length source). Never add filler paragraphs, but never drop real beats either.
 - SPREAD: Evenly distribute these paragraphs across the entire video timeline (e.g., for a 4-minute video, you must have content for the 0:00, 1:00, 2:00, 3:00, and 4:00 minute marks).
 - IF YOU OMIT THE SECOND HALF OF THE VIDEO, YOUR OUTPUT IS REJECTED.
 - TOKEN MANAGEMENT: If you find yourself writing too much detail at the start, STOP and COMPRESS the beginning so you have enough space to finish the entire story.
@@ -786,6 +786,11 @@ AFTER the complete narration script, output a final line containing exactly ===S
 
       const durationHint = sourceDurationSec
         ? `\nSOURCE VIDEO DURATION: ${Math.floor(sourceDurationSec / 60)} minutes ${Math.round(sourceDurationSec % 60)} seconds` +
+          `\nREQUIRED NARRATION LENGTH: about ${Math.floor((sourceDurationSec * LENGTH_TARGET_RATIO) / 60)} minutes ${Math.round(
+            (sourceDurationSec * LENGTH_TARGET_RATIO) % 60,
+          )} seconds when spoken (acceptable range ${Math.round((sourceDurationSec * LENGTH_MIN_RATIO) / 60)}-${Math.round(
+            (sourceDurationSec * LENGTH_MAX_RATIO) / 60,
+          )} minutes). Writing shorter than this range is REJECTED.` +
           `\nCRITICAL: YOU MUST ANALYZE THE ENTIRE VIDEO FROM 00:00 TO THE VERY END. DO NOT STOP EARLY.`
         : "";
 
