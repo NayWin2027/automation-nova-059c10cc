@@ -664,36 +664,19 @@ ${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYL
 ###############################################################
 ${
   seriesContext
-    ? `PREVIOUS PARTS MEMORY (STORY BIBLE) — treat as absolute truth:
+    ? `PREVIOUS PARTS MEMORY (STORY BIBLE) — reference for name and fact consistency only, NOT a source of new content:
 ${seriesContext}
 
 CONTINUITY RULES:
-- This series may be ANY niche (movie/drama, documentary, news, tutorial, tech, health, business, sport, vlog, history, true-crime, etc.). Read SERIES TYPE / SERIES FOCUS above and continue in that same lane.
-- Use EXACTLY the same names, terms, numbers and facts as the memory above (characters, key entities, key facts). Never rename or re-describe a known name/term with a new generic label, and never contradict a stated fact.
-- Do NOT repeat anything listed under TOPICS ALREADY COVERED. Move the series forward.
-- Where relevant, pay off or advance the OPEN THREADS.
+- The SOURCE VIDEO attached to this request is your ONLY source of content. Watch it from start to finish and narrate ONLY what you see and hear in it.
+- Use the story bible ONLY to keep character names, spellings, and established facts consistent. Do NOT use it to generate new scenes or events.
+- Do NOT repeat anything listed under TOPICS ALREADY COVERED.
 - Begin the script with a short, natural 1-2 sentence bridge in ${lang} that reconnects to where the previous part stopped. It MUST still start with a [MM:SS] timecode like every other paragraph, and it must feel organic — not a formal summary.
   * If SERIES TYPE is a story/drama/film: a "previously" story bridge.
   * Otherwise: a knowledge bridge like "last part we covered X — now we continue with Y", in natural ${lang}.
 - Do NOT re-tell the whole previous part. Only the minimum needed to reconnect.
-- End this part with a hook that pulls the audience into the next part: a cliffhanger for stories, an open curiosity question for non-fiction.
-- Keep the same narration tone and style as a continuing series.
-
-ANTI-HALLUCINATION (ABSOLUTE — OVERRIDES EVERYTHING ABOVE):
-- You may ONLY narrate events, dialogue, actions, and facts that ACTUALLY APPEAR in THIS PART's source video.
-- NEVER invent, predict, or fabricate scenes, dialogue, outcomes, or events that are not visible/audible in the source.
-- If the source video ends at a certain point, your script MUST end there too. Do NOT write beyond the source video's actual content.
-- The "hook toward next part" must be based on an unresolved moment that IS in the source — never a fabricated teaser.
-- Your script's last timecode MUST correspond to a real moment in the source video, never exceed the source duration.
-- If OPEN THREADS from previous parts are NOT addressed in THIS source video, do NOT resolve or advance them — leave them open.`
-    : `This is PART 1 of a series. Write it as a self-contained recap, but end with a hook toward the next part.
-
-ANTI-HALLUCINATION (ABSOLUTE):
-- You may ONLY narrate events, dialogue, actions, and facts that ACTUALLY APPEAR in the source video.
-- NEVER invent or fabricate scenes, dialogue, or outcomes not in the source.
-- If the source ends at a certain point, your script MUST end there. Do NOT write beyond the source video's actual content.
-- Your script's last timecode MUST correspond to a real moment in the source, never exceed the source duration.
-- The "hook toward next part" must reference an unresolved moment that IS in the source — never a fabricated teaser.`
+- Keep the same narration tone and style as a continuing series.`
+    : `This is PART 1 of a series. Write it as a self-contained recap. Your ONLY source of content is the attached source video — narrate ONLY what you see and hear in it.`
 }
 ${
   emitStoryBible
