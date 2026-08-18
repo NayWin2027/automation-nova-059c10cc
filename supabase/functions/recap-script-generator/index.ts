@@ -612,7 +612,10 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - DO NOT SUMMARIZE. DO NOT SKIP. DO NOT STOP EARLY.
 - YOU MUST WRITE A COMPLETE NARRATION THAT FOLLOWS THE STORY UNFOLDING AS IT HAPPENS.
 - EVERY SCENE IS IMPORTANT: You must cover the beginning, the middle, the climax, and the ending in full detail.
-- MINIMUM LENGTH: You must generate at least 15 to 20 detailed paragraphs.
+- SOURCE-ONLY RULE (HIGHEST PRIORITY): Narrate ONLY what actually happens in the source. NEVER invent, imagine, guess, embellish or add scenes, dialogue, backstory, motives, emotions or events that are not clearly seen/heard in the source. If something is unclear, describe it plainly or skip it — do NOT fabricate.
+- LENGTH CEILING (HARD): The spoken narration MUST NOT be longer than the source duration. A 10-minute source must NEVER produce more than 10 minutes of narration. Shorter is acceptable; longer is REJECTED.
+- Do NOT stretch, pad, repeat or over-describe to make the script longer. Length comes from real source content only.
+- PARAGRAPH COUNT: Write as many paragraphs as the real source beats require (typically 15-20 for a full-length source). Never add filler paragraphs just to reach a count.
 - SPREAD: Evenly distribute these paragraphs across the entire video timeline (e.g., for a 4-minute video, you must have content for the 0:00, 1:00, 2:00, 3:00, and 4:00 minute marks).
 - IF YOU OMIT THE SECOND HALF OF THE VIDEO, YOUR OUTPUT IS REJECTED.
 - TOKEN MANAGEMENT: If you find yourself writing too much detail at the start, STOP and COMPRESS the beginning so you have enough space to finish the entire story.
@@ -797,7 +800,7 @@ Below is a source video/audio file. Your job is to:
 3. If there is NO spoken dialogue, analyze visual elements, actions, music, settings, body language
 4. Identify ALL key moments, especially dramatic/shocking ones (confrontations, revelations, emotional scenes, physical actions like kisses/fights/tears)
 5. Write a complete professional ${nicheLabel} narration script that covers only the essential story beats and script must be fullcoverage on source video
-6. A viewer reading your script aloud MUST finish in about 100% of the original source duration (see REQUIRED NARRATION LENGTH above) and must cover the full source from beginning to end.
+6. A viewer reading your script aloud MUST finish WITHIN the original source duration — never longer than the source. Cover the full source from beginning to end, but do not exceed its length.
 7. Hook the audience immediately
 8. Use vivid, engaging ${lang} appropriate for "${nicheLabel}" content
 9. Be perfectly paced for voice narration
@@ -817,7 +820,7 @@ FULL COVERAGE RULE (MANDATORY):
 - Your paragraph timecodes MUST spread from near 00:00 all the way to the END of the source. The final paragraph's timecode must be close to the source's last minute.
 - Never cover the first half in detail and compress or skip the second half. The last third of the source is just as important.
 - ENDING COVERAGE (HARD RULE): the LAST 15% of the source duration MUST have its own paragraphs. The final confrontation/fight, the climax, its outcome and the closing scene must each be narrated in full detail — never compressed into one rushed sentence and never summarised away. Your last paragraph's timecode must fall inside that final 15%.
-- Never pad with repeated or restated sentences to reach the length — add MISSING scenes instead.
+- Never pad with repeated or restated sentences to reach the length — add MISSING real scenes instead, and never invent scenes that do not exist in the source.
 
 OUTPUT FORMAT:
 - Each paragraph MUST start with [MM:SS] — the source video timecode of the best matching scene
