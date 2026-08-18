@@ -9,13 +9,13 @@ const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1bet
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
 // gemini-1.5-flash / gemini-2.5-flash are no longer served (404 NOT_FOUND).
 // Use the rolling "latest" alias which stays available for both old and new keys.
-const MODEL = "gemini-flash-latest";
+const MODEL = "gemini-3.1-flash-lite";
 
 function buildGenerationConfig(model: string, requestedMaxOutputTokens: number | null): Record<string, unknown> {
   // Burmese/CJK narration costs 2-3 tokens per syllable: an 8192 cap truncated
   // long recaps and dropped the middle/ending beats. Give the model real room.
   const maxOutputTokens =
-    model === "gemini-flash-latest"
+    model === "gemini-3.1-flash-lite"
       ? Math.max(requestedMaxOutputTokens || 0, 80000)
       : Math.max(requestedMaxOutputTokens || 0, 60000);
 
@@ -612,10 +612,7 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - DO NOT SUMMARIZE. DO NOT SKIP. DO NOT STOP EARLY.
 - YOU MUST WRITE A COMPLETE NARRATION THAT FOLLOWS THE STORY UNFOLDING AS IT HAPPENS.
 - EVERY SCENE IS IMPORTANT: You must cover the beginning, the middle, the climax, and the ending in full detail.
-- SOURCE-ONLY RULE (HIGHEST PRIORITY): Narrate ONLY what actually happens in the source. NEVER invent, imagine, guess, embellish or add scenes, dialogue, backstory, motives, emotions or events that are not clearly seen/heard in the source. If something is unclear, describe it plainly or skip it — do NOT fabricate.
-- LENGTH TARGET (HARD, BOTH DIRECTIONS): The spoken narration MUST be about 70% of the source duration — never below 65% and never above 75%. A 10-minute source must produce roughly 7 minutes of narration. Too SHORT is rejected exactly like too LONG.
-- Do NOT stretch, pad, repeat or over-describe to reach the target. Reach it by covering MORE real source beats in full detail — never by filler or invention.
-- PARAGRAPH COUNT: Write as many paragraphs as the real source beats require (minimum 15-20 for a full-length source). Never add filler paragraphs, but never drop real beats either.
+- MINIMUM LENGTH: You must generate at least 15 to 20 detailed paragraphs.
 - SPREAD: Evenly distribute these paragraphs across the entire video timeline (e.g., for a 4-minute video, you must have content for the 0:00, 1:00, 2:00, 3:00, and 4:00 minute marks).
 - IF YOU OMIT THE SECOND HALF OF THE VIDEO, YOUR OUTPUT IS REJECTED.
 - TOKEN MANAGEMENT: If you find yourself writing too much detail at the start, STOP and COMPRESS the beginning so you have enough space to finish the entire story.
@@ -786,11 +783,6 @@ AFTER the complete narration script, output a final line containing exactly ===S
 
       const durationHint = sourceDurationSec
         ? `\nSOURCE VIDEO DURATION: ${Math.floor(sourceDurationSec / 60)} minutes ${Math.round(sourceDurationSec % 60)} seconds` +
-          `\nREQUIRED NARRATION LENGTH: about ${Math.floor((sourceDurationSec * LENGTH_TARGET_RATIO) / 60)} minutes ${Math.round(
-            (sourceDurationSec * LENGTH_TARGET_RATIO) % 60,
-          )} seconds when spoken (acceptable range ${Math.round((sourceDurationSec * LENGTH_MIN_RATIO) / 60)}-${Math.round(
-            (sourceDurationSec * LENGTH_MAX_RATIO) / 60,
-          )} minutes). Writing shorter than this range is REJECTED.` +
           `\nCRITICAL: YOU MUST ANALYZE THE ENTIRE VIDEO FROM 00:00 TO THE VERY END. DO NOT STOP EARLY.`
         : "";
 
@@ -805,7 +797,7 @@ Below is a source video/audio file. Your job is to:
 3. If there is NO spoken dialogue, analyze visual elements, actions, music, settings, body language
 4. Identify ALL key moments, especially dramatic/shocking ones (confrontations, revelations, emotional scenes, physical actions like kisses/fights/tears)
 5. Write a complete professional ${nicheLabel} narration script that covers only the essential story beats and script must be fullcoverage on source video
-6. A viewer reading your script aloud MUST finish WITHIN the original source duration — never longer than the source. Cover the full source from beginning to end, but do not exceed its length.
+6. A viewer reading your script aloud MUST finish in about 100% of the original source duration (see REQUIRED NARRATION LENGTH above) and must cover the full source from beginning to end.
 7. Hook the audience immediately
 8. Use vivid, engaging ${lang} appropriate for "${nicheLabel}" content
 9. Be perfectly paced for voice narration
@@ -825,7 +817,7 @@ FULL COVERAGE RULE (MANDATORY):
 - Your paragraph timecodes MUST spread from near 00:00 all the way to the END of the source. The final paragraph's timecode must be close to the source's last minute.
 - Never cover the first half in detail and compress or skip the second half. The last third of the source is just as important.
 - ENDING COVERAGE (HARD RULE): the LAST 15% of the source duration MUST have its own paragraphs. The final confrontation/fight, the climax, its outcome and the closing scene must each be narrated in full detail — never compressed into one rushed sentence and never summarised away. Your last paragraph's timecode must fall inside that final 15%.
-- Never pad with repeated or restated sentences to reach the length — add MISSING real scenes instead, and never invent scenes that do not exist in the source.
+- Never pad with repeated or restated sentences to reach the length — add MISSING scenes instead.
 
 OUTPUT FORMAT:
 - Each paragraph MUST start with [MM:SS] — the source video timecode of the best matching scene
@@ -949,7 +941,8 @@ ${transcript}
           "gemini-flash-latest",
           "gemini-flash-lite-latest",
         ];
-    const shouldFallback = (status?: number) => status === 404 || status === 429 || status === 503 || status === 504;
+    const shouldFallback = (status?: number) =>
+      !isOwnApi && (status === 404 || status === 429 || status === 503 || status === 504);
 
     for (const fallbackModel of fallbackModels) {
       // Fallback if: no response (timeout/abort/network) OR response not ok and status warrants fallback
