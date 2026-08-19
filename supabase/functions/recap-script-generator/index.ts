@@ -9,18 +9,18 @@ const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1bet
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
 // gemini-1.5-flash / gemini-2.5-flash are no longer served (404 NOT_FOUND).
 // Use the rolling "latest" alias which stays available for both old and new keys.
-const MODEL = "gemini-flash-latest";
+const MODEL = "gemini-3.5-flash-lite";
 
 function buildGenerationConfig(model: string, requestedMaxOutputTokens: number | null): Record<string, unknown> {
   // Burmese/CJK narration costs 2-3 tokens per syllable: an 8192 cap truncated
   // long recaps and dropped the middle/ending beats. Give the model real room.
   const maxOutputTokens =
-    model === "gemini-flash-latest"
+    model === "gemini-3.5-flash-lite"
       ? Math.max(requestedMaxOutputTokens || 0, 80000)
       : Math.max(requestedMaxOutputTokens || 0, 60000);
 
   const config: Record<string, unknown> = {
-    temperature: 0.55,
+    temperature: 0.1,
     maxOutputTokens,
   };
 
@@ -664,21 +664,19 @@ ${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYL
 ###############################################################
 ${
   seriesContext
-    ? `PREVIOUS PARTS MEMORY (STORY BIBLE) — treat as absolute truth:
+    ? `PREVIOUS PARTS MEMORY (STORY BIBLE) — reference for name and fact consistency only, NOT a source of new content:
 ${seriesContext}
 
 CONTINUITY RULES:
-- This series may be ANY niche (movie/drama, documentary, news, tutorial, tech, health, business, sport, vlog, history, true-crime, etc.). Read SERIES TYPE / SERIES FOCUS above and continue in that same lane.
-- Use EXACTLY the same names, terms, numbers and facts as the memory above (characters, key entities, key facts). Never rename or re-describe a known name/term with a new generic label, and never contradict a stated fact.
-- Do NOT repeat anything listed under TOPICS ALREADY COVERED. Move the series forward.
-- Where relevant, pay off or advance the OPEN THREADS.
+- The SOURCE VIDEO attached to this request is your ONLY source of content. Watch it from start to finish and narrate ONLY what you see and hear in it.
+- Use the story bible ONLY to keep character names, spellings, and established facts consistent. Do NOT use it to generate new scenes or events.
+- Do NOT repeat anything listed under TOPICS ALREADY COVERED.
 - Begin the script with a short, natural 1-2 sentence bridge in ${lang} that reconnects to where the previous part stopped. It MUST still start with a [MM:SS] timecode like every other paragraph, and it must feel organic — not a formal summary.
   * If SERIES TYPE is a story/drama/film: a "previously" story bridge.
   * Otherwise: a knowledge bridge like "last part we covered X — now we continue with Y", in natural ${lang}.
 - Do NOT re-tell the whole previous part. Only the minimum needed to reconnect.
-- End this part with a hook that pulls the audience into the next part: a cliffhanger for stories, an open curiosity question for non-fiction.
 - Keep the same narration tone and style as a continuing series.`
-    : `This is PART 1 of a series. Write it as a self-contained recap, but end with a hook toward the next part.`
+    : `This is PART 1 of a series. Write it as a self-contained recap. Your ONLY source of content is the attached source video — narrate ONLY what you see and hear in it.`
 }
 ${
   emitStoryBible
@@ -917,17 +915,27 @@ ${transcript}
       );
     }
 
-    // Own API must fail fast on its own key. Fallback and key rotation belong to App API only.
+    // Own API: model-level fallback is allowed, but ONLY on the user's own key.
+    // Key rotation into the paid App pool stays App-API-only.
     const fallbackModels = isOwnApi
-      ? []
+      ? [
+          "gemini-2.5-flash",
+          "gemini-flash-lite-latest",
+          "gemini-flash-latest",
+          "gemini-2.5-flash-lite",
+          "gemini-3.5-flash-lite",
+          "gemini-3.1-flash-lite",
+          "gemini-3.7-flash",
+          "gemini-3.6-flash",
+          "gemini-3.5-flash",
+          "gemini-3.1-flash",
+        ]
       : [
+          "gemini-3.7-flash",
+          "gemini-3.6-flash",
+          "gemini-3.5-flash",
           "gemini-3.1-flash",
           "gemini-2.5-flash",
-          "gemini-flash-latest",
-          "gemini-3.1-flash-lite",
-          "gemini-3.5-flash-lite",
-          "gemini-2.5-flash-lite",
-          "gemini-3.6-flash",
           "gemini-flash-latest",
           "gemini-flash-lite-latest",
         ];
