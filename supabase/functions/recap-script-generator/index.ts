@@ -20,7 +20,7 @@ function buildGenerationConfig(model: string, requestedMaxOutputTokens: number |
       : Math.max(requestedMaxOutputTokens || 0, 60000);
 
   const config: Record<string, unknown> = {
-    temperature: 0.1,
+    temperature: 0.3,
     maxOutputTokens,
   };
 
@@ -567,6 +567,8 @@ ABSOLUTE RULES:
 4. The script must be READY TO READ as narration (no stage directions, no brackets, no formatting marks, no timestamps)
 5. Fully embody the "${nicheLabel}" niche style described above
 6. ${targetLanguageLock}
+7. ZERO HALLUCINATION POLICY: Write ONLY what is visibly or audibly present. DO NOT invent facts. 
+8. CRITICAL LENGTH RULE: To maintain correct audio-visual sync, DO NOT write short or robotic sentences. You MUST write highly detailed, rich, and descriptive sentences about the REAL visible actions, emotions, and settings. Keep the word count naturally full so the voiceover matches the scene length perfectly.
 
 CRITICAL - DIALOGUE TRANSLATION RULE (MOST IMPORTANT):
 - If characters or people in the video/audio SPEAK any dialogue — in ANY language (English, Thai, Korean, Chinese, Japanese, etc.) — you MUST translate and include what they actually said
