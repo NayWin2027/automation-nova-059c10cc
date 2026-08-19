@@ -533,7 +533,7 @@ ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
       BURMESE: "မြန်မာ (Burmese)",
     };
     const langLabel = langNativeMap[lang] || lang;
-    const targetLanguageLock = `TARGET LANGUAGE LOCK: Output narration language is ${lang} / ${langLabel}. The source video's spoken language is only INPUT; translate ALL dialogue, signs, captions, and story details into ${langLabel}. Never copy the source language into the final script. If the source is Chinese but target is Burmese, write Burmese only. If target is English/Thai/Korean/Japanese/Hindi/etc., write only that selected target language.`;
+    const targetLanguageLock = `TARGET LANGUAGE LOCK: The target output language is strictly ${langLabel}. The source video might be in Chinese or another language, but you MUST translate EVERYTHING (including all character dialogues, signs, and story details) directly into modern, conversational ${langLabel}. NEVER output the original source language. NEVER mix languages in a single sentence.`;
 
     const systemPrompt = `You are a world-class professional scriptwriter. You write premium narration scripts at Netflix/BBC/HBO broadcast standard.
 
