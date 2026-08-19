@@ -1508,6 +1508,29 @@ ${lengthAdjustedScript}`;
       }
     }
 
+    // Hard source boundary: discard every complete paragraph whose source timecode
+    // is beyond the attached video's real duration. This is a final safety net for
+    // all modes, including Series Mode, and does not alter any in-range paragraph.
+    if (sourceDurationSec) {
+      const beforeBoundaryFilter = lengthAdjustedScript;
+      const boundarySafeParas = beforeBoundaryFilter
+        .split(/\n{2,}/)
+        .map((p) => p.trim())
+        .filter(Boolean)
+        .filter((p) => {
+          const timecodeSec = paraTimecodeSec(p);
+          return timecodeSec === null || timecodeSec <= sourceDurationSec;
+        });
+      lengthAdjustedScript = boundarySafeParas.join("\n\n").trim();
+      const removedCount =
+        beforeBoundaryFilter.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean).length - boundarySafeParas.length;
+      if (removedCount > 0) {
+        console.warn(
+          `[recap-script-generator] Source boundary filter removed ${removedCount} paragraph(s) after ${Math.round(sourceDurationSec)}s`,
+        );
+      }
+    }
+
     // Series outputs are accepted only when their final source timecode is aligned
     // with the attached media ending. This prevents story-bible context from extending
     // the narration beyond the real source or stopping before its final scene.
