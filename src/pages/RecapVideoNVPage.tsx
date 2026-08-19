@@ -5950,8 +5950,8 @@ const RecapVideoNVPage: React.FC = () => {
   };
 
   const scriptToSegments = (scriptText: string, videoDuration: number): RecapSegment[] => {
-    const rawLines = scriptText.split("\n").filter((p) => p.trim().length > 0);
-    if (rawLines.length === 0) return [];
+    const paragraphs = scriptText.split("\n").filter((p) => p.trim().length > 0);
+    if (paragraphs.length === 0) return [];
     // SURGICAL FIX: accept [M:SS], [HH:MM:SS] and both range forms so timecodes are
     // always parsed (and removed) instead of leaking into subtitles with a 0s start.
     const timecodeRegex = /^\[\s*(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*[-–—]\s*(\d{1,2}):(\d{2})(?::(\d{2}))?)?\s*\]\s*/;
@@ -5959,22 +5959,7 @@ const RecapVideoNVPage: React.FC = () => {
     // when Gemini puts it after a quote. The marker is metadata and must never reach subtitles/TTS.
     const dialogueCaptureRegex =
       /(?:\[|\{|\(|［|｛|（)\s*DIALOG(?:UE|UAGE)(?:\s*:\s*([A-Za-z _-]+))?\s*(?:\]|\}|\)|］|｝|）)/i;
-    const hasTimecodes = rawLines.some((p) => timecodeRegex.test(p.trim()));
-    // Gemini can visually wrap one timestamped paragraph across multiple lines.
-    // A continuation line is still the same scene; treating it as a new 00:00 segment
-    // makes the hard-cut engine jump back to the hook/source start and breaks AV sync.
-    const paragraphs = hasTimecodes
-      ? rawLines.reduce<string[]>((merged, line) => {
-          const trimmed = line.trim();
-          if (timecodeRegex.test(trimmed) || merged.length === 0) {
-            merged.push(trimmed);
-          } else {
-            const previousIndex = merged.length - 1;
-            merged[previousIndex] = `${merged[previousIndex]} ${trimmed}`;
-          }
-          return merged;
-        }, [])
-      : rawLines;
+    const hasTimecodes = paragraphs.some((p) => timecodeRegex.test(p.trim()));
     if (hasTimecodes) {
       const parsed = paragraphs.map((rawText) => {
         const trimmed = rawText.trim();
