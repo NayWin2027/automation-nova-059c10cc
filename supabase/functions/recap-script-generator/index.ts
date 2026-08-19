@@ -671,10 +671,10 @@ CONTINUITY RULES:
 - The SOURCE VIDEO attached to this request is your ONLY source of content. Watch it from start to finish and narrate ONLY what you see and hear in it.
 - Use the story bible ONLY to keep character names, spellings, and established facts consistent. Do NOT use it to generate new scenes or events.
 - Do NOT repeat anything listed under TOPICS ALREADY COVERED.
-- Begin the script with a short, natural 1-2 sentence bridge in ${lang} that reconnects to where the previous part stopped. It MUST still start with a [MM:SS] timecode like every other paragraph, and it must feel organic — not a formal summary.
-  * If SERIES TYPE is a story/drama/film: a "previously" story bridge.
-  * Otherwise: a knowledge bridge like "last part we covered X — now we continue with Y", in natural ${lang}.
-- Do NOT re-tell the whole previous part. Only the minimum needed to reconnect.
+- NEVER write a bridge, "previously" recap, transition, continuation, scene, dialogue, action, motive, ending, or prediction unless it is visibly shown or audibly stated in THIS attached source video.
+- Start directly with the first real event in THIS source. The previous-part memory must never contribute narration content.
+- Treat the attached source's ending as the absolute story boundary. Never continue an open thread beyond what this source actually shows or says.
+- The final narration paragraph MUST describe only the source's actual final scene and its [MM:SS] must be within 2 seconds of the attached source's real ending. Never output a timecode beyond the source duration.
 - Keep the same narration tone and style as a continuing series.`
     : `This is PART 1 of a series. Write it as a self-contained recap. Your ONLY source of content is the attached source video — narrate ONLY what you see and hear in it.`
 }
@@ -1372,7 +1372,7 @@ ${workingScript}`;
               .filter(Boolean)) {
               const t = paraTimecodeSec(p);
               if (t === null || t <= cursor) continue;
-              if (sourceDurationSec && t > sourceDurationSec + 5) continue;
+               if (sourceDurationSec && t > sourceDurationSec + (seriesContext || emitStoryBible ? 2 : 5)) continue;
               accepted.push(p);
               cursor = t;
             }
@@ -1428,7 +1428,7 @@ ${workingScript}`;
         const t = paraTimecodeSec(p);
         if (t !== null && t > lastTc) lastTc = t;
       }
-      const endThreshold = sourceDurationSec * 0.88;
+      const endThreshold = seriesContext || emitStoryBible ? Math.max(0, sourceDurationSec - 2) : sourceDurationSec * 0.88;
       if (lastTc > 0 && lastTc < endThreshold && sourceDurationSec - lastTc >= 20) {
         const tail = tailParas.slice(-2).join("\n\n");
         const endPrompt = `*** ENDING COVERAGE PASS — COVER ONLY ${tc(lastTc)} to ${tc(sourceDurationSec)} ***
@@ -1442,8 +1442,9 @@ Rules:
 - Re-watch the source from ${tc(Math.max(0, lastTc - 5))} to the very end, then narrate everything that happens after [${tc(lastTc)}] in full detail.
 - Write ONLY the new paragraphs. Do NOT repeat, restate or rewrite anything already written. No new hook, no re-introduction, no summary of earlier parts.
 - Every paragraph MUST start with [MM:SS] STRICTLY LATER than [${tc(lastTc)}] and keep increasing. Nothing after [${tc(sourceDurationSec)}].
+- SOURCE-ONLY: write only events visibly shown or audibly stated between those source timecodes. Never invent a continuation, dialogue, action, motive, resolution, or future event.
 - The final fight/climax must get its own paragraphs — never compressed into one sentence.
-- The LAST paragraph must correspond to the source's final scene and end the story properly.
+- The LAST paragraph must correspond to the source's actual final scene, and its timecode MUST be within 2 seconds of [${tc(sourceDurationSec)}]. Stop exactly where the source stops, even if a plot thread remains unresolved.
 - Same language (${lang}), same tone, same narrator voice and same [MM:SS] format. Never [HH:MM:SS], never ranges.
 - Finish with a complete sentence.
 
@@ -1476,7 +1477,7 @@ ${lengthAdjustedScript}`;
               .filter(Boolean)) {
               const t = paraTimecodeSec(p);
               if (t === null || t <= cursor) continue;
-              if (t > sourceDurationSec + 5) continue;
+               if (t > sourceDurationSec + (seriesContext || emitStoryBible ? 2 : 5)) continue;
               acceptedEnd.push(p);
               cursor = t;
             }
@@ -1504,6 +1505,38 @@ ${lengthAdjustedScript}`;
         } finally {
           clearTimeout(endTimeoutId);
         }
+      }
+    }
+
+    // Series outputs are accepted only when their final source timecode is aligned
+    // with the attached media ending. This prevents story-bible context from extending
+    // the narration beyond the real source or stopping before its final scene.
+    if (sourceDurationSec && (seriesContext || emitStoryBible)) {
+      const seriesParas = lengthAdjustedScript
+        .split(/\n{2,}/)
+        .map((p) => p.trim())
+        .filter(Boolean);
+      let finalSeriesTc = 0;
+      for (const p of seriesParas) {
+        const t = paraTimecodeSec(p);
+        if (t !== null && t > finalSeriesTc) finalSeriesTc = t;
+      }
+      const endDriftSec = Math.abs(finalSeriesTc - sourceDurationSec);
+      if (finalSeriesTc > sourceDurationSec + 2 || endDriftSec > 2) {
+        console.error(
+          `[recap-script-generator] Series source-boundary validation failed: lastTc=${finalSeriesTc}s sourceEnd=${Math.round(
+            sourceDurationSec,
+          )}s drift=${endDriftSec.toFixed(1)}s`,
+        );
+        return new Response(
+          JSON.stringify({
+            error: "Series script ရဲ့ အဆုံး timecode က source video အဆုံးနဲ့ မကိုက်သေးပါ။ Credit မဖြတ်ဘဲ ပြန် Generate လုပ်ပါမည်။",
+            retryable: true,
+            sourceBoundaryMismatch: true,
+            retryAfterSeconds: 3,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
       }
     }
 
