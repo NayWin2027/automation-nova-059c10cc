@@ -664,19 +664,21 @@ ${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYL
 ###############################################################
 ${
   seriesContext
-    ? `PREVIOUS PARTS MEMORY (STORY BIBLE) — reference for name and fact consistency only, NOT a source of new content:
+    ? `PREVIOUS PARTS MEMORY (STORY BIBLE) — treat as absolute truth:
 ${seriesContext}
 
 CONTINUITY RULES:
-- The SOURCE VIDEO attached to this request is your ONLY source of content. Watch it from start to finish and narrate ONLY what you see and hear in it.
-- Use the story bible ONLY to keep character names, spellings, and established facts consistent. Do NOT use it to generate new scenes or events.
-- Do NOT repeat anything listed under TOPICS ALREADY COVERED.
-- NEVER write a bridge, "previously" recap, transition, continuation, scene, dialogue, action, motive, ending, or prediction unless it is visibly shown or audibly stated in THIS attached source video.
-- Start directly with the first real event in THIS source. The previous-part memory must never contribute narration content.
-- Treat the attached source's ending as the absolute story boundary. Never continue an open thread beyond what this source actually shows or says.
-- The final narration paragraph MUST describe only the source's actual final scene and its [MM:SS] must be within 2 seconds of the attached source's real ending. Never output a timecode beyond the source duration.
+- This series may be ANY niche (movie/drama, documentary, news, tutorial, tech, health, business, sport, vlog, history, true-crime, etc.). Read SERIES TYPE / SERIES FOCUS above and continue in that same lane.
+- Use EXACTLY the same names, terms, numbers and facts as the memory above (characters, key entities, key facts). Never rename or re-describe a known name/term with a new generic label, and never contradict a stated fact.
+- Do NOT repeat anything listed under TOPICS ALREADY COVERED. Move the series forward.
+- Where relevant, pay off or advance the OPEN THREADS.
+- Begin the script with a short, natural 1-2 sentence bridge in ${lang} that reconnects to where the previous part stopped. It MUST still start with a [MM:SS] timecode like every other paragraph, and it must feel organic — not a formal summary.
+  * If SERIES TYPE is a story/drama/film: a "previously" story bridge.
+  * Otherwise: a knowledge bridge like "last part we covered X — now we continue with Y", in natural ${lang}.
+- Do NOT re-tell the whole previous part. Only the minimum needed to reconnect.
+- End this part with a hook that pulls the audience into the next part: a cliffhanger for stories, an open curiosity question for non-fiction.
 - Keep the same narration tone and style as a continuing series.`
-    : `This is PART 1 of a series. Write it as a self-contained recap. Your ONLY source of content is the attached source video — narrate ONLY what you see and hear in it.`
+    : `This is PART 1 of a series. Write it as a self-contained recap, but end with a hook toward the next part.`
 }
 ${
   emitStoryBible
@@ -915,27 +917,17 @@ ${transcript}
       );
     }
 
-    // Own API: model-level fallback is allowed, but ONLY on the user's own key.
-    // Key rotation into the paid App pool stays App-API-only.
+    // Own API must fail fast on its own key. Fallback and key rotation belong to App API only.
     const fallbackModels = isOwnApi
-      ? [
-          "gemini-2.5-flash",
-          "gemini-flash-lite-latest",
-          "gemini-flash-latest",
-          "gemini-2.5-flash-lite",
-          "gemini-3.5-flash-lite",
-          "gemini-3.1-flash-lite",
-          "gemini-3.7-flash",
-          "gemini-3.6-flash",
-          "gemini-3.5-flash",
-          "gemini-3.1-flash",
-        ]
+      ? []
       : [
-          "gemini-3.7-flash",
-          "gemini-3.6-flash",
-          "gemini-3.5-flash",
           "gemini-3.1-flash",
           "gemini-2.5-flash",
+          "gemini-flash-latest",
+          "gemini-3.1-flash-lite",
+          "gemini-3.5-flash-lite",
+          "gemini-2.5-flash-lite",
+          "gemini-3.6-flash",
           "gemini-flash-latest",
           "gemini-flash-lite-latest",
         ];
@@ -1372,7 +1364,7 @@ ${workingScript}`;
               .filter(Boolean)) {
               const t = paraTimecodeSec(p);
               if (t === null || t <= cursor) continue;
-               if (sourceDurationSec && t > sourceDurationSec + (seriesContext || emitStoryBible ? 2 : 5)) continue;
+              if (sourceDurationSec && t > sourceDurationSec + 5) continue;
               accepted.push(p);
               cursor = t;
             }
@@ -1428,7 +1420,7 @@ ${workingScript}`;
         const t = paraTimecodeSec(p);
         if (t !== null && t > lastTc) lastTc = t;
       }
-      const endThreshold = seriesContext || emitStoryBible ? Math.max(0, sourceDurationSec - 2) : sourceDurationSec * 0.88;
+      const endThreshold = sourceDurationSec * 0.88;
       if (lastTc > 0 && lastTc < endThreshold && sourceDurationSec - lastTc >= 20) {
         const tail = tailParas.slice(-2).join("\n\n");
         const endPrompt = `*** ENDING COVERAGE PASS — COVER ONLY ${tc(lastTc)} to ${tc(sourceDurationSec)} ***
@@ -1442,9 +1434,8 @@ Rules:
 - Re-watch the source from ${tc(Math.max(0, lastTc - 5))} to the very end, then narrate everything that happens after [${tc(lastTc)}] in full detail.
 - Write ONLY the new paragraphs. Do NOT repeat, restate or rewrite anything already written. No new hook, no re-introduction, no summary of earlier parts.
 - Every paragraph MUST start with [MM:SS] STRICTLY LATER than [${tc(lastTc)}] and keep increasing. Nothing after [${tc(sourceDurationSec)}].
-- SOURCE-ONLY: write only events visibly shown or audibly stated between those source timecodes. Never invent a continuation, dialogue, action, motive, resolution, or future event.
 - The final fight/climax must get its own paragraphs — never compressed into one sentence.
-- The LAST paragraph must correspond to the source's actual final scene, and its timecode MUST be within 2 seconds of [${tc(sourceDurationSec)}]. Stop exactly where the source stops, even if a plot thread remains unresolved.
+- The LAST paragraph must correspond to the source's final scene and end the story properly.
 - Same language (${lang}), same tone, same narrator voice and same [MM:SS] format. Never [HH:MM:SS], never ranges.
 - Finish with a complete sentence.
 
@@ -1477,7 +1468,7 @@ ${lengthAdjustedScript}`;
               .filter(Boolean)) {
               const t = paraTimecodeSec(p);
               if (t === null || t <= cursor) continue;
-               if (t > sourceDurationSec + (seriesContext || emitStoryBible ? 2 : 5)) continue;
+              if (t > sourceDurationSec + 5) continue;
               acceptedEnd.push(p);
               cursor = t;
             }
@@ -1505,61 +1496,6 @@ ${lengthAdjustedScript}`;
         } finally {
           clearTimeout(endTimeoutId);
         }
-      }
-    }
-
-    // Hard source boundary: discard every complete paragraph whose source timecode
-    // is beyond the attached video's real duration. This is a final safety net for
-    // all modes, including Series Mode, and does not alter any in-range paragraph.
-    if (sourceDurationSec) {
-      const beforeBoundaryFilter = lengthAdjustedScript;
-      const boundarySafeParas = beforeBoundaryFilter
-        .split(/\n{2,}/)
-        .map((p) => p.trim())
-        .filter(Boolean)
-        .filter((p) => {
-          const timecodeSec = paraTimecodeSec(p);
-          return timecodeSec === null || timecodeSec <= sourceDurationSec;
-        });
-      lengthAdjustedScript = boundarySafeParas.join("\n\n").trim();
-      const removedCount =
-        beforeBoundaryFilter.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean).length - boundarySafeParas.length;
-      if (removedCount > 0) {
-        console.warn(
-          `[recap-script-generator] Source boundary filter removed ${removedCount} paragraph(s) after ${Math.round(sourceDurationSec)}s`,
-        );
-      }
-    }
-
-    // Series outputs are accepted only when their final source timecode is aligned
-    // with the attached media ending. This prevents story-bible context from extending
-    // the narration beyond the real source or stopping before its final scene.
-    if (sourceDurationSec && (seriesContext || emitStoryBible)) {
-      const seriesParas = lengthAdjustedScript
-        .split(/\n{2,}/)
-        .map((p) => p.trim())
-        .filter(Boolean);
-      let finalSeriesTc = 0;
-      for (const p of seriesParas) {
-        const t = paraTimecodeSec(p);
-        if (t !== null && t > finalSeriesTc) finalSeriesTc = t;
-      }
-      const endDriftSec = Math.abs(finalSeriesTc - sourceDurationSec);
-      if (finalSeriesTc > sourceDurationSec + 2 || endDriftSec > 2) {
-        console.error(
-          `[recap-script-generator] Series source-boundary validation failed: lastTc=${finalSeriesTc}s sourceEnd=${Math.round(
-            sourceDurationSec,
-          )}s drift=${endDriftSec.toFixed(1)}s`,
-        );
-        return new Response(
-          JSON.stringify({
-            error: "Series script ရဲ့ အဆုံး timecode က source video အဆုံးနဲ့ မကိုက်သေးပါ။ Credit မဖြတ်ဘဲ ပြန် Generate လုပ်ပါမည်။",
-            retryable: true,
-            sourceBoundaryMismatch: true,
-            retryAfterSeconds: 3,
-          }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
       }
     }
 
