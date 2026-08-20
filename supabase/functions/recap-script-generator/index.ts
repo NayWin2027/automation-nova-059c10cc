@@ -500,8 +500,8 @@ DIALOGUE COMPLETENESS (mandatory for ${narrationStyle} mode):
 - EVERY spoken line in the source must appear in the script as a real translated [DIALOGUE:EMOTION] line. Do NOT sample or pick "only the important ones".
 - It is FORBIDDEN to replace a spoken line with a description of it. BAD: "သူက ဒေါသတကြီး ပြောလိုက်တယ်" — GOOD: the actual translated words the character said.
 - For back-and-forth exchanges, write EACH speaker's line as its own separate paragraph with its own timecode range and its own emotion tag. Never merge two speakers into one paragraph.
-- Dialogue has priority over narration. Total script length does NOT change: to make room for the full dialogue, cut narrator sentences down to short connective lines only.
-- Narrator paragraphs exist to bridge, set context, and explain what dialogue cannot — keep them short but ALWAYS keep the story understandable. A viewer who never saw the source must follow the plot from start to finish; never sacrifice story coherence for brevity.
+- Balance dialogue with narration: dialogue is the star (~80%), but narrator/action lines (~20%) are ESSENTIAL for story flow and professional quality.
+- Narrator paragraphs exist to bridge scenes, describe actions, establish character roles and relationships, and explain what dialogue alone cannot. A viewer who never saw the source must follow the plot from start to finish; never sacrifice story coherence for brevity.
 
 ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
 - In moments with no speech, the narrator line must state the CONCRETE physical action with a precise verb: what was picked up, swung, kicked, stomped, thrown, grabbed, pushed. Example style: "စက်ဘီးကို ဘေ့စ်ဘောတုတ်နဲ့ ရိုက်ချလိုက်တယ်၊ ပြီးတော့ ခြေနဲ့ တက်နင်းလိုက်တယ်".
@@ -517,7 +517,11 @@ ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
 - Keep ALL the real dialogue (this is the backbone), but the script must NOT read like a bare dialogue transcript.
 - MAXIMUM 2-3 DIALOGUES RULE: You must NEVER write more than 2 or 3 consecutive [DIALOGUE] lines without inserting a [MM:SS] Narrator line.
 - CONTINUOUS CONVERSATION RULE: Even during a continuous back-and-forth conversation with no silent gaps, you MUST pause the dialogue after every 2-3 speaker turns and insert a 1-sentence narrator line describing their face expressions, body language, or the emotional tension of the argument.
-- NARRATOR'S ROLE (PLOT BRIDGES & ACTION - 10%): Keep narrator context very brief (about 10% of the content). Insert just 1 or 2 short, punchy sentences between dialogue scenes to bridge the plot (explain the reveal, character motives, connections between events) alongside any key actions.
+- NARRATOR'S ROLE (PLOT BRIDGES, ACTION & RELATIONSHIPS - 20%): Narrator lines are NOT optional filler — they are essential story glue. Insert narrator paragraphs to:
+  * Describe WHO the characters are and their RELATIONSHIP to each other (e.g. husband-wife, boss-employee, childhood friends) — especially on first appearance.
+  * Bridge between scenes: explain where, when, why, and what changed.
+  * Describe physical actions, fights, chases, embraces — concrete verbs, not summaries.
+  * Show face/body reactions: tears, trembling, jaw clenching, stepping back.
 - STORY-CONNECTION REQUIREMENT: The narrator lines must make the PLOT understandable on their own — who did what to whom, where, and why it matters right now. A viewer who never saw the source must follow the story from the script alone.
 - If two consecutive dialogue blocks come from different scenes, different speakers' situations, or after a time jump, you MUST place a connective narrator/action line between them.
 - Never invent facts in these narrator lines: describe only actions, expressions and relationships that are visible or audible in the source.
