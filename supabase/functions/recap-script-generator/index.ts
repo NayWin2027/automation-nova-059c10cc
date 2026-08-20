@@ -511,6 +511,21 @@ ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
 - Goal: the viewer feels pity, anger, tension, or satisfaction as it happens — because they hear the real words and see the described reaction, not a summary.`
         : "";
 
+    const viralBalanceBlock =
+      narrationStyle === "VIRAL"
+        ? `\n\nVIRAL MODE BALANCE (mandatory — dialogue-heavy, but NEVER dialogue-only):
+- Keep ALL the real dialogue (this stays the backbone), but the script must NOT read like a bare dialogue transcript.
+- Roughly 70-80% dialogue lines, 20-30% short narrator lines. Never output long runs of dialogue with zero narrator lines.
+- Insert ONE short narrator line (1-2 sentences max) whenever any of these happen: scene/location/time changes, a new character appears, a fight/chase/physical action occurs, or an off-screen fact is needed for the plot to make sense.
+- Those narrator lines must carry the CONCRETE physical action and the character's visible reaction, so a viewer who never saw the source still follows the whole plot.
+- Narrator lines are connective glue: short, punchy, no summarising of dialogue that was already spoken.
+
+DIALOGUE TIMECODE PRECISION (mandatory):
+- The [MM:SS] you write for a dialogue paragraph must be the EXACT second the speaker's first syllable is heard — never an earlier cue, reaction shot, or rounded-down value.
+- If unsure between two seconds, pick the LATER one (the frame where the mouth is already moving). Writing an early timecode makes the voice-over start before the picture.
+- Timecodes must strictly increase down the script; never repeat or go backwards.`
+        : "";
+
     console.log(`[recap-script-generator] Language: ${lang}, Niche: ${nicheLabel}, isOwnApi: ${isOwnApi}`);
 
     // Map language name to a clear, unambiguous native label for the AI
@@ -646,7 +661,7 @@ STRUCTURE:
 - Climax: The single most shocking/dramatic moment at peak intensity
 - Resolution: Short, punchy ending that leaves viewers wanting more
 
-${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYLE/LENGTH DETAILS ABOVE WHEN CONFLICTING):\n${callerInstructionsBlock}\n` : ""}${dialogueTimingLockBlock}
+${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYLE/LENGTH DETAILS ABOVE WHEN CONFLICTING):\n${callerInstructionsBlock}\n` : ""}${dialogueTimingLockBlock}${viralBalanceBlock}
 
 ###############################################################
 # FINAL ENFORCEMENT: YOUR ENTIRE OUTPUT MUST BE IN ${lang}.
