@@ -513,15 +513,29 @@ ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
 
     const viralBalanceBlock =
       narrationStyle === "VIRAL"
-        ? `\n\nVIRAL MODE BALANCE (mandatory — dialogue-heavy, but NEVER dialogue-only):
-- Keep ALL the real dialogue (this stays the backbone), but the script must NOT read like a bare dialogue transcript.
-- Roughly 70-80% dialogue lines, 20-30% short narrator lines. Never output long runs of dialogue with zero narrator lines.
-- Insert ONE short narrator line (1-2 sentences max) whenever any of these happen: scene/location/time changes, a new character appears, a fight/chase/physical action occurs, or an off-screen fact is needed for the plot to make sense.
-- Those narrator lines must carry the CONCRETE physical action and the character's visible reaction, so a viewer who never saw the source still follows the whole plot.
-- Narrator lines are connective glue: short, punchy, no summarising of dialogue that was already spoken.
-- STORY-CONNECTION REQUIREMENT: the narrator lines must make the PLOT understandable on their own — who did what to whom, where, and why it matters right now. A viewer who never saw the source must follow the story from the script alone.
-- If two consecutive dialogue blocks come from different scenes, different speakers' situations, or after a time jump, you MUST place a connective narrator/action line between them.
-- Never invent facts in these narrator lines: describe only actions, expressions and relationships that are visible or audible in the source.
+ MANDATORY NARRATOR-DIALOGUE RHYTHM (CRITICAL STRICT RULE):
+- STRICT PROHIBITION: Generating dialogue-only scripts is FORBIDDEN. Outputting a long wall of pure dialogue without narration is completely INVALID.
+- MAXIMUM 2-3 DIALOGUES RULE: You must NEVER write more than 2 or 3 consecutive [DIALOGUE] lines without inserting a [MM:SS] Narrator line (1-2 sentences of plot context, character motives, or physical action).
+- REQUIRED INTERLEAVING PATTERN: You MUST strictly alternate between narration and dialogue like this:
+  [00:10] Narrator describes the setting, plot context, or what the characters are doing...
+  [00:15] [DIALOGUE:ANGRY] First character speaks...
+  [00:18] [DIALOGUE:SHOCKED] Second character replies...
+  [00:22] Narrator explains the reaction, the hidden motive, or why this matters to the plot...
+  [00:26] [DIALOGUE:CALM] Next character speaks...
+
+NARRATOR'S ROLE (PLOT BRIDGES & ACTION - 10%):
+- Do NOT output ONLY dialogue. The narrator MUST provide crucial story connections (plot context, character motives, relationships) and key actions so the audience easily understands WHY things are happening.
+- Insert 1 or 2 short, punchy sentences between dialogue scenes to bridge the plot (e.g., explain a sudden reveal, connection between events, or emotional tension) alongside any important visual actions.
+- A viewer who has NEVER seen the source video MUST follow and understand the entire story arc from start to finish through these smart connective lines combined with the dialogue.
+
+ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
+- In moments with no speech, the narrator line must state the CONCRETE physical action with a precise verb: what was picked up, swung, kicked, stomped, thrown, grabbed, pushed. Example style: "စက်ဘီးကို ဘေ့စ်ဘောတုတ်နဲ့ ရိုက်ချလိုက်တယ်၊ ပြီးတော့ ခြေနဲ့ တက်နင်းလိုက်တယ်".
+- Never replace an action with a vague summary like "ဒေါသထွက်သွားတယ်" or "အခြေအနေ ဆိုးသွားတယ်".
+- Add the character's FACE and BODY reaction where it is visible: eyes widening, hands shaking, jaw clenching, tears welling, stepping back, head dropping.
+- Keep each action/expression line SHORT (1-2 sentences). They must never crowd out dialogue.
+- TONE & VOCABULARY: Use modern, trendy internet slang,modern trending words, popular pop-culture lingo, and highly engaging humorous expressions naturally (e.g., if \${lang} is BURMESE, use modern daily spoken Burmese, NOT formal/literary Myanmar text). 
+- Goal: the viewer feels pity, anger, tension, or satisfaction as it happens — because they hear the real words and see the described reaction, not a summary.`
+        : "";
 
 DIALOGUE TIMECODE PRECISION (mandatory):
 - The [MM:SS] you write for a dialogue paragraph must be the EXACT second the speaker's first syllable is heard — never an earlier cue, reaction shot, or rounded-down value.
