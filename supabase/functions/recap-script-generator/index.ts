@@ -519,6 +519,9 @@ ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
 - Insert ONE short narrator line (1-2 sentences max) whenever any of these happen: scene/location/time changes, a new character appears, a fight/chase/physical action occurs, or an off-screen fact is needed for the plot to make sense.
 - Those narrator lines must carry the CONCRETE physical action and the character's visible reaction, so a viewer who never saw the source still follows the whole plot.
 - Narrator lines are connective glue: short, punchy, no summarising of dialogue that was already spoken.
+- STORY-CONNECTION REQUIREMENT: the narrator lines must make the PLOT understandable on their own — who did what to whom, where, and why it matters right now. A viewer who never saw the source must follow the story from the script alone.
+- If two consecutive dialogue blocks come from different scenes, different speakers' situations, or after a time jump, you MUST place a connective narrator/action line between them.
+- Never invent facts in these narrator lines: describe only actions, expressions and relationships that are visible or audible in the source.
 
 DIALOGUE TIMECODE PRECISION (mandatory):
 - The [MM:SS] you write for a dialogue paragraph must be the EXACT second the speaker's first syllable is heard — never an earlier cue, reaction shot, or rounded-down value.
