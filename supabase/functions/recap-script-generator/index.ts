@@ -661,7 +661,7 @@ STRUCTURE:
 - Climax: The single most shocking/dramatic moment at peak intensity
 - Resolution: Short, punchy ending that leaves viewers wanting more
 
-${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYLE/LENGTH DETAILS ABOVE WHEN CONFLICTING):\n${callerInstructionsBlock}\n` : ""}${dialogueTimingLockBlock}
+${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYLE/LENGTH DETAILS ABOVE WHEN CONFLICTING):\n${callerInstructionsBlock}\n` : ""}${dialogueTimingLockBlock}${viralBalanceBlock}
 
 ###############################################################
 # FINAL ENFORCEMENT: YOUR ENTIRE OUTPUT MUST BE IN ${lang}.
