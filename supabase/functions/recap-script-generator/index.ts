@@ -511,40 +511,6 @@ ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
 - Goal: the viewer feels pity, anger, tension, or satisfaction as it happens — because they hear the real words and see the described reaction, not a summary.`
         : "";
 
-    const viralBalanceBlock =
-      narrationStyle === "VIRAL"
- ? `\n\nVIRAL MODE BALANCE (mandatory — dialogue-heavy, but NEVER dialogue-only):
-- Keep ALL the real dialogue (this is the backbone), but the script must NOT read like a bare dialogue transcript.
-- MAXIMUM 2-3 DIALOGUES RULE: You must NEVER write more than 2 or 3 consecutive [DIALOGUE] lines without inserting a [MM:SS] Narrator line.
-- CONTINUOUS CONVERSATION RULE: Even during a continuous back-and-forth conversation with no silent gaps, you MUST pause the dialogue after every 2-3 speaker turns and insert a 1-sentence narrator line describing their face expressions, body language, or the emotional tension of the argument.
-- NARRATOR'S ROLE (PLOT BRIDGES & ACTION - 10%): Keep narrator context very brief (about 10% of the content). Insert just 1 or 2 short, punchy sentences between dialogue scenes to bridge the plot (explain the reveal, character motives, connections between events) alongside any key actions.
-- STORY-CONNECTION REQUIREMENT: The narrator lines must make the PLOT understandable on their own — who did what to whom, where, and why it matters right now. A viewer who never saw the source must follow the story from the script alone.
-- If two consecutive dialogue blocks come from different scenes, different speakers' situations, or after a time jump, you MUST place a connective narrator/action line between them.
-- Never invent facts in these narrator lines: describe only actions, expressions and relationships that are visible or audible in the source.
-- NATIVE SCRIPT TRANSLITERATION (TTS FRIENDLY): NEVER leave foreign words, brand names, or English words in the Latin (A-Z) alphabet. You MUST transliterate and spell them out phonetically using ONLY the native alphabet of \${langLabel} (e.g. if \${lang} is BURMESE, write "Facebook" as "ဖေ့စ်ဘွတ်", NOT "Facebook").
-- TONE & VOCABULARY: Use modern, trendy internet slang, popular pop-culture lingo, and highly engaging humorous expressions naturally (e.g., if \${lang} is BURMESE, use modern daily spoken Burmese, NOT formal/literary Myanmar text).`
-        : "";
-
-NARRATOR'S ROLE (PLOT BRIDGES & ACTION - 10%):
-- Do NOT output ONLY dialogue. The narrator MUST provide crucial story connections (plot context, character motives, relationships) and key actions so the audience easily understands WHY things are happening.
-- Insert 1 or 2 short, punchy sentences between dialogue scenes to bridge the plot (e.g., explain a sudden reveal, connection between events, or emotional tension) alongside any important visual actions.
-- A viewer who has NEVER seen the source video MUST follow and understand the entire story arc from start to finish through these smart connective lines combined with the dialogue.
-
-ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
-- In moments with no speech, the narrator line must state the CONCRETE physical action with a precise verb: what was picked up, swung, kicked, stomped, thrown, grabbed, pushed. Example style: "စက်ဘီးကို ဘေ့စ်ဘောတုတ်နဲ့ ရိုက်ချလိုက်တယ်၊ ပြီးတော့ ခြေနဲ့ တက်နင်းလိုက်တယ်".
-- Never replace an action with a vague summary like "ဒေါသထွက်သွားတယ်" or "အခြေအနေ ဆိုးသွားတယ်".
-- Add the character's FACE and BODY reaction where it is visible: eyes widening, hands shaking, jaw clenching, tears welling, stepping back, head dropping.
-- Keep each action/expression line SHORT (1-2 sentences). They must never crowd out dialogue.
-- TONE & VOCABULARY: Use modern, trendy internet slang,modern trending words, popular pop-culture lingo, and highly engaging humorous expressions naturally (e.g., if \${lang} is BURMESE, use modern daily spoken Burmese, NOT formal/literary Myanmar text). 
-- Goal: the viewer feels pity, anger, tension, or satisfaction as it happens — because they hear the real words and see the described reaction, not a summary.`
-        : "";
-
-DIALOGUE TIMECODE PRECISION (mandatory):
-- The [MM:SS] you write for a dialogue paragraph must be the EXACT second the speaker's first syllable is heard — never an earlier cue, reaction shot, or rounded-down value.
-- If unsure between two seconds, pick the LATER one (the frame where the mouth is already moving). Writing an early timecode makes the voice-over start before the picture.
-- Timecodes must strictly increase down the script; never repeat or go backwards.`
-        : "";
-
     console.log(`[recap-script-generator] Language: ${lang}, Niche: ${nicheLabel}, isOwnApi: ${isOwnApi}`);
 
     // Map language name to a clear, unambiguous native label for the AI
