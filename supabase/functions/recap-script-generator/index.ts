@@ -20,7 +20,7 @@ function buildGenerationConfig(model: string, requestedMaxOutputTokens: number |
       : Math.max(requestedMaxOutputTokens || 0, 60000);
 
   const config: Record<string, unknown> = {
-    temperature: 0.55,
+    temperature: 0.35,
     maxOutputTokens,
   };
 
