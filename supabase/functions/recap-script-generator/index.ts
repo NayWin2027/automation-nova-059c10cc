@@ -513,15 +513,17 @@ ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
 
     const viralBalanceBlock =
       narrationStyle === "VIRAL"
- MANDATORY NARRATOR-DIALOGUE RHYTHM (CRITICAL STRICT RULE):
-- STRICT PROHIBITION: Generating dialogue-only scripts is FORBIDDEN. Outputting a long wall of pure dialogue without narration is completely INVALID.
-- MAXIMUM 2-3 DIALOGUES RULE: You must NEVER write more than 2 or 3 consecutive [DIALOGUE] lines without inserting a [MM:SS] Narrator line (1-2 sentences of plot context, character motives, or physical action).
-- REQUIRED INTERLEAVING PATTERN: You MUST strictly alternate between narration and dialogue like this:
-  [00:10] Narrator describes the setting, plot context, or what the characters are doing...
-  [00:15] [DIALOGUE:ANGRY] First character speaks...
-  [00:18] [DIALOGUE:SHOCKED] Second character replies...
-  [00:22] Narrator explains the reaction, the hidden motive, or why this matters to the plot...
-  [00:26] [DIALOGUE:CALM] Next character speaks...
+ ? `\n\nVIRAL MODE BALANCE (mandatory — dialogue-heavy, but NEVER dialogue-only):
+- Keep ALL the real dialogue (this is the backbone), but the script must NOT read like a bare dialogue transcript.
+- MAXIMUM 2-3 DIALOGUES RULE: You must NEVER write more than 2 or 3 consecutive [DIALOGUE] lines without inserting a [MM:SS] Narrator line.
+- CONTINUOUS CONVERSATION RULE: Even during a continuous back-and-forth conversation with no silent gaps, you MUST pause the dialogue after every 2-3 speaker turns and insert a 1-sentence narrator line describing their face expressions, body language, or the emotional tension of the argument.
+- NARRATOR'S ROLE (PLOT BRIDGES & ACTION - 10%): Keep narrator context very brief (about 10% of the content). Insert just 1 or 2 short, punchy sentences between dialogue scenes to bridge the plot (explain the reveal, character motives, connections between events) alongside any key actions.
+- STORY-CONNECTION REQUIREMENT: The narrator lines must make the PLOT understandable on their own — who did what to whom, where, and why it matters right now. A viewer who never saw the source must follow the story from the script alone.
+- If two consecutive dialogue blocks come from different scenes, different speakers' situations, or after a time jump, you MUST place a connective narrator/action line between them.
+- Never invent facts in these narrator lines: describe only actions, expressions and relationships that are visible or audible in the source.
+- NATIVE SCRIPT TRANSLITERATION (TTS FRIENDLY): NEVER leave foreign words, brand names, or English words in the Latin (A-Z) alphabet. You MUST transliterate and spell them out phonetically using ONLY the native alphabet of \${langLabel} (e.g. if \${lang} is BURMESE, write "Facebook" as "ဖေ့စ်ဘွတ်", NOT "Facebook").
+- TONE & VOCABULARY: Use modern, trendy internet slang, popular pop-culture lingo, and highly engaging humorous expressions naturally (e.g., if \${lang} is BURMESE, use modern daily spoken Burmese, NOT formal/literary Myanmar text).`
+        : "";
 
 NARRATOR'S ROLE (PLOT BRIDGES & ACTION - 10%):
 - Do NOT output ONLY dialogue. The narrator MUST provide crucial story connections (plot context, character motives, relationships) and key actions so the audience easily understands WHY things are happening.
