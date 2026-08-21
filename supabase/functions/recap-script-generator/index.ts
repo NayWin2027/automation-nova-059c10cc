@@ -525,9 +525,15 @@ ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
 - STORY-CONNECTION REQUIREMENT: The narrator lines must make the PLOT understandable on their own — who did what to whom, where, and why it matters right now. A viewer who never saw the source must follow the story from the script alone.
 - If two consecutive dialogue blocks come from different scenes, different speakers' situations, or after a time jump, you MUST place a connective narrator/action line between them.
 - Never invent facts in these narrator lines: describe only actions, expressions and relationships that are visible or audible in the source.
-- NATIVE SCRIPT TRANSLITERATION (TTS FRIENDLY): NEVER leave foreign words, brand names, or English words in the Latin (A-Z) alphabet. You MUST transliterate and spell them out phonetically using ONLY the native alphabet of ${langLabel} (e.g. if ${lang} is BURMESE, write "Facebook" as "ဖေ့စ်ဘွတ်", NOT "Facebook").
-- TONE & VOCABULARY: Use modern, trendy internet slang, popular pop-culture lingo, and highly engaging humorous expressions naturally (e.g., if ${lang} is BURMESE, use modern daily spoken Burmese, NOT formal/literary Myanmar text).`
+- NATIVE SCRIPT TRANSLITERATION (TTS FRIENDLY): NEVER leave foreign words, brand names, or English words in the Latin (A-Z) alphabet. You MUST transliterate and spell them out phonetically using ONLY the native alphabet of \${langLabel} (e.g. if \${lang} is BURMESE, write "Facebook" as "ဖေ့စ်ဘွတ်", NOT "Facebook").
+- TONE & VOCABULARY: Use modern, trendy internet slang, popular pop-culture lingo, and highly engaging humorous expressions naturally (e.g., if \${lang} is BURMESE, use modern daily spoken Burmese, NOT formal/literary Myanmar text).`
         : "";
+DIALOGUE TIMECODE PRECISION (mandatory):
+- The [MM:SS] you write for a dialogue paragraph must be the EXACT second the speaker's first syllable is heard — never an earlier cue, reaction shot, or rounded-down value.
+- If unsure between two seconds, pick the LATER one (the frame where the mouth is already moving). Writing an early timecode makes the voice-over start before the picture.
+- Timecodes must strictly increase down the script; never repeat or go backwards.`
+        : "";
+
 
     console.log(`[recap-script-generator] Language: ${lang}, Niche: ${nicheLabel}, isOwnApi: ${isOwnApi}`);
 
@@ -812,7 +818,7 @@ Below is a source video/audio file. Your job is to:
 3. If there is NO spoken dialogue, analyze visual elements, actions, music, settings, body language
 4. Identify ALL key moments, especially dramatic/shocking ones (confrontations, revelations, emotional scenes, physical actions like kisses/fights/tears)
 5. Write a complete professional ${nicheLabel} narration script that covers only the essential story beats and script must be fullcoverage on source video
-6. A viewer reading your script aloud MUST finish in about 70% of the original source duration (see REQUIRED NARRATION LENGTH above) and must cover the full source from beginning to end.
+6. A viewer reading your script aloud MUST finish in about 100% of the original source duration (see REQUIRED NARRATION LENGTH above) and must cover the full source from beginning to end.
 7. Hook the audience immediately
 8. Use vivid, engaging ${lang} appropriate for "${nicheLabel}" content
 9. Be perfectly paced for voice narration
@@ -956,7 +962,8 @@ ${transcript}
           "gemini-flash-latest",
           "gemini-flash-lite-latest",
         ];
-    const shouldFallback = (status?: number) => status === 404 || status === 429 || status === 503 || status === 504;
+    const shouldFallback = (status?: number) =>
+      !isOwnApi && (status === 404 || status === 429 || status === 503 || status === 504);
 
     for (const fallbackModel of fallbackModels) {
       // Fallback if: no response (timeout/abort/network) OR response not ok and status warrants fallback
@@ -1102,7 +1109,7 @@ ${transcript}
       }
       return s.trim();
     };
-    let normalizedRawScript = stripHookPreamble(rawScript);
+    const normalizedRawScript = stripHookPreamble(rawScript);
 
     if (!normalizedRawScript || normalizedRawScript.length < 10) {
       console.error("[recap-script-generator] Empty or invalid script output");
@@ -1113,107 +1120,28 @@ ${transcript}
     }
 
     if (sourceDurationSec && !endsAtCompleteSentence(normalizedRawScript)) {
-      console.warn("[recap-script-generator] Incomplete sentence detected — auto-completing");
-      if (remainingBudget() > 12000) {
-        const lastLines = normalizedRawScript.split("\n").slice(-5).join("\n");
-        const completePrompt = `The narration script below was cut off mid-sentence. Continue EXACTLY from where it stopped and finish the sentence, then keep writing until the source video's ending is fully covered.
-
-Rules:
-- Your first word must be the direct continuation of the last incomplete sentence below — no gap, no restart.
-- After completing that sentence, continue narrating any remaining source content.
-- Same language (${lang}), same tone, same [MM:SS] format.
-- Do NOT repeat anything already written.
-
-LAST LINES (continue from here):
-${lastLines}`;
-        const completeCtrl = new AbortController();
-        const completeTimer = setTimeout(
-          () => completeCtrl.abort(),
-          Math.max(5000, Math.min(40000, remainingBudget() - 8000)),
-        );
-        try {
-          const completeRes = await callGeminiGenerateContent(
-            activeModel,
-            activeApiKey,
-            isOwnApi,
-            completeCtrl.signal,
-            finalSystemPrompt,
-            [{ text: completePrompt }, ...contentParts.slice(1)],
-            requestedMaxOutputTokens,
-          );
-          if (completeRes.ok) {
-            const completeData = await completeRes.json();
-            const continuation = (completeData.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
-            if (continuation.length > 2) {
-              normalizedRawScript = normalizedRawScript + " " + continuation;
-              console.log(`[recap-script-generator] Auto-complete succeeded (${continuation.length} chars added)`);
-            }
-          }
-        } catch (completeErr) {
-          console.warn(
-            `[recap-script-generator] Auto-complete error: ${completeErr instanceof Error ? completeErr.message : String(completeErr)}`,
-          );
-        } finally {
-          clearTimeout(completeTimer);
-        }
-      }
+      console.error("[recap-script-generator] Incomplete script output detected before length enforcement");
+      return new Response(
+        JSON.stringify({
+          error: "AI script က ဝါကျမဆုံးခင် တန်းလန်းရပ်သွားပါသည်။ Retry Script ကိုနှိပ်ပြီး ပြန် Generate လုပ်ပါ။",
+          retryable: true,
+          incompleteOutput: true,
+          retryAfterSeconds: 5,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     if (violatesTargetLanguage(normalizedRawScript, lang)) {
-      console.warn(`[recap-script-generator] Target language violation for ${lang} — auto-retrying up to 5 times`);
-      let langFixed = false;
-      for (let langAttempt = 1; langAttempt <= 5 && !langFixed && remainingBudget() > 15000; langAttempt++) {
-        const langRetryCtrl = new AbortController();
-        const langRetryTimer = setTimeout(
-          () => langRetryCtrl.abort(),
-          Math.max(5000, Math.min(50000, remainingBudget() - 8000)),
-        );
-        try {
-          const langRetryRes = await callGeminiGenerateContent(
-            activeModel,
-            activeApiKey,
-            isOwnApi,
-            langRetryCtrl.signal,
-            finalSystemPrompt,
-            contentParts,
-            requestedMaxOutputTokens,
-          );
-          if (langRetryRes.ok) {
-            const langRetryData = await langRetryRes.json();
-            let retryScript = langRetryData.candidates?.[0]?.content?.parts?.[0]?.text || "";
-            if (retryScript.includes("===STORY_BIBLE===")) {
-              const sbIdx = retryScript.indexOf("===STORY_BIBLE===");
-              const sbRaw = retryScript
-                .slice(sbIdx + "===STORY_BIBLE===".length)
-                .replace(/```[a-zA-Z]*/g, "")
-                .trim();
-              try {
-                const s = sbRaw.indexOf("{");
-                const e = sbRaw.lastIndexOf("}");
-                if (s !== -1 && e > s) storyBible = JSON.parse(sbRaw.slice(s, e + 1));
-              } catch {}
-              retryScript = retryScript.slice(0, sbIdx).trim();
-            }
-            retryScript = stripHookPreamble(retryScript);
-            if (retryScript.length > 10 && !violatesTargetLanguage(retryScript, lang)) {
-              normalizedRawScript = retryScript;
-              langFixed = true;
-              console.log(`[recap-script-generator] Language auto-retry ${langAttempt}/5 succeeded for ${lang}`);
-            } else {
-              console.warn(`[recap-script-generator] Language auto-retry ${langAttempt}/5 still violated for ${lang}`);
-            }
-          }
-        } catch (langRetryErr) {
-          console.warn(
-            `[recap-script-generator] Language auto-retry ${langAttempt}/5 error: ${langRetryErr instanceof Error ? langRetryErr.message : String(langRetryErr)}`,
-          );
-        } finally {
-          clearTimeout(langRetryTimer);
-        }
-      }
-      if (!langFixed) {
-        console.warn(`[recap-script-generator] All language retries failed — proceeding with script anyway`);
-      }
+      console.error(`[recap-script-generator] Target language validation failed for ${lang}`);
+      return new Response(
+        JSON.stringify({
+          error: "AI က ရွေးထားတဲ့ target language အတိုင်း script မထုတ်ပေးလို့ credit မဖြတ်ပါ။ ပြန် Generate လုပ်ပါ။",
+          retryable: true,
+          languageMismatch: true,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     // Skip premature trimming — let continuation passes complete first, trim at the end only
