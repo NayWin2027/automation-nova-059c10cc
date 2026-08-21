@@ -1496,11 +1496,22 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         // Use exact timestamp if present; otherwise use previous segment's vEnd (no estimation)
         const rawVStart = parseTime(seg.timestamp);
-        // SURGICAL FIX: Hybrid/Viral dialogue lines already carry their exact source slot.
-        // Story mode and narrator lines keep the existing gap-based timing unchanged.
-        // SURGICAL ROLLBACK: gap-based timing for all modes (exact-range override removed).
-        const dialogueSourceStart: number | null = null;
-        const vStart: number = seg.timestamp && rawVStart > 0 ? rawVStart : lastComputedVEnd;
+        // VIRAL dialogue only: pre-roll the matching source scene by 2s so browser seek/decode
+        // latency cannot leave the spoken audio ahead of the visible mouth movement.
+        // Narrator lines and STORY/HYBRID timing remain unchanged.
+        const dialogueSourceStart =
+          narrationStyle === "VIRAL" &&
+          seg.isDialogue === true &&
+          typeof seg.sourceStartSec === "number" &&
+          Number.isFinite(seg.sourceStartSec)
+            ? Math.max(0, seg.sourceStartSec - 2)
+            : null;
+        const vStart: number =
+          dialogueSourceStart !== null
+            ? dialogueSourceStart
+            : seg.timestamp && rawVStart > 0
+              ? rawVStart
+              : lastComputedVEnd;
 
         const nextSeg = scriptData.segments[i + 1];
         let vEnd: number;

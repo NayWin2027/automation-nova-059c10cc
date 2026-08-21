@@ -525,7 +525,7 @@ ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
 - STORY-CONNECTION REQUIREMENT: The narrator lines must make the PLOT understandable on their own — who did what to whom, where, and why it matters right now. A viewer who never saw the source must follow the story from the script alone.
 - If two consecutive dialogue blocks come from different scenes, different speakers' situations, or after a time jump, you MUST place a connective narrator/action line between them.
 - Never invent facts in these narrator lines: describe only actions, expressions and relationships that are visible or audible in the source.
-- VIRAL DIALOGUE AV CALIBRATION: The rendered voice currently leads the matching picture by about 2 seconds. For every VIRAL [DIALOGUE] paragraph, first locate the exact visible frame where that same speaker begins that same line, then set [MM:SS] to 2 seconds AFTER the raw detected onset (clamped to the source duration). Apply this offset to dialogue paragraphs only; do not offset narrator/action paragraphs. Never use a reaction shot or the previous speaker's frame.
+- VIRAL DIALOGUE SOURCE LOCK: For every VIRAL [DIALOGUE] paragraph, locate the exact visible frame where that same speaker begins that same line and use that raw source onset as [MM:SS]. Do not add or subtract any timing offset in the script. Never use a reaction shot or the previous speaker's frame.
 - VIRAL CHARACTER LEDGER (do internally before writing): Build one immutable ledger from the entire source containing each character's exact spoken name, visual identity, role, and explicitly evidenced relationships. Use that same identity for every later line.
 - Never swap speakers, rename a character, change name spelling, merge two characters, or change a relationship later in the script. Attribute each dialogue to the person whose mouth is moving and whose voice is heard in that source moment.
 - A name or relationship is valid only when supported by spoken dialogue, captions, or unmistakable source context. If evidence is uncertain, keep the already-established specific role and do NOT guess a new name, family tie, romance, or job relationship.
@@ -534,7 +534,7 @@ ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
 
 DIALOGUE TIMECODE PRECISION (mandatory for VIRAL mode):
 - The [MM:SS] you write for a dialogue paragraph must be the EXACT second the speaker's first syllable is heard — never an earlier cue, reaction shot, or rounded-down value.
-- Apply the VIRAL 2-second calibration above only after locating that exact raw onset. If a fractional onset falls between whole seconds, round upward before applying the calibration; never round down.
+- If a fractional onset falls between whole seconds, use the nearest whole second to that raw onset; do not deliberately shift it later.
 - Timecodes must strictly increase down the script; never repeat or go backwards.`
         : "";
 
