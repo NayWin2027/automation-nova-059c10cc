@@ -528,12 +528,6 @@ ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
 - NATIVE SCRIPT TRANSLITERATION (TTS FRIENDLY): NEVER leave foreign words, brand names, or English words in the Latin (A-Z) alphabet. You MUST transliterate and spell them out phonetically using ONLY the native alphabet of \${langLabel} (e.g. if \${lang} is BURMESE, write "Facebook" as "ဖေ့စ်ဘွတ်", NOT "Facebook").
 - TONE & VOCABULARY: Use modern, trendy internet slang, popular pop-culture lingo, and highly engaging humorous expressions naturally (e.g., if \${lang} is BURMESE, use modern daily spoken Burmese, NOT formal/literary Myanmar text).`
         : "";
-DIALOGUE TIMECODE PRECISION (mandatory):
-- The [MM:SS] you write for a dialogue paragraph must be the EXACT second the speaker's first syllable is heard — never an earlier cue, reaction shot, or rounded-down value.
-- If unsure between two seconds, pick the LATER one (the frame where the mouth is already moving). Writing an early timecode makes the voice-over start before the picture.
-- Timecodes must strictly increase down the script; never repeat or go backwards.`
-        : "";
-
 
     console.log(`[recap-script-generator] Language: ${lang}, Niche: ${nicheLabel}, isOwnApi: ${isOwnApi}`);
 
