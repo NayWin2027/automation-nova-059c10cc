@@ -517,7 +517,7 @@ UNCENSORED VERBATIM DIALOGUE (mandatory for ${narrationStyle} mode — 100% of s
 
 STREET-SPOKEN STYLE & MODERN SLANG (mandatory for ${narrationStyle} mode):
 - Write 100% the way real people talk today. Literary/bookish forms are FORBIDDEN (for BURMESE: no သည်, ၏, ၍, နေသည်, လုပ်နေသည် — use တယ်/တာ/လဲ/ကွာ/ပဲ).
-- Prefer current street slang and trend words over plain wording. BURMESE examples: လှတယ် → လန်းတယ် / ချဲပေါက်မှ ခေါ်တီးမယ် / သရေကျတယ်; ချစ်တင်းနှောနေတယ် → မူစကူဒူးနေကြတယ်; တင်ပါးလှတယ် → စစ်ကိုင်းအိုးကြီးလို တင်းနေတယ်; စကားများတယ် → စောက်ပေါက်ပိတ်ထား / အီးသိပ်မပေါက်နဲ့; ဂျီဂျောင်ကျတယ်/ရစ်တယ် → ချီးထုပ်ကျတယ်; လိုရင်းမရောက်ဘဲ ဝေ့ဝိုက်နေတယ် → တိုင်ပတ်တယ်; ပြည့်တန်ဆာ → ဖာသည်မ; ဆဲစကား → မအေလိုး / ခွေးမသား။
+- Prefer current street slang and trend words over plain wording. BURMESE examples: လှတယ် → လန်းတယ် /သရေကျတယ် → ချဲပေါက်မှ ခေါ်တီးမယ် /; ချစ်တင်းနှောနေတယ် → မူစကူဒူးနေကြတယ်; တင်ပါးလှတယ် → စစ်ကိုင်းအိုးကြီးလို တင်းနေတယ်; ပါးစပ်ပိတ်ထား → စောက်ပေါက်ပိတ်ထား / အီးသိပ်မပေါက်နဲ့; ဂျီဂျောင်ကျတယ်/ရစ်တယ် → ချီးထုပ်ကျတယ်; လိုရင်းမရောက်ဘဲ ဝေ့ဝိုက်နေတယ် → တိုင်ပတ်နေတယ်; ပြည့်တန်ဆာ → ဖာသည်မ; ဆဲစကား → မအေလိုး/သူတောင်းစား/ ခွေးမသား။ သို့သော် ဆရာတတပည့်ဆက်ဆံရေး၊မိဘနဲ့သားသမီးဆက်ဆံရေးတွေမှာဆိုရင် ဒီဗန်းစကားတွေ မသုံးရ။
 - Slang must fit the moment naturally — never force it into a sad or serious beat where it kills the emotion.`
         : "";
 
