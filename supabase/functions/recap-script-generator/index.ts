@@ -508,7 +508,17 @@ ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
 - Never replace an action with a vague summary like "ဒေါသထွက်သွားတယ်" or "အခြေအနေ ဆိုးသွားတယ်".
 - Add the character's FACE and BODY reaction where it is visible: eyes widening, hands shaking, jaw clenching, tears welling, stepping back, head dropping.
 - Keep each action/expression line SHORT (1-2 sentences). They must never crowd out dialogue.
-- Goal: the viewer feels pity, anger, tension, or satisfaction as it happens — because they hear the real words and see the described reaction, not a summary.`
+- Goal: the viewer feels pity, anger, tension, or satisfaction as it happens — because they hear the real words and see the described reaction, not a summary.
+
+UNCENSORED VERBATIM DIALOGUE (mandatory for ${narrationStyle} mode — 100% of spoken lines):
+- 100% of the spoken lines must appear. Zero skipping, zero merging, zero replacing a line with a summary. Narrator/action lines stay at ~20% only.
+- NEVER soften, censor, bleep, or clean up harsh speech. If a character curses, insults, threatens, or talks vulgarly/sexually, translate it EXACTLY as harsh and raw as the source (in ${lang}). Never write "ဆဲလိုက်တယ်", "***", or a polite substitute.
+- Faithfulness to the source outweighs politeness: explicit, crude, sexual and offensive lines are kept as-is.
+
+STREET-SPOKEN STYLE & MODERN SLANG (mandatory for ${narrationStyle} mode):
+- Write 100% the way real people talk today. Literary/bookish forms are FORBIDDEN (for BURMESE: no သည်, ၏, ၍, နေသည်, လုပ်နေသည် — use တယ်/တာ/လဲ/ကွာ/ပဲ).
+- Prefer current street slang and trend words over plain wording. BURMESE examples: လှတယ် → လန်းတယ် / ချဲပေါက်မှ ခေါ်တီးမယ် / သရေကျတယ်; ချစ်တင်းနှောနေတယ် → မူစကူဒူးနေကြတယ်; တင်ပါးလှတယ် → စစ်ကိုင်းအိုးကြီးလို တင်းနေတယ်; စကားများတယ် → စောက်ပေါက်ပိတ်ထား / အီးသိပ်မပေါက်နဲ့; ဂျီဂျောင်ကျတယ်/ရစ်တယ် → ချီးထုပ်ကျတယ်; လိုရင်းမရောက်ဘဲ ဝေ့ဝိုက်နေတယ် → တိုင်ပတ်တယ်; ပြည့်တန်ဆာ → ဖာသည်မ; ဆဲစကား → မအေလိုး / ခွေးမသား။
+- Slang must fit the moment naturally — never force it into a sad or serious beat where it kills the emotion.`
         : "";
 
     const viralBalanceBlock =
@@ -582,7 +592,7 @@ ABSOLUTE RULES:
 6. ${targetLanguageLock}
 7. ZERO HALLUCINATION POLICY: Write ONLY what is visibly or audibly present. DO NOT invent facts. 
 8. CRITICAL LENGTH RULE: To maintain correct audio-visual sync, DO NOT write short or robotic sentences. You MUST write highly detailed, rich, and descriptive sentences about the REAL visible actions, emotions, and settings. Keep the word count naturally full so the voiceover matches the scene length perfectly.
-9. TONE & VOCABULARY: Use modern, trendy internet slang, popular pop-culture lingo, and highly engaging humorous expressions naturally to make the recap entertaining and relatable for young audiences. Keep the vibe highly energetic and cool, but strictly avoid severe profanity or derogatory words.
+9. TONE & VOCABULARY: Use modern, trendy internet slang, popular pop-culture lingo, and highly engaging humorous expressions naturally to make the recap entertaining and relatable for young audiences. Keep the vibe highly energetic and cool. When the source speech itself is harsh, vulgar or profane, keep it raw and uncensored — never sanitise a real spoken line.
 10. NATIVE SCRIPT TRANSLITERATION (TTS FRIENDLY): NEVER leave foreign words, brand names, or English words in the Latin (A-Z) alphabet. If you must include them, you MUST transliterate and spell them out phonetically using ONLY the native alphabet of ${langLabel}. For example, if ${lang} is BURMESE, write "Facebook" as "ဖေ့စ်ဘွတ်(ခ်)", "Apple" as "အက်ပဲလ်", NOT "Facebook" or "Apple". This ensures the Text-to-Speech engine reads them smoothly in the native accent.
 
 CRITICAL - DIALOGUE TRANSLATION RULE (MOST IMPORTANT):
