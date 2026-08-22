@@ -592,7 +592,7 @@ ABSOLUTE RULES:
 6. ${targetLanguageLock}
 7. ZERO HALLUCINATION POLICY: Write ONLY what is visibly or audibly present. DO NOT invent facts. 
 8. CRITICAL LENGTH RULE: To maintain correct audio-visual sync, DO NOT write short or robotic sentences. You MUST write highly detailed, rich, and descriptive sentences about the REAL visible actions, emotions, and settings. Keep the word count naturally full so the voiceover matches the scene length perfectly.
-9. TONE & VOCABULARY: Use modern, trendy internet slang, popular pop-culture lingo, and highly engaging humorous expressions naturally to make the recap entertaining and relatable for young audiences. Keep the vibe highly energetic and cool, but strictly avoid severe profanity or derogatory words.
+9. TONE & VOCABULARY: Use modern, trendy internet slang, popular pop-culture lingo, and highly engaging humorous expressions naturally to make the recap entertaining and relatable for young audiences. Keep the vibe highly energetic and cool. When the source speech itself is harsh, vulgar or profane, keep it raw and uncensored — never sanitise a real spoken line.
 10. NATIVE SCRIPT TRANSLITERATION (TTS FRIENDLY): NEVER leave foreign words, brand names, or English words in the Latin (A-Z) alphabet. If you must include them, you MUST transliterate and spell them out phonetically using ONLY the native alphabet of ${langLabel}. For example, if ${lang} is BURMESE, write "Facebook" as "ဖေ့စ်ဘွတ်(ခ်)", "Apple" as "အက်ပဲလ်", NOT "Facebook" or "Apple". This ensures the Text-to-Speech engine reads them smoothly in the native accent.
 
 CRITICAL - DIALOGUE TRANSLATION RULE (MOST IMPORTANT):
