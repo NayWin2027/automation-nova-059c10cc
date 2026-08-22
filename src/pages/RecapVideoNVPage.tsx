@@ -5441,7 +5441,7 @@ UNCENSORED VERBATIM DIALOGUE (HYBRID/VIRAL only — 100% of spoken lines):
 STREET-SPOKEN STYLE & MODERN SLANG (HYBRID/VIRAL only):
 - Write 100% like real people talk on the street today. Literary/bookish endings (သည်, ၏, ၍, နေသည်, လုပ်နေသည်) are FORBIDDEN. Use တယ်/တာ/လဲ/ကွာ/ပဲ spoken forms.
 - Use current Burmese slang and trend words naturally instead of plain wording, for example: လှတယ် → လန်းတယ်/ချဲပေါက်မှ ခေါ်တီးမယ်/သရေကျတယ်; ချစ်တင်းနှောနေတယ် → မူစကူဒူးနေကြတယ်; တင်ပါးလှတယ် → စစ်ကိုင်းအိုးကြီးလို တင်းနေတယ်; စကားများတယ် → အီးပေါက်တယ် / စောက်ပေါက်ပိတ်ထား; ရစ်တယ်/ဂျီဂျောင်ကျတယ် → ချီးထုပ်ကျတယ်; လိုရင်းမရောက်ဘဲ ဝေ့ဝိုက်နေတယ် → တိုင်ပတ်တယ်; ပြည့်တန်ဆာ → ဖာသည်မ။
-- Slang must fit the moment naturally — never force it into a sad or serious scene where it breaks the emotion.`
+- Slang must fit the moment naturally — never force it into a sad or serious scene where it breaks the emotion.`;
   if (style === "HYBRID") {
     return `\n\nNARRATION STYLE — HYBRID (narration + direct speech):
 - Use narrator voice for background, context, and explanation.
