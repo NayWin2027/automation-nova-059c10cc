@@ -315,6 +315,7 @@ function countMatches(text: string, pattern: RegExp): number {
 function violatesTargetLanguage(script: string, lang: string): boolean {
   const body = script.replace(/\[\d{1,2}:\d{2}(?::\d{2})?\]/g, " ");
   const target = lang.toUpperCase();
+  const latinCount = countMatches(body, /[A-Za-z]/g);
   const cjkCount = countMatches(body, /[\u3400-\u9FFF]/g);
   const myanmarCount = countMatches(body, /[\u1000-\u109F]/g);
   const japaneseKanaCount = countMatches(body, /[\u3040-\u30FF]/g);
@@ -322,7 +323,14 @@ function violatesTargetLanguage(script: string, lang: string): boolean {
   const thaiCount = countMatches(body, /[\u0E00-\u0E7F]/g);
 
   if (target === "BURMESE")
-    return myanmarCount < 12 || cjkCount > 6 || japaneseKanaCount > 3 || koreanCount > 3 || thaiCount > 3;
+    return (
+      myanmarCount < 12 ||
+      latinCount > Math.max(8, Math.floor(myanmarCount * 0.025)) ||
+      cjkCount > 6 ||
+      japaneseKanaCount > 3 ||
+      koreanCount > 3 ||
+      thaiCount > 3
+    );
   if (target !== "CHINESE" && target !== "JAPANESE" && cjkCount > 12) return true;
   if (target !== "JAPANESE" && japaneseKanaCount > 6) return true;
   if (target !== "KOREAN" && koreanCount > 6) return true;
@@ -586,7 +594,7 @@ ABSOLUTE RULES:
 1. Write ONLY in ${lang} language
 2. Use modern spoken style, NOT formal/literary
 3. Each paragraph = natural spoken segment (2-4 sentences)
-4. The script must be READY TO READ as narration (no stage directions, no brackets, no formatting marks, no timestamps)
+4. The script must be READY TO READ as narration. The required leading [MM:SS] timecode and [DIALOGUE:EMOTION] marker are the ONLY allowed metadata; never omit them where required and add no other stage directions or formatting marks.
 5. Fully embody the "${nicheLabel}" niche style described above
 6. ${targetLanguageLock}
 7. ZERO HALLUCINATION POLICY: Write ONLY what is visibly or audibly present. DO NOT invent facts. 
@@ -1154,8 +1162,24 @@ ${lastLines}`;
             const completeData = await completeRes.json();
             const continuation = (completeData.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
             if (continuation.length > 2) {
-              normalizedRawScript = normalizedRawScript + " " + continuation;
-              console.log(`[recap-script-generator] Auto-complete succeeded (${continuation.length} chars added)`);
+              const existingTimecodes = [...normalizedRawScript.matchAll(/\[(\d{1,2}):(\d{2})\]/g)].map(
+                (m) => Number(m[1]) * 60 + Number(m[2]),
+              );
+              const lastExistingTimecode = existingTimecodes.length ? Math.max(...existingTimecodes) : -1;
+              const continuationTimecode = continuation.match(/^\s*\[(\d{1,2}):(\d{2})\]/);
+              const continuationStartsAt = continuationTimecode
+                ? Number(continuationTimecode[1]) * 60 + Number(continuationTimecode[2])
+                : null;
+              const normalizedExistingStart = stripTimecodes(normalizedRawScript).replace(/\s+/g, " ").slice(0, 100);
+              const normalizedContinuationStart = stripTimecodes(continuation).replace(/\s+/g, " ").slice(0, 100);
+              const restartedFromBeginning =
+                normalizedExistingStart.length >= 40 && normalizedContinuationStart === normalizedExistingStart;
+              if (!restartedFromBeginning && (continuationStartsAt === null || continuationStartsAt > lastExistingTimecode)) {
+                normalizedRawScript = normalizedRawScript + " " + continuation;
+                console.log(`[recap-script-generator] Auto-complete succeeded (${continuation.length} chars added)`);
+              } else {
+                console.warn("[recap-script-generator] Rejected duplicate/restarted auto-complete output");
+              }
             }
           }
         } catch (completeErr) {
@@ -1338,7 +1362,7 @@ ${normalizedRawScript}`;
     ) {
       // Pass 1 already covered window 1. Run one pass per remaining window (or a
       // single top-up pass when the source is short but the script came out thin).
-      const passCount = isWindowMode ? windowTotal - 1 : 3;
+      const passCount = isWindowMode ? windowTotal - 1 : 1;
       let workingScript = lengthAdjustedScript;
 
       for (let pass = 1; pass <= passCount; pass++) {
@@ -1458,6 +1482,9 @@ ${workingScript}`;
             const contData = await contRes.json();
             const contText: string = contData.candidates?.[0]?.content?.parts?.[0]?.text || "";
             const accepted: string[] = [];
+            const seenParagraphBodies = new Set(
+              existingParas.map((p) => stripTc(p).replace(/\s+/g, " ").trim().toLocaleLowerCase()),
+            );
             let cursor = isWindowMode ? Math.max(lastTc, windowStart - 1) : lastTc;
             // Seam guard: a part that opens with a restart/hook instead of continuing
             // is dropped so the merged script reads as one continuous arc.
@@ -1477,7 +1504,10 @@ ${workingScript}`;
               const t = paraTimecodeSec(p);
               if (t === null || t <= cursor) continue;
               if (sourceDurationSec && t > sourceDurationSec + 5) continue;
+              const paragraphBody = stripTc(p).replace(/\s+/g, " ").trim().toLocaleLowerCase();
+              if (!paragraphBody || seenParagraphBodies.has(paragraphBody)) continue;
               accepted.push(p);
+              seenParagraphBodies.add(paragraphBody);
               cursor = t;
             }
             if (isWindowMode && accepted.length > 1 && !seamChecked) {
