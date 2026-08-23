@@ -500,7 +500,7 @@ DIALOGUE COMPLETENESS (mandatory for ${narrationStyle} mode):
 - EVERY spoken line in the source must appear in the script as a real translated [DIALOGUE:EMOTION] line. Do NOT sample or pick "only the important ones".
 - It is FORBIDDEN to replace a spoken line with a description of it. BAD: "သူက ဒေါသတကြီး ပြောလိုက်တယ်" — GOOD: the actual translated words the character said.
 - For back-and-forth exchanges, write EACH speaker's line as its own separate paragraph with its own timecode range and its own emotion tag. Never merge two speakers into one paragraph.
-- Balance dialogue with narration: dialogue is the star (~100%), but narrator/action lines (~15%) are ESSENTIAL for story flow and professional quality.
+- Balance dialogue with narration: dialogue is the star (~100%), but narrator/action lines (~20%) are ESSENTIAL for story flow and professional quality.
 - Narrator paragraphs exist to bridge scenes, describe actions, establish character roles and relationships, and explain what dialogue alone cannot. A viewer who never saw the source must follow the plot from start to finish; never sacrifice story coherence for brevity.
 
 ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
