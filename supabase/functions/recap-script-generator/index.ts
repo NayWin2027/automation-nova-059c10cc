@@ -508,8 +508,38 @@ ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
 - Never replace an action with a vague summary like "ဒေါသထွက်သွားတယ်" or "အခြေအနေ ဆိုးသွားတယ်".
 - Add the character's FACE and BODY reaction where it is visible: eyes widening, hands shaking, jaw clenching, tears welling, stepping back, head dropping.
 - Keep each action/expression line SHORT (1-2 sentences). They must never crowd out dialogue.
-- Goal: the viewer feels pity, anger, tension, or satisfaction as it happens — because they hear the real words and see the described reaction, not a summary.`
+- Goal: the viewer feels pity, anger, tension, or satisfaction as it happens — because they hear the real words and see the described reaction, not a summary.
+
+UNCENSORED VERBATIM DIALOGUE (mandatory for ${narrationStyle} mode — 100% of spoken lines):
+- 100% of the spoken lines must appear. Zero skipping, zero merging, zero replacing a line with a summary. Narrator/action lines stay at ~20% only.
+- NEVER soften, censor, bleep, or clean up harsh speech. If a character curses, insults, threatens, or talks vulgarly/sexually, translate it EXACTLY as harsh and raw as the source (in ${lang}). Never write "ဆဲလိုက်တယ်", "***", or a polite substitute.
+- Faithfulness to the source outweighs politeness: explicit, crude, sexual and offensive lines are kept as-is.
+
+STREET-SPOKEN STYLE & MODERN SLANG (mandatory for ${narrationStyle} mode):
+- Write 100% the way real people talk today. Literary/bookish forms are FORBIDDEN (for BURMESE: no သည်, ၏, ၍, နေသည်, လုပ်နေသည် — use တယ်/တာ/လဲ/ကွာ/ပဲ).
+- Prefer current street slang and trend words over plain wording. BURMESE examples: လှတယ် → လန်းတယ်/; ချစ်တင်းနှောနေတယ် → မူစကူဒူးနေကြတယ်; တင်ပါးလှတယ် → စစ်ကိုင်းအိုးကြီးလို တင်းနေတယ်; ပါးစပ်ပိတ်ထား → စောက်ပေါက်ပိတ်ထား / အီးသိပ်မပေါက်နဲ့; ဂဂျီဂဂျောင်ကျတယ်/ရစ်တယ် → ချီးထုပ်ကျတယ်; လိုရင်းမရောက်ဘဲ ဝေ့ဝိုက်နေတယ် → တိုင်ပတ်နေတယ်; ပြည့်တန်ဆာ → ဖာသည်မ; ဆဲစကား → မအေလိုး/သူတောင်းစား/ ခွေးမသား။ သို့သော် ဆရာတပည့်ဆက်ဆံရေး၊မိဘနဲ့သားသမီးဆက်ဆံရေးတွေမှာဆိုရင် ဒီဗန်းစကားတွေ မသုံးရ။
+- Slang must fit the moment naturally — never force it into a sad or serious beat where it kills the emotion.`
         : "";
+
+    const viralBalanceBlock =
+      narrationStyle === "VIRAL"
+        ? `\n\nVIRAL MODE BALANCE (mandatory — dialogue-heavy, but NEVER dialogue-only):
+- Keep ALL the real dialogue (this is the backbone), but the script must NOT read like a bare dialogue transcript.
+- MAXIMUM 2-3 DIALOGUES RULE: You must NEVER write more than 2 or 3 consecutive [DIALOGUE] lines without inserting a [MM:SS] Narrator line.
+- CONTINUOUS CONVERSATION RULE: Even during a continuous back-and-forth conversation with no silent gaps, you MUST pause the dialogue after every 2-3 speaker turns and insert a 1-sentence narrator line describing their face expressions, body language, or the emotional tension of the argument.
+- NARRATOR'S ROLE (PLOT BRIDGES, ACTION & RELATIONSHIPS - 20%): Narrator lines are NOT optional filler — they are essential story glue. Insert narrator paragraphs to:
+  * Describe WHO the characters are and their RELATIONSHIP to each other (e.g. husband-wife, boss-employee, childhood friends) — especially on first appearance.
+  * Bridge between scenes: explain where, when, why, and what changed.
+  * Describe physical actions, fights, chases, embraces — concrete verbs, not summaries.
+  * Show face/body reactions: tears, trembling, jaw clenching, stepping back.
+- STORY-CONNECTION REQUIREMENT: The narrator lines must make the PLOT understandable on their own — who did what to whom, where, and why it matters right now. A viewer who never saw the source must follow the story from the script alone.
+- If two consecutive dialogue blocks come from different scenes, different speakers' situations, or after a time jump, you MUST place a connective narrator/action line between them.
+- Never invent facts in these narrator lines: describe only actions, expressions and relationships that are visible or audible in the source.
+- NATIVE SCRIPT TRANSLITERATION (TTS FRIENDLY): NEVER leave foreign words, brand names, or English words in the Latin (A-Z) alphabet. You MUST transliterate and spell them out phonetically using ONLY the native alphabet of \${langLabel} (e.g. if \${lang} is BURMESE, write "Facebook" as "ဖေ့စ်ဘွတ်", NOT "Facebook").
+- TONE & VOCABULARY: Use modern, trendy internet slang, popular pop-culture lingo, and highly engaging humorous expressions naturally (e.g., if \${lang} is BURMESE, use modern daily spoken Burmese, NOT formal/literary Myanmar text).`
+        : "";
+
+    console.log(`[recap-script-generator] Language: ${lang}, Niche: ${nicheLabel}, isOwnApi: ${isOwnApi}`);
 
     // Map language name to a clear, unambiguous native label for the AI
     const langNativeMap: Record<string, string> = {
@@ -531,27 +561,6 @@ ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
       BURMESE: "မြန်မာ (Burmese)",
     };
     const langLabel = langNativeMap[lang] || lang;
-
-    const viralBalanceBlock =
-      narrationStyle === "VIRAL"
-        ? `\n\nVIRAL MODE BALANCE (mandatory — dialogue-heavy, but NEVER dialogue-only):
-- Keep ALL the real dialogue (this is the backbone), but the script must NOT read like a bare dialogue transcript.
-- MAXIMUM 2-3 DIALOGUES RULE: You must NEVER write more than 2 or 3 consecutive [DIALOGUE] lines without inserting a [MM:SS] Narrator line.
-- CONTINUOUS CONVERSATION RULE: Even during a continuous back-and-forth conversation with no silent gaps, you MUST pause the dialogue after every 2-3 speaker turns and insert a 1-sentence narrator line describing their face expressions, body language, or the emotional tension of the argument.
-- NARRATOR'S ROLE (PLOT BRIDGES, ACTION & RELATIONSHIPS - 20%): Narrator lines are NOT optional filler — they are essential story glue. Insert narrator paragraphs to:
-  * Describe WHO the characters are and their RELATIONSHIP to each other (e.g. husband-wife, boss-employee, childhood friends) — especially on first appearance.
-  * Bridge between scenes: explain where, when, why, and what changed.
-  * Describe physical actions, fights, chases, embraces — concrete verbs, not summaries.
-  * Show face/body reactions: tears, trembling, jaw clenching, stepping back.
-- STORY-CONNECTION REQUIREMENT: The narrator lines must make the PLOT understandable on their own — who did what to whom, where, and why it matters right now. A viewer who never saw the source must follow the story from the script alone.
-- If two consecutive dialogue blocks come from different scenes, different speakers' situations, or after a time jump, you MUST place a connective narrator/action line between them.
-- Never invent facts in these narrator lines: describe only actions, expressions and relationships that are visible or audible in the source.
-- NATIVE SCRIPT TRANSLITERATION (TTS FRIENDLY): NEVER leave foreign words, brand names, or English words in the Latin (A-Z) alphabet. You MUST transliterate and spell them out phonetically using ONLY the native alphabet of ${langLabel} (e.g. if ${lang} is BURMESE, write "Facebook" as "ဖေ့စ်ဘွတ်", NOT "Facebook").
-- TONE & VOCABULARY: Use modern, trendy internet slang, popular pop-culture lingo, and highly engaging humorous expressions naturally (e.g., if ${lang} is BURMESE, use modern daily spoken Burmese, NOT formal/literary Myanmar text).`
-        : "";
-
-    console.log(`[recap-script-generator] Language: ${lang}, Niche: ${nicheLabel}, isOwnApi: ${isOwnApi}`);
-
     const targetLanguageLock = `TARGET LANGUAGE LOCK: The target output language is strictly ${langLabel}. The source video might be in Chinese or another language, but you MUST translate EVERYTHING (including all character dialogues, signs, and story details) directly into modern, conversational ${langLabel}. NEVER output the original source language. NEVER mix languages in a single sentence.`;
 
     const systemPrompt = `You are a world-class professional scriptwriter. You write premium narration scripts at Netflix/BBC/HBO broadcast standard.
