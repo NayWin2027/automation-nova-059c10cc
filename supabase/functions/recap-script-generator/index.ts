@@ -511,6 +511,27 @@ ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
 - Goal: the viewer feels pity, anger, tension, or satisfaction as it happens — because they hear the real words and see the described reaction, not a summary.`
         : "";
 
+    // Map language name to a clear, unambiguous native label for the AI
+    const langNativeMap: Record<string, string> = {
+      ENGLISH: "English",
+      JAPANESE: "日本語 (Japanese)",
+      KOREAN: "한국어 (Korean)",
+      CHINESE: "中文 (Chinese)",
+      THAI: "ภาษาไทย (Thai)",
+      HINDI: "हिन्दी (Hindi)",
+      SPANISH: "Español (Spanish)",
+      FRENCH: "Français (French)",
+      GERMAN: "Deutsch (German)",
+      ITALIAN: "Italiano (Italian)",
+      PORTUGUESE: "Português (Portuguese)",
+      RUSSIAN: "Русский (Russian)",
+      ARABIC: "العربية (Arabic)",
+      VIETNAMESE: "Tiếng Việt (Vietnamese)",
+      INDONESIAN: "Bahasa Indonesia (Indonesian)",
+      BURMESE: "မြန်မာ (Burmese)",
+    };
+    const langLabel = langNativeMap[lang] || lang;
+
     const viralBalanceBlock =
       narrationStyle === "VIRAL"
         ? `\n\nVIRAL MODE BALANCE (mandatory — dialogue-heavy, but NEVER dialogue-only):
