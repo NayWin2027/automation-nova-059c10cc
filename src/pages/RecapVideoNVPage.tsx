@@ -7091,18 +7091,18 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                     className="flex-1 h-9 rounded-md border border-border bg-background px-3 text-sm text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                   <input
-                    type="number"
-                    min={1}
+                    type="text"
+                    inputMode="numeric"
                     value={seriesPart}
-                    onChange={(e) => setSeriesPart(Math.max(1, Number(e.target.value) || 1))}
-                    className="w-20 h-9 rounded-md border border-border bg-background px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-ring"
+                    onChange={(e) => setSeriesPart(e.target.value)}
+                    placeholder="အပိုင်းနံပါတ် (ဥပမာ 12 / ဇာတ်သိမ်း)"
+                    className="w-32 h-9 rounded-md border border-border bg-background px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </div>
                 <p className="text-[11px] text-muted-foreground">
                   နာမည်ကွက်လပ်ထားရင် AI က မူရင်း video ရဲ့ ဇာတ်ကားနာမည်/အကြောင်းအရာအပေါ် အခြေခံပြီး ဆွဲဆောင်မှုရှိတဲ့
-                  Series နာမည်ကို auto ရေးပေးပါမယ်။ အပိုင်းနံပါတ်ကိုတော့ ကိုယ်တိုင် ထည့်ပါ။ နောက်ဆုံးအပိုင်းဆိုရင် နာမည်ထဲမှာ
-                  "ဇာတ်သိမ်း" ထည့်ရေးပါ — ဇာတ်လမ်းပြီးဆုံးကြောင်း အနှစ်ချုပ်နဲ့ ကျေးဇူးတင်စကား auto ပါလာပါမယ်။
-
+                  Series နာမည်ကို auto ရေးပေးပါမယ်။ အပိုင်းနံပါတ်ကိုတော့ ကိုယ်တိုင် ထည့်ပါ။ နောက်ဆုံးအပိုင်းဆိုရင် အပိုင်းနံပါတ်
+                  ကွက်လပ်မှာ "ဇာတ်သိမ်း" လို့ရေးပါ — ဇာတ်လမ်းပြီးဆုံးကြောင်း အနှစ်ချုပ်နဲ့ ကျေးဇူးတင်စကား auto ပါလာပါမယ်။
                 </p>
               </div>
             )}
