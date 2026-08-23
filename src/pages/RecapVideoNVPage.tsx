@@ -7076,7 +7076,11 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                     <SelectContent className="max-h-[220px] z-50">
                       {seriesList.map((s) => (
                         <SelectItem key={s.series_name} value={s.series_name} className="text-xs">
-                          {s.series_name} (Part {s.last_part})
+                          {s.series_name} (Part{
+                            s.series_name === seriesName && /^\d+$/.test(seriesPart.trim())
+                              ? ` ${Math.max(1, Number(seriesPart.trim()) - 1)}`
+                              : ` ${s.last_part}`
+                          })
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -7092,7 +7096,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                   />
                   <input
                     type="text"
-                    inputMode="numeric"
+                    inputMode="text"
                     value={seriesPart}
                     onChange={(e) => setSeriesPart(e.target.value)}
                     placeholder="အပိုင်းနံပါတ် (ဥပမာ 12 / ဇာတ်သိမ်း)"
