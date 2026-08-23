@@ -500,7 +500,7 @@ DIALOGUE COMPLETENESS (mandatory for ${narrationStyle} mode):
 - EVERY spoken line in the source must appear in the script as a real translated [DIALOGUE:EMOTION] line. Do NOT sample or pick "only the important ones".
 - It is FORBIDDEN to replace a spoken line with a description of it. BAD: "သူက ဒေါသတကြီး ပြောလိုက်တယ်" — GOOD: the actual translated words the character said.
 - For back-and-forth exchanges, write EACH speaker's line as its own separate paragraph with its own timecode range and its own emotion tag. Never merge two speakers into one paragraph.
-- Balance dialogue with narration: dialogue is the star (~100%), but narrator/action lines (~18%) are ESSENTIAL for story flow and professional quality.
+- Balance dialogue with narration: dialogue is the star (~80%), but narrator/action lines (~20%) are ESSENTIAL for story flow and professional quality.
 - Narrator paragraphs exist to bridge scenes, describe actions, establish character roles and relationships, and explain what dialogue alone cannot. A viewer who never saw the source must follow the plot from start to finish; never sacrifice story coherence for brevity.
 
 ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
@@ -508,17 +508,7 @@ ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
 - Never replace an action with a vague summary like "ဒေါသထွက်သွားတယ်" or "အခြေအနေ ဆိုးသွားတယ်".
 - Add the character's FACE and BODY reaction where it is visible: eyes widening, hands shaking, jaw clenching, tears welling, stepping back, head dropping.
 - Keep each action/expression line SHORT (1-2 sentences). They must never crowd out dialogue.
-- Goal: the viewer feels pity, anger, tension, or satisfaction as it happens — because they hear the real words and see the described reaction, not a summary.
-
-UNCENSORED VERBATIM DIALOGUE (mandatory for ${narrationStyle} mode — 100% of spoken lines):
-- 100% of the spoken lines must appear. Zero skipping, zero merging, zero replacing a line with a summary. Narrator/action lines stay at ~20% only.
-- NEVER soften, censor, bleep, or clean up harsh speech. If a character curses, insults, threatens, or talks vulgarly/sexually, translate it EXACTLY as harsh and raw as the source (in ${lang}). Never write "ဆဲလိုက်တယ်", "***", or a polite substitute.
-- Faithfulness to the source outweighs politeness: explicit, crude, sexual and offensive lines are kept as-is.
-
-STREET-SPOKEN STYLE & MODERN SLANG (mandatory for ${narrationStyle} mode):
-- Write 100% the way real people talk today. Literary/bookish forms are FORBIDDEN (for BURMESE: no သည်, ၏, ၍, နေသည်, လုပ်နေသည် — use တယ်/တာ/လဲ/ကွာ/ပဲ).
-- Prefer current street slang and trend words over plain wording. BURMESE examples: လှတယ် → လန်းတယ်/; ချစ်တင်းနှောနေတယ် → မူစကူဒူးနေကြတယ်; တင်ပါးလှတယ် → စစ်ကိုင်းအိုးကြီးလို တင်းနေတယ်; ပါးစပ်ပိတ်ထား → စောက်ပေါက်ပိတ်ထား / အီးသိပ်မပေါက်နဲ့; ဂဂျီဂဂျောင်ကျတယ်/ရစ်တယ် → ချီးထုပ်ကျတယ်; လိုရင်းမရောက်ဘဲ ဝေ့ဝိုက်နေတယ် → တိုင်ပတ်နေတယ်; ပြည့်တန်ဆာ → ဖာသည်မ; ဆဲစကား → မအေလိုး/သူတောင်းစား/ ခွေးမသား။ သို့သော် ဆရာတပည့်ဆက်ဆံရေး၊မိဘနဲ့သားသမီးဆက်ဆံရေးတွေမှာဆိုရင် ဒီဗန်းစကားတွေ မသုံးရ။
-- Slang must fit the moment naturally — never force it into a sad or serious beat where it kills the emotion.`
+- Goal: the viewer feels pity, anger, tension, or satisfaction as it happens — because they hear the real words and see the described reaction, not a summary.`
         : "";
 
     const viralBalanceBlock =
@@ -535,8 +525,8 @@ STREET-SPOKEN STYLE & MODERN SLANG (mandatory for ${narrationStyle} mode):
 - STORY-CONNECTION REQUIREMENT: The narrator lines must make the PLOT understandable on their own — who did what to whom, where, and why it matters right now. A viewer who never saw the source must follow the story from the script alone.
 - If two consecutive dialogue blocks come from different scenes, different speakers' situations, or after a time jump, you MUST place a connective narrator/action line between them.
 - Never invent facts in these narrator lines: describe only actions, expressions and relationships that are visible or audible in the source.
-- NATIVE SCRIPT TRANSLITERATION (TTS FRIENDLY): NEVER leave foreign words, brand names, or English words in the Latin (A-Z) alphabet. You MUST transliterate and spell them out phonetically using ONLY the native alphabet of \${langLabel} (e.g. if \${lang} is BURMESE, write "Facebook" as "ဖေ့စ်ဘွတ်", NOT "Facebook").
-- TONE & VOCABULARY: Use modern, trendy internet slang, popular pop-culture lingo, and highly engaging humorous expressions naturally (e.g., if \${lang} is BURMESE, use modern daily spoken Burmese, NOT formal/literary Myanmar text).`
+- NATIVE SCRIPT TRANSLITERATION (TTS FRIENDLY): NEVER leave foreign words, brand names, or English words in the Latin (A-Z) alphabet. You MUST transliterate and spell them out phonetically using ONLY the native alphabet of ${langLabel} (e.g. if ${lang} is BURMESE, write "Facebook" as "ဖေ့စ်ဘွတ်", NOT "Facebook").
+- TONE & VOCABULARY: Use modern, trendy internet slang, popular pop-culture lingo, and highly engaging humorous expressions naturally (e.g., if ${lang} is BURMESE, use modern daily spoken Burmese, NOT formal/literary Myanmar text).`
         : "";
 
     console.log(`[recap-script-generator] Language: ${lang}, Niche: ${nicheLabel}, isOwnApi: ${isOwnApi}`);
@@ -592,7 +582,7 @@ ABSOLUTE RULES:
 6. ${targetLanguageLock}
 7. ZERO HALLUCINATION POLICY: Write ONLY what is visibly or audibly present. DO NOT invent facts. 
 8. CRITICAL LENGTH RULE: To maintain correct audio-visual sync, DO NOT write short or robotic sentences. You MUST write highly detailed, rich, and descriptive sentences about the REAL visible actions, emotions, and settings. Keep the word count naturally full so the voiceover matches the scene length perfectly.
-9. TONE & VOCABULARY: Use modern, trendy internet slang, popular pop-culture lingo, and highly engaging humorous expressions naturally to make the recap entertaining and relatable for young audiences. Keep the vibe highly energetic and cool. When the source speech itself is harsh, vulgar or profane, keep it raw and uncensored — never sanitise a real spoken line.
+9. TONE & VOCABULARY: Use modern, trendy internet slang, popular pop-culture lingo, and highly engaging humorous expressions naturally to make the recap entertaining and relatable for young audiences. Keep the vibe highly energetic and cool, but strictly avoid severe profanity or derogatory words.
 10. NATIVE SCRIPT TRANSLITERATION (TTS FRIENDLY): NEVER leave foreign words, brand names, or English words in the Latin (A-Z) alphabet. If you must include them, you MUST transliterate and spell them out phonetically using ONLY the native alphabet of ${langLabel}. For example, if ${lang} is BURMESE, write "Facebook" as "ဖေ့စ်ဘွတ်(ခ်)", "Apple" as "အက်ပဲလ်", NOT "Facebook" or "Apple". This ensures the Text-to-Speech engine reads them smoothly in the native accent.
 
 CRITICAL - DIALOGUE TRANSLATION RULE (MOST IMPORTANT):
@@ -822,7 +812,7 @@ Below is a source video/audio file. Your job is to:
 3. If there is NO spoken dialogue, analyze visual elements, actions, music, settings, body language
 4. Identify ALL key moments, especially dramatic/shocking ones (confrontations, revelations, emotional scenes, physical actions like kisses/fights/tears)
 5. Write a complete professional ${nicheLabel} narration script that covers only the essential story beats and script must be fullcoverage on source video
-6. A viewer reading your script aloud MUST finish in about 100% of the original source duration (see REQUIRED NARRATION LENGTH above) and must cover the full source from beginning to end.
+6. A viewer reading your script aloud MUST finish in about 70% of the original source duration (see REQUIRED NARRATION LENGTH above) and must cover the full source from beginning to end.
 7. Hook the audience immediately
 8. Use vivid, engaging ${lang} appropriate for "${nicheLabel}" content
 9. Be perfectly paced for voice narration
@@ -966,8 +956,7 @@ ${transcript}
           "gemini-flash-latest",
           "gemini-flash-lite-latest",
         ];
-    const shouldFallback = (status?: number) =>
-      !isOwnApi && (status === 404 || status === 429 || status === 503 || status === 504);
+    const shouldFallback = (status?: number) => status === 404 || status === 429 || status === 503 || status === 504;
 
     for (const fallbackModel of fallbackModels) {
       // Fallback if: no response (timeout/abort/network) OR response not ok and status warrants fallback
@@ -1113,7 +1102,7 @@ ${transcript}
       }
       return s.trim();
     };
-    const normalizedRawScript = stripHookPreamble(rawScript);
+    let normalizedRawScript = stripHookPreamble(rawScript);
 
     if (!normalizedRawScript || normalizedRawScript.length < 10) {
       console.error("[recap-script-generator] Empty or invalid script output");
@@ -1124,28 +1113,107 @@ ${transcript}
     }
 
     if (sourceDurationSec && !endsAtCompleteSentence(normalizedRawScript)) {
-      console.error("[recap-script-generator] Incomplete script output detected before length enforcement");
-      return new Response(
-        JSON.stringify({
-          error: "AI script က ဝါကျမဆုံးခင် တန်းလန်းရပ်သွားပါသည်။ Retry Script ကိုနှိပ်ပြီး ပြန် Generate လုပ်ပါ။",
-          retryable: true,
-          incompleteOutput: true,
-          retryAfterSeconds: 5,
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      console.warn("[recap-script-generator] Incomplete sentence detected — auto-completing");
+      if (remainingBudget() > 12000) {
+        const lastLines = normalizedRawScript.split("\n").slice(-5).join("\n");
+        const completePrompt = `The narration script below was cut off mid-sentence. Continue EXACTLY from where it stopped and finish the sentence, then keep writing until the source video's ending is fully covered.
+
+Rules:
+- Your first word must be the direct continuation of the last incomplete sentence below — no gap, no restart.
+- After completing that sentence, continue narrating any remaining source content.
+- Same language (${lang}), same tone, same [MM:SS] format.
+- Do NOT repeat anything already written.
+
+LAST LINES (continue from here):
+${lastLines}`;
+        const completeCtrl = new AbortController();
+        const completeTimer = setTimeout(
+          () => completeCtrl.abort(),
+          Math.max(5000, Math.min(40000, remainingBudget() - 8000)),
+        );
+        try {
+          const completeRes = await callGeminiGenerateContent(
+            activeModel,
+            activeApiKey,
+            isOwnApi,
+            completeCtrl.signal,
+            finalSystemPrompt,
+            [{ text: completePrompt }, ...contentParts.slice(1)],
+            requestedMaxOutputTokens,
+          );
+          if (completeRes.ok) {
+            const completeData = await completeRes.json();
+            const continuation = (completeData.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
+            if (continuation.length > 2) {
+              normalizedRawScript = normalizedRawScript + " " + continuation;
+              console.log(`[recap-script-generator] Auto-complete succeeded (${continuation.length} chars added)`);
+            }
+          }
+        } catch (completeErr) {
+          console.warn(
+            `[recap-script-generator] Auto-complete error: ${completeErr instanceof Error ? completeErr.message : String(completeErr)}`,
+          );
+        } finally {
+          clearTimeout(completeTimer);
+        }
+      }
     }
 
     if (violatesTargetLanguage(normalizedRawScript, lang)) {
-      console.error(`[recap-script-generator] Target language validation failed for ${lang}`);
-      return new Response(
-        JSON.stringify({
-          error: "AI က ရွေးထားတဲ့ target language အတိုင်း script မထုတ်ပေးလို့ credit မဖြတ်ပါ။ ပြန် Generate လုပ်ပါ။",
-          retryable: true,
-          languageMismatch: true,
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      console.warn(`[recap-script-generator] Target language violation for ${lang} — auto-retrying up to 5 times`);
+      let langFixed = false;
+      for (let langAttempt = 1; langAttempt <= 5 && !langFixed && remainingBudget() > 15000; langAttempt++) {
+        const langRetryCtrl = new AbortController();
+        const langRetryTimer = setTimeout(
+          () => langRetryCtrl.abort(),
+          Math.max(5000, Math.min(50000, remainingBudget() - 8000)),
+        );
+        try {
+          const langRetryRes = await callGeminiGenerateContent(
+            activeModel,
+            activeApiKey,
+            isOwnApi,
+            langRetryCtrl.signal,
+            finalSystemPrompt,
+            contentParts,
+            requestedMaxOutputTokens,
+          );
+          if (langRetryRes.ok) {
+            const langRetryData = await langRetryRes.json();
+            let retryScript = langRetryData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+            if (retryScript.includes("===STORY_BIBLE===")) {
+              const sbIdx = retryScript.indexOf("===STORY_BIBLE===");
+              const sbRaw = retryScript
+                .slice(sbIdx + "===STORY_BIBLE===".length)
+                .replace(/```[a-zA-Z]*/g, "")
+                .trim();
+              try {
+                const s = sbRaw.indexOf("{");
+                const e = sbRaw.lastIndexOf("}");
+                if (s !== -1 && e > s) storyBible = JSON.parse(sbRaw.slice(s, e + 1));
+              } catch {}
+              retryScript = retryScript.slice(0, sbIdx).trim();
+            }
+            retryScript = stripHookPreamble(retryScript);
+            if (retryScript.length > 10 && !violatesTargetLanguage(retryScript, lang)) {
+              normalizedRawScript = retryScript;
+              langFixed = true;
+              console.log(`[recap-script-generator] Language auto-retry ${langAttempt}/5 succeeded for ${lang}`);
+            } else {
+              console.warn(`[recap-script-generator] Language auto-retry ${langAttempt}/5 still violated for ${lang}`);
+            }
+          }
+        } catch (langRetryErr) {
+          console.warn(
+            `[recap-script-generator] Language auto-retry ${langAttempt}/5 error: ${langRetryErr instanceof Error ? langRetryErr.message : String(langRetryErr)}`,
+          );
+        } finally {
+          clearTimeout(langRetryTimer);
+        }
+      }
+      if (!langFixed) {
+        console.warn(`[recap-script-generator] All language retries failed — proceeding with script anyway`);
+      }
     }
 
     // Skip premature trimming — let continuation passes complete first, trim at the end only
