@@ -5535,7 +5535,7 @@ const RecapVideoNVPage: React.FC = () => {
   // ===== SERIES CONTINUITY (additive, optional) =====
   const [seriesEnabled, setSeriesEnabled] = useState(false);
   const [seriesName, setSeriesName] = useState("");
-  const [seriesPart, setSeriesPart] = useState<number>(1);
+  const [seriesPart, setSeriesPart] = useState<string>("1");
   const [seriesList, setSeriesList] = useState<
     { series_name: string; last_part: number; story_bible: Record<string, unknown> | null }[]
   >([]);
@@ -5554,9 +5554,20 @@ const RecapVideoNVPage: React.FC = () => {
   }, []);
   const buildSeriesContext = useCallback((): string => {
     if (!seriesEnabled || !seriesName.trim()) return "";
-    // SURGICAL: finale detection — user types "ဇာတ်သိမ်း" / "finale" / "final part" in the series name
     const nameRaw = seriesName.trim();
-    const isFinale = /ဇာတ်သိမ်း|ဇာတ်သိမ်းပိုင်း|finale|final part|last part/i.test(nameRaw);
+    const partRaw = String(seriesPart ?? "").trim();
+    // SURGICAL: finale detection now lives in the EPISODE NUMBER field, not the series name field.
+    const isFinale = /ဇာတ်သိမ်း|ဇာတ်သိမ်းပိုင်း|finale|final part|last part/i.test(partRaw);
+    const explicitPart = parseInt(partRaw.replace(/\D/g, ""), 10);
+    const row = seriesList.find((s) => s.series_name === nameRaw);
+    const savedLast = row?.last_part || 0;
+    let partNum = 1;
+    if (isFinale) {
+      partNum = !isNaN(explicitPart) ? explicitPart : savedLast > 0 ? savedLast + 1 : 1;
+    } else {
+      partNum = !isNaN(explicitPart) ? explicitPart : 1;
+    }
+    const prevPart = Math.max(1, partNum - 1);
     const finaleBlock = isFinale
       ? `FINALE PART (STORY ENDING):
 - This is the FINAL part of the series. The story ENDS here.
@@ -5565,8 +5576,7 @@ const RecapVideoNVPage: React.FC = () => {
 - Keep it natural and spoken — no formal literary endings, no meta-talk, no channel-subscription sales pitch beyond the thank-you.
 - These closing lines still follow the normal [MM:SS] timecode format like every other paragraph.`
       : "";
-    if (seriesPart <= 1) return finaleBlock;
-    const row = seriesList.find((s) => s.series_name === nameRaw);
+    if (partNum <= 1) return finaleBlock;
     const bible: any = row?.story_bible;
     if (!bible || typeof bible !== "object" || Object.keys(bible).length === 0) return finaleBlock;
     const chars = Array.isArray(bible.characters)
@@ -5589,8 +5599,8 @@ const RecapVideoNVPage: React.FC = () => {
           .join("\n")
       : "";
     return [
-      `SERIES: ${nameRaw} — this is PART ${seriesPart}. The PREVIOUS PART is PART ${seriesPart - 1}. Previous parts: 1..${seriesPart - 1}.`,
-      `CONTINUE DIRECTLY FROM PART ${seriesPart - 1} (the part numbered exactly one less than this one).`,
+      `SERIES: ${nameRaw} — this is PART ${partNum}. The PREVIOUS PART is PART ${prevPart}. Previous parts: 1..${prevPart}.`,
+      `CONTINUE DIRECTLY FROM PART ${prevPart} (the part numbered exactly one less than this one).`,
       bible.content_type ? `SERIES TYPE: ${bible.content_type}` : "",
       bible.series_focus ? `SERIES FOCUS: ${bible.series_focus}` : "",
       chars ? `CHARACTERS:\n${chars}` : "",
@@ -5625,11 +5635,23 @@ const RecapVideoNVPage: React.FC = () => {
       const { data: authData } = await supabase.auth.getUser();
       const uid = authData?.user?.id;
       if (!uid) return;
+      // SURGICAL: derive a clean numeric last_part from the free-text episode field (e.g. "12" or "ဇာတ်သိမ်း").
+      const partRaw = String(seriesPart ?? "").trim();
+      const isFinale = /ဇာတ်သိမ်း|ဇာတ်သိမ်းပိုင်း|finale|final part|last part/i.test(partRaw);
+      const explicitPart = parseInt(partRaw.replace(/\D/g, ""), 10);
+      const savedLast = seriesList.find((s) => s.series_name === name)?.last_part || 0;
+      const partNum = isFinale && isNaN(explicitPart)
+        ? savedLast > 0
+          ? savedLast + 1
+          : 1
+        : !isNaN(explicitPart)
+          ? explicitPart
+          : 1;
       const { error } = await supabase.from("recap_series").upsert(
         {
           user_id: uid,
           series_name: name,
-          last_part: seriesPart,
+          last_part: partNum,
           story_bible: bible as any,
         },
         { onConflict: "user_id,series_name" },
@@ -5640,11 +5662,14 @@ const RecapVideoNVPage: React.FC = () => {
       }
       setSeriesList((prev) => {
         const rest = prev.filter((s) => s.series_name !== name);
-        return [{ series_name: name, last_part: seriesPart, story_bible: bible as any }, ...rest];
+        return [{ series_name: name, last_part: partNum, story_bible: bible as any }, ...rest];
       });
-      setSeriesPart((p) => p + 1);
+      setSeriesPart((p) => {
+        const n = parseInt(String(p).replace(/\D/g, ""), 10) || 1;
+        return String(n + 1);
+      });
     },
-    [seriesEnabled, seriesName, seriesPart],
+    [seriesEnabled, seriesName, seriesPart, seriesList],
   );
   // SURGICAL: Restore blocking "Solve to fix" error dialog (per user request)
   const [errorBox, setErrorBox] = useState<{ title: string; message: string; suggestion: string } | null>(null);
@@ -7042,7 +7067,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                     onValueChange={(v) => {
                       setSeriesName(v);
                       const row = seriesList.find((s) => s.series_name === v);
-                      setSeriesPart((row?.last_part || 0) + 1);
+                      setSeriesPart(String((row?.last_part || 0) + 1));
                     }}
                   >
                     <SelectTrigger className="w-full bg-background border-border text-foreground text-xs h-9">
@@ -7066,18 +7091,18 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                     className="flex-1 h-9 rounded-md border border-border bg-background px-3 text-sm text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                   <input
-                    type="number"
-                    min={1}
+                    type="text"
+                    inputMode="numeric"
                     value={seriesPart}
-                    onChange={(e) => setSeriesPart(Math.max(1, Number(e.target.value) || 1))}
-                    className="w-20 h-9 rounded-md border border-border bg-background px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-ring"
+                    onChange={(e) => setSeriesPart(e.target.value)}
+                    placeholder="အပိုင်းနံပါတ် (ဥပမာ 12 / ဇာတ်သိမ်း)"
+                    className="w-32 h-9 rounded-md border border-border bg-background px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </div>
                 <p className="text-[11px] text-muted-foreground">
                   နာမည်ကွက်လပ်ထားရင် AI က မူရင်း video ရဲ့ ဇာတ်ကားနာမည်/အကြောင်းအရာအပေါ် အခြေခံပြီး ဆွဲဆောင်မှုရှိတဲ့
-                  Series နာမည်ကို auto ရေးပေးပါမယ်။ အပိုင်းနံပါတ်ကိုတော့ ကိုယ်တိုင် ထည့်ပါ။ နောက်ဆုံးအပိုင်းဆိုရင် နာမည်ထဲမှာ
-                  "ဇာတ်သိမ်း" ထည့်ရေးပါ — ဇာတ်လမ်းပြီးဆုံးကြောင်း အနှစ်ချုပ်နဲ့ ကျေးဇူးတင်စကား auto ပါလာပါမယ်။
-
+                  Series နာမည်ကို auto ရေးပေးပါမယ်။ အပိုင်းနံပါတ်ကိုတော့ ကိုယ်တိုင် ထည့်ပါ။ နောက်ဆုံးအပိုင်းဆိုရင် အပိုင်းနံပါတ်
+                  ကွက်လပ်မှာ "ဇာတ်သိမ်း" လို့ရေးပါ — ဇာတ်လမ်းပြီးဆုံးကြောင်း အနှစ်ချုပ်နဲ့ ကျေးဇူးတင်စကား auto ပါလာပါမယ်။
                 </p>
               </div>
             )}
