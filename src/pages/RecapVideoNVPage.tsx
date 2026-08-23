@@ -5535,7 +5535,7 @@ const RecapVideoNVPage: React.FC = () => {
   // ===== SERIES CONTINUITY (additive, optional) =====
   const [seriesEnabled, setSeriesEnabled] = useState(false);
   const [seriesName, setSeriesName] = useState("");
-  const [seriesPart, setSeriesPart] = useState<number>(1);
+  const [seriesPart, setSeriesPart] = useState<string>("1");
   const [seriesList, setSeriesList] = useState<
     { series_name: string; last_part: number; story_bible: Record<string, unknown> | null }[]
   >([]);
