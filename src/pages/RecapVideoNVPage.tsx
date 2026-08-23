@@ -7067,7 +7067,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                     onValueChange={(v) => {
                       setSeriesName(v);
                       const row = seriesList.find((s) => s.series_name === v);
-                      setSeriesPart((row?.last_part || 0) + 1);
+                      setSeriesPart(String((row?.last_part || 0) + 1));
                     }}
                   >
                     <SelectTrigger className="w-full bg-background border-border text-foreground text-xs h-9">
