@@ -511,26 +511,6 @@ ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
 - Goal: the viewer feels pity, anger, tension, or satisfaction as it happens — because they hear the real words and see the described reaction, not a summary.`
         : "";
 
-    const viralBalanceBlock =
-      narrationStyle === "VIRAL"
-        ? `\n\nVIRAL MODE BALANCE (mandatory — dialogue-heavy, but NEVER dialogue-only):
-- Keep ALL the real dialogue (this is the backbone), but the script must NOT read like a bare dialogue transcript.
-- MAXIMUM 2-3 DIALOGUES RULE: You must NEVER write more than 2 or 3 consecutive [DIALOGUE] lines without inserting a [MM:SS] Narrator line.
-- CONTINUOUS CONVERSATION RULE: Even during a continuous back-and-forth conversation with no silent gaps, you MUST pause the dialogue after every 2-3 speaker turns and insert a 1-sentence narrator line describing their face expressions, body language, or the emotional tension of the argument.
-- NARRATOR'S ROLE (PLOT BRIDGES, ACTION & RELATIONSHIPS - 20%): Narrator lines are NOT optional filler — they are essential story glue. Insert narrator paragraphs to:
-  * Describe WHO the characters are and their RELATIONSHIP to each other (e.g. husband-wife, boss-employee, childhood friends) — especially on first appearance.
-  * Bridge between scenes: explain where, when, why, and what changed.
-  * Describe physical actions, fights, chases, embraces — concrete verbs, not summaries.
-  * Show face/body reactions: tears, trembling, jaw clenching, stepping back.
-- STORY-CONNECTION REQUIREMENT: The narrator lines must make the PLOT understandable on their own — who did what to whom, where, and why it matters right now. A viewer who never saw the source must follow the story from the script alone.
-- If two consecutive dialogue blocks come from different scenes, different speakers' situations, or after a time jump, you MUST place a connective narrator/action line between them.
-- Never invent facts in these narrator lines: describe only actions, expressions and relationships that are visible or audible in the source.
-- NATIVE SCRIPT TRANSLITERATION (TTS FRIENDLY): NEVER leave foreign words, brand names, or English words in the Latin (A-Z) alphabet. You MUST transliterate and spell them out phonetically using ONLY the native alphabet of ${langLabel} (e.g. if ${lang} is BURMESE, write "Facebook" as "ဖေ့စ်ဘွတ်", NOT "Facebook").
-- TONE & VOCABULARY: Use modern, trendy internet slang, popular pop-culture lingo, and highly engaging humorous expressions naturally (e.g., if ${lang} is BURMESE, use modern daily spoken Burmese, NOT formal/literary Myanmar text).`
-        : "";
-
-    console.log(`[recap-script-generator] Language: ${lang}, Niche: ${nicheLabel}, isOwnApi: ${isOwnApi}`);
-
     // Map language name to a clear, unambiguous native label for the AI
     const langNativeMap: Record<string, string> = {
       ENGLISH: "English",
@@ -551,6 +531,27 @@ ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
       BURMESE: "မြန်မာ (Burmese)",
     };
     const langLabel = langNativeMap[lang] || lang;
+
+    const viralBalanceBlock =
+      narrationStyle === "VIRAL"
+        ? `\n\nVIRAL MODE BALANCE (mandatory — dialogue-heavy, but NEVER dialogue-only):
+- Keep ALL the real dialogue (this is the backbone), but the script must NOT read like a bare dialogue transcript.
+- MAXIMUM 2-3 DIALOGUES RULE: You must NEVER write more than 2 or 3 consecutive [DIALOGUE] lines without inserting a [MM:SS] Narrator line.
+- CONTINUOUS CONVERSATION RULE: Even during a continuous back-and-forth conversation with no silent gaps, you MUST pause the dialogue after every 2-3 speaker turns and insert a 1-sentence narrator line describing their face expressions, body language, or the emotional tension of the argument.
+- NARRATOR'S ROLE (PLOT BRIDGES, ACTION & RELATIONSHIPS - 20%): Narrator lines are NOT optional filler — they are essential story glue. Insert narrator paragraphs to:
+  * Describe WHO the characters are and their RELATIONSHIP to each other (e.g. husband-wife, boss-employee, childhood friends) — especially on first appearance.
+  * Bridge between scenes: explain where, when, why, and what changed.
+  * Describe physical actions, fights, chases, embraces — concrete verbs, not summaries.
+  * Show face/body reactions: tears, trembling, jaw clenching, stepping back.
+- STORY-CONNECTION REQUIREMENT: The narrator lines must make the PLOT understandable on their own — who did what to whom, where, and why it matters right now. A viewer who never saw the source must follow the story from the script alone.
+- If two consecutive dialogue blocks come from different scenes, different speakers' situations, or after a time jump, you MUST place a connective narrator/action line between them.
+- Never invent facts in these narrator lines: describe only actions, expressions and relationships that are visible or audible in the source.
+- NATIVE SCRIPT TRANSLITERATION (TTS FRIENDLY): NEVER leave foreign words, brand names, or English words in the Latin (A-Z) alphabet. You MUST transliterate and spell them out phonetically using ONLY the native alphabet of ${langLabel} (e.g. if ${lang} is BURMESE, write "Facebook" as "ဖေ့စ်ဘွတ်", NOT "Facebook").
+- TONE & VOCABULARY: Use modern, trendy internet slang, popular pop-culture lingo, and highly engaging humorous expressions naturally (e.g., if ${lang} is BURMESE, use modern daily spoken Burmese, NOT formal/literary Myanmar text).`
+        : "";
+
+    console.log(`[recap-script-generator] Language: ${lang}, Niche: ${nicheLabel}, isOwnApi: ${isOwnApi}`);
+
     const targetLanguageLock = `TARGET LANGUAGE LOCK: The target output language is strictly ${langLabel}. The source video might be in Chinese or another language, but you MUST translate EVERYTHING (including all character dialogues, signs, and story details) directly into modern, conversational ${langLabel}. NEVER output the original source language. NEVER mix languages in a single sentence.`;
 
     const systemPrompt = `You are a world-class professional scriptwriter. You write premium narration scripts at Netflix/BBC/HBO broadcast standard.
