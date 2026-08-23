@@ -5553,10 +5553,22 @@ const RecapVideoNVPage: React.FC = () => {
     };
   }, []);
   const buildSeriesContext = useCallback((): string => {
-    if (!seriesEnabled || !seriesName.trim() || seriesPart <= 1) return "";
-    const row = seriesList.find((s) => s.series_name === seriesName.trim());
+    if (!seriesEnabled || !seriesName.trim()) return "";
+    // SURGICAL: finale detection — user types "ဇာတ်သိမ်း" / "finale" / "final part" in the series name
+    const nameRaw = seriesName.trim();
+    const isFinale = /ဇာတ်သိမ်း|ဇာတ်သိမ်းပိုင်း|finale|final part|last part/i.test(nameRaw);
+    const finaleBlock = isFinale
+      ? `FINALE PART (STORY ENDING):
+- This is the FINAL part of the series. The story ENDS here.
+- After the last story beat, close with a short 1-2 sentence wrap-up (အနှစ်ချုပ် သုံးသပ်ချက်) in the same narration language, spoken style, telling viewers the story is now finished.
+- Then add one short warm thank-you line thanking every single viewer who watched to the very end and supported the series.
+- Keep it natural and spoken — no formal literary endings, no meta-talk, no channel-subscription sales pitch beyond the thank-you.
+- These closing lines still follow the normal [MM:SS] timecode format like every other paragraph.`
+      : "";
+    if (seriesPart <= 1) return finaleBlock;
+    const row = seriesList.find((s) => s.series_name === nameRaw);
     const bible: any = row?.story_bible;
-    if (!bible || typeof bible !== "object" || Object.keys(bible).length === 0) return "";
+    if (!bible || typeof bible !== "object" || Object.keys(bible).length === 0) return finaleBlock;
     const chars = Array.isArray(bible.characters)
       ? bible.characters
           .map((c: any) => `- ${c?.name || ""}${c?.role ? ` (${c.role})` : ""}${c?.note ? ` — ${c.note}` : ""}`)
@@ -5577,22 +5589,28 @@ const RecapVideoNVPage: React.FC = () => {
           .join("\n")
       : "";
     return [
-      `SERIES: ${seriesName.trim()} — this is PART ${seriesPart}. Previous parts: 1..${seriesPart - 1}.`,
+      `SERIES: ${nameRaw} — this is PART ${seriesPart}. The PREVIOUS PART is PART ${seriesPart - 1}. Previous parts: 1..${seriesPart - 1}.`,
+      `CONTINUE DIRECTLY FROM PART ${seriesPart - 1} (the part numbered exactly one less than this one).`,
       bible.content_type ? `SERIES TYPE: ${bible.content_type}` : "",
       bible.series_focus ? `SERIES FOCUS: ${bible.series_focus}` : "",
       chars ? `CHARACTERS:\n${chars}` : "",
       rels ? `RELATIONSHIPS:\n${rels}` : "",
       ents ? `KEY ENTITIES (people, places, orgs, tools, terms):\n${ents}` : "",
+      chars || ents
+        ? `NAME LOCK (CRITICAL): Use the character/entity names above EXACTLY as written — same spelling, same transliteration, every time. Never rename, shorten, translate, swap or invent a name. If someone in the source video is not in the list, describe them by role/relationship instead of inventing a name, and never reuse an existing name for a different person.`
+        : "",
       list(bible.topics_covered) ? `TOPICS ALREADY COVERED (do NOT repeat):\n${list(bible.topics_covered)}` : "",
       list(bible.key_facts) ? `KEY FACTS / NUMBERS / TERMS (must stay consistent):\n${list(bible.key_facts)}` : "",
       list(bible.open_threads) ? `OPEN THREADS (still unanswered):\n${list(bible.open_threads)}` : "",
       bible.plot_so_far ? `STORY SO FAR:\n${bible.plot_so_far}` : "",
       bible.last_scene_ending ? `HOW THE PREVIOUS PART ENDED:\n${bible.last_scene_ending}` : "",
       bible.last_point_ending ? `WHERE THE PREVIOUS PART STOPPED:\n${bible.last_point_ending}` : "",
+      finaleBlock,
     ]
       .filter(Boolean)
       .join("\n\n");
   }, [seriesEnabled, seriesName, seriesPart, seriesList]);
+
   const saveSeriesBible = useCallback(
     async (bible: unknown) => {
       if (!seriesEnabled || !bible || typeof bible !== "object") return;
