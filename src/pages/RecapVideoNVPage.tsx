@@ -5554,9 +5554,20 @@ const RecapVideoNVPage: React.FC = () => {
   }, []);
   const buildSeriesContext = useCallback((): string => {
     if (!seriesEnabled || !seriesName.trim()) return "";
-    // SURGICAL: finale detection — user types "ဇာတ်သိမ်း" / "finale" / "final part" in the series name
     const nameRaw = seriesName.trim();
-    const isFinale = /ဇာတ်သိမ်း|ဇာတ်သိမ်းပိုင်း|finale|final part|last part/i.test(nameRaw);
+    const partRaw = String(seriesPart ?? "").trim();
+    // SURGICAL: finale detection now lives in the EPISODE NUMBER field, not the series name field.
+    const isFinale = /ဇာတ်သိမ်း|ဇာတ်သိမ်းပိုင်း|finale|final part|last part/i.test(partRaw);
+    const explicitPart = parseInt(partRaw.replace(/\D/g, ""), 10);
+    const row = seriesList.find((s) => s.series_name === nameRaw);
+    const savedLast = row?.last_part || 0;
+    let partNum = 1;
+    if (isFinale) {
+      partNum = !isNaN(explicitPart) ? explicitPart : savedLast > 0 ? savedLast + 1 : 1;
+    } else {
+      partNum = !isNaN(explicitPart) ? explicitPart : 1;
+    }
+    const prevPart = Math.max(1, partNum - 1);
     const finaleBlock = isFinale
       ? `FINALE PART (STORY ENDING):
 - This is the FINAL part of the series. The story ENDS here.
@@ -5565,8 +5576,7 @@ const RecapVideoNVPage: React.FC = () => {
 - Keep it natural and spoken — no formal literary endings, no meta-talk, no channel-subscription sales pitch beyond the thank-you.
 - These closing lines still follow the normal [MM:SS] timecode format like every other paragraph.`
       : "";
-    if (seriesPart <= 1) return finaleBlock;
-    const row = seriesList.find((s) => s.series_name === nameRaw);
+    if (partNum <= 1) return finaleBlock;
     const bible: any = row?.story_bible;
     if (!bible || typeof bible !== "object" || Object.keys(bible).length === 0) return finaleBlock;
     const chars = Array.isArray(bible.characters)
@@ -5589,8 +5599,8 @@ const RecapVideoNVPage: React.FC = () => {
           .join("\n")
       : "";
     return [
-      `SERIES: ${nameRaw} — this is PART ${seriesPart}. The PREVIOUS PART is PART ${seriesPart - 1}. Previous parts: 1..${seriesPart - 1}.`,
-      `CONTINUE DIRECTLY FROM PART ${seriesPart - 1} (the part numbered exactly one less than this one).`,
+      `SERIES: ${nameRaw} — this is PART ${partNum}. The PREVIOUS PART is PART ${prevPart}. Previous parts: 1..${prevPart}.`,
+      `CONTINUE DIRECTLY FROM PART ${prevPart} (the part numbered exactly one less than this one).`,
       bible.content_type ? `SERIES TYPE: ${bible.content_type}` : "",
       bible.series_focus ? `SERIES FOCUS: ${bible.series_focus}` : "",
       chars ? `CHARACTERS:\n${chars}` : "",
@@ -5625,11 +5635,23 @@ const RecapVideoNVPage: React.FC = () => {
       const { data: authData } = await supabase.auth.getUser();
       const uid = authData?.user?.id;
       if (!uid) return;
+      // SURGICAL: derive a clean numeric last_part from the free-text episode field (e.g. "12" or "ဇာတ်သိမ်း").
+      const partRaw = String(seriesPart ?? "").trim();
+      const isFinale = /ဇာတ်သိမ်း|ဇာတ်သိမ်းပိုင်း|finale|final part|last part/i.test(partRaw);
+      const explicitPart = parseInt(partRaw.replace(/\D/g, ""), 10);
+      const savedLast = seriesList.find((s) => s.series_name === name)?.last_part || 0;
+      const partNum = isFinale && isNaN(explicitPart)
+        ? savedLast > 0
+          ? savedLast + 1
+          : 1
+        : !isNaN(explicitPart)
+          ? explicitPart
+          : 1;
       const { error } = await supabase.from("recap_series").upsert(
         {
           user_id: uid,
           series_name: name,
-          last_part: seriesPart,
+          last_part: partNum,
           story_bible: bible as any,
         },
         { onConflict: "user_id,series_name" },
@@ -5640,11 +5662,14 @@ const RecapVideoNVPage: React.FC = () => {
       }
       setSeriesList((prev) => {
         const rest = prev.filter((s) => s.series_name !== name);
-        return [{ series_name: name, last_part: seriesPart, story_bible: bible as any }, ...rest];
+        return [{ series_name: name, last_part: partNum, story_bible: bible as any }, ...rest];
       });
-      setSeriesPart((p) => p + 1);
+      setSeriesPart((p) => {
+        const n = parseInt(String(p).replace(/\D/g, ""), 10) || 1;
+        return String(n + 1);
+      });
     },
-    [seriesEnabled, seriesName, seriesPart],
+    [seriesEnabled, seriesName, seriesPart, seriesList],
   );
   // SURGICAL: Restore blocking "Solve to fix" error dialog (per user request)
   const [errorBox, setErrorBox] = useState<{ title: string; message: string; suggestion: string } | null>(null);
