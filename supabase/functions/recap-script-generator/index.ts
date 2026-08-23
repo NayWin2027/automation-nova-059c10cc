@@ -552,26 +552,6 @@ ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
 
     console.log(`[recap-script-generator] Language: ${lang}, Niche: ${nicheLabel}, isOwnApi: ${isOwnApi}`);
 
-    // Map language name to a clear, unambiguous native label for the AI
-    const langNativeMap: Record<string, string> = {
-      ENGLISH: "English",
-      JAPANESE: "日本語 (Japanese)",
-      KOREAN: "한국어 (Korean)",
-      CHINESE: "中文 (Chinese)",
-      THAI: "ภาษาไทย (Thai)",
-      HINDI: "हिन्दी (Hindi)",
-      SPANISH: "Español (Spanish)",
-      FRENCH: "Français (French)",
-      GERMAN: "Deutsch (German)",
-      ITALIAN: "Italiano (Italian)",
-      PORTUGUESE: "Português (Portuguese)",
-      RUSSIAN: "Русский (Russian)",
-      ARABIC: "العربية (Arabic)",
-      VIETNAMESE: "Tiếng Việt (Vietnamese)",
-      INDONESIAN: "Bahasa Indonesia (Indonesian)",
-      BURMESE: "မြန်မာ (Burmese)",
-    };
-    const langLabel = langNativeMap[lang] || lang;
     const targetLanguageLock = `TARGET LANGUAGE LOCK: The target output language is strictly ${langLabel}. The source video might be in Chinese or another language, but you MUST translate EVERYTHING (including all character dialogues, signs, and story details) directly into modern, conversational ${langLabel}. NEVER output the original source language. NEVER mix languages in a single sentence.`;
 
     const systemPrompt = `You are a world-class professional scriptwriter. You write premium narration scripts at Netflix/BBC/HBO broadcast standard.
