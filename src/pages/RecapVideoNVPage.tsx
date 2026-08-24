@@ -5458,7 +5458,7 @@ STREET-SPOKEN STYLE & MODERN SLANG (HYBRID/VIRAL only):
 - Match the words to what is actually happening on screen at that moment (action, gesture, expression).
 - NEVER invent dialogue that does not exist in the source. If the source has no speech at that point, stay in narrator voice.
 - Keep the same total length rules as normal; this changes HOW it is written, not how much.
-- THIS OVERRIDES any earlier instruction that says to avoid quoting dialogue: quoting real spoken lines is REQUIRED in this style.${timingLockBlock}`;
+- THIS OVERRIDES any earlier instruction that says to avoid quoting dialogue: quoting real spoken lines is REQUIRED in this style.${timingLockBlock}${translitBlock}`;
   }
   if (style === "VIRAL") {
     return `\n\nNARRATION STYLE — VIRAL (short-form, TikTok/Reels):
@@ -5473,11 +5473,11 @@ STREET-SPOKEN STYLE & MODERN SLANG (HYBRID/VIRAL only):
 - Add one such connective line whenever the scene/location/time changes, a new character appears, a fight/chase/physical action happens, or a relationship/motive must be clear for the next dialogue to make sense.
 - Overall mix: roughly 70-80% real dialogue, 20-30% short narrator/action lines. NEVER produce a bare dialogue transcript with no connective lines.
 - Narrator lines must be connective glue only: short, punchy, describing action/reaction — never re-summarising dialogue that was already spoken, never invented facts.
-- THIS OVERRIDES any earlier instruction that says to avoid quoting dialogue: quoting real spoken lines is REQUIRED in this style.${timingLockBlock}`;
+- THIS OVERRIDES any earlier instruction that says to avoid quoting dialogue: quoting real spoken lines is REQUIRED in this style.${timingLockBlock}${translitBlock}`;
   }
   return `\n\nNARRATION STYLE — STORY (full narrative, long-form):
 - Keep the classic complete narrator style: clear beginning-to-end storytelling with smooth flow and emotional depth.
-- Translate what people actually said when it matters, but stay primarily in narrator voice.`;
+- Translate what people actually said when it matters, but stay primarily in narrator voice.${translitBlock}`;
 }
 
 const RecapVideoNVPage: React.FC = () => {
