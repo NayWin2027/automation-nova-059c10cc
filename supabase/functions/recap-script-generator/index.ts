@@ -711,6 +711,21 @@ ${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYL
 ###############################################################
 # FINAL ENFORCEMENT: YOUR ENTIRE OUTPUT MUST BE IN ${lang}.
 # NOT BURMESE. NOT MYANMAR. ONLY ${lang}. EVERY SINGLE WORD.
+###############################################################
+
+###############################################################
+# NATIVE-SCRIPT TRANSLITERATION (MANDATORY — TTS DEPENDS ON IT)
+# Every single character in the script must be written in the
+# ${lang} writing system. NO Chinese/Japanese/Korean characters,
+# NO Latin letters, NO other alphabets anywhere — not even for
+# names, places, brands, or borrowed words.
+# Transliterate them phonetically into ${lang} letters so the
+# text-to-speech voice reads them with a natural ${lang} accent.
+# If ${lang} is BURMESE: 杨帆 → ယန်ဖန်း ; 李伟 → လီဝေ့ ;
+#   Facebook → ဖေ့ဘုတ် ; TikTok → တစ်တော့ ; CEO → စီအီးအို ;
+#   hotel → ဟိုတယ် ; police → ပိုလိစ် ; OK → အိုကေ.
+# A name left in Chinese characters or Latin letters is SKIPPED
+# by the voice engine, so this is a hard failure — never do it.
 ###############################################################${
       narrationStyle === "HYBRID" || narrationStyle === "VIRAL"
         ? `
