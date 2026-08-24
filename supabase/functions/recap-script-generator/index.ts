@@ -11,6 +11,20 @@ const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
 // Use the rolling "latest" alias which stays available for both old and new keys.
 const MODEL = "gemini-3.1-flash-lite";
 
+// SLANG-TEMP: HYBRID/VIRAL modes need a slightly higher temperature so the model
+// actually reaches for street slang instead of the safest plain wording. STORY mode
+// keeps the original 0.35 (anti-hallucination).
+let STYLE_TEMPERATURE = 0.35;
+
+// SLANG-SAFETY: without explicit safetySettings Gemini self-censors harsh/vulgar
+// source dialogue and replaces it with polite wording, which kills verbatim slang.
+const GEMINI_SAFETY_SETTINGS = [
+  { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+];
+
 function buildGenerationConfig(model: string, requestedMaxOutputTokens: number | null): Record<string, unknown> {
   // Burmese/CJK narration costs 2-3 tokens per syllable: an 8192 cap truncated
   // long recaps and dropped the middle/ending beats. Give the model real room.
@@ -20,12 +34,13 @@ function buildGenerationConfig(model: string, requestedMaxOutputTokens: number |
       : Math.max(requestedMaxOutputTokens || 0, 60000);
 
   const config: Record<string, unknown> = {
-    temperature: 0.35,
+    temperature: STYLE_TEMPERATURE,
     maxOutputTokens,
   };
 
   return config;
 }
+
 
 async function callGeminiGenerateContent(
   model: string,
