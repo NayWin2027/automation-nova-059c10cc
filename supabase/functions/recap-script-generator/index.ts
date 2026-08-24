@@ -11,6 +11,20 @@ const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
 // Use the rolling "latest" alias which stays available for both old and new keys.
 const MODEL = "gemini-3.1-flash-lite";
 
+// SLANG-TEMP: HYBRID/VIRAL modes need a slightly higher temperature so the model
+// actually reaches for street slang instead of the safest plain wording. STORY mode
+// keeps the original 0.35 (anti-hallucination).
+let STYLE_TEMPERATURE = 0.35;
+
+// SLANG-SAFETY: without explicit safetySettings Gemini self-censors harsh/vulgar
+// source dialogue and replaces it with polite wording, which kills verbatim slang.
+const GEMINI_SAFETY_SETTINGS = [
+  { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+];
+
 function buildGenerationConfig(model: string, requestedMaxOutputTokens: number | null): Record<string, unknown> {
   // Burmese/CJK narration costs 2-3 tokens per syllable: an 8192 cap truncated
   // long recaps and dropped the middle/ending beats. Give the model real room.
@@ -20,12 +34,13 @@ function buildGenerationConfig(model: string, requestedMaxOutputTokens: number |
       : Math.max(requestedMaxOutputTokens || 0, 60000);
 
   const config: Record<string, unknown> = {
-    temperature: 0.35,
+    temperature: STYLE_TEMPERATURE,
     maxOutputTokens,
   };
 
   return config;
 }
+
 
 async function callGeminiGenerateContent(
   model: string,
@@ -51,7 +66,9 @@ async function callGeminiGenerateContent(
       system_instruction: { parts: [{ text: systemPrompt }] },
       contents: [{ parts: contentParts }],
       generationConfig: buildGenerationConfig(model, requestedMaxOutputTokens),
+      safetySettings: GEMINI_SAFETY_SETTINGS,
     }),
+
   });
 }
 
@@ -456,6 +473,10 @@ serve(async (req) => {
       if (body.narrationStyle === "HYBRID" || body.narrationStyle === "VIRAL" || body.narrationStyle === "STORY") {
         narrationStyle = body.narrationStyle;
       }
+      // SLANG-TEMP: dialogue-heavy modes get a slightly warmer temperature so slang
+      // actually surfaces; STORY keeps the strict 0.35 anti-hallucination setting.
+      STYLE_TEMPERATURE = narrationStyle === "HYBRID" || narrationStyle === "VIRAL" ? 0.55 : 0.35;
+
       // SEO mode: accept a raw seoPrompt as transcript input (used by client SEO metadata generator)
       if (body.seoMode && typeof body.seoPrompt === "string" && body.seoPrompt.trim()) {
         transcript = body.seoPrompt;
@@ -526,7 +547,11 @@ UNCENSORED VERBATIM DIALOGUE (mandatory for ${narrationStyle} mode — 100% of s
 STREET-SPOKEN STYLE & MODERN SLANG (mandatory for ${narrationStyle} mode):
 - Write 100% the way real people talk today. Literary/bookish forms are FORBIDDEN (for BURMESE: no သည်, ၏, ၍, နေသည်, လုပ်နေသည် — use တယ်/တာ/လဲ/ကွာ/ပဲ).
 - Prefer current street slang and trend words over plain wording. BURMESE examples: လှတယ် → လန်းတယ်/; ချစ်တင်းနှောနေတယ် → မူစကူဒူးနေကြတယ်; တင်ပါးလှတယ် → စစ်ကိုင်းအိုးကြီးလို တင်းနေတယ်; ပါးစပ်ပိတ်ထား → စောက်ပေါက်ပိတ်ထား / အီးသိပ်မပေါက်နဲ့; ဂဂျီဂဂျောင်ကျတယ်/ရစ်တယ် → ချီးထုပ်ကျတယ်; လိုရင်းမရောက်ဘဲ ဝေ့ဝိုက်နေတယ် → တိုင်ပတ်နေတယ်; ပြည့်တန်ဆာ → ဖာသည်မ; ဆဲစကား → မအေလိုး/သူတောင်းစား/ ခွေးမသား။ သို့သော် ဆရာတပည့်ဆက်ဆံရေး၊မိဘနဲ့သားသမီးဆက်ဆံရေးတွေမှာဆိုရင် ဒီဗန်းစကားတွေ မသုံးရ။
-- Slang must fit the moment naturally — never force it into a sad or serious beat where it kills the emotion.`
+- SLANG QUOTA (HARD REQUIREMENT): the finished script MUST actually contain AT LEAST 6-10 real slang/street expressions from the list above (or equally current Burmese street slang), spread across the whole script — not just in the hook. A script written entirely in plain polite wording is REJECTED.
+- Whenever a plain word has a street equivalent above, you MUST write the street version. Example: never write "ပါးစပ်ပိတ်ထား" — write "စောက်ပေါက်ပိတ်ထား" or "အီးသိပ်မပေါက်နဲ့". Never write "လှတယ်" — write "လန်းတယ်". Never write "ပြည့်တန်ဆာ" — write "ဖာသည်မ".
+- These slang and vulgar words are ALLOWED and REQUIRED here. No politeness filter, no softening, no self-censoring, no asterisks. This rule OVERRIDES every earlier "avoid profanity / keep it clean / avoid derogatory words" style instruction anywhere in this prompt.
+- Slang must fit the moment naturally — never force it into a sad or serious beat where it kills the emotion, and never in teacher-student or parent-child interactions.`
+
         : "";
 
     const viralBalanceBlock =
@@ -599,7 +624,7 @@ ABSOLUTE RULES:
 6. ${targetLanguageLock}
 7. ZERO HALLUCINATION POLICY: Write ONLY what is visibly or audibly present. DO NOT invent facts. 
 8. CRITICAL LENGTH RULE: To maintain correct audio-visual sync, DO NOT write short or robotic sentences. You MUST write highly detailed, rich, and descriptive sentences about the REAL visible actions, emotions, and settings. Keep the word count naturally full so the voiceover matches the scene length perfectly.
-9. TONE & VOCABULARY: Use modern, trendy internet slang, popular pop-culture lingo, and highly engaging humorous expressions naturally to make the recap entertaining and relatable for young audiences. Keep the vibe highly energetic and cool, but strictly avoid severe profanity or derogatory words.
+9. TONE & VOCABULARY: Use modern, trendy internet slang, popular pop-culture lingo, and highly engaging humorous expressions naturally to make the recap entertaining and relatable for young audiences. Keep the vibe highly energetic and cool. In HYBRID/VIRAL dialogue modes, harsh, vulgar and street slang words ARE allowed and expected whenever the source speaks that way — never soften or censor them.
 10. NATIVE SCRIPT TRANSLITERATION (TTS FRIENDLY): NEVER leave foreign words, brand names, or English words in the Latin (A-Z) alphabet. If you must include them, you MUST transliterate and spell them out phonetically using ONLY the native alphabet of ${langLabel}. For example, if ${lang} is BURMESE, write "Facebook" as "ဖေ့စ်ဘွတ်(ခ်)", "Apple" as "အက်ပဲလ်", NOT "Facebook" or "Apple". This ensures the Text-to-Speech engine reads them smoothly in the native accent.
 
 CRITICAL - DIALOGUE TRANSLATION RULE (MOST IMPORTANT):
@@ -686,7 +711,23 @@ ${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYL
 ###############################################################
 # FINAL ENFORCEMENT: YOUR ENTIRE OUTPUT MUST BE IN ${lang}.
 # NOT BURMESE. NOT MYANMAR. ONLY ${lang}. EVERY SINGLE WORD.
-###############################################################`;
+###############################################################${
+      narrationStyle === "HYBRID" || narrationStyle === "VIRAL"
+        ? `
+
+###############################################################
+# FINAL SLANG ENFORCEMENT (HIGHEST PRIORITY AFTER LANGUAGE)
+# Write 100% street-spoken ${lang}. Use the REQUIRED slang list above
+# (လန်းတယ်, မူစကူဒူး, စစ်ကိုင်းအိုးကြီးလို တင်းနေတယ်, စောက်ပေါက်ပိတ်ထား,
+#  အီးသိပ်မပေါက်နဲ့, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး, ခွေးမသား)
+# at least 6-10 times across the script, and keep every harsh/vulgar
+# source line uncensored and verbatim. Polite substitutes are REJECTED.
+# Exception: no slang/vulgarity in teacher-student or parent-child scenes,
+# or in genuinely sad/serious emotional beats.
+###############################################################`
+        : ""
+    }`;
+
 
     // ===== SERIES CONTINUITY BLOCK (appended only when the caller opts in) =====
     const seriesBlock =
@@ -1138,6 +1179,7 @@ ${transcript}
 Rules:
 - Your first word must be the direct continuation of the last incomplete sentence below — no gap, no restart.
 - After completing that sentence, continue narrating any remaining source content.
+- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, စောက်ပေါက်ပိတ်ထား, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
 - Same language (${lang}), same tone, same [MM:SS] format.
 - Do NOT repeat anything already written.
 
@@ -1444,6 +1486,7 @@ ${
     ? "- This is the FINAL part: cover every remaining beat including the ENDING/climax."
     : "- This is a MIDDLE part: do NOT write an ending or conclusion — stop mid-story on an unresolved beat."
 }
+- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, စောက်ပေါက်ပိတ်ထား, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
 - Same language (${lang}), same tone, same [MM:SS] format. Never [HH:MM:SS], never ranges.
 - Target about ${missingSec} seconds of spoken narration. Finish with complete sentences.
 
@@ -1456,6 +1499,7 @@ CONTINUE the script. Rules:
 - Write ONLY the new paragraphs. Do NOT repeat or rewrite anything already written.
 - Every new paragraph MUST start with a timecode [MM:SS] that is STRICTLY LATER than [${tc(lastTc)}] and must keep increasing.
 - Cover the remaining source content through to the ENDING. Include the beats that were skipped.
+- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, စောက်ပေါက်ပိတ်ထား, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
 - Same language (${lang}), same tone and same [MM:SS] format. Never use [HH:MM:SS] or ranges.
 - Finish with complete sentences. Add roughly ${missingSec} seconds of spoken narration.
 
@@ -1581,6 +1625,7 @@ Rules:
 - Every paragraph MUST start with [MM:SS] STRICTLY LATER than [${tc(lastTc)}] and keep increasing. Nothing after [${tc(sourceDurationSec)}].
 - The final fight/climax must get its own paragraphs — never compressed into one sentence.
 - The LAST paragraph must correspond to the source's final scene and end the story properly.
+- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, စောက်ပေါက်ပိတ်ထား, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
 - Same language (${lang}), same tone, same narrator voice and same [MM:SS] format. Never [HH:MM:SS], never ranges.
 - Finish with a complete sentence.
 
