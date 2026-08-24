@@ -1196,11 +1196,9 @@ ${lastLines}`;
     }
 
     if (violatesTargetLanguage(normalizedRawScript, lang)) {
-      console.warn(`[recap-script-generator] Target language violation for ${lang} — retrying until budget exhausted`);
+      console.warn(`[recap-script-generator] Target language violation for ${lang} — auto-retrying up to 5 times`);
       let langFixed = false;
-      let langAttempt = 0;
-      while (!langFixed && remainingBudget() > 15000) {
-        langAttempt++;
+      for (let langAttempt = 1; langAttempt <= 5 && !langFixed && remainingBudget() > 15000; langAttempt++) {
         const langRetryCtrl = new AbortController();
         const langRetryTimer = setTimeout(
           () => langRetryCtrl.abort(),
@@ -1250,15 +1248,7 @@ ${lastLines}`;
         }
       }
       if (!langFixed) {
-        console.error(`[recap-script-generator] All 5 language retries failed for ${lang} — returning error`);
-        return new Response(
-          JSON.stringify({
-            error: "AI က ရွေးထားတဲ့ ဘာသာစကားအတိုင်း script မထုတ်ပေးနိုင်ပါ။ ထပ်ကြိုးစားပါ။",
-            retryable: true,
-            languageMismatch: true,
-          }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
+        console.warn(`[recap-script-generator] All language retries failed — proceeding with script anyway`);
       }
     }
 
