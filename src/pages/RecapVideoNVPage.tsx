@@ -5412,6 +5412,13 @@ const NARRATION_STYLE_OPTIONS: Record<"STORY" | "HYBRID" | "VIRAL", { emoji: str
 };
 
 function buildNarrationStyleBlock(style: "STORY" | "HYBRID" | "VIRAL", langName: string): string {
+  // SURGICAL: TTS skips foreign glyphs (Chinese names, Latin words), so every
+  // character must be transliterated into the target language's own script.
+  const translitBlock = `\n\nNATIVE-SCRIPT TRANSLITERATION (MANDATORY — the voice engine skips foreign glyphs):
+- EVERY character of the script must be written in the ${langName} writing system. No Chinese/Japanese/Korean characters, no Latin letters, no other alphabets anywhere — including names, places, brands and borrowed words.
+- Transliterate them phonetically into ${langName} letters so the voice reads them with a natural ${langName} accent.
+- If ${langName} is BURMESE: 杨帆 → ယန်ဖန်း ; 李伟 → လီဝေ့ ; Facebook → ဖေ့ဘုတ် ; TikTok → တစ်တော့ ; CEO → စီအီးအို ; hotel → ဟိုတယ် ; police → ပိုလိစ် ; OK → အိုကေ.
+- A name left in Chinese characters or Latin letters is read as silence — that is a hard failure, never do it.`;
   const timingLockBlock = `\n\nDIALOGUE TIMING LOCK (HYBRID/VIRAL only):
 - For each real spoken line, inspect the source carefully and use the EXACT source frame where the speaker's first audible syllable begins (normally the first mouth movement). Do not use a nearby reaction shot, an earlier establishing shot, or an approximate scene time.
 - Keep each speaker turn separate. When the speaker changes, start a new paragraph at that new speaker's exact source start time.
