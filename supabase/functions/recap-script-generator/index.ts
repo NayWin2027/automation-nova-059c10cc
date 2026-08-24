@@ -711,7 +711,23 @@ ${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYL
 ###############################################################
 # FINAL ENFORCEMENT: YOUR ENTIRE OUTPUT MUST BE IN ${lang}.
 # NOT BURMESE. NOT MYANMAR. ONLY ${lang}. EVERY SINGLE WORD.
-###############################################################`;
+###############################################################${
+      narrationStyle === "HYBRID" || narrationStyle === "VIRAL"
+        ? `
+
+###############################################################
+# FINAL SLANG ENFORCEMENT (HIGHEST PRIORITY AFTER LANGUAGE)
+# Write 100% street-spoken ${lang}. Use the REQUIRED slang list above
+# (လန်းတယ်, မူစကူဒူး, စစ်ကိုင်းအိုးကြီးလို တင်းနေတယ်, စောက်ပေါက်ပိတ်ထား,
+#  အီးသိပ်မပေါက်နဲ့, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး, ခွေးမသား)
+# at least 6-10 times across the script, and keep every harsh/vulgar
+# source line uncensored and verbatim. Polite substitutes are REJECTED.
+# Exception: no slang/vulgarity in teacher-student or parent-child scenes,
+# or in genuinely sad/serious emotional beats.
+###############################################################`
+        : ""
+    }`;
+
 
     // ===== SERIES CONTINUITY BLOCK (appended only when the caller opts in) =====
     const seriesBlock =
