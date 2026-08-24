@@ -66,7 +66,9 @@ async function callGeminiGenerateContent(
       system_instruction: { parts: [{ text: systemPrompt }] },
       contents: [{ parts: contentParts }],
       generationConfig: buildGenerationConfig(model, requestedMaxOutputTokens),
+      safetySettings: GEMINI_SAFETY_SETTINGS,
     }),
+
   });
 }
 
