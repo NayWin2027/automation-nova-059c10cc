@@ -1179,6 +1179,7 @@ ${transcript}
 Rules:
 - Your first word must be the direct continuation of the last incomplete sentence below — no gap, no restart.
 - After completing that sentence, continue narrating any remaining source content.
+- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, စောက်ပေါက်ပိတ်ထား, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
 - Same language (${lang}), same tone, same [MM:SS] format.
 - Do NOT repeat anything already written.
 
@@ -1485,6 +1486,7 @@ ${
     ? "- This is the FINAL part: cover every remaining beat including the ENDING/climax."
     : "- This is a MIDDLE part: do NOT write an ending or conclusion — stop mid-story on an unresolved beat."
 }
+- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, စောက်ပေါက်ပိတ်ထား, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
 - Same language (${lang}), same tone, same [MM:SS] format. Never [HH:MM:SS], never ranges.
 - Target about ${missingSec} seconds of spoken narration. Finish with complete sentences.
 
@@ -1497,6 +1499,7 @@ CONTINUE the script. Rules:
 - Write ONLY the new paragraphs. Do NOT repeat or rewrite anything already written.
 - Every new paragraph MUST start with a timecode [MM:SS] that is STRICTLY LATER than [${tc(lastTc)}] and must keep increasing.
 - Cover the remaining source content through to the ENDING. Include the beats that were skipped.
+- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, စောက်ပေါက်ပိတ်ထား, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
 - Same language (${lang}), same tone and same [MM:SS] format. Never use [HH:MM:SS] or ranges.
 - Finish with complete sentences. Add roughly ${missingSec} seconds of spoken narration.
 
@@ -1622,6 +1625,7 @@ Rules:
 - Every paragraph MUST start with [MM:SS] STRICTLY LATER than [${tc(lastTc)}] and keep increasing. Nothing after [${tc(sourceDurationSec)}].
 - The final fight/climax must get its own paragraphs — never compressed into one sentence.
 - The LAST paragraph must correspond to the source's final scene and end the story properly.
+- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, စောက်ပေါက်ပိတ်ထား, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
 - Same language (${lang}), same tone, same narrator voice and same [MM:SS] format. Never [HH:MM:SS], never ranges.
 - Finish with a complete sentence.
 
