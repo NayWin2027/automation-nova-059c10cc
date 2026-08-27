@@ -54,7 +54,63 @@ const stripDialogueMetadata = (text: string): string =>
     .replace(/[ \t]{2,}/g, " ")
     .trim();
 
+// ── LANGUAGE MISMATCH DETECTOR (script text layer only) ──
+const SCRIPT_RANGES: Record<string, RegExp> = {
+  my: /[\u1000-\u109F]/g,
+  th: /[\u0E00-\u0E7F]/g,
+  km: /[\u1780-\u17FF]/g,
+  lo: /[\u0E80-\u0EFF]/g,
+  zh: /[\u4E00-\u9FFF]/g,
+  ja: /[\u3040-\u30FF\u4E00-\u9FFF]/g,
+  ko: /[\uAC00-\uD7AF]/g,
+  ar: /[\u0600-\u06FF]/g,
+  fa: /[\u0600-\u06FF]/g,
+  ur: /[\u0600-\u06FF]/g,
+  he: /[\u0590-\u05FF]/g,
+  hi: /[\u0900-\u097F]/g,
+  mr: /[\u0900-\u097F]/g,
+  ne: /[\u0900-\u097F]/g,
+  bn: /[\u0980-\u09FF]/g,
+  ta: /[\u0B80-\u0BFF]/g,
+  te: /[\u0C00-\u0C7F]/g,
+  kn: /[\u0C80-\u0CFF]/g,
+  ml: /[\u0D00-\u0D7F]/g,
+  gu: /[\u0A80-\u0AFF]/g,
+  pa: /[\u0A00-\u0A7F]/g,
+  si: /[\u0D80-\u0DFF]/g,
+  ru: /[\u0400-\u04FF]/g,
+  uk: /[\u0400-\u04FF]/g,
+  bg: /[\u0400-\u04FF]/g,
+  sr: /[\u0400-\u04FF]/g,
+  mk: /[\u0400-\u04FF]/g,
+  be: /[\u0400-\u04FF]/g,
+  mn: /[\u0400-\u04FF]/g,
+  kk: /[\u0400-\u04FF]/g,
+  ky: /[\u0400-\u04FF]/g,
+  tg: /[\u0400-\u04FF]/g,
+  el: /[\u0370-\u03FF]/g,
+  hy: /[\u0530-\u058F]/g,
+  ka: /[\u10A0-\u10FF]/g,
+  am: /[\u1200-\u137F]/g,
+};
+
+/** Returns true when the script is clearly NOT written in the target language's script. */
+const scriptLanguageMismatch = (text: string, langCode: string): boolean => {
+  const body = String(text || "").replace(/\d|\s|[.,:;!?'"()\-–—[\]{}|/\\]/g, "");
+  if (body.length < 40) return false;
+  const base = (langCode || "").split("-")[0];
+  const range = SCRIPT_RANGES[base];
+  const latin = (body.match(/[A-Za-z]/g) || []).length;
+  if (!range) {
+    // Latin-script target languages: mismatch when Latin letters are a minority.
+    return latin / body.length < 0.5;
+  }
+  const hits = (body.match(range) || []).length;
+  return hits / body.length < 0.35;
+};
+
 type ProcessingStatus = "idle" | "processing" | "done" | "error";
+
 
 interface ResultViewProps {
   scriptData: RecapScript;
