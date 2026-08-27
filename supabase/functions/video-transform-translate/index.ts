@@ -25,12 +25,16 @@ function geminiUnavailableResponse(upstreamStatus: number, detail?: string): Res
 }
 
 const SUBTITLE_MODELS = [
-  "gemini-2.0-flash",
-  "gemini-2.0-flash-001",
   "gemini-2.5-flash",
+  "gemini-flash-lite-latest",
+  "gemini-flash-latest",
   "gemini-2.5-flash-lite",
-  "gemini-1.5-flash-latest",
-  "gemini-1.5-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
+  "gemini-3.7-flash",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash",
+  "gemini-3.1-flash",
 ];
 
 function shouldTryNextModel(status: number): boolean {
@@ -98,22 +102,23 @@ serve(async (req) => {
     // ===== AUTHENTICATION =====
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Authentication required" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Authentication required" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
-    const supabaseAuthClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-    const { data: { user }, error: authError } = await supabaseAuthClient.auth.getUser();
+    const supabaseAuthClient = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseAuthClient.auth.getUser();
     if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Invalid or expired token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Invalid or expired token" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const body = await req.json();
@@ -396,7 +401,10 @@ Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'tex
             timeoutMs,
           );
         } catch (error) {
-          console.warn(`Subtitle model ${model} stalled, trying next non-Pro model...`, error instanceof Error ? error.message : error);
+          console.warn(
+            `Subtitle model ${model} stalled, trying next non-Pro model...`,
+            error instanceof Error ? error.message : error,
+          );
           lastError = error;
           continue;
         }
@@ -404,7 +412,10 @@ Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'tex
         if (response.ok || !shouldTryNextModel(response.status)) return response;
 
         console.warn(`Subtitle model ${model} failed with ${response.status}, trying next non-Pro model...`);
-        await response.clone().text().catch(() => "");
+        await response
+          .clone()
+          .text()
+          .catch(() => "");
         lastResponse = response;
       }
 
@@ -437,7 +448,10 @@ Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'tex
       }
 
       if (response.status === 429) {
-        return jsonResponse({ error: "API rate limit exceeded. Please try again later.", errorCode: "RATE_LIMIT" }, 429);
+        return jsonResponse(
+          { error: "API rate limit exceeded. Please try again later.", errorCode: "RATE_LIMIT" },
+          429,
+        );
       }
 
       if (response.status === 404) {
@@ -454,7 +468,9 @@ Return a JSON array of objects with 'start' (seconds), 'end' (seconds), and 'tex
       const jsonMatch = rawText.match(/\[[\s\S]*\]/);
       const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : "[]");
       if (Array.isArray(parsed)) {
-        text = JSON.stringify(parsed.filter((item: any) => !hasTargetScriptConflict(String(item?.text || ""), targetLang)));
+        text = JSON.stringify(
+          parsed.filter((item: any) => !hasTargetScriptConflict(String(item?.text || ""), targetLang)),
+        );
       }
     } catch {
       text = rawText;
