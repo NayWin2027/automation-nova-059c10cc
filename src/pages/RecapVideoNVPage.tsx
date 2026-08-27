@@ -5910,16 +5910,10 @@ const RecapVideoNVPage: React.FC = () => {
         setScriptData((prev) => ({ ...prev, full_script: stripDialogueMetadata(out) }));
       }
 
-      toast({
-        title: "✅ ဘာသာပြန်ပြီးပါပြီ",
-        description: `${selectedLangName} အဖြစ် ပြောင်းပြီးပါပြီ။ Voice ဆက်ထုတ်လို့ရပါပြီ။`,
-      });
+      toast.success(`✅ ${selectedLangName} အဖြစ် ဘာသာပြန်ပြီးပါပြီ။ Voice ဆက်ထုတ်လို့ရပါပြီ။`);
     } catch (e) {
-      toast({
-        title: "❌ Translate မအောင်မြင်ပါ",
-        description: e instanceof Error ? e.message : "Unknown error",
-        variant: "destructive",
-      });
+      toast.error(`❌ Translate မအောင်မြင်ပါ — ${e instanceof Error ? e.message : "Unknown error"}`);
+
     } finally {
       setIsTranslatingScript(false);
     }
