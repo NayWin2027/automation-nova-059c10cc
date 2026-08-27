@@ -266,6 +266,10 @@ function charGramSimilarity(a: string, b: string): number {
   return (2 * overlap) / (aTotal + bTotal);
 }
 
+// AV-SYNC SAFETY: this cleanup must NEVER drop or merge a timecoded paragraph.
+// The client maps each timecoded paragraph 1:1 to a video segment and a TTS turn,
+// so removing a paragraph shifts every later segment and breaks AV sync. We only
+// strip leaked metadata and remove duplicate sentences INSIDE the same paragraph.
 function removeNarrationRepetition(script: string): string {
   const withoutLeakedMetadata = String(script || "")
     // Catch STORY_BIBLE plus common model misspellings such as STORY_BIBE/VIBE.
@@ -280,51 +284,41 @@ function removeNarrationRepetition(script: string): string {
     .map((paragraph) => paragraph.trim())
     .filter(Boolean);
   const kept: string[] = [];
-  const narratorBodies: string[] = [];
-  const narratorSentences: string[] = [];
 
   for (const paragraph of paragraphs) {
+    // Dialogue turns are preserved verbatim — a source character may intentionally
+    // repeat the same words, and dropping them would break AV sync counts.
     if (/\[DIALOGUE:[A-Z]+\]/i.test(paragraph)) {
       kept.push(paragraph);
       continue;
     }
-    const prefix = paragraph.match(/^\s*(\[\d{1,2}:\d{2}\]\s*)/)?.[1] || "";
+    const prefix = paragraph.match(/^\s*(\[\d{1,2}:\d{2}(?::\d{2})?\]\s*)/)?.[1] || "";
     const body = prefix ? paragraph.slice(prefix.length).trim() : paragraph;
-    const bodyKey = normalizeForRepetition(body);
-    if (!bodyKey) continue;
-
-    // Remove exact and strongly paraphrased narrator paragraphs. The high threshold
-    // avoids deleting distinct events that merely share a character name.
-    if (
-      narratorBodies.some((seen) =>
-        bodyKey.length >= 24 && normalizeForRepetition(seen).length >= 24
-          ? charGramSimilarity(body, seen) >= 0.88
-          : bodyKey === normalizeForRepetition(seen),
-      )
-    ) {
+    if (!normalizeForRepetition(body)) {
+      kept.push(paragraph);
       continue;
     }
 
+    // Only remove sentences repeated WITHIN this same paragraph. The paragraph
+    // itself (and its timecode) is always kept so segment mapping stays intact.
     const sentences = body.match(/[^။.!?…。！？]+[။.!?…。！？]+(?:["'”’）\)]*)?|[^။.!?…。！？]+$/g) || [body];
     const uniqueSentences: string[] = [];
     for (const sentenceRaw of sentences) {
       const sentence = sentenceRaw.trim();
       const sentenceKey = normalizeForRepetition(sentence);
       if (!sentenceKey) continue;
-      const repeated = narratorSentences.some((seen) => {
+      const repeated = uniqueSentences.some((seen) => {
         const seenKey = normalizeForRepetition(seen);
         if (sentenceKey === seenKey) return true;
-        return sentenceKey.length >= 28 && seenKey.length >= 28 && charGramSimilarity(sentence, seen) >= 0.92;
+        return sentenceKey.length >= 28 && seenKey.length >= 28 && charGramSimilarity(sentence, seen) >= 0.95;
       });
-      if (!repeated) {
-        uniqueSentences.push(sentence);
-        narratorSentences.push(sentence);
-      }
+      if (!repeated) uniqueSentences.push(sentence);
     }
-    if (!uniqueSentences.length) continue;
-    const cleanedBody = uniqueSentences.join(" ").trim();
-    kept.push(`${prefix}${cleanedBody}`.trim());
-    narratorBodies.push(cleanedBody);
+    if (!uniqueSentences.length) {
+      kept.push(paragraph);
+      continue;
+    }
+    kept.push(`${prefix}${uniqueSentences.join(" ").trim()}`.trim());
   }
   return kept.join("\n\n").trim();
 }
