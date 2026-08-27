@@ -407,7 +407,120 @@ serve(async (req) => {
 
     console.log(`[recap-script-generator] Authenticated user: ${user.id}`);
 
+    // ===== TRANSLATE MODE (additive branch — does NOT touch the generation path) =====
+    // Takes an already-generated script and re-renders it in the target language,
+    // preserving segment/timecode structure exactly. Free: no credit deduction.
+    if (!(req.headers.get("content-type") || "").includes("multipart/form-data")) {
+      const peek = await req.clone().json().catch(() => null);
+      if (peek && peek.translateMode && typeof peek.script === "string" && peek.script.trim()) {
+        const srcScript: string = peek.script;
+        const tgtLang: string = (peek.targetLanguage || peek.language || "BURMESE").toString().slice(0, 60);
+        const tKey = (peek.ownApiKey || peek.apiKey || req.headers.get("x-own-api-key") || "").trim();
+        const tIsOwnApi = !!tKey;
+        let tActiveKey = tIsOwnApi ? tKey : getGeminiKey();
+
+        const burmeseStyle = /BURMESE|MYANMAR/i.test(tgtLang)
+          ? `\n- Burmese must be MODERN SPOKEN style (တယ်/တာ/လဲ). NEVER literary endings (သည်/၏/၍).\n- Keep street slang, harsh words and uncensored dialogue exactly as strong as the source. Do not soften or censor.`
+          : "";
+
+        const translateSystemPrompt = `You are a professional subtitle/recap script translator.
+
+TASK: Translate the script below into ${tgtLang}. Output the translated script ONLY — no preamble, no notes, no explanations.
+
+ABSOLUTE STRUCTURE LOCK:
+- Keep EVERY line, paragraph and blank line in the SAME order and the SAME count.
+- Keep ALL timecodes, timestamps, segment markers, numbering and bracketed tags byte-identical. Translate ONLY the human-readable narration/dialogue text.
+- Never merge two lines into one. Never split one line into two. Never add or drop a line.
+
+LANGUAGE LOCK:
+- 100% of the output text must be written in ${tgtLang} using ${tgtLang}'s own writing system.
+- No Chinese, Latin, or other foreign glyphs may remain inside the narration text. Transliterate names and brands phonetically (e.g. 杨帆 → Yan Fan in the target script, Facebook → the target-script spelling, CEO → the target-script spelling) so TTS reads them naturally.
+- Spoken, natural, conversational register — never bookish or machine-translated wording.${burmeseStyle}`;
+
+        const tModels = [
+          MODEL,
+          "gemini-3.7-flash",
+          "gemini-3.6-flash",
+          "gemini-3.5-flash",
+          "gemini-3.1-flash",
+          "gemini-2.5-flash",
+          "gemini-flash-latest",
+          "gemini-flash-lite-latest",
+        ];
+        const tShouldFallback = (s?: number) => s === 404 || s === 429 || s === 503 || s === 504;
+
+        let tRes: Response | null = null;
+        let tLastError = "";
+        let tLastStatus = 0;
+        for (const m of tModels) {
+          if (tRes && tRes.ok) break;
+          if (tRes && !tShouldFallback(tRes.status)) break;
+          if (tRes && !tIsOwnApi && tRes.status === 429) tActiveKey = rotateKey("script") || tActiveKey;
+          const ctrl = new AbortController();
+          const to = setTimeout(() => ctrl.abort(), 110000);
+          try {
+            tRes = await callGeminiGenerateContent(
+              m,
+              tActiveKey,
+              tIsOwnApi,
+              ctrl.signal,
+              translateSystemPrompt,
+              [{ text: srcScript }],
+              null,
+            );
+            if (!tRes.ok) {
+              tLastStatus = tRes.status;
+              tLastError = await tRes.clone().text();
+              console.warn(`[recap-script-generator][translate] ${m} failed ${tRes.status}`);
+            }
+          } catch (e) {
+            tRes = null;
+            tLastError = e instanceof Error ? e.message : "network error";
+          } finally {
+            clearTimeout(to);
+          }
+        }
+
+        if (!tRes || !tRes.ok) {
+          return new Response(
+            JSON.stringify({ error: "Translation failed", detail: tLastError.slice(0, 500), upstreamStatus: tLastStatus }),
+            { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        const tData = await tRes.json();
+        const translated = (tData?.candidates?.[0]?.content?.parts || [])
+          .map((p: any) => p?.text || "")
+          .join("")
+          .trim();
+
+        if (!translated) {
+          return new Response(JSON.stringify({ error: "Translation returned empty output" }), {
+            status: 502,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const srcLines = srcScript.split("\n").filter((l) => l.trim()).length;
+        const outLines = translated.split("\n").filter((l) => l.trim()).length;
+
+        logToolActivity(user.id, "narration-script-translate", "success", { targetLanguage: tgtLang });
+        return new Response(
+          JSON.stringify({
+            script: translated,
+            translated: true,
+            targetLanguage: tgtLang,
+            structureMatch: Math.abs(srcLines - outLines) <= Math.max(2, Math.round(srcLines * 0.1)),
+            sourceLines: srcLines,
+            outputLines: outLines,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
+
     // ===== PARSE REQUEST =====
+
     let fileObj: File | null = null;
     let niche = "GENERAL";
     let language = "BURMESE";
