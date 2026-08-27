@@ -832,7 +832,7 @@ ABSOLUTE RULES:
 5. Fully embody the "${nicheLabel}" niche style described above
 6. ${targetLanguageLock}
 7. ZERO HALLUCINATION POLICY: Write ONLY what is visibly or audibly present. DO NOT invent facts. 
-8. CRITICAL LENGTH RULE: To maintain correct audio-visual sync, DO NOT write short or robotic sentences. You MUST write highly detailed, rich, and descriptive sentences about the REAL visible actions, emotions, and settings. Keep the word count naturally full so the voiceover matches the scene length perfectly.
+8. CRITICAL LENGTH RULE: To maintain correct audio-visual sync, write natural complete sentences about REAL visible actions, dialogue, emotions and consequences. Reach the needed length only with distinct source beats; never stretch one event through paraphrases, repeated names, repeated reactions or filler.
 9. TONE & VOCABULARY: Use modern, trendy internet slang, popular pop-culture lingo, and highly engaging humorous expressions naturally to make the recap entertaining and relatable for young audiences. Keep the vibe highly energetic and cool. In HYBRID/VIRAL dialogue modes, harsh, vulgar and street slang words ARE allowed and expected whenever the source speaks that way — never soften or censor them.
 10. NATIVE SCRIPT TRANSLITERATION (TTS FRIENDLY): NEVER leave foreign words, brand names, or English words in the Latin (A-Z) alphabet. If you must include them, you MUST transliterate and spell them out phonetically using ONLY the native alphabet of ${langLabel}. For example, if ${lang} is BURMESE, write "Facebook" as "ဖေ့စ်ဘွတ်(ခ်)", "Apple" as "အက်ပဲလ်", NOT "Facebook" or "Apple". This ensures the Text-to-Speech engine reads them smoothly in the native accent.
 11. ZERO REPETITION LOCK: State each fact, action, emotion, relationship, name introduction, plan, and consequence ONCE only. Never repeat it later with synonyms or slightly different wording. Every new sentence must advance to a new source event or add genuinely new information.
@@ -883,8 +883,8 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - MANDATORY: YOU MUST NARRATE THE ENTIRE VIDEO FROM 00:00 TO THE VERY END.
 - DO NOT SUMMARIZE. DO NOT SKIP. DO NOT STOP EARLY.
 - YOU MUST WRITE A COMPLETE NARRATION THAT FOLLOWS THE STORY UNFOLDING AS IT HAPPENS.
-- EVERY SCENE IS IMPORTANT: You must cover the beginning, the middle, the climax, and the ending in full detail.
-- MINIMUM LENGTH: You must generate at least 15 to 20 detailed paragraphs.
+- Cover the beginning, middle, climax and ending through distinct essential beats; compress routine or duplicate moments.
+- PARAGRAPH COUNT: Use only as many paragraphs as the source has distinct useful beats. Never create extra paragraphs merely to satisfy a count or duration target.
 - SPREAD: Evenly distribute these paragraphs across the entire video timeline (e.g., for a 4-minute video, you must have content for the 0:00, 1:00, 2:00, 3:00, and 4:00 minute marks).
 - IF YOU OMIT THE SECOND HALF OF THE VIDEO, YOUR OUTPUT IS REJECTED.
 - TOKEN MANAGEMENT: If you find yourself writing too much detail at the start, STOP and COMPRESS the beginning so you have enough space to finish the entire story.
@@ -1489,10 +1489,11 @@ ${lastLines}`;
           if (langRetryRes.ok) {
             const langRetryData = await langRetryRes.json();
             let retryScript = langRetryData.candidates?.[0]?.content?.parts?.[0]?.text || "";
-            if (retryScript.includes("===STORY_BIBLE===")) {
-              const sbIdx = retryScript.indexOf("===STORY_BIBLE===");
+            const retryStoryBibleMarker = retryScript.match(/(?:^|\n)\s*(?:===\s*)?STORY[\s_-]*BI(?:BLE|BE|VE)(?:\s*===)?\s*:?[ \t]*(?:\n|$)/im);
+            if (retryStoryBibleMarker?.index !== undefined) {
+              const sbIdx = retryStoryBibleMarker.index;
               const sbRaw = retryScript
-                .slice(sbIdx + "===STORY_BIBLE===".length)
+                .slice(sbIdx + retryStoryBibleMarker[0].length)
                 .replace(/```[a-zA-Z]*/g, "")
                 .trim();
               try {
@@ -1502,7 +1503,7 @@ ${lastLines}`;
               } catch {}
               retryScript = retryScript.slice(0, sbIdx).trim();
             }
-            retryScript = stripHookPreamble(retryScript);
+            retryScript = removeNarrationRepetition(stripHookPreamble(retryScript));
             if (retryScript.length > 10 && !violatesTargetLanguage(retryScript, lang)) {
               normalizedRawScript = retryScript;
               langFixed = true;
