@@ -111,7 +111,6 @@ const scriptLanguageMismatch = (text: string, langCode: string): boolean => {
 
 type ProcessingStatus = "idle" | "processing" | "done" | "error";
 
-
 interface ResultViewProps {
   scriptData: RecapScript;
   narrationStyle: "STORY" | "HYBRID" | "VIRAL";
@@ -136,7 +135,6 @@ interface ResultViewProps {
   onTranslateScript?: () => void;
   isTranslatingScript?: boolean;
 }
-
 
 interface LogoSettings {
   url: string | null;
@@ -3826,7 +3824,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   Export SRT
                 </button>
               </div>
-
             </div>
             {onTranslateScript && scriptLanguageMismatch(scriptData.full_script, targetLanguageCode) && (
               <div className="mx-3 mb-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-400/40 text-[11px] text-amber-300 leading-relaxed">
@@ -3835,7 +3832,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               </div>
             )}
             <div className="flex-1 overflow-hidden">
-
               {activeTab === "script" ? (
                 <textarea
                   className="w-full h-full p-4 bg-slate-900/50 text-slate-200 text-sm leading-relaxed focus:outline-none resize-none"
@@ -5436,9 +5432,20 @@ interface RecapHistoryItem {
 }
 
 const VOICE_OPTIONS = [
-  { value: "edge:it-IT-GiuseppeMultilingualNeural", label: "⭐ Giuseppe (Multilingual v2 — Male)", gender: "Male" },
   { value: "edge:my-MM-ThihaNeural", label: "⭐ Thiha (Burmese Native — Male)", gender: "Male" },
   { value: "edge:my-MM-NilarNeural", label: "⭐ Nilar (Burmese Native — Female)", gender: "Female" },
+  { value: "edge:it-IT-GiuseppeMultilingualNeural", label: "Giuseppe (Multilingual — Male 🇮🇹)", gender: "Male" },
+  { value: "edge:en-US-AndrewMultilingualNeural", label: "Andrew (Multilingual — Male 🇺🇸)", gender: "Male" },
+  { value: "edge:en-US-AvaMultilingualNeural", label: "Ava (Multilingual — Female 🇺🇸)", gender: "Female" },
+  { value: "edge:en-US-BrianMultilingualNeural", label: "Brian (Multilingual — Male 🇺🇸)", gender: "Male" },
+  { value: "edge:en-US-EmmaMultilingualNeural", label: "Emma (Multilingual — Female 🇺🇸)", gender: "Female" },
+  { value: "edge:en-AU-WilliamMultilingualNeural", label: "William (Multilingual — Male 🇦🇺)", gender: "Male" },
+  { value: "edge:de-DE-FlorianMultilingualNeural", label: "Florian (Multilingual — Male 🇩🇪)", gender: "Male" },
+  { value: "edge:de-DE-SeraphinaMultilingualNeural", label: "Seraphina (Multilingual — Female 🇩🇪)", gender: "Female" },
+  { value: "edge:fr-FR-RemyMultilingualNeural", label: "Remy (Multilingual — Male 🇫🇷)", gender: "Male" },
+  { value: "edge:fr-FR-VivienneMultilingualNeural", label: "Vivienne (Multilingual — Female 🇫🇷)", gender: "Female" },
+  { value: "edge:ko-KR-HyunsuMultilingualNeural", label: "Hyunsu (Multilingual — Male 🇰🇷)", gender: "Male" },
+  { value: "edge:pt-BR-ThalitaMultilingualNeural", label: "Thalita (Multilingual — Female 🇧🇷)", gender: "Female" },
   { value: "Zephyr", label: "Zephyr (Female)", gender: "Female" },
   { value: "Puck", label: "Puck (Male)", gender: "Male" },
   { value: "Charon", label: "Charon (Male)", gender: "Male" },
@@ -5731,13 +5738,8 @@ const RecapVideoNVPage: React.FC = () => {
       const isFinale = /ဇာတ်သိမ်း|ဇာတ်သိမ်းပိုင်း|finale|final part|last part/i.test(partRaw);
       const explicitPart = parseInt(partRaw.replace(/\D/g, ""), 10);
       const savedLast = seriesList.find((s) => s.series_name === name)?.last_part || 0;
-      const partNum = isFinale && isNaN(explicitPart)
-        ? savedLast > 0
-          ? savedLast + 1
-          : 1
-        : !isNaN(explicitPart)
-          ? explicitPart
-          : 1;
+      const partNum =
+        isFinale && isNaN(explicitPart) ? (savedLast > 0 ? savedLast + 1 : 1) : !isNaN(explicitPart) ? explicitPart : 1;
       const { error } = await supabase.from("recap_series").upsert(
         {
           user_id: uid,
@@ -5997,13 +5999,10 @@ const RecapVideoNVPage: React.FC = () => {
       toast.success(`✅ ${selectedLangName} အဖြစ် ဘာသာပြန်ပြီးပါပြီ။ Voice ဆက်ထုတ်လို့ရပါပြီ။`);
     } catch (e) {
       toast.error(`❌ Translate မအောင်မြင်ပါ — ${e instanceof Error ? e.message : "Unknown error"}`);
-
     } finally {
       setIsTranslatingScript(false);
     }
   };
-
-
 
   const handleGenerateVoice = () => {
     if (scriptData.full_script) {
@@ -7250,11 +7249,11 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                     <SelectContent className="max-h-[220px] z-50">
                       {seriesList.map((s) => (
                         <SelectItem key={s.series_name} value={s.series_name} className="text-xs">
-                          {s.series_name} (Part{
-                            s.series_name === seriesName && /^\d+$/.test(seriesPart.trim())
-                              ? ` ${Math.max(1, Number(seriesPart.trim()) - 1)}`
-                              : ` ${s.last_part}`
-                          })
+                          {s.series_name} (Part
+                          {s.series_name === seriesName && /^\d+$/.test(seriesPart.trim())
+                            ? ` ${Math.max(1, Number(seriesPart.trim()) - 1)}`
+                            : ` ${s.last_part}`}
+                          )
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -7279,8 +7278,9 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                 </div>
                 <p className="text-[11px] text-muted-foreground">
                   နာမည်ကွက်လပ်ထားရင် AI က မူရင်း video ရဲ့ ဇာတ်ကားနာမည်/အကြောင်းအရာအပေါ် အခြေခံပြီး ဆွဲဆောင်မှုရှိတဲ့
-                  Series နာမည်ကို auto ရေးပေးပါမယ်။ အပိုင်းနံပါတ်ကိုတော့ ကိုယ်တိုင် ထည့်ပါ။ နောက်ဆုံးအပိုင်းဆိုရင် အပိုင်းနံပါတ်
-                  ကွက်လပ်မှာ "ဇာတ်သိမ်း" လို့ရေးပါ — ဇာတ်လမ်းပြီးဆုံးကြောင်း အနှစ်ချုပ်နဲ့ ကျေးဇူးတင်စကား auto ပါလာပါမယ်။
+                  Series နာမည်ကို auto ရေးပေးပါမယ်။ အပိုင်းနံပါတ်ကိုတော့ ကိုယ်တိုင် ထည့်ပါ။ နောက်ဆုံးအပိုင်းဆိုရင်
+                  အပိုင်းနံပါတ် ကွက်လပ်မှာ "ဇာတ်သိမ်း" လို့ရေးပါ — ဇာတ်လမ်းပြီးဆုံးကြောင်း အနှစ်ချုပ်နဲ့ ကျေးဇူးတင်စကား
+                  auto ပါလာပါမယ်။
                 </p>
               </div>
             )}
@@ -7685,7 +7685,6 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
             targetLanguageCode={selectedLanguage}
             onTranslateScript={handleTranslateScript}
             isTranslatingScript={isTranslatingScript}
-
           />
         )}
 
