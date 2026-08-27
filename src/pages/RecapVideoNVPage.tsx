@@ -54,7 +54,63 @@ const stripDialogueMetadata = (text: string): string =>
     .replace(/[ \t]{2,}/g, " ")
     .trim();
 
+// ── LANGUAGE MISMATCH DETECTOR (script text layer only) ──
+const SCRIPT_RANGES: Record<string, RegExp> = {
+  my: /[\u1000-\u109F]/g,
+  th: /[\u0E00-\u0E7F]/g,
+  km: /[\u1780-\u17FF]/g,
+  lo: /[\u0E80-\u0EFF]/g,
+  zh: /[\u4E00-\u9FFF]/g,
+  ja: /[\u3040-\u30FF\u4E00-\u9FFF]/g,
+  ko: /[\uAC00-\uD7AF]/g,
+  ar: /[\u0600-\u06FF]/g,
+  fa: /[\u0600-\u06FF]/g,
+  ur: /[\u0600-\u06FF]/g,
+  he: /[\u0590-\u05FF]/g,
+  hi: /[\u0900-\u097F]/g,
+  mr: /[\u0900-\u097F]/g,
+  ne: /[\u0900-\u097F]/g,
+  bn: /[\u0980-\u09FF]/g,
+  ta: /[\u0B80-\u0BFF]/g,
+  te: /[\u0C00-\u0C7F]/g,
+  kn: /[\u0C80-\u0CFF]/g,
+  ml: /[\u0D00-\u0D7F]/g,
+  gu: /[\u0A80-\u0AFF]/g,
+  pa: /[\u0A00-\u0A7F]/g,
+  si: /[\u0D80-\u0DFF]/g,
+  ru: /[\u0400-\u04FF]/g,
+  uk: /[\u0400-\u04FF]/g,
+  bg: /[\u0400-\u04FF]/g,
+  sr: /[\u0400-\u04FF]/g,
+  mk: /[\u0400-\u04FF]/g,
+  be: /[\u0400-\u04FF]/g,
+  mn: /[\u0400-\u04FF]/g,
+  kk: /[\u0400-\u04FF]/g,
+  ky: /[\u0400-\u04FF]/g,
+  tg: /[\u0400-\u04FF]/g,
+  el: /[\u0370-\u03FF]/g,
+  hy: /[\u0530-\u058F]/g,
+  ka: /[\u10A0-\u10FF]/g,
+  am: /[\u1200-\u137F]/g,
+};
+
+/** Returns true when the script is clearly NOT written in the target language's script. */
+const scriptLanguageMismatch = (text: string, langCode: string): boolean => {
+  const body = String(text || "").replace(/\d|\s|[.,:;!?'"()\-–—[\]{}|/\\]/g, "");
+  if (body.length < 40) return false;
+  const base = (langCode || "").split("-")[0];
+  const range = SCRIPT_RANGES[base];
+  const latin = (body.match(/[A-Za-z]/g) || []).length;
+  if (!range) {
+    // Latin-script target languages: mismatch when Latin letters are a minority.
+    return latin / body.length < 0.5;
+  }
+  const hits = (body.match(range) || []).length;
+  return hits / body.length < 0.35;
+};
+
 type ProcessingStatus = "idle" | "processing" | "done" | "error";
+
 
 interface ResultViewProps {
   scriptData: RecapScript;
@@ -75,7 +131,12 @@ interface ResultViewProps {
   renderMode?: "browser" | "server";
   sourceFileUriRef?: React.MutableRefObject<string | null>;
   videoFileRef?: React.MutableRefObject<File | null>;
+  targetLanguageName?: string;
+  targetLanguageCode?: string;
+  onTranslateScript?: () => void;
+  isTranslatingScript?: boolean;
 }
+
 
 interface LogoSettings {
   url: string | null;
@@ -299,8 +360,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     renderMode,
     sourceFileUriRef,
     videoFileRef,
+    targetLanguageName = "BURMESE",
+    targetLanguageCode = "my-MM",
+    onTranslateScript,
+    isTranslatingScript = false,
   }) => {
     const [activeTab, setActiveTab] = useState<"script" | "segments">("script");
+
     const [isRecapPlaying, setIsRecapPlaying] = useState(false);
     const [currentSubtitle, setCurrentSubtitle] = useState("");
     const [subtitleKey, setSubtitleKey] = useState(0);
@@ -3743,6 +3809,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 </button>
               </div>
               <div className="flex gap-2">
+                {onTranslateScript && (
+                  <button
+                    onClick={onTranslateScript}
+                    disabled={isTranslatingScript}
+                    title={`Translate script to ${targetLanguageName}`}
+                    className="text-xs text-cyan-300 border border-cyan-400/50 px-2 py-1 rounded-lg hover:bg-cyan-400/10 transition-all disabled:opacity-50"
+                  >
+                    {isTranslatingScript ? "🌐 ဘာသာပြန်နေသည်..." : `🌐 Translate → ${targetLanguageName}`}
+                  </button>
+                )}
                 <button
                   onClick={downloadSRT}
                   className="text-xs text-amber-400 border border-amber-400/50 px-2 py-1 rounded-lg hover:bg-amber-400/10 transition-all"
@@ -3750,8 +3826,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   Export SRT
                 </button>
               </div>
+
             </div>
+            {onTranslateScript && scriptLanguageMismatch(scriptData.full_script, targetLanguageCode) && (
+              <div className="mx-3 mb-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-400/40 text-[11px] text-amber-300 leading-relaxed">
+                ⚠️ Script က ရွေးထားတဲ့ ဘာသာစကား ({targetLanguageName}) နဲ့ မကိုက်ညီပုံရပါတယ်။ အပေါ်က{" "}
+                <span className="font-semibold">🌐 Translate</span> ခလုတ်ကို နှိပ်ပြီး ပြောင်းပါ။
+              </div>
+            )}
             <div className="flex-1 overflow-hidden">
+
               {activeTab === "script" ? (
                 <textarea
                   className="w-full h-full p-4 bg-slate-900/50 text-slate-200 text-sm leading-relaxed focus:outline-none resize-none"
@@ -5838,6 +5922,89 @@ const RecapVideoNVPage: React.FC = () => {
     setScriptData((prev) => ({ ...prev, full_script: stripDialogueMetadata(newScript) }));
   };
 
+  // ── TARGET-LANGUAGE TRANSLATE GATE (additive; does not touch AV sync / seek / fallback) ──
+  const [isTranslatingScript, setIsTranslatingScript] = useState(false);
+  const selectedLangName = languages.find((l) => l.code === selectedLanguage)?.name || "BURMESE";
+
+  const handleTranslateScript = async () => {
+    if (!scriptData.full_script && scriptData.segments.length === 0) return;
+    setIsTranslatingScript(true);
+    try {
+      const {
+        data: { session: currentSession },
+      } = await supabase.auth.getSession();
+      const userToken = currentSession?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      const resolvedOwnKey = apiMode === "own" ? ownApiKey.trim() : "";
+      const hasSegments = scriptData.segments.length > 0;
+      const payloadScript = hasSegments
+        ? scriptData.segments.map((s) => `${s.timestamp} | ${s.text}`).join("\n")
+        : scriptData.full_script;
+
+      const runOnce = async () => {
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recap-script-generator`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${userToken}`,
+            ...(resolvedOwnKey ? { "x-own-api-key": resolvedOwnKey } : {}),
+          },
+          body: JSON.stringify({
+            translateMode: true,
+            script: payloadScript,
+            targetLanguage: selectedLangName,
+            ...(resolvedOwnKey ? { ownApiKey: resolvedOwnKey, apiKey: resolvedOwnKey } : {}),
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || `Translate failed (${res.status})`);
+        }
+        const json = await res.json();
+        return String(json.script || "").trim();
+      };
+
+      let out = await runOnce();
+      const parseLines = (txt: string) =>
+        txt
+          .split("\n")
+          .map((l) => l.trim())
+          .filter(Boolean);
+
+      if (hasSegments) {
+        let lines = parseLines(out);
+        if (lines.length !== scriptData.segments.length) {
+          out = await runOnce();
+          lines = parseLines(out);
+        }
+        if (lines.length !== scriptData.segments.length) {
+          throw new Error("ဘာသာပြန်ရလဒ်က segment အရေအတွက် မကိုက်ပါ။ ထပ်စမ်းကြည့်ပါ။");
+        }
+        const newSegments = scriptData.segments.map((seg, i) => {
+          const m = lines[i].match(/^\s*[^|]*\|\s*(.*)$/);
+          const text = stripDialogueMetadata(m ? m[1] : lines[i]);
+          return { ...seg, text: text || seg.text };
+        });
+        setScriptData((prev) => ({
+          ...prev,
+          segments: newSegments,
+          full_script: newSegments.map((s) => s.text).join("\n\n"),
+        }));
+      } else {
+        setScriptData((prev) => ({ ...prev, full_script: stripDialogueMetadata(out) }));
+      }
+
+      toast.success(`✅ ${selectedLangName} အဖြစ် ဘာသာပြန်ပြီးပါပြီ။ Voice ဆက်ထုတ်လို့ရပါပြီ။`);
+    } catch (e) {
+      toast.error(`❌ Translate မအောင်မြင်ပါ — ${e instanceof Error ? e.message : "Unknown error"}`);
+
+    } finally {
+      setIsTranslatingScript(false);
+    }
+  };
+
+
+
   const handleGenerateVoice = () => {
     if (scriptData.full_script) {
       const resolvedOwnKey = apiMode === "own" ? ownApiKey.trim() : "";
@@ -7514,6 +7681,11 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
             onVoiceModeChange={setVoiceMode}
             sourceFileUriRef={sourceFileUriRef}
             videoFileRef={videoFileRef}
+            targetLanguageName={selectedLangName}
+            targetLanguageCode={selectedLanguage}
+            onTranslateScript={handleTranslateScript}
+            isTranslatingScript={isTranslatingScript}
+
           />
         )}
 
