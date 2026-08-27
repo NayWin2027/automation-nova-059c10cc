@@ -230,6 +230,105 @@ function stripTimecodes(text: string): string {
   return (text || "").replace(/\[\d{1,2}:\d{2}(?::\d{2})?\]/g, " ");
 }
 
+// Script-only quality guard. It never rewrites or moves a timecode: it only removes
+// accidental model metadata and narrator sentences/paragraphs that restate an idea
+// already delivered. Real [DIALOGUE:*] turns are preserved verbatim because a source
+// character may intentionally repeat the same words.
+function normalizeForRepetition(text: string): string {
+  return stripTimecodes(text)
+    .replace(/\[DIALOGUE:[A-Z]+\]/gi, " ")
+    .toLocaleLowerCase()
+    .replace(/[\p{P}\p{S}\s]+/gu, "")
+    .trim();
+}
+
+function charGramSimilarity(a: string, b: string): number {
+  const left = normalizeForRepetition(a);
+  const right = normalizeForRepetition(b);
+  if (!left || !right) return 0;
+  if (left === right) return 1;
+  const size = 3;
+  if (left.length < size || right.length < size) return 0;
+  const grams = (value: string) => {
+    const result = new Map<string, number>();
+    for (let i = 0; i <= value.length - size; i++) {
+      const gram = value.slice(i, i + size);
+      result.set(gram, (result.get(gram) || 0) + 1);
+    }
+    return result;
+  };
+  const aGrams = grams(left);
+  const bGrams = grams(right);
+  let overlap = 0;
+  for (const [gram, count] of aGrams) overlap += Math.min(count, bGrams.get(gram) || 0);
+  const aTotal = [...aGrams.values()].reduce((sum, count) => sum + count, 0);
+  const bTotal = [...bGrams.values()].reduce((sum, count) => sum + count, 0);
+  return (2 * overlap) / (aTotal + bTotal);
+}
+
+function removeNarrationRepetition(script: string): string {
+  const withoutLeakedMetadata = String(script || "")
+    // Catch STORY_BIBLE plus common model misspellings such as STORY_BIBE/VIBE.
+    // Everything after this marker is internal series metadata, never narration.
+    .split(/(?:^|\n)\s*(?:===\s*)?STORY[\s_-]*BI(?:BLE|BE|VE)(?:\s*===)?\s*:?[ \t]*(?:\n|$)/im)[0]
+    .replace(/(^|\n)(\s*\[\d{1,2}:\d{2}\](?:\s*\[DIALOGUE:[A-Z]+\])?\s*)?(?:STORY\s+(?:BIBLE|BIBE|VIBE)|ဇာတ်လမ်း\s*(?:မှတ်စု|အနှစ်ချုပ်))\s*[:：-]\s*/gim, "$1$2")
+    .trim();
+
+  const paragraphs = withoutLeakedMetadata
+    .replace(/\n(?=\s*\[\d{1,2}:\d{2}\])/g, "\n\n")
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+  const kept: string[] = [];
+  const narratorBodies: string[] = [];
+  const narratorSentences: string[] = [];
+
+  for (const paragraph of paragraphs) {
+    if (/\[DIALOGUE:[A-Z]+\]/i.test(paragraph)) {
+      kept.push(paragraph);
+      continue;
+    }
+    const prefix = paragraph.match(/^\s*(\[\d{1,2}:\d{2}\]\s*)/)?.[1] || "";
+    const body = prefix ? paragraph.slice(prefix.length).trim() : paragraph;
+    const bodyKey = normalizeForRepetition(body);
+    if (!bodyKey) continue;
+
+    // Remove exact and strongly paraphrased narrator paragraphs. The high threshold
+    // avoids deleting distinct events that merely share a character name.
+    if (
+      narratorBodies.some((seen) =>
+        bodyKey.length >= 24 && normalizeForRepetition(seen).length >= 24
+          ? charGramSimilarity(body, seen) >= 0.88
+          : bodyKey === normalizeForRepetition(seen),
+      )
+    ) {
+      continue;
+    }
+
+    const sentences = body.match(/[^။.!?…。！？]+[။.!?…。！？]+(?:["'”’）\)]*)?|[^။.!?…。！？]+$/g) || [body];
+    const uniqueSentences: string[] = [];
+    for (const sentenceRaw of sentences) {
+      const sentence = sentenceRaw.trim();
+      const sentenceKey = normalizeForRepetition(sentence);
+      if (!sentenceKey) continue;
+      const repeated = narratorSentences.some((seen) => {
+        const seenKey = normalizeForRepetition(seen);
+        if (sentenceKey === seenKey) return true;
+        return sentenceKey.length >= 28 && seenKey.length >= 28 && charGramSimilarity(sentence, seen) >= 0.92;
+      });
+      if (!repeated) {
+        uniqueSentences.push(sentence);
+        narratorSentences.push(sentence);
+      }
+    }
+    if (!uniqueSentences.length) continue;
+    const cleanedBody = uniqueSentences.join(" ").trim();
+    kept.push(`${prefix}${cleanedBody}`.trim());
+    narratorBodies.push(cleanedBody);
+  }
+  return kept.join("\n\n").trim();
+}
+
 // Mirrors gemini-tts `countSpeechWeight` so script length and TTS length agree.
 function speechWeights(text: string): { asian: number; latin: number } {
   let asian = 0;
@@ -736,6 +835,10 @@ ABSOLUTE RULES:
 8. CRITICAL LENGTH RULE: To maintain correct audio-visual sync, DO NOT write short or robotic sentences. You MUST write highly detailed, rich, and descriptive sentences about the REAL visible actions, emotions, and settings. Keep the word count naturally full so the voiceover matches the scene length perfectly.
 9. TONE & VOCABULARY: Use modern, trendy internet slang, popular pop-culture lingo, and highly engaging humorous expressions naturally to make the recap entertaining and relatable for young audiences. Keep the vibe highly energetic and cool. In HYBRID/VIRAL dialogue modes, harsh, vulgar and street slang words ARE allowed and expected whenever the source speaks that way — never soften or censor them.
 10. NATIVE SCRIPT TRANSLITERATION (TTS FRIENDLY): NEVER leave foreign words, brand names, or English words in the Latin (A-Z) alphabet. If you must include them, you MUST transliterate and spell them out phonetically using ONLY the native alphabet of ${langLabel}. For example, if ${lang} is BURMESE, write "Facebook" as "ဖေ့စ်ဘွတ်(ခ်)", "Apple" as "အက်ပဲလ်", NOT "Facebook" or "Apple". This ensures the Text-to-Speech engine reads them smoothly in the native accent.
+11. ZERO REPETITION LOCK: State each fact, action, emotion, relationship, name introduction, plan, and consequence ONCE only. Never repeat it later with synonyms or slightly different wording. Every new sentence must advance to a new source event or add genuinely new information.
+12. NAME NATURALNESS: Introduce a character's name/role once, then use natural pronouns or relationship terms when the subject remains clear. Never begin several consecutive sentences with the same name or “သူ/သူမ”. Reuse the name only when needed to prevent confusion after a speaker/scene change.
+13. COHERENCE LOCK: Before writing, internally build a chronological beat ledger (do NOT print it). Each paragraph must cover the next uncovered beat and clearly preserve cause → action → consequence. A viewer who has never seen the source must understand who acted, why it happened, and what changed.
+14. NARRATION-ONLY OUTPUT: Never print internal labels or planning terms such as “story bible”, “story bibe”, “story vibe”, “beat ledger”, “hook”, “character list”, “analysis”, or any heading. Output only timestamped narration/dialogue.
 
 CRITICAL - DIALOGUE TRANSLATION RULE (MOST IMPORTANT):
 - If characters or people in the video/audio SPEAK any dialogue — in ANY language (English, Thai, Korean, Chinese, Japanese, etc.) — you MUST translate and include what they actually said
@@ -1015,6 +1118,8 @@ FULL COVERAGE RULE (MANDATORY):
 - Never cover the first half in detail and compress or skip the second half. The last third of the source is just as important.
 - ENDING COVERAGE (HARD RULE): the LAST 15% of the source duration MUST have its own paragraphs. The final confrontation/fight, the climax, its outcome and the closing scene must each be narrated in full detail — never compressed into one rushed sentence and never summarised away. Your last paragraph's timecode must fall inside that final 15%.
 - Never pad with repeated or restated sentences to reach the length — add MISSING scenes instead.
+- ONE-BEAT-ONE-MENTION: Once a source event has been narrated, mark it covered internally and never mention it again unless a later source scene adds a genuinely new consequence. Repeating a plan, a character name, tears, a reaction, or the same explanation in different words is a hard failure.
+- PARAGRAPH PROGRESSION: Before accepting each paragraph, compare it with all earlier paragraphs. If its core meaning is already present, delete it and move to the next uncovered source event.
 
 OUTPUT FORMAT:
 - Each paragraph MUST start with [MM:SS] — the source video timecode of the best matching scene
@@ -1241,11 +1346,12 @@ ${transcript}
     // ===== SERIES: split off the optional story bible before any script validation =====
     let storyBible: unknown = null;
     let rawScript = rawModelText;
-    if (rawModelText.includes("===STORY_BIBLE===")) {
-      const idx = rawModelText.indexOf("===STORY_BIBLE===");
+    const storyBibleMarker = rawModelText.match(/(?:^|\n)\s*(?:===\s*)?STORY[\s_-]*BI(?:BLE|BE|VE)(?:\s*===)?\s*:?[ \t]*(?:\n|$)/im);
+    if (storyBibleMarker?.index !== undefined) {
+      const idx = storyBibleMarker.index;
       rawScript = rawModelText.slice(0, idx).trim();
       const bibleRaw = rawModelText
-        .slice(idx + "===STORY_BIBLE===".length)
+        .slice(idx + storyBibleMarker[0].length)
         .replace(/```[a-zA-Z]*/g, "")
         .trim();
       try {
@@ -1284,7 +1390,7 @@ ${transcript}
       }
       return s.trim();
     };
-    let normalizedRawScript = stripHookPreamble(rawScript);
+    let normalizedRawScript = removeNarrationRepetition(stripHookPreamble(rawScript));
 
     if (!normalizedRawScript || normalizedRawScript.length < 10) {
       console.error("[recap-script-generator] Empty or invalid script output");
@@ -1686,7 +1792,7 @@ ${workingScript}`;
               if (looksLikeRestart(accepted[0])) accepted.shift();
             }
             if (accepted.length) {
-              const merged = `${workingScript}\n\n${accepted.join("\n\n")}`.trim();
+               const merged = removeNarrationRepetition(`${workingScript}\n\n${accepted.join("\n\n")}`.trim());
               if (endsAtCompleteSentence(merged)) {
                 workingScript = merged;
                 lengthAdjustedScript = merged;
@@ -1787,7 +1893,7 @@ ${lengthAdjustedScript}`;
               cursor = t;
             }
             if (acceptedEnd.length) {
-              const merged = `${lengthAdjustedScript}\n\n${acceptedEnd.join("\n\n")}`.trim();
+               const merged = removeNarrationRepetition(`${lengthAdjustedScript}\n\n${acceptedEnd.join("\n\n")}`.trim());
               if (endsAtCompleteSentence(merged) && !violatesTargetLanguage(merged, lang)) {
                 lengthAdjustedScript = merged;
                 toppedUp = true;
@@ -1814,7 +1920,7 @@ ${lengthAdjustedScript}`;
     }
 
     // No trimming — full content coverage is the priority
-    const script = lengthAdjustedScript;
+    const script = removeNarrationRepetition(lengthAdjustedScript);
     const finalWordCount = script.split(/\s+/).filter(Boolean).length;
     const finalSpokenSec = estimateSpokenSeconds(script);
     if (sourceDurationSec) {
