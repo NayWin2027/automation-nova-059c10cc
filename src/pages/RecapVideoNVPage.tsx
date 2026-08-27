@@ -3753,6 +3753,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 </button>
               </div>
               <div className="flex gap-2">
+                {onTranslateScript && (
+                  <button
+                    onClick={onTranslateScript}
+                    disabled={isTranslatingScript}
+                    title={`Translate script to ${targetLanguageName}`}
+                    className="text-xs text-cyan-300 border border-cyan-400/50 px-2 py-1 rounded-lg hover:bg-cyan-400/10 transition-all disabled:opacity-50"
+                  >
+                    {isTranslatingScript ? "🌐 ဘာသာပြန်နေသည်..." : `🌐 Translate → ${targetLanguageName}`}
+                  </button>
+                )}
                 <button
                   onClick={downloadSRT}
                   className="text-xs text-amber-400 border border-amber-400/50 px-2 py-1 rounded-lg hover:bg-amber-400/10 transition-all"
@@ -3760,6 +3770,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   Export SRT
                 </button>
               </div>
+
             </div>
             <div className="flex-1 overflow-hidden">
               {activeTab === "script" ? (
