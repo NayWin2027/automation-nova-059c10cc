@@ -7681,6 +7681,11 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
             onVoiceModeChange={setVoiceMode}
             sourceFileUriRef={sourceFileUriRef}
             videoFileRef={videoFileRef}
+            targetLanguageName={selectedLangName}
+            targetLanguageCode={selectedLanguage}
+            onTranslateScript={handleTranslateScript}
+            isTranslatingScript={isTranslatingScript}
+
           />
         )}
 
