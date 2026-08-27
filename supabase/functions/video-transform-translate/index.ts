@@ -35,10 +35,19 @@ const SUBTITLE_MODELS = [
   "gemini-3.6-flash",
   "gemini-3.5-flash",
   "gemini-3.1-flash",
+  "gemini-3.5-transcribe",
 ];
 
 function shouldTryNextModel(status: number): boolean {
-  return status === 429 || status === 404 || status === 503 || status === 504;
+  return (
+    status === 400 ||
+    status === 429 ||
+    status === 404 ||
+    status === 500 ||
+    status === 502 ||
+    status === 503 ||
+    status === 504
+  );
 }
 
 function hasTargetScriptConflict(text: string, targetLang: string): boolean {
