@@ -75,7 +75,12 @@ interface ResultViewProps {
   renderMode?: "browser" | "server";
   sourceFileUriRef?: React.MutableRefObject<string | null>;
   videoFileRef?: React.MutableRefObject<File | null>;
+  targetLanguageName?: string;
+  targetLanguageCode?: string;
+  onTranslateScript?: () => void;
+  isTranslatingScript?: boolean;
 }
+
 
 interface LogoSettings {
   url: string | null;
