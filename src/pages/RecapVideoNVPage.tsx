@@ -5838,6 +5838,95 @@ const RecapVideoNVPage: React.FC = () => {
     setScriptData((prev) => ({ ...prev, full_script: stripDialogueMetadata(newScript) }));
   };
 
+  // ── TARGET-LANGUAGE TRANSLATE GATE (additive; does not touch AV sync / seek / fallback) ──
+  const [isTranslatingScript, setIsTranslatingScript] = useState(false);
+  const selectedLangName = languages.find((l) => l.code === selectedLanguage)?.name || "BURMESE";
+
+  const handleTranslateScript = async () => {
+    if (!scriptData.full_script && scriptData.segments.length === 0) return;
+    setIsTranslatingScript(true);
+    try {
+      const {
+        data: { session: currentSession },
+      } = await supabase.auth.getSession();
+      const userToken = currentSession?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      const resolvedOwnKey = apiMode === "own" ? ownApiKey.trim() : "";
+      const hasSegments = scriptData.segments.length > 0;
+      const payloadScript = hasSegments
+        ? scriptData.segments.map((s) => `${s.timestamp} | ${s.text}`).join("\n")
+        : scriptData.full_script;
+
+      const runOnce = async () => {
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recap-script-generator`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${userToken}`,
+            ...(resolvedOwnKey ? { "x-own-api-key": resolvedOwnKey } : {}),
+          },
+          body: JSON.stringify({
+            translateMode: true,
+            script: payloadScript,
+            targetLanguage: selectedLangName,
+            ...(resolvedOwnKey ? { ownApiKey: resolvedOwnKey, apiKey: resolvedOwnKey } : {}),
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || `Translate failed (${res.status})`);
+        }
+        const json = await res.json();
+        return String(json.script || "").trim();
+      };
+
+      let out = await runOnce();
+      const parseLines = (txt: string) =>
+        txt
+          .split("\n")
+          .map((l) => l.trim())
+          .filter(Boolean);
+
+      if (hasSegments) {
+        let lines = parseLines(out);
+        if (lines.length !== scriptData.segments.length) {
+          out = await runOnce();
+          lines = parseLines(out);
+        }
+        if (lines.length !== scriptData.segments.length) {
+          throw new Error("ဘာသာပြန်ရလဒ်က segment အရေအတွက် မကိုက်ပါ။ ထပ်စမ်းကြည့်ပါ။");
+        }
+        const newSegments = scriptData.segments.map((seg, i) => {
+          const m = lines[i].match(/^\s*[^|]*\|\s*(.*)$/);
+          const text = stripDialogueMetadata(m ? m[1] : lines[i]);
+          return { ...seg, text: text || seg.text };
+        });
+        setScriptData((prev) => ({
+          ...prev,
+          segments: newSegments,
+          full_script: newSegments.map((s) => s.text).join("\n\n"),
+        }));
+      } else {
+        setScriptData((prev) => ({ ...prev, full_script: stripDialogueMetadata(out) }));
+      }
+
+      toast({
+        title: "✅ ဘာသာပြန်ပြီးပါပြီ",
+        description: `${selectedLangName} အဖြစ် ပြောင်းပြီးပါပြီ။ Voice ဆက်ထုတ်လို့ရပါပြီ။`,
+      });
+    } catch (e) {
+      toast({
+        title: "❌ Translate မအောင်မြင်ပါ",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setIsTranslatingScript(false);
+    }
+  };
+
+
+
   const handleGenerateVoice = () => {
     if (scriptData.full_script) {
       const resolvedOwnKey = apiMode === "own" ? ownApiKey.trim() : "";
