@@ -304,8 +304,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     renderMode,
     sourceFileUriRef,
     videoFileRef,
+    targetLanguageName = "BURMESE",
+    targetLanguageCode = "my-MM",
+    onTranslateScript,
+    isTranslatingScript = false,
   }) => {
     const [activeTab, setActiveTab] = useState<"script" | "segments">("script");
+
     const [isRecapPlaying, setIsRecapPlaying] = useState(false);
     const [currentSubtitle, setCurrentSubtitle] = useState("");
     const [subtitleKey, setSubtitleKey] = useState(0);
