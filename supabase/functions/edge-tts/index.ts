@@ -1,4 +1,4 @@
-// Microsoft Edge TTS proxy — Burmese voices (Thiha + Nilar)
+// Microsoft Edge TTS proxy — Burmese voicgeminies (Thiha + Nilar)
 // Surgical, isolated function. Does not touch existing TTS / Recap pipelines.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Communicate } from "npm:edge-tts-universal@1.4.0";
@@ -13,6 +13,13 @@ const ALLOWED_VOICES = new Set([
   "en-US-AvaMultilingualNeural",
   "en-US-BrianMultilingualNeural",
   "en-US-EmmaMultilingualNeural",
+  "en-AU-WilliamMultilingualNeural",
+  "de-DE-FlorianMultilingualNeural",
+  "de-DE-SeraphinaMultilingualNeural",
+  "fr-FR-RemyMultilingualNeural",
+  "fr-FR-VivienneMultilingualNeural",
+  "ko-KR-HyunsuMultilingualNeural",
+  "pt-BR-ThalitaMultilingualNeural",
   // Common target languages for Translate Video dub
   "en-US-GuyNeural",
   "en-US-JennyNeural",
@@ -62,7 +69,10 @@ async function synthesize(
   // Microsoft recently requires WebSocket headers/cookies that Deno's native
   // browser-style WebSocket cannot set. The maintained server-side client uses
   // npm ws and sends those headers correctly, fixing the protocol error.
-  const speakText = humanizeBurmese(text);
+  const isBurmeseVoice = voice === "my-MM-ThihaNeural" || voice === "my-MM-NilarNeural";
+  const speakText = isBurmeseVoice
+    ? `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="my-MM"><voice name="${voice}"><lang xml:lang="my-MM">${humanizeBurmese(text)}</lang></voice></speak>`
+    : humanizeBurmese(text);
   const communicate = new Communicate(speakText, { voice, rate, pitch, volume, connectionTimeout: 30000 });
   const chunks: Uint8Array[] = [];
 
@@ -93,9 +103,10 @@ function toBase64(bytes: Uint8Array): string {
 
 function estimateSegmentTimestamps(segments: unknown[], durationSec: number) {
   const weights = segments.map((segment) => {
-    const text = typeof segment === "object" && segment !== null && "text" in segment
-      ? String((segment as { text?: unknown }).text ?? "")
-      : "";
+    const text =
+      typeof segment === "object" && segment !== null && "text" in segment
+        ? String((segment as { text?: unknown }).text ?? "")
+        : "";
     const compact = humanizeBurmese(text).replace(/\s+/g, "");
     let weight = 0;
     for (const char of compact) {
