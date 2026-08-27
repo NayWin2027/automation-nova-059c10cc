@@ -3828,7 +3828,14 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               </div>
 
             </div>
+            {onTranslateScript && scriptLanguageMismatch(scriptData.full_script, targetLanguageCode) && (
+              <div className="mx-3 mb-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-400/40 text-[11px] text-amber-300 leading-relaxed">
+                ⚠️ Script က ရွေးထားတဲ့ ဘာသာစကား ({targetLanguageName}) နဲ့ မကိုက်ညီပုံရပါတယ်။ အပေါ်က{" "}
+                <span className="font-semibold">🌐 Translate</span> ခလုတ်ကို နှိပ်ပြီး ပြောင်းပါ။
+              </div>
+            )}
             <div className="flex-1 overflow-hidden">
+
               {activeTab === "script" ? (
                 <textarea
                   className="w-full h-full p-4 bg-slate-900/50 text-slate-200 text-sm leading-relaxed focus:outline-none resize-none"
