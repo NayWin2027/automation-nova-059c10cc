@@ -528,7 +528,7 @@ ABSOLUTE STRUCTURE LOCK:
 
 LANGUAGE LOCK:
 - 100% of the output text must be written in ${tgtLang} using ${tgtLang}'s own writing system.
-- No Chinese, Latin, or other foreign glyphs may remain inside the narration text. Transliterate names and brands phonetically (e.g. 杨帆 → Yan Fan in the target script, Facebook → the target-script spelling, CEO → the target-script spelling) so TTS reads them naturally.
+- No Chinese, Latin, or other foreign glyphs may remain inside the narration text. Transliterate names and brands phonetically into the target script (e.g. Facebook → the target-script spelling, CEO → the target-script spelling) so TTS reads them naturally. Character names must be the REAL names from this source video only — never invented, never carried over from any example.
 - Spoken, natural, conversational register — never bookish or machine-translated wording.${burmeseStyle}`;
 
         const tModels = [
