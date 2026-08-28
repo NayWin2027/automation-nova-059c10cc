@@ -434,15 +434,15 @@ function violatesTargetLanguage(script: string, lang: string): boolean {
     return (
       myanmarCount < 12 ||
       latinCount > Math.max(8, Math.floor(myanmarCount * 0.025)) ||
-      cjkCount > 6 ||
-      japaneseKanaCount > 3 ||
-      koreanCount > 3 ||
-      thaiCount > 3
+      cjkCount > 0 ||
+      japaneseKanaCount > 0 ||
+      koreanCount > 0 ||
+      thaiCount > 0
     );
-  if (target !== "CHINESE" && target !== "JAPANESE" && cjkCount > 12) return true;
-  if (target !== "JAPANESE" && japaneseKanaCount > 6) return true;
-  if (target !== "KOREAN" && koreanCount > 6) return true;
-  if (target !== "THAI" && thaiCount > 6) return true;
+  if (target !== "CHINESE" && target !== "JAPANESE" && cjkCount > 0) return true;
+  if (target !== "JAPANESE" && japaneseKanaCount > 0) return true;
+  if (target !== "KOREAN" && koreanCount > 0) return true;
+  if (target !== "THAI" && thaiCount > 0) return true;
   return false;
 }
 
