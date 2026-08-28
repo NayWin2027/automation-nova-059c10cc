@@ -2874,6 +2874,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           ctx.filter = `blur(${actualBlurPx}px)`;
           ctx.drawImage(canvas, blurX, blurY, blurW, blurH, blurX, blurY, blurW, blurH);
           ctx.filter = "none";
+          appliedFilterRef.current = "none";
 
           // Step 2: Dark frosted tint — darkness from slider intensity
           ctx.fillStyle = `rgba(0, 0, 0, ${darkAlpha})`;
