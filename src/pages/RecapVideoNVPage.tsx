@@ -2399,10 +2399,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               ? filterStringRef.current + " sepia(18%) brightness(96%) saturate(90%)"
               : filterStringRef.current;
         }
-        if (appliedFilterRef.current !== gradedFilterValRef.current) {
-          ctx.filter = gradedFilterValRef.current;
-          appliedFilterRef.current = gradedFilterValRef.current;
-        }
+        ctx.filter = gradedFilterValRef.current;
 
         // SURGICAL EDIT: Zoom toggle - conditional cinematic zoom/pan/rotation
         // Freeze mode is INDEPENDENT of zoom toggle â€” it works even when zoom is OFF
