@@ -523,6 +523,7 @@ TASK: Translate the script below into ${tgtLang}. Output the translated script O
 ABSOLUTE STRUCTURE LOCK:
 - Keep EVERY line, paragraph and blank line in the SAME order and the SAME count.
 - Keep ALL timecodes, timestamps, segment markers, numbering and bracketed tags byte-identical. Translate ONLY the human-readable narration/dialogue text.
+- When a line uses "SEG_0001 00:12 | text", copy everything before and including the | byte-identically and translate only the text after |.
 - Never merge two lines into one. Never split one line into two. Never add or drop a line.
 
 LANGUAGE LOCK:
@@ -596,6 +597,24 @@ LANGUAGE LOCK:
 
         const srcLines = srcScript.split("\n").filter((l) => l.trim()).length;
         const outLines = translated.split("\n").filter((l) => l.trim()).length;
+        const sourceSegmentPrefixes = srcScript
+          .split("\n")
+          .map((line) => line.match(/^\s*(SEG_\d{4}\s+\d{1,2}:\d{2}(?::\d{2})?)\s*\|/)?.[1] || null)
+          .filter((prefix): prefix is string => !!prefix);
+        const outputSegmentPrefixes = translated
+          .split("\n")
+          .map((line) => line.match(/^\s*(SEG_\d{4}\s+\d{1,2}:\d{2}(?::\d{2})?)\s*\|/)?.[1] || null)
+          .filter((prefix): prefix is string => !!prefix);
+        if (
+          sourceSegmentPrefixes.length > 0 &&
+          (sourceSegmentPrefixes.length !== outputSegmentPrefixes.length ||
+            sourceSegmentPrefixes.some((prefix, index) => prefix !== outputSegmentPrefixes[index]))
+        ) {
+          return new Response(JSON.stringify({ error: "Translation changed timestamp or segment mapping" }), {
+            status: 422,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
 
         logToolActivity(user.id, "narration-script-translate", "success", { targetLanguage: tgtLang });
         return new Response(

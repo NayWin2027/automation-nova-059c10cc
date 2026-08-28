@@ -109,6 +109,13 @@ const scriptLanguageMismatch = (text: string, langCode: string): boolean => {
   return hits / body.length < 0.35;
 };
 
+/** Reject foreign writing systems that must never be spoken by the selected TTS voice. */
+const scriptContainsForbiddenGlyphs = (text: string, langCode: string): boolean => {
+  const base = (langCode || "").split("-")[0];
+  if (base === "my") return /[\u3400-\u9FFF\u3040-\u30FF\uAC00-\uD7AF\u0E00-\u0EFF\u1780-\u17FF]/u.test(text);
+  return false;
+};
+
 type ProcessingStatus = "idle" | "processing" | "done" | "error";
 
 interface ResultViewProps {
@@ -5947,7 +5954,7 @@ const RecapVideoNVPage: React.FC = () => {
       const resolvedOwnKey = apiMode === "own" ? ownApiKey.trim() : "";
       const hasSegments = scriptData.segments.length > 0;
       const payloadScript = hasSegments
-        ? scriptData.segments.map((s) => `${s.timestamp} | ${s.text}`).join("\n")
+        ? scriptData.segments.map((s, i) => `SEG_${String(i + 1).padStart(4, "0")} ${s.timestamp} | ${s.text}`).join("\n")
         : scriptData.full_script;
 
       const runOnce = async () => {
@@ -5971,7 +5978,14 @@ const RecapVideoNVPage: React.FC = () => {
           throw new Error(err.error || `Translate failed (${res.status})`);
         }
         const json = await res.json();
-        return String(json.script || "").trim();
+        const translatedScript = String(json.script || "").trim();
+        if (
+          scriptLanguageMismatch(translatedScript, selectedLanguage) ||
+          scriptContainsForbiddenGlyphs(translatedScript, selectedLanguage)
+        ) {
+          throw new Error(`${selectedLangName} မဟုတ်တဲ့ စာတွေ ကျန်နေသေးလို့ output ကို လက်မခံပါ။`);
+        }
+        return translatedScript;
       };
 
       let out = await runOnce();
@@ -5991,20 +6005,39 @@ const RecapVideoNVPage: React.FC = () => {
           throw new Error("ဘာသာပြန်ရလဒ်က segment အရေအတွက် မကိုက်ပါ။ ထပ်စမ်းကြည့်ပါ။");
         }
         const newSegments = scriptData.segments.map((seg, i) => {
-          const m = lines[i].match(/^\s*[^|]*\|\s*(.*)$/);
-          const text = stripDialogueMetadata(m ? m[1] : lines[i]);
+          const expectedPrefix = `SEG_${String(i + 1).padStart(4, "0")} ${seg.timestamp}`;
+          const m = lines[i].match(/^\s*(SEG_\d{4})\s+(\d{1,2}:\d{2}(?::\d{2})?)\s*\|\s*(.*)$/);
+          if (!m || `${m[1]} ${m[2]}` !== expectedPrefix) {
+            throw new Error("ဘာသာပြန်ရလဒ်ရဲ့ timestamp/segment mapping မကိုက်ပါ။");
+          }
+          const text = stripDialogueMetadata(m[3]);
           return { ...seg, text: text || seg.text };
         });
+        const translatedFullScript = newSegments
+          .map((s) => `${s.timestamp}${s.isDialogue ? ` [DIALOGUE:${(s.emotion || "NEUTRAL").toUpperCase()}]` : ""} ${s.text}`)
+          .join("\n\n");
         setScriptData((prev) => ({
           ...prev,
           segments: newSegments,
-          full_script: newSegments.map((s) => s.text).join("\n\n"),
+          full_script: stripDialogueMetadata(translatedFullScript),
         }));
+        setProgressMsg("📝 ဘာသာပြန်ပြီးပါပြီ။ AI Voice ဆက်ထုတ်နေပါသည်...");
+        const translatedSpeech = newSegments.map((s) => s.text).join("\n\n");
+        generateVoice(
+          translatedSpeech,
+          resolvedOwnKey || undefined,
+          newSegments.map((s) => ({ text: s.text })),
+          newSegments,
+        );
       } else {
         setScriptData((prev) => ({ ...prev, full_script: stripDialogueMetadata(out) }));
       }
 
-      toast.success(`✅ ${selectedLangName} အဖြစ် ဘာသာပြန်ပြီးပါပြီ။ Voice ဆက်ထုတ်လို့ရပါပြီ။`);
+      toast.success(
+        hasSegments
+          ? `✅ ${selectedLangName} အဖြစ် ဘာသာပြန်ပြီး full pipeline ဆက်လုပ်နေပါသည်။`
+          : `✅ ${selectedLangName} အဖြစ် ဘာသာပြန်ပြီးပါပြီ။`,
+      );
     } catch (e) {
       toast.error(`❌ Translate မအောင်မြင်ပါ — ${e instanceof Error ? e.message : "Unknown error"}`);
     } finally {
