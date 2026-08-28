@@ -763,9 +763,11 @@ ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
 - Goal: the viewer feels pity, anger, tension, or satisfaction as it happens — because they hear the real words and see the described reaction, not a summary.
 
 UNCENSORED VERBATIM DIALOGUE (mandatory for ${narrationStyle} mode — 100% of spoken lines):
+- LANGUAGE LOCK (HIGHEST PRIORITY): "verbatim" means verbatim in MEANING and TONE only. Every dialogue line MUST be written in ${langLabel} (${lang}) using ONLY the native ${langLabel} script. NEVER copy or quote the source-language words (Chinese/Japanese/Korean/Thai/English) into the script — not even one word, not even inside quotes.
+- If the source characters speak Chinese (or any other language), you MUST fully translate their lines into ${langLabel}. A script containing source-language characters is REJECTED.
 - 100% of the spoken lines must appear. Zero skipping, zero merging, zero replacing a line with a summary. Narrator/action lines stay at ~20% only.
-- NEVER soften, censor, bleep, or clean up harsh speech. If a character curses, insults, threatens, or talks vulgarly/sexually, translate it EXACTLY as harsh and raw as the source (in ${lang}). Never write "ဆဲလိုက်တယ်", "***", or a polite substitute.
-- Faithfulness to the source outweighs politeness: explicit, crude, sexual and offensive lines are kept as-is.
+- NEVER soften, censor, bleep, or clean up harsh speech. If a character curses, insults, threatens, or talks vulgarly/sexually, translate it EXACTLY as harsh and raw as the source (written in ${langLabel}). Never write "ဆဲလိုက်တယ်", "***", or a polite substitute.
+- Faithfulness to the source outweighs politeness: explicit, crude, sexual and offensive lines are kept as-is — but always rendered in ${langLabel} script.
 
 STREET-SPOKEN STYLE & MODERN SLANG (mandatory for ${narrationStyle} mode):
 - Write 100% the way real people talk today. Literary/bookish forms are FORBIDDEN (for BURMESE: no သည်, ၏, ၍, နေသည်, လုပ်နေသည် — use တယ်/တာ/လဲ/ကွာ/ပဲ).
