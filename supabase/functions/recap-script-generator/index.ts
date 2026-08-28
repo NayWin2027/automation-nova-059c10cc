@@ -528,7 +528,7 @@ ABSOLUTE STRUCTURE LOCK:
 
 LANGUAGE LOCK:
 - 100% of the output text must be written in ${tgtLang} using ${tgtLang}'s own writing system.
-- No Chinese, Latin, or other foreign glyphs may remain inside the narration text. Transliterate names and brands phonetically (e.g. 杨帆 → Yan Fan in the target script, Facebook → the target-script spelling, CEO → the target-script spelling) so TTS reads them naturally.
+- No Chinese, Latin, or other foreign glyphs may remain inside the narration text. Transliterate names and brands phonetically into the target script (e.g. Facebook → the target-script spelling, CEO → the target-script spelling) so TTS reads them naturally. Character names must be the REAL names from this source video only — never invented, never carried over from any example.
 - Spoken, natural, conversational register — never bookish or machine-translated wording.${burmeseStyle}`;
 
         const tModels = [
@@ -949,9 +949,12 @@ ${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYL
 # names, places, brands, or borrowed words.
 # Transliterate them phonetically into ${lang} letters so the
 # text-to-speech voice reads them with a natural ${lang} accent.
-# If ${lang} is BURMESE: 杨帆 → ယန်ဖန်း ; 李伟 → လီဝေ့ ;
-#   Facebook → ဖေ့ဘုတ် ; TikTok → တစ်တော့ ; CEO → စီအီးအို ;
-#   hotel → ဟိုတယ် ; police → ပိုလိစ် ; OK → အိုကေ.
+# If ${lang} is BURMESE: Facebook → ဖေ့ဘုတ် ; TikTok → တစ်တော့ ;
+#   CEO → စီအီးအို ; hotel → ဟိုတယ် ; police → ပိုလိစ် ; OK → အိုကေ.
+# CHARACTER NAMES: use ONLY the real names spoken/shown in THIS source
+# video, transliterated into ${lang} letters. NEVER invent a name and
+# NEVER reuse any example name from this prompt. If a name is unclear,
+# use the character's role/relationship instead of a made-up name.
 # A name left in Chinese characters or Latin letters is SKIPPED
 # by the voice engine, so this is a hard failure — never do it.
 ###############################################################${

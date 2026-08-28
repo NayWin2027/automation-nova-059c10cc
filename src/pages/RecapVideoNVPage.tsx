@@ -5523,7 +5523,8 @@ function buildNarrationStyleBlock(style: "STORY" | "HYBRID" | "VIRAL", langName:
   const translitBlock = `\n\nNATIVE-SCRIPT TRANSLITERATION (MANDATORY — the voice engine skips foreign glyphs):
 - EVERY character of the script must be written in the ${langName} writing system. No Chinese/Japanese/Korean characters, no Latin letters, no other alphabets anywhere — including names, places, brands and borrowed words.
 - Transliterate them phonetically into ${langName} letters so the voice reads them with a natural ${langName} accent.
-- If ${langName} is BURMESE: 杨帆 → ယန်ဖန်း ; 李伟 → လီဝေ့ ; Facebook → ဖေ့ဘုတ် ; TikTok → တစ်တော့ ; CEO → စီအီးအို ; hotel → ဟိုတယ် ; police → ပိုလိစ် ; OK → အိုကေ.
+- If ${langName} is BURMESE: Facebook → ဖေ့ဘုတ် ; TikTok → တစ်တော့ ; CEO → စီအီးအို ; hotel → ဟိုတယ် ; police → ပိုလိစ် ; OK → အိုကေ.
+- CHARACTER NAMES: use ONLY the real names spoken or shown in THIS source video, transliterated into ${langName} letters. NEVER invent a name and NEVER reuse any example name from this prompt. If a name is unclear, use the character's role or relationship instead.
 - A name left in Chinese characters or Latin letters is read as silence — that is a hard failure, never do it.`;
   const timingLockBlock = `\n\nDIALOGUE TIMING LOCK (HYBRID/VIRAL only):
 - For each real spoken line, inspect the source carefully and use the EXACT source frame where the speaker's first audible syllable begins (normally the first mouth movement). Do not use a nearby reaction shot, an earlier establishing shot, or an approximate scene time.
