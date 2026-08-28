@@ -698,7 +698,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     // —— PERF FIX: memoize the scene-graded filter string + last assigned ctx.filter ——
     const gradedFilterKeyRef = useRef<string>("");
     const gradedFilterValRef = useRef<string>("none");
-    const appliedFilterRef = useRef<string>("");
 
     // —— FIX: Drag position ref — avoid setState on every mousemove ——
     const dragSubPosRef = useRef({ x: 50, y: 85 });
