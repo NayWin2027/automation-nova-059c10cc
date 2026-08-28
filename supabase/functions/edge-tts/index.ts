@@ -69,11 +69,13 @@ async function synthesize(
   // Microsoft recently requires WebSocket headers/cookies that Deno's native
   // browser-style WebSocket cannot set. The maintained server-side client uses
   // npm ws and sends those headers correctly, fixing the protocol error.
-  const isBurmeseVoice = voice === "my-MM-ThihaNeural" || voice === "my-MM-NilarNeural";
-  const speakText = isBurmeseVoice
-    ? `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="my-MM"><voice name="${voice}"><lang xml:lang="my-MM">${humanizeBurmese(text)}</lang></voice></speak>`
-    : humanizeBurmese(text);
+  // SURGICAL FIX: never wrap in SSML — edge-tts-universal escapes the markup, so the
+  // <speak>/<voice>/<lang> tags were literally spoken at the start of the audio (heard as
+  // a foreign language before the Burmese narration). Plain text only; the voice id already
+  // pins the language, so no other language can leak in.
+  const speakText = humanizeBurmese(text);
   const communicate = new Communicate(speakText, { voice, rate, pitch, volume, connectionTimeout: 30000 });
+
   const chunks: Uint8Array[] = [];
 
   for await (const chunk of communicate.stream()) {
