@@ -949,9 +949,12 @@ ${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYL
 # names, places, brands, or borrowed words.
 # Transliterate them phonetically into ${lang} letters so the
 # text-to-speech voice reads them with a natural ${lang} accent.
-# If ${lang} is BURMESE: 杨帆 → ယန်ဖန်း ; 李伟 → လီဝေ့ ;
-#   Facebook → ဖေ့ဘုတ် ; TikTok → တစ်တော့ ; CEO → စီအီးအို ;
-#   hotel → ဟိုတယ် ; police → ပိုလိစ် ; OK → အိုကေ.
+# If ${lang} is BURMESE: Facebook → ဖေ့ဘုတ် ; TikTok → တစ်တော့ ;
+#   CEO → စီအီးအို ; hotel → ဟိုတယ် ; police → ပိုလိစ် ; OK → အိုကေ.
+# CHARACTER NAMES: use ONLY the real names spoken/shown in THIS source
+# video, transliterated into ${lang} letters. NEVER invent a name and
+# NEVER reuse any example name from this prompt. If a name is unclear,
+# use the character's role/relationship instead of a made-up name.
 # A name left in Chinese characters or Latin letters is SKIPPED
 # by the voice engine, so this is a hard failure — never do it.
 ###############################################################${
