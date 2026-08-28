@@ -2384,16 +2384,24 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           }
         }
 
-        // â”€â”€ FIX: Use cached filter string â€” no string allocation per frame â”€â”€
-        // â”€â”€ BONUS: Scene-Aware Dynamic Color Grade â€” blend base filter with scene-type modifier â”€â”€
+        // ── FIX: Use cached filter string — no string allocation per frame ──
+        // ── BONUS: Scene-Aware Dynamic Color Grade — blend base filter with scene-type modifier ──
+        // ── PERF FIX: recompute the graded string only when its inputs change, and only
+        //    touch ctx.filter when the value actually differs (canvas filter parsing is costly).
         const sceneType = segPacingTypeRef.current;
         const isColorOff = editorState.colorGrade === "OFF" || editorState.bypass;
-        if (!isColorOff && sceneType === "action") {
-          ctx.filter = filterStringRef.current + " contrast(118%) hue-rotate(-8deg) saturate(115%)";
-        } else if (!isColorOff && sceneType === "emotional") {
-          ctx.filter = filterStringRef.current + " sepia(18%) brightness(96%) saturate(90%)";
-        } else {
-          ctx.filter = filterStringRef.current;
+        const gradeKey = `${isColorOff ? 1 : 0}|${sceneType}|${filterStringRef.current}`;
+        if (gradedFilterKeyRef.current !== gradeKey) {
+          gradedFilterKeyRef.current = gradeKey;
+          gradedFilterValRef.current = !isColorOff && sceneType === "action"
+            ? filterStringRef.current + " contrast(118%) hue-rotate(-8deg) saturate(115%)"
+            : !isColorOff && sceneType === "emotional"
+              ? filterStringRef.current + " sepia(18%) brightness(96%) saturate(90%)"
+              : filterStringRef.current;
+        }
+        if (appliedFilterRef.current !== gradedFilterValRef.current) {
+          ctx.filter = gradedFilterValRef.current;
+          appliedFilterRef.current = gradedFilterValRef.current;
         }
 
         // SURGICAL EDIT: Zoom toggle - conditional cinematic zoom/pan/rotation
