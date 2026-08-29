@@ -275,7 +275,10 @@ function removeNarrationRepetition(script: string): string {
     // Catch STORY_BIBLE plus common model misspellings such as STORY_BIBE/VIBE.
     // Everything after this marker is internal series metadata, never narration.
     .split(/(?:^|\n)\s*(?:===\s*)?STORY[\s_-]*BI(?:BLE|BE|VE)(?:\s*===)?\s*:?[ \t]*(?:\n|$)/im)[0]
-    .replace(/(^|\n)(\s*\[\d{1,2}:\d{2}\](?:\s*\[DIALOGUE:[A-Z]+\])?\s*)?(?:STORY\s+(?:BIBLE|BIBE|VIBE)|ဇာတ်လမ်း\s*(?:မှတ်စု|အနှစ်ချုပ်))\s*[:：-]\s*/gim, "$1$2")
+    .replace(
+      /(^|\n)(\s*\[\d{1,2}:\d{2}\](?:\s*\[DIALOGUE:[A-Z]+\])?\s*)?(?:STORY\s+(?:BIBLE|BIBE|VIBE)|ဇာတ်လမ်း\s*(?:မှတ်စု|အနှစ်ချုပ်))\s*[:：-]\s*/gim,
+      "$1$2",
+    )
     .trim();
 
   const paragraphs = withoutLeakedMetadata
@@ -504,7 +507,10 @@ serve(async (req) => {
     // Takes an already-generated script and re-renders it in the target language,
     // preserving segment/timecode structure exactly. Free: no credit deduction.
     if (!(req.headers.get("content-type") || "").includes("multipart/form-data")) {
-      const peek = await req.clone().json().catch(() => null);
+      const peek = await req
+        .clone()
+        .json()
+        .catch(() => null);
       if (peek && peek.translateMode && typeof peek.script === "string" && peek.script.trim()) {
         const srcScript: string = peek.script;
         const tgtLang: string = (peek.targetLanguage || peek.language || "BURMESE").toString().slice(0, 60);
@@ -577,7 +583,11 @@ LANGUAGE LOCK:
 
         if (!tRes || !tRes.ok) {
           return new Response(
-            JSON.stringify({ error: "Translation failed", detail: tLastError.slice(0, 500), upstreamStatus: tLastStatus }),
+            JSON.stringify({
+              error: "Translation failed",
+              detail: tLastError.slice(0, 500),
+              upstreamStatus: tLastStatus,
+            }),
             { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
@@ -784,7 +794,7 @@ STREET-SPOKEN STYLE & MODERN SLANG (mandatory for ${narrationStyle} mode):
 - Keep ALL the real dialogue (this is the backbone), but the script must NOT read like a bare dialogue transcript.
 - MAXIMUM 2-3 DIALOGUES RULE: You must NEVER write more than 2 or 3 consecutive [DIALOGUE] lines without inserting a [MM:SS] Narrator line.
 - CONTINUOUS CONVERSATION RULE: Even during a continuous back-and-forth conversation with no silent gaps, you MUST pause the dialogue after every 2-3 speaker turns and insert a 1-sentence narrator line describing their face expressions, body language, or the emotional tension of the argument.
-- NARRATOR'S ROLE (PLOT BRIDGES, ACTION & RELATIONSHIPS - 20%): Narrator lines are NOT optional filler — they are essential story glue. Insert narrator paragraphs to:
+- NARRATOR'S ROLE (PLOT BRIDGES, ACTION & RELATIONSHIPS - 15%): Narrator lines are NOT optional filler — they are essential story glue. Keep narrator paragraphs strictly short (1-2 punchy sentences max) just to connect the dialogue scenes.
   * Describe WHO the characters are and their RELATIONSHIP to each other (e.g. husband-wife, boss-employee, childhood friends) — especially on first appearance.
   * Bridge between scenes: explain where, when, why, and what changed.
   * Describe physical actions, fights, chases, embraces — concrete verbs, not summaries.
@@ -1364,7 +1374,9 @@ ${transcript}
     // ===== SERIES: split off the optional story bible before any script validation =====
     let storyBible: unknown = null;
     let rawScript = rawModelText;
-    const storyBibleMarker = rawModelText.match(/(?:^|\n)\s*(?:===\s*)?STORY[\s_-]*BI(?:BLE|BE|VE)(?:\s*===)?\s*:?[ \t]*(?:\n|$)/im);
+    const storyBibleMarker = rawModelText.match(
+      /(?:^|\n)\s*(?:===\s*)?STORY[\s_-]*BI(?:BLE|BE|VE)(?:\s*===)?\s*:?[ \t]*(?:\n|$)/im,
+    );
     if (storyBibleMarker?.index !== undefined) {
       const idx = storyBibleMarker.index;
       rawScript = rawModelText.slice(0, idx).trim();
@@ -1507,7 +1519,9 @@ ${lastLines}`;
           if (langRetryRes.ok) {
             const langRetryData = await langRetryRes.json();
             let retryScript = langRetryData.candidates?.[0]?.content?.parts?.[0]?.text || "";
-            const retryStoryBibleMarker = retryScript.match(/(?:^|\n)\s*(?:===\s*)?STORY[\s_-]*BI(?:BLE|BE|VE)(?:\s*===)?\s*:?[ \t]*(?:\n|$)/im);
+            const retryStoryBibleMarker = retryScript.match(
+              /(?:^|\n)\s*(?:===\s*)?STORY[\s_-]*BI(?:BLE|BE|VE)(?:\s*===)?\s*:?[ \t]*(?:\n|$)/im,
+            );
             if (retryStoryBibleMarker?.index !== undefined) {
               const sbIdx = retryStoryBibleMarker.index;
               const sbRaw = retryScript
@@ -1811,7 +1825,7 @@ ${workingScript}`;
               if (looksLikeRestart(accepted[0])) accepted.shift();
             }
             if (accepted.length) {
-               const merged = removeNarrationRepetition(`${workingScript}\n\n${accepted.join("\n\n")}`.trim());
+              const merged = removeNarrationRepetition(`${workingScript}\n\n${accepted.join("\n\n")}`.trim());
               if (endsAtCompleteSentence(merged)) {
                 workingScript = merged;
                 lengthAdjustedScript = merged;
@@ -1912,7 +1926,7 @@ ${lengthAdjustedScript}`;
               cursor = t;
             }
             if (acceptedEnd.length) {
-               const merged = removeNarrationRepetition(`${lengthAdjustedScript}\n\n${acceptedEnd.join("\n\n")}`.trim());
+              const merged = removeNarrationRepetition(`${lengthAdjustedScript}\n\n${acceptedEnd.join("\n\n")}`.trim());
               if (endsAtCompleteSentence(merged) && !violatesTargetLanguage(merged, lang)) {
                 lengthAdjustedScript = merged;
                 toppedUp = true;
