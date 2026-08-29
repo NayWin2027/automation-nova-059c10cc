@@ -73,31 +73,50 @@ serve(async (req) => {
     let lastErrorText = "";
     let lastStatus = 0;
 
-    for (const key of candidates) {
-      // New Google AI Studio keys (AQ.*) use header auth; legacy AIz.* keys accept query param.
-      // Sending both is safe and maximises compatibility across published/preview environments.
-      const isNewKey = key.startsWith("AQ.");
-      const url = isNewKey ? GOOGLE_FILES_API : `${GOOGLE_FILES_API}?key=${key}`;
-      const headers: Record<string, string> = {
-        "X-Goog-Upload-Protocol": "resumable",
-        "X-Goog-Upload-Command": "start",
-        "X-Goog-Upload-Header-Content-Length": fileSize.toString(),
-        "X-Goog-Upload-Header-Content-Type": mimeType,
-        "Content-Type": "application/json",
-      };
-      if (isNewKey) headers["x-goog-api-key"] = key;
+    for (const rawKey of candidates) {
+      const key = String(rawKey).trim().replace(/\s+/g, "");
+      if (!key) continue;
 
-      const resp = await fetch(url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          file: {
-            display_name: fileName.replace(/[\/\\:*?"<>|]/g, "_").substring(0, 255),
-          },
-        }),
-      });
+      // Try BOTH auth transports: query-param `?key=` and `x-goog-api-key` header.
+      // New AI Studio keys (AQ.*) require the header; legacy AIz.* keys accept either.
+      const attempts: Array<{ url: string; useHeader: boolean }> = key.startsWith("AQ.")
+        ? [
+            { url: GOOGLE_FILES_API, useHeader: true },
+            { url: `${GOOGLE_FILES_API}?key=${encodeURIComponent(key)}`, useHeader: true },
+          ]
+        : [
+            { url: `${GOOGLE_FILES_API}?key=${encodeURIComponent(key)}`, useHeader: true },
+            { url: `${GOOGLE_FILES_API}?key=${encodeURIComponent(key)}`, useHeader: false },
+          ];
+
+      let resp: Response | null = null;
+      for (const attempt of attempts) {
+        const headers: Record<string, string> = {
+          "X-Goog-Upload-Protocol": "resumable",
+          "X-Goog-Upload-Command": "start",
+          "X-Goog-Upload-Header-Content-Length": fileSize.toString(),
+          "X-Goog-Upload-Header-Content-Type": mimeType,
+          "Content-Type": "application/json",
+        };
+        if (attempt.useHeader) headers["x-goog-api-key"] = key;
+
+        resp = await fetch(attempt.url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            file: {
+              display_name: fileName.replace(/[\/\\:*?"<>|]/g, "_").substring(0, 255),
+            },
+          }),
+        });
+
+        // Only retry the alternate transport on credential-shaped failures.
+        if (resp.ok || (resp.status !== 401 && resp.status !== 403)) break;
+      }
+      if (!resp) continue;
 
       if (resp.ok) { startResponse = resp; break; }
+
 
       const errText = await resp.text();
       lastErrorText = errText;
