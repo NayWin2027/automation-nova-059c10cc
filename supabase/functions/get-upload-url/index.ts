@@ -141,8 +141,11 @@ serve(async (req) => {
         );
       }
       if (isOwnMode && (lastStatus === 401 || lastStatus === 403 || lastStatus === 400)) {
+        const isDenied = /denied access|PERMISSION_DENIED|CONSUMER_SUSPENDED/i.test(lastErrorText);
         const isBlocked = /API_KEY_SERVICE_BLOCKED|SERVICE_DISABLED/i.test(lastErrorText);
-        const msg = isBlocked
+        const msg = isDenied
+          ? "ဒီ API key ရဲ့ Google project ကို Google က ပိတ်ထား/ငြင်းပယ်ထားပါတယ် (403 denied access)။ Google AI Studio (aistudio.google.com) မှာ project အသစ်တစ်ခုနဲ့ key အသစ်ထုတ်ပြီး ပြန်ထည့်ပါ။"
+          : isBlocked
           ? "သင့် Google Cloud project မှာ Generative Language API မဖွင့်ရသေးပါ။ Google AI Studio (aistudio.google.com) ကနေ ရတဲ့ key ကို သုံးပါ။"
           : `API key error: ${lastErrorText.slice(0, 300)}`;
         return new Response(
