@@ -2399,11 +2399,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         const gradeKey = `${isColorOff ? 1 : 0}|${sceneType}|${filterStringRef.current}`;
         if (gradedFilterKeyRef.current !== gradeKey) {
           gradedFilterKeyRef.current = gradeKey;
-          gradedFilterValRef.current = !isColorOff && sceneType === "action"
-            ? filterStringRef.current + " contrast(118%) hue-rotate(-8deg) saturate(115%)"
-            : !isColorOff && sceneType === "emotional"
-              ? filterStringRef.current + " sepia(18%) brightness(96%) saturate(90%)"
-              : filterStringRef.current;
+          gradedFilterValRef.current =
+            !isColorOff && sceneType === "action"
+              ? filterStringRef.current + " contrast(118%) hue-rotate(-8deg) saturate(115%)"
+              : !isColorOff && sceneType === "emotional"
+                ? filterStringRef.current + " sepia(18%) brightness(96%) saturate(90%)"
+                : filterStringRef.current;
         }
         ctx.filter = gradedFilterValRef.current;
 
@@ -2589,7 +2590,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           !prewarmActiveRef.current &&
           visibleLoopFrameReadyRef.current;
 
-        // (B) residual gap mask — slow micro zoom-in (max 2%) so any held frame reads as motion
+        // (B) residual gap mask — slow micro zoom-in (max 4%) so any held frame reads as motion
         {
           const _now = performance.now();
           if (seekPendingRef.current) {
@@ -5955,7 +5956,9 @@ const RecapVideoNVPage: React.FC = () => {
       const resolvedOwnKey = apiMode === "own" ? ownApiKey.trim() : "";
       const hasSegments = scriptData.segments.length > 0;
       const payloadScript = hasSegments
-        ? scriptData.segments.map((s, i) => `SEG_${String(i + 1).padStart(4, "0")} ${s.timestamp} | ${s.text}`).join("\n")
+        ? scriptData.segments
+            .map((s, i) => `SEG_${String(i + 1).padStart(4, "0")} ${s.timestamp} | ${s.text}`)
+            .join("\n")
         : scriptData.full_script;
 
       const runOnce = async () => {
@@ -6015,7 +6018,10 @@ const RecapVideoNVPage: React.FC = () => {
           return { ...seg, text: text || seg.text };
         });
         const translatedFullScript = newSegments
-          .map((s) => `${s.timestamp}${s.isDialogue ? ` [DIALOGUE:${(s.emotion || "NEUTRAL").toUpperCase()}]` : ""} ${s.text}`)
+          .map(
+            (s) =>
+              `${s.timestamp}${s.isDialogue ? ` [DIALOGUE:${(s.emotion || "NEUTRAL").toUpperCase()}]` : ""} ${s.text}`,
+          )
           .join("\n\n");
         setScriptData((prev) => ({
           ...prev,
