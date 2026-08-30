@@ -59,6 +59,50 @@ function humanizeBurmese(text: string): string {
   );
 }
 
+// Split long text into ~1200-char pieces at sentence boundaries so one huge
+// WebSocket synthesis never stalls past the 150s idle timeout.
+function splitForTts(text: string, maxLen = 1200): string[] {
+  if (text.length <= maxLen) return [text];
+  const parts: string[] = [];
+  let buf = "";
+  for (const piece of text.split(/(?<=[.!?])\s+/)) {
+    if ((buf + " " + piece).trim().length > maxLen && buf) {
+      parts.push(buf.trim());
+      buf = piece;
+    } else {
+      buf = buf ? `${buf} ${piece}` : piece;
+    }
+  }
+  if (buf.trim()) parts.push(buf.trim());
+  // Hard-split anything still oversized (no sentence punctuation at all)
+  const out: string[] = [];
+  for (const p of parts) {
+    if (p.length <= maxLen) out.push(p);
+    else for (let i = 0; i < p.length; i += maxLen) out.push(p.slice(i, i + maxLen));
+  }
+  return out;
+}
+
+async function synthesizeOne(
+  speakText: string,
+  voice: string,
+  rate: string,
+  pitch: string,
+  volume: string,
+): Promise<Uint8Array[]> {
+  // Microsoft recently requires WebSocket headers/cookies that Deno's native
+  // browser-style WebSocket cannot set. The maintained server-side client uses
+  // npm ws and sends those headers correctly, fixing the protocol error.
+  // SURGICAL FIX: never wrap in SSML — edge-tts-universal escapes the markup, so the
+  // <speak>/<voice>/<lang> tags were literally spoken at the start of the audio.
+  const communicate = new Communicate(speakText, { voice, rate, pitch, volume, connectionTimeout: 30000 });
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of communicate.stream()) {
+    if (chunk.type === "audio" && chunk.data) chunks.push(new Uint8Array(chunk.data));
+  }
+  return chunks;
+}
+
 async function synthesize(
   text: string,
   voice: string,
@@ -66,22 +110,32 @@ async function synthesize(
   pitch: string,
   volume: string,
 ): Promise<Uint8Array> {
-  // Microsoft recently requires WebSocket headers/cookies that Deno's native
-  // browser-style WebSocket cannot set. The maintained server-side client uses
-  // npm ws and sends those headers correctly, fixing the protocol error.
-  // SURGICAL FIX: never wrap in SSML — edge-tts-universal escapes the markup, so the
-  // <speak>/<voice>/<lang> tags were literally spoken at the start of the audio (heard as
-  // a foreign language before the Burmese narration). Plain text only; the voice id already
-  // pins the language, so no other language can leak in.
-  const speakText = humanizeBurmese(text);
-  const communicate = new Communicate(speakText, { voice, rate, pitch, volume, connectionTimeout: 30000 });
+  const pieces = splitForTts(humanizeBurmese(text));
 
-  const chunks: Uint8Array[] = [];
+  // Bounded parallelism keeps ordering while staying well under the idle timeout.
+  const results: Uint8Array[][] = new Array(pieces.length);
+  const CONCURRENCY = 4;
+  let cursor = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, pieces.length) }, async () => {
+      while (cursor < pieces.length) {
+        const i = cursor++;
+        let lastErr: unknown = null;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            results[i] = await synthesizeOne(pieces[i], voice, rate, pitch, volume);
+            lastErr = null;
+            break;
+          } catch (e) {
+            lastErr = e;
+          }
+        }
+        if (lastErr) throw lastErr;
+      }
+    }),
+  );
 
-  for await (const chunk of communicate.stream()) {
-    if (chunk.type === "audio" && chunk.data) chunks.push(new Uint8Array(chunk.data));
-  }
-
+  const chunks = results.flat();
   const total = chunks.reduce((s, c) => s + c.length, 0);
   if (total === 0) throw new Error("No audio received from Edge TTS");
 
@@ -93,6 +147,7 @@ async function synthesize(
   }
   return out;
 }
+
 
 function toBase64(bytes: Uint8Array): string {
   let binary = "";
