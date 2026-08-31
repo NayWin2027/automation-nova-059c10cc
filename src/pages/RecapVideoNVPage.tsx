@@ -3671,14 +3671,32 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // SURGICAL EDIT: Apply user-selected audioSpeedRate at recording start
       // AV-SYNC FIX: start the recorder in the same tick as audio playback so frame 0 of the
       // recording corresponds to audio t=0 (no leading dead frames → no audio lag).
+      // AV-SYNC FIX (prime): render + push one real frame BEFORE audio starts, so the very
+      // first encoded frame is a finished picture (not a blank/held frame). On slow phones the
+      // first draw can cost 0.5-2s; without priming that time is charged to video only, which
+      // makes audio look early / video look late.
+      const primeFirstFrame = () => {
+        try {
+          drawFrame(false);
+          encCtx.drawImage(canvas, 0, 0, encW, encH);
+          if (encTrack && typeof encTrack.requestFrame === "function") encTrack.requestFrame();
+        } catch (e) {
+          console.warn("[RECORDING] Prime frame failed:", e);
+        }
+      };
+
       if (audioRef.current) {
         audioRef.current.playbackRate = audioSpeedRate;
+        primeFirstFrame();
         try {
           if (recorder.state === "inactive") recorder.start(250);
         } catch (_) {}
+        // push the primed frame again right after start so t=0 of the stream is non-empty
+        primeFirstFrame();
         recStartTimeRef.current = performance.now();
         audioRef.current.play().catch(console.error);
       } else {
+
         try {
           if (recorder.state === "inactive") recorder.start(250);
         } catch (_) {}
