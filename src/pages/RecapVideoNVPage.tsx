@@ -705,6 +705,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     // —— PERF FIX: memoize the scene-graded filter string + last assigned ctx.filter ——
     const gradedFilterKeyRef = useRef<string>("");
     const gradedFilterValRef = useRef<string>("none");
+    // —— PERF FIX: low-res offscreen buffer for the blur box (avoids full-res canvas self-blur per frame) ——
+    const blurScratchRef = useRef<HTMLCanvasElement | null>(null);
+
 
     // —— FIX: Drag position ref — avoid setState on every mousemove ——
     const dragSubPosRef = useRef({ x: 50, y: 85 });
@@ -2236,7 +2239,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // â”€â”€ BONUS FIX: Reset mid-video teaser so it fires on every recording â”€â”€
       midTeaserShownRef.current = false;
       midTeaserStartRef.current = 0;
-      recorder.start(250);
+      // AV-SYNC FIX: recorder.start() moved to the exact moment audio playback begins.
+      // Starting it here recorded 1-2s of pre-audio warmup frames (logo/asset loading),
+      // which made the whole audio track appear late in the exported file.
+
       // Pre-load logo
       let logoImg: HTMLImageElement | null = null;
       if (logo.url) {
@@ -2875,9 +2881,34 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           ctx.clip();
 
           // Step 1: Draw blurred video content — blur amount from slider
-          ctx.filter = `blur(${actualBlurPx}px)`;
-          ctx.drawImage(canvas, blurX, blurY, blurW, blurH, blurX, blurY, blurW, blurH);
-          ctx.filter = "none";
+          // PERF FIX: downscale the region into a small scratch canvas, blur there (cheap),
+          // then upscale back. Visually identical frosted glass at a fraction of the cost.
+          try {
+            const DOWN = 0.25;
+            const sw = Math.max(2, Math.round(blurW * DOWN));
+            const sh = Math.max(2, Math.round(blurH * DOWN));
+            let scratch = blurScratchRef.current;
+            if (!scratch) {
+              scratch = document.createElement("canvas");
+              blurScratchRef.current = scratch;
+            }
+            if (scratch.width !== sw || scratch.height !== sh) {
+              scratch.width = sw;
+              scratch.height = sh;
+            }
+            const sctx = scratch.getContext("2d", { alpha: false })!;
+            sctx.filter = "none";
+            sctx.drawImage(canvas, blurX, blurY, blurW, blurH, 0, 0, sw, sh);
+            ctx.filter = `blur(${Math.max(1, Math.round(actualBlurPx * DOWN))}px)`;
+            ctx.imageSmoothingEnabled = true;
+            ctx.drawImage(scratch, 0, 0, sw, sh, blurX, blurY, blurW, blurH);
+            ctx.filter = "none";
+          } catch (_) {
+            ctx.filter = `blur(${actualBlurPx}px)`;
+            ctx.drawImage(canvas, blurX, blurY, blurW, blurH, blurX, blurY, blurW, blurH);
+            ctx.filter = "none";
+          }
+
 
           // Step 2: Dark frosted tint — darkness from slider intensity
           ctx.fillStyle = `rgba(0, 0, 0, ${darkAlpha})`;
@@ -3638,10 +3669,22 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
       // SURGICAL FIX: Ensure perfect audio start by playing ONLY after async recorder setup completes (warmup + logo load)
       // SURGICAL EDIT: Apply user-selected audioSpeedRate at recording start
+      // AV-SYNC FIX: start the recorder in the same tick as audio playback so frame 0 of the
+      // recording corresponds to audio t=0 (no leading dead frames → no audio lag).
       if (audioRef.current) {
         audioRef.current.playbackRate = audioSpeedRate;
+        try {
+          if (recorder.state === "inactive") recorder.start(250);
+        } catch (_) {}
+        recStartTimeRef.current = performance.now();
         audioRef.current.play().catch(console.error);
+      } else {
+        try {
+          if (recorder.state === "inactive") recorder.start(250);
+        } catch (_) {}
+        recStartTimeRef.current = performance.now();
       }
+
       if (videoRef.current) {
         videoRef.current.playbackRate = 1.0;
         // SURGICAL FIX: Only auto-play if NOT in a freeze cycle of freezeMode
