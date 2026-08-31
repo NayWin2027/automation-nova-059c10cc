@@ -705,6 +705,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     // —— PERF FIX: memoize the scene-graded filter string + last assigned ctx.filter ——
     const gradedFilterKeyRef = useRef<string>("");
     const gradedFilterValRef = useRef<string>("none");
+    // —— PERF FIX: low-res offscreen buffer for the blur box (avoids full-res canvas self-blur per frame) ——
+    const blurScratchRef = useRef<HTMLCanvasElement | null>(null);
+
 
     // —— FIX: Drag position ref — avoid setState on every mousemove ——
     const dragSubPosRef = useRef({ x: 50, y: 85 });
