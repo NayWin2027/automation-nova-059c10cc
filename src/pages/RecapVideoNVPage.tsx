@@ -2878,9 +2878,34 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           ctx.clip();
 
           // Step 1: Draw blurred video content — blur amount from slider
-          ctx.filter = `blur(${actualBlurPx}px)`;
-          ctx.drawImage(canvas, blurX, blurY, blurW, blurH, blurX, blurY, blurW, blurH);
-          ctx.filter = "none";
+          // PERF FIX: downscale the region into a small scratch canvas, blur there (cheap),
+          // then upscale back. Visually identical frosted glass at a fraction of the cost.
+          try {
+            const DOWN = 0.25;
+            const sw = Math.max(2, Math.round(blurW * DOWN));
+            const sh = Math.max(2, Math.round(blurH * DOWN));
+            let scratch = blurScratchRef.current;
+            if (!scratch) {
+              scratch = document.createElement("canvas");
+              blurScratchRef.current = scratch;
+            }
+            if (scratch.width !== sw || scratch.height !== sh) {
+              scratch.width = sw;
+              scratch.height = sh;
+            }
+            const sctx = scratch.getContext("2d", { alpha: false })!;
+            sctx.filter = "none";
+            sctx.drawImage(canvas, blurX, blurY, blurW, blurH, 0, 0, sw, sh);
+            ctx.filter = `blur(${Math.max(1, Math.round(actualBlurPx * DOWN))}px)`;
+            ctx.imageSmoothingEnabled = true;
+            ctx.drawImage(scratch, 0, 0, sw, sh, blurX, blurY, blurW, blurH);
+            ctx.filter = "none";
+          } catch (_) {
+            ctx.filter = `blur(${actualBlurPx}px)`;
+            ctx.drawImage(canvas, blurX, blurY, blurW, blurH, blurX, blurY, blurW, blurH);
+            ctx.filter = "none";
+          }
+
 
           // Step 2: Dark frosted tint — darkness from slider intensity
           ctx.fillStyle = `rgba(0, 0, 0, ${darkAlpha})`;
