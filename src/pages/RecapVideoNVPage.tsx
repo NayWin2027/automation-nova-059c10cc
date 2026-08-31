@@ -2466,7 +2466,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             const freezeProgress = cyclePos / FREEZE_SEC;
             // Pure ease-out: fast at start, slow at end (reverse of ease-in — natural deceleration)
             const eased = 1 - Math.pow(1 - freezeProgress, 3);
-            const freezeZoom = 1.0 + 0.12 * eased; // 12% zoom, smooth deceleration
+            const freezeZoom = 1.0 + 0.15 * eased; // 15% zoom, smooth deceleration
             const drawW = Math.max(2, Math.round(canvas.width / freezeZoom));
             const drawH = Math.max(2, Math.round(canvas.height / freezeZoom));
             // Center perfectly — no pan (international news standard)
