@@ -762,7 +762,7 @@ DIALOGUE COMPLETENESS (mandatory for ${narrationStyle} mode):
 - EVERY spoken line in the source must appear in the script as a real translated [DIALOGUE:EMOTION] line. Do NOT sample or pick "only the important ones".
 - It is FORBIDDEN to replace a spoken line with a description of it. BAD: "သူက ဒေါသတကြီး ပြောလိုက်တယ်" — GOOD: the actual translated words the character said.
 - For back-and-forth exchanges, write EACH speaker's line as its own separate paragraph with its own timecode range and its own emotion tag. Never merge two speakers into one paragraph.
-- Balance dialogue with narration: dialogue is the star (~100%), but narrator/action lines (~10%) are ESSENTIAL for story flow and professional quality.
+- Balance dialogue with narration: dialogue is the star (~100%), but narrator/action lines (~12%) are ESSENTIAL for story flow and professional quality.
 - Narrator paragraphs exist to bridge scenes, describe actions, establish character roles and relationships, and explain what dialogue alone cannot. A viewer who never saw the source must follow the plot from start to finish; never sacrifice story coherence for brevity.
 
 ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
@@ -775,7 +775,7 @@ ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
 UNCENSORED VERBATIM DIALOGUE (mandatory for ${narrationStyle} mode — 100% of spoken lines):
 - LANGUAGE LOCK (HIGHEST PRIORITY): "verbatim" means verbatim in MEANING and TONE only. Every dialogue line MUST be written in ${lang} using ONLY the native ${lang} script. NEVER copy or quote the source-language words (Chinese/Japanese/Korean/Thai/English) into the script — not even one word, not even inside quotes.
 - If the source characters speak Chinese (or any other language), you MUST fully translate their lines into ${lang}. A script containing source-language characters is REJECTED.
-- 100% of the spoken lines must appear. Zero skipping, zero merging, zero replacing a line with a summary. Narrator/action lines stay at ~10% only.
+- 100% of the spoken lines must appear. Zero skipping, zero merging, zero replacing a line with a summary. Narrator/action lines stay at ~12% only.
 - NEVER soften, censor, bleep, or clean up harsh speech. If a character curses, insults, threatens, or talks vulgarly/sexually, translate it EXACTLY as harsh and raw as the source (written in ${lang}). Never write "ဆဲလိုက်တယ်", "***", or a polite substitute.
 - Faithfulness to the source outweighs politeness: explicit, crude, sexual and offensive lines are kept as-is — but always rendered in ${lang} script.
 
@@ -794,7 +794,7 @@ STREET-SPOKEN STYLE & MODERN SLANG (mandatory for ${narrationStyle} mode):
 - Keep ALL the real dialogue (this is the backbone), but the script must NOT read like a bare dialogue transcript.
 - MAXIMUM 2-3 DIALOGUES RULE: You must NEVER write more than 2 or 3 consecutive [DIALOGUE] lines without inserting a [MM:SS] Narrator line.
 - CONTINUOUS CONVERSATION RULE: Even during a continuous back-and-forth conversation with no silent gaps, you MUST pause the dialogue after every 2-3 speaker turns and insert a 1-sentence narrator line describing their face expressions, body language, or the emotional tension of the argument.
-- NARRATOR'S ROLE (PLOT BRIDGES, ACTION & RELATIONSHIPS - 10%): Narrator lines are NOT optional filler — they are essential story glue. Insert narrator paragraphs to:
+- NARRATOR'S ROLE (PLOT BRIDGES, ACTION & RELATIONSHIPS - 12%): Narrator lines are NOT optional filler — they are essential story glue. Insert narrator paragraphs to:
   * Describe WHO the characters are and their RELATIONSHIP to each other (e.g. husband-wife, boss-employee, childhood friends) — especially on first appearance.
   * Bridge between scenes: explain where, when, why, and what changed.
   * Describe physical actions, fights, chases, embraces — concrete verbs, not summaries.
