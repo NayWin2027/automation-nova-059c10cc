@@ -705,8 +705,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     // —— PERF FIX: memoize the scene-graded filter string + last assigned ctx.filter ——
     const gradedFilterKeyRef = useRef<string>("");
     const gradedFilterValRef = useRef<string>("none");
-    // —— PERF FIX: low-res offscreen buffer for the blur box (avoids full-res canvas self-blur per frame) ——
-    const blurScratchRef = useRef<HTMLCanvasElement | null>(null);
 
     // —— FIX: Drag position ref — avoid setState on every mousemove ——
     const dragSubPosRef = useRef({ x: 50, y: 85 });
@@ -776,7 +774,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       y: 88,
       width: 84,
       height: 11,
-      opacity: 22,
+      opacity: 90,
       isDragging: false,
     });
 
@@ -2238,10 +2236,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // â”€â”€ BONUS FIX: Reset mid-video teaser so it fires on every recording â”€â”€
       midTeaserShownRef.current = false;
       midTeaserStartRef.current = 0;
-      // AV-SYNC FIX: recorder.start() moved to the exact moment audio playback begins.
-      // Starting it here recorded 1-2s of pre-audio warmup frames (logo/asset loading),
-      // which made the whole audio track appear late in the exported file.
-
+      recorder.start(250);
       // Pre-load logo
       let logoImg: HTMLImageElement | null = null;
       if (logo.url) {
@@ -2287,15 +2282,23 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
       logoAngleRef.current = 0;
       let lastFrameTime = performance.now();
-      let isLowEndRender = quality.fps < 30;
+      // SURGICAL FIX: Also detect Snapdragon 4gen (4 cores/4GB), 6gen (6 cores/≤4GB), i3 (4 cores) as low-end render
+      // Previously quality.fps < 30 only triggered this — those devices have 30fps quality tier but still stutter
+      let isLowEndRender = quality.fps < 30 || (cores <= 4 && mem <= 4) || (cores <= 6 && mem <= 3);
 
       // â”€â”€ FIX: Real-time FPS monitoring (NO FRAME SKIP for Hollywood smoothness)
       let lastFrameTimestamp = 0;
       let consecutiveSlowFrames = 0;
-      const DYNAMIC_DOWNGRADE_THRESHOLD = 15; // Downgrade quality after 15 slow frames
+      const DYNAMIC_DOWNGRADE_THRESHOLD = 5; // SURGICAL FIX: 15→5 — faster low-end adaptation (Snapdragon 4gen/6gen/i3)
 
-      // HOLLYWOOD CINEMATIC: Never skip frames - render every single frame for buttery smoothness
-      const shouldSkipFrame = (_timestamp: number): boolean => false;
+      // SURGICAL FIX: Apply frame budget throttle to ALL devices (not just low-end).
+      // rAF fires at 60Hz but quality output is 30fps → without skipping, every device draws 2× needed frames.
+      // This was the root cause of Snapdragon 7gen/i5 CPU overload during 30fps output.
+      // Resolution is NOT changed — only excess rAF callbacks are skipped.
+      const shouldSkipFrame = (timestamp: number): boolean => {
+        if (lastDrawTime === 0) return false;
+        return timestamp - lastDrawTime < adaptiveFrameInterval * 0.85;
+      };
 
       const monitorPerformance = (timestamp: number): void => {
         if (lastFrameTimestamp > 0) {
@@ -2595,7 +2598,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           !prewarmActiveRef.current &&
           visibleLoopFrameReadyRef.current;
 
-        // (B) residual gap mask — slow micro zoom-in (max 8%) so any held frame reads as motion
+        // (B) residual gap mask — slow micro zoom-in (max 4%) so any held frame reads as motion
         {
           const _now = performance.now();
           if (seekPendingRef.current) {
@@ -2604,7 +2607,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             gapStartRef.current = 0;
           }
           let gapZoom = 1;
-          if (gapStartRef.current > 0) {
+          const AV_GAP_ZOOM_THRESHOLD_MS = 150; // SURGICAL FIX: only zoom when gap > 150ms (real AV sync issue)
+          if (gapStartRef.current > 0 && _now - gapStartRef.current > AV_GAP_ZOOM_THRESHOLD_MS) {
             const p = Math.min(1, (_now - gapStartRef.current) / 250);
             gapZoom = 1 + 0.02 * (1 - Math.pow(1 - p, 3));
             gapZoomHoldRef.current = gapZoom;
@@ -2880,33 +2884,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           ctx.clip();
 
           // Step 1: Draw blurred video content — blur amount from slider
-          // PERF FIX: downscale the region into a small scratch canvas, blur there (cheap),
-          // then upscale back. Visually identical frosted glass at a fraction of the cost.
-          try {
-            const DOWN = 0.25;
-            const sw = Math.max(2, Math.round(blurW * DOWN));
-            const sh = Math.max(2, Math.round(blurH * DOWN));
-            let scratch = blurScratchRef.current;
-            if (!scratch) {
-              scratch = document.createElement("canvas");
-              blurScratchRef.current = scratch;
-            }
-            if (scratch.width !== sw || scratch.height !== sh) {
-              scratch.width = sw;
-              scratch.height = sh;
-            }
-            const sctx = scratch.getContext("2d", { alpha: false })!;
-            sctx.filter = "none";
-            sctx.drawImage(canvas, blurX, blurY, blurW, blurH, 0, 0, sw, sh);
-            ctx.filter = `blur(${Math.max(1, Math.round(actualBlurPx * DOWN))}px)`;
-            ctx.imageSmoothingEnabled = true;
-            ctx.drawImage(scratch, 0, 0, sw, sh, blurX, blurY, blurW, blurH);
-            ctx.filter = "none";
-          } catch (_) {
-            ctx.filter = `blur(${actualBlurPx}px)`;
-            ctx.drawImage(canvas, blurX, blurY, blurW, blurH, blurX, blurY, blurW, blurH);
-            ctx.filter = "none";
-          }
+          ctx.filter = `blur(${actualBlurPx}px)`;
+          ctx.drawImage(canvas, blurX, blurY, blurW, blurH, blurX, blurY, blurW, blurH);
+          ctx.filter = "none";
 
           // Step 2: Dark frosted tint — darkness from slider intensity
           ctx.fillStyle = `rgba(0, 0, 0, ${darkAlpha})`;
@@ -3174,8 +3154,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // // —— ADAPTIVE FPS: dynamically throttle to 24fps if CPU is struggling ——
       let adaptiveFrameInterval = frameInterval;
       let slowFrameCount = 0;
-      const SLOW_THRESHOLD = 10; // 10 consecutive slow frames triggers throttle
-      const MIN_FPS = isHighEndDevice ? quality.fps : 24;
+      const SLOW_THRESHOLD = 5; // SURGICAL FIX: 10→5 — faster throttle trigger for 7gen/i5/mid-tier
+      // SURGICAL FIX: MIN_FPS=24 for ALL devices — allows adaptive throttle to actually take effect.
+      // Previously isHighEndDevice got quality.fps (e.g. 30) so MIN_FRAME_INTERVAL = frameInterval → no throttle possible.
+      const MIN_FPS = 24;
       const MIN_FRAME_INTERVAL = 1000 / MIN_FPS;
       const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
       let lastTsIdx = 0;
@@ -3211,8 +3193,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         // â”€â”€ ADAPTIVE FPS: Monitor frame budget â”€â”€
         const frameDelta = timestamp - lastDrawTime;
-        // SURGICAL FIX: High-end (i7/i5 desktop) never down-throttles — keeps cinematic 30fps steady
-        if (!isHighEndDevice && lastDrawTime > 0 && frameDelta > adaptiveFrameInterval * 1.5) {
+        // SURGICAL FIX: Remove !isHighEndDevice guard — 7gen/i5 also need adaptive throttle during CPU spikes
+        if (lastDrawTime > 0 && frameDelta > adaptiveFrameInterval * 1.5) {
           slowFrameCount++;
           if (slowFrameCount >= SLOW_THRESHOLD) {
             adaptiveFrameInterval = Math.max(adaptiveFrameInterval, MIN_FRAME_INTERVAL);
@@ -3268,7 +3250,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               const hookSeg = segs[hookIdx] as any;
               if (hookSeg) {
                 const hookVEnd = hookSeg.vEnd === -1 ? vv.duration : hookSeg.vEnd;
-                if (!seekPendingRef.current && Math.abs(vv.currentTime - hookSeg.vStart) > 0.8) {
+                if (!seekPendingRef.current && Math.abs(vv.currentTime - hookSeg.vStart) > 0.3) {
+                  // SURGICAL FIX: 0.8→0.3s — tighter lock to hook dramatic scene
                   seekPendingRef.current = true;
                   const onHookSeeked = () => {
                     seekPendingRef.current = false;
@@ -3667,39 +3650,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
       // SURGICAL FIX: Ensure perfect audio start by playing ONLY after async recorder setup completes (warmup + logo load)
       // SURGICAL EDIT: Apply user-selected audioSpeedRate at recording start
-      // AV-SYNC FIX: start the recorder in the same tick as audio playback so frame 0 of the
-      // recording corresponds to audio t=0 (no leading dead frames → no audio lag).
-      // AV-SYNC FIX (prime): render + push one real frame BEFORE audio starts, so the very
-      // first encoded frame is a finished picture (not a blank/held frame). On slow phones the
-      // first draw can cost 0.5-2s; without priming that time is charged to video only, which
-      // makes audio look early / video look late.
-      const primeFirstFrame = () => {
-        try {
-          drawFrame(false);
-          encCtx.drawImage(canvas, 0, 0, encW, encH);
-          if (encTrack && typeof encTrack.requestFrame === "function") encTrack.requestFrame();
-        } catch (e) {
-          console.warn("[RECORDING] Prime frame failed:", e);
-        }
-      };
-
       if (audioRef.current) {
         audioRef.current.playbackRate = audioSpeedRate;
-        primeFirstFrame();
-        try {
-          if (recorder.state === "inactive") recorder.start(250);
-        } catch (_) {}
-        // push the primed frame again right after start so t=0 of the stream is non-empty
-        primeFirstFrame();
-        recStartTimeRef.current = performance.now();
         audioRef.current.play().catch(console.error);
-      } else {
-        try {
-          if (recorder.state === "inactive") recorder.start(250);
-        } catch (_) {}
-        recStartTimeRef.current = performance.now();
       }
-
       if (videoRef.current) {
         videoRef.current.playbackRate = 1.0;
         // SURGICAL FIX: Only auto-play if NOT in a freeze cycle of freezeMode
@@ -5562,7 +5516,7 @@ const NARRATION_STYLE_OPTIONS: Record<"STORY" | "HYBRID" | "VIRAL", { emoji: str
   STORY: {
     emoji: "📖",
     label: "Story Mode — အစအဆုံး ဇာတ်ကြောင်းပြန် (YouTube)",
-    hint: "Long-form YouTube အတွက် အကောင်းဆုံး ",
+    hint: "Long-form YouTube အတွက် အကောင်းဆုံး (default)",
   },
   HYBRID: {
     emoji: "🎭",
@@ -5572,7 +5526,7 @@ const NARRATION_STYLE_OPTIONS: Record<"STORY" | "HYBRID" | "VIRAL", { emoji: str
   VIRAL: {
     emoji: "🔥",
     label: "Viral Mode — မြန်ဆန်ပြင်းထန် (TikTok / Reels)",
-    hint: "Short-form အတွက် pacing မြန်၊ dialogue-first (default)",
+    hint: "Short-form အတွက် pacing မြန်၊ dialogue-first",
   },
 };
 
@@ -5660,7 +5614,7 @@ const RecapVideoNVPage: React.FC = () => {
 
   useEffect(() => {
     const timer = setTimeout(async () => {
-      const { data } = await supabase
+      const { data } = await (supabase as any)
         .from("safe_tool_settings")
         .select("credit_cost, server_credit_per_min")
         .eq("tool_id", "recap-nv")
@@ -5703,7 +5657,23 @@ const RecapVideoNVPage: React.FC = () => {
   }, [selectedLanguage]);
   const [langPopoverOpen, setLangPopoverOpen] = useState(false);
   const [apiMode, setApiMode] = useState<"app" | "own">("own");
-  const [ownApiKey, setOwnApiKey] = useState("");
+  // Own API key persists for the browser session only (cleared when the tab closes)
+  const [ownApiKey, setOwnApiKey] = useState(() => {
+    try {
+      return sessionStorage.getItem("recap_nv_own_api_key") || "";
+    } catch {
+      return "";
+    }
+  });
+  useEffect(() => {
+    try {
+      if (ownApiKey.trim()) sessionStorage.setItem("recap_nv_own_api_key", ownApiKey.trim());
+      else sessionStorage.removeItem("recap_nv_own_api_key");
+    } catch {
+      /* ignore */
+    }
+  }, [ownApiKey]);
+
   const [showApiKey, setShowApiKey] = useState(false);
   // ===== SERIES CONTINUITY (additive, optional) =====
   const [seriesEnabled, setSeriesEnabled] = useState(false);
@@ -5715,7 +5685,7 @@ const RecapVideoNVPage: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data } = await supabase
+      const { data } = await (supabase as any)
         .from("recap_series")
         .select("series_name,last_part,story_bible")
         .order("updated_at", { ascending: false });
@@ -5815,7 +5785,7 @@ const RecapVideoNVPage: React.FC = () => {
       const savedLast = seriesList.find((s) => s.series_name === name)?.last_part || 0;
       const partNum =
         isFinale && isNaN(explicitPart) ? (savedLast > 0 ? savedLast + 1 : 1) : !isNaN(explicitPart) ? explicitPart : 1;
-      const { error } = await supabase.from("recap_series").upsert(
+      const { error } = await (supabase as any).from("recap_series").upsert(
         {
           user_id: uid,
           series_name: name,
@@ -6905,6 +6875,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
       // Finds the most viral/dramatic segment: highest emotional intensity + climax position
       (() => {
         try {
+          if (seriesEnabled) return; // SURGICAL FIX: Series mode ON → no viral hook
           if (segments.length < 2) return;
           // TIER 1: Ultra-high drama (Ã—5) â€” twists, reveals, deaths, betrayals
           const ultraKw = [
