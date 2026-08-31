@@ -708,7 +708,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     // —— PERF FIX: low-res offscreen buffer for the blur box (avoids full-res canvas self-blur per frame) ——
     const blurScratchRef = useRef<HTMLCanvasElement | null>(null);
 
-
     // —— FIX: Drag position ref — avoid setState on every mousemove ——
     const dragSubPosRef = useRef({ x: 50, y: 85 });
     const dragBlurPosRef = useRef({ x: 50, y: 88 });
@@ -2909,7 +2908,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             ctx.filter = "none";
           }
 
-
           // Step 2: Dark frosted tint — darkness from slider intensity
           ctx.fillStyle = `rgba(0, 0, 0, ${darkAlpha})`;
           ctx.fillRect(blurX, blurY, blurW, blurH);
@@ -3696,7 +3694,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         recStartTimeRef.current = performance.now();
         audioRef.current.play().catch(console.error);
       } else {
-
         try {
           if (recorder.state === "inactive") recorder.start(250);
         } catch (_) {}
@@ -5565,7 +5562,7 @@ const NARRATION_STYLE_OPTIONS: Record<"STORY" | "HYBRID" | "VIRAL", { emoji: str
   STORY: {
     emoji: "📖",
     label: "Story Mode — အစအဆုံး ဇာတ်ကြောင်းပြန် (YouTube)",
-    hint: "Long-form YouTube အတွက် အကောင်းဆုံး (default)",
+    hint: "Long-form YouTube အတွက် အကောင်းဆုံး ",
   },
   HYBRID: {
     emoji: "🎭",
@@ -5575,7 +5572,7 @@ const NARRATION_STYLE_OPTIONS: Record<"STORY" | "HYBRID" | "VIRAL", { emoji: str
   VIRAL: {
     emoji: "🔥",
     label: "Viral Mode — မြန်ဆန်ပြင်းထန် (TikTok / Reels)",
-    hint: "Short-form အတွက် pacing မြန်၊ dialogue-first",
+    hint: "Short-form အတွက် pacing မြန်၊ dialogue-first (default)",
   },
 };
 
