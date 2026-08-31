@@ -2239,7 +2239,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // â”€â”€ BONUS FIX: Reset mid-video teaser so it fires on every recording â”€â”€
       midTeaserShownRef.current = false;
       midTeaserStartRef.current = 0;
-      recorder.start(250);
+      // AV-SYNC FIX: recorder.start() moved to the exact moment audio playback begins.
+      // Starting it here recorded 1-2s of pre-audio warmup frames (logo/asset loading),
+      // which made the whole audio track appear late in the exported file.
+
       // Pre-load logo
       let logoImg: HTMLImageElement | null = null;
       if (logo.url) {
