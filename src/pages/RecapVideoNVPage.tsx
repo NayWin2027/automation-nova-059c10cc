@@ -3669,10 +3669,22 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
       // SURGICAL FIX: Ensure perfect audio start by playing ONLY after async recorder setup completes (warmup + logo load)
       // SURGICAL EDIT: Apply user-selected audioSpeedRate at recording start
+      // AV-SYNC FIX: start the recorder in the same tick as audio playback so frame 0 of the
+      // recording corresponds to audio t=0 (no leading dead frames → no audio lag).
       if (audioRef.current) {
         audioRef.current.playbackRate = audioSpeedRate;
+        try {
+          if (recorder.state === "inactive") recorder.start(250);
+        } catch (_) {}
+        recStartTimeRef.current = performance.now();
         audioRef.current.play().catch(console.error);
+      } else {
+        try {
+          if (recorder.state === "inactive") recorder.start(250);
+        } catch (_) {}
+        recStartTimeRef.current = performance.now();
       }
+
       if (videoRef.current) {
         videoRef.current.playbackRate = 1.0;
         // SURGICAL FIX: Only auto-play if NOT in a freeze cycle of freezeMode
