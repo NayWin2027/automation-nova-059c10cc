@@ -218,17 +218,17 @@ export function WelcomeSplash({ onDone }: { onDone: () => void }) {
             မဂ်လာပါ...Automation Nova AI မှ ကြိုဆိုပါတယ်ခင်ဗျာ။
           </p>
           <p className="text-xs leading-relaxed mb-3" style={{ color: "hsl(220 20% 75%)" }}>
-            က📱 Automation Nova Web App အသုံးပြုရန် လိုအပ်ချက်များ 🟣 ဖုန်း (Android) - အနည်းဆုံး Snapdragon 7 Gen
-            သို့မဟုတ် Dimensity 8000 Series မှစ၍ အဆင်ပြေချောမွေ့စွာ သုံးနိုင်ပြီး၊ Flagship (Snapdragon 8 Gen /
-            Dimensity 9000 Series) များဆိုလျှင် အရည်အသွေးမြင့် Recap Video များကို 100% အဆင်ပြေချောမွေ့စွာဖြင့်
+            📱 Automation Nova Web App အသုံးပြုရန် လိုအပ်ချက်များ 🟣 ဖုန်း (Android) - အနည်းဆုံး Snapdragon7Gen (သို့)
+            Dimensity 8000 Series မှစ၍ အဆင်ပြေချောမွေ့ စွာ သုံးနိုင်ပြီး၊ Flagship (Snapdragon 8 Gen / Dimensity 9000
+            Series) များဆိုလျှင် အရည်အသွေးမြင့် Recap Video များကို 100% အဆင်ပြေချောမွေ့စွာဖြင့်
             စိတ်ကြိုက်အကောင်းဆုံးလုပ်ဆောင်နိုင်တာကြောင့် အကောင်းဆုံး Result/အကောင်းဆုံးအရည်အသွေးမြင့် Output Recap
             Videos များကို ရရှိနိုင်ပါတယ်။ 🟣 ကွန်ပျူတာ - အနည်းဆုံး Intel Core i5 သို့မဟုတ် Ryzen 5 လိုအပ်ပြီး၊ i7
             သို့မဟုတ် Ryzen 7, i9 or Ryzen 9 ဆိုလျှင်လည်း အရည်အသွေးမြင့် Recap Video များကို 100%
             အဆင်ပြေချောမွေ့စွာဖြင့် စိတ်ကြိုက်အကောင်းဆုံးလုပ်ဆောင်နိုင်တာကြောင့် အကောင်းဆုံး
-            Result/အကောင်းဆုံးအရည်အသွေးမြင့် Output Recap Videos များကို ရရှိနိုင်ပါတယ်။ 🟣 ကန့်သတ်ချက် - အထက်ပါ Specs
-            ထက်နိမ့်သော ဖုန်း/ကွန်ပျူတာများနှင့် Apple Device များတွင် လက်ရှိ အသုံးပြု၍ မရသေးပါ။ 🟣
-            မိမိဖုန်းနဲ့ကွန်ပျူတာများရဲ့ CPU၊ GPU၊ RAM Specifications များကို မသိပါကလည်း Page Messenger or Viber No -
-            09967793288 ကနေ အချိန်မရွေးလာရောက်မေးမြန်းနိုင်ပါတယ်။ ။
+            Result/အကောင်းဆုံးအရည်အသွေးမြင့် Output Recap Videos များကို ရရှိနိုင်ပါတယ်။ 🟣 ကန့်သတ်ချက် - အထက်ပါ
+            Specsထက်နိမ့်သော ဖုန်း/ကွန်ပျူတာများနှင့် Apple Device များတွင် လက်ရှိ အသုံးပြု၍ မရသေးပါ။
+            🟣မိမိဖုန်းနဲ့ကွန်ပျူတာများရဲ့ CPU၊ GPU၊ RAM Specifications များကို မသိပါကလည်း Page Messenger or Viber No
+            -09967793288 ကနေ အချိန်မရွေးလာရောက်မေးမြန်းနိုင်ပါတယ်။ ။
           </p>
           <p className="text-xs leading-relaxed" style={{ color: "hsl(220 20% 75%)" }}>
             ပိုမိုကောင်းမွန်သော၀န်ဆောင်မှုများကို ပေးအပ်နိုင်ဖို့ ဆက်လက်ကြိုးစားသွားပါမယ်။
