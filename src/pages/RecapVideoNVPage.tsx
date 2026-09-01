@@ -5851,9 +5851,10 @@ const RecapVideoNVPage: React.FC = () => {
       if (didDeductRef.current) return;
       const billedApiMode = activePipelineOwnKeyRef.current ? "own" : activePipelineApiModeRef.current || apiMode;
       const billedRenderMode = activePipelineRenderModeRef.current || renderMode;
+      const trackedRenderMode: "browser" | "server" = billedRenderMode === "server" ? "server" : "browser";
       if (billedApiMode === "own") {
         // Track per-variant usage (APP/OWN x DEVICE/SERVER) for admin Daily Records
-        void trackToolVariant("recap-nv", "own", billedRenderMode, "success", false);
+        void trackToolVariant("recap-nv", "own", trackedRenderMode, "success", false);
         didDeductRef.current = true;
         return;
       }
@@ -5884,7 +5885,7 @@ const RecapVideoNVPage: React.FC = () => {
           console.error("[CREDIT] Deduction FAILED:", result.error);
           didDeductRef.current = false;
         } else {
-          void trackToolVariant("recap-nv", "app", billedRenderMode, "success", (result.deducted || 0) > 0);
+          void trackToolVariant("recap-nv", "app", trackedRenderMode, "success", (result.deducted || 0) > 0);
         }
       } catch (err) {
         console.error("[CREDIT] ERROR:", err);
