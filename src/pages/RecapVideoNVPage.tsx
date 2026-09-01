@@ -134,7 +134,7 @@ interface ResultViewProps {
   audioTimestampsRef: React.MutableRefObject<{ index: number; start: number; end: number }[]>;
   autoStartRecap?: boolean;
   onAutoStartConsumed?: () => void;
-  renderMode?: "browser" | "server";
+  renderMode?: "Device" | "server";
   sourceFileUriRef?: React.MutableRefObject<string | null>;
   videoFileRef?: React.MutableRefObject<File | null>;
   targetLanguageName?: string;
@@ -5609,7 +5609,7 @@ const RecapVideoNVPage: React.FC = () => {
   const didDeductRef = useRef(false);
   const [creditPerMinRate, setCreditPerMinRate] = useState<number>(6);
   const [serverCreditPerMinRate, setServerCreditPerMinRate] = useState<number>(5);
-  const [renderMode, setRenderMode] = useState<"browser" | "server">("browser");
+  const [renderMode, setRenderMode] = useState<"Device" | "server">("Device");
   const [deviceTier, setDeviceTier] = useState<"fast" | "slow">("fast");
 
   useEffect(() => {
@@ -5844,7 +5844,7 @@ const RecapVideoNVPage: React.FC = () => {
   }, []);
   const activePipelineApiModeRef = useRef<"app" | "own">("own");
   const activePipelineOwnKeyRef = useRef("");
-  const activePipelineRenderModeRef = useRef<"browser" | "server">("browser");
+  const activePipelineRenderModeRef = useRef<"Device" | "server">("Device");
 
   const handleVideoReady = useCallback(
     async (outputDurationSecs: number) => {
@@ -5852,7 +5852,7 @@ const RecapVideoNVPage: React.FC = () => {
       const billedApiMode = activePipelineOwnKeyRef.current ? "own" : activePipelineApiModeRef.current || apiMode;
       const billedRenderMode = activePipelineRenderModeRef.current || renderMode;
       if (billedApiMode === "own") {
-        // Track per-variant usage (APP/OWN x BROWSER/SERVER) for admin Daily Records
+        // Track per-variant usage (APP/OWN x DEVICE/SERVER) for admin Daily Records
         void trackToolVariant("recap-nv", "own", billedRenderMode, "success", false);
         didDeductRef.current = true;
         return;
@@ -7175,7 +7175,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                 <button
                   onClick={() => {
                     setDeviceTier("fast");
-                    setRenderMode("browser");
+                    setRenderMode("Device");
                   }}
                   className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${deviceTier === "fast" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
                 >
@@ -7199,10 +7199,10 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
               <label className="text-sm font-medium text-neon-cyan">⚙️ Render Mode</label>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setRenderMode("browser")}
-                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${renderMode === "browser" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
+                  onClick={() => setRenderMode("Device")}
+                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${renderMode === "Device" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
                 >
-                  🖥️ Browser Render
+                  🖥️ Device Render
                   <span className="block text-xs font-normal opacity-70">{creditPerMinRate} CR / min</span>
                 </button>
                 <button
