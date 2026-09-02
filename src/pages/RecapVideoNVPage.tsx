@@ -2598,7 +2598,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           !prewarmActiveRef.current &&
           visibleLoopFrameReadyRef.current;
 
-        // (B) residual gap mask — slow micro zoom-in (max 25%) so any held frame reads as motion
+        // (B) residual gap mask — slow micro zoom-in (max 2%) so any held frame reads as motion
         {
           const _now = performance.now();
           if (seekPendingRef.current) {
@@ -2645,11 +2645,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               useVisibleLoopMask && visibleLoopMaskStartRef.current > 0
                 ? performance.now() - visibleLoopMaskStartRef.current
                 : Math.max(0, performance.now() - gapStartRef.current);
-            const maskProgress = Math.min(1, maskElapsed / (useVisibleLoopMask ? 14000 : 320));
+            const maskProgress = Math.min(1, maskElapsed / (useVisibleLoopMask ? 9000 : 320));
             const maskEase = useVisibleLoopMask
               ? 1 - Math.pow(1 - maskProgress, 2) // gentle, visible ease-out (news-channel push-in)
               : 1 - Math.pow(1 - maskProgress, 3);
-            const maskZoom = 1 + (useVisibleLoopMask ? 0.18 : 0.018) * maskEase;
+            const maskZoom = 1 + (useVisibleLoopMask ? 0.3 : 0.018) * maskEase;
             const maskW = Math.max(2, Math.round(heldFrame.width / maskZoom));
             const maskH = Math.max(2, Math.round(heldFrame.height / maskZoom));
             const maskX = Math.round((heldFrame.width - maskW) / 2);
