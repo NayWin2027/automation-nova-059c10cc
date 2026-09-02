@@ -14,7 +14,7 @@ const MODEL = "gemini-3.1-flash-lite";
 // SLANG-TEMP: HYBRID/VIRAL modes need a slightly higher temperature so the model
 // actually reaches for street slang instead of the safest plain wording. STORY mode
 // keeps the original 0.35 (anti-hallucination).
-let STYLE_TEMPERATURE = 0.28;
+let STYLE_TEMPERATURE = 0.32;
 
 // SLANG-SAFETY: without explicit safetySettings Gemini self-censors harsh/vulgar
 // source dialogue and replaces it with polite wording, which kills verbatim slang.
