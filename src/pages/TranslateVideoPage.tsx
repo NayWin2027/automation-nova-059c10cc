@@ -745,7 +745,7 @@ export default function App() {
         // Own API: direct client-side call
         const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
         const result = await ai.models.generateContent({
-          model: "gemini-3.1-flash",
+          model: "gemini-2.5-flash",
           contents: mktPrompt,
           config: { temperature: 0.9, maxOutputTokens: 2048, responseMimeType: "application/json" },
         });
@@ -1715,7 +1715,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                 ownParts.push(parts[parts.length - 1]); // The prompt text part
 
                 const ownResult = await ai.models.generateContent({
-                  model: "gemini-3.1-flash",
+                  model: "gemini-2.5-flash",
                   contents: [{ role: "user", parts: ownParts }],
                   config: {
                     temperature: attempt === 1 ? 0 : 0.2,
