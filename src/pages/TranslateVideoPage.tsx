@@ -2004,6 +2004,8 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
       console.error("Rendering error:", error);
       setProcessingStatus(error.message || "Error occurred during rendering. Please try again.");
       setProcessingProgress(-1); // Use -1 to indicate error state
+      surfaceToPreview(error, "rendering");
+
     }
   };
 
