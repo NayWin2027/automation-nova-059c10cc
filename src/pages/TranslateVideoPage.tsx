@@ -44,6 +44,20 @@ const SUBTITLE_MODELS = [
   "gemini-1.5-flash",
 ];
 
+// User-provided Own API key fallback chain (rotates one model to the next on failure).
+const OWN_API_FALLBACK_MODELS = [
+  "gemini-2.5-flash",
+  "gemini-flash-lite-latest",
+  "gemini-flash-latest",
+  "gemini-2.5-flash-lite",
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
+  "gemini-3.7-flash",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash",
+  "gemini-3.1-flash",
+];
+
 // Round-robin cursor so a model that just failed is not retried first next time.
 let ownApiModelCursor = 0;
 const getOwnApiModelRotation = () =>
