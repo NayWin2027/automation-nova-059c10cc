@@ -787,7 +787,7 @@ export default function App() {
         // Own API: direct client-side call with FALLBACK MODEL ROTATION
         const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
         let mktSuccess = false;
-        for (const fallbackModel of OWN_API_FALLBACK_MODELS) {
+        for (const fallbackModel of getOwnApiModelRotation()) {
           try {
             const result = await ai.models.generateContent({
               model: fallbackModel,
@@ -800,21 +800,17 @@ export default function App() {
             title = parsed.title || "Untitled";
             description = parsed.description || "";
             mktSuccess = true;
+            lockOwnApiModelCursor(fallbackModel);
             break;
           } catch (modelErr: any) {
             const errMsg = String(modelErr?.message || "");
-            const isRetryable =
-              errMsg.includes("429") ||
-              errMsg.includes("RESOURCE_EXHAUSTED") ||
-              errMsg.includes("503") ||
-              errMsg.includes("limit") ||
-              errMsg.includes("quota") ||
-              errMsg.includes("overloaded");
-            console.warn(`[OwnAPI Marketing] Model ${fallbackModel} failed:`, errMsg);
-            if (!isRetryable) throw modelErr;
-            await new Promise((r) => setTimeout(r, 600));
+            console.warn(`[OwnAPI Marketing] Model ${fallbackModel} failed, rotating:`, errMsg);
+            if (isOwnApiKeyFatal(modelErr)) throw modelErr;
+            advanceOwnApiModelCursor(fallbackModel);
+            await new Promise((r) => setTimeout(r, 500));
           }
         }
+
         if (!mktSuccess) throw new Error("All models exhausted for marketing kit.");
       } else {
         // Server-side via edge function (secure — no API key in browser)
