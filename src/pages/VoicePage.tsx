@@ -361,7 +361,12 @@ const VoicePage: React.FC = () => {
   };
 
   const voices = [
-    { name: "GIUSEPPE ⭐ (MULTILINGUAL)", gender: "MALE ♂", value: "edge:it-IT-GiuseppeMultilingualNeural", color: "from-amber-500 to-orange-700" },
+    {
+      name: "GIUSEPPE ⭐ (MULTILINGUAL)",
+      gender: "MALE ♂",
+      value: "edge:it-IT-GiuseppeMultilingualNeural",
+      color: "from-amber-500 to-orange-700",
+    },
     { name: "THIHA ⭐", gender: "MALE ♂", value: "edge:my-MM-ThihaNeural", color: "from-emerald-500 to-teal-700" },
     { name: "NILAR ⭐", gender: "FEMALE ♀", value: "edge:my-MM-NilarNeural", color: "from-pink-500 to-rose-600" },
     { name: "PUCK", gender: "MALE ♂", value: "Puck", color: "from-orange-500 to-amber-600" },
@@ -492,7 +497,9 @@ const VoicePage: React.FC = () => {
       // is untouched. Credit accounting still runs once below (same as Gemini path).
       if (actualVoiceValue.startsWith("edge:")) {
         try {
-          const { data: { session } } = await supabase.auth.getSession();
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
           const edgeRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/edge-tts`, {
             method: "POST",
             headers: {
@@ -516,23 +523,23 @@ const VoicePage: React.FC = () => {
           isError = true;
         }
       } else {
-      for (const chunk of chunks) {
-        try {
-          const pcm = await generateSpeech(
-            chunk,
-            actualVoiceValue,
-            apiType === "own" ? apiKey : undefined,
-            performance,
-            selectedLanguage,
-            undefined,
-            apiType === "app", // skipCreditDeduction for App API chunks (we deduct once below)
-          );
-          if (pcm) pcmBuffers.push(pcm);
-        } catch (e) {
-          console.error("Chunk generation error", e);
-          isError = true;
+        for (const chunk of chunks) {
+          try {
+            const pcm = await generateSpeech(
+              chunk,
+              actualVoiceValue,
+              apiType === "own" ? apiKey : undefined,
+              performance,
+              selectedLanguage,
+              undefined,
+              apiType === "app", // skipCreditDeduction for App API chunks (we deduct once below)
+            );
+            if (pcm) pcmBuffers.push(pcm);
+          } catch (e) {
+            console.error("Chunk generation error", e);
+            isError = true;
+          }
         }
-      }
       }
 
       if (pcmBuffers.length > 0) {
@@ -1010,7 +1017,7 @@ const VoicePage: React.FC = () => {
                 </label>
               )}
               <span className="bg-background/50 px-2 py-0.5 rounded-lg font-black text-neon-rose text-base">
-                {text.length}/4500
+                {text.length}/10000
               </span>
             </div>
             {!isEditing && (
