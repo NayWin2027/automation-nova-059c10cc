@@ -1860,16 +1860,22 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                 err?.message?.includes("429") ||
                 err?.message?.includes("RESOURCE_EXHAUSTED") ||
                 err?.status === "RESOURCE_EXHAUSTED";
-              if (isRateLimit) {
+              const isOwn = apiMode === "own" && !!ownApiKey.trim();
+              // Own key: all models in the fallback chain share one quota — retry with backoff
+              // instead of aborting on the first 429; only give up after the last attempt.
+              if (isRateLimit && !isOwn) {
                 throw new Error(
                   `API Quota Exceeded! The server API key has hit its rate limit. Please try again later.`,
                 );
               }
               if (attempt >= MAX_CHUNK_ATTEMPTS) {
                 throw new Error(
-                  `Failed to translate segment ${i + 1}. Subtitle မပါဘဲ render မလုပ်ပါဘူး။ ခဏနေရင် ပြန်စမ်းပါ။`,
+                  isOwn && isRateLimit
+                    ? `Own API Key quota ပြည့်နေပါတယ် (segment ${i + 1})။ ခဏနေမှ ပြန်စမ်းပါ သို့မဟုတ် billing ဖွင့်ထားတဲ့ key သုံးပါ။`
+                    : `Failed to translate segment ${i + 1}. Subtitle မပါဘဲ render မလုပ်ပါဘူး။ ခဏနေရင် ပြန်စမ်းပါ။`,
                 );
               }
+
             }
           }
           parsedSubtitles = [...parsedSubtitles, ...chunkAdded];
