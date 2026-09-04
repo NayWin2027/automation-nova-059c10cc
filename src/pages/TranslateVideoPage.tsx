@@ -36,6 +36,7 @@ import { GoogleGenAI } from "@google/genai";
 // SURGICAL FIX: Actual fallback model rotation for Own API key mode.
 // When one model hits rate-limit / quota / error, the next model is tried automatically.
 const OWN_API_FALLBACK_MODELS = [
+  "gemini-2.5-flash",
   "gemini-flash-lite-latest",
   "gemini-flash-latest",
   "gemini-2.5-flash-lite",
@@ -46,6 +47,33 @@ const OWN_API_FALLBACK_MODELS = [
   "gemini-3.5-flash",
   "gemini-3.1-flash",
 ];
+
+// Round-robin cursor so a model that just failed is not retried first next time.
+let ownApiModelCursor = 0;
+const getOwnApiModelRotation = () =>
+  OWN_API_FALLBACK_MODELS.map(
+    (_, i) => OWN_API_FALLBACK_MODELS[(ownApiModelCursor + i) % OWN_API_FALLBACK_MODELS.length],
+  );
+const advanceOwnApiModelCursor = (model: string) => {
+  const idx = OWN_API_FALLBACK_MODELS.indexOf(model);
+  if (idx >= 0) ownApiModelCursor = (idx + 1) % OWN_API_FALLBACK_MODELS.length;
+};
+const lockOwnApiModelCursor = (model: string) => {
+  const idx = OWN_API_FALLBACK_MODELS.indexOf(model);
+  if (idx >= 0) ownApiModelCursor = idx;
+};
+// Only a bad/blocked API key should stop rotation — everything else tries the next model.
+const isOwnApiKeyFatal = (err: any) => {
+  const m = String(err?.message || err?.status || "").toUpperCase();
+  return (
+    m.includes("API_KEY_INVALID") ||
+    m.includes("API KEY NOT VALID") ||
+    m.includes("PERMISSION_DENIED") ||
+    m.includes("UNAUTHENTICATED") ||
+    m.includes("401")
+  );
+};
+
 
 type Step = "upload" | "configure" | "processing" | "review_subs" | "rendering" | "result";
 
