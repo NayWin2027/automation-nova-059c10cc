@@ -537,20 +537,31 @@ LANGUAGE LOCK:
 - No Chinese, Latin, or other foreign glyphs may remain inside the narration text. Transliterate names and brands phonetically into the target script (e.g. Facebook → the target-script spelling, CEO → the target-script spelling) so TTS reads them naturally. Character names must be the REAL names from this source video only — never invented, never carried over from any example.
 - Spoken, natural, conversational register — never bookish or machine-translated wording.${burmeseStyle}`;
 
-        const tModels = [
-          // SURGICAL FIX: Same 11 verified active models as main fallback list
-          MODEL,
-          "gemini-3.8-flash",
-          "gemini-3.7-flash",
-          "gemini-3.6-flash",
-          "gemini-3.5-flash",
-          "gemini-3.5-flash-lite",
-          "gemini-3.1-flash-lite",
-          "gemini-3.8-flash",
-          "gemini-3.7-flash",
-          "gemini-3.6-flash",
-          "gemini-3.5-flash",
-        ];
+        // Own API: model-level fallback is allowed, but ONLY on the user's own key.
+        // Key rotation into the paid App pool stays App-API-only.
+        const fallbackModels = isOwnApi
+          ? [
+              "gemini-2.5-flash",
+              "gemini-flash-lite-latest",
+              "gemini-flash-latest",
+              "gemini-2.5-flash-lite",
+              "gemini-3.5-flash-lite",
+              "gemini-3.1-flash-lite",
+              "gemini-3.7-flash",
+              "gemini-3.6-flash",
+              "gemini-3.5-flash",
+              "gemini-3.1-flash",
+            ]
+          : [
+              "gemini-3.7-flash",
+              "gemini-3.6-flash",
+              "gemini-3.5-flash",
+              "gemini-3.1-flash",
+              "gemini-2.5-flash",
+              "gemini-flash-latest",
+              "gemini-flash-lite-latest",
+            ];
+
         const tShouldFallback = (s?: number) => s === 404 || s === 429 || s === 503 || s === 504;
 
         let tRes: Response | null = null;
