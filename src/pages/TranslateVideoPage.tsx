@@ -33,10 +33,9 @@ import { trackToolVariant } from "@/utils/trackToolVariant";
 import { useCreditDeduction } from "@/hooks/useCreditDeduction";
 import { GoogleGenAI } from "@google/genai";
 
-// === OWN-KEY MODEL FALLBACK CHAIN (Translate Video only) ===
-// Tried in order with the SAME user key. Never falls back to app/paid keys.
-const OWN_MODEL_FALLBACKS = [
-  "gemini-2.5-flash",
+// SURGICAL FIX: Actual fallback model rotation for Own API key mode.
+// When one model hits rate-limit / quota / error, the next model is tried automatically.
+const OWN_API_FALLBACK_MODELS = [
   "gemini-flash-lite-latest",
   "gemini-flash-latest",
   "gemini-2.5-flash-lite",
@@ -48,58 +47,7 @@ const OWN_MODEL_FALLBACKS = [
   "gemini-3.1-flash",
 ];
 
-const ownErrText = (err: any) =>
-  `${err?.message || ""} ${err?.status || ""} ${(() => {
-    try {
-      return JSON.stringify(err);
-    } catch {
-      return "";
-    }
-  })()}`;
-
-/** Should we move on to the next model with the same key? */
-const shouldTryNextModel = (err: any) => {
-  const t = ownErrText(err);
-  return (
-    /404|not found|not supported|does not support|NOT_FOUND|INVALID_ARGUMENT|400/i.test(t) ||
-    /429|RESOURCE_EXHAUSTED|quota|rate limit|exhausted|503|500|UNAVAILABLE|overloaded/i.test(t)
-  );
-};
-
-/** Run a generateContent request against the own key, walking the model fallback chain. */
-async function ownGenerateWithFallback(apiKey: string, params: Omit<Parameters<GoogleGenAI["models"]["generateContent"]>[0], "model">) {
-  const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
-  let lastErr: any = null;
-  for (const model of OWN_MODEL_FALLBACKS) {
-    try {
-      const res = await ai.models.generateContent({ ...(params as any), model });
-      const txt = res.text || "";
-      if (!txt.trim()) {
-        lastErr = new Error(`Empty response from ${model}`);
-        continue;
-      }
-      return res;
-    } catch (err: any) {
-      lastErr = err;
-      console.warn(`[TranslateVideo][OwnAPI] model ${model} failed:`, err?.message || err);
-      if (shouldTryNextModel(err)) continue;
-      throw err;
-    }
-  }
-  throw lastErr || new Error("All own-key models failed");
-}
-
-/** Surface a caught error to the Lovable preview overlay ("Try to fix") without breaking the UI flow. */
-function surfaceToPreview(err: any, context: string) {
-  const e = err instanceof Error ? err : new Error(String(err?.message || err));
-  e.message = `[TranslateVideo:${context}] ${e.message}`;
-  setTimeout(() => {
-    throw e;
-  }, 0);
-}
-
 type Step = "upload" | "configure" | "processing" | "review_subs" | "rendering" | "result";
-
 
 const ASPECT_RATIOS = {
   "16:9": { w: 16, h: 9, label: "16:9 Landscape" },
@@ -808,17 +756,38 @@ export default function App() {
         : `Generate a very short, viral shock title (max 5-7 words) and a very short subtitle/hook (max 6-8 words) in Burmese for a generic movie thumbnail. The title should be extremely catchy, dramatic and "clickbaity". Output MUST be a valid JSON object with "title" and "description" keys (use "description" key for the short hook).`;
 
       if (apiMode === "own" && ownApiKey.trim()) {
-        // Own API: direct client-side call with model fallback chain
-        const result = await ownGenerateWithFallback(ownApiKey, {
-          contents: mktPrompt,
-          config: { temperature: 0.9, maxOutputTokens: 2048, responseMimeType: "application/json" },
-        });
-        const resultText = result.text || "{}";
-
-        const jsonMatch = resultText.match(/\{[\s\S]*\}/);
-        const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : "{}");
-        title = parsed.title || "Untitled";
-        description = parsed.description || "";
+        // Own API: direct client-side call with FALLBACK MODEL ROTATION
+        const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
+        let mktSuccess = false;
+        for (const fallbackModel of OWN_API_FALLBACK_MODELS) {
+          try {
+            const result = await ai.models.generateContent({
+              model: fallbackModel,
+              contents: mktPrompt,
+              config: { temperature: 0.9, maxOutputTokens: 2048, responseMimeType: "application/json" },
+            });
+            const resultText = result.text || "{}";
+            const jsonMatch = resultText.match(/\{[\s\S]*\}/);
+            const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : "{}");
+            title = parsed.title || "Untitled";
+            description = parsed.description || "";
+            mktSuccess = true;
+            break;
+          } catch (modelErr: any) {
+            const errMsg = String(modelErr?.message || "");
+            const isRetryable =
+              errMsg.includes("429") ||
+              errMsg.includes("RESOURCE_EXHAUSTED") ||
+              errMsg.includes("503") ||
+              errMsg.includes("limit") ||
+              errMsg.includes("quota") ||
+              errMsg.includes("overloaded");
+            console.warn(`[OwnAPI Marketing] Model ${fallbackModel} failed:`, errMsg);
+            if (!isRetryable) throw modelErr;
+            await new Promise((r) => setTimeout(r, 600));
+          }
+        }
+        if (!mktSuccess) throw new Error("All models exhausted for marketing kit.");
       } else {
         // Server-side via edge function (secure — no API key in browser)
         const { data, error } = await supabase.functions.invoke("video-transform-translate", {
@@ -1771,23 +1740,61 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
               let text = "[]";
 
               if (apiMode === "own" && ownApiKey.trim()) {
-                // === OWN API MODE: Direct client-side Gemini call (model fallback chain) ===
+                // === OWN API MODE: Direct client-side Gemini call with FALLBACK MODEL ROTATION ===
+                const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
                 const ownParts: any[] = [{ inlineData: { mimeType: "audio/wav", data: chunk.base64 } }];
                 if (frameBase64) {
                   ownParts.push({ inlineData: { mimeType: "image/jpeg", data: frameBase64 } });
                 }
                 ownParts.push(parts[parts.length - 1]); // The prompt text part
 
-                const ownResult = await ownGenerateWithFallback(ownApiKey, {
-                  contents: [{ role: "user", parts: ownParts }],
-                  config: {
-                    temperature: attempt === 1 ? 0 : 0.2,
-                    maxOutputTokens: 8192,
-                    responseMimeType: "application/json",
-                  },
-                });
-
-                text = ownResult.text || "[]";
+                let ownSuccess = false;
+                let ownLastErr: any = null;
+                for (const fallbackModel of OWN_API_FALLBACK_MODELS) {
+                  try {
+                    setProcessingStatus(`Translating segment ${i + 1}/${audioChunks.length} via ${fallbackModel}...`);
+                    const ownResult = await ai.models.generateContent({
+                      model: fallbackModel,
+                      contents: [{ role: "user", parts: ownParts }],
+                      config: {
+                        temperature: attempt === 1 ? 0 : 0.2,
+                        maxOutputTokens: 8192,
+                        responseMimeType: "application/json",
+                      },
+                    });
+                    text = ownResult.text || "[]";
+                    ownSuccess = true;
+                    console.log(`[OwnAPI] Segment ${i + 1} succeeded with model: ${fallbackModel}`);
+                    break; // Success — exit fallback loop
+                  } catch (modelErr: any) {
+                    ownLastErr = modelErr;
+                    const errMsg = String(modelErr?.message || modelErr?.status || "");
+                    const isModelRetryable =
+                      modelErr?.status === 429 ||
+                      errMsg.includes("429") ||
+                      errMsg.includes("RESOURCE_EXHAUSTED") ||
+                      errMsg.includes("503") ||
+                      errMsg.includes("500") ||
+                      errMsg.includes("UNAVAILABLE") ||
+                      errMsg.includes("overloaded") ||
+                      errMsg.includes("rate") ||
+                      errMsg.includes("quota") ||
+                      errMsg.includes("limit");
+                    console.warn(`[OwnAPI] Model ${fallbackModel} failed (retryable=${isModelRetryable}):`, errMsg);
+                    if (!isModelRetryable) {
+                      // Non-retryable error (e.g. invalid key, permission denied) — stop trying
+                      throw modelErr;
+                    }
+                    // Wait briefly before trying next model
+                    await new Promise((r) => setTimeout(r, 800));
+                  }
+                }
+                if (!ownSuccess) {
+                  throw new Error(
+                    ownLastErr?.message ||
+                      "All fallback models exhausted. Own API key rate limited. ခဏနေရင် ပြန်စမ်းပါ။",
+                  );
+                }
               } else {
                 // === APP API MODE: Server-side edge function (secure) ===
                 text = await invokeSubtitleTranslationChunk({
@@ -1860,22 +1867,18 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                 err?.message?.includes("429") ||
                 err?.message?.includes("RESOURCE_EXHAUSTED") ||
                 err?.status === "RESOURCE_EXHAUSTED";
-              const isOwn = apiMode === "own" && !!ownApiKey.trim();
-              // Own key: all models in the fallback chain share one quota — retry with backoff
-              // instead of aborting on the first 429; only give up after the last attempt.
-              if (isRateLimit && !isOwn) {
+              // SURGICAL FIX: Only throw immediately for APP API rate limits.
+              // Own API mode already handled by fallback model rotation above.
+              if (isRateLimit && apiMode !== "own") {
                 throw new Error(
                   `API Quota Exceeded! The server API key has hit its rate limit. Please try again later.`,
                 );
               }
               if (attempt >= MAX_CHUNK_ATTEMPTS) {
                 throw new Error(
-                  isOwn && isRateLimit
-                    ? `Own API Key quota ပြည့်နေပါတယ် (segment ${i + 1})။ ခဏနေမှ ပြန်စမ်းပါ သို့မဟုတ် billing ဖွင့်ထားတဲ့ key သုံးပါ။`
-                    : `Failed to translate segment ${i + 1}. Subtitle မပါဘဲ render မလုပ်ပါဘူး။ ခဏနေရင် ပြန်စမ်းပါ။`,
+                  `Failed to translate segment ${i + 1}. Subtitle မပါဘဲ render မလုပ်ပါဘူး။ ခဏနေရင် ပြန်စမ်းပါ။`,
                 );
               }
-
             }
           }
           parsedSubtitles = [...parsedSubtitles, ...chunkAdded];
@@ -1928,8 +1931,6 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
       console.error("Processing error:", error);
       setProcessingStatus(error.message || "Error occurred during processing. Please try again.");
       setProcessingProgress(-1);
-      surfaceToPreview(error, "processing");
-
     }
   };
 
@@ -2004,8 +2005,6 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
       console.error("Rendering error:", error);
       setProcessingStatus(error.message || "Error occurred during rendering. Please try again.");
       setProcessingProgress(-1); // Use -1 to indicate error state
-      surfaceToPreview(error, "rendering");
-
     }
   };
 
@@ -3978,16 +3977,53 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                 </div>
 
                 {processingProgress === -1 && (
-                  <div className="mt-6">
-                    <button
-                      onClick={() => {
-                        setStep("configure");
-                        setProcessingProgress(0);
-                      }}
-                      className="px-6 py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl font-medium transition-colors"
-                    >
-                      Go Back & Try Again
-                    </button>
+                  <div className="mt-6 max-w-lg mx-auto bg-red-950/40 border border-red-500/30 rounded-2xl p-6 space-y-4">
+                    <h4 className="text-lg font-bold text-red-400 flex items-center gap-2">
+                      ⚠️ Error — ပြဿနာတက်နေပါသည်
+                    </h4>
+                    <p className="text-sm text-red-300/80 break-words">{processingStatus}</p>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <button
+                        onClick={() => {
+                          startProcessingTriggeredRef.current = false;
+                          setProcessingProgress(0);
+                          setProcessingStatus("");
+                          void startProcessing();
+                        }}
+                        className="flex-1 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors shadow-lg"
+                      >
+                        <RefreshCw size={18} /> ပြန်စမ်းမည် (Retry)
+                      </button>
+                      <button
+                        onClick={() => {
+                          setStep("configure");
+                          setProcessingProgress(0);
+                          setProcessingStatus("");
+                          startProcessingTriggeredRef.current = false;
+                        }}
+                        className="flex-1 py-3 px-4 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl font-medium flex items-center justify-center gap-2 transition-colors"
+                      >
+                        ⬅ Go Back & Fix Settings
+                      </button>
+                    </div>
+                    {subtitleFile && (
+                      <button
+                        onClick={() => {
+                          setProcessingProgress(0);
+                          setProcessingStatus("");
+                          startProcessingTriggeredRef.current = false;
+                          void skipToBurnIn();
+                        }}
+                        className="w-full py-2.5 px-4 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors"
+                      >
+                        📝 Skip AI → Subtitle Review (SRT ဖိုင် သုံးမည်)
+                      </button>
+                    )}
+                    {apiMode === "own" && (
+                      <p className="text-xs text-zinc-500 text-center">
+                        💡 Own API key rate limit ဖြစ်နေရင် ခဏစောင့်ပြီး Retry နှိပ်ပါ။ Model fallback active ဖြစ်ပါသည်။
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
