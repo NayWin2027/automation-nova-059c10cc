@@ -33,57 +33,6 @@ import { trackToolVariant } from "@/utils/trackToolVariant";
 import { useCreditDeduction } from "@/hooks/useCreditDeduction";
 import { GoogleGenAI } from "@google/genai";
 
-// SURGICAL FIX: Actual fallback model rotation for Own API key mode.
-// When one model hits rate-limit / quota / error, the next model is tried automatically.
-const SUBTITLE_MODELS = [
-  "gemini-2.0-flash",
-  "gemini-2.0-flash-001",
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite",
-  "gemini-1.5-flash-latest",
-  "gemini-1.5-flash",
-];
-
-// User-provided Own API key fallback chain (rotates one model to the next on failure).
-const OWN_API_FALLBACK_MODELS = [
-  "gemini-2.5-flash",
-  "gemini-flash-lite-latest",
-  "gemini-flash-latest",
-  "gemini-2.5-flash-lite",
-  "gemini-3.5-flash-lite",
-  "gemini-3.1-flash-lite",
-  "gemini-3.7-flash",
-  "gemini-3.6-flash",
-  "gemini-3.5-flash",
-  "gemini-3.1-flash",
-];
-
-// Round-robin cursor so a model that just failed is not retried first next time.
-let ownApiModelCursor = 0;
-const getOwnApiModelRotation = () =>
-  OWN_API_FALLBACK_MODELS.map(
-    (_, i) => OWN_API_FALLBACK_MODELS[(ownApiModelCursor + i) % OWN_API_FALLBACK_MODELS.length],
-  );
-const advanceOwnApiModelCursor = (model: string) => {
-  const idx = OWN_API_FALLBACK_MODELS.indexOf(model);
-  if (idx >= 0) ownApiModelCursor = (idx + 1) % OWN_API_FALLBACK_MODELS.length;
-};
-const lockOwnApiModelCursor = (model: string) => {
-  const idx = OWN_API_FALLBACK_MODELS.indexOf(model);
-  if (idx >= 0) ownApiModelCursor = idx;
-};
-// Only a bad/blocked API key should stop rotation — everything else tries the next model.
-const isOwnApiKeyFatal = (err: any) => {
-  const m = String(err?.message || err?.status || "").toUpperCase();
-  return (
-    m.includes("API_KEY_INVALID") ||
-    m.includes("API KEY NOT VALID") ||
-    m.includes("PERMISSION_DENIED") ||
-    m.includes("UNAUTHENTICATED") ||
-    m.includes("401")
-  );
-};
-
 type Step = "upload" | "configure" | "processing" | "review_subs" | "rendering" | "result";
 
 const ASPECT_RATIOS = {
@@ -545,16 +494,6 @@ export default function App() {
   const [audioBypass, setAudioBypass] = useState(true);
   const [zoomEnabled, setZoomEnabled] = useState(false);
 
-  // === AI VOICE OVER (DUB) MODE — additive, default OFF ===
-  const [dubEnabled, setDubEnabled] = useState(false);
-  const [dubVoice, setDubVoice] = useState("it-IT-GiuseppeMultilingualNeural");
-  const [dubVolume, setDubVolume] = useState(100); // dub track volume %
-  const [dubBgVolume, setDubBgVolume] = useState(85); // original audio volume %
-  const [dubDuckLevel, setDubDuckLevel] = useState(12); // original volume % while speaking
-  const [dubProgress, setDubProgress] = useState<{ done: number; total: number } | null>(null);
-  const [isGeneratingDub, setIsGeneratingDub] = useState(false);
-  const dubClipsRef = useRef<{ start: number; end: number; buffer: AudioBuffer }[]>([]);
-
   const [processingProgress, setProcessingProgress] = useState(0);
   const [isProcessingActive, setIsProcessingActive] = useState(false);
   const [processingStatus, setProcessingStatus] = useState("");
@@ -793,34 +732,18 @@ export default function App() {
         : `Generate a very short, viral shock title (max 5-7 words) and a very short subtitle/hook (max 6-8 words) in Burmese for a generic movie thumbnail. The title should be extremely catchy, dramatic and "clickbaity". Output MUST be a valid JSON object with "title" and "description" keys (use "description" key for the short hook).`;
 
       if (apiMode === "own" && ownApiKey.trim()) {
-        // Own API: direct client-side call with FALLBACK MODEL ROTATION
+        // Own API: direct client-side call
         const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
-        let mktSuccess = false;
-        for (const fallbackModel of getOwnApiModelRotation()) {
-          try {
-            const result = await ai.models.generateContent({
-              model: fallbackModel,
-              contents: mktPrompt,
-              config: { temperature: 0.9, maxOutputTokens: 2048, responseMimeType: "application/json" },
-            });
-            const resultText = result.text || "{}";
-            const jsonMatch = resultText.match(/\{[\s\S]*\}/);
-            const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : "{}");
-            title = parsed.title || "Untitled";
-            description = parsed.description || "";
-            mktSuccess = true;
-            lockOwnApiModelCursor(fallbackModel);
-            break;
-          } catch (modelErr: any) {
-            const errMsg = String(modelErr?.message || "");
-            console.warn(`[OwnAPI Marketing] Model ${fallbackModel} failed, rotating:`, errMsg);
-            if (isOwnApiKeyFatal(modelErr)) throw modelErr;
-            advanceOwnApiModelCursor(fallbackModel);
-            await new Promise((r) => setTimeout(r, 500));
-          }
-        }
-
-        if (!mktSuccess) throw new Error("All models exhausted for marketing kit.");
+        const result = await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: mktPrompt,
+          config: { temperature: 0.9, maxOutputTokens: 2048, responseMimeType: "application/json" },
+        });
+        const resultText = result.text || "{}";
+        const jsonMatch = resultText.match(/\{[\s\S]*\}/);
+        const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : "{}");
+        title = parsed.title || "Untitled";
+        description = parsed.description || "";
       } else {
         // Server-side via edge function (secure — no API key in browser)
         const { data, error } = await supabase.functions.invoke("video-transform-translate", {
@@ -1773,7 +1696,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
               let text = "[]";
 
               if (apiMode === "own" && ownApiKey.trim()) {
-                // === OWN API MODE: Direct client-side Gemini call with FALLBACK MODEL ROTATION ===
+                // === OWN API MODE: Direct client-side Gemini call ===
                 const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
                 const ownParts: any[] = [{ inlineData: { mimeType: "audio/wav", data: chunk.base64 } }];
                 if (frameBase64) {
@@ -1781,44 +1704,16 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                 }
                 ownParts.push(parts[parts.length - 1]); // The prompt text part
 
-                let ownSuccess = false;
-                let ownLastErr: any = null;
-                const rotation = getOwnApiModelRotation();
-                for (const fallbackModel of rotation) {
-                  try {
-                    setProcessingStatus(`Translating segment ${i + 1}/${audioChunks.length} via ${fallbackModel}...`);
-                    const ownResult = await ai.models.generateContent({
-                      model: fallbackModel,
-                      contents: [{ role: "user", parts: ownParts }],
-                      config: {
-                        temperature: attempt === 1 ? 0 : 0.2,
-                        maxOutputTokens: 8192,
-                        responseMimeType: "application/json",
-                      },
-                    });
-                    text = ownResult.text || "[]";
-                    ownSuccess = true;
-                    lockOwnApiModelCursor(fallbackModel);
-                    console.log(`[OwnAPI] Segment ${i + 1} succeeded with model: ${fallbackModel}`);
-                    break; // Success — exit fallback loop
-                  } catch (modelErr: any) {
-                    ownLastErr = modelErr;
-                    const errMsg = String(modelErr?.message || modelErr?.status || "");
-                    console.warn(`[OwnAPI] Model ${fallbackModel} failed, rotating to next model:`, errMsg);
-                    // Only a bad key stops rotation. Any other error (429/quota/404/400/500) → next model.
-                    if (isOwnApiKeyFatal(modelErr)) throw modelErr;
-                    advanceOwnApiModelCursor(fallbackModel);
-                    // Wait briefly before trying next model
-                    await new Promise((r) => setTimeout(r, 500));
-                  }
-                }
-
-                if (!ownSuccess) {
-                  throw new Error(
-                    ownLastErr?.message ||
-                      "All fallback models exhausted. Own API key rate limited. ခဏနေရင် ပြန်စမ်းပါ။",
-                  );
-                }
+                const ownResult = await ai.models.generateContent({
+                  model: "gemini-2.5-flash",
+                  contents: [{ role: "user", parts: ownParts }],
+                  config: {
+                    temperature: attempt === 1 ? 0 : 0.2,
+                    maxOutputTokens: 8192,
+                    responseMimeType: "application/json",
+                  },
+                });
+                text = ownResult.text || "[]";
               } else {
                 // === APP API MODE: Server-side edge function (secure) ===
                 text = await invokeSubtitleTranslationChunk({
@@ -1891,9 +1786,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                 err?.message?.includes("429") ||
                 err?.message?.includes("RESOURCE_EXHAUSTED") ||
                 err?.status === "RESOURCE_EXHAUSTED";
-              // SURGICAL FIX: Only throw immediately for APP API rate limits.
-              // Own API mode already handled by fallback model rotation above.
-              if (isRateLimit && apiMode !== "own") {
+              if (isRateLimit) {
                 throw new Error(
                   `API Quota Exceeded! The server API key has hit its rate limit. Please try again later.`,
                 );
@@ -1937,11 +1830,6 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
       setProcessingStatus(`Applying ${COLOR_GRADES[colorGrade].label} Color Grade...`);
       await new Promise((r) => setTimeout(r, 1000));
       setProcessingProgress(75);
-
-      if (dubEnabled) {
-        setProcessingStatus("Generating AI Voice Over (Dub)...");
-        await generateDubTracks(finalSubs);
-      }
 
       setProcessingStatus("Rendering Final Video...");
       await renderVideo(finalSubs);
@@ -2017,11 +1905,6 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
       await new Promise((r) => setTimeout(r, 1000));
       setProcessingProgress(75);
 
-      if (dubEnabled) {
-        setProcessingStatus("Generating AI Voice Over (Dub)...");
-        await generateDubTracks(finalSubs);
-      }
-
       setProcessingStatus("Rendering Final Video...");
       await renderVideo(finalSubs);
       setStep("result");
@@ -2030,129 +1913,6 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
       setProcessingStatus(error.message || "Error occurred during rendering. Please try again.");
       setProcessingProgress(-1); // Use -1 to indicate error state
     }
-  };
-
-  // ===== AI VOICE OVER (DUB) — generate one TTS clip per translated subtitle line =====
-  const resolveDubLanguageCode = () => {
-    const match = ALL_LANGUAGES.find(
-      (l) =>
-        l.name.toLowerCase() === targetLang.toLowerCase() || l.nativeName.toLowerCase() === targetLang.toLowerCase(),
-    );
-    return match?.bcp47 || "en-US";
-  };
-
-  const decodeTtsToBuffer = async (ctx: AudioContext, data: any): Promise<AudioBuffer | null> => {
-    if (!data?.audio) return null;
-    const mt = String(data.mimeType || "").toLowerCase();
-    const raw = Uint8Array.from(atob(data.audio), (c) => c.charCodeAt(0));
-    let bytes: Uint8Array = raw;
-    if (mt.includes("audio/pcm") || mt.includes("audio/l16")) {
-      const rateMatch = mt.match(/rate=(\d+)/);
-      const sampleRate = Number(data.sampleRate) || (rateMatch ? parseInt(rateMatch[1], 10) : 24000);
-      const numChannels = 1;
-      const bitsPerSample = 16;
-      const dataLength = raw.length;
-      const wav = new Uint8Array(44 + dataLength);
-      const view = new DataView(wav.buffer);
-      wav.set([0x52, 0x49, 0x46, 0x46], 0);
-      view.setUint32(4, 36 + dataLength, true);
-      wav.set([0x57, 0x41, 0x56, 0x45], 8);
-      wav.set([0x66, 0x6d, 0x74, 0x20], 12);
-      view.setUint32(16, 16, true);
-      view.setUint16(20, 1, true);
-      view.setUint16(22, numChannels, true);
-      view.setUint32(24, sampleRate, true);
-      view.setUint32(28, sampleRate * numChannels * (bitsPerSample / 8), true);
-      view.setUint16(32, numChannels * (bitsPerSample / 8), true);
-      view.setUint16(34, bitsPerSample, true);
-      wav.set([0x64, 0x61, 0x74, 0x61], 36);
-      view.setUint32(40, dataLength, true);
-      wav.set(raw, 44);
-      bytes = wav;
-    }
-    const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-    try {
-      return await ctx.decodeAudioData(arrayBuffer);
-    } catch (e) {
-      console.warn("[dub] decode failed", e);
-      return null;
-    }
-  };
-
-  const generateDubTracks = async (subs: { start: number; end: number; text: string }[]) => {
-    dubClipsRef.current = [];
-    const lines = subs.filter((s) => s.text && s.text.trim());
-    if (lines.length === 0) return;
-
-    setIsGeneratingDub(true);
-    setDubProgress({ done: 0, total: lines.length });
-
-    const decodeCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const languageCode = resolveDubLanguageCode();
-    const results: ({ start: number; end: number; buffer: AudioBuffer } | null)[] = new Array(lines.length).fill(null);
-    let done = 0;
-
-    const runOne = async (idx: number) => {
-      const line = lines[idx];
-      const nextStart = idx + 1 < lines.length ? lines[idx + 1].start : Number.POSITIVE_INFINITY;
-      const videoRate = audioBypass ? 1.04 : 1;
-      // Room available for this line in real (rendered) seconds, with a small guard
-      // so one line can never bleed into the next one.
-      const room = Math.max(0.4, (nextStart - line.start) / videoRate - 0.1);
-      // VOICE IDENTITY LOCK — identical prosody settings to Recap Video NV so the
-      // same speaker (e.g. Thiha) always sounds like the same person.
-      const BASE_RATE = "+0%";
-      const BASE_PITCH = "-2Hz";
-      let speedTag = BASE_RATE;
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        try {
-          const body: Record<string, unknown> = {
-            text: line.text.replace(/\s+/g, " ").trim(),
-            voice: dubVoice,
-            rate: speedTag,
-            pitch: BASE_PITCH,
-            // Charged once per video-minute by this tool — don't double-charge per line.
-            skipCreditDeduction: true,
-          };
-          const { data, error } = await supabase.functions.invoke("edge-tts", { body });
-          if (error) throw new Error(error.message || "TTS failed");
-          const buffer = await decodeTtsToBuffer(decodeCtx, data);
-          if (buffer) {
-            // If the line overruns its slot, re-speak it FASTER on the server instead of
-            // resampling on the client: Edge TTS rate keeps the original pitch/timbre,
-            // so the voice identity never changes and no two lines overlap.
-            if (Number.isFinite(room) && buffer.duration > room * 1.02 && speedTag === BASE_RATE) {
-              const needed = Math.min(30, Math.max(4, Math.round((buffer.duration / room - 1) * 100)));
-              speedTag = `+${needed}%`;
-              continue;
-            }
-            results[idx] = { start: line.start, end: line.end, buffer };
-            return;
-          }
-          throw new Error("No audio returned");
-        } catch (e) {
-          if (attempt === 1) console.warn(`[dub] line ${idx + 1} skipped:`, e);
-          else await new Promise((r) => setTimeout(r, 900));
-        }
-      }
-    };
-
-    const CONCURRENCY = 3;
-    let cursor = 0;
-    const workers = Array.from({ length: Math.min(CONCURRENCY, lines.length) }, async () => {
-      while (cursor < lines.length) {
-        const myIdx = cursor;
-        cursor += 1;
-        await runOne(myIdx);
-        done += 1;
-        setDubProgress({ done, total: lines.length });
-      }
-    });
-    await Promise.all(workers);
-
-    dubClipsRef.current = results.filter(Boolean) as { start: number; end: number; buffer: AudioBuffer }[];
-    if (decodeCtx.state !== "closed") void decodeCtx.close().catch(() => undefined);
-    setIsGeneratingDub(false);
   };
 
   const renderVideo = (subs: { start: number; end: number; text: string }[]) => {
@@ -2274,27 +2034,6 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
         const source = audioCtx.createMediaElementSource(video);
         const dest = audioCtx.createMediaStreamDestination();
 
-        // DUB MODE: original audio passes through a gain node we can duck during speech.
-        const dubClips = dubEnabled ? dubClipsRef.current : [];
-        const originalGain = audioCtx.createGain();
-        originalGain.gain.value = dubEnabled ? dubBgVolume / 100 : 1;
-        const dubGain = audioCtx.createGain();
-        dubGain.gain.value = dubVolume / 100;
-        if (dubEnabled) {
-          dubGain.connect(dest);
-          dubGain.connect(audioCtx.destination);
-        }
-        const tail = (node: AudioNode) => {
-          if (dubEnabled) {
-            node.connect(originalGain);
-            originalGain.connect(dest);
-            originalGain.connect(audioCtx.destination);
-          } else {
-            node.connect(dest);
-            node.connect(audioCtx.destination);
-          }
-        };
-
         if (audioBypass) {
           // AI Auto Copyright Bypass: Subtle speed & pitch shift + Multi-band EQ
           (video as any).preservesPitch = false;
@@ -2320,9 +2059,11 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
           source.connect(lowShelf);
           lowShelf.connect(highShelf);
           highShelf.connect(peaking);
-          tail(peaking);
+          peaking.connect(dest);
+          peaking.connect(audioCtx.destination);
         } else {
-          tail(source);
+          source.connect(dest);
+          source.connect(audioCtx.destination);
         }
 
         const stream = canvas.captureStream(30);
@@ -2423,58 +2164,15 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
 
         // Ensure video is ready and play it
         video.currentTime = 0;
-
-        // Schedule every dub clip + ducking envelope on the AudioContext timeline.
-        // Anchored to the exact moment playback starts => no drift.
-        const scheduleDub = () => {
-          if (!dubEnabled || dubClips.length === 0) return;
-          const rate = video.playbackRate || 1;
-          const t0 = audioCtx.currentTime + 0.06;
-          const bgLevel = dubBgVolume / 100;
-          const duckLevel = Math.min(bgLevel, dubDuckLevel / 100);
-          originalGain.gain.setValueAtTime(bgLevel, audioCtx.currentTime);
-
-          dubClips.forEach((clip, i) => {
-            const slotStart = clip.start / rate;
-            const nextStart = i + 1 < dubClips.length ? dubClips[i + 1].start / rate : Number.POSITIVE_INFINITY;
-            // Never push the next line: allowed room = up to next line's start (minus 60ms guard).
-            const room = Math.max(0.2, Math.min(nextStart - slotStart - 0.06, Number.MAX_SAFE_INTEGER));
-            const dur = clip.buffer.duration;
-            // Voice identity lock: only a barely-audible client-side nudge (<=6%).
-            // Real fitting is done server-side at generation time (pitch preserved).
-            const playbackRate = dur > room ? Math.min(1.06, dur / room) : 1;
-            const realDur = dur / playbackRate;
-
-            const src = audioCtx.createBufferSource();
-            src.buffer = clip.buffer;
-            src.playbackRate.value = playbackRate;
-            src.connect(dubGain);
-            src.start(t0 + slotStart);
-            // Anti-overlap guard: never let a line still be talking when the next one starts.
-            if (Number.isFinite(nextStart)) {
-              const hardStop = t0 + Math.max(slotStart + 0.15, nextStart - 0.04);
-              if (slotStart + realDur > nextStart - 0.04) src.stop(hardStop);
-            }
-
-            // Duck the original audio around the spoken window.
-            const duckIn = t0 + Math.max(0, slotStart - 0.12);
-            const duckOut = t0 + slotStart + realDur + 0.2;
-            originalGain.gain.setTargetAtTime(duckLevel, duckIn, 0.05);
-            originalGain.gain.setTargetAtTime(bgLevel, duckOut, 0.12);
-          });
-        };
-
         const playVideo = async () => {
           try {
             await video.play();
-            scheduleDub();
           } catch (err) {
             console.warn("Unmuted play blocked by browser, retrying muted (audio still captured via Web Audio):", err);
             video.muted = true;
             await audioCtx.resume().catch(() => undefined);
             try {
               await video.play();
-              scheduleDub();
             } catch (e) {
               console.error("Video play retry failed:", e);
               resolve();
@@ -3659,109 +3357,6 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                   </button>
                 </div>
 
-                {/* AI Voice Over (Dub) */}
-                <div className="p-5 rounded-2xl border border-zinc-800 bg-zinc-900/50 space-y-5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="p-3 bg-indigo-500/20 text-indigo-400 rounded-xl">
-                        <Music size={24} />
-                      </div>
-                      <div>
-                        <h4 className="text-base font-medium text-zinc-100 mb-1">AI Voice Over (Dub)</h4>
-                        <p className="text-sm text-zinc-500">
-                          {dubEnabled
-                            ? "ON — ဘာသာပြန်စာကို TTS နဲ့ အသံထည့်၊ စကားပြောချိန် မူရင်းအသံ auto လျှော့"
-                            : "OFF — မူရင်းအသံအတိုင်း (subtitle သီးသန့်)"}
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setDubEnabled(!dubEnabled)}
-                      className={`w-14 h-8 rounded-full transition-colors relative shrink-0 ${dubEnabled ? "bg-indigo-500" : "bg-zinc-700"}`}
-                    >
-                      <div
-                        className={`w-6 h-6 rounded-full bg-white absolute top-1 transition-all shadow-sm ${dubEnabled ? "left-7" : "left-1"}`}
-                      />
-                    </button>
-                  </div>
-
-                  {dubEnabled && (
-                    <div className="space-y-4 pt-2 border-t border-zinc-800">
-                      <div>
-                        <label className="block text-sm text-zinc-400 mb-1">Voice</label>
-                        <Select value={dubVoice} onValueChange={setDubVoice}>
-                          <SelectTrigger className="w-full bg-zinc-900 border-zinc-800 text-zinc-100 h-11">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-100">
-                            <SelectItem value="it-IT-GiuseppeMultilingualNeural">
-                              Giuseppe — Multilingual Male (Default)
-                            </SelectItem>
-                            <SelectItem value="en-US-AndrewMultilingualNeural">Andrew — Multilingual Male</SelectItem>
-                            <SelectItem value="en-US-AvaMultilingualNeural">Ava — Multilingual Female</SelectItem>
-                            <SelectItem value="en-US-EmmaMultilingualNeural">Emma — Multilingual Female</SelectItem>
-                            <SelectItem value="my-MM-ThihaNeural">Thiha — Burmese Male</SelectItem>
-                            <SelectItem value="my-MM-NilarNeural">Nilar — Burmese Female</SelectItem>
-                            <SelectItem value="th-TH-NiwatNeural">Niwat — Thai Male</SelectItem>
-                            <SelectItem value="th-TH-PremwadeeNeural">Premwadee — Thai Female</SelectItem>
-                            <SelectItem value="zh-CN-YunxiNeural">Yunxi — Chinese Male</SelectItem>
-                            <SelectItem value="zh-CN-XiaoxiaoNeural">Xiaoxiao — Chinese Female</SelectItem>
-                            <SelectItem value="fil-PH-AngeloNeural">Angelo — Filipino Male</SelectItem>
-                            <SelectItem value="fil-PH-BlessicaNeural">Blessica — Filipino Female</SelectItem>
-                            <SelectItem value="ko-KR-InJoonNeural">InJoon — Korean Male</SelectItem>
-                            <SelectItem value="ja-JP-NanamiNeural">Nanami — Japanese Female</SelectItem>
-                            <SelectItem value="en-US-GuyNeural">Guy — English Male</SelectItem>
-                            <SelectItem value="en-US-JennyNeural">Jenny — English Female</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <label className="block text-sm text-zinc-400 mb-1">Dub Volume ({dubVolume}%)</label>
-                        <input
-                          type="range"
-                          min="20"
-                          max="150"
-                          value={dubVolume}
-                          onChange={(e) => setDubVolume(Number(e.target.value))}
-                          className="w-full accent-indigo-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm text-zinc-400 mb-1">
-                          Background (မူရင်းအသံ) Volume ({dubBgVolume}%)
-                        </label>
-                        <input
-                          type="range"
-                          min="0"
-                          max="100"
-                          value={dubBgVolume}
-                          onChange={(e) => setDubBgVolume(Number(e.target.value))}
-                          className="w-full accent-indigo-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm text-zinc-400 mb-1">
-                          Ducking Level — စကားပြောချိန် မူရင်းအသံ ({dubDuckLevel}%)
-                        </label>
-                        <input
-                          type="range"
-                          min="0"
-                          max="60"
-                          value={dubDuckLevel}
-                          onChange={(e) => setDubDuckLevel(Number(e.target.value))}
-                          className="w-full accent-indigo-500"
-                        />
-                      </div>
-                      {(isGeneratingDub || dubProgress) && (
-                        <p className="text-[12px] text-indigo-300">
-                          {isGeneratingDub ? "Generating voice… " : "Voice ready — "}
-                          {dubProgress ? `${dubProgress.done}/${dubProgress.total} lines` : ""}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-
                 {/* Layout & Watermark Settings */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4 border-t border-zinc-800">
                   {/* Subtitle Controls */}
@@ -4001,53 +3596,16 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                 </div>
 
                 {processingProgress === -1 && (
-                  <div className="mt-6 max-w-lg mx-auto bg-red-950/40 border border-red-500/30 rounded-2xl p-6 space-y-4">
-                    <h4 className="text-lg font-bold text-red-400 flex items-center gap-2">
-                      ⚠️ Error — ပြဿနာတက်နေပါသည်
-                    </h4>
-                    <p className="text-sm text-red-300/80 break-words">{processingStatus}</p>
-                    <div className="flex flex-col sm:flex-row gap-3">
-                      <button
-                        onClick={() => {
-                          startProcessingTriggeredRef.current = false;
-                          setProcessingProgress(0);
-                          setProcessingStatus("");
-                          void startProcessing();
-                        }}
-                        className="flex-1 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors shadow-lg"
-                      >
-                        <RefreshCw size={18} /> ပြန်စမ်းမည် (Retry)
-                      </button>
-                      <button
-                        onClick={() => {
-                          setStep("configure");
-                          setProcessingProgress(0);
-                          setProcessingStatus("");
-                          startProcessingTriggeredRef.current = false;
-                        }}
-                        className="flex-1 py-3 px-4 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl font-medium flex items-center justify-center gap-2 transition-colors"
-                      >
-                        ⬅ Go Back & Fix Settings
-                      </button>
-                    </div>
-                    {subtitleFile && (
-                      <button
-                        onClick={() => {
-                          setProcessingProgress(0);
-                          setProcessingStatus("");
-                          startProcessingTriggeredRef.current = false;
-                          void skipToBurnIn();
-                        }}
-                        className="w-full py-2.5 px-4 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors"
-                      >
-                        📝 Skip AI → Subtitle Review (SRT ဖိုင် သုံးမည်)
-                      </button>
-                    )}
-                    {apiMode === "own" && (
-                      <p className="text-xs text-zinc-500 text-center">
-                        💡 Own API key rate limit ဖြစ်နေရင် ခဏစောင့်ပြီး Retry နှိပ်ပါ။ Model fallback active ဖြစ်ပါသည်။
-                      </p>
-                    )}
+                  <div className="mt-6">
+                    <button
+                      onClick={() => {
+                        setStep("configure");
+                        setProcessingProgress(0);
+                      }}
+                      className="px-6 py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl font-medium transition-colors"
+                    >
+                      Go Back & Try Again
+                    </button>
                   </div>
                 )}
               </div>
