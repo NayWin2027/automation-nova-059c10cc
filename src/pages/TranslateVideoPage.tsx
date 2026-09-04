@@ -1778,7 +1778,8 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
 
                 let ownSuccess = false;
                 let ownLastErr: any = null;
-                for (const fallbackModel of OWN_API_FALLBACK_MODELS) {
+                const rotation = getOwnApiModelRotation();
+                for (const fallbackModel of rotation) {
                   try {
                     setProcessingStatus(`Translating segment ${i + 1}/${audioChunks.length} via ${fallbackModel}...`);
                     const ownResult = await ai.models.generateContent({
@@ -1792,31 +1793,21 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                     });
                     text = ownResult.text || "[]";
                     ownSuccess = true;
+                    lockOwnApiModelCursor(fallbackModel);
                     console.log(`[OwnAPI] Segment ${i + 1} succeeded with model: ${fallbackModel}`);
                     break; // Success — exit fallback loop
                   } catch (modelErr: any) {
                     ownLastErr = modelErr;
                     const errMsg = String(modelErr?.message || modelErr?.status || "");
-                    const isModelRetryable =
-                      modelErr?.status === 429 ||
-                      errMsg.includes("429") ||
-                      errMsg.includes("RESOURCE_EXHAUSTED") ||
-                      errMsg.includes("503") ||
-                      errMsg.includes("500") ||
-                      errMsg.includes("UNAVAILABLE") ||
-                      errMsg.includes("overloaded") ||
-                      errMsg.includes("rate") ||
-                      errMsg.includes("quota") ||
-                      errMsg.includes("limit");
-                    console.warn(`[OwnAPI] Model ${fallbackModel} failed (retryable=${isModelRetryable}):`, errMsg);
-                    if (!isModelRetryable) {
-                      // Non-retryable error (e.g. invalid key, permission denied) — stop trying
-                      throw modelErr;
-                    }
+                    console.warn(`[OwnAPI] Model ${fallbackModel} failed, rotating to next model:`, errMsg);
+                    // Only a bad key stops rotation. Any other error (429/quota/404/400/500) → next model.
+                    if (isOwnApiKeyFatal(modelErr)) throw modelErr;
+                    advanceOwnApiModelCursor(fallbackModel);
                     // Wait briefly before trying next model
-                    await new Promise((r) => setTimeout(r, 800));
+                    await new Promise((r) => setTimeout(r, 500));
                   }
                 }
+
                 if (!ownSuccess) {
                   throw new Error(
                     ownLastErr?.message ||
