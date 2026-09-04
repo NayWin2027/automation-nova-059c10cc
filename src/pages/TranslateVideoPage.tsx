@@ -1928,6 +1928,8 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
       console.error("Processing error:", error);
       setProcessingStatus(error.message || "Error occurred during processing. Please try again.");
       setProcessingProgress(-1);
+      surfaceToPreview(error, "processing");
+
     }
   };
 
