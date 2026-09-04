@@ -808,14 +808,13 @@ export default function App() {
         : `Generate a very short, viral shock title (max 5-7 words) and a very short subtitle/hook (max 6-8 words) in Burmese for a generic movie thumbnail. The title should be extremely catchy, dramatic and "clickbaity". Output MUST be a valid JSON object with "title" and "description" keys (use "description" key for the short hook).`;
 
       if (apiMode === "own" && ownApiKey.trim()) {
-        // Own API: direct client-side call
-        const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
-        const result = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
+        // Own API: direct client-side call with model fallback chain
+        const result = await ownGenerateWithFallback(ownApiKey, {
           contents: mktPrompt,
           config: { temperature: 0.9, maxOutputTokens: 2048, responseMimeType: "application/json" },
         });
         const resultText = result.text || "{}";
+
         const jsonMatch = resultText.match(/\{[\s\S]*\}/);
         const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : "{}");
         title = parsed.title || "Untitled";
