@@ -7,8 +7,8 @@ import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts"
 
 const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1beta/files";
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
-// gemini-1.5-flash / gemini-2.5-flash / gemini-3.1-flash are no longer served (404 NOT_FOUND).
-// SURGICAL FIX: Primary = flash-lite for higher rate limits (less 429 errors).
+// gemini-1.5-flash / gemini-2.5-flash are no longer served (404 NOT_FOUND).
+// Use the rolling "latest" alias which stays available for both old and new keys.
 const MODEL = "gemini-3.1-flash-lite";
 
 // SLANG-TEMP: HYBRID/VIRAL modes need a slightly higher temperature so the model
@@ -537,31 +537,19 @@ LANGUAGE LOCK:
 - No Chinese, Latin, or other foreign glyphs may remain inside the narration text. Transliterate names and brands phonetically into the target script (e.g. Facebook → the target-script spelling, CEO → the target-script spelling) so TTS reads them naturally. Character names must be the REAL names from this source video only — never invented, never carried over from any example.
 - Spoken, natural, conversational register — never bookish or machine-translated wording.${burmeseStyle}`;
 
-        // Own API: model-level fallback is allowed, but ONLY on the user's own key.
-        // Key rotation into the paid App pool stays App-API-only.
-        const fallbackModels = isOwnApi
-          ? [
-              "gemini-2.5-flash",
-              "gemini-flash-lite-latest",
-              "gemini-flash-latest",
-              "gemini-2.5-flash-lite",
-              "gemini-3.5-flash-lite",
-              "gemini-3.1-flash-lite",
-              "gemini-3.7-flash",
-              "gemini-3.6-flash",
-              "gemini-3.5-flash",
-              "gemini-3.1-flash",
-            ]
-          : [
-              "gemini-3.7-flash",
-              "gemini-3.6-flash",
-              "gemini-3.5-flash",
-              "gemini-3.1-flash",
-              "gemini-2.5-flash",
-              "gemini-flash-latest",
-              "gemini-flash-lite-latest",
-            ];
-
+        const tModels = [
+          MODEL,
+          "gemini-2.5-flash",
+          "gemini-flash-lite-latest",
+          "gemini-flash-latest",
+          "gemini-2.5-flash-lite",
+          "gemini-3.5-flash-lite",
+          "gemini-3.1-flash-lite",
+          "gemini-3.7-flash",
+          "gemini-3.6-flash",
+          "gemini-3.5-flash",
+          "gemini-3.1-flash",
+        ];
         const tShouldFallback = (s?: number) => s === 404 || s === 429 || s === 503 || s === 504;
 
         let tRes: Response | null = null;
@@ -924,11 +912,7 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - DO NOT SUMMARIZE. DO NOT SKIP. DO NOT STOP EARLY.
 - YOU MUST WRITE A COMPLETE NARRATION THAT FOLLOWS THE STORY UNFOLDING AS IT HAPPENS.
 - Cover the beginning, middle, climax and ending through distinct essential beats; compress routine or duplicate moments.
-${
-  narrationStyle === "STORY"
-    ? `- PARAGRAPH COUNT: Write enough paragraphs to cover every important scene, relationship change, confrontation, and emotional beat. Do not compress the story so aggressively that viewers miss key moments. Better to have more detailed coverage than to skip scenes.`
-    : `- PARAGRAPH COUNT: Use only as many paragraphs as the source has distinct useful beats. Never create extra paragraphs merely to satisfy a count or duration target.`
-}
+- PARAGRAPH COUNT: Use only as many paragraphs as the source has distinct useful beats. Never create extra paragraphs merely to satisfy a count or duration target.
 - SPREAD: Evenly distribute these paragraphs across the entire video timeline (e.g., for a 4-minute video, you must have content for the 0:00, 1:00, 2:00, 3:00, and 4:00 minute marks).
 - IF YOU OMIT THE SECOND HALF OF THE VIDEO, YOUR OUTPUT IS REJECTED.
 - TOKEN MANAGEMENT: If you find yourself writing too much detail at the start, STOP and COMPRESS the beginning so you have enough space to finish the entire story.
@@ -949,22 +933,7 @@ VIRAL HOOK RULE (MANDATORY — FIRST 3 SECONDS):
 - FORBIDDEN OPENERS include (but not limited to): "ဟုတ်ကဲ့", "ကောင်းပါပြီ", "ရပါပြီ", "အောက်မှာ ဖော်ပြပေး", "ဒီ ... ဗီဒီယိုလေးကို အခြေခံပြီး", "Here is", "Here's", "Below is", "Sure", "Okay", "Of course", or any sentence wrapped in ( ) / （ ） that describes what you are about to write.
 - The very FIRST character of your output MUST be the FIRST WORD of the viral hook itself. No labels like "Hook:", no headings, no parentheses, no markdown — just the hook sentence.
 
-${
-  narrationStyle === "STORY"
-    ? `RECAP WRITING STYLE (IMMERSIVE STORY NARRATION):
-- Write like a master storyteller narrating a gripping film — rich, flowing, emotionally immersive
-- Cover EVERY important scene: setups, turning points, confrontations, betrayals, intimate moments, revelations, consequences, and the full ending
-- Each paragraph = one complete scene beat, 3-5 sentences, with vivid actions, emotions, and dialogue woven in
-- Build dramatic tension naturally — let the story breathe and develop, don't rush past important moments
-- Use transitions that pull the viewer deeper: tension, suspense, emotional weight between beats
-- Include character reactions, relationship dynamics, and emotional consequences — not just plot points
-
-STRUCTURE:
-- HOOK (1 viral sentence — 3-second scroll-stopper)
-- Full story arc: setup → rising conflict → every major turning point in chronological order
-- Climax: The most shocking/dramatic moment at full emotional intensity
-- Resolution: Complete ending that gives viewers the full story payoff`
-    : `RECAP WRITING STYLE (BILLION-VIEW YOUTUBE STANDARD):
+RECAP WRITING STYLE (BILLION-VIEW YOUTUBE STANDARD):
 - Write like a billion-view YouTube narrator: MrBeast energy for drama, Coffeezilla tension for exposés, Mark Rober precision for tech
 - Key-point summary ONLY — NOT micro-detailed play-by-play
 - Hit ONLY the dramatic peaks: shocking moments, confrontations, betrayals, intimate scenes, revelations
@@ -976,8 +945,7 @@ STRUCTURE:
 - HOOK (1 viral sentence — 3-second scroll-stopper)
 - Rising tension: Build with only the most gripping beats in chronological order
 - Climax: The single most shocking/dramatic moment at peak intensity
-- Resolution: Short, punchy ending that leaves viewers wanting more`
-}
+- Resolution: Short, punchy ending that leaves viewers wanting more
 
 ${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYLE/LENGTH DETAILS ABOVE WHEN CONFLICTING):\n${callerInstructionsBlock}\n` : ""}${dialogueTimingLockBlock}${viralBalanceBlock}
 
@@ -1286,33 +1254,25 @@ ${transcript}
     // Key rotation into the paid App pool stays App-API-only.
     const fallbackModels = isOwnApi
       ? [
-          // SURGICAL FIX: 11 verified active models (Sep 2026). Removed deprecated 2.5-flash, 2.5-flash-lite, 3.1-flash.
-          // Added gemini-3.8-flash (newest). Ordered: newest → oldest, full → lite.
-          "gemini-3.8-flash",
+          "gemini-2.5-flash",
+          "gemini-flash-lite-latest",
+          "gemini-flash-latest",
+          "gemini-2.5-flash-lite",
+          "gemini-3.5-flash-lite",
+          "gemini-3.1-flash-lite",
           "gemini-3.7-flash",
           "gemini-3.6-flash",
           "gemini-3.5-flash",
-          "gemini-3.5-flash-lite",
-          "gemini-3.1-flash-lite",
-          "gemini-3.8-flash", // retry newest once more after lite fallbacks
-          "gemini-3.7-flash", // retry second-newest
-          "gemini-3.6-flash", // retry third
-          "gemini-3.5-flash", // retry fourth
-          "gemini-3.5-flash-lite", // last resort lite
+          "gemini-3.1-flash",
         ]
       : [
-          // App API pool: same 11 verified models, ordered for best quality first
-          "gemini-3.8-flash",
           "gemini-3.7-flash",
           "gemini-3.6-flash",
           "gemini-3.5-flash",
-          "gemini-3.5-flash-lite",
-          "gemini-3.1-flash-lite",
-          "gemini-3.8-flash", // retry newest with rotated key
-          "gemini-3.7-flash", // retry second-newest with rotated key
-          "gemini-3.6-flash", // retry third with rotated key
-          "gemini-3.5-flash", // retry fourth with rotated key
-          "gemini-3.5-flash-lite", // last resort lite with rotated key
+          "gemini-3.1-flash",
+          "gemini-2.5-flash",
+          "gemini-flash-latest",
+          "gemini-flash-lite-latest",
         ];
     const shouldFallback = (status?: number) => status === 404 || status === 429 || status === 503 || status === 504;
 
@@ -1609,9 +1569,7 @@ ${lastLines}`;
     // the accepted 65% floor, make one media-grounded full rewrite while enough wall
     // time remains. Rewriting (rather than appending after the final timecode) lets the
     // model restore important scenes skipped anywhere in the beginning/middle/end.
-    // SURGICAL FIX: Full rewrite disabled for ALL modes — it rewrites from scratch wasting budget.
-    // STORY mode uses more aggressive continuation passes instead (continue from where it stopped).
-    const initialWindowTotal = 0;
+    const initialWindowTotal = 0; // Disabled: use continuation pass instead of full rewrite to save tokens
     if (
       sourceDurationSec &&
       initialWindowTotal === 1 &&
@@ -1704,9 +1662,7 @@ ${normalizedRawScript}`;
       const t = paraTimecodeSec(p);
       if (t !== null && t > _preCheckLastTc) _preCheckLastTc = t;
     }
-    // SURGICAL FIX: STORY mode requires 97% coverage (practically full video), others keep 85%
-    const coverageThreshold = narrationStyle === "STORY" ? 0.97 : 0.85;
-    const coverageIncomplete = sourceDurationSec ? _preCheckLastTc < sourceDurationSec * coverageThreshold : false;
+    const coverageIncomplete = sourceDurationSec ? _preCheckLastTc < sourceDurationSec * 0.85 : false;
     if (
       sourceDurationSec &&
       (isWindowMode ||
@@ -1715,9 +1671,9 @@ ${normalizedRawScript}`;
       endsAtCompleteSentence(lengthAdjustedScript) &&
       remainingBudget() > 22000
     ) {
-      // SURGICAL FIX: STORY mode gets up to 3 continuation passes (continue from where it stopped).
-      // This achieves near-100% coverage without rewriting from scratch. VIRAL/HYBRID keep 1 pass.
-      const passCount = isWindowMode ? windowTotal - 1 : narrationStyle === "STORY" ? 3 : 1;
+      // Pass 1 already covered window 1. Run one pass per remaining window (or a
+      // single top-up pass when the source is short but the script came out thin).
+      const passCount = isWindowMode ? windowTotal - 1 : 1;
       let workingScript = lengthAdjustedScript;
 
       for (let pass = 1; pass <= passCount; pass++) {
@@ -1741,9 +1697,7 @@ ${normalizedRawScript}`;
         const boundaryStart = isWindowMode ? Math.floor((sourceDurationSec * (partNo - 1)) / windowTotal) : lastTc;
         const windowStart = isWindowMode ? lastTc : boundaryStart;
         const windowEnd = isLastWindow ? sourceDurationSec : Math.floor((sourceDurationSec * partNo) / windowTotal);
-        // SURGICAL FIX: STORY mode min gap 5s (was 20s — allows covering small remaining tail)
-        const minContGap = narrationStyle === "STORY" ? 5 : 20;
-        if (windowEnd - windowStart < minContGap) break;
+        if (windowEnd - windowStart < 20) break;
         const watchFrom = Math.max(0, windowStart - 5);
         const workingSpokenSec = estimateSpokenSeconds(workingScript);
         const missingSec = isWindowMode
@@ -1921,11 +1875,8 @@ ${workingScript}`;
         const t = paraTimecodeSec(p);
         if (t !== null && t > lastTc) lastTc = t;
       }
-      // SURGICAL FIX: STORY mode ending threshold 97% — fire ending pass unless script reaches near-end
-      const endThreshold = narrationStyle === "STORY" ? sourceDurationSec * 0.97 : sourceDurationSec * 0.88;
-      // SURGICAL FIX: STORY mode minimum gap 5s (was 20s — would skip final 18s of a 10-min video)
-      const minEndGap = narrationStyle === "STORY" ? 5 : 20;
-      if (lastTc > 0 && lastTc < endThreshold && sourceDurationSec - lastTc >= minEndGap) {
+      const endThreshold = sourceDurationSec * 0.88;
+      if (lastTc > 0 && lastTc < endThreshold && sourceDurationSec - lastTc >= 20) {
         const tail = tailParas.slice(-2).join("\n\n");
         const endPrompt = `*** ENDING COVERAGE PASS — COVER ONLY ${tc(lastTc)} to ${tc(sourceDurationSec)} ***
 
