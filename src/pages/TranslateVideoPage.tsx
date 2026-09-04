@@ -33,7 +33,73 @@ import { trackToolVariant } from "@/utils/trackToolVariant";
 import { useCreditDeduction } from "@/hooks/useCreditDeduction";
 import { GoogleGenAI } from "@google/genai";
 
+// === OWN-KEY MODEL FALLBACK CHAIN (Translate Video only) ===
+// Tried in order with the SAME user key. Never falls back to app/paid keys.
+const OWN_MODEL_FALLBACKS = [
+  "gemini-2.5-flash",
+  "gemini-flash-lite-latest",
+  "gemini-flash-latest",
+  "gemini-2.5-flash-lite",
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
+  "gemini-3.7-flash",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash",
+  "gemini-3.1-flash",
+];
+
+const ownErrText = (err: any) =>
+  `${err?.message || ""} ${err?.status || ""} ${(() => {
+    try {
+      return JSON.stringify(err);
+    } catch {
+      return "";
+    }
+  })()}`;
+
+/** Should we move on to the next model with the same key? */
+const shouldTryNextModel = (err: any) => {
+  const t = ownErrText(err);
+  return (
+    /404|not found|not supported|does not support|NOT_FOUND|INVALID_ARGUMENT|400/i.test(t) ||
+    /429|RESOURCE_EXHAUSTED|quota|rate limit|exhausted|503|500|UNAVAILABLE|overloaded/i.test(t)
+  );
+};
+
+/** Run a generateContent request against the own key, walking the model fallback chain. */
+async function ownGenerateWithFallback(apiKey: string, params: Omit<Parameters<GoogleGenAI["models"]["generateContent"]>[0], "model">) {
+  const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
+  let lastErr: any = null;
+  for (const model of OWN_MODEL_FALLBACKS) {
+    try {
+      const res = await ai.models.generateContent({ ...(params as any), model });
+      const txt = res.text || "";
+      if (!txt.trim()) {
+        lastErr = new Error(`Empty response from ${model}`);
+        continue;
+      }
+      return res;
+    } catch (err: any) {
+      lastErr = err;
+      console.warn(`[TranslateVideo][OwnAPI] model ${model} failed:`, err?.message || err);
+      if (shouldTryNextModel(err)) continue;
+      throw err;
+    }
+  }
+  throw lastErr || new Error("All own-key models failed");
+}
+
+/** Surface a caught error to the Lovable preview overlay ("Try to fix") without breaking the UI flow. */
+function surfaceToPreview(err: any, context: string) {
+  const e = err instanceof Error ? err : new Error(String(err?.message || err));
+  e.message = `[TranslateVideo:${context}] ${e.message}`;
+  setTimeout(() => {
+    throw e;
+  }, 0);
+}
+
 type Step = "upload" | "configure" | "processing" | "review_subs" | "rendering" | "result";
+
 
 const ASPECT_RATIOS = {
   "16:9": { w: 16, h: 9, label: "16:9 Landscape" },
