@@ -36,6 +36,7 @@ import { GoogleGenAI } from "@google/genai";
 // SURGICAL FIX: Actual fallback model rotation for Own API key mode.
 // When one model hits rate-limit / quota / error, the next model is tried automatically.
 const OWN_API_FALLBACK_MODELS = [
+  "gemini-2.5-flash",
   "gemini-flash-lite-latest",
   "gemini-flash-latest",
   "gemini-2.5-flash-lite",
@@ -46,6 +47,33 @@ const OWN_API_FALLBACK_MODELS = [
   "gemini-3.5-flash",
   "gemini-3.1-flash",
 ];
+
+// Round-robin cursor so a model that just failed is not retried first next time.
+let ownApiModelCursor = 0;
+const getOwnApiModelRotation = () =>
+  OWN_API_FALLBACK_MODELS.map(
+    (_, i) => OWN_API_FALLBACK_MODELS[(ownApiModelCursor + i) % OWN_API_FALLBACK_MODELS.length],
+  );
+const advanceOwnApiModelCursor = (model: string) => {
+  const idx = OWN_API_FALLBACK_MODELS.indexOf(model);
+  if (idx >= 0) ownApiModelCursor = (idx + 1) % OWN_API_FALLBACK_MODELS.length;
+};
+const lockOwnApiModelCursor = (model: string) => {
+  const idx = OWN_API_FALLBACK_MODELS.indexOf(model);
+  if (idx >= 0) ownApiModelCursor = idx;
+};
+// Only a bad/blocked API key should stop rotation — everything else tries the next model.
+const isOwnApiKeyFatal = (err: any) => {
+  const m = String(err?.message || err?.status || "").toUpperCase();
+  return (
+    m.includes("API_KEY_INVALID") ||
+    m.includes("API KEY NOT VALID") ||
+    m.includes("PERMISSION_DENIED") ||
+    m.includes("UNAUTHENTICATED") ||
+    m.includes("401")
+  );
+};
+
 
 type Step = "upload" | "configure" | "processing" | "review_subs" | "rendering" | "result";
 
@@ -759,7 +787,7 @@ export default function App() {
         // Own API: direct client-side call with FALLBACK MODEL ROTATION
         const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
         let mktSuccess = false;
-        for (const fallbackModel of OWN_API_FALLBACK_MODELS) {
+        for (const fallbackModel of getOwnApiModelRotation()) {
           try {
             const result = await ai.models.generateContent({
               model: fallbackModel,
@@ -772,21 +800,17 @@ export default function App() {
             title = parsed.title || "Untitled";
             description = parsed.description || "";
             mktSuccess = true;
+            lockOwnApiModelCursor(fallbackModel);
             break;
           } catch (modelErr: any) {
             const errMsg = String(modelErr?.message || "");
-            const isRetryable =
-              errMsg.includes("429") ||
-              errMsg.includes("RESOURCE_EXHAUSTED") ||
-              errMsg.includes("503") ||
-              errMsg.includes("limit") ||
-              errMsg.includes("quota") ||
-              errMsg.includes("overloaded");
-            console.warn(`[OwnAPI Marketing] Model ${fallbackModel} failed:`, errMsg);
-            if (!isRetryable) throw modelErr;
-            await new Promise((r) => setTimeout(r, 600));
+            console.warn(`[OwnAPI Marketing] Model ${fallbackModel} failed, rotating:`, errMsg);
+            if (isOwnApiKeyFatal(modelErr)) throw modelErr;
+            advanceOwnApiModelCursor(fallbackModel);
+            await new Promise((r) => setTimeout(r, 500));
           }
         }
+
         if (!mktSuccess) throw new Error("All models exhausted for marketing kit.");
       } else {
         // Server-side via edge function (secure — no API key in browser)
@@ -1750,7 +1774,8 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
 
                 let ownSuccess = false;
                 let ownLastErr: any = null;
-                for (const fallbackModel of OWN_API_FALLBACK_MODELS) {
+                const rotation = getOwnApiModelRotation();
+                for (const fallbackModel of rotation) {
                   try {
                     setProcessingStatus(`Translating segment ${i + 1}/${audioChunks.length} via ${fallbackModel}...`);
                     const ownResult = await ai.models.generateContent({
@@ -1764,31 +1789,21 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                     });
                     text = ownResult.text || "[]";
                     ownSuccess = true;
+                    lockOwnApiModelCursor(fallbackModel);
                     console.log(`[OwnAPI] Segment ${i + 1} succeeded with model: ${fallbackModel}`);
                     break; // Success — exit fallback loop
                   } catch (modelErr: any) {
                     ownLastErr = modelErr;
                     const errMsg = String(modelErr?.message || modelErr?.status || "");
-                    const isModelRetryable =
-                      modelErr?.status === 429 ||
-                      errMsg.includes("429") ||
-                      errMsg.includes("RESOURCE_EXHAUSTED") ||
-                      errMsg.includes("503") ||
-                      errMsg.includes("500") ||
-                      errMsg.includes("UNAVAILABLE") ||
-                      errMsg.includes("overloaded") ||
-                      errMsg.includes("rate") ||
-                      errMsg.includes("quota") ||
-                      errMsg.includes("limit");
-                    console.warn(`[OwnAPI] Model ${fallbackModel} failed (retryable=${isModelRetryable}):`, errMsg);
-                    if (!isModelRetryable) {
-                      // Non-retryable error (e.g. invalid key, permission denied) — stop trying
-                      throw modelErr;
-                    }
+                    console.warn(`[OwnAPI] Model ${fallbackModel} failed, rotating to next model:`, errMsg);
+                    // Only a bad key stops rotation. Any other error (429/quota/404/400/500) → next model.
+                    if (isOwnApiKeyFatal(modelErr)) throw modelErr;
+                    advanceOwnApiModelCursor(fallbackModel);
                     // Wait briefly before trying next model
-                    await new Promise((r) => setTimeout(r, 800));
+                    await new Promise((r) => setTimeout(r, 500));
                   }
                 }
+
                 if (!ownSuccess) {
                   throw new Error(
                     ownLastErr?.message ||
