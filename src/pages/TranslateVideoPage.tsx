@@ -33,7 +33,73 @@ import { trackToolVariant } from "@/utils/trackToolVariant";
 import { useCreditDeduction } from "@/hooks/useCreditDeduction";
 import { GoogleGenAI } from "@google/genai";
 
+// === OWN-KEY MODEL FALLBACK CHAIN (Translate Video only) ===
+// Tried in order with the SAME user key. Never falls back to app/paid keys.
+const OWN_MODEL_FALLBACKS = [
+  "gemini-2.5-flash",
+  "gemini-flash-lite-latest",
+  "gemini-flash-latest",
+  "gemini-2.5-flash-lite",
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
+  "gemini-3.7-flash",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash",
+  "gemini-3.1-flash",
+];
+
+const ownErrText = (err: any) =>
+  `${err?.message || ""} ${err?.status || ""} ${(() => {
+    try {
+      return JSON.stringify(err);
+    } catch {
+      return "";
+    }
+  })()}`;
+
+/** Should we move on to the next model with the same key? */
+const shouldTryNextModel = (err: any) => {
+  const t = ownErrText(err);
+  return (
+    /404|not found|not supported|does not support|NOT_FOUND|INVALID_ARGUMENT|400/i.test(t) ||
+    /429|RESOURCE_EXHAUSTED|quota|rate limit|exhausted|503|500|UNAVAILABLE|overloaded/i.test(t)
+  );
+};
+
+/** Run a generateContent request against the own key, walking the model fallback chain. */
+async function ownGenerateWithFallback(apiKey: string, params: Omit<Parameters<GoogleGenAI["models"]["generateContent"]>[0], "model">) {
+  const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
+  let lastErr: any = null;
+  for (const model of OWN_MODEL_FALLBACKS) {
+    try {
+      const res = await ai.models.generateContent({ ...(params as any), model });
+      const txt = res.text || "";
+      if (!txt.trim()) {
+        lastErr = new Error(`Empty response from ${model}`);
+        continue;
+      }
+      return res;
+    } catch (err: any) {
+      lastErr = err;
+      console.warn(`[TranslateVideo][OwnAPI] model ${model} failed:`, err?.message || err);
+      if (shouldTryNextModel(err)) continue;
+      throw err;
+    }
+  }
+  throw lastErr || new Error("All own-key models failed");
+}
+
+/** Surface a caught error to the Lovable preview overlay ("Try to fix") without breaking the UI flow. */
+function surfaceToPreview(err: any, context: string) {
+  const e = err instanceof Error ? err : new Error(String(err?.message || err));
+  e.message = `[TranslateVideo:${context}] ${e.message}`;
+  setTimeout(() => {
+    throw e;
+  }, 0);
+}
+
 type Step = "upload" | "configure" | "processing" | "review_subs" | "rendering" | "result";
+
 
 const ASPECT_RATIOS = {
   "16:9": { w: 16, h: 9, label: "16:9 Landscape" },
@@ -742,14 +808,13 @@ export default function App() {
         : `Generate a very short, viral shock title (max 5-7 words) and a very short subtitle/hook (max 6-8 words) in Burmese for a generic movie thumbnail. The title should be extremely catchy, dramatic and "clickbaity". Output MUST be a valid JSON object with "title" and "description" keys (use "description" key for the short hook).`;
 
       if (apiMode === "own" && ownApiKey.trim()) {
-        // Own API: direct client-side call
-        const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
-        const result = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
+        // Own API: direct client-side call with model fallback chain
+        const result = await ownGenerateWithFallback(ownApiKey, {
           contents: mktPrompt,
           config: { temperature: 0.9, maxOutputTokens: 2048, responseMimeType: "application/json" },
         });
         const resultText = result.text || "{}";
+
         const jsonMatch = resultText.match(/\{[\s\S]*\}/);
         const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : "{}");
         title = parsed.title || "Untitled";
@@ -1706,16 +1771,14 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
               let text = "[]";
 
               if (apiMode === "own" && ownApiKey.trim()) {
-                // === OWN API MODE: Direct client-side Gemini call ===
-                const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
+                // === OWN API MODE: Direct client-side Gemini call (model fallback chain) ===
                 const ownParts: any[] = [{ inlineData: { mimeType: "audio/wav", data: chunk.base64 } }];
                 if (frameBase64) {
                   ownParts.push({ inlineData: { mimeType: "image/jpeg", data: frameBase64 } });
                 }
                 ownParts.push(parts[parts.length - 1]); // The prompt text part
 
-                const ownResult = await ai.models.generateContent({
-                  model: "gemini-2.5-flash",
+                const ownResult = await ownGenerateWithFallback(ownApiKey, {
                   contents: [{ role: "user", parts: ownParts }],
                   config: {
                     temperature: attempt === 1 ? 0 : 0.2,
@@ -1723,6 +1786,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                     responseMimeType: "application/json",
                   },
                 });
+
                 text = ownResult.text || "[]";
               } else {
                 // === APP API MODE: Server-side edge function (secure) ===
@@ -1796,16 +1860,22 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                 err?.message?.includes("429") ||
                 err?.message?.includes("RESOURCE_EXHAUSTED") ||
                 err?.status === "RESOURCE_EXHAUSTED";
-              if (isRateLimit) {
+              const isOwn = apiMode === "own" && !!ownApiKey.trim();
+              // Own key: all models in the fallback chain share one quota — retry with backoff
+              // instead of aborting on the first 429; only give up after the last attempt.
+              if (isRateLimit && !isOwn) {
                 throw new Error(
                   `API Quota Exceeded! The server API key has hit its rate limit. Please try again later.`,
                 );
               }
               if (attempt >= MAX_CHUNK_ATTEMPTS) {
                 throw new Error(
-                  `Failed to translate segment ${i + 1}. Subtitle မပါဘဲ render မလုပ်ပါဘူး။ ခဏနေရင် ပြန်စမ်းပါ။`,
+                  isOwn && isRateLimit
+                    ? `Own API Key quota ပြည့်နေပါတယ် (segment ${i + 1})။ ခဏနေမှ ပြန်စမ်းပါ သို့မဟုတ် billing ဖွင့်ထားတဲ့ key သုံးပါ။`
+                    : `Failed to translate segment ${i + 1}. Subtitle မပါဘဲ render မလုပ်ပါဘူး။ ခဏနေရင် ပြန်စမ်းပါ။`,
                 );
               }
+
             }
           }
           parsedSubtitles = [...parsedSubtitles, ...chunkAdded];
@@ -1858,6 +1928,8 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
       console.error("Processing error:", error);
       setProcessingStatus(error.message || "Error occurred during processing. Please try again.");
       setProcessingProgress(-1);
+      surfaceToPreview(error, "processing");
+
     }
   };
 
@@ -1932,6 +2004,8 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
       console.error("Rendering error:", error);
       setProcessingStatus(error.message || "Error occurred during rendering. Please try again.");
       setProcessingProgress(-1); // Use -1 to indicate error state
+      surfaceToPreview(error, "rendering");
+
     }
   };
 
