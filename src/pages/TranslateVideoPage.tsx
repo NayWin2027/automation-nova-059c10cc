@@ -35,17 +35,13 @@ import { GoogleGenAI } from "@google/genai";
 
 // SURGICAL FIX: Actual fallback model rotation for Own API key mode.
 // When one model hits rate-limit / quota / error, the next model is tried automatically.
-const OWN_API_FALLBACK_MODELS = [
+const SUBTITLE_MODELS = [
+  "gemini-2.0-flash",
+  "gemini-2.0-flash-001",
   "gemini-2.5-flash",
-  "gemini-flash-lite-latest",
-  "gemini-flash-latest",
   "gemini-2.5-flash-lite",
-  "gemini-3.5-flash-lite",
-  "gemini-3.1-flash-lite",
-  "gemini-3.7-flash",
-  "gemini-3.6-flash",
-  "gemini-3.5-flash",
-  "gemini-3.1-flash",
+  "gemini-1.5-flash-latest",
+  "gemini-1.5-flash",
 ];
 
 // Round-robin cursor so a model that just failed is not retried first next time.
@@ -73,7 +69,6 @@ const isOwnApiKeyFatal = (err: any) => {
     m.includes("401")
   );
 };
-
 
 type Step = "upload" | "configure" | "processing" | "review_subs" | "rendering" | "result";
 
