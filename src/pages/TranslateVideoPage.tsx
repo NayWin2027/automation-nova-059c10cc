@@ -1771,16 +1771,14 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
               let text = "[]";
 
               if (apiMode === "own" && ownApiKey.trim()) {
-                // === OWN API MODE: Direct client-side Gemini call ===
-                const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
+                // === OWN API MODE: Direct client-side Gemini call (model fallback chain) ===
                 const ownParts: any[] = [{ inlineData: { mimeType: "audio/wav", data: chunk.base64 } }];
                 if (frameBase64) {
                   ownParts.push({ inlineData: { mimeType: "image/jpeg", data: frameBase64 } });
                 }
                 ownParts.push(parts[parts.length - 1]); // The prompt text part
 
-                const ownResult = await ai.models.generateContent({
-                  model: "gemini-2.5-flash",
+                const ownResult = await ownGenerateWithFallback(ownApiKey, {
                   contents: [{ role: "user", parts: ownParts }],
                   config: {
                     temperature: attempt === 1 ? 0 : 0.2,
@@ -1788,6 +1786,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                     responseMimeType: "application/json",
                   },
                 });
+
                 text = ownResult.text || "[]";
               } else {
                 // === APP API MODE: Server-side edge function (secure) ===
