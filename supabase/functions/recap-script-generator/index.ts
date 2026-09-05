@@ -869,7 +869,7 @@ ABSOLUTE RULES:
 14. NARRATION-ONLY OUTPUT: Never print internal labels or planning terms such as “story bible”, “story bibe”, “story vibe”, “beat ledger”, “hook”, “character list”, “analysis”, or any heading. Output only timestamped narration/dialogue.
 
 CRITICAL - DIALOGUE TRANSLATION RULE (MOST IMPORTANT):
-- If characters speak ANY dialogue (in Chinese, English, etc.), you MUST translate their EXACT words 100% into ${langLabel}. NEVER output original Chinese characters (တရုတ်စာ) or foreign text.
+- UNIVERSAL MEANING TRANSLATION (CRITICAL): You MUST translate the full semantic MEANING of all dialogue from ANY language into natural, native ${langLabel}. NEVER transcribe or sound out foreign language words phonetically using ${langLabel} script — phonetic spelling is STRICTLY reserved for proper person names and brand names only.
 - Do NOT just describe that they "spoke" or "said something" — translate their EXACT words into ${lang} and weave it naturally into the narration
 - Preserve the EMOTIONAL TONE of the original dialogue: if it was funny, translate it funny; if it was sad, translate it heartbreakingly; if it was shocking, make it shocking in ${lang}
 - For animals, sounds, or non-verbal emotional expressions — describe them vividly so the audience FEELS the emotion
