@@ -1502,6 +1502,14 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const dubModeRef = useRef(false);
     const translateModeRef = useRef(false);
     const origAudioGainRef = useRef<GainNode | null>(null);
+    // SURGICAL FIX (Dub/Translate REC audio): a media element can only ever have ONE
+    // MediaElementAudioSourceNode, and it must live in a context that stays open.
+    // Reuse one persistent AudioContext + source nodes across recordings, otherwise the
+    // second recording throws InvalidStateError and the whole audio graph (TTS included)
+    // is silently dropped from the recorded stream.
+    const persistentAudioCtxRef = useRef<AudioContext | null>(null);
+    const ttsSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+    const videoSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
     useEffect(() => {
       dubModeRef.current = narrationStyle === "DUBBING" || narrationStyle === "TRANSLATE";
       translateModeRef.current = narrationStyle === "TRANSLATE";
