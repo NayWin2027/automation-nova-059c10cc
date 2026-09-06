@@ -1955,7 +1955,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       let videoGainNode: GainNode | null = null;
       const isDub = narrationStyle === "DUBBING" || narrationStyle === "TRANSLATE";
       const stopDubRecordingAtVideoEnd = () => {
-        if (isDub && recorder.state !== "inactive") recorder.stop();
+        const videoAtEnd =
+          videoEl.ended ||
+          (Number.isFinite(videoEl.duration) && videoEl.duration > 0 && videoEl.currentTime >= videoEl.duration - 0.05);
+        if (isDub && videoAtEnd && recorder.state !== "inactive") recorder.stop();
       };
 
       try {
@@ -2028,7 +2031,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // This ensures perfect AV sync for all output videos.
         const av = audioRef.current;
         let exactDurationSecs = recordingElapsedSecs;
-        if (av && Number.isFinite(av.duration) && av.duration > 0) {
+        if (isDub && Number.isFinite(videoEl.duration) && videoEl.duration > 0) {
+          exactDurationSecs = videoEl.duration;
+        } else if (av && Number.isFinite(av.duration) && av.duration > 0) {
           exactDurationSecs = av.duration;
         }
         // Clamp to 3 decimal places for ffmpeg and metadata
