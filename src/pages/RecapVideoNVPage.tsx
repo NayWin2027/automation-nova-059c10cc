@@ -1956,26 +1956,57 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       const isDub = narrationStyle === "DUBBING" || narrationStyle === "TRANSLATE";
 
       try {
-        audioCtx = new AudioContext();
+        // Reuse the persistent context/source nodes (see refs above)
+        if (!persistentAudioCtxRef.current || persistentAudioCtxRef.current.state === "closed") {
+          persistentAudioCtxRef.current = new AudioContext();
+          ttsSourceRef.current = null;
+          videoSourceRef.current = null;
+        }
+        audioCtx = persistentAudioCtxRef.current;
+        if (audioCtx.state === "suspended") {
+          try {
+            await audioCtx.resume();
+          } catch (_) {}
+        }
         const dest = audioCtx.createMediaStreamDestination();
-        const ttsSource = audioCtx.createMediaElementSource(audioEl);
+        if (!ttsSourceRef.current) {
+          ttsSourceRef.current = audioCtx.createMediaElementSource(audioEl);
+        }
+        const ttsSource = ttsSourceRef.current;
+        try {
+          ttsSource.disconnect();
+        } catch (_) {}
         ttsSource.connect(dest);
         ttsSource.connect(audioCtx.destination);
 
         // DUBBING MODE: မူရင်းဗီဒီယို အသံ (Music/Effects) ကို ဖမ်းယူခြင်း
         if (isDub) {
-          videoEl.muted = false;
-          const videoSource = audioCtx.createMediaElementSource(videoEl);
-          videoGainNode = audioCtx.createGain();
-          videoSource.connect(videoGainNode);
-          videoGainNode.connect(dest);
-          videoGainNode.connect(audioCtx.destination);
+          try {
+            videoEl.muted = false;
+            videoEl.volume = 1;
+            if (!videoSourceRef.current) {
+              videoSourceRef.current = audioCtx.createMediaElementSource(videoEl);
+            }
+            const videoSource = videoSourceRef.current;
+            try {
+              videoSource.disconnect();
+            } catch (_) {}
+            videoGainNode = audioCtx.createGain();
+            videoSource.connect(videoGainNode);
+            videoGainNode.connect(dest);
+            videoGainNode.connect(audioCtx.destination);
+          } catch (vErr) {
+            // Original-audio capture failing must NEVER drop the TTS track from the recording
+            console.warn("Original video audio capture skipped:", vErr);
+            videoGainNode = null;
+          }
         }
 
         dest.stream.getAudioTracks().forEach((track: MediaStreamTrack) => canvasStream.addTrack(track));
       } catch (audioErr) {
         console.warn("Could not capture audio for recording:", audioErr);
       }
+
 
       const recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: quality.bitrate });
       recapRecorderRef.current = recorder;
