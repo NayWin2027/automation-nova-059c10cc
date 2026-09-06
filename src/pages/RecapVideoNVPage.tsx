@@ -1502,14 +1502,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const dubModeRef = useRef(false);
     const translateModeRef = useRef(false);
     const origAudioGainRef = useRef<GainNode | null>(null);
-    // SURGICAL FIX (Dub/Translate REC audio): a media element can only ever have ONE
-    // MediaElementAudioSourceNode, and it must live in a context that stays open.
-    // Reuse one persistent AudioContext + source nodes across recordings, otherwise the
-    // second recording throws InvalidStateError and the whole audio graph (TTS included)
-    // is silently dropped from the recorded stream.
-    const persistentAudioCtxRef = useRef<AudioContext | null>(null);
-    const ttsSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
-    const videoSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
     useEffect(() => {
       dubModeRef.current = narrationStyle === "DUBBING" || narrationStyle === "TRANSLATE";
       translateModeRef.current = narrationStyle === "TRANSLATE";
@@ -1952,73 +1944,34 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       const chunks: BlobPart[] = [];
 
       let audioCtx: AudioContext | null = null;
-      let videoGainNode: GainNode | null = null;
-      let ttsGainNode: GainNode | null = null;
-      const isDub = narrationStyle === "DUBBING" || narrationStyle === "TRANSLATE";
-      const stopDubRecordingAtVideoEnd = () => {
-        const videoAtEnd =
-          videoEl.ended ||
-          (Number.isFinite(videoEl.duration) && videoEl.duration > 0 && videoEl.currentTime >= videoEl.duration - 0.05);
-        if (isDub && videoAtEnd && recorder.state !== "inactive") recorder.stop();
-      };
-
       try {
-        // Reuse the persistent context/source nodes (see refs above)
-        if (!persistentAudioCtxRef.current || persistentAudioCtxRef.current.state === "closed") {
-          persistentAudioCtxRef.current = new AudioContext();
-          ttsSourceRef.current = null;
-          videoSourceRef.current = null;
-        }
-        audioCtx = persistentAudioCtxRef.current;
-        if (audioCtx.state === "suspended") {
-          try {
-            await audioCtx.resume();
-          } catch (_) {}
-        }
+        audioCtx = new AudioContext();
+        const source = audioCtx.createMediaElementSource(audioEl);
         const dest = audioCtx.createMediaStreamDestination();
-        if (!ttsSourceRef.current) {
-          ttsSourceRef.current = audioCtx.createMediaElementSource(audioEl);
-        }
-        const ttsSource = ttsSourceRef.current;
-        try {
-          ttsSource.disconnect();
-        } catch (_) {}
-        ttsGainNode = audioCtx.createGain();
-        // Full Dubbing starts with TTS immediately. Translation starts with the source
-        // soundtrack and opens the TTS channel only on translated speech segments.
-        ttsGainNode.gain.value = narrationStyle === "DUBBING" ? 1 : 0;
-        ttsSource.connect(ttsGainNode);
-        ttsGainNode.connect(dest);
-        ttsGainNode.connect(audioCtx.destination);
-
-        // DUBBING MODE: မူရင်းဗီဒီယို အသံ (Music/Effects) ကို ဖမ်းယူခြင်း
-        if (isDub) {
+        source.connect(dest);
+        source.connect(audioCtx.destination);
+        // TRANSLATE mode only: mix the original video audio in, ducked during dialogue.
+        origAudioGainRef.current = null;
+        if (translateModeRef.current && videoRef.current) {
           try {
-            videoEl.muted = false;
-            videoEl.volume = 1;
-            if (!videoSourceRef.current) {
-              videoSourceRef.current = audioCtx.createMediaElementSource(videoEl);
-            }
-            const videoSource = videoSourceRef.current;
-            try {
-              videoSource.disconnect();
-            } catch (_) {}
-            videoGainNode = audioCtx.createGain();
-            videoSource.connect(videoGainNode);
-            videoGainNode.connect(dest);
-            videoGainNode.connect(audioCtx.destination);
-          } catch (vErr) {
-            // Original-audio capture failing must NEVER drop the TTS track from the recording
-            console.warn("Original video audio capture skipped:", vErr);
-            videoGainNode = null;
+            const vEl = videoRef.current;
+            vEl.muted = false;
+            const vSrc = audioCtx.createMediaElementSource(vEl);
+            const vGain = audioCtx.createGain();
+            vGain.gain.value = 1;
+            vSrc.connect(vGain);
+            vGain.connect(dest);
+            vGain.connect(audioCtx.destination);
+            origAudioGainRef.current = vGain;
+          } catch (mixErr) {
+            console.warn("Original audio mix unavailable:", mixErr);
+            origAudioGainRef.current = null;
           }
         }
-
         dest.stream.getAudioTracks().forEach((track: MediaStreamTrack) => canvasStream.addTrack(track));
       } catch (audioErr) {
         console.warn("Could not capture audio for recording:", audioErr);
       }
-
 
       const recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: quality.bitrate });
       recapRecorderRef.current = recorder;
@@ -2029,32 +1982,22 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       };
 
       recorder.onstop = async () => {
-        videoEl.removeEventListener("ended", stopDubRecordingAtVideoEnd);
-        videoEl.removeEventListener("timeupdate", stopDubRecordingAtVideoEnd);
         const recordingElapsedSecs = (Date.now() - recordingStartTime) / 1000;
         // SURGICAL EDIT: FORCE AV SYNC 100% ACCURACY
         // Always use audio duration as the single source of truth for output video duration.
         // This ensures perfect AV sync for all output videos.
         const av = audioRef.current;
         let exactDurationSecs = recordingElapsedSecs;
-        if (isDub && Number.isFinite(videoEl.duration) && videoEl.duration > 0) {
-          exactDurationSecs = videoEl.duration;
-        } else if (av && Number.isFinite(av.duration) && av.duration > 0) {
+        if (av && Number.isFinite(av.duration) && av.duration > 0) {
           exactDurationSecs = av.duration;
         }
         // Clamp to 3 decimal places for ffmpeg and metadata
         exactDurationSecs = Number(exactDurationSecs.toFixed(3));
 
         origAudioGainRef.current = null;
-        // Keep the persistent AudioContext alive (closing it would permanently silence the
-        // media elements whose source nodes belong to it). Just release the recording graph.
-        if (videoGainNode)
+        if (audioCtx)
           try {
-            videoGainNode.disconnect();
-          } catch (_) {}
-        if (ttsGainNode)
-          try {
-            ttsGainNode.disconnect();
+            audioCtx.close();
           } catch (_) {}
         audioCtx = null;
         if (recapIntervalRef.current) {
@@ -2322,6 +2265,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // â”€â”€ BONUS FIX: Reset mid-video teaser so it fires on every recording â”€â”€
       midTeaserShownRef.current = false;
       midTeaserStartRef.current = 0;
+      recorder.start(250);
       // Pre-load logo
       let logoImg: HTMLImageElement | null = null;
       if (logo.url) {
@@ -3279,25 +3223,17 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
       const checkEnded = (): boolean => {
         const av = audioRef.current;
-        // SURGICAL FIX (Dub/Translate only): the source video is the master timeline in these
-        // modes — when it finishes, the recorder must stop even if the TTS element never
-        // fires "ended" (stalled/looped). Other modes keep the original audio-only rule.
-        const videoFinished =
-          isDub &&
-          (videoEl.ended ||
-            (Number.isFinite(videoEl.duration) && videoEl.duration > 0 && videoEl.currentTime >= videoEl.duration - 0.05));
-        if ((av && av.ended) || videoFinished) {
+        if (av && av.ended) {
           if (recorder.state !== "inactive") {
             recorder.stop();
             videoEl.pause();
-            if (av) av.pause();
+            av.pause();
             videoEl.playbackRate = 1.0;
           }
           return true;
         }
         return false;
       };
-
 
       const syncAndDraw = (timestamp: number) => {
         if (checkEnded()) return;
@@ -3363,16 +3299,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               audioTs.length > 0 && audioTs[0] && audioTs[0].end > 0
                 ? Math.min(HOOK_SYNC_SEC, audioTs[0].end)
                 : HOOK_SYNC_SEC;
-            const isDub = narrationStyle === "DUBBING" || narrationStyle === "TRANSLATE";
-            if (isDub) {
-              // Dubbing Mode တွင် ဗီဒီယိုကို ဟိုခုန်ဒီခုန် လုံးဝမလုပ်ရ (အစအဆုံး 1.0x အပြည့် Play မည်)
-              if (vv.paused && !vv.ended) {
-                vv.playbackRate = 1.0;
-                vv.play().catch(() => {});
-              }
-              // Zoom ပိတ်ခြင်းကို drawFrame အပိုင်းတွင် ကိုင်တွယ်ပြီးဖြစ်သည်
-            }
-            const isHookPhase = !isDub && currentTime < hookAudioLimit && hookIdx >= 0 && segs.length > hookIdx;
+            const isHookPhase = currentTime < hookAudioLimit && hookIdx >= 0 && segs.length > hookIdx;
 
             if (isHookPhase) {
               // Override: seek video to hook segment's vStart â€” show the dramatic scene
@@ -3771,76 +3698,49 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         // // —— ENCODER PUSH: Ensure encoder receives frames at steady target FPS ——
         // SURGICAL FIX: Single steady tick — draw + encode together at target FPS (no 60fps overload, no stale frames)
-        // =========================================================================
-        // 👇 ဒီနေရာမှာ အခုကုဒ်လေးကို ကပ်ထည့်လိုက်ပါ 👇
-        // =========================================================================
-        // Audio Ducking: စကားပြောချိန် မူရင်းအသံ ပိတ်ပြီး၊ တီးလုံးချိန် မူရင်းအသံ ပြန်ဖွင့်သည်
-        if (videoGainNode && ttsGainNode && audioCtx) {
-          const isSpeakingNow = currentSubtitleRef.current.trim().length > 0;
-          // DUBBING replaces the source soundtrack from REC start to finish.
-          // TRANSLATE replaces it only while translated speech is active.
-          const targetGain = narrationStyle === "DUBBING" ? 0.0 : isSpeakingNow ? 0.0 : 1.0;
-          const targetTtsGain = narrationStyle === "DUBBING" || isSpeakingNow ? 1.0 : 0.0;
-          videoGainNode.gain.setTargetAtTime(targetGain, audioCtx.currentTime, 0.05);
-          ttsGainNode.gain.setTargetAtTime(targetTtsGain, audioCtx.currentTime, 0.02);
-        }
-        // =========================================================================
-
-        // // —— ENCODER PUSH: Ensure encoder receives frames at steady target FPS ——
         if (timestamp - lastDrawTime >= adaptiveFrameInterval) {
           lastDrawTime = timestamp;
           lastEncPushTime = timestamp;
           drawFrame(false);
-          if (timestamp - lastDrawTime >= adaptiveFrameInterval) {
-            lastDrawTime = timestamp;
-            lastEncPushTime = timestamp;
-            drawFrame(false);
-            try {
-              encCtx.drawImage(canvas, 0, 0, encW, encH);
-              if (encTrack && typeof encTrack.requestFrame === "function") encTrack.requestFrame();
-            } catch (e) {
-              console.warn("[RECORDING] Encoder push failed:", e);
-            }
-          }
-
-          recapAnimFrameRef.current = requestAnimationFrame(syncAndDraw);
-        }
-        // 100% MILLISECOND AV SYNC: Initialize video position before playback starts
-        const segs = syncSegmentsRef.current;
-        if (videoRef.current && segs.length > 0) {
-          const firstVStart = (segs[0] as any).vStart ?? 0;
-          videoRef.current.currentTime = firstVStart;
-        }
-
-        // SURGICAL FIX: Ensure perfect audio start by playing ONLY after async recorder setup completes (warmup + logo load)
-        // SURGICAL EDIT: Apply user-selected audioSpeedRate at recording start
-        // DUBBING / TRANSLATE: start REC at the same point as TTS, not before async logo/setup work.
-        recorder.start(250);
-        if (isDub) {
-          videoEl.addEventListener("ended", stopDubRecordingAtVideoEnd);
-          videoEl.addEventListener("timeupdate", stopDubRecordingAtVideoEnd);
-        }
-        if (audioRef.current) {
-          audioRef.current.playbackRate = audioSpeedRate;
-          audioRef.current.play().catch(console.error);
-        }
-        if (videoRef.current) {
-          videoRef.current.playbackRate = 1.0;
-          // SURGICAL FIX: Only auto-play if NOT in a freeze cycle of freezeMode
-          const isFreezeCycle = freezeModeRef.current && audioRef.current!.currentTime % (2 + 12) < 2;
-          if (!isFreezeCycle) {
-            videoRef.current.play().catch((err) => {
-              // SURGICAL IOS FIX: Safely bypass the WebKit muted autoplay bug.
-              console.warn("[RECORDING] iOS Video freeze detected, applying safe hardware reload...", err);
-              videoRef.current!.muted = true;
-              videoRef.current!.load();
-              videoRef.current!.play().catch(console.error);
-            });
+          try {
+            encCtx.drawImage(canvas, 0, 0, encW, encH);
+            if (encTrack && typeof encTrack.requestFrame === "function") encTrack.requestFrame();
+          } catch (e) {
+            console.warn("[RECORDING] Encoder push failed:", e);
           }
         }
 
         recapAnimFrameRef.current = requestAnimationFrame(syncAndDraw);
       };
+      // 100% MILLISECOND AV SYNC: Initialize video position before playback starts
+      const segs = syncSegmentsRef.current;
+      if (videoRef.current && segs.length > 0) {
+        const firstVStart = (segs[0] as any).vStart ?? 0;
+        videoRef.current.currentTime = firstVStart;
+      }
+
+      // SURGICAL FIX: Ensure perfect audio start by playing ONLY after async recorder setup completes (warmup + logo load)
+      // SURGICAL EDIT: Apply user-selected audioSpeedRate at recording start
+      if (audioRef.current) {
+        audioRef.current.playbackRate = audioSpeedRate;
+        audioRef.current.play().catch(console.error);
+      }
+      if (videoRef.current) {
+        videoRef.current.playbackRate = 1.0;
+        // SURGICAL FIX: Only auto-play if NOT in a freeze cycle of freezeMode
+        const isFreezeCycle = freezeModeRef.current && audioRef.current!.currentTime % (2 + 12) < 2;
+        if (!isFreezeCycle) {
+          videoRef.current.play().catch((err) => {
+            // SURGICAL IOS FIX: Safely bypass the WebKit muted autoplay bug.
+            console.warn("[RECORDING] iOS Video freeze detected, applying safe hardware reload...", err);
+            videoRef.current!.muted = true;
+            videoRef.current!.load();
+            videoRef.current!.play().catch(console.error);
+          });
+        }
+      }
+
+      recapAnimFrameRef.current = requestAnimationFrame(syncAndDraw);
     };
 
     // â”€â”€ FIX: Unified useEffect â€” single rAF loop via startRecapRecording â”€â”€
@@ -4326,11 +4226,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     src={videoUrl}
                     className="w-full h-full"
                     style={videoStyles}
-                    muted={
-                      narrationStyle === "TRANSLATE" || narrationStyle === "DUBBING"
-                        ? false
-                        : isRecapPlaying || isRendering
-                    }
+                    muted={narrationStyle === "TRANSLATE" ? false : isRecapPlaying || isRendering}
                     controls={!isRendering && !isRecapPlaying}
                     playsInline
                     autoPlay
