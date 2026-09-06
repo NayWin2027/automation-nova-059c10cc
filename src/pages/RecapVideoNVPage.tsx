@@ -1954,6 +1954,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       let audioCtx: AudioContext | null = null;
       let videoGainNode: GainNode | null = null;
       const isDub = narrationStyle === "DUBBING" || narrationStyle === "TRANSLATE";
+      const stopDubRecordingAtVideoEnd = () => {
+        if (isDub && recorder.state !== "inactive") recorder.stop();
+      };
 
       try {
         // Reuse the persistent context/source nodes (see refs above)
@@ -2017,6 +2020,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       };
 
       recorder.onstop = async () => {
+        videoEl.removeEventListener("ended", stopDubRecordingAtVideoEnd);
+        videoEl.removeEventListener("timeupdate", stopDubRecordingAtVideoEnd);
         const recordingElapsedSecs = (Date.now() - recordingStartTime) / 1000;
         // SURGICAL EDIT: FORCE AV SYNC 100% ACCURACY
         // Always use audio duration as the single source of truth for output video duration.
@@ -2302,7 +2307,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // â”€â”€ BONUS FIX: Reset mid-video teaser so it fires on every recording â”€â”€
       midTeaserShownRef.current = false;
       midTeaserStartRef.current = 0;
-      recorder.start(250);
       // Pre-load logo
       let logoImg: HTMLImageElement | null = null;
       if (logo.url) {
@@ -3758,7 +3762,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // Audio Ducking: စကားပြောချိန် မူရင်းအသံ ပိတ်ပြီး၊ တီးလုံးချိန် မူရင်းအသံ ပြန်ဖွင့်သည်
         if (videoGainNode && audioCtx) {
           const isSpeakingNow = currentSubtitleRef.current.trim().length > 0;
-          const targetGain = isSpeakingNow ? 0.0 : 1.0;
+          // DUBBING replaces the source soundtrack from REC start to finish.
+          // TRANSLATE replaces it only while translated speech is active.
+          const targetGain = narrationStyle === "DUBBING" ? 0.0 : isSpeakingNow ? 0.0 : 1.0;
           videoGainNode.gain.setTargetAtTime(targetGain, audioCtx.currentTime, 0.05);
         }
         // =========================================================================
@@ -3791,6 +3797,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         // SURGICAL FIX: Ensure perfect audio start by playing ONLY after async recorder setup completes (warmup + logo load)
         // SURGICAL EDIT: Apply user-selected audioSpeedRate at recording start
+        // DUBBING / TRANSLATE: start REC at the same point as TTS, not before async logo/setup work.
+        recorder.start(250);
+        if (isDub) {
+          videoEl.addEventListener("ended", stopDubRecordingAtVideoEnd);
+          videoEl.addEventListener("timeupdate", stopDubRecordingAtVideoEnd);
+        }
         if (audioRef.current) {
           audioRef.current.playbackRate = audioSpeedRate;
           audioRef.current.play().catch(console.error);
