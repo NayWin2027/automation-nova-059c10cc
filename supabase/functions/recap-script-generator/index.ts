@@ -1033,7 +1033,23 @@ AFTER the complete narration script, output a final line containing exactly ===S
 }
 ###############################################################`
         : "";
-    const finalSystemPrompt = systemPrompt + seriesBlock;
+    // DUBBING MODE စစ်ဆေးခြင်း
+    const isDub =
+      narrationStyle === "DUBBING" || narrationStyle === "TRANSLATE" || niche === "DUBBING" || niche === "TRANSLATE";
+
+    const dubbingSystemPrompt = `You are a professional Dubbing Script Director and Translator.
+TARGET LANGUAGE: ${langLabel}
+
+THIS IS A 100% DUBBING AND TRANSLATION TASK. THIS IS NOT A RECAP.
+- ABSOLUTELY DO NOT SUMMARIZE. DO NOT CONDENSE. DO NOT SKIP ANY SCENE.
+- You must translate 100% of the spoken dialogue from 00:00 to the very end of the video.
+- For EVERY spoken dialogue, output: [MM:SS] [DIALOGUE:EMOTION] translated dialogue here...
+- Translate the full semantic meaning into natural spoken ${langLabel}.
+- Between dialogue scenes, do NOT invent fake dialogue.
+- Output must cover the entire video duration without shortening the story.`;
+
+    // Dubbing ဖြစ်ပါက Recap Prompt ကို လုံးဝမသုံးဘဲ Dubbing သီးသန့် Prompt သုံးမည်
+    const finalSystemPrompt = isDub ? dubbingSystemPrompt : systemPrompt + seriesBlock;
 
     // ===== BUILD GEMINI REQUEST =====
     let contentParts: any[] = [];
