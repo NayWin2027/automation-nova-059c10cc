@@ -4297,7 +4297,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     src={videoUrl}
                     className="w-full h-full"
                     style={videoStyles}
-                    muted={narrationStyle === "TRANSLATE" ? false : isRecapPlaying || isRendering}
+                    muted={
+                      narrationStyle === "TRANSLATE" || narrationStyle === "DUBBING"
+                        ? false
+                        : isRecapPlaying || isRendering
+                    }
                     controls={!isRendering && !isRecapPlaying}
                     playsInline
                     autoPlay
