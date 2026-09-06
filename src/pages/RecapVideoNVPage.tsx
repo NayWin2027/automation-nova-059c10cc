@@ -3260,17 +3260,25 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
       const checkEnded = (): boolean => {
         const av = audioRef.current;
-        if (av && av.ended) {
+        // SURGICAL FIX (Dub/Translate only): the source video is the master timeline in these
+        // modes — when it finishes, the recorder must stop even if the TTS element never
+        // fires "ended" (stalled/looped). Other modes keep the original audio-only rule.
+        const videoFinished =
+          isDub &&
+          (videoEl.ended ||
+            (Number.isFinite(videoEl.duration) && videoEl.duration > 0 && videoEl.currentTime >= videoEl.duration - 0.05));
+        if ((av && av.ended) || videoFinished) {
           if (recorder.state !== "inactive") {
             recorder.stop();
             videoEl.pause();
-            av.pause();
+            if (av) av.pause();
             videoEl.playbackRate = 1.0;
           }
           return true;
         }
         return false;
       };
+
 
       const syncAndDraw = (timestamp: number) => {
         if (checkEnded()) return;
