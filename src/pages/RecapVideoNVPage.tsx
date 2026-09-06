@@ -1953,6 +1953,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
       let audioCtx: AudioContext | null = null;
       let videoGainNode: GainNode | null = null;
+      let ttsGainNode: GainNode | null = null;
       const isDub = narrationStyle === "DUBBING" || narrationStyle === "TRANSLATE";
       const stopDubRecordingAtVideoEnd = () => {
         const videoAtEnd =
@@ -1982,8 +1983,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         try {
           ttsSource.disconnect();
         } catch (_) {}
-        ttsSource.connect(dest);
-        ttsSource.connect(audioCtx.destination);
+        ttsGainNode = audioCtx.createGain();
+        // Full Dubbing starts with TTS immediately. Translation starts with the source
+        // soundtrack and opens the TTS channel only on translated speech segments.
+        ttsGainNode.gain.value = narrationStyle === "DUBBING" ? 1 : 0;
+        ttsSource.connect(ttsGainNode);
+        ttsGainNode.connect(dest);
+        ttsGainNode.connect(audioCtx.destination);
 
         // DUBBING MODE: မူရင်းဗီဒီယို အသံ (Music/Effects) ကို ဖမ်းယူခြင်း
         if (isDub) {
@@ -2045,6 +2051,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         if (videoGainNode)
           try {
             videoGainNode.disconnect();
+          } catch (_) {}
+        if (ttsGainNode)
+          try {
+            ttsGainNode.disconnect();
           } catch (_) {}
         audioCtx = null;
         if (recapIntervalRef.current) {
@@ -3765,12 +3775,14 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // 👇 ဒီနေရာမှာ အခုကုဒ်လေးကို ကပ်ထည့်လိုက်ပါ 👇
         // =========================================================================
         // Audio Ducking: စကားပြောချိန် မူရင်းအသံ ပိတ်ပြီး၊ တီးလုံးချိန် မူရင်းအသံ ပြန်ဖွင့်သည်
-        if (videoGainNode && audioCtx) {
+        if (videoGainNode && ttsGainNode && audioCtx) {
           const isSpeakingNow = currentSubtitleRef.current.trim().length > 0;
           // DUBBING replaces the source soundtrack from REC start to finish.
           // TRANSLATE replaces it only while translated speech is active.
           const targetGain = narrationStyle === "DUBBING" ? 0.0 : isSpeakingNow ? 0.0 : 1.0;
+          const targetTtsGain = narrationStyle === "DUBBING" || isSpeakingNow ? 1.0 : 0.0;
           videoGainNode.gain.setTargetAtTime(targetGain, audioCtx.currentTime, 0.05);
+          ttsGainNode.gain.setTargetAtTime(targetTtsGain, audioCtx.currentTime, 0.02);
         }
         // =========================================================================
 
