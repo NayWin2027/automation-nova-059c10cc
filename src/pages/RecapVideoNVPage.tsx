@@ -2030,9 +2030,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         exactDurationSecs = Number(exactDurationSecs.toFixed(3));
 
         origAudioGainRef.current = null;
-        if (audioCtx)
+        // Keep the persistent AudioContext alive (closing it would permanently silence the
+        // media elements whose source nodes belong to it). Just release the recording graph.
+        if (videoGainNode)
           try {
-            audioCtx.close();
+            videoGainNode.disconnect();
           } catch (_) {}
         audioCtx = null;
         if (recapIntervalRef.current) {
