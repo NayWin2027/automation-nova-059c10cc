@@ -352,9 +352,9 @@ function estimateSpokenSeconds(text: string): number {
   return asian / 6.8 + latin / 1.9;
 }
 
-const LENGTH_TARGET_RATIO = 0.8;
-const LENGTH_MAX_RATIO = 0.85;
-const LENGTH_MIN_RATIO = 0.75;
+const LENGTH_TARGET_RATIO = 0.7;
+const LENGTH_MAX_RATIO = 0.75;
+const LENGTH_MIN_RATIO = 0.65;
 
 function enforcefullScriptCoverage(script: string, sourceDurationSec?: number | null): string {
   const normalized = script.replace(/\r\n/g, "\n").trim();
@@ -1033,23 +1033,7 @@ AFTER the complete narration script, output a final line containing exactly ===S
 }
 ###############################################################`
         : "";
-    // DUBBING MODE စစ်ဆေးခြင်း
-    const isDub =
-      narrationStyle === "DUBBING" || narrationStyle === "TRANSLATE" || niche === "DUBBING" || niche === "TRANSLATE";
-
-    const dubbingSystemPrompt = `You are a professional Dubbing Script Director and Translator.
-TARGET LANGUAGE: ${langLabel}
-
-THIS IS A 100% DUBBING AND TRANSLATION TASK. THIS IS NOT A RECAP.
-- ABSOLUTELY DO NOT SUMMARIZE. DO NOT CONDENSE. DO NOT SKIP ANY SCENE.
-- You must translate 100% of the spoken dialogue from 00:00 to the very end of the video.
-- For EVERY spoken dialogue, output: [MM:SS] [DIALOGUE:EMOTION] translated dialogue here...
-- Translate the full semantic meaning into natural spoken ${langLabel}.
-- Between dialogue scenes, do NOT invent fake dialogue.
-- Output must cover the entire video duration without shortening the story.`;
-
-    // Dubbing ဖြစ်ပါက Recap Prompt ကို လုံးဝမသုံးဘဲ Dubbing သီးသန့် Prompt သုံးမည်
-    const finalSystemPrompt = isDub ? dubbingSystemPrompt : systemPrompt + seriesBlock;
+    const finalSystemPrompt = systemPrompt + seriesBlock;
 
     // ===== BUILD GEMINI REQUEST =====
     let contentParts: any[] = [];
