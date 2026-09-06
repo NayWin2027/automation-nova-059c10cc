@@ -1502,6 +1502,14 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const dubModeRef = useRef(false);
     const translateModeRef = useRef(false);
     const origAudioGainRef = useRef<GainNode | null>(null);
+    // SURGICAL FIX (Dub/Translate REC audio): a media element can only ever have ONE
+    // MediaElementAudioSourceNode, and it must live in a context that stays open.
+    // Reuse one persistent AudioContext + source nodes across recordings, otherwise the
+    // second recording throws InvalidStateError and the whole audio graph (TTS included)
+    // is silently dropped from the recorded stream.
+    const persistentAudioCtxRef = useRef<AudioContext | null>(null);
+    const ttsSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+    const videoSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
     useEffect(() => {
       dubModeRef.current = narrationStyle === "DUBBING" || narrationStyle === "TRANSLATE";
       translateModeRef.current = narrationStyle === "TRANSLATE";
@@ -1948,26 +1956,57 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       const isDub = narrationStyle === "DUBBING" || narrationStyle === "TRANSLATE";
 
       try {
-        audioCtx = new AudioContext();
+        // Reuse the persistent context/source nodes (see refs above)
+        if (!persistentAudioCtxRef.current || persistentAudioCtxRef.current.state === "closed") {
+          persistentAudioCtxRef.current = new AudioContext();
+          ttsSourceRef.current = null;
+          videoSourceRef.current = null;
+        }
+        audioCtx = persistentAudioCtxRef.current;
+        if (audioCtx.state === "suspended") {
+          try {
+            await audioCtx.resume();
+          } catch (_) {}
+        }
         const dest = audioCtx.createMediaStreamDestination();
-        const ttsSource = audioCtx.createMediaElementSource(audioEl);
+        if (!ttsSourceRef.current) {
+          ttsSourceRef.current = audioCtx.createMediaElementSource(audioEl);
+        }
+        const ttsSource = ttsSourceRef.current;
+        try {
+          ttsSource.disconnect();
+        } catch (_) {}
         ttsSource.connect(dest);
         ttsSource.connect(audioCtx.destination);
 
         // DUBBING MODE: မူရင်းဗီဒီယို အသံ (Music/Effects) ကို ဖမ်းယူခြင်း
         if (isDub) {
-          videoEl.muted = false;
-          const videoSource = audioCtx.createMediaElementSource(videoEl);
-          videoGainNode = audioCtx.createGain();
-          videoSource.connect(videoGainNode);
-          videoGainNode.connect(dest);
-          videoGainNode.connect(audioCtx.destination);
+          try {
+            videoEl.muted = false;
+            videoEl.volume = 1;
+            if (!videoSourceRef.current) {
+              videoSourceRef.current = audioCtx.createMediaElementSource(videoEl);
+            }
+            const videoSource = videoSourceRef.current;
+            try {
+              videoSource.disconnect();
+            } catch (_) {}
+            videoGainNode = audioCtx.createGain();
+            videoSource.connect(videoGainNode);
+            videoGainNode.connect(dest);
+            videoGainNode.connect(audioCtx.destination);
+          } catch (vErr) {
+            // Original-audio capture failing must NEVER drop the TTS track from the recording
+            console.warn("Original video audio capture skipped:", vErr);
+            videoGainNode = null;
+          }
         }
 
         dest.stream.getAudioTracks().forEach((track: MediaStreamTrack) => canvasStream.addTrack(track));
       } catch (audioErr) {
         console.warn("Could not capture audio for recording:", audioErr);
       }
+
 
       const recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: quality.bitrate });
       recapRecorderRef.current = recorder;
@@ -1991,9 +2030,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         exactDurationSecs = Number(exactDurationSecs.toFixed(3));
 
         origAudioGainRef.current = null;
-        if (audioCtx)
+        // Keep the persistent AudioContext alive (closing it would permanently silence the
+        // media elements whose source nodes belong to it). Just release the recording graph.
+        if (videoGainNode)
           try {
-            audioCtx.close();
+            videoGainNode.disconnect();
           } catch (_) {}
         audioCtx = null;
         if (recapIntervalRef.current) {
@@ -3219,17 +3260,25 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
       const checkEnded = (): boolean => {
         const av = audioRef.current;
-        if (av && av.ended) {
+        // SURGICAL FIX (Dub/Translate only): the source video is the master timeline in these
+        // modes — when it finishes, the recorder must stop even if the TTS element never
+        // fires "ended" (stalled/looped). Other modes keep the original audio-only rule.
+        const videoFinished =
+          isDub &&
+          (videoEl.ended ||
+            (Number.isFinite(videoEl.duration) && videoEl.duration > 0 && videoEl.currentTime >= videoEl.duration - 0.05));
+        if ((av && av.ended) || videoFinished) {
           if (recorder.state !== "inactive") {
             recorder.stop();
             videoEl.pause();
-            av.pause();
+            if (av) av.pause();
             videoEl.playbackRate = 1.0;
           }
           return true;
         }
         return false;
       };
+
 
       const syncAndDraw = (timestamp: number) => {
         if (checkEnded()) return;
@@ -4248,7 +4297,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     src={videoUrl}
                     className="w-full h-full"
                     style={videoStyles}
-                    muted={narrationStyle === "TRANSLATE" ? false : isRecapPlaying || isRendering}
+                    muted={
+                      narrationStyle === "TRANSLATE" || narrationStyle === "DUBBING"
+                        ? false
+                        : isRecapPlaying || isRendering
+                    }
                     controls={!isRendering && !isRecapPlaying}
                     playsInline
                     autoPlay
