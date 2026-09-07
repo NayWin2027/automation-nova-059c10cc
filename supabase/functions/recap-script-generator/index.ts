@@ -867,6 +867,7 @@ ABSOLUTE RULES:
 12. NAME NATURALNESS: Introduce a character's name/role once, then use natural pronouns or relationship terms when the subject remains clear. Never begin several consecutive sentences with the same name or “သူ/သူမ”. Reuse the name only when needed to prevent confusion after a speaker/scene change.
 13. COHERENCE LOCK: Before writing, internally build a chronological beat ledger (do NOT print it). Each paragraph must cover the next uncovered beat and clearly preserve cause → action → consequence. A viewer who has never seen the source must understand who acted, why it happened, and what changed.
 14. NARRATION-ONLY OUTPUT: Never print internal labels or planning terms such as “story bible”, “story bibe”, “story vibe”, “beat ledger”, “hook”, “character list”, “analysis”, or any heading. Output only timestamped narration/dialogue.
+15. SENTENCE-ENDING VARIETY (HARD REQUIREMENT): Never end consecutive sentences with the same closing phrase. NEVER use "ပြောလိုက်ပါတယ်" (or any single ending) again and again. Rotate naturally across many different endings so the narration sounds like a real storyteller, e.g. for BURMESE: ...တယ် / ...ခဲ့တယ် / ...လိုက်တယ် / ...တာပဲ / ...တာပေါ့ / ...ပါပဲ / ...နေတာ / ...တော့တာပဲ / ...ပြန်တယ် / ...ဆိုပြီး / ...လို့ ပြောတယ် / ...လို့ ပြန်ပြောလိုက်တယ် / ...လို့ အော်လိုက်တယ် / ...လို့ ကြိမ်းတယ် / ...လို့ ရေရွတ်တယ် / ...လို့ သတိပေးလိုက်တယ်။ For past events prefer ခဲ့တယ် / လုပ်လိုက်တယ် / ပြောတယ် forms. HARD RULE: the same ending form must NOT appear in more than 2 sentences in a row, and no single ending may cover more than about 30% of the whole script. Vary the reporting verb to match the emotion (အော်တယ်၊ လှောင်တယ်၊ ညည်းတယ်၊ ကြိမ်းတယ်၊ ရယ်လိုက်တယ်) instead of repeating one neutral "ပြောလိုက်ပါတယ်". Non-Burmese target languages must follow the same principle in their own natural spoken endings.
 
 CRITICAL - DIALOGUE TRANSLATION RULE (MOST IMPORTANT):
 - UNIVERSAL MEANING TRANSLATION (CRITICAL): You MUST translate the full semantic MEANING of all dialogue from ANY language into natural, native ${langLabel}. NEVER transcribe or sound out foreign language words phonetically using ${langLabel} script — phonetic spelling is STRICTLY reserved for proper person names and brand names only.
@@ -1442,6 +1443,7 @@ ${transcript}
 Rules:
 - Your first word must be the direct continuation of the last incomplete sentence below — no gap, no restart.
 - After completing that sentence, continue narrating any remaining source content.
+- ENDING VARIETY: never end consecutive sentences with the same closing phrase (never repeat "ပြောလိုက်ပါတယ်"); rotate ...တယ်/...ခဲ့တယ်/...လိုက်တယ်/...တာပဲ/...တာပေါ့/...ပါပဲ/...တော့တာပဲ and vary the reporting verb with the emotion.
 - SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, စောက်ပေါက်ပိတ်ထား, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
 - Same language (${lang}), same tone, same [MM:SS] format.
 - Do NOT repeat anything already written.
@@ -1752,6 +1754,7 @@ ${
     ? "- This is the FINAL part: cover every remaining beat including the ENDING/climax."
     : "- This is a MIDDLE part: do NOT write an ending or conclusion — stop mid-story on an unresolved beat."
 }
+- ENDING VARIETY: never end consecutive sentences with the same closing phrase (never repeat "ပြောလိုက်ပါတယ်"); rotate ...တယ်/...ခဲ့တယ်/...လိုက်တယ်/...တာပဲ/...တာပေါ့/...ပါပဲ/...တော့တာပဲ and vary the reporting verb with the emotion.
 - SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, စောက်ပေါက်ပိတ်ထား, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
 - Same language (${lang}), same tone, same [MM:SS] format. Never [HH:MM:SS], never ranges.
 - Target about ${missingSec} seconds of spoken narration. Finish with complete sentences.
@@ -1765,6 +1768,7 @@ CONTINUE the script. Rules:
 - Write ONLY the new paragraphs. Do NOT repeat or rewrite anything already written.
 - Every new paragraph MUST start with a timecode [MM:SS] that is STRICTLY LATER than [${tc(lastTc)}] and must keep increasing.
 - Cover the remaining source content through to the ENDING. Include the beats that were skipped.
+- ENDING VARIETY: never end consecutive sentences with the same closing phrase (never repeat "ပြောလိုက်ပါတယ်"); rotate ...တယ်/...ခဲ့တယ်/...လိုက်တယ်/...တာပဲ/...တာပေါ့/...ပါပဲ/...တော့တာပဲ and vary the reporting verb with the emotion.
 - SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, စောက်ပေါက်ပိတ်ထား, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
 - Same language (${lang}), same tone and same [MM:SS] format. Never use [HH:MM:SS] or ranges.
 - Finish with complete sentences. Add roughly ${missingSec} seconds of spoken narration.
@@ -1891,6 +1895,7 @@ Rules:
 - Every paragraph MUST start with [MM:SS] STRICTLY LATER than [${tc(lastTc)}] and keep increasing. Nothing after [${tc(sourceDurationSec)}].
 - The final fight/climax must get its own paragraphs — never compressed into one sentence.
 - The LAST paragraph must correspond to the source's final scene and end the story properly.
+- ENDING VARIETY: never end consecutive sentences with the same closing phrase (never repeat "ပြောလိုက်ပါတယ်"); rotate ...တယ်/...ခဲ့တယ်/...လိုက်တယ်/...တာပဲ/...တာပေါ့/...ပါပဲ/...တော့တာပဲ and vary the reporting verb with the emotion.
 - SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, စောက်ပေါက်ပိတ်ထား, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
 - Same language (${lang}), same tone, same narrator voice and same [MM:SS] format. Never [HH:MM:SS], never ranges.
 - Finish with a complete sentence.
