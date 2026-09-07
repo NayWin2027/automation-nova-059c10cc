@@ -2427,7 +2427,19 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         // SURGICAL FIX: Freeze/Motion mode runs independently of isZoomEnabled
         // Previously was nested inside isZoomEnabled â€” now runs always when freezeMode is ON
-        if (freezeModeRef.current) {
+        // SURGICAL FIX (dialogue): during character speech, NO zoom at all — plain normal play,
+        // so lips stay natural and the cut reads smooth. Narration keeps existing behavior.
+        const _curSegDraw = (syncSegmentsRef.current as any[])?.[lastIndexRef.current];
+        const _isDialogueNow = _curSegDraw?.isDialogue === true;
+        if (_isDialogueNow) {
+          frozenFrameCapturedRef.current = false;
+          if (videoEl.paused && !videoEl.ended) {
+            videoEl.playbackRate = 1.0;
+            videoEl.play().catch(() => {});
+          }
+          // zoomedSrc* stay at srcCrop* defaults — 100% normal, no zoom/pan
+        } else if (freezeModeRef.current) {
+
           const t = audioEl.currentTime;
           const FREEZE_SEC = 4; // 4s professional news-style zoom
           const MOTION_SEC = 10;
