@@ -1570,11 +1570,20 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         // Use exact timestamp if present; otherwise use previous segment's vEnd (no estimation)
         const rawVStart = parseTime(seg.timestamp);
-        // SURGICAL FIX: Hybrid/Viral dialogue lines already carry their exact source slot.
-        // Story mode and narrator lines keep the existing gap-based timing unchanged.
-        // SURGICAL ROLLBACK: gap-based timing for all modes (exact-range override removed).
-        const dialogueSourceStart: number | null = null;
-        const vStart: number = seg.timestamp && rawVStart > 0 ? rawVStart : lastComputedVEnd;
+        // SURGICAL FIX (per-character lip timing): a dialogue line carries the exact source
+        // moment where THAT character starts speaking. Use it so speaker A's TTS line lands on
+        // speaker A's mouth movement, and B's on B's. Narrator/story lines are unchanged.
+        const dialogueSourceStart: number | null =
+          seg.isDialogue && typeof seg.sourceStartSec === "number" && Number.isFinite(seg.sourceStartSec) && seg.sourceStartSec >= 0
+            ? seg.sourceStartSec
+            : null;
+        const vStart: number =
+          dialogueSourceStart !== null
+            ? dialogueSourceStart
+            : seg.timestamp && rawVStart > 0
+              ? rawVStart
+              : lastComputedVEnd;
+
 
         const nextSeg = scriptData.segments[i + 1];
         let vEnd: number;
@@ -2427,7 +2436,19 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         // SURGICAL FIX: Freeze/Motion mode runs independently of isZoomEnabled
         // Previously was nested inside isZoomEnabled â€” now runs always when freezeMode is ON
-        if (freezeModeRef.current) {
+        // SURGICAL FIX (dialogue): during character speech, NO zoom at all — plain normal play,
+        // so lips stay natural and the cut reads smooth. Narration keeps existing behavior.
+        const _curSegDraw = (syncSegmentsRef.current as any[])?.[lastIndexRef.current];
+        const _isDialogueNow = _curSegDraw?.isDialogue === true;
+        if (_isDialogueNow) {
+          frozenFrameCapturedRef.current = false;
+          if (videoEl.paused && !videoEl.ended) {
+            videoEl.playbackRate = 1.0;
+            videoEl.play().catch(() => {});
+          }
+          // zoomedSrc* stay at srcCrop* defaults — 100% normal, no zoom/pan
+        } else if (freezeModeRef.current) {
+
           const t = audioEl.currentTime;
           const FREEZE_SEC = 4; // 4s professional news-style zoom
           const MOTION_SEC = 10;
