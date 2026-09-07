@@ -1570,11 +1570,20 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         // Use exact timestamp if present; otherwise use previous segment's vEnd (no estimation)
         const rawVStart = parseTime(seg.timestamp);
-        // SURGICAL FIX: Hybrid/Viral dialogue lines already carry their exact source slot.
-        // Story mode and narrator lines keep the existing gap-based timing unchanged.
-        // SURGICAL ROLLBACK: gap-based timing for all modes (exact-range override removed).
-        const dialogueSourceStart: number | null = null;
-        const vStart: number = seg.timestamp && rawVStart > 0 ? rawVStart : lastComputedVEnd;
+        // SURGICAL FIX (per-character lip timing): a dialogue line carries the exact source
+        // moment where THAT character starts speaking. Use it so speaker A's TTS line lands on
+        // speaker A's mouth movement, and B's on B's. Narrator/story lines are unchanged.
+        const dialogueSourceStart: number | null =
+          seg.isDialogue && typeof seg.sourceStartSec === "number" && Number.isFinite(seg.sourceStartSec) && seg.sourceStartSec >= 0
+            ? seg.sourceStartSec
+            : null;
+        const vStart: number =
+          dialogueSourceStart !== null
+            ? dialogueSourceStart
+            : seg.timestamp && rawVStart > 0
+              ? rawVStart
+              : lastComputedVEnd;
+
 
         const nextSeg = scriptData.segments[i + 1];
         let vEnd: number;
