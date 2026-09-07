@@ -120,7 +120,7 @@ type ProcessingStatus = "idle" | "processing" | "done" | "error";
 
 interface ResultViewProps {
   scriptData: RecapScript;
-  narrationStyle: "STORY" | "HYBRID" | "VIRAL" | "DUBBING" | "TRANSLATE";
+  narrationStyle: "STORY" | "HYBRID" | "VIRAL";
   onUpdateScript: (newScript: string) => void;
   onGenerateVoice: () => void;
   voiceMode: "modern" | "normal";
@@ -1498,14 +1498,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     };
 
     const syncSegmentsRef = useRef<ReturnType<typeof Array.prototype.map>>([]);
-    // ── DUBBING / TRANSLATE MODE (surgical, mode-gated only) ──
-    const dubModeRef = useRef(false);
-    const translateModeRef = useRef(false);
-    const origAudioGainRef = useRef<GainNode | null>(null);
-    useEffect(() => {
-      dubModeRef.current = narrationStyle === "DUBBING" || narrationStyle === "TRANSLATE";
-      translateModeRef.current = narrationStyle === "TRANSLATE";
-    }, [narrationStyle]);
 
     const syncSegments = useMemo(() => {
       // â”€â”€ FEATURE: Pacing Intelligence â€” classify segment type for dynamic duration cap â”€â”€
@@ -1612,8 +1604,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           aStartPct: totalWords > 0 ? startWords / totalWords : 0,
           aEndPct: totalWords > 0 ? wordCursor / totalWords : 1,
           text: stripDialogueMetadata(seg.text).replace(TIMECODE_STRIP_RE, "").trim(),
-          rawText: seg.text,
-          isDialogue: !!seg.isDialogue || /\[?\s*DIALOG(?:UE|UAGE)/i.test(seg.text || ""),
+          isDialogue: !!seg.isDialogue, // ဇာတ်ကောင်စကားပြောခန်း ဟုတ်မဟုတ် ချိန်ညှိရန် ထည့်သွင်းခြင်း
         };
       });
     }, [scriptData, narrationStyle]);
@@ -1950,24 +1941,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         const dest = audioCtx.createMediaStreamDestination();
         source.connect(dest);
         source.connect(audioCtx.destination);
-        // TRANSLATE mode only: mix the original video audio in, ducked during dialogue.
-        origAudioGainRef.current = null;
-        if (translateModeRef.current && videoRef.current) {
-          try {
-            const vEl = videoRef.current;
-            vEl.muted = false;
-            const vSrc = audioCtx.createMediaElementSource(vEl);
-            const vGain = audioCtx.createGain();
-            vGain.gain.value = 1;
-            vSrc.connect(vGain);
-            vGain.connect(dest);
-            vGain.connect(audioCtx.destination);
-            origAudioGainRef.current = vGain;
-          } catch (mixErr) {
-            console.warn("Original audio mix unavailable:", mixErr);
-            origAudioGainRef.current = null;
-          }
-        }
         dest.stream.getAudioTracks().forEach((track: MediaStreamTrack) => canvasStream.addTrack(track));
       } catch (audioErr) {
         console.warn("Could not capture audio for recording:", audioErr);
@@ -1994,7 +1967,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // Clamp to 3 decimal places for ffmpeg and metadata
         exactDurationSecs = Number(exactDurationSecs.toFixed(3));
 
-        origAudioGainRef.current = null;
         if (audioCtx)
           try {
             audioCtx.close();
@@ -2591,28 +2563,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // Clamp to the valid source crop bounds.
         zoomedSrcX = Math.max(srcCropX, Math.min(srcCropX + (srcCropW - zoomedSrcW), zoomedSrcX));
         zoomedSrcY = Math.max(srcCropY, Math.min(srcCropY + (srcCropH - zoomedSrcH), zoomedSrcY));
-        // MASTER ZERO-ZOOM OVERRIDE: Eradicate all zoom, pan, rotation, gapZoom, and maskZoom during dialogue
-        const activeSegIdx = lastIndexRef.current;
-        const activeSeg = syncSegmentsRef.current && activeSegIdx >= 0 ? syncSegmentsRef.current[activeSegIdx] : null;
-        const rawIsDialogue = activeSeg
-          ? !!(activeSeg as any).isDialogue || /\[?\s*DIALOG(?:UE|UAGE)/i.test((activeSeg as any).rawText || "")
-          : false;
-        // TRANSLATE mode: duck the original audio only while a character speaks.
-        const _origGain = origAudioGainRef.current;
-        if (_origGain) {
-          const _target = rawIsDialogue ? 0 : 1;
-          if (_origGain.gain.value !== _target) _origGain.gain.value = _target;
-        }
-        // Dubbing/Translate keep the original framing for the whole video (no zoom/pan).
-        const isCurrentDialogue = dubModeRef.current || rawIsDialogue;
-        if (isCurrentDialogue) {
-          zoomedSrcX = srcCropX;
-          zoomedSrcY = srcCropY;
-          zoomedSrcW = srcCropW;
-          zoomedSrcH = srcCropH;
-          rotate = 0;
-          gapZoomHoldRef.current = 1.0;
-        }
 
         // ── SURGICAL FIX: SCENE-CUT MICRO-PAUSE KILLER (desktop) ──
         // (A) draw from the prewarm buffer while the active element re-decodes after a hard cut
@@ -3384,36 +3334,21 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     }
                     _timecodesUsable = increasing && _lastSegVStart > 0;
                   }
-                  const isCurrentDialogue = !!active.isDialogue;
-                  const _needsScale = _hasAudioTs && !_timecodesUsable && !isCurrentDialogue;
-                  // Exact source timecode lock for dialogue (strictly locks to mouth movement start)
-                  const effectiveVStart = isCurrentDialogue
-                    ? active.vStart
-                    : _needsScale
-                      ? Math.min((audioTs[activeIndex].start / _audioDur) * _vidDur, _vidDur - 0.5)
-                      : active.vStart;
-                  const effectiveVEnd = isCurrentDialogue
-                    ? active.vEnd === -1
+                  const _needsScale = _hasAudioTs && !_timecodesUsable;
+                  const effectiveVStart = _needsScale
+                    ? Math.min((audioTs[activeIndex].start / _audioDur) * _vidDur, _vidDur - 0.5)
+                    : active.vStart;
+                  const effectiveVEnd = _needsScale
+                    ? Math.min((audioTs[activeIndex].end / _audioDur) * _vidDur, _vidDur)
+                    : active.vEnd === -1
                       ? vv.duration
-                      : active.vEnd
-                    : _needsScale
-                      ? Math.min((audioTs[activeIndex].end / _audioDur) * _vidDur, _vidDur)
-                      : active.vEnd === -1
-                        ? vv.duration
-                        : active.vEnd;
+                      : active.vEnd;
+                  // Persist for between-segment hold loop
                   lastEffectiveVStartRef.current = effectiveVStart;
                   lastEffectiveVEndRef.current = effectiveVEnd;
                   const vActualEnd = effectiveVEnd;
                   const sourceEnd = vActualEnd > effectiveVStart ? vActualEnd : vv.duration;
-                  // 100% Lip-sync speed matching: aligns mouth movement duration to TTS audio duration
-                  let targetPlaybackRate = 1.0;
-                  if (isCurrentDialogue && _hasAudioTs) {
-                    const audioSegDur = audioTs[activeIndex].end - audioTs[activeIndex].start;
-                    const videoSegDur = sourceEnd - effectiveVStart;
-                    if (audioSegDur > 0 && videoSegDur > 0) {
-                      targetPlaybackRate = Math.min(1.15, Math.max(0.85, videoSegDur / audioSegDur));
-                    }
-                  }
+                  const targetPlaybackRate = 1.0;
 
                   if (activeIndex !== lastIndexRef.current) {
                     // TRUE RECAP: Hard cut — seek ONCE to segment start
@@ -4226,7 +4161,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     src={videoUrl}
                     className="w-full h-full"
                     style={videoStyles}
-                    muted={narrationStyle === "TRANSLATE" ? false : isRecapPlaying || isRendering}
+                    muted={isRecapPlaying || isRendering}
                     controls={!isRendering && !isRecapPlaying}
                     playsInline
                     autoPlay
@@ -5583,10 +5518,7 @@ const VOICE_OPTIONS = [
 ];
 
 // ===== NARRATION STYLE PRESETS (niche-agnostic, prompt-only) =====
-const NARRATION_STYLE_OPTIONS: Record<
-  "STORY" | "HYBRID" | "VIRAL" | "DUBBING" | "TRANSLATE",
-  { emoji: string; label: string; hint: string }
-> = {
+const NARRATION_STYLE_OPTIONS: Record<"STORY" | "HYBRID" | "VIRAL", { emoji: string; label: string; hint: string }> = {
   STORY: {
     emoji: "📖",
     label: "Story Mode — အစအဆုံး ဇာတ်ကြောင်းပြန် (YouTube)",
@@ -5602,31 +5534,9 @@ const NARRATION_STYLE_OPTIONS: Record<
     label: "Viral Mode — မြန်ဆန်ပြင်းထန် (TikTok / Reels)",
     hint: "Short-form အတွက် pacing မြန်၊ dialogue-first",
   },
-  DUBBING: {
-    emoji: "🎙️",
-    label: "Dubbing Mode — Recap to Recap (အသံသွင်းပြန်)",
-    hint: "သူများ recap ကို summary မလုပ်ဘဲ target language နဲ့ အတိအကျ dubbing",
-  },
-  TRANSLATE: {
-    emoji: "🌏",
-    label: "ဘာသာပြန် Mode — မူရင်းအသံ + TTS dubbing",
-    hint: "စကားပြောချိန်မှာပဲ မူရင်းအသံ mute၊ ကျန်ချိန် မူရင်းအသံအတိုင်း",
-  },
 };
 
-// ===== DUBBING / TRANSLATE MODE HEADER (surgical: only used by the 2 new modes) =====
-const isDubStyle = (s: string) => s === "DUBBING" || s === "TRANSLATE";
-const buildDubHeader = (langName: string) => `HARD OVERRIDE — DUBBING JOB, NOT A RECAP.
-Ignore every instruction below about condensing, recapping, cutting scenes, 70% length, hooks or original wording.
-The uploaded video is a FINISHED video. Your only job: translate 100% of what is said into ${langName}, in order, with exact source timecodes, covering the FULL source duration end to end.
-No summarizing. No skipping. No invented lines. Meaning preserved exactly.
-
-`;
-
-function buildNarrationStyleBlock(
-  style: "STORY" | "HYBRID" | "VIRAL" | "DUBBING" | "TRANSLATE",
-  langName: string,
-): string {
+function buildNarrationStyleBlock(style: "STORY" | "HYBRID" | "VIRAL", langName: string): string {
   // SURGICAL: TTS skips foreign glyphs (Chinese names, Latin words), so every
   // character must be transliterated into the target language's own script.
   const translitBlock = `\n\nNATIVE-SCRIPT TRANSLITERATION (MANDATORY — the voice engine skips foreign glyphs):
@@ -5665,29 +5575,6 @@ STREET-SPOKEN STYLE & MODERN SLANG (HYBRID/VIRAL only):
 - Write 100% like real people talk on the street today. Literary/bookish endings (သည်, ၏, ၍, နေသည်, လုပ်နေသည်) are FORBIDDEN. Use တယ်/တာ/လဲ/ကွာ/ပဲ spoken forms.
 - Use current Burmese slang and trend words naturally instead of plain wording, for example: လှတယ် → လန်းတယ်/ချဲပေါက်မှ ခေါ်တီးမယ်/သရေကျတယ်; ချစ်တင်းနှောနေတယ် → မူစကူဒူးနေကြတယ်; တင်ပါးလှတယ် → စစ်ကိုင်းအိုးကြီးလို တင်းနေတယ်; စကားများတယ် → အီးပေါက်တယ် / စောက်ပေါက်ပိတ်ထား; ရစ်တယ်/ဂျီဂျောင်ကျတယ် → ချီးထုပ်ကျတယ်; လိုရင်းမရောက်ဘဲ ဝေ့ဝိုက်နေတယ် → တိုင်ပတ်တယ်; ပြည့်တန်ဆာ → ဖာသည်မ။
 - Slang must fit the moment naturally — never force it into a sad or serious scene where it breaks the emotion.`;
-  if (style === "DUBBING" || style === "TRANSLATE") {
-    const audioRule =
-      style === "TRANSLATE"
-        ? `- The original video audio stays audible everywhere EXCEPT while a character is speaking; during every spoken line the original voice is muted and replaced by our TTS. So dialogue timecodes must be frame-accurate.`
-        : `- The original narration audio is fully muted and replaced by our TTS from start to end.`;
-    return `\n\nMODE — ${style === "TRANSLATE" ? "FAITHFUL TRANSLATION DUBBING" : "RECAP-TO-RECAP DUBBING"} (NOT a recap, NOT a summary):
-- This is a 1:1 DUBBING job. The source is already a finished video. Your ONLY task is to TRANSLATE everything that is said into ${langName}.
-- ABSOLUTELY FORBIDDEN: summarizing, condensing, skipping, merging, re-ordering, adding narration that is not in the source, or cutting "boring" parts.
-- Translate 100% of the spoken content, sentence by sentence, in the exact order it occurs.
-- TOTAL LENGTH = THE FULL SOURCE DURATION. The last timecode must sit at the very end of the source video, not earlier.
-- Zero hallucination: never invent facts, names, jokes or emotions that are not in the source. Meaning must be preserved exactly.
-${audioRule}
-
-TIMECODE ACCURACY (MANDATORY — lip-sync depends on it):
-- Every paragraph starts with the EXACT source timecode where that sentence's first audible syllable begins: [MM:SS] (use [MM:SS.mmm] when you can be more precise).
-- When the speaker changes, ALWAYS start a new paragraph at that new speaker's exact start time. Never merge two speakers into one paragraph.
-- Speaker A's words belong only to Speaker A's time slot; Speaker B's words belong only to Speaker B's slot.
-- Each spoken paragraph is prefixed with [DIALOGUE:EMOTION] after the timecode, where EMOTION is exactly ONE of: ANGRY, SHOUTING, SAD, CRYING, HAPPY, EXCITED, FEARFUL, NERVOUS, SHOCKED, MOCKING, DISGUSTED, PLEADING, WHISPER, PROUD, RELIEVED, CALM.
-- Example: [02:15.400] [DIALOGUE:SAD] "မင်းဘယ်လောက်ခံစားရလဲဆိုတာ ငါသိတယ်"
-- Narration/voice-over in the source (not a character's mouth) keeps the plain format: [02:15] translated narration text.
-- Keep each line's spoken length close to the source line's length so the voice fits inside the speaker's mouth-movement window: match the source line's pace, do not pad and do not truncate the meaning.
-- If nothing is said in a stretch of the source, output NOTHING for that stretch — no filler narration, no scene description.${translitBlock}`;
-  }
   if (style === "HYBRID") {
     return `\n\nNARRATION STYLE — HYBRID (narration + direct speech):
 - Use narrator voice for background, context, and explanation.
@@ -5763,7 +5650,7 @@ const RecapVideoNVPage: React.FC = () => {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState("my-MM");
   // ===== NARRATION STYLE (additive — prompt-only, does not touch render/AV-sync) =====
-  const [narrationStyle, setNarrationStyle] = useState<"STORY" | "HYBRID" | "VIRAL" | "DUBBING" | "TRANSLATE">("STORY");
+  const [narrationStyle, setNarrationStyle] = useState<"STORY" | "HYBRID" | "VIRAL">("STORY");
   const [selectedVoice, setSelectedVoice] = useState("edge:my-MM-ThihaNeural");
 
   // Auto-update selected voice when selected language changes
@@ -6279,7 +6166,7 @@ const RecapVideoNVPage: React.FC = () => {
       const scriptBody: Record<string, unknown> = {
         fileUri,
         fileMimeType: mimeType,
-        niche: `${isDubStyle(narrationStyle) ? buildDubHeader(selectedLangName) : ""}You are an aggressive international professional YouTube recap editor. Analyze the uploaded movie/video and produce a condensed, fast-paced recap script in ${selectedLangName}. Length must be approximately 70% of the original duration when read aloud (band 65-75%, never below 65%). Start with a shocking hook, build mystery, escalate tension, finish with a climactic payoff. Aggressively cut filler/travel/waiting scenes. Keep only plot twists, key character moments, conflicts, reveals, and the resolution. Write as ONE continuous gripping story with hook transitions between segments. Output each paragraph prefixed by [MM:SS] starting at [00:00] and ending close to the full duration. Use original wording — do NOT quote distinctive dialogue.${burmeseStyleBlock}${buildNarrationStyleBlock(narrationStyle, selectedLangName)}`,
+        niche: `You are an aggressive international professional YouTube recap editor. Analyze the uploaded movie/video and produce a condensed, fast-paced recap script in ${selectedLangName}. Length must be approximately 70% of the original duration when read aloud (band 65-75%, never below 65%). Start with a shocking hook, build mystery, escalate tension, finish with a climactic payoff. Aggressively cut filler/travel/waiting scenes. Keep only plot twists, key character moments, conflicts, reveals, and the resolution. Write as ONE continuous gripping story with hook transitions between segments. Output each paragraph prefixed by [MM:SS] starting at [00:00] and ending close to the full duration. Use original wording — do NOT quote distinctive dialogue.${burmeseStyleBlock}${buildNarrationStyleBlock(narrationStyle, selectedLangName)}`,
         language: selectedLangName,
         sourceDurationSec: duration,
         narrationStyle,
@@ -6839,7 +6726,7 @@ const RecapVideoNVPage: React.FC = () => {
         fileUri,
         fileMimeType: mimeType,
         // â”€â”€ INTELLIGENT RECAP EDITOR PROMPT (surgical edit â€” comprehensive recap instructions) â”€â”€
-        niche: `${isDubStyle(narrationStyle) ? buildDubHeader(selectedLangName) : ""}You are an aggressive international professional YouTube recap editor.
+        niche: `You are an aggressive international professional YouTube recap editor.
 
 Your task is to analyze the uploaded movie/video and create a condensed, fast-paced recap version like the best YouTube movie recap channels. Do NOT simply speed up or use only the first part. You must understand the FULL STORY and then cut it down ruthlessly.
 
@@ -7383,10 +7270,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
           {/* ===== NARRATION STYLE (additive, prompt-only) ===== */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-neon-cyan">🎙️ ဇာတ်ကြောင်းပြောစတိုင် (Narration Style)</label>
-            <Select
-              value={narrationStyle}
-              onValueChange={(v) => setNarrationStyle(v as "STORY" | "HYBRID" | "VIRAL" | "DUBBING" | "TRANSLATE")}
-            >
+            <Select value={narrationStyle} onValueChange={(v) => setNarrationStyle(v as "STORY" | "HYBRID" | "VIRAL")}>
               <SelectTrigger className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-slate-100 shadow-[0_20px_50px_rgba(15,23,42,0.45)] transition hover:border-amber-400">
                 <span className="inline-flex items-center gap-2 truncate">
                   <span>{NARRATION_STYLE_OPTIONS[narrationStyle].emoji}</span>
@@ -7395,9 +7279,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-slate-950 border border-slate-700 shadow-2xl z-50">
-                {(
-                  Object.keys(NARRATION_STYLE_OPTIONS) as Array<"STORY" | "HYBRID" | "VIRAL" | "DUBBING" | "TRANSLATE">
-                ).map((key) => (
+                {(Object.keys(NARRATION_STYLE_OPTIONS) as Array<"STORY" | "HYBRID" | "VIRAL">).map((key) => (
                   <SelectItem
                     key={key}
                     value={key}
