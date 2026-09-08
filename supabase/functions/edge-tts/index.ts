@@ -120,6 +120,47 @@ async function synthesizeOne(
   return out;
 }
 
+// TIME-LIMIT FIX: synthesize long text in sequential bounded-time chunks so the
+// request keeps progressing instead of hanging until the 150s idle timeout.
+async function synthesize(
+  text: string,
+  voice: string,
+  rate: string,
+  pitch: string,
+  volume: string,
+): Promise<Uint8Array> {
+  const pieces = splitForSynthesis(text);
+  const audios: Uint8Array[] = [];
+  for (const piece of pieces) {
+    let audio: Uint8Array | null = null;
+    let lastErr: unknown = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        audio = await withTimeout(
+          synthesizeOne(piece, voice, rate, pitch, volume),
+          45000,
+          "Edge TTS chunk",
+        );
+        break;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    if (!audio) throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+    audios.push(audio);
+  }
+
+  const total = audios.reduce((s, c) => s + c.length, 0);
+  if (total === 0) throw new Error("No audio received from Edge TTS");
+  const out = new Uint8Array(total);
+  let o = 0;
+  for (const c of audios) {
+    out.set(c, o);
+    o += c.length;
+  }
+  return out;
+}
+
 function toBase64(bytes: Uint8Array): string {
   let binary = "";
   const chunk = 0x8000;
