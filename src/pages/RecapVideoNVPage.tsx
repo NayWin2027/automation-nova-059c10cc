@@ -6510,7 +6510,7 @@ const RecapVideoNVPage: React.FC = () => {
         audioBlob = new Blob([wav], { type: "audio/wav" });
       } else {
         // MP3 Frame များကို တဆက်တည်း ပေါင်းစပ်ခြင်း
-        audioBlob = new Blob(audioChunks, { type: "audio/mpeg" });
+        audioBlob = new Blob(audioChunks as unknown as BlobPart[], { type: "audio/mpeg" });
       }
 
       const url = URL.createObjectURL(audioBlob);
