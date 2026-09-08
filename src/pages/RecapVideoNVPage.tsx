@@ -1570,20 +1570,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         // Use exact timestamp if present; otherwise use previous segment's vEnd (no estimation)
         const rawVStart = parseTime(seg.timestamp);
-        // SURGICAL FIX (per-character lip timing): a dialogue line carries the exact source
-        // moment where THAT character starts speaking. Use it so speaker A's TTS line lands on
-        // speaker A's mouth movement, and B's on B's. Narrator/story lines are unchanged.
-        const dialogueSourceStart: number | null =
-          seg.isDialogue && typeof seg.sourceStartSec === "number" && Number.isFinite(seg.sourceStartSec) && seg.sourceStartSec >= 0
-            ? seg.sourceStartSec
-            : null;
-        const vStart: number =
-          dialogueSourceStart !== null
-            ? dialogueSourceStart
-            : seg.timestamp && rawVStart > 0
-              ? rawVStart
-              : lastComputedVEnd;
-
+        // SURGICAL FIX: Hybrid/Viral dialogue lines already carry their exact source slot.
+        // Story mode and narrator lines keep the existing gap-based timing unchanged.
+        // SURGICAL ROLLBACK: gap-based timing for all modes (exact-range override removed).
+        const dialogueSourceStart: number | null = null;
+        const vStart: number = seg.timestamp && rawVStart > 0 ? rawVStart : lastComputedVEnd;
 
         const nextSeg = scriptData.segments[i + 1];
         let vEnd: number;
@@ -1613,7 +1604,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           aStartPct: totalWords > 0 ? startWords / totalWords : 0,
           aEndPct: totalWords > 0 ? wordCursor / totalWords : 1,
           text: stripDialogueMetadata(seg.text).replace(TIMECODE_STRIP_RE, "").trim(),
-          isDialogue: !!seg.isDialogue, // ဇာတ်ကောင်စကားပြောခန်း ဟုတ်မဟုတ် ချိန်ညှိရန် ထည့်သွင်းခြင်း
         };
       });
     }, [scriptData, narrationStyle]);
@@ -2436,19 +2426,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         // SURGICAL FIX: Freeze/Motion mode runs independently of isZoomEnabled
         // Previously was nested inside isZoomEnabled â€” now runs always when freezeMode is ON
-        // SURGICAL FIX (dialogue): during character speech, NO zoom at all — plain normal play,
-        // so lips stay natural and the cut reads smooth. Narration keeps existing behavior.
-        const _curSegDraw = (syncSegmentsRef.current as any[])?.[lastIndexRef.current];
-        const _isDialogueNow = _curSegDraw?.isDialogue === true;
-        if (_isDialogueNow) {
-          frozenFrameCapturedRef.current = false;
-          if (videoEl.paused && !videoEl.ended) {
-            videoEl.playbackRate = 1.0;
-            videoEl.play().catch(() => {});
-          }
-          // zoomedSrc* stay at srcCrop* defaults — 100% normal, no zoom/pan
-        } else if (freezeModeRef.current) {
-
+        if (freezeModeRef.current) {
           const t = audioEl.currentTime;
           const FREEZE_SEC = 4; // 4s professional news-style zoom
           const MOTION_SEC = 10;
@@ -2620,9 +2598,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           !prewarmActiveRef.current &&
           visibleLoopFrameReadyRef.current;
 
-        // (B) residual gap mask — slow micro zoom-in (max 1%) so any held frame reads as motion
-        // SURGICAL FIX: Only zoom during NARRATION segments, never during dialogue.
-        // And only when gap > 300ms (genuine AV sync issue, not normal seek latency).
+        // (B) residual gap mask — slow micro zoom-in (max 2%) so any held frame reads as motion
         {
           const _now = performance.now();
           if (seekPendingRef.current) {
@@ -2631,10 +2607,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             gapStartRef.current = 0;
           }
           let gapZoom = 1;
-          // Check if current segment is dialogue — if so, NEVER zoom
-          const _curSegForZoom = (syncSegmentsRef.current as any[])?.[lastIndexRef.current];
-          const _isDialogueSeg = _curSegForZoom?.isDialogue === true;
-          const AV_GAP_ZOOM_THRESHOLD_MS = _isDialogueSeg ? Infinity : 300; // dialogue=never zoom, narration=300ms+
+          const AV_GAP_ZOOM_THRESHOLD_MS = 150; // SURGICAL FIX: only zoom when gap > 150ms (real AV sync issue)
           if (gapStartRef.current > 0 && _now - gapStartRef.current > AV_GAP_ZOOM_THRESHOLD_MS) {
             const p = Math.min(1, (_now - gapStartRef.current) / 250);
             gapZoom = 1 + 0.02 * (1 - Math.pow(1 - p, 3));
