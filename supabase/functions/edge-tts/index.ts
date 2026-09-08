@@ -59,6 +59,25 @@ function humanizeBurmese(text: string): string {
   );
 }
 
+// SURGICAL: split long text into chunks so each Edge TTS websocket stays short-lived.
+// One giant request regularly exceeded the 150s edge idle timeout (504 IDLE_TIMEOUT).
+function splitForTts(text: string, maxLen = 900): string[] {
+  const parts = text.split(/(?<=[.!?])\s+/);
+  const chunks: string[] = [];
+  let cur = "";
+  for (const p of parts) {
+    if (!p.trim()) continue;
+    if ((cur + " " + p).trim().length > maxLen && cur) {
+      chunks.push(cur.trim());
+      cur = p;
+    } else {
+      cur = cur ? `${cur} ${p}` : p;
+    }
+  }
+  if (cur.trim()) chunks.push(cur.trim());
+  return chunks.length ? chunks : [text];
+}
+
 async function synthesize(
   text: string,
   voice: string,
