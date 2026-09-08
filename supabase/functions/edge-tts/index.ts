@@ -59,7 +59,33 @@ function humanizeBurmese(text: string): string {
   );
 }
 
-async function synthesize(
+// TIME-LIMIT FIX: split very long text so no single upstream request stalls past
+// the 150s idle limit. Splits on sentence boundaries only; text content unchanged.
+function splitForSynthesis(text: string, maxChars = 1200): string[] {
+  if (text.length <= maxChars) return [text];
+  const parts = text.split(/(?<=[.!?。။])\s+/);
+  const chunks: string[] = [];
+  let cur = "";
+  for (const p of parts) {
+    if (cur && (cur + " " + p).length > maxChars) {
+      chunks.push(cur.trim());
+      cur = p;
+    } else {
+      cur = cur ? cur + " " + p : p;
+    }
+  }
+  if (cur.trim()) chunks.push(cur.trim());
+  return chunks.filter(Boolean);
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms);
+    p.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
+  });
+}
+
+async function synthesizeOne(
   text: string,
   voice: string,
   rate: string,
