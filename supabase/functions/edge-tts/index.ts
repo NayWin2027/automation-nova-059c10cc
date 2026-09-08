@@ -93,14 +93,37 @@ async function synthesize(
   // a foreign language before the Burmese narration). Plain text only; the voice id already
   // pins the language, so no other language can leak in.
   const speakText = humanizeBurmese(text);
-  const communicate = new Communicate(speakText, { voice, rate, pitch, volume, connectionTimeout: 30000 });
+  const pieces = splitForTts(speakText);
 
-  const chunks: Uint8Array[] = [];
-
-  for await (const chunk of communicate.stream()) {
-    if (chunk.type === "audio" && chunk.data) chunks.push(new Uint8Array(chunk.data));
+  async function synthOne(part: string): Promise<Uint8Array[]> {
+    const communicate = new Communicate(part, { voice, rate, pitch, volume, connectionTimeout: 20000 });
+    const acc: Uint8Array[] = [];
+    for await (const chunk of communicate.stream()) {
+      if (chunk.type === "audio" && chunk.data) acc.push(new Uint8Array(chunk.data));
+    }
+    return acc;
   }
 
+  // Bounded parallelism keeps total wall time well under the 150s edge idle timeout
+  // while preserving the exact playback order of the pieces.
+  const CONCURRENCY = 4;
+  const results: Uint8Array[][] = new Array(pieces.length);
+  let cursor = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, pieces.length) }, async () => {
+      while (true) {
+        const i = cursor++;
+        if (i >= pieces.length) return;
+        try {
+          results[i] = await synthOne(pieces[i]);
+        } catch (_e) {
+          results[i] = await synthOne(pieces[i]); // single retry
+        }
+      }
+    }),
+  );
+
+  const chunks: Uint8Array[] = results.flat().filter(Boolean);
   const total = chunks.reduce((s, c) => s + c.length, 0);
   if (total === 0) throw new Error("No audio received from Edge TTS");
 
