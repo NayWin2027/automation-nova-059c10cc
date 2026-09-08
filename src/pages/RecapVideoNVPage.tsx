@@ -1604,6 +1604,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           aStartPct: totalWords > 0 ? startWords / totalWords : 0,
           aEndPct: totalWords > 0 ? wordCursor / totalWords : 1,
           text: stripDialogueMetadata(seg.text).replace(TIMECODE_STRIP_RE, "").trim(),
+          isDialogue: !!seg.isDialogue, // ဇာတ်ကောင်စကားပြောခန်း ဟုတ်မဟုတ် ချိန်ညှိရန် ထည့်သွင်းခြင်း
         };
       });
     }, [scriptData, narrationStyle]);
@@ -2599,6 +2600,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           visibleLoopFrameReadyRef.current;
 
         // (B) residual gap mask — slow micro zoom-in (max 2%) so any held frame reads as motion
+        // SURGICAL FIX: Only zoom during NARRATION segments, never during dialogue.
+        // And only when gap > 300ms (genuine AV sync issue, not normal seek latency).
         {
           const _now = performance.now();
           if (seekPendingRef.current) {
@@ -2607,7 +2610,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             gapStartRef.current = 0;
           }
           let gapZoom = 1;
-          const AV_GAP_ZOOM_THRESHOLD_MS = 150; // SURGICAL FIX: only zoom when gap > 150ms (real AV sync issue)
+          // Check if current segment is dialogue — if so, NEVER zoom
+          const _curSegForZoom = (syncSegmentsRef.current as any[])?.[lastIndexRef.current];
+          const _isDialogueSeg = _curSegForZoom?.isDialogue === true;
+          const AV_GAP_ZOOM_THRESHOLD_MS = _isDialogueSeg ? Infinity : 300; // dialogue=never zoom, narration=300ms+
           if (gapStartRef.current > 0 && _now - gapStartRef.current > AV_GAP_ZOOM_THRESHOLD_MS) {
             const p = Math.min(1, (_now - gapStartRef.current) / 250);
             gapZoom = 1 + 0.02 * (1 - Math.pow(1 - p, 3));
