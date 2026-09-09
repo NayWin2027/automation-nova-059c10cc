@@ -173,7 +173,7 @@ async function synthesize(
   // now a bounded synthesis budget rather than an idle-timeout workaround.
   const requestDeadline = Date.now() + 240_000;
   const parts = splitForTts(text);
-  if (parts.length === 1) return synthesizeOne(text, voice, rate, pitch, volume, requestDeadline);
+  if (parts.length === 1) return synthesizeWithRetry(text, voice, rate, pitch, volume, requestDeadline);
 
   const results: Uint8Array[] = new Array(parts.length);
   const CONCURRENCY = 4;
@@ -184,7 +184,7 @@ async function synthesize(
         const i = cursor++;
         if (i >= parts.length) return;
         if (Date.now() >= requestDeadline) throw new Error("TTS_TIMEOUT");
-        results[i] = await synthesizeOne(parts[i], voice, rate, pitch, volume, requestDeadline);
+        results[i] = await synthesizeWithRetry(parts[i], voice, rate, pitch, volume, requestDeadline);
       }
     }),
   );
