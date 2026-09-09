@@ -89,12 +89,9 @@ async function synthesize(
   pitch: string,
   volume: string,
 ): Promise<Uint8Array> {
-  // The Microsoft websocket currently stalls in the edge runtime because its
-  // custom socket transport is unsupported. Use the fast HTTP Burmese endpoint
-  // for Thiha/Nilar requests so voice generation remains available on every device.
-  if (voice === "my-MM-ThihaNeural" || voice === "my-MM-NilarNeural") {
-    return synthesizeBurmeseHttp(humanizeBurmese(text));
-  }
+  // Every allowed voice (including Burmese Thiha/Nilar) must use the real
+  // Microsoft neural engine. No HTTP/robot fallback.
+
 
   // Microsoft recently requires WebSocket headers/cookies that Deno's native
   // browser-style WebSocket cannot set. The maintained server-side client uses
