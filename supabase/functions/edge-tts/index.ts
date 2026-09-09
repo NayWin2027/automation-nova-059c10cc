@@ -61,7 +61,7 @@ function humanizeBurmese(text: string): string {
 
 // SURGICAL: split long text into chunks so each Edge TTS websocket stays short-lived.
 // One giant request regularly exceeded the 150s edge idle timeout (504 IDLE_TIMEOUT).
-function splitForTts(text: string, maxLen = 900): string[] {
+function splitForTts(text: string, maxLen = 600): string[] {
   const parts = text.split(/(?<=[.!?])\s+/);
   const chunks: string[] = [];
   let cur = "";
@@ -106,7 +106,7 @@ async function synthesize(
 
   // Bounded parallelism keeps total wall time well under the 150s edge idle timeout
   // while preserving the exact playback order of the pieces.
-  const CONCURRENCY = 4;
+  const CONCURRENCY = 8;
   const results: Uint8Array[][] = new Array(pieces.length);
   let cursor = 0;
   await Promise.all(
