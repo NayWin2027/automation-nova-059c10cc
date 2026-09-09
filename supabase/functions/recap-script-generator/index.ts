@@ -539,16 +539,15 @@ LANGUAGE LOCK:
 
         const tModels = [
           MODEL,
-          "gemini-2.5-flash",
-          "gemini-flash-lite-latest",
-          "gemini-flash-latest",
-          "gemini-2.5-flash-lite",
-          "gemini-3.5-flash-lite",
-          "gemini-3.1-flash-lite",
           "gemini-3.7-flash",
-          "gemini-3.6-flash",
           "gemini-3.5-flash",
           "gemini-3.1-flash",
+          "gemini-flash-latest",
+          "gemini-3.5-flash-lite",
+          "gemini-3.1-flash-lite",
+          "gemini-flash-lite-latest",
+          "gemini-2.5-flash",
+          "gemini-2.5-flash-lite",
         ];
         const tShouldFallback = (s?: number) => s === 404 || s === 429 || s === 503 || s === 504;
 
