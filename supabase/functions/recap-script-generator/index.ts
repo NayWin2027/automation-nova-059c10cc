@@ -1254,25 +1254,24 @@ ${transcript}
     // Key rotation into the paid App pool stays App-API-only.
     const fallbackModels = isOwnApi
       ? [
-          "gemini-2.5-flash",
-          "gemini-flash-lite-latest",
-          "gemini-flash-latest",
-          "gemini-2.5-flash-lite",
-          "gemini-3.5-flash-lite",
-          "gemini-3.1-flash-lite",
           "gemini-3.7-flash",
-          "gemini-3.6-flash",
           "gemini-3.5-flash",
           "gemini-3.1-flash",
+          "gemini-flash-latest",
+          "gemini-3.5-flash-lite",
+          "gemini-3.1-flash-lite",
+          "gemini-flash-lite-latest",
+          "gemini-2.5-flash",
+          "gemini-2.5-flash-lite",
         ]
       : [
           "gemini-3.7-flash",
-          "gemini-3.6-flash",
           "gemini-3.5-flash",
           "gemini-3.1-flash",
-          "gemini-2.5-flash",
           "gemini-flash-latest",
+          "gemini-3.5-flash-lite",
           "gemini-flash-lite-latest",
+          "gemini-2.5-flash",
         ];
     const shouldFallback = (status?: number) => status === 404 || status === 429 || status === 503 || status === 504;
 
