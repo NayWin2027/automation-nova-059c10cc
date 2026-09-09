@@ -302,9 +302,16 @@ Deno.serve(async (req) => {
     );
   } catch (e) {
     console.error("edge-tts error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), {
-      status: 500,
-      headers: { ...cors, "Content-Type": "application/json" },
-    });
+    const msg = e instanceof Error ? e.message : String(e);
+    const timedOut = msg.includes("TTS_TIMEOUT");
+    return new Response(
+      JSON.stringify({
+        error: timedOut
+          ? "အသံထုတ်ချိန် ကြာလွန်းလို့ ရပ်လိုက်ပါတယ်။ Script ကို အပိုင်းခွဲပြီး ပြန်ကြိုးစားပါ။"
+          : msg,
+        errorCode: timedOut ? "TTS_TIMEOUT" : undefined,
+      }),
+      { status: timedOut ? 504 : 500, headers: { ...cors, "Content-Type": "application/json" } },
+    );
   }
 });
