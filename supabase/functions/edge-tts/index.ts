@@ -104,7 +104,7 @@ async function synthesize(
   return await new Promise<Uint8Array>((resolve, reject) => {
     const requestId = crypto.randomUUID().replace(/-/g, "");
     const url = `${WSS_URL}&Sec-MS-GEC=${secMsGec}&Sec-MS-GEC-Version=${SEC_MS_GEC_VERSION}&ConnectionId=${requestId}`;
-    const ws = new WebSocket(url, "synthesize", {
+    const ws = new WebSocket(url, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0",
         "Accept-Encoding": "gzip, deflate, br",
@@ -112,6 +112,7 @@ async function synthesize(
         Origin: "chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold",
         Pragma: "no-cache",
         "Cache-Control": "no-cache",
+        "Sec-WebSocket-Protocol": "synthesize",
         Cookie: `muid=${crypto.randomUUID().replace(/-/g, "").toUpperCase()};`,
       },
     });
