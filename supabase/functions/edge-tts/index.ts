@@ -65,6 +65,7 @@ async function synthesizeOne(
   rate: string,
   pitch: string,
   volume: string,
+  requestDeadline: number,
 ): Promise<Uint8Array> {
   // Microsoft recently requires WebSocket headers/cookies that Deno's native
   // browser-style WebSocket cannot set. The maintained server-side client uses
@@ -78,12 +79,25 @@ async function synthesizeOne(
 
   const chunks: Uint8Array[] = [];
 
-  // SURGICAL: hard wall-clock budget so we always answer before the 150s platform
-  // idle timeout (which surfaced as a 504 IDLE_TIMEOUT / blank screen).
-  const deadline = Date.now() + 110_000;
-  for await (const chunk of communicate.stream()) {
-    if (chunk.type === "audio" && chunk.data) chunks.push(new Uint8Array(chunk.data));
-    if (Date.now() > deadline) throw new Error("TTS_TIMEOUT");
+  // Checking the clock inside `for await` is not sufficient: when Microsoft's
+  // websocket stalls before yielding its next chunk, that loop body never runs.
+  // Race the whole stream against a real timer so this function can still send a
+  // controlled response before the platform's fixed 150-second idle cutoff.
+  const remainingMs = Math.max(1, requestDeadline - Date.now());
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      (async () => {
+        for await (const chunk of communicate.stream()) {
+          if (chunk.type === "audio" && chunk.data) chunks.push(new Uint8Array(chunk.data));
+        }
+      })(),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error("TTS_TIMEOUT")), remainingMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
   }
 
   const total = chunks.reduce((s, c) => s + c.length, 0);
@@ -130,8 +144,11 @@ async function synthesize(
   pitch: string,
   volume: string,
 ): Promise<Uint8Array> {
+  // Covers every worker and every chunk, leaving enough time to serialize the
+  // MP3 response and return it before the 150-second platform limit.
+  const requestDeadline = Date.now() + 115_000;
   const parts = splitForTts(text);
-  if (parts.length === 1) return synthesizeOne(text, voice, rate, pitch, volume);
+  if (parts.length === 1) return synthesizeOne(text, voice, rate, pitch, volume, requestDeadline);
 
   const results: Uint8Array[] = new Array(parts.length);
   const CONCURRENCY = 4;
@@ -141,7 +158,8 @@ async function synthesize(
       while (true) {
         const i = cursor++;
         if (i >= parts.length) return;
-        results[i] = await synthesizeOne(parts[i], voice, rate, pitch, volume);
+        if (Date.now() >= requestDeadline) throw new Error("TTS_TIMEOUT");
+        results[i] = await synthesizeOne(parts[i], voice, rate, pitch, volume, requestDeadline);
       }
     }),
   );
