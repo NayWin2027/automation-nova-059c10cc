@@ -1,8 +1,13 @@
 // Microsoft Edge TTS proxy — Burmese voicgeminies (Thiha + Nilar)
 // Surgical, isolated function. Does not touch existing TTS / Recap pipelines.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Communicate } from "npm:edge-tts-universal@1.4.0";
+import { WebSocket } from "npm:ws@8.18.0";
 import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
+
+const TRUSTED_CLIENT_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
+const WSS_URL = `wss://api.msedgeservices.com/tts/cognitiveservices/websocket/v1?Ocp-Apim-Subscription-Key=${TRUSTED_CLIENT_TOKEN}`;
+const CHROMIUM_VERSION = "140.0.3485.14";
+const SEC_MS_GEC_VERSION = `1-${CHROMIUM_VERSION}`;
 
 const ALLOWED_VOICES = new Set([
   "my-MM-ThihaNeural",
@@ -59,27 +64,31 @@ function humanizeBurmese(text: string): string {
   );
 }
 
-async function synthesizeBurmeseHttp(text: string): Promise<Uint8Array> {
-  const pieces = text.match(/.{1,180}(?:\s|$)|.{1,180}/gu)?.map((part) => part.trim()).filter(Boolean) ?? [text];
-  const chunks = await Promise.all(pieces.map(async (piece) => {
-    const url = new URL("https://translate.googleapis.com/translate_tts");
-    url.searchParams.set("ie", "UTF-8");
-    url.searchParams.set("client", "tw-ob");
-    url.searchParams.set("tl", "my");
-    url.searchParams.set("q", piece);
-    const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
-    if (!response.ok) throw new Error(`TTS upstream failed (${response.status})`);
-    return new Uint8Array(await response.arrayBuffer());
-  }));
-  const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-  if (total === 0) throw new Error("No audio received from TTS");
-  const audio = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    audio.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return audio;
+function escapeXml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+async function computeSecMsGec(): Promise<string> {
+  const ticks = BigInt(Math.floor(Date.now() / 1000) + 11644473600) * 10000000n;
+  const rounded = ticks - (ticks % 3000000000n);
+  const source = `${rounded.toString()}${TRUSTED_CLIENT_TOKEN}`;
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(source));
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("")
+    .toUpperCase();
+}
+
+function buildSsml(text: string, voice: string, rate: string, pitch: string, volume: string): string {
+  const locale = voice.split("-").slice(0, 2).join("-") || "my-MM";
+  return `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='${locale}'>` +
+    `<voice name='${voice}'><prosody pitch='${pitch}' rate='${rate}' volume='${volume}'>` +
+    `${escapeXml(text)}</prosody></voice></speak>`;
 }
 
 async function synthesize(
@@ -89,40 +98,77 @@ async function synthesize(
   pitch: string,
   volume: string,
 ): Promise<Uint8Array> {
-  // Every allowed voice (including Burmese Thiha/Nilar) must use the real
-  // Microsoft neural engine. No HTTP/robot fallback.
-
-
-  // Microsoft recently requires WebSocket headers/cookies that Deno's native
-  // browser-style WebSocket cannot set. The maintained server-side client uses
-  // npm ws and sends those headers correctly, fixing the protocol error.
-  // SURGICAL FIX: never wrap in SSML — edge-tts-universal escapes the markup, so the
-  // <speak>/<voice>/<lang> tags were literally spoken at the start of the audio (heard as
-  // a foreign language before the Burmese narration). Plain text only; the voice id already
-  // pins the language, so no other language can leak in.
   const speakText = humanizeBurmese(text);
-  const communicate = new Communicate(speakText, { voice, rate, pitch, volume, connectionTimeout: 30000 });
+  const secMsGec = await computeSecMsGec();
 
-  const chunks: Uint8Array[] = [];
+  return await new Promise<Uint8Array>((resolve, reject) => {
+    const requestId = crypto.randomUUID().replace(/-/g, "");
+    const url = `${WSS_URL}&Sec-MS-GEC=${secMsGec}&Sec-MS-GEC-Version=${SEC_MS_GEC_VERSION}&ConnectionId=${requestId}`;
+    const ws = new WebSocket(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Accept-Language": "en-US,en;q=0.9",
+        Origin: "chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold",
+        Pragma: "no-cache",
+        "Cache-Control": "no-cache",
+        "Sec-WebSocket-Protocol": "synthesize",
+        Cookie: `muid=${crypto.randomUUID().replace(/-/g, "").toUpperCase()};`,
+      },
+    });
+    const chunks: Uint8Array[] = [];
+    let settled = false;
 
-  // Keep the original single-request flow. This is the fast path that worked
-  // before timeout retries, parallel sockets and streamed JSON were introduced.
-  const deadline = Date.now() + 110_000;
-  for await (const chunk of communicate.stream()) {
-    if (chunk.type === "audio" && chunk.data) chunks.push(new Uint8Array(chunk.data));
-    if (Date.now() > deadline) throw new Error("TTS_TIMEOUT");
-  }
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      try { ws.close(); } catch { /* already closed */ }
+      if (error) {
+        reject(error);
+        return;
+      }
+      const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+      if (total === 0) {
+        reject(new Error("No audio received from Microsoft TTS"));
+        return;
+      }
+      const audio = new Uint8Array(total);
+      let offset = 0;
+      for (const chunk of chunks) {
+        audio.set(chunk, offset);
+        offset += chunk.length;
+      }
+      resolve(audio);
+    };
 
-  const total = chunks.reduce((s, c) => s + c.length, 0);
-  if (total === 0) throw new Error("No audio received from Edge TTS");
+    const timeout = setTimeout(() => finish(new Error("TTS_TIMEOUT")), 30_000);
 
-  const out = new Uint8Array(total);
-  let o = 0;
-  for (const c of chunks) {
-    out.set(c, o);
-    o += c.length;
-  }
-  return out;
+    ws.on("open", () => {
+      const timestamp = new Date().toISOString();
+      ws.send(`X-Timestamp:${timestamp}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n` +
+        `{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}`);
+      ws.send(`X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${timestamp}Z\r\nPath:ssml\r\n\r\n` +
+        buildSsml(speakText, voice, rate, pitch, volume));
+    });
+
+    ws.on("message", (data: Uint8Array, isBinary: boolean) => {
+      if (isBinary) {
+        const bytes = new Uint8Array(data);
+        if (bytes.length < 2) return;
+        const headerLength = (bytes[0] << 8) | bytes[1];
+        const audio = bytes.slice(2 + headerLength);
+        if (audio.length > 0) chunks.push(audio);
+        return;
+      }
+      const message = new TextDecoder().decode(data);
+      if (message.includes("Path:turn.end")) finish();
+    });
+    ws.on("error", (error: Error) => finish(error));
+    ws.on("close", () => {
+      if (!settled) finish(new Error("Microsoft TTS connection closed before completion"));
+    });
+  });
 }
 
 function toBase64(bytes: Uint8Array): string {
