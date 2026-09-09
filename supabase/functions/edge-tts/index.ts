@@ -78,8 +78,12 @@ async function synthesize(
 
   const chunks: Uint8Array[] = [];
 
+  // SURGICAL: hard wall-clock budget so we always answer before the 150s platform
+  // idle timeout (which surfaced as a 504 IDLE_TIMEOUT / blank screen).
+  const deadline = Date.now() + 110_000;
   for await (const chunk of communicate.stream()) {
     if (chunk.type === "audio" && chunk.data) chunks.push(new Uint8Array(chunk.data));
+    if (Date.now() > deadline) throw new Error("TTS_TIMEOUT");
   }
 
   const total = chunks.reduce((s, c) => s + c.length, 0);
