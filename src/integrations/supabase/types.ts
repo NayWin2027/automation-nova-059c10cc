@@ -533,42 +533,6 @@ export type Database = {
         }
         Relationships: []
       }
-      tts_jobs: {
-        Row: {
-          audio_base64: string | null
-          created_at: string
-          error: string | null
-          id: string
-          mime_type: string | null
-          sample_rate: number | null
-          segment_timestamps: Json | null
-          status: string
-          user_id: string
-        }
-        Insert: {
-          audio_base64?: string | null
-          created_at?: string
-          error?: string | null
-          id?: string
-          mime_type?: string | null
-          sample_rate?: number | null
-          segment_timestamps?: Json | null
-          status?: string
-          user_id: string
-        }
-        Update: {
-          audio_base64?: string | null
-          created_at?: string
-          error?: string | null
-          id?: string
-          mime_type?: string | null
-          sample_rate?: number | null
-          segment_timestamps?: Json | null
-          status?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       tutorials: {
         Row: {
           category: string

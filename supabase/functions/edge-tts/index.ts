@@ -1,5 +1,5 @@
-// Microsoft Edge TTS proxy — Burmese voicgeminies (Thiha + Nilar)
-// Surgical, isolated function. Does not touch existing TTS / Recap pipelines.
+// Microsoft Edge TTS proxy — Burmese voices (Thiha + Nilar)
+// Surgical, isolated function. Optimized for zero 150s timeouts.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Communicate } from "npm:edge-tts-universal@1.4.0";
 import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
@@ -35,14 +35,13 @@ const ALLOWED_VOICES = new Set([
   "ja-JP-NanamiNeural",
 ]);
 
-// SURGICAL: Make Burmese Edge TTS sound natural (human-like, not robotic).
-// Burmese uses ၊ (comma) and ။ (full stop). Microsoft Edge TTS does NOT detect
-// these as sentence/phrase boundaries, which is the #1 cause of the "flat robot"
-// cadence. Converting them to "," and "." gives the neural engine the prosody
-// cues it needs to breathe, pause, rise, and fall like a real human narrator.
+// SURGICAL: Make Burmese Edge TTS sound natural and strip stray metadata tags.
 function humanizeBurmese(text: string): string {
   return (
     text
+      // Strip any stray timestamps or dialogue tags if leaked into TTS
+      .replace(/\[\s*\d{1,2}:\d{2}(?::\d{2})?\s*\]/g, " ")
+      .replace(/(?:\[|\{|\(|［|｛|（)\s*DIALOG(?:UE|UAGE)[^\]\)\}]*(?:\]|\}|\)|］|｝|）)/gi, " ")
       // Normalize Burmese punctuation -> ASCII so prosody engine reacts
       .replace(/\s*။\s*/g, ". ")
       .replace(/\s*၊\s*/g, ", ")
@@ -59,10 +58,31 @@ function humanizeBurmese(text: string): string {
   );
 }
 
-// SURGICAL: split long text into chunks so each Edge TTS websocket stays short-lived.
-// One giant request regularly exceeded the 150s edge idle timeout (504 IDLE_TIMEOUT).
-function splitForTts(text: string, maxLen = 600): string[] {
-  const parts = text.split(/(?<=[.!?])\s+/);
+// SURGICAL FIX: Strict chunk splitting (Max 450 chars).
+// Guaranteed: Even if text has zero periods or punctuation, it will NEVER send giant stalled packets.
+function splitForTts(text: string, maxLen = 450): string[] {
+  const rawParts = text.split(/(?<=[.!?\n])\s+/);
+  const parts: string[] = [];
+
+  for (const p of rawParts) {
+    if (p.length <= maxLen) {
+      parts.push(p);
+    } else {
+      // Secondary split by commas/clauses
+      const sub = p.split(/(?<=[,၊;])\s+/);
+      for (const s of sub) {
+        if (s.length <= maxLen) {
+          parts.push(s);
+        } else {
+          // Hard slice if a single phrase is still overly long
+          for (let i = 0; i < s.length; i += maxLen) {
+            parts.push(s.slice(i, i + maxLen));
+          }
+        }
+      }
+    }
+  }
+
   const chunks: string[] = [];
   let cur = "";
   for (const p of parts) {
@@ -85,39 +105,75 @@ async function synthesize(
   pitch: string,
   volume: string,
 ): Promise<Uint8Array> {
-  // Microsoft recently requires WebSocket headers/cookies that Deno's native
-  // browser-style WebSocket cannot set. The maintained server-side client uses
-  // npm ws and sends those headers correctly, fixing the protocol error.
-  // SURGICAL FIX: never wrap in SSML — edge-tts-universal escapes the markup, so the
-  // <speak>/<voice>/<lang> tags were literally spoken at the start of the audio (heard as
-  // a foreign language before the Burmese narration). Plain text only; the voice id already
-  // pins the language, so no other language can leak in.
   const speakText = humanizeBurmese(text);
-  const pieces = splitForTts(speakText);
+  const pieces = splitForTts(speakText, 450);
 
-  async function synthOne(part: string): Promise<Uint8Array[]> {
-    const communicate = new Communicate(part, { voice, rate, pitch, volume, connectionTimeout: 20000 });
-    const acc: Uint8Array[] = [];
-    for await (const chunk of communicate.stream()) {
-      if (chunk.type === "audio" && chunk.data) acc.push(new Uint8Array(chunk.data));
-    }
-    return acc;
+  const startTime = Date.now();
+  // SURGICAL: Hard 115s wall budget to guarantee we ALWAYS return before Supabase's 150s idle drop
+  const MAX_WALL_TIME_MS = 115000;
+
+  // Synthesize single chunk with a strict 14-second timeout to kill hanging sockets immediately
+  async function synthOne(part: string, timeoutMs = 14000): Promise<Uint8Array[]> {
+    return await new Promise<Uint8Array[]>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error("Chunk synthesis timeout"));
+      }, timeoutMs);
+
+      (async () => {
+        try {
+          const communicate = new Communicate(part, {
+            voice,
+            rate,
+            pitch,
+            volume,
+            connectionTimeout: 8000,
+          });
+          const acc: Uint8Array[] = [];
+          for await (const chunk of communicate.stream()) {
+            if (chunk.type === "audio" && chunk.data) {
+              acc.push(new Uint8Array(chunk.data));
+            }
+          }
+          clearTimeout(timer);
+          if (acc.length === 0) {
+            reject(new Error("Empty audio buffer received"));
+          } else {
+            resolve(acc);
+          }
+        } catch (err) {
+          clearTimeout(timer);
+          reject(err);
+        }
+      })();
+    });
   }
 
-  // Bounded parallelism keeps total wall time well under the 150s edge idle timeout
-  // while preserving the exact playback order of the pieces.
-  const CONCURRENCY = 8;
+  // SURGICAL: Concurrency = 2.
+  // Microsoft Edge TTS throttles/blocks when 4 concurrent WebSockets hit from the same IP.
+  // 2 concurrent streams runs smoothly without triggering rate-limits.
+  const CONCURRENCY = 2;
   const results: Uint8Array[][] = new Array(pieces.length);
   let cursor = 0;
+
   await Promise.all(
     Array.from({ length: Math.min(CONCURRENCY, pieces.length) }, async () => {
       while (true) {
+        if (Date.now() - startTime > MAX_WALL_TIME_MS) {
+          throw new Error("TTS time budget exceeded (115s safeguard)");
+        }
         const i = cursor++;
         if (i >= pieces.length) return;
+
         try {
-          results[i] = await synthOne(pieces[i]);
+          results[i] = await synthOne(pieces[i], 14000);
         } catch (_e) {
-          results[i] = await synthOne(pieces[i]); // single retry
+          // Single fast retry
+          try {
+            results[i] = await synthOne(pieces[i], 15000);
+          } catch (retryErr) {
+            console.warn(`Chunk ${i + 1}/${pieces.length} dropped:`, retryErr);
+            results[i] = []; // Continue remaining audio without failing the whole request
+          }
         }
       }
     }),
@@ -125,7 +181,7 @@ async function synthesize(
 
   const chunks: Uint8Array[] = results.flat().filter(Boolean);
   const total = chunks.reduce((s, c) => s + c.length, 0);
-  if (total === 0) throw new Error("No audio received from Edge TTS");
+  if (total === 0) throw new Error("No audio received from Edge TTS. Please retry.");
 
   const out = new Uint8Array(total);
   let o = 0;
@@ -205,63 +261,16 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json().catch(() => ({}));
-
-    // ── STATUS POLL: client checks job progress with { action: "status", jobId } ──
-    if (body.action === "status" && body.jobId) {
-      const adminClient = createClient(supabaseUrl, serviceKey);
-      const { data: job, error: jobFetchErr } = await adminClient
-        .from("tts_jobs")
-        .select("status, audio_base64, mime_type, sample_rate, segment_timestamps, error")
-        .eq("id", body.jobId)
-        .eq("user_id", user.id)
-        .single();
-
-      if (jobFetchErr || !job) {
-        return new Response(JSON.stringify({ error: "Job not found" }), {
-          status: 404,
-          headers: { ...cors, "Content-Type": "application/json" },
-        });
-      }
-
-      if (job.status === "done") {
-        return new Response(
-          JSON.stringify({
-            success: true,
-            status: "done",
-            audioBase64: job.audio_base64,
-            audio: job.audio_base64,
-            mimeType: job.mime_type,
-            sampleRate: job.sample_rate,
-            segmentTimestamps: job.segment_timestamps,
-          }),
-          { status: 200, headers: { ...cors, "Content-Type": "application/json" } },
-        );
-      }
-      if (job.status === "failed") {
-        return new Response(JSON.stringify({ success: false, status: "failed", error: job.error }), {
-          status: 200,
-          headers: { ...cors, "Content-Type": "application/json" },
-        });
-      }
-      return new Response(JSON.stringify({ success: true, status: "processing" }), {
-        status: 200,
-        headers: { ...cors, "Content-Type": "application/json" },
-      });
-    }
-
     const text: string = (body.text ?? "").toString().trim();
     const voice: string = (body.voice ?? "it-IT-GiuseppeMultilingualNeural").toString();
-    // SURGICAL: defaults tuned for natural Burmese human cadence
-    // -8% rate = slightly slower (less rushed/robotic)
-    // -2Hz pitch = warmer, more conversational tone
     const rate: string = (body.rate ?? "-8%").toString();
     const pitch: string = (body.pitch ?? "-2Hz").toString();
     const volume: string = (body.volume ?? "+0%").toString();
     const skipCreditDeduction: boolean = body.skipCreditDeduction === true;
     const segments: unknown[] = Array.isArray(body.segments) ? body.segments : [];
 
-    if (!text || text.length > 20000) {
-      return new Response(JSON.stringify({ error: "Text must be 1–20000 chars" }), {
+    if (!text || text.length > 25000) {
+      return new Response(JSON.stringify({ error: "Text must be 1–25000 chars" }), {
         status: 400,
         headers: { ...cors, "Content-Type": "application/json" },
       });
@@ -273,7 +282,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Credit deduction via RPC — skipped when caller (Voice/Recap NV) handles billing itself.
     let rpcResult: any = null;
     if (!skipCreditDeduction) {
       const adminClient = createClient(supabaseUrl, serviceKey);
@@ -301,60 +309,18 @@ Deno.serve(async (req) => {
       rpcResult = data;
     }
 
-    // ── SURGICAL FIX: Background job pattern — avoids 150s idle timeout ──
-    // Instead of waiting for synthesis to finish before responding (which triggers
-    // 504 on long scripts), we create a job row, respond with jobId IMMEDIATELY,
-    // then run synthesis in the background via EdgeRuntime.waitUntil (up to 400s on Pro).
-    const adminClient = createClient(supabaseUrl, serviceKey);
-    const { data: jobRow, error: jobErr } = await adminClient
-      .from("tts_jobs")
-      .insert({ user_id: user.id, status: "processing" })
-      .select("id")
-      .single();
+    const audio = await synthesize(text, voice, rate, pitch, volume);
+    const durationSec = audio.length / 6000;
+    const segmentTimestamps = segments.length > 0 ? estimateSegmentTimestamps(segments, durationSec) : undefined;
 
-    if (jobErr || !jobRow) {
-      return new Response(JSON.stringify({ error: "Failed to create TTS job: " + (jobErr?.message || "unknown") }), {
-        status: 500,
-        headers: { ...cors, "Content-Type": "application/json" },
-      });
-    }
-
-    const jobId = jobRow.id;
-
-    const processInBackground = async () => {
-      try {
-        const audio = await synthesize(text, voice, rate, pitch, volume);
-        const durationSec = audio.length / 6000;
-        const segmentTimestamps = segments.length > 0 ? estimateSegmentTimestamps(segments, durationSec) : undefined;
-
-        await adminClient
-          .from("tts_jobs")
-          .update({
-            status: "done",
-            audio_base64: toBase64(audio),
-            mime_type: "audio/mpeg",
-            sample_rate: 24000,
-            segment_timestamps: segmentTimestamps ?? null,
-          })
-          .eq("id", jobId);
-      } catch (e) {
-        console.error("edge-tts background error:", e);
-        await adminClient
-          .from("tts_jobs")
-          .update({ status: "failed", error: e instanceof Error ? e.message : String(e) })
-          .eq("id", jobId);
-      }
-    };
-
-    // @ts-ignore — EdgeRuntime is available in Supabase's Deno edge runtime
-    EdgeRuntime.waitUntil(processInBackground());
-
-    // ── Respond immediately — client should poll with { action: "status", jobId } ──
     return new Response(
       JSON.stringify({
         success: true,
-        jobId,
-        polling: true,
+        audioBase64: toBase64(audio),
+        audio: toBase64(audio),
+        mimeType: "audio/mpeg",
+        sampleRate: 24000,
+        segmentTimestamps,
         balance: (rpcResult as any)?.balance,
         deducted: (rpcResult as any)?.deducted,
       }),

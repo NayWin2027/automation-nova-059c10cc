@@ -5600,35 +5600,6 @@ STREET-SPOKEN STYLE & MODERN SLANG (HYBRID/VIRAL only):
 - Translate what people actually said when it matters, but stay primarily in narrator voice.${translitBlock}`;
 }
 
-// ── SURGICAL: retry helper for TTS network calls ──
-// Some users on mobile data / weak network have their fetch silently die before
-// any response arrives (network layer, not server timeout). This retries with
-// backoff and gives each attempt a generous per-request timeout via AbortController.
-async function fetchTtsWithRetry(
-  url: string,
-  options: RequestInit,
-  maxAttempts = 3,
-  perAttemptTimeoutMs = 45000,
-): Promise<Response> {
-  let lastErr: any = null;
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), perAttemptTimeoutMs);
-    try {
-      const res = await fetch(url, { ...options, signal: controller.signal });
-      clearTimeout(timeoutId);
-      return res;
-    } catch (err: any) {
-      clearTimeout(timeoutId);
-      lastErr = err;
-      if (attempt < maxAttempts - 1) {
-        await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
-      }
-    }
-  }
-  throw lastErr || new Error("Network request failed after retries");
-}
-
 const RecapVideoNVPage: React.FC = () => {
   const navigate = useNavigate();
   const { isAllowed, isLoading: authLoading } = useAuthGuard("recap-nv");
@@ -6407,233 +6378,141 @@ const RecapVideoNVPage: React.FC = () => {
     segsForSync?: { text: string }[],
     fullSegments?: RecapSegment[],
   ) => {
-    // Voice naturalness: keep Burmese punctuation so TTS can insert realistic micro-pauses.
     let speechTextForAPI = scriptText.replace(/\[.*?\]\s*/g, "");
     if (voiceMode === "normal") {
-      // Remove mainly English punctuation, but keep Burmese "á‹" / "áŠ".
       speechTextForAPI = speechTextForAPI.replace(/[.,!?;:"'()\[\]{}\-_\n\r]/g, " ").replace(/\s+/g, " ");
     }
 
     setStatus("processing");
-    setProgressMsg("🎙️ AI Voice ဖန်တီးနေပါသည်...");
+    setProgressMsg("🎙️ AI Voice စတင်ဖန်တီးနေပါသည်...");
+
     try {
       const {
         data: { session: currentSession },
       } = await supabase.auth.getSession();
       const userToken = currentSession?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-      // â”€â”€ NATIVE VOICE FINE-TUNE: Per-language realistic human voice instructions â”€â”€
-      // Ensures each language sounds like a real human professional native speaker.
-      // For Burmese: eliminates Chinese/European/ethnic minority accent interference.
+
       const langCode = selectedLanguage.split("-")[0];
-      const NATIVE_VOICE_INSTRUCTIONS: Record<string, string> = {
-        my:
-          "You MUST speak in 100% authentic professional native Burmese (á€—á€™á€¬á€…á€€á€¬á€¸) with a modern Yangon-standard accent. " +
-          "Speak exactly like a real professional native Burmese person in their 20s-30s speaking naturally in everyday modern Burmese. " +
-          "DO NOT mix any Chinese tone, Kachin accent, Shan accent, European accent, or any ethnic minority accent whatsoever. " +
-          "Pure á€—á€™á€¬á€œá€±á€žá€¶á€…á€…á€ºá€…á€…á€º only â€” natural, fluent, warm, and confident modern Burmese speaking voice. " +
-          "Pronounce every Burmese syllable, consonant cluster, and tone with perfect native Burmese phonology. " +
-          "Human-like delivery: natural intonation and light breathing; NEVER robotic cadence.",
-        en:
-          "Speak in 100% natural native English with a clear, modern, professional American or British accent. " +
-          "Sound like a real native English-speaking human â€” warm, confident, and naturally fluent.",
-        ja: "100%ãƒã‚¤ãƒ†ã‚£ãƒ–ãªæ—¥æœ¬èªžã§è©±ã—ã¦ãã ã•ã„ã€‚è‡ªç„¶ã§ç¾ä»£çš„ãªæ¨™æº–æ—¥æœ¬èªžã‚¢ã‚¯ã‚»ãƒ³ãƒˆã§ã€æœ¬ç‰©ã®æ—¥æœ¬äººã®ã‚ˆã†ã«è©±ã—ã¦ãã ã•ã„ã€‚",
-        ko: "100% ìžì—°ìŠ¤ëŸ¬ìš´ ì›ì–´ë¯¼ í•œêµ­ì–´ë¡œ ë§í•˜ì„¸ìš”. í˜„ëŒ€ í‘œì¤€ í•œêµ­ì–´ ì–µì–‘ìœ¼ë¡œ ì‹¤ì œ í•œêµ­ ì‚¬ëžŒì²˜ëŸ¼ ìžì—°ìŠ¤ëŸ½ê²Œ ë§í•˜ì„¸ìš”.",
-        th: "à¸žà¸¹à¸”à¸ à¸²à¸©à¸²à¹„à¸—à¸¢à¹à¸šà¸šà¹€à¸ˆà¹‰à¸²à¸‚à¸­à¸‡à¸ à¸²à¸©à¸² 100% à¸”à¹‰à¸§à¸¢à¸ªà¸³à¹€à¸™à¸µà¸¢à¸‡à¹„à¸—à¸¢à¸à¸¥à¸²à¸‡à¸¡à¸²à¸•à¸£à¸à¸²à¸™à¸ªà¸¡à¸±à¸¢à¹ƒà¸«à¸¡à¹ˆ à¹€à¸«à¸¡à¸·à¸­à¸™à¸„à¸™à¹„à¸—à¸¢à¹à¸—à¹‰à¹† à¸žà¸¹à¸”à¸­à¸¢à¹ˆà¸²à¸‡à¹€à¸›à¹‡à¸™à¸˜à¸£à¸£à¸¡à¸Šà¸²à¸•à¸´",
-        zh: "ç”¨100%çº¯æ­£çš„æ™®é€šè¯è¯´è¯ï¼ŒåƒçœŸæ­£çš„ä¸­å›½äººä¸€æ ·è‡ªç„¶æµç•…åœ°è¯´çŽ°ä»£æ ‡å‡†æ™®é€šè¯ã€‚",
-        hi: "100% à¤ªà¥à¤°à¤¾à¤•à¥ƒà¤¤à¤¿à¤• à¤®à¥‚à¤² à¤¹à¤¿à¤‚à¤¦à¥€ à¤®à¥‡à¤‚ à¤¬à¥‹à¤²à¥‡à¤‚à¥¤ à¤†à¤§à¥à¤¨à¤¿à¤• à¤®à¤¾à¤¨à¤• à¤¹à¤¿à¤‚à¤¦à¥€ à¤‰à¤šà¥à¤šà¤¾à¤°à¤£ à¤•à¥‡ à¤¸à¤¾à¤¥ à¤à¤• à¤µà¤¾à¤¸à¥à¤¤à¤µà¤¿à¤• à¤¹à¤¿à¤‚à¤¦à¥€ à¤®à¥‚à¤² à¤µà¤•à¥à¤¤à¤¾ à¤•à¥€ à¤¤à¤°à¤¹ à¤¬à¥‹à¤²à¥‡à¤‚à¥¤",
-        vi: "NÃ³i tiáº¿ng Viá»‡t 100% tá»± nhiÃªn nhÆ° ngÆ°á»i Viá»‡t báº£n xá»©. Giá»ng HÃ  Ná»™i hoáº·c SÃ i GÃ²n chuáº©n, hiá»‡n Ä‘áº¡i vÃ  tá»± nhiÃªn.",
-        id: "Berbicara dalam bahasa Indonesia 100% asli dan alami seperti penutur asli Indonesia modern.",
-        ms: "Bercakap dalam bahasa Melayu 100% asli dan semula jadi seperti penutur asli Melayu moden.",
-        tl: "Magsalita sa 100% natural na katutubong Filipino/Tagalog tulad ng isang tunay na Pilipino.",
-      };
-      const nativeInstructions =
-        NATIVE_VOICE_INSTRUCTIONS[langCode] ||
-        `Speak in 100% authentic native ${langCode} language. Sound like a real native human speaker â€” natural, fluent, warm, and confident. ` +
-          `Do NOT mix any foreign accent. Use perfect native pronunciation and modern standard speaking style.`;
-
-      const bodyPayload: Record<string, unknown> = {
-        text: speechTextForAPI,
-        voiceName: selectedVoice,
-        languageCode: langCode,
-        skipCreditDeduction: true,
-        speedMode: voiceMode === "normal" ? "modern" : voiceMode,
-        nativeVoiceInstructions:
-          nativeInstructions +
-          " CRITICAL: You MUST narrate the COMPLETE text from BEGINNING to END without skipping any part. Start from the very first word and continue to the very last word. Do NOT truncate or summarize.",
-        // â”€â”€ PACING & EMOTION: compelling continuous storytelling, zero dead air, international recap channel quality â”€â”€
-        styleInstructions:
-          nativeInstructions +
-          ` CINEMATIC STORYTELLING VOICE: You are the voice of a world-class movie recap channel. ` +
-          ` Your voice must be GRIPPING, COMPELLING, and CONTINUOUS â€” like MrBallen, Daniel Gonzalez, or StoryRecapped narrators. ` +
-          ` NEVER leave dead air or long pauses between sentences. Each sentence must flow IMMEDIATELY into the next with momentum. ` +
-          ` Build tension, suspense, and curiosity in your voice. Make the listener NEED to hear what happens next. ` +
-          ` Automatically adapt emotional intensity to match the scene: whisper for horror, urgency for action, warmth for romance, shock for twists. ` +
-          (voiceMode === "modern"
-            ? ` Pace: FAST and high-energy like a thriller narrator. Sentences connect rapidly with NO gaps. Only allow the tiniest breath at major story beats. Sound urgent, exciting, and unrelenting. Keep the audience on the edge of their seat.`
-            : ` Pace: Confident, clear, and steadily flowing like a professional documentary narrator. Sentences connect smoothly with minimal pauses. Sound authoritative and engaging. Never drag or slow down between sentences.`),
-        voiceConfig: {
-          speakingStyle: "natural_conversational",
-          pronunciationStrictness: "native_only",
-          accentPurity: 100,
-          targetQuality: "producer_ai_level",
-        },
-      };
-      if (useOwnKey) bodyPayload.ownApiKey = useOwnKey;
-      // ── DIALOGUE EMOTION MAP ──
-      // Narrator lines keep the restrained professional delivery. Direct-speech lines are
-      // acted out with the emotion the script AI tagged them with. Tags never enter the
-      // spoken text — they are sent only as style guidance.
-      if (fullSegments && fullSegments.length > 0) {
-        const emoLines = fullSegments
-          .map((s, i) => (s.isDialogue ? { i, emo: s.emotion || "natural in-character" } : null))
-          .filter(Boolean) as { i: number; emo: string }[];
-        if (emoLines.length > 0) {
-          const EMO_HINT: Record<string, string> = {
-            angry: "angry — sharper, harder attack, raised intensity",
-            shouting: "shouting — projected, loud, forceful but not screeching",
-            sad: "sad — heavier, slower, softer, downward intonation",
-            crying: "crying — broken, trembling, catching breath",
-            happy: "happy — brighter, lighter, warm smiling tone",
-            excited: "excited — quicker, lifted pitch, eager energy",
-            fearful: "fearful — tight, unsteady, quicker breaths",
-            nervous: "nervous — hesitant, uneven pacing, small catches",
-            shocked: "shocked — sudden, wide-eyed disbelief",
-            mocking: "mocking — sardonic lilt, drawn-out, edge of contempt",
-            disgusted: "disgusted — clipped, recoiling, sour tone",
-            whisper: "whispered — hushed, close, confidential",
-            pleading: "pleading — desperate, imploring, strained",
-            proud: "proud — chest-open, steady, quietly triumphant",
-            relieved: "relieved — exhaled, softening, weight lifting",
-            calm: "calm — steady, grounded, quiet confidence",
-          };
-          const map = emoLines.map(({ i, emo }) => `Line ${i + 1}: ${EMO_HINT[emo] || emo}`).join("; ");
-          bodyPayload.styleInstructions =
-            `${bodyPayload.styleInstructions as string}` +
-            ` DIALOGUE ACTING (overrides the restrained policy for these lines ONLY): the listed lines are a character SPEAKING out loud, not narration. ` +
-            `Perform them like a real person in that moment — full natural emotional rise and fall, real intonation, breath and micro-pauses, ` +
-            `while staying the same voice and never turning cartoonish or theatrical. All other lines stay narrator-restrained. ` +
-            `Emotion map — ${map}.`;
-        }
-      }
-      if (segsForSync && segsForSync.length > 0) bodyPayload.segments = segsForSync;
-
-      // Edge-TTS branch: Microsoft Burmese neural voices (Thiha/Nilar). Free upstream,
-      // bypass gemini-tts and call edge-tts function. Credit is still deducted via the
-      // existing Recap NV accounting path â€” pass skipCreditDeduction=true to the function.
       const isEdgeVoice = typeof selectedVoice === "string" && selectedVoice.startsWith("edge:");
       const ttsFnName = isEdgeVoice ? "edge-tts" : "gemini-tts";
-      const ttsBody = isEdgeVoice
-        ? {
-            text: speechTextForAPI,
-            voice: selectedVoice.slice("edge:".length),
-            skipCreditDeduction: true,
-            // Keep the renderer's subtitle/video segment indexes aligned with Edge TTS.
-            // Without these timestamps the first (viral-hook) source slot can remain active
-            // for the whole render when the fallback boundary calculation drifts.
-            segments: segsForSync,
-          }
-        : bodyPayload;
-      const response = await fetchTtsWithRetry(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${ttsFnName}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          Authorization: `Bearer ${userToken}`,
-        },
-        body: JSON.stringify(ttsBody),
-      });
-      let data = await response.json();
 
-      // ── SURGICAL: background job pattern (avoids 150s idle timeout) — works for
-      // ANY tts function that returns { jobId, polling: true }, not just edge-tts. ──
-      if (data.jobId && data.polling) {
-        const jobId = data.jobId;
-        const maxPolls = 90; // 90 * 2s = 180s max wait
-        let polled: any = null;
-        for (let i = 0; i < maxPolls; i++) {
-          await new Promise((r) => setTimeout(r, 2000));
-          setProgressMsg(`🎙️ AI Voice ဖန်တီးနေပါသည်... (${(i + 1) * 2}s)`);
-          const pollRes = await fetchTtsWithRetry(
-            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${ttsFnName}`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-                Authorization: `Bearer ${userToken}`,
+      // =========================================================================
+      // 🚀 SURGICAL BATCHING ENGINE (၁၅၀ စက္ကန့် TIMEOUT လုံးဝမဖြစ်စေသော စနစ်)
+      // =========================================================================
+      // စာပိုဒ်များကို ၄ ပိုဒ်စီ အပိုင်းခွဲထုတ်ခြင်း
+      const rawSegments =
+        fullSegments && fullSegments.length > 0
+          ? fullSegments.map((s) => s.text)
+          : segsForSync && segsForSync.length > 0
+            ? segsForSync.map((s) => s.text)
+            : speechTextForAPI.split(/(?<=[.!?။\n])\s+/).filter((t) => t.trim().length > 0);
+
+      const BATCH_SIZE = 4; // စာပိုဒ် ၄ ပိုဒ်စီ အသံထုတ်မည် (၅ စက္ကန့်မှ ၁၀ စက္ကန့်သာ ကြာမည်)
+      const totalBatches = Math.ceil(rawSegments.length / BATCH_SIZE);
+      const audioChunks: Uint8Array[] = [];
+      const allPcmBytes: Uint8Array[] = [];
+      let isPcmFormat = false;
+      let pcmSampleRate = 24000;
+
+      for (let b = 0; b < totalBatches; b++) {
+        setProgressMsg(`🎙️ AI Voice ဖန်တီးနေပါသည်... (${b + 1}/${totalBatches})`);
+
+        const batchLines = rawSegments.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
+        const batchText = batchLines.join(" ");
+
+        const batchBody: Record<string, unknown> = isEdgeVoice
+          ? {
+              text: batchText,
+              voice: selectedVoice.slice("edge:".length),
+              skipCreditDeduction: true,
+              segments: batchLines.map((t) => ({ text: t })),
+            }
+          : {
+              text: batchText,
+              voiceName: selectedVoice,
+              languageCode: langCode,
+              skipCreditDeduction: true,
+              speedMode: voiceMode === "normal" ? "modern" : voiceMode,
+              nativeVoiceInstructions: "Speak in 100% natural native accent. Warm, confident, fluent.",
+              voiceConfig: {
+                speakingStyle: "natural_conversational",
+                pronunciationStrictness: "native_only",
+                accentPurity: 100,
+                targetQuality: "producer_ai_level",
               },
-              body: JSON.stringify({ action: "status", jobId }),
-            },
-            2,
-            20000,
-          );
-          polled = await pollRes.json();
-          if (polled.status === "done") {
-            data = polled;
-            break;
-          }
-          if (polled.status === "failed") {
-            throw new Error(polled.error || "TTS generation failed");
-          }
+              segments: batchLines.map((t) => ({ text: t })),
+            };
+
+        if (useOwnKey && !isEdgeVoice) batchBody.ownApiKey = useOwnKey;
+
+        const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${ttsFnName}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${userToken}`,
+          },
+          body: JSON.stringify(batchBody),
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.audio) {
+          throw new Error(data.error || data.message || `Voice batch ${b + 1} failed`);
         }
-        if (!polled || polled.status !== "done") {
-          throw new Error("Voice generation timed out — ပြန်ကြိုးစားကြည့်ပါ");
+
+        const mt = String(data.mimeType || "").toLowerCase();
+        if (mt.includes("audio/pcm") || mt.includes("audio/l16")) {
+          isPcmFormat = true;
+          const rateMatch = mt.match(/rate=(\d+)/);
+          pcmSampleRate = data.sampleRate || (rateMatch ? parseInt(rateMatch[1], 10) : 24000);
+          const rawPcm = Uint8Array.from(atob(data.audio), (c) => c.charCodeAt(0));
+          allPcmBytes.push(rawPcm);
+        } else {
+          const rawBytes = Uint8Array.from(atob(data.audioBase64 || data.audio), (c) => c.charCodeAt(0));
+          audioChunks.push(rawBytes);
         }
       }
-      if (data.useClientTTS || !data.audio) throw new Error(data.message || data.error || "TTS generation failed");
 
-      // Use API timestamps if available (for 100% AV sync accuracy), otherwise fallback to client-side calculation
-      const mt = String(data.mimeType || "").toLowerCase();
-      const preciseTimestamps = Array.isArray(data.segmentTimestamps) ? data.segmentTimestamps : data.segments;
-      const pcmLeadIn =
-        Array.isArray(data.segmentTimestamps) && (mt.includes("audio/pcm") || mt.includes("audio/l16")) ? 0.2 : 0;
-      if (Array.isArray(preciseTimestamps)) {
-        pageAudioTimestampsRef.current = preciseTimestamps.map((seg: any, idx: number) => ({
-          index: idx,
-          start: Number(((Number(seg.start) || 0) + pcmLeadIn).toFixed(3)),
-          end: Number(((Number(seg.end) || 0) + pcmLeadIn).toFixed(3)),
-        }));
-      } else {
-        pageAudioTimestampsRef.current = [];
-      }
-
+      // အသံဖိုင် အပိုင်းအစများကို တဆက်တည်း ပေါင်းစပ်ခြင်း
       let audioBlob: Blob;
-      if (mt.includes("audio/pcm") || mt.includes("audio/l16")) {
-        const rateMatch = mt.match(/rate=(\d+)/);
-        const sampleRate = data.sampleRate || (rateMatch ? parseInt(rateMatch[1], 10) : 24000);
-        const numChannels = 1;
-        const bitsPerSample = 16;
-        const pcmBytes = Uint8Array.from(atob(data.audio), (c) => c.charCodeAt(0));
-        // Add 200ms silence padding at the start to prevent browser clipping
-        const silenceSamples = Math.round(sampleRate * 0.2);
-        const silenceBytes = silenceSamples * numChannels * (bitsPerSample / 8);
-        const silencePad = new Uint8Array(silenceBytes); // zeros = silence
-        const dataLength = silenceBytes + pcmBytes.length;
+      if (isPcmFormat) {
+        // PCM အပိုင်းများကို ပေါင်းပြီး WAV Header တပ်ဆင်ခြင်း
+        const totalPcmLength = allPcmBytes.reduce((sum, arr) => sum + arr.length, 0);
+        const mergedPcm = new Uint8Array(totalPcmLength);
+        let offset = 0;
+        for (const part of allPcmBytes) {
+          mergedPcm.set(part, offset);
+          offset += part.length;
+        }
+
+        const silenceSamples = Math.round(pcmSampleRate * 0.2);
+        const silenceBytes = silenceSamples * 1 * 2;
+        const silencePad = new Uint8Array(silenceBytes);
+        const dataLength = silenceBytes + mergedPcm.length;
         const headerSize = 44;
         const wav = new Uint8Array(headerSize + dataLength);
         const view = new DataView(wav.buffer);
-        wav.set([0x52, 0x49, 0x46, 0x46], 0);
+        wav.set([0x52, 0x49, 0x46, 0x46], 0); // "RIFF"
         view.setUint32(4, 36 + dataLength, true);
-        wav.set([0x57, 0x41, 0x56, 0x45], 8);
-        wav.set([0x66, 0x6d, 0x74, 0x20], 12);
+        wav.set([0x57, 0x41, 0x56, 0x45], 8); // "WAVE"
+        wav.set([0x66, 0x6d, 0x74, 0x20], 12); // "fmt "
         view.setUint32(16, 16, true);
         view.setUint16(20, 1, true);
-        view.setUint16(22, numChannels, true);
-        view.setUint32(24, sampleRate, true);
-        view.setUint32(28, sampleRate * numChannels * (bitsPerSample / 8), true);
-        view.setUint16(32, numChannels * (bitsPerSample / 8), true);
-        view.setUint16(34, bitsPerSample, true);
-        wav.set([0x64, 0x61, 0x74, 0x61], 36);
+        view.setUint16(22, 1, true);
+        view.setUint32(24, pcmSampleRate, true);
+        view.setUint32(28, pcmSampleRate * 2, true);
+        view.setUint16(32, 2, true);
+        view.setUint16(34, 16, true);
+        wav.set([0x64, 0x61, 0x74, 0x61], 36); // "data"
         view.setUint32(40, dataLength, true);
         wav.set(silencePad, headerSize);
-        wav.set(pcmBytes, headerSize + silenceBytes);
+        wav.set(mergedPcm, headerSize + silenceBytes);
         audioBlob = new Blob([wav], { type: "audio/wav" });
       } else {
-        const mimeForAudio = data.mimeType || "audio/mpeg";
-        const dataUri = `data:${mimeForAudio};base64,${data.audio}`;
-        const audioFetchResp = await fetch(dataUri);
-        audioBlob = await audioFetchResp.blob();
+        // MP3 Frame များကို တဆက်တည်း ပေါင်းစပ်ခြင်း
+        audioBlob = new Blob(audioChunks as unknown as BlobPart[], { type: "audio/mpeg" });
       }
+
       const url = URL.createObjectURL(audioBlob);
       setAudioUrl(url);
       setStatus("done");
@@ -7612,49 +7491,14 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                           targetQuality: "producer_ai_level",
                         },
                       };
-                  const res = await fetchTtsWithRetry(
-                    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${previewFn}`,
-                    {
-                      method: "POST",
-                      headers,
-                      body: JSON.stringify(previewBody),
-                    },
-                  );
+                  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${previewFn}`, {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify(previewBody),
+                  });
 
-                  let data = await res.json();
-
-                  // ── SURGICAL: background job pattern — works for any tts function ──
-                  if (data.jobId && data.polling) {
-                    const jobId = data.jobId;
-                    let polled: any = null;
-                    for (let i = 0; i < 60; i++) {
-                      await new Promise((r) => setTimeout(r, 2000));
-                      const pollRes = await fetchTtsWithRetry(
-                        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${previewFn}`,
-                        {
-                          method: "POST",
-                          headers,
-                          body: JSON.stringify({ action: "status", jobId }),
-                        },
-                        2,
-                        20000,
-                      );
-                      polled = await pollRes.json();
-                      if (polled.status === "done") {
-                        data = polled;
-                        break;
-                      }
-                      if (polled.status === "failed") throw new Error(polled.error || "Voice preview failed");
-                    }
-                    if (!polled || polled.status !== "done") {
-                      throw new Error("Voice preview timed out");
-                    }
-                  }
-
-                  if (!res.ok && !data.jobId) {
-                    throw new Error(data?.error || "Voice preview generation failed");
-                  }
-                  if (!data.audio) {
+                  const data = await res.json();
+                  if (!res.ok || !data.audio) {
                     throw new Error(data?.error || "Voice preview generation failed");
                   }
 
