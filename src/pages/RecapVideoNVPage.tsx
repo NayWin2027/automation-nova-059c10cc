@@ -5600,6 +5600,35 @@ STREET-SPOKEN STYLE & MODERN SLANG (HYBRID/VIRAL only):
 - Translate what people actually said when it matters, but stay primarily in narrator voice.${translitBlock}`;
 }
 
+// ── SURGICAL: retry helper for TTS network calls ──
+// Some users on mobile data / weak network have their fetch silently die before
+// any response arrives (network layer, not server timeout). This retries with
+// backoff and gives each attempt a generous per-request timeout via AbortController.
+async function fetchTtsWithRetry(
+  url: string,
+  options: RequestInit,
+  maxAttempts = 3,
+  perAttemptTimeoutMs = 45000,
+): Promise<Response> {
+  let lastErr: any = null;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), perAttemptTimeoutMs);
+    try {
+      const res = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(timeoutId);
+      return res;
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      lastErr = err;
+      if (attempt < maxAttempts - 1) {
+        await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+      }
+    }
+  }
+  throw lastErr || new Error("Network request failed after retries");
+}
+
 const RecapVideoNVPage: React.FC = () => {
   const navigate = useNavigate();
   const { isAllowed, isLoading: authLoading } = useAuthGuard("recap-nv");
@@ -6504,7 +6533,7 @@ const RecapVideoNVPage: React.FC = () => {
             segments: segsForSync,
           }
         : bodyPayload;
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${ttsFnName}`, {
+      const response = await fetchTtsWithRetry(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${ttsFnName}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -6513,7 +6542,44 @@ const RecapVideoNVPage: React.FC = () => {
         },
         body: JSON.stringify(ttsBody),
       });
-      const data = await response.json();
+      let data = await response.json();
+
+      // ── SURGICAL: background job pattern (avoids 150s idle timeout) — works for
+      // ANY tts function that returns { jobId, polling: true }, not just edge-tts. ──
+      if (data.jobId && data.polling) {
+        const jobId = data.jobId;
+        const maxPolls = 90; // 90 * 2s = 180s max wait
+        let polled: any = null;
+        for (let i = 0; i < maxPolls; i++) {
+          await new Promise((r) => setTimeout(r, 2000));
+          setProgressMsg(`🎙️ AI Voice ဖန်တီးနေပါသည်... (${(i + 1) * 2}s)`);
+          const pollRes = await fetchTtsWithRetry(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${ttsFnName}`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+                Authorization: `Bearer ${userToken}`,
+              },
+              body: JSON.stringify({ action: "status", jobId }),
+            },
+            2,
+            20000,
+          );
+          polled = await pollRes.json();
+          if (polled.status === "done") {
+            data = polled;
+            break;
+          }
+          if (polled.status === "failed") {
+            throw new Error(polled.error || "TTS generation failed");
+          }
+        }
+        if (!polled || polled.status !== "done") {
+          throw new Error("Voice generation timed out — ပြန်ကြိုးစားကြည့်ပါ");
+        }
+      }
       if (data.useClientTTS || !data.audio) throw new Error(data.message || data.error || "TTS generation failed");
 
       // Use API timestamps if available (for 100% AV sync accuracy), otherwise fallback to client-side calculation
@@ -7546,14 +7612,49 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                           targetQuality: "producer_ai_level",
                         },
                       };
-                  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${previewFn}`, {
-                    method: "POST",
-                    headers,
-                    body: JSON.stringify(previewBody),
-                  });
+                  const res = await fetchTtsWithRetry(
+                    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${previewFn}`,
+                    {
+                      method: "POST",
+                      headers,
+                      body: JSON.stringify(previewBody),
+                    },
+                  );
 
-                  const data = await res.json();
-                  if (!res.ok || !data.audio) {
+                  let data = await res.json();
+
+                  // ── SURGICAL: background job pattern — works for any tts function ──
+                  if (data.jobId && data.polling) {
+                    const jobId = data.jobId;
+                    let polled: any = null;
+                    for (let i = 0; i < 60; i++) {
+                      await new Promise((r) => setTimeout(r, 2000));
+                      const pollRes = await fetchTtsWithRetry(
+                        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${previewFn}`,
+                        {
+                          method: "POST",
+                          headers,
+                          body: JSON.stringify({ action: "status", jobId }),
+                        },
+                        2,
+                        20000,
+                      );
+                      polled = await pollRes.json();
+                      if (polled.status === "done") {
+                        data = polled;
+                        break;
+                      }
+                      if (polled.status === "failed") throw new Error(polled.error || "Voice preview failed");
+                    }
+                    if (!polled || polled.status !== "done") {
+                      throw new Error("Voice preview timed out");
+                    }
+                  }
+
+                  if (!res.ok && !data.jobId) {
+                    throw new Error(data?.error || "Voice preview generation failed");
+                  }
+                  if (!data.audio) {
                     throw new Error(data?.error || "Voice preview generation failed");
                   }
 
