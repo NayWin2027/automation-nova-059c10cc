@@ -59,6 +59,29 @@ function humanizeBurmese(text: string): string {
   );
 }
 
+async function synthesizeBurmeseHttp(text: string): Promise<Uint8Array> {
+  const pieces = text.match(/.{1,180}(?:\s|$)|.{1,180}/gu)?.map((part) => part.trim()).filter(Boolean) ?? [text];
+  const chunks = await Promise.all(pieces.map(async (piece) => {
+    const url = new URL("https://translate.googleapis.com/translate_tts");
+    url.searchParams.set("ie", "UTF-8");
+    url.searchParams.set("client", "tw-ob");
+    url.searchParams.set("tl", "my");
+    url.searchParams.set("q", piece);
+    const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+    if (!response.ok) throw new Error(`TTS upstream failed (${response.status})`);
+    return new Uint8Array(await response.arrayBuffer());
+  }));
+  const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  if (total === 0) throw new Error("No audio received from TTS");
+  const audio = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    audio.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return audio;
+}
+
 async function synthesize(
   text: string,
   voice: string,
@@ -66,6 +89,13 @@ async function synthesize(
   pitch: string,
   volume: string,
 ): Promise<Uint8Array> {
+  // The Microsoft websocket currently stalls in the edge runtime because its
+  // custom socket transport is unsupported. Use the fast HTTP Burmese endpoint
+  // for Thiha/Nilar requests so voice generation remains available on every device.
+  if (voice === "my-MM-ThihaNeural" || voice === "my-MM-NilarNeural") {
+    return synthesizeBurmeseHttp(humanizeBurmese(text));
+  }
+
   // Microsoft recently requires WebSocket headers/cookies that Deno's native
   // browser-style WebSocket cannot set. The maintained server-side client uses
   // npm ws and sends those headers correctly, fixing the protocol error.
