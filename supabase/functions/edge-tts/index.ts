@@ -59,7 +59,7 @@ function humanizeBurmese(text: string): string {
   );
 }
 
-async function synthesize(
+async function synthesizeOne(
   text: string,
   voice: string,
   rate: string,
@@ -78,8 +78,12 @@ async function synthesize(
 
   const chunks: Uint8Array[] = [];
 
+  // SURGICAL: hard wall-clock budget so we always answer before the 150s platform
+  // idle timeout (which surfaced as a 504 IDLE_TIMEOUT / blank screen).
+  const deadline = Date.now() + 110_000;
   for await (const chunk of communicate.stream()) {
     if (chunk.type === "audio" && chunk.data) chunks.push(new Uint8Array(chunk.data));
+    if (Date.now() > deadline) throw new Error("TTS_TIMEOUT");
   }
 
   const total = chunks.reduce((s, c) => s + c.length, 0);
@@ -93,6 +97,67 @@ async function synthesize(
   }
   return out;
 }
+
+// SURGICAL: long scripts streamed as ONE websocket took >150s and the platform
+// killed the request (504 IDLE_TIMEOUT). Split on sentence boundaries and run a
+// few sockets in parallel, then concatenate the MP3 frames in original order.
+function splitForTts(text: string, maxLen = 1200): string[] {
+  const parts: string[] = [];
+  let buf = "";
+  for (const piece of text.split(/(?<=[။\.\!\?၊,])\s+/)) {
+    if (!piece) continue;
+    if ((buf + " " + piece).trim().length > maxLen && buf) {
+      parts.push(buf.trim());
+      buf = piece;
+    } else {
+      buf = buf ? `${buf} ${piece}` : piece;
+    }
+  }
+  if (buf.trim()) parts.push(buf.trim());
+  // Hard-split anything still oversized (no punctuation at all).
+  const out: string[] = [];
+  for (const p of parts) {
+    if (p.length <= maxLen * 1.5) out.push(p);
+    else for (let i = 0; i < p.length; i += maxLen) out.push(p.slice(i, i + maxLen));
+  }
+  return out.length ? out : [text];
+}
+
+async function synthesize(
+  text: string,
+  voice: string,
+  rate: string,
+  pitch: string,
+  volume: string,
+): Promise<Uint8Array> {
+  const parts = splitForTts(text);
+  if (parts.length === 1) return synthesizeOne(text, voice, rate, pitch, volume);
+
+  const results: Uint8Array[] = new Array(parts.length);
+  const CONCURRENCY = 4;
+  let cursor = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, parts.length) }, async () => {
+      while (true) {
+        const i = cursor++;
+        if (i >= parts.length) return;
+        results[i] = await synthesizeOne(parts[i], voice, rate, pitch, volume);
+      }
+    }),
+  );
+
+  const total = results.reduce((s, c) => s + (c?.length ?? 0), 0);
+  if (total === 0) throw new Error("No audio received from Edge TTS");
+  const merged = new Uint8Array(total);
+  let o = 0;
+  for (const c of results) {
+    if (!c) continue;
+    merged.set(c, o);
+    o += c.length;
+  }
+  return merged;
+}
+
 
 function toBase64(bytes: Uint8Array): string {
   let binary = "";
@@ -237,9 +302,16 @@ Deno.serve(async (req) => {
     );
   } catch (e) {
     console.error("edge-tts error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), {
-      status: 500,
-      headers: { ...cors, "Content-Type": "application/json" },
-    });
+    const msg = e instanceof Error ? e.message : String(e);
+    const timedOut = msg.includes("TTS_TIMEOUT");
+    return new Response(
+      JSON.stringify({
+        error: timedOut
+          ? "အသံထုတ်ချိန် ကြာလွန်းလို့ ရပ်လိုက်ပါတယ်။ Script ကို အပိုင်းခွဲပြီး ပြန်ကြိုးစားပါ။"
+          : msg,
+        errorCode: timedOut ? "TTS_TIMEOUT" : undefined,
+      }),
+      { status: timedOut ? 504 : 500, headers: { ...cors, "Content-Type": "application/json" } },
+    );
   }
 });
