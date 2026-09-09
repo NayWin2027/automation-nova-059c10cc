@@ -205,6 +205,50 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json().catch(() => ({}));
+
+    // ── STATUS POLL: client checks job progress with { action: "status", jobId } ──
+    if (body.action === "status" && body.jobId) {
+      const adminClient = createClient(supabaseUrl, serviceKey);
+      const { data: job, error: jobFetchErr } = await adminClient
+        .from("tts_jobs")
+        .select("status, audio_base64, mime_type, sample_rate, segment_timestamps, error")
+        .eq("id", body.jobId)
+        .eq("user_id", user.id)
+        .single();
+
+      if (jobFetchErr || !job) {
+        return new Response(JSON.stringify({ error: "Job not found" }), {
+          status: 404,
+          headers: { ...cors, "Content-Type": "application/json" },
+        });
+      }
+
+      if (job.status === "done") {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            status: "done",
+            audioBase64: job.audio_base64,
+            audio: job.audio_base64,
+            mimeType: job.mime_type,
+            sampleRate: job.sample_rate,
+            segmentTimestamps: job.segment_timestamps,
+          }),
+          { status: 200, headers: { ...cors, "Content-Type": "application/json" } },
+        );
+      }
+      if (job.status === "failed") {
+        return new Response(JSON.stringify({ success: false, status: "failed", error: job.error }), {
+          status: 200,
+          headers: { ...cors, "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ success: true, status: "processing" }), {
+        status: 200,
+        headers: { ...cors, "Content-Type": "application/json" },
+      });
+    }
+
     const text: string = (body.text ?? "").toString().trim();
     const voice: string = (body.voice ?? "it-IT-GiuseppeMultilingualNeural").toString();
     // SURGICAL: defaults tuned for natural Burmese human cadence
@@ -257,21 +301,60 @@ Deno.serve(async (req) => {
       rpcResult = data;
     }
 
-    const audio = await synthesize(text, voice, rate, pitch, volume);
-    // Edge TTS returns MP3. MPEG-1 Layer III at the service's 48 kbps output rate is
-    // 6000 bytes/sec, so the encoded payload gives a stable duration for segment boundaries.
-    // The final segment is forced to the exact calculated end to prevent hook-slot overrun.
-    const durationSec = audio.length / 6000;
-    const segmentTimestamps = segments.length > 0 ? estimateSegmentTimestamps(segments, durationSec) : undefined;
+    // ── SURGICAL FIX: Background job pattern — avoids 150s idle timeout ──
+    // Instead of waiting for synthesis to finish before responding (which triggers
+    // 504 on long scripts), we create a job row, respond with jobId IMMEDIATELY,
+    // then run synthesis in the background via EdgeRuntime.waitUntil (up to 400s on Pro).
+    const adminClient = createClient(supabaseUrl, serviceKey);
+    const { data: jobRow, error: jobErr } = await adminClient
+      .from("tts_jobs")
+      .insert({ user_id: user.id, status: "processing" })
+      .select("id")
+      .single();
 
+    if (jobErr || !jobRow) {
+      return new Response(JSON.stringify({ error: "Failed to create TTS job: " + (jobErr?.message || "unknown") }), {
+        status: 500,
+        headers: { ...cors, "Content-Type": "application/json" },
+      });
+    }
+
+    const jobId = jobRow.id;
+
+    const processInBackground = async () => {
+      try {
+        const audio = await synthesize(text, voice, rate, pitch, volume);
+        const durationSec = audio.length / 6000;
+        const segmentTimestamps = segments.length > 0 ? estimateSegmentTimestamps(segments, durationSec) : undefined;
+
+        await adminClient
+          .from("tts_jobs")
+          .update({
+            status: "done",
+            audio_base64: toBase64(audio),
+            mime_type: "audio/mpeg",
+            sample_rate: 24000,
+            segment_timestamps: segmentTimestamps ?? null,
+          })
+          .eq("id", jobId);
+      } catch (e) {
+        console.error("edge-tts background error:", e);
+        await adminClient
+          .from("tts_jobs")
+          .update({ status: "failed", error: e instanceof Error ? e.message : String(e) })
+          .eq("id", jobId);
+      }
+    };
+
+    // @ts-ignore — EdgeRuntime is available in Supabase's Deno edge runtime
+    EdgeRuntime.waitUntil(processInBackground());
+
+    // ── Respond immediately — client should poll with { action: "status", jobId } ──
     return new Response(
       JSON.stringify({
         success: true,
-        audioBase64: toBase64(audio),
-        audio: toBase64(audio),
-        mimeType: "audio/mpeg",
-        sampleRate: 24000,
-        segmentTimestamps,
+        jobId,
+        polling: true,
         balance: (rpcResult as any)?.balance,
         deducted: (rpcResult as any)?.deducted,
       }),
