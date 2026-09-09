@@ -59,7 +59,7 @@ function humanizeBurmese(text: string): string {
   );
 }
 
-async function synthesize(
+async function synthesizeOne(
   text: string,
   voice: string,
   rate: string,
