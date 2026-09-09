@@ -83,7 +83,10 @@ async function synthesizeOne(
   // websocket stalls before yielding its next chunk, that loop body never runs.
   // Race the whole stream against a real timer so this function can still send a
   // controlled response before the platform's fixed 150-second idle cutoff.
-  const remainingMs = Math.max(1, requestDeadline - Date.now());
+  // A single chunk must never be allowed to hold the whole budget: when Microsoft's
+  // socket stalls, waiting 240s is what made generation feel "stuck". Cap each attempt
+  // short so the retry wrapper can open a fresh socket and finish fast.
+  const remainingMs = Math.max(1, Math.min(45_000, requestDeadline - Date.now()));
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
@@ -137,6 +140,28 @@ function splitForTts(text: string, maxLen = 1200): string[] {
   return out.length ? out : [text];
 }
 
+// Retry a stalled/failed chunk on a fresh socket instead of waiting out the budget.
+async function synthesizeWithRetry(
+  text: string,
+  voice: string,
+  rate: string,
+  pitch: string,
+  volume: string,
+  requestDeadline: number,
+): Promise<Uint8Array> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (Date.now() >= requestDeadline) break;
+    try {
+      return await synthesizeOne(text, voice, rate, pitch, volume, requestDeadline);
+    } catch (e) {
+      lastErr = e;
+      console.warn(`edge-tts chunk attempt ${attempt + 1} failed:`, e instanceof Error ? e.message : e);
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error("TTS_TIMEOUT");
+}
+
 async function synthesize(
   text: string,
   voice: string,
@@ -148,7 +173,7 @@ async function synthesize(
   // now a bounded synthesis budget rather than an idle-timeout workaround.
   const requestDeadline = Date.now() + 240_000;
   const parts = splitForTts(text);
-  if (parts.length === 1) return synthesizeOne(text, voice, rate, pitch, volume, requestDeadline);
+  if (parts.length === 1) return synthesizeWithRetry(text, voice, rate, pitch, volume, requestDeadline);
 
   const results: Uint8Array[] = new Array(parts.length);
   const CONCURRENCY = 4;
@@ -159,7 +184,7 @@ async function synthesize(
         const i = cursor++;
         if (i >= parts.length) return;
         if (Date.now() >= requestDeadline) throw new Error("TTS_TIMEOUT");
-        results[i] = await synthesizeOne(parts[i], voice, rate, pitch, volume, requestDeadline);
+        results[i] = await synthesizeWithRetry(parts[i], voice, rate, pitch, volume, requestDeadline);
       }
     }),
   );
