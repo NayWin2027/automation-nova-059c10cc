@@ -98,6 +98,67 @@ async function synthesizeOne(
   return out;
 }
 
+// SURGICAL: long scripts streamed as ONE websocket took >150s and the platform
+// killed the request (504 IDLE_TIMEOUT). Split on sentence boundaries and run a
+// few sockets in parallel, then concatenate the MP3 frames in original order.
+function splitForTts(text: string, maxLen = 1200): string[] {
+  const parts: string[] = [];
+  let buf = "";
+  for (const piece of text.split(/(?<=[။\.\!\?၊,])\s+/)) {
+    if (!piece) continue;
+    if ((buf + " " + piece).trim().length > maxLen && buf) {
+      parts.push(buf.trim());
+      buf = piece;
+    } else {
+      buf = buf ? `${buf} ${piece}` : piece;
+    }
+  }
+  if (buf.trim()) parts.push(buf.trim());
+  // Hard-split anything still oversized (no punctuation at all).
+  const out: string[] = [];
+  for (const p of parts) {
+    if (p.length <= maxLen * 1.5) out.push(p);
+    else for (let i = 0; i < p.length; i += maxLen) out.push(p.slice(i, i + maxLen));
+  }
+  return out.length ? out : [text];
+}
+
+async function synthesize(
+  text: string,
+  voice: string,
+  rate: string,
+  pitch: string,
+  volume: string,
+): Promise<Uint8Array> {
+  const parts = splitForTts(text);
+  if (parts.length === 1) return synthesizeOne(text, voice, rate, pitch, volume);
+
+  const results: Uint8Array[] = new Array(parts.length);
+  const CONCURRENCY = 4;
+  let cursor = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, parts.length) }, async () => {
+      while (true) {
+        const i = cursor++;
+        if (i >= parts.length) return;
+        results[i] = await synthesizeOne(parts[i], voice, rate, pitch, volume);
+      }
+    }),
+  );
+
+  const total = results.reduce((s, c) => s + (c?.length ?? 0), 0);
+  if (total === 0) throw new Error("No audio received from Edge TTS");
+  const merged = new Uint8Array(total);
+  let o = 0;
+  for (const c of results) {
+    if (!c) continue;
+    merged.set(c, o);
+    o += c.length;
+  }
+  return merged;
+}
+
+
 function toBase64(bytes: Uint8Array): string {
   let binary = "";
   const chunk = 0x8000;
