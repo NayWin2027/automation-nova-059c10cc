@@ -6,7 +6,8 @@ import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts"
 
 const TRUSTED_CLIENT_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
 const WSS_URL = `wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=${TRUSTED_CLIENT_TOKEN}`;
-const SEC_MS_GEC_VERSION = "1-130.0.2849.68";
+const CHROMIUM_VERSION = "143.0.3650.75";
+const SEC_MS_GEC_VERSION = `1-${CHROMIUM_VERSION}`;
 
 const ALLOWED_VOICES = new Set([
   "my-MM-ThihaNeural",
@@ -105,10 +106,13 @@ async function synthesize(
     const url = `${WSS_URL}&Sec-MS-GEC=${secMsGec}&Sec-MS-GEC-Version=${SEC_MS_GEC_VERSION}&ConnectionId=${requestId}`;
     const ws = new WebSocket(url, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "Accept-Language": "en-US,en;q=0.9",
         Origin: "chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold",
         Pragma: "no-cache",
         "Cache-Control": "no-cache",
+        Cookie: `muid=${crypto.randomUUID().replace(/-/g, "").toUpperCase()};`,
       },
     });
     const chunks: Uint8Array[] = [];
