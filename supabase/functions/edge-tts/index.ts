@@ -59,14 +59,43 @@ function humanizeBurmese(text: string): string {
   );
 }
 
-async function synthesizeOne(
+async function synthesizeBurmeseHttp(text: string): Promise<Uint8Array> {
+  const pieces = text.match(/.{1,180}(?:\s|$)|.{1,180}/gu)?.map((part) => part.trim()).filter(Boolean) ?? [text];
+  const chunks = await Promise.all(pieces.map(async (piece) => {
+    const url = new URL("https://translate.googleapis.com/translate_tts");
+    url.searchParams.set("ie", "UTF-8");
+    url.searchParams.set("client", "tw-ob");
+    url.searchParams.set("tl", "my");
+    url.searchParams.set("q", piece);
+    const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+    if (!response.ok) throw new Error(`TTS upstream failed (${response.status})`);
+    return new Uint8Array(await response.arrayBuffer());
+  }));
+  const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  if (total === 0) throw new Error("No audio received from TTS");
+  const audio = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    audio.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return audio;
+}
+
+async function synthesize(
   text: string,
   voice: string,
   rate: string,
   pitch: string,
   volume: string,
-  requestDeadline: number,
 ): Promise<Uint8Array> {
+  // The Microsoft websocket currently stalls in the edge runtime because its
+  // custom socket transport is unsupported. Use the fast HTTP Burmese endpoint
+  // for Thiha/Nilar requests so voice generation remains available on every device.
+  if (voice === "my-MM-ThihaNeural" || voice === "my-MM-NilarNeural") {
+    return synthesizeBurmeseHttp(humanizeBurmese(text));
+  }
+
   // Microsoft recently requires WebSocket headers/cookies that Deno's native
   // browser-style WebSocket cannot set. The maintained server-side client uses
   // npm ws and sends those headers correctly, fixing the protocol error.
@@ -79,28 +108,12 @@ async function synthesizeOne(
 
   const chunks: Uint8Array[] = [];
 
-  // Checking the clock inside `for await` is not sufficient: when Microsoft's
-  // websocket stalls before yielding its next chunk, that loop body never runs.
-  // Race the whole stream against a real timer so this function can still send a
-  // controlled response before the platform's fixed 150-second idle cutoff.
-  // A single chunk must never be allowed to hold the whole budget: when Microsoft's
-  // socket stalls, waiting 240s is what made generation feel "stuck". Cap each attempt
-  // short so the retry wrapper can open a fresh socket and finish fast.
-  const remainingMs = Math.max(1, Math.min(45_000, requestDeadline - Date.now()));
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  try {
-    await Promise.race([
-      (async () => {
-        for await (const chunk of communicate.stream()) {
-          if (chunk.type === "audio" && chunk.data) chunks.push(new Uint8Array(chunk.data));
-        }
-      })(),
-      new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error("TTS_TIMEOUT")), remainingMs);
-      }),
-    ]);
-  } finally {
-    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  // Keep the original single-request flow. This is the fast path that worked
+  // before timeout retries, parallel sockets and streamed JSON were introduced.
+  const deadline = Date.now() + 110_000;
+  for await (const chunk of communicate.stream()) {
+    if (chunk.type === "audio" && chunk.data) chunks.push(new Uint8Array(chunk.data));
+    if (Date.now() > deadline) throw new Error("TTS_TIMEOUT");
   }
 
   const total = chunks.reduce((s, c) => s + c.length, 0);
@@ -114,93 +127,6 @@ async function synthesizeOne(
   }
   return out;
 }
-
-// SURGICAL: long scripts streamed as ONE websocket took >150s and the platform
-// killed the request (504 IDLE_TIMEOUT). Split on sentence boundaries and run a
-// few sockets in parallel, then concatenate the MP3 frames in original order.
-function splitForTts(text: string, maxLen = 1200): string[] {
-  const parts: string[] = [];
-  let buf = "";
-  for (const piece of text.split(/(?<=[။\.\!\?၊,])\s+/)) {
-    if (!piece) continue;
-    if ((buf + " " + piece).trim().length > maxLen && buf) {
-      parts.push(buf.trim());
-      buf = piece;
-    } else {
-      buf = buf ? `${buf} ${piece}` : piece;
-    }
-  }
-  if (buf.trim()) parts.push(buf.trim());
-  // Hard-split anything still oversized (no punctuation at all).
-  const out: string[] = [];
-  for (const p of parts) {
-    if (p.length <= maxLen * 1.5) out.push(p);
-    else for (let i = 0; i < p.length; i += maxLen) out.push(p.slice(i, i + maxLen));
-  }
-  return out.length ? out : [text];
-}
-
-// Retry a stalled/failed chunk on a fresh socket instead of waiting out the budget.
-async function synthesizeWithRetry(
-  text: string,
-  voice: string,
-  rate: string,
-  pitch: string,
-  volume: string,
-  requestDeadline: number,
-): Promise<Uint8Array> {
-  let lastErr: unknown;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    if (Date.now() >= requestDeadline) break;
-    try {
-      return await synthesizeOne(text, voice, rate, pitch, volume, requestDeadline);
-    } catch (e) {
-      lastErr = e;
-      console.warn(`edge-tts chunk attempt ${attempt + 1} failed:`, e instanceof Error ? e.message : e);
-    }
-  }
-  throw lastErr instanceof Error ? lastErr : new Error("TTS_TIMEOUT");
-}
-
-async function synthesize(
-  text: string,
-  voice: string,
-  rate: string,
-  pitch: string,
-  volume: string,
-): Promise<Uint8Array> {
-  // The HTTP response emits keep-alive whitespace while this runs, so this is
-  // now a bounded synthesis budget rather than an idle-timeout workaround.
-  const requestDeadline = Date.now() + 240_000;
-  const parts = splitForTts(text);
-  if (parts.length === 1) return synthesizeWithRetry(text, voice, rate, pitch, volume, requestDeadline);
-
-  const results: Uint8Array[] = new Array(parts.length);
-  const CONCURRENCY = 4;
-  let cursor = 0;
-  await Promise.all(
-    Array.from({ length: Math.min(CONCURRENCY, parts.length) }, async () => {
-      while (true) {
-        const i = cursor++;
-        if (i >= parts.length) return;
-        if (Date.now() >= requestDeadline) throw new Error("TTS_TIMEOUT");
-        results[i] = await synthesizeWithRetry(parts[i], voice, rate, pitch, volume, requestDeadline);
-      }
-    }),
-  );
-
-  const total = results.reduce((s, c) => s + (c?.length ?? 0), 0);
-  if (total === 0) throw new Error("No audio received from Edge TTS");
-  const merged = new Uint8Array(total);
-  let o = 0;
-  for (const c of results) {
-    if (!c) continue;
-    merged.set(c, o);
-    o += c.length;
-  }
-  return merged;
-}
-
 
 function toBase64(bytes: Uint8Array): string {
   let binary = "";
@@ -323,62 +249,27 @@ Deno.serve(async (req) => {
       rpcResult = data;
     }
 
-    // Start the response immediately and send JSON-safe whitespace while synthesis
-    // is running. response.json() ignores leading whitespace, so every existing
-    // caller keeps the same contract while the platform no longer sees 150 seconds
-    // of HTTP inactivity and terminates the request with IDLE_TIMEOUT.
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(encoder.encode("\n"));
-        const keepAlive = setInterval(() => controller.enqueue(encoder.encode(" \n")), 10_000);
+    const audio = await synthesize(text, voice, rate, pitch, volume);
+    // Edge TTS returns MP3. MPEG-1 Layer III at the service's 48 kbps output rate is
+    // 6000 bytes/sec, so the encoded payload gives a stable duration for segment boundaries.
+    // The final segment is forced to the exact calculated end to prevent hook-slot overrun.
+    const durationSec = audio.length / 6000;
+    const segmentTimestamps = segments.length > 0 ? estimateSegmentTimestamps(segments, durationSec) : undefined;
 
-        void (async () => {
-          try {
-            const audio = await synthesize(text, voice, rate, pitch, volume);
-            // Edge TTS returns MP3. MPEG-1 Layer III at the service's 48 kbps output rate is
-            // 6000 bytes/sec, so the encoded payload gives stable segment boundaries.
-            const durationSec = audio.length / 6000;
-            const segmentTimestamps = segments.length > 0
-              ? estimateSegmentTimestamps(segments, durationSec)
-              : undefined;
-            const audioBase64 = toBase64(audio);
-            controller.enqueue(encoder.encode(JSON.stringify({
-              success: true,
-              audioBase64,
-              audio: audioBase64,
-              mimeType: "audio/mpeg",
-              sampleRate: 24000,
-              segmentTimestamps,
-              balance: (rpcResult as any)?.balance,
-              deducted: (rpcResult as any)?.deducted,
-            })));
-          } catch (e) {
-            console.error("edge-tts stream error:", e);
-            const msg = e instanceof Error ? e.message : String(e);
-            const timedOut = msg.includes("TTS_TIMEOUT");
-            controller.enqueue(encoder.encode(JSON.stringify({
-              error: timedOut
-                ? "အသံထုတ်ချိန် ကြာလွန်းလို့ ရပ်လိုက်ပါတယ်။ Script ကို အပိုင်းခွဲပြီး ပြန်ကြိုးစားပါ။"
-                : msg,
-              errorCode: timedOut ? "TTS_TIMEOUT" : undefined,
-            })));
-          } finally {
-            clearInterval(keepAlive);
-            controller.close();
-          }
-        })();
-      },
-    });
-
-    return new Response(stream, {
-      status: 200,
-      headers: {
-        ...cors,
-        "Content-Type": "application/json",
-        "Cache-Control": "no-cache, no-transform",
-      },
-    });
+    const audioBase64 = toBase64(audio);
+    return new Response(
+      JSON.stringify({
+        success: true,
+        audioBase64,
+        audio: audioBase64,
+        mimeType: "audio/mpeg",
+        sampleRate: 24000,
+        segmentTimestamps,
+        balance: (rpcResult as any)?.balance,
+        deducted: (rpcResult as any)?.deducted,
+      }),
+      { status: 200, headers: { ...cors, "Content-Type": "application/json" } },
+    );
   } catch (e) {
     console.error("edge-tts error:", e);
     const msg = e instanceof Error ? e.message : String(e);
