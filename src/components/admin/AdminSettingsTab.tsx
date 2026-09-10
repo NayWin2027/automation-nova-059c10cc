@@ -129,10 +129,13 @@ const AdminSettingsTab: React.FC = () => {
     action_label: string;
     action_url: string;
     custom_color: string;
+    is_marquee: boolean;
+    marquee_speed: string;
   }
 
   const emptyAnnouncement: AnnouncementItem = {
-    message: "", type: "info", is_active: false, action_label: "", action_url: "", custom_color: ""
+    message: "", type: "info", is_active: false, action_label: "", action_url: "", custom_color: "",
+    is_marquee: false, marquee_speed: "normal"
   };
 
   const [announcementList, setAnnouncementList] = useState<AnnouncementItem[]>([]);
@@ -235,6 +238,8 @@ const AdminSettingsTab: React.FC = () => {
         action_label: a.action_label || "",
         action_url: a.action_url || "",
         custom_color: a.custom_color || "",
+        is_marquee: !!a.is_marquee,
+        marquee_speed: a.marquee_speed || "normal",
       })));
     }
 
