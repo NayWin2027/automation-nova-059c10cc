@@ -10,6 +10,8 @@ interface Announcement {
   action_label: string | null;
   action_url: string | null;
   custom_color: string | null;
+  is_marquee: boolean | null;
+  marquee_speed: string | null;
 }
 
 const typeConfig: Record<string, {
@@ -63,7 +65,7 @@ const AnnouncementBanner = () => {
     const fetchAnnouncements = async () => {
       const { data } = await supabase
         .from("site_announcements")
-        .select("id, message, type, action_label, action_url, custom_color")
+        .select("id, message, type, action_label, action_url, custom_color, is_marquee, marquee_speed")
         .eq("is_active", true)
         .order("created_at", { ascending: false });
 
@@ -109,11 +111,38 @@ const AnnouncementBanner = () => {
             className={`relative w-full ${!isCustom ? `${config.bg} ${config.border}` : "border-b border-white/10"} shadow-lg announcement-neon-glow ${!isCustom ? config.neonClass : ""}`}
             style={customStyle}
           >
-            <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center justify-center gap-3">
+            <div className="max-w-7xl mx-auto px-4 py-2.5 pr-10 flex items-center justify-center gap-3">
               <Icon className={`w-4 h-4 ${config.iconColor} shrink-0 announcement-icon-pulse`} />
-              <p className={`text-sm font-medium ${config.text} text-center`}>
-                {announcement.message}
-              </p>
+              {announcement.is_marquee ? (
+                <>
+                  <span
+                    className={`shrink-0 w-1.5 h-1.5 rounded-full ${config.iconColor} announcement-live-dot`}
+                    style={{ backgroundColor: "currentColor" }}
+                  />
+                  <div
+                    className={`announcement-ticker-viewport announcement-ticker-${
+                      announcement.marquee_speed === "slow"
+                        ? "slow"
+                        : announcement.marquee_speed === "fast"
+                        ? "fast"
+                        : "normal"
+                    }`}
+                  >
+                    <div className="announcement-ticker-track">
+                      <span className={`text-sm font-medium tracking-wide ${config.text} pr-16`}>
+                        {announcement.message}
+                      </span>
+                      <span className={`text-sm font-medium tracking-wide ${config.text} pr-16`} aria-hidden="true">
+                        {announcement.message}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <p className={`text-sm font-medium ${config.text} text-center`}>
+                  {announcement.message}
+                </p>
+              )}
               {announcement.action_label && announcement.action_url && (
                 <a
                   href={announcement.action_url}
