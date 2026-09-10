@@ -10,6 +10,8 @@ interface Announcement {
   action_label: string | null;
   action_url: string | null;
   custom_color: string | null;
+  is_marquee: boolean | null;
+  marquee_speed: string | null;
 }
 
 const typeConfig: Record<string, {
@@ -63,7 +65,7 @@ const AnnouncementBanner = () => {
     const fetchAnnouncements = async () => {
       const { data } = await supabase
         .from("site_announcements")
-        .select("id, message, type, action_label, action_url, custom_color")
+        .select("id, message, type, action_label, action_url, custom_color, is_marquee, marquee_speed")
         .eq("is_active", true)
         .order("created_at", { ascending: false });
 
