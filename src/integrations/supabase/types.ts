@@ -455,6 +455,8 @@ export type Database = {
           custom_color: string | null
           id: string
           is_active: boolean
+          is_marquee: boolean
+          marquee_speed: string
           message: string
           type: string
           updated_at: string | null
@@ -467,6 +469,8 @@ export type Database = {
           custom_color?: string | null
           id?: string
           is_active?: boolean
+          is_marquee?: boolean
+          marquee_speed?: string
           message: string
           type?: string
           updated_at?: string | null
@@ -479,6 +483,8 @@ export type Database = {
           custom_color?: string | null
           id?: string
           is_active?: boolean
+          is_marquee?: boolean
+          marquee_speed?: string
           message?: string
           type?: string
           updated_at?: string | null
