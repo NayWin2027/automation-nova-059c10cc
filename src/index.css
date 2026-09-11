@@ -885,15 +885,21 @@
   align-items: center;
   white-space: nowrap;
   will-change: transform;
-  animation: announcement-ticker 26s linear infinite;
+  animation: announcement-ticker var(--announcement-ticker-duration, 26s) linear infinite;
+}
+.announcement-ticker-reference {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: nowrap;
 }
 .announcement-ticker-viewport:hover .announcement-ticker-track,
 .announcement-ticker-viewport:active .announcement-ticker-track {
   animation-play-state: paused;
 }
-.announcement-ticker-slow .announcement-ticker-track { animation-duration: 42s; }
-.announcement-ticker-normal .announcement-ticker-track { animation-duration: 26s; }
-.announcement-ticker-fast .announcement-ticker-track { animation-duration: 15s; }
+.announcement-ticker-slow { --announcement-ticker-duration: 42s; }
+.announcement-ticker-normal { --announcement-ticker-duration: 26s; }
+.announcement-ticker-fast { --announcement-ticker-duration: 15s; }
 .announcement-live-dot {
   animation: announcement-live-dot 1.4s ease-in-out infinite;
 }

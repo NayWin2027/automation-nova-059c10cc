@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { X, AlertTriangle, CheckCircle, Info, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -54,6 +54,72 @@ const typeConfig: Record<string, {
     iconColor: "text-blue-200",
     neonClass: "neon-pulse-blue",
   },
+};
+
+type MarqueeSpeed = "slow" | "normal" | "fast";
+
+const tickerReferenceDurations: Record<MarqueeSpeed, number> = {
+  slow: 42,
+  normal: 26,
+  fast: 15,
+};
+
+const tickerReferenceMessage = "APP ပြန်အသုံးပြုလို့ရပါပြီ";
+
+const AnnouncementTicker = ({
+  message,
+  speed,
+  textClass,
+}: {
+  message: string;
+  speed: MarqueeSpeed;
+  textClass: string;
+}) => {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const referenceRef = useRef<HTMLSpanElement>(null);
+
+  useLayoutEffect(() => {
+    const track = trackRef.current;
+    const reference = referenceRef.current;
+    if (!track || !reference) return;
+
+    const synchronizeSpeed = () => {
+      const referenceDistance = reference.getBoundingClientRect().width;
+      const messageDistance = track.scrollWidth / 2;
+      if (referenceDistance <= 0 || messageDistance <= 0) return;
+
+      const duration = (messageDistance / referenceDistance) * tickerReferenceDurations[speed];
+      track.style.setProperty("--announcement-ticker-duration", `${duration}s`);
+    };
+
+    synchronizeSpeed();
+    const observer = new ResizeObserver(synchronizeSpeed);
+    observer.observe(track);
+    observer.observe(reference);
+    void document.fonts?.ready.then(synchronizeSpeed);
+
+    return () => observer.disconnect();
+  }, [message, speed]);
+
+  return (
+    <div className={`announcement-ticker-viewport announcement-ticker-${speed}`}>
+      <span
+        ref={referenceRef}
+        className={`announcement-ticker-reference text-sm font-medium tracking-wide ${textClass} pr-16`}
+        aria-hidden="true"
+      >
+        {tickerReferenceMessage}
+      </span>
+      <div ref={trackRef} className="announcement-ticker-track">
+        <span className={`text-sm font-medium tracking-wide ${textClass} pr-16`}>
+          {message}
+        </span>
+        <span className={`text-sm font-medium tracking-wide ${textClass} pr-16`} aria-hidden="true">
+          {message}
+        </span>
+      </div>
+    </div>
+  );
 };
 
 const AnnouncementBanner = () => {
@@ -119,24 +185,15 @@ const AnnouncementBanner = () => {
                     className={`shrink-0 w-1.5 h-1.5 rounded-full ${config.iconColor} announcement-live-dot`}
                     style={{ backgroundColor: "currentColor" }}
                   />
-                  <div
-                    className={`announcement-ticker-viewport announcement-ticker-${
-                      announcement.marquee_speed === "slow"
-                        ? "slow"
-                        : announcement.marquee_speed === "fast"
-                        ? "fast"
+                  <AnnouncementTicker
+                    message={announcement.message}
+                    speed={
+                      announcement.marquee_speed === "slow" || announcement.marquee_speed === "fast"
+                        ? announcement.marquee_speed
                         : "normal"
-                    }`}
-                  >
-                    <div className="announcement-ticker-track">
-                      <span className={`text-sm font-medium tracking-wide ${config.text} pr-16`}>
-                        {announcement.message}
-                      </span>
-                      <span className={`text-sm font-medium tracking-wide ${config.text} pr-16`} aria-hidden="true">
-                        {announcement.message}
-                      </span>
-                    </div>
-                  </div>
+                    }
+                    textClass={config.text}
+                  />
                 </>
               ) : (
                 <p className={`text-sm font-medium ${config.text} text-center`}>
