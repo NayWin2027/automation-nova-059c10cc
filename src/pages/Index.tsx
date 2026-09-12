@@ -13,6 +13,7 @@ import {
   PenTool,
   Download,
   Video,
+  Clapperboard,
   Diamond,
   User,
   LogOut,
