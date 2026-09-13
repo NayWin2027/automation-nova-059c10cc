@@ -418,7 +418,27 @@ const Index = () => {
       })}
 
       </div>
+      {(() => {
+        const showcaseSetting = toolSettings.find((s) => s.tool_id === "showcase");
+        const showcaseEnabled = showcaseSetting ? showcaseSetting.is_enabled !== false : true;
+        const showcaseVisible = isAdmin || (showcaseEnabled && (showcaseSetting?.requires_auth === false || isAuthenticated));
+        if (!showcaseVisible) return null;
+        return (
+          <button
+            onClick={() => navigate("/showcase")}
+            className="mt-4 w-full max-w-2xl mx-auto flex items-center gap-3 p-3 rounded-xl border border-gold/25 bg-card/60 text-left hover:bg-card transition-colors">
+            <div className="w-9 h-9 rounded-lg icon-gradient-gold flex items-center justify-center flex-shrink-0">
+              <Clapperboard className="w-4.5 h-4.5 text-foreground" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="font-semibold text-gold text-base">Showcase</h3>
+              <p className="text-3xs text-muted-foreground text-base">Source နှင့် Output ယှဉ်တွဲ နမူနာများ</p>
+            </div>
+          </button>
+        );
+      })()}
       {isAuthenticated && !isAdmin && <div id="referral-rewards" className="mt-4"><HomeRewardsSection /></div>}
+
     </>;
 
   const renderPremiumContent = () => <PlansView />;
@@ -496,25 +516,8 @@ const Index = () => {
           </div>
         </button>
 
-        {(() => {
-          const showcaseSetting = toolSettings.find((s) => s.tool_id === "showcase");
-          const showcaseEnabled = showcaseSetting ? showcaseSetting.is_enabled !== false : true;
-          const showcaseVisible = isAdmin || (showcaseEnabled && (showcaseSetting?.requires_auth === false || isAuthenticated));
-          if (!showcaseVisible) return null;
-          return (
-            <button
-              onClick={() => navigate("/showcase")}
-              className="w-full p-2.5 rounded-lg border border-border/30 bg-card/50 text-left hover:bg-card transition-colors">
-              <div className="flex items-center gap-2">
-                <Clapperboard className="w-4 h-4 text-primary" />
-                <div>
-                  <h3 className="font-semibold text-foreground text-base">Showcase</h3>
-                  <p className="text-3xs text-muted-foreground text-base">Source နှင့် Output ယှဉ်တွဲ နမူနာများ</p>
-                </div>
-              </div>
-            </button>
-          );
-        })()}
+
+
 
         {(isAdmin || profile?.plan === "premium" || toolSettings.find((s) => s.tool_id === "tutorials")?.requires_auth === false) &&
         <button
