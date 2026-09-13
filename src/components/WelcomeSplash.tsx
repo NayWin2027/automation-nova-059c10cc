@@ -259,7 +259,7 @@ export function WelcomeSplash({ onDone }: { onDone: () => void }) {
               textShadow: "0 0 10px hsl(200 100% 60% / 0.3)",
             }}
           >
-            Ko Ye Swan &nbsp;&nbsp;•&nbsp;&nbsp; Ko Nay Win
+            &nbsp;&nbsp;•&nbsp;&nbsp; Ko Nay Win
           </p>
         </div>
       </div>
