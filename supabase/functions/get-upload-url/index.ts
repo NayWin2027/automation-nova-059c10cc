@@ -143,7 +143,10 @@ serve(async (req) => {
       if (isOwnMode && (lastStatus === 401 || lastStatus === 403 || lastStatus === 400)) {
         const isDenied = /denied access|PERMISSION_DENIED|CONSUMER_SUSPENDED/i.test(lastErrorText);
         const isBlocked = /API_KEY_SERVICE_BLOCKED|SERVICE_DISABLED/i.test(lastErrorText);
-        const msg = isDenied
+        const isDeadAccount = /service account is deleted or disabled|ACCOUNT_STATE_INVALID/i.test(lastErrorText);
+        const msg = isDeadAccount
+          ? "ဒီ API key ချိတ်ထားတဲ့ Google account/project ကို ဖျက်ထား သို့မဟုတ် ပိတ်ထားပါတယ် (key က အလုပ်မလုပ်တော့ပါ)။ Google AI Studio (aistudio.google.com) မှာ project အသစ်နဲ့ API key အသစ်တစ်ခု ထုတ်ပြီး App ထဲမှာ ပြန်ထည့်ပါ။"
+          : isDenied
           ? "ဒီ API key ရဲ့ Google project ကို Google က ပိတ်ထား/ငြင်းပယ်ထားပါတယ် (403 denied access)။ Google AI Studio (aistudio.google.com) မှာ project အသစ်တစ်ခုနဲ့ key အသစ်ထုတ်ပြီး ပြန်ထည့်ပါ။"
           : isBlocked
           ? "သင့် Google Cloud project မှာ Generative Language API မဖွင့်ရသေးပါ။ Google AI Studio (aistudio.google.com) ကနေ ရတဲ့ key ကို သုံးပါ။"
