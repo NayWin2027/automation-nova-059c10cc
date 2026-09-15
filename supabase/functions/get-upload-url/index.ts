@@ -73,31 +73,50 @@ serve(async (req) => {
     let lastErrorText = "";
     let lastStatus = 0;
 
-    for (const key of candidates) {
-      // New Google AI Studio keys (AQ.*) use header auth; legacy AIz.* keys accept query param.
-      // Sending both is safe and maximises compatibility across published/preview environments.
-      const isNewKey = key.startsWith("AQ.");
-      const url = isNewKey ? GOOGLE_FILES_API : `${GOOGLE_FILES_API}?key=${key}`;
-      const headers: Record<string, string> = {
-        "X-Goog-Upload-Protocol": "resumable",
-        "X-Goog-Upload-Command": "start",
-        "X-Goog-Upload-Header-Content-Length": fileSize.toString(),
-        "X-Goog-Upload-Header-Content-Type": mimeType,
-        "Content-Type": "application/json",
-      };
-      if (isNewKey) headers["x-goog-api-key"] = key;
+    for (const rawKey of candidates) {
+      const key = String(rawKey).trim().replace(/\s+/g, "");
+      if (!key) continue;
 
-      const resp = await fetch(url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          file: {
-            display_name: fileName.replace(/[\/\\:*?"<>|]/g, "_").substring(0, 255),
-          },
-        }),
-      });
+      // Try BOTH auth transports: query-param `?key=` and `x-goog-api-key` header.
+      // New AI Studio keys (AQ.*) require the header; legacy AIz.* keys accept either.
+      const attempts: Array<{ url: string; useHeader: boolean }> = key.startsWith("AQ.")
+        ? [
+            { url: GOOGLE_FILES_API, useHeader: true },
+            { url: `${GOOGLE_FILES_API}?key=${encodeURIComponent(key)}`, useHeader: true },
+          ]
+        : [
+            { url: `${GOOGLE_FILES_API}?key=${encodeURIComponent(key)}`, useHeader: true },
+            { url: `${GOOGLE_FILES_API}?key=${encodeURIComponent(key)}`, useHeader: false },
+          ];
+
+      let resp: Response | null = null;
+      for (const attempt of attempts) {
+        const headers: Record<string, string> = {
+          "X-Goog-Upload-Protocol": "resumable",
+          "X-Goog-Upload-Command": "start",
+          "X-Goog-Upload-Header-Content-Length": fileSize.toString(),
+          "X-Goog-Upload-Header-Content-Type": mimeType,
+          "Content-Type": "application/json",
+        };
+        if (attempt.useHeader) headers["x-goog-api-key"] = key;
+
+        resp = await fetch(attempt.url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            file: {
+              display_name: fileName.replace(/[\/\\:*?"<>|]/g, "_").substring(0, 255),
+            },
+          }),
+        });
+
+        // Only retry the alternate transport on credential-shaped failures.
+        if (resp.ok || (resp.status !== 401 && resp.status !== 403)) break;
+      }
+      if (!resp) continue;
 
       if (resp.ok) { startResponse = resp; break; }
+
 
       const errText = await resp.text();
       lastErrorText = errText;
@@ -122,8 +141,14 @@ serve(async (req) => {
         );
       }
       if (isOwnMode && (lastStatus === 401 || lastStatus === 403 || lastStatus === 400)) {
+        const isDenied = /denied access|PERMISSION_DENIED|CONSUMER_SUSPENDED/i.test(lastErrorText);
         const isBlocked = /API_KEY_SERVICE_BLOCKED|SERVICE_DISABLED/i.test(lastErrorText);
-        const msg = isBlocked
+        const isDeadAccount = /service account is deleted or disabled|ACCOUNT_STATE_INVALID/i.test(lastErrorText);
+        const msg = isDeadAccount
+          ? "ဒီ API key ချိတ်ထားတဲ့ Google account/project ကို ဖျက်ထား သို့မဟုတ် ပိတ်ထားပါတယ် (key က အလုပ်မလုပ်တော့ပါ)။ Google AI Studio (aistudio.google.com) မှာ project အသစ်နဲ့ API key အသစ်တစ်ခု ထုတ်ပြီး App ထဲမှာ ပြန်ထည့်ပါ။"
+          : isDenied
+          ? "ဒီ API key ရဲ့ Google project ကို Google က ပိတ်ထား/ငြင်းပယ်ထားပါတယ် (403 denied access)။ Google AI Studio (aistudio.google.com) မှာ project အသစ်တစ်ခုနဲ့ key အသစ်ထုတ်ပြီး ပြန်ထည့်ပါ။"
+          : isBlocked
           ? "သင့် Google Cloud project မှာ Generative Language API မဖွင့်ရသေးပါ။ Google AI Studio (aistudio.google.com) ကနေ ရတဲ့ key ကို သုံးပါ။"
           : `API key error: ${lastErrorText.slice(0, 300)}`;
         return new Response(

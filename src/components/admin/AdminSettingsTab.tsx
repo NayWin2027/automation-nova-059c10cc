@@ -129,10 +129,13 @@ const AdminSettingsTab: React.FC = () => {
     action_label: string;
     action_url: string;
     custom_color: string;
+    is_marquee: boolean;
+    marquee_speed: string;
   }
 
   const emptyAnnouncement: AnnouncementItem = {
-    message: "", type: "info", is_active: false, action_label: "", action_url: "", custom_color: ""
+    message: "", type: "info", is_active: false, action_label: "", action_url: "", custom_color: "",
+    is_marquee: false, marquee_speed: "normal"
   };
 
   const [announcementList, setAnnouncementList] = useState<AnnouncementItem[]>([]);
@@ -235,6 +238,8 @@ const AdminSettingsTab: React.FC = () => {
         action_label: a.action_label || "",
         action_url: a.action_url || "",
         custom_color: a.custom_color || "",
+        is_marquee: !!a.is_marquee,
+        marquee_speed: a.marquee_speed || "normal",
       })));
     }
 
@@ -1130,6 +1135,43 @@ const AdminSettingsTab: React.FC = () => {
                   </div>
                 </div>
 
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-xs">Ticker (running text)</Label>
+                    <p className="text-2xs text-muted-foreground">သတင်းဌာနစတိုင် စာတန်းပြေး</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <OnOffBadge checked={ann.is_marquee} />
+                    <Switch
+                      checked={ann.is_marquee}
+                      onCheckedChange={(checked) => {
+                        const updated = [...announcementList];
+                        updated[idx] = { ...ann, is_marquee: checked };
+                        setAnnouncementList(updated);
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {ann.is_marquee && (
+                  <div className="space-y-1">
+                    <Label className="text-2xs">Ticker Speed</Label>
+                    <select
+                      value={ann.marquee_speed || "normal"}
+                      onChange={(e) => {
+                        const updated = [...announcementList];
+                        updated[idx] = { ...ann, marquee_speed: e.target.value };
+                        setAnnouncementList(updated);
+                      }}
+                      className="w-full h-8 text-xs rounded-md border border-input bg-background px-3"
+                    >
+                      <option value="slow">🐢 Slow</option>
+                      <option value="normal">⚡ Normal</option>
+                      <option value="fast">🚀 Fast</option>
+                    </select>
+                  </div>
+                )}
+
                 <div className="space-y-1">
                   <Label className="text-2xs">Message</Label>
                   <Input
@@ -1235,6 +1277,8 @@ const AdminSettingsTab: React.FC = () => {
                       action_label: ann.action_label || null,
                       action_url: ann.action_url || null,
                       custom_color: ann.type === "custom" ? (ann.custom_color || "#3b82f6") : null,
+                      is_marquee: ann.is_marquee,
+                      marquee_speed: ann.marquee_speed || "normal",
                       updated_at: new Date().toISOString(),
                     };
 

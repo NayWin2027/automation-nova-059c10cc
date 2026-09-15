@@ -100,9 +100,11 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ embedded = false }) => {
       let slipImagePath: string | null = null;
 
       if (slipFile) {
-        const ext = slipFile.name.split(".").pop();
+        const rawExt = (slipFile.name.split(".").pop() || "").toLowerCase();
+        const ext = /^[a-z0-9]{1,5}$/.test(rawExt) ? rawExt : "bin";
         const folder = currentUser?.id ? currentUser.id : "public";
-        const fileName = `${folder}/${Date.now()}_${crypto.randomUUID().substring(0, 8)}.${ext}`;
+        // Fully unguessable path: two full random UUIDs (no enumerable timestamp prefix)
+        const fileName = `${folder}/${crypto.randomUUID()}-${crypto.randomUUID()}.${ext}`;
         const { error: uploadError } = await supabase.storage.from("payment-slips").upload(fileName, slipFile);
 
         if (uploadError) {

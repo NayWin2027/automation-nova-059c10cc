@@ -32,6 +32,7 @@ const NovelTransPage = lazyRetry(() => import("./pages/NovelTransPage"));
 const ThumbnailPage = lazyRetry(() => import("./pages/ThumbnailPage"));
 const SrtSubPage = lazyRetry(() => import("./pages/SrtSubPage"));
 const TutorialVideosPage = lazyRetry(() => import("./pages/TutorialVideosPage"));
+const ShowcasePage = lazyRetry(() => import("./pages/ShowcasePage"));
 const NovaCutVideoPage = lazyRetry(() => import("./pages/NovaCutVideoPage"));
 const TranslateVideoPage = lazyRetry(() => import("./pages/TranslateVideoPage"));
 const OrderFormPage = lazyRetry(() => import("./pages/OrderFormPage"));
@@ -72,6 +73,7 @@ const App = () => (
             <Route path="/thumbnail" element={<ThumbnailPage />} />
             <Route path="/srt" element={<SrtSubPage />} />
             <Route path="/tutorials" element={<TutorialVideosPage />} />
+            <Route path="/showcase" element={<ShowcasePage />} />
             <Route path="/nova-cut" element={<NovaCutVideoPage />} />
             <Route path="/translate-video" element={<TranslateVideoPage />} />
             {/* Admin Routes */}

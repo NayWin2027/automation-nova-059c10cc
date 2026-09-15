@@ -46,14 +46,75 @@ const DIALOGUE_METADATA_PATTERN =
 
 // SURGICAL FIX: strip every timecode shape the AI may emit ([M:SS], [HH:MM:SS], ranges)
 // so timestamps never leak into subtitles.
-const TIMECODE_STRIP_RE =
-  /\[\s*\d{1,2}:\d{2}(?::\d{2})?(?:\s*[-–—]\s*\d{1,2}:\d{2}(?::\d{2})?)?\s*\]/g;
+const TIMECODE_STRIP_RE = /\[\s*\d{1,2}:\d{2}(?::\d{2})?(?:\s*[-–—]\s*\d{1,2}:\d{2}(?::\d{2})?)?\s*\]/g;
 
 const stripDialogueMetadata = (text: string): string =>
   String(text || "")
     .replace(DIALOGUE_METADATA_PATTERN, "")
     .replace(/[ \t]{2,}/g, " ")
     .trim();
+
+// ── LANGUAGE MISMATCH DETECTOR (script text layer only) ──
+const SCRIPT_RANGES: Record<string, RegExp> = {
+  my: /[\u1000-\u109F]/g,
+  th: /[\u0E00-\u0E7F]/g,
+  km: /[\u1780-\u17FF]/g,
+  lo: /[\u0E80-\u0EFF]/g,
+  zh: /[\u4E00-\u9FFF]/g,
+  ja: /[\u3040-\u30FF\u4E00-\u9FFF]/g,
+  ko: /[\uAC00-\uD7AF]/g,
+  ar: /[\u0600-\u06FF]/g,
+  fa: /[\u0600-\u06FF]/g,
+  ur: /[\u0600-\u06FF]/g,
+  he: /[\u0590-\u05FF]/g,
+  hi: /[\u0900-\u097F]/g,
+  mr: /[\u0900-\u097F]/g,
+  ne: /[\u0900-\u097F]/g,
+  bn: /[\u0980-\u09FF]/g,
+  ta: /[\u0B80-\u0BFF]/g,
+  te: /[\u0C00-\u0C7F]/g,
+  kn: /[\u0C80-\u0CFF]/g,
+  ml: /[\u0D00-\u0D7F]/g,
+  gu: /[\u0A80-\u0AFF]/g,
+  pa: /[\u0A00-\u0A7F]/g,
+  si: /[\u0D80-\u0DFF]/g,
+  ru: /[\u0400-\u04FF]/g,
+  uk: /[\u0400-\u04FF]/g,
+  bg: /[\u0400-\u04FF]/g,
+  sr: /[\u0400-\u04FF]/g,
+  mk: /[\u0400-\u04FF]/g,
+  be: /[\u0400-\u04FF]/g,
+  mn: /[\u0400-\u04FF]/g,
+  kk: /[\u0400-\u04FF]/g,
+  ky: /[\u0400-\u04FF]/g,
+  tg: /[\u0400-\u04FF]/g,
+  el: /[\u0370-\u03FF]/g,
+  hy: /[\u0530-\u058F]/g,
+  ka: /[\u10A0-\u10FF]/g,
+  am: /[\u1200-\u137F]/g,
+};
+
+/** Returns true when the script is clearly NOT written in the target language's script. */
+const scriptLanguageMismatch = (text: string, langCode: string): boolean => {
+  const body = String(text || "").replace(/\d|\s|[.,:;!?'"()\-–—[\]{}|/\\]/g, "");
+  if (body.length < 40) return false;
+  const base = (langCode || "").split("-")[0];
+  const range = SCRIPT_RANGES[base];
+  const latin = (body.match(/[A-Za-z]/g) || []).length;
+  if (!range) {
+    // Latin-script target languages: mismatch when Latin letters are a minority.
+    return latin / body.length < 0.5;
+  }
+  const hits = (body.match(range) || []).length;
+  return hits / body.length < 0.35;
+};
+
+/** Reject foreign writing systems that must never be spoken by the selected TTS voice. */
+const scriptContainsForbiddenGlyphs = (text: string, langCode: string): boolean => {
+  const base = (langCode || "").split("-")[0];
+  if (base === "my") return /[\u3400-\u9FFF\u3040-\u30FF\uAC00-\uD7AF\u0E00-\u0EFF\u1780-\u17FF]/u.test(text);
+  return false;
+};
 
 type ProcessingStatus = "idle" | "processing" | "done" | "error";
 
@@ -76,6 +137,10 @@ interface ResultViewProps {
   renderMode?: "browser" | "server";
   sourceFileUriRef?: React.MutableRefObject<string | null>;
   videoFileRef?: React.MutableRefObject<File | null>;
+  targetLanguageName?: string;
+  targetLanguageCode?: string;
+  onTranslateScript?: () => void;
+  isTranslatingScript?: boolean;
 }
 
 interface LogoSettings {
@@ -300,8 +365,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     renderMode,
     sourceFileUriRef,
     videoFileRef,
+    targetLanguageName = "BURMESE",
+    targetLanguageCode = "my-MM",
+    onTranslateScript,
+    isTranslatingScript = false,
   }) => {
     const [activeTab, setActiveTab] = useState<"script" | "segments">("script");
+
     const [isRecapPlaying, setIsRecapPlaying] = useState(false);
     const [currentSubtitle, setCurrentSubtitle] = useState("");
     const [subtitleKey, setSubtitleKey] = useState(0);
@@ -632,6 +702,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
     // —— FIX: Cache canvas filter string — recompute only when grade/bypass changes ——
     const filterStringRef = useRef<string>("none");
+    // —— PERF FIX: memoize the scene-graded filter string + last assigned ctx.filter ——
+    const gradedFilterKeyRef = useRef<string>("");
+    const gradedFilterValRef = useRef<string>("none");
 
     // —— FIX: Drag position ref — avoid setState on every mousemove ——
     const dragSubPosRef = useRef({ x: 50, y: 85 });
@@ -701,7 +774,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       y: 88,
       width: 84,
       height: 11,
-      opacity: 90,
+      opacity: 22,
       isDragging: false,
     });
 
@@ -2209,15 +2282,23 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
       logoAngleRef.current = 0;
       let lastFrameTime = performance.now();
-      let isLowEndRender = quality.fps < 30;
+      // SURGICAL FIX: Also detect Snapdragon 4gen (4 cores/4GB), 6gen (6 cores/≤4GB), i3 (4 cores) as low-end render
+      // Previously quality.fps < 30 only triggered this — those devices have 30fps quality tier but still stutter
+      let isLowEndRender = quality.fps < 30 || (cores <= 4 && mem <= 4) || (cores <= 6 && mem <= 3);
 
       // â”€â”€ FIX: Real-time FPS monitoring (NO FRAME SKIP for Hollywood smoothness)
       let lastFrameTimestamp = 0;
       let consecutiveSlowFrames = 0;
-      const DYNAMIC_DOWNGRADE_THRESHOLD = 15; // Downgrade quality after 15 slow frames
+      const DYNAMIC_DOWNGRADE_THRESHOLD = 5; // SURGICAL FIX: 15→5 — faster low-end adaptation (Snapdragon 4gen/6gen/i3)
 
-      // HOLLYWOOD CINEMATIC: Never skip frames - render every single frame for buttery smoothness
-      const shouldSkipFrame = (_timestamp: number): boolean => false;
+      // SURGICAL FIX: Apply frame budget throttle to ALL devices (not just low-end).
+      // rAF fires at 60Hz but quality output is 30fps → without skipping, every device draws 2× needed frames.
+      // This was the root cause of Snapdragon 7gen/i5 CPU overload during 30fps output.
+      // Resolution is NOT changed — only excess rAF callbacks are skipped.
+      const shouldSkipFrame = (timestamp: number): boolean => {
+        if (lastDrawTime === 0) return false;
+        return timestamp - lastDrawTime < adaptiveFrameInterval * 0.85;
+      };
 
       const monitorPerformance = (timestamp: number): void => {
         if (lastFrameTimestamp > 0) {
@@ -2317,17 +2398,23 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           }
         }
 
-        // â”€â”€ FIX: Use cached filter string â€” no string allocation per frame â”€â”€
-        // â”€â”€ BONUS: Scene-Aware Dynamic Color Grade â€” blend base filter with scene-type modifier â”€â”€
+        // ── FIX: Use cached filter string — no string allocation per frame ──
+        // ── BONUS: Scene-Aware Dynamic Color Grade — blend base filter with scene-type modifier ──
+        // ── PERF FIX: recompute the graded string only when its inputs change, and only
+        //    touch ctx.filter when the value actually differs (canvas filter parsing is costly).
         const sceneType = segPacingTypeRef.current;
         const isColorOff = editorState.colorGrade === "OFF" || editorState.bypass;
-        if (!isColorOff && sceneType === "action") {
-          ctx.filter = filterStringRef.current + " contrast(118%) hue-rotate(-8deg) saturate(115%)";
-        } else if (!isColorOff && sceneType === "emotional") {
-          ctx.filter = filterStringRef.current + " sepia(18%) brightness(96%) saturate(90%)";
-        } else {
-          ctx.filter = filterStringRef.current;
+        const gradeKey = `${isColorOff ? 1 : 0}|${sceneType}|${filterStringRef.current}`;
+        if (gradedFilterKeyRef.current !== gradeKey) {
+          gradedFilterKeyRef.current = gradeKey;
+          gradedFilterValRef.current =
+            !isColorOff && sceneType === "action"
+              ? filterStringRef.current + " contrast(118%) hue-rotate(-8deg) saturate(115%)"
+              : !isColorOff && sceneType === "emotional"
+                ? filterStringRef.current + " sepia(18%) brightness(96%) saturate(90%)"
+                : filterStringRef.current;
         }
+        ctx.filter = gradedFilterValRef.current;
 
         // SURGICAL EDIT: Zoom toggle - conditional cinematic zoom/pan/rotation
         // Freeze mode is INDEPENDENT of zoom toggle â€” it works even when zoom is OFF
@@ -2379,7 +2466,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             const freezeProgress = cyclePos / FREEZE_SEC;
             // Pure ease-out: fast at start, slow at end (reverse of ease-in — natural deceleration)
             const eased = 1 - Math.pow(1 - freezeProgress, 3);
-            const freezeZoom = 1.0 + 0.12 * eased; // 12% zoom, smooth deceleration
+            const freezeZoom = 1.0 + 0.15 * eased; // 15% zoom, smooth deceleration
             const drawW = Math.max(2, Math.round(canvas.width / freezeZoom));
             const drawH = Math.max(2, Math.round(canvas.height / freezeZoom));
             // Center perfectly — no pan (international news standard)
@@ -2511,7 +2598,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           !prewarmActiveRef.current &&
           visibleLoopFrameReadyRef.current;
 
-        // (B) residual gap mask — slow micro zoom-in (max 2%) so any held frame reads as motion
+        // (B) residual gap mask — slow micro zoom-in (max 1%) so any held frame reads as motion
         {
           const _now = performance.now();
           if (seekPendingRef.current) {
@@ -2520,7 +2607,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             gapStartRef.current = 0;
           }
           let gapZoom = 1;
-          if (gapStartRef.current > 0) {
+          const AV_GAP_ZOOM_THRESHOLD_MS = 150; // SURGICAL FIX: only zoom when gap > 150ms (real AV sync issue)
+          if (gapStartRef.current > 0 && _now - gapStartRef.current > AV_GAP_ZOOM_THRESHOLD_MS) {
             const p = Math.min(1, (_now - gapStartRef.current) / 250);
             gapZoom = 1 + 0.02 * (1 - Math.pow(1 - p, 3));
             gapZoomHoldRef.current = gapZoom;
@@ -2557,11 +2645,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               useVisibleLoopMask && visibleLoopMaskStartRef.current > 0
                 ? performance.now() - visibleLoopMaskStartRef.current
                 : Math.max(0, performance.now() - gapStartRef.current);
-            const maskProgress = Math.min(1, maskElapsed / (useVisibleLoopMask ? 14000 : 320));
+            const maskProgress = Math.min(1, maskElapsed / (useVisibleLoopMask ? 9000 : 320));
             const maskEase = useVisibleLoopMask
               ? 1 - Math.pow(1 - maskProgress, 2) // gentle, visible ease-out (news-channel push-in)
               : 1 - Math.pow(1 - maskProgress, 3);
-            const maskZoom = 1 + (useVisibleLoopMask ? 0.18 : 0.018) * maskEase;
+            const maskZoom = 1 + (useVisibleLoopMask ? 0.3 : 0.018) * maskEase;
             const maskW = Math.max(2, Math.round(heldFrame.width / maskZoom));
             const maskH = Math.max(2, Math.round(heldFrame.height / maskZoom));
             const maskX = Math.round((heldFrame.width - maskW) / 2);
@@ -3066,8 +3154,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // // —— ADAPTIVE FPS: dynamically throttle to 24fps if CPU is struggling ——
       let adaptiveFrameInterval = frameInterval;
       let slowFrameCount = 0;
-      const SLOW_THRESHOLD = 10; // 10 consecutive slow frames triggers throttle
-      const MIN_FPS = isHighEndDevice ? quality.fps : 24;
+      const SLOW_THRESHOLD = 5; // SURGICAL FIX: 10→5 — faster throttle trigger for 7gen/i5/mid-tier
+      // SURGICAL FIX: MIN_FPS=24 for ALL devices — allows adaptive throttle to actually take effect.
+      // Previously isHighEndDevice got quality.fps (e.g. 30) so MIN_FRAME_INTERVAL = frameInterval → no throttle possible.
+      const MIN_FPS = 24;
       const MIN_FRAME_INTERVAL = 1000 / MIN_FPS;
       const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
       let lastTsIdx = 0;
@@ -3103,8 +3193,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         // â”€â”€ ADAPTIVE FPS: Monitor frame budget â”€â”€
         const frameDelta = timestamp - lastDrawTime;
-        // SURGICAL FIX: High-end (i7/i5 desktop) never down-throttles — keeps cinematic 30fps steady
-        if (!isHighEndDevice && lastDrawTime > 0 && frameDelta > adaptiveFrameInterval * 1.5) {
+        // SURGICAL FIX: Remove !isHighEndDevice guard — 7gen/i5 also need adaptive throttle during CPU spikes
+        if (lastDrawTime > 0 && frameDelta > adaptiveFrameInterval * 1.5) {
           slowFrameCount++;
           if (slowFrameCount >= SLOW_THRESHOLD) {
             adaptiveFrameInterval = Math.max(adaptiveFrameInterval, MIN_FRAME_INTERVAL);
@@ -3160,7 +3250,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               const hookSeg = segs[hookIdx] as any;
               if (hookSeg) {
                 const hookVEnd = hookSeg.vEnd === -1 ? vv.duration : hookSeg.vEnd;
-                if (!seekPendingRef.current && Math.abs(vv.currentTime - hookSeg.vStart) > 0.8) {
+                if (!seekPendingRef.current && Math.abs(vv.currentTime - hookSeg.vStart) > 0.3) {
+                  // SURGICAL FIX: 0.8→0.3s — tighter lock to hook dramatic scene
                   seekPendingRef.current = true;
                   const onHookSeeked = () => {
                     seekPendingRef.current = false;
@@ -3744,6 +3835,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 </button>
               </div>
               <div className="flex gap-2">
+                {onTranslateScript && (
+                  <button
+                    onClick={onTranslateScript}
+                    disabled={isTranslatingScript}
+                    title={`Translate script to ${targetLanguageName}`}
+                    className="text-xs text-cyan-300 border border-cyan-400/50 px-2 py-1 rounded-lg hover:bg-cyan-400/10 transition-all disabled:opacity-50"
+                  >
+                    {isTranslatingScript ? "🌐 ဘာသာပြန်နေသည်..." : `🌐 Translate → ${targetLanguageName}`}
+                  </button>
+                )}
                 <button
                   onClick={downloadSRT}
                   className="text-xs text-amber-400 border border-amber-400/50 px-2 py-1 rounded-lg hover:bg-amber-400/10 transition-all"
@@ -3752,6 +3853,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 </button>
               </div>
             </div>
+            {onTranslateScript && scriptLanguageMismatch(scriptData.full_script, targetLanguageCode) && (
+              <div className="mx-3 mb-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-400/40 text-[11px] text-amber-300 leading-relaxed">
+                ⚠️ Script က ရွေးထားတဲ့ ဘာသာစကား ({targetLanguageName}) နဲ့ မကိုက်ညီပုံရပါတယ်။ အပေါ်က{" "}
+                <span className="font-semibold">🌐 Translate</span> ခလုတ်ကို နှိပ်ပြီး ပြောင်းပါ။
+              </div>
+            )}
             <div className="flex-1 overflow-hidden">
               {activeTab === "script" ? (
                 <textarea
@@ -5353,9 +5460,20 @@ interface RecapHistoryItem {
 }
 
 const VOICE_OPTIONS = [
-  { value: "edge:it-IT-GiuseppeMultilingualNeural", label: "⭐ Giuseppe (Multilingual v2 — Male)", gender: "Male" },
   { value: "edge:my-MM-ThihaNeural", label: "⭐ Thiha (Burmese Native — Male)", gender: "Male" },
   { value: "edge:my-MM-NilarNeural", label: "⭐ Nilar (Burmese Native — Female)", gender: "Female" },
+  { value: "edge:it-IT-GiuseppeMultilingualNeural", label: "Giuseppe (Multilingual — Male 🇮🇹)", gender: "Male" },
+  { value: "edge:en-US-AndrewMultilingualNeural", label: "Andrew (Multilingual — Male 🇺🇸)", gender: "Male" },
+  { value: "edge:en-US-AvaMultilingualNeural", label: "Ava (Multilingual — Female 🇺🇸)", gender: "Female" },
+  { value: "edge:en-US-BrianMultilingualNeural", label: "Brian (Multilingual — Male 🇺🇸)", gender: "Male" },
+  { value: "edge:en-US-EmmaMultilingualNeural", label: "Emma (Multilingual — Female 🇺🇸)", gender: "Female" },
+  { value: "edge:en-AU-WilliamMultilingualNeural", label: "William (Multilingual — Male 🇦🇺)", gender: "Male" },
+  { value: "edge:de-DE-FlorianMultilingualNeural", label: "Florian (Multilingual — Male 🇩🇪)", gender: "Male" },
+  { value: "edge:de-DE-SeraphinaMultilingualNeural", label: "Seraphina (Multilingual — Female 🇩🇪)", gender: "Female" },
+  { value: "edge:fr-FR-RemyMultilingualNeural", label: "Remy (Multilingual — Male 🇫🇷)", gender: "Male" },
+  { value: "edge:fr-FR-VivienneMultilingualNeural", label: "Vivienne (Multilingual — Female 🇫🇷)", gender: "Female" },
+  { value: "edge:ko-KR-HyunsuMultilingualNeural", label: "Hyunsu (Multilingual — Male 🇰🇷)", gender: "Male" },
+  { value: "edge:pt-BR-ThalitaMultilingualNeural", label: "Thalita (Multilingual — Female 🇧🇷)", gender: "Female" },
   { value: "Zephyr", label: "Zephyr (Female)", gender: "Female" },
   { value: "Puck", label: "Puck (Male)", gender: "Male" },
   { value: "Charon", label: "Charon (Male)", gender: "Male" },
@@ -5413,6 +5531,14 @@ const NARRATION_STYLE_OPTIONS: Record<"STORY" | "HYBRID" | "VIRAL", { emoji: str
 };
 
 function buildNarrationStyleBlock(style: "STORY" | "HYBRID" | "VIRAL", langName: string): string {
+  // SURGICAL: TTS skips foreign glyphs (Chinese names, Latin words), so every
+  // character must be transliterated into the target language's own script.
+  const translitBlock = `\n\nNATIVE-SCRIPT TRANSLITERATION (MANDATORY — the voice engine skips foreign glyphs):
+- EVERY character of the script must be written in the ${langName} writing system. No Chinese/Japanese/Korean characters, no Latin letters, no other alphabets anywhere — including names, places, brands and borrowed words.
+- Transliterate them phonetically into ${langName} letters so the voice reads them with a natural ${langName} accent.
+- If ${langName} is BURMESE: Facebook → ဖေ့ဘုတ် ; TikTok → တစ်တော့ ; CEO → စီအီးအို ; hotel → ဟိုတယ် ; police → ပိုလိစ် ; OK → အိုကေ.
+- CHARACTER NAMES: use ONLY the real names spoken or shown in THIS source video, transliterated into ${langName} letters. NEVER invent a name and NEVER reuse any example name from this prompt. If a name is unclear, use the character's role or relationship instead.
+- A name left in Chinese characters or Latin letters is read as silence — that is a hard failure, never do it.`;
   const timingLockBlock = `\n\nDIALOGUE TIMING LOCK (HYBRID/VIRAL only):
 - For each real spoken line, inspect the source carefully and use the EXACT source frame where the speaker's first audible syllable begins (normally the first mouth movement). Do not use a nearby reaction shot, an earlier establishing shot, or an approximate scene time.
 - Keep each speaker turn separate. When the speaker changes, start a new paragraph at that new speaker's exact source start time.
@@ -5432,7 +5558,17 @@ DIALOGUE COMPLETENESS (HYBRID/VIRAL only):
 ACTION & FACE EXPRESSION (HYBRID/VIRAL only):
 - In no-speech moments, state the CONCRETE physical action with a precise verb (what was swung, kicked, stomped, grabbed, thrown), not a vague summary like "ဒေါသထွက်သွားတယ်".
 - Add the visible face/body reaction: eyes widening, hands shaking, jaw clenching, tears welling, stepping back.
-- Keep each action/expression line SHORT (1-2 sentences) so it never crowds out dialogue.`;
+- Keep each action/expression line SHORT (1-2 sentences) so it never crowds out dialogue.
+
+UNCENSORED VERBATIM DIALOGUE (HYBRID/VIRAL only — 100% of spoken lines):
+- 100% of the spoken lines must be present. Zero skipping, zero merging, zero "summary instead of the line". Action/narrator lines stay at ~20% only.
+- NEVER soften, censor, bleep, or clean up harsh speech. If a character curses, insults, threatens, or talks vulgarly, write it EXACTLY that harsh in ${langName} (e.g. မအေလိုး, ခွေးမသား, ဖာသည်မ, စောက်...). Do not replace with "ဆဲလိုက်တယ်" or "***".
+- Explicit, sexual, crude or offensive lines are kept as-is — faithfulness to the source outweighs politeness.
+
+STREET-SPOKEN STYLE & MODERN SLANG (HYBRID/VIRAL only):
+- Write 100% like real people talk on the street today. Literary/bookish endings (သည်, ၏, ၍, နေသည်, လုပ်နေသည်) are FORBIDDEN. Use တယ်/တာ/လဲ/ကွာ/ပဲ spoken forms.
+- Use current Burmese slang and trend words naturally instead of plain wording, for example: လှတယ် → လန်းတယ်/ချဲပေါက်မှ ခေါ်တီးမယ်/သရေကျတယ်; ချစ်တင်းနှောနေတယ် → မူစကူဒူးနေကြတယ်; တင်ပါးလှတယ် → စစ်ကိုင်းအိုးကြီးလို တင်းနေတယ်; စကားများတယ် → အီးပေါက်တယ် / စောက်ပေါက်ပိတ်ထား; ရစ်တယ်/ဂျီဂျောင်ကျတယ် → ချီးထုပ်ကျတယ်; လိုရင်းမရောက်ဘဲ ဝေ့ဝိုက်နေတယ် → တိုင်ပတ်တယ်; ပြည့်တန်ဆာ → ဖာသည်မ။
+- Slang must fit the moment naturally — never force it into a sad or serious scene where it breaks the emotion.`;
   if (style === "HYBRID") {
     return `\n\nNARRATION STYLE — HYBRID (narration + direct speech):
 - Use narrator voice for background, context, and explanation.
@@ -5442,7 +5578,7 @@ ACTION & FACE EXPRESSION (HYBRID/VIRAL only):
 - Match the words to what is actually happening on screen at that moment (action, gesture, expression).
 - NEVER invent dialogue that does not exist in the source. If the source has no speech at that point, stay in narrator voice.
 - Keep the same total length rules as normal; this changes HOW it is written, not how much.
-- THIS OVERRIDES any earlier instruction that says to avoid quoting dialogue: quoting real spoken lines is REQUIRED in this style.${timingLockBlock}`;
+- THIS OVERRIDES any earlier instruction that says to avoid quoting dialogue: quoting real spoken lines is REQUIRED in this style.${timingLockBlock}${translitBlock}`;
   }
   if (style === "VIRAL") {
     return `\n\nNARRATION STYLE — VIRAL (short-form, TikTok/Reels):
@@ -5453,11 +5589,15 @@ ACTION & FACE EXPRESSION (HYBRID/VIRAL only):
 - Match the words to the on-screen action at that moment.
 - NEVER invent dialogue that does not exist in the source.
 - For non-story niches (tech, news, health, business, educational), "conflict" means the myth being busted, the surprising number, the mistake people make — hit those hard and fast.
-- THIS OVERRIDES any earlier instruction that says to avoid quoting dialogue: quoting real spoken lines is REQUIRED in this style.${timingLockBlock}`;
+- STORY-CONNECTION LINES (mandatory): dialogue alone is NOT enough. Between dialogue blocks, add SHORT narrator lines (1-2 sentences) that state the concrete physical action, who is doing it to whom, and the visible reaction/expression — so a viewer who never saw the source still understands the plot.
+- Add one such connective line whenever the scene/location/time changes, a new character appears, a fight/chase/physical action happens, or a relationship/motive must be clear for the next dialogue to make sense.
+- Overall mix: roughly 70-80% real dialogue, 20-30% short narrator/action lines. NEVER produce a bare dialogue transcript with no connective lines.
+- Narrator lines must be connective glue only: short, punchy, describing action/reaction — never re-summarising dialogue that was already spoken, never invented facts.
+- THIS OVERRIDES any earlier instruction that says to avoid quoting dialogue: quoting real spoken lines is REQUIRED in this style.${timingLockBlock}${translitBlock}`;
   }
   return `\n\nNARRATION STYLE — STORY (full narrative, long-form):
 - Keep the classic complete narrator style: clear beginning-to-end storytelling with smooth flow and emotional depth.
-- Translate what people actually said when it matters, but stay primarily in narrator voice.`;
+- Translate what people actually said when it matters, but stay primarily in narrator voice.${translitBlock}`;
 }
 
 const RecapVideoNVPage: React.FC = () => {
@@ -5474,7 +5614,7 @@ const RecapVideoNVPage: React.FC = () => {
 
   useEffect(() => {
     const timer = setTimeout(async () => {
-      const { data } = await supabase
+      const { data } = await (supabase as any)
         .from("safe_tool_settings")
         .select("credit_cost, server_credit_per_min")
         .eq("tool_id", "recap-nv")
@@ -5505,7 +5645,7 @@ const RecapVideoNVPage: React.FC = () => {
   const [selectedLanguage, setSelectedLanguage] = useState("my-MM");
   // ===== NARRATION STYLE (additive — prompt-only, does not touch render/AV-sync) =====
   const [narrationStyle, setNarrationStyle] = useState<"STORY" | "HYBRID" | "VIRAL">("STORY");
-  const [selectedVoice, setSelectedVoice] = useState("edge:it-IT-GiuseppeMultilingualNeural");
+  const [selectedVoice, setSelectedVoice] = useState("edge:my-MM-ThihaNeural");
 
   // Auto-update selected voice when selected language changes
   useEffect(() => {
@@ -5517,19 +5657,35 @@ const RecapVideoNVPage: React.FC = () => {
   }, [selectedLanguage]);
   const [langPopoverOpen, setLangPopoverOpen] = useState(false);
   const [apiMode, setApiMode] = useState<"app" | "own">("own");
-  const [ownApiKey, setOwnApiKey] = useState("");
+  // Own API key persists for the browser session only (cleared when the tab closes)
+  const [ownApiKey, setOwnApiKey] = useState(() => {
+    try {
+      return sessionStorage.getItem("recap_nv_own_api_key") || "";
+    } catch {
+      return "";
+    }
+  });
+  useEffect(() => {
+    try {
+      if (ownApiKey.trim()) sessionStorage.setItem("recap_nv_own_api_key", ownApiKey.trim());
+      else sessionStorage.removeItem("recap_nv_own_api_key");
+    } catch {
+      /* ignore */
+    }
+  }, [ownApiKey]);
+
   const [showApiKey, setShowApiKey] = useState(false);
   // ===== SERIES CONTINUITY (additive, optional) =====
   const [seriesEnabled, setSeriesEnabled] = useState(false);
   const [seriesName, setSeriesName] = useState("");
-  const [seriesPart, setSeriesPart] = useState<number>(1);
+  const [seriesPart, setSeriesPart] = useState<string>("1");
   const [seriesList, setSeriesList] = useState<
     { series_name: string; last_part: number; story_bible: Record<string, unknown> | null }[]
   >([]);
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data } = await supabase
+      const { data } = await (supabase as any)
         .from("recap_series")
         .select("series_name,last_part,story_bible")
         .order("updated_at", { ascending: false });
@@ -5540,10 +5696,32 @@ const RecapVideoNVPage: React.FC = () => {
     };
   }, []);
   const buildSeriesContext = useCallback((): string => {
-    if (!seriesEnabled || !seriesName.trim() || seriesPart <= 1) return "";
-    const row = seriesList.find((s) => s.series_name === seriesName.trim());
+    if (!seriesEnabled || !seriesName.trim()) return "";
+    const nameRaw = seriesName.trim();
+    const partRaw = String(seriesPart ?? "").trim();
+    // SURGICAL: finale detection now lives in the EPISODE NUMBER field, not the series name field.
+    const isFinale = /ဇာတ်သိမ်း|ဇာတ်သိမ်းပိုင်း|finale|final part|last part/i.test(partRaw);
+    const explicitPart = parseInt(partRaw.replace(/\D/g, ""), 10);
+    const row = seriesList.find((s) => s.series_name === nameRaw);
+    const savedLast = row?.last_part || 0;
+    let partNum = 1;
+    if (isFinale) {
+      partNum = !isNaN(explicitPart) ? explicitPart : savedLast > 0 ? savedLast + 1 : 1;
+    } else {
+      partNum = !isNaN(explicitPart) ? explicitPart : 1;
+    }
+    const prevPart = Math.max(1, partNum - 1);
+    const finaleBlock = isFinale
+      ? `FINALE PART (STORY ENDING):
+- This is the FINAL part of the series. The story ENDS here.
+- After the last story beat, close with a short 1-2 sentence wrap-up (အနှစ်ချုပ် သုံးသပ်ချက်) in the same narration language, spoken style, telling viewers the story is now finished.
+- Then add one short warm thank-you line thanking every single viewer who watched to the very end and supported the series.
+- Keep it natural and spoken — no formal literary endings, no meta-talk, no channel-subscription sales pitch beyond the thank-you.
+- These closing lines still follow the normal [MM:SS] timecode format like every other paragraph.`
+      : "";
+    if (partNum <= 1) return finaleBlock;
     const bible: any = row?.story_bible;
-    if (!bible || typeof bible !== "object" || Object.keys(bible).length === 0) return "";
+    if (!bible || typeof bible !== "object" || Object.keys(bible).length === 0) return finaleBlock;
     const chars = Array.isArray(bible.characters)
       ? bible.characters
           .map((c: any) => `- ${c?.name || ""}${c?.role ? ` (${c.role})` : ""}${c?.note ? ` — ${c.note}` : ""}`)
@@ -5564,22 +5742,28 @@ const RecapVideoNVPage: React.FC = () => {
           .join("\n")
       : "";
     return [
-      `SERIES: ${seriesName.trim()} — this is PART ${seriesPart}. Previous parts: 1..${seriesPart - 1}.`,
+      `SERIES: ${nameRaw} — this is PART ${partNum}. The PREVIOUS PART is PART ${prevPart}. Previous parts: 1..${prevPart}.`,
+      `CONTINUE DIRECTLY FROM PART ${prevPart} (the part numbered exactly one less than this one).`,
       bible.content_type ? `SERIES TYPE: ${bible.content_type}` : "",
       bible.series_focus ? `SERIES FOCUS: ${bible.series_focus}` : "",
       chars ? `CHARACTERS:\n${chars}` : "",
       rels ? `RELATIONSHIPS:\n${rels}` : "",
       ents ? `KEY ENTITIES (people, places, orgs, tools, terms):\n${ents}` : "",
+      chars || ents
+        ? `NAME LOCK (CRITICAL): Use the character/entity names above EXACTLY as written — same spelling, same transliteration, every time. Never rename, shorten, translate, swap or invent a name. If someone in the source video is not in the list, describe them by role/relationship instead of inventing a name, and never reuse an existing name for a different person.`
+        : "",
       list(bible.topics_covered) ? `TOPICS ALREADY COVERED (do NOT repeat):\n${list(bible.topics_covered)}` : "",
       list(bible.key_facts) ? `KEY FACTS / NUMBERS / TERMS (must stay consistent):\n${list(bible.key_facts)}` : "",
       list(bible.open_threads) ? `OPEN THREADS (still unanswered):\n${list(bible.open_threads)}` : "",
       bible.plot_so_far ? `STORY SO FAR:\n${bible.plot_so_far}` : "",
       bible.last_scene_ending ? `HOW THE PREVIOUS PART ENDED:\n${bible.last_scene_ending}` : "",
       bible.last_point_ending ? `WHERE THE PREVIOUS PART STOPPED:\n${bible.last_point_ending}` : "",
+      finaleBlock,
     ]
       .filter(Boolean)
       .join("\n\n");
   }, [seriesEnabled, seriesName, seriesPart, seriesList]);
+
   const saveSeriesBible = useCallback(
     async (bible: unknown) => {
       if (!seriesEnabled || !bible || typeof bible !== "object") return;
@@ -5594,11 +5778,18 @@ const RecapVideoNVPage: React.FC = () => {
       const { data: authData } = await supabase.auth.getUser();
       const uid = authData?.user?.id;
       if (!uid) return;
-      const { error } = await supabase.from("recap_series").upsert(
+      // SURGICAL: derive a clean numeric last_part from the free-text episode field (e.g. "12" or "ဇာတ်သိမ်း").
+      const partRaw = String(seriesPart ?? "").trim();
+      const isFinale = /ဇာတ်သိမ်း|ဇာတ်သိမ်းပိုင်း|finale|final part|last part/i.test(partRaw);
+      const explicitPart = parseInt(partRaw.replace(/\D/g, ""), 10);
+      const savedLast = seriesList.find((s) => s.series_name === name)?.last_part || 0;
+      const partNum =
+        isFinale && isNaN(explicitPart) ? (savedLast > 0 ? savedLast + 1 : 1) : !isNaN(explicitPart) ? explicitPart : 1;
+      const { error } = await (supabase as any).from("recap_series").upsert(
         {
           user_id: uid,
           series_name: name,
-          last_part: seriesPart,
+          last_part: partNum,
           story_bible: bible as any,
         },
         { onConflict: "user_id,series_name" },
@@ -5609,11 +5800,14 @@ const RecapVideoNVPage: React.FC = () => {
       }
       setSeriesList((prev) => {
         const rest = prev.filter((s) => s.series_name !== name);
-        return [{ series_name: name, last_part: seriesPart, story_bible: bible as any }, ...rest];
+        return [{ series_name: name, last_part: partNum, story_bible: bible as any }, ...rest];
       });
-      setSeriesPart((p) => p + 1);
+      setSeriesPart((p) => {
+        const n = parseInt(String(p).replace(/\D/g, ""), 10) || 1;
+        return String(n + 1);
+      });
     },
-    [seriesEnabled, seriesName, seriesPart],
+    [seriesEnabled, seriesName, seriesPart, seriesList],
   );
   // SURGICAL: Restore blocking "Solve to fix" error dialog (per user request)
   const [errorBox, setErrorBox] = useState<{ title: string; message: string; suggestion: string } | null>(null);
@@ -5773,6 +5967,117 @@ const RecapVideoNVPage: React.FC = () => {
 
   const handleUpdateScript = (newScript: string) => {
     setScriptData((prev) => ({ ...prev, full_script: stripDialogueMetadata(newScript) }));
+  };
+
+  // ── TARGET-LANGUAGE TRANSLATE GATE (additive; does not touch AV sync / seek / fallback) ──
+  const [isTranslatingScript, setIsTranslatingScript] = useState(false);
+  const selectedLangName = languages.find((l) => l.code === selectedLanguage)?.name || "BURMESE";
+
+  const handleTranslateScript = async () => {
+    if (!scriptData.full_script && scriptData.segments.length === 0) return;
+    setIsTranslatingScript(true);
+    try {
+      const {
+        data: { session: currentSession },
+      } = await supabase.auth.getSession();
+      const userToken = currentSession?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      const resolvedOwnKey = apiMode === "own" ? ownApiKey.trim() : "";
+      const hasSegments = scriptData.segments.length > 0;
+      const payloadScript = hasSegments
+        ? scriptData.segments
+            .map((s, i) => `SEG_${String(i + 1).padStart(4, "0")} ${s.timestamp} | ${s.text}`)
+            .join("\n")
+        : scriptData.full_script;
+
+      const runOnce = async () => {
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recap-script-generator`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${userToken}`,
+            ...(resolvedOwnKey ? { "x-own-api-key": resolvedOwnKey } : {}),
+          },
+          body: JSON.stringify({
+            translateMode: true,
+            script: payloadScript,
+            targetLanguage: selectedLangName,
+            ...(resolvedOwnKey ? { ownApiKey: resolvedOwnKey, apiKey: resolvedOwnKey } : {}),
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || `Translate failed (${res.status})`);
+        }
+        const json = await res.json();
+        const translatedScript = String(json.script || "").trim();
+        if (
+          scriptLanguageMismatch(translatedScript, selectedLanguage) ||
+          scriptContainsForbiddenGlyphs(translatedScript, selectedLanguage)
+        ) {
+          throw new Error(`${selectedLangName} မဟုတ်တဲ့ စာတွေ ကျန်နေသေးလို့ output ကို လက်မခံပါ။`);
+        }
+        return translatedScript;
+      };
+
+      let out = await runOnce();
+      const parseLines = (txt: string) =>
+        txt
+          .split("\n")
+          .map((l) => l.trim())
+          .filter(Boolean);
+
+      if (hasSegments) {
+        let lines = parseLines(out);
+        if (lines.length !== scriptData.segments.length) {
+          out = await runOnce();
+          lines = parseLines(out);
+        }
+        if (lines.length !== scriptData.segments.length) {
+          throw new Error("ဘာသာပြန်ရလဒ်က segment အရေအတွက် မကိုက်ပါ။ ထပ်စမ်းကြည့်ပါ။");
+        }
+        const newSegments = scriptData.segments.map((seg, i) => {
+          const expectedPrefix = `SEG_${String(i + 1).padStart(4, "0")} ${seg.timestamp}`;
+          const m = lines[i].match(/^\s*(SEG_\d{4})\s+(\d{1,2}:\d{2}(?::\d{2})?)\s*\|\s*(.*)$/);
+          if (!m || `${m[1]} ${m[2]}` !== expectedPrefix) {
+            throw new Error("ဘာသာပြန်ရလဒ်ရဲ့ timestamp/segment mapping မကိုက်ပါ။");
+          }
+          const text = stripDialogueMetadata(m[3]);
+          return { ...seg, text: text || seg.text };
+        });
+        const translatedFullScript = newSegments
+          .map(
+            (s) =>
+              `${s.timestamp}${s.isDialogue ? ` [DIALOGUE:${(s.emotion || "NEUTRAL").toUpperCase()}]` : ""} ${s.text}`,
+          )
+          .join("\n\n");
+        setScriptData((prev) => ({
+          ...prev,
+          segments: newSegments,
+          full_script: stripDialogueMetadata(translatedFullScript),
+        }));
+        setProgressMsg("📝 ဘာသာပြန်ပြီးပါပြီ။ AI Voice ဆက်ထုတ်နေပါသည်...");
+        const translatedSpeech = newSegments.map((s) => s.text).join("\n\n");
+        generateVoice(
+          translatedSpeech,
+          resolvedOwnKey || undefined,
+          newSegments.map((s) => ({ text: s.text })),
+          newSegments,
+        );
+      } else {
+        setScriptData((prev) => ({ ...prev, full_script: stripDialogueMetadata(out) }));
+      }
+
+      toast.success(
+        hasSegments
+          ? `✅ ${selectedLangName} အဖြစ် ဘာသာပြန်ပြီး full pipeline ဆက်လုပ်နေပါသည်။`
+          : `✅ ${selectedLangName} အဖြစ် ဘာသာပြန်ပြီးပါပြီ။`,
+      );
+    } catch (e) {
+      toast.error(`❌ Translate မအောင်မြင်ပါ — ${e instanceof Error ? e.message : "Unknown error"}`);
+    } finally {
+      setIsTranslatingScript(false);
+    }
   };
 
   const handleGenerateVoice = () => {
@@ -5955,8 +6260,7 @@ const RecapVideoNVPage: React.FC = () => {
     if (rawLines.length === 0) return [];
     // SURGICAL FIX: accept [M:SS], [HH:MM:SS] and both range forms so timecodes are
     // always parsed (and removed) instead of leaking into subtitles with a 0s start.
-    const timecodeRegex =
-      /^\[\s*(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*[-–—]\s*(\d{1,2}):(\d{2})(?::(\d{2}))?)?\s*\]\s*/;
+    const timecodeRegex = /^\[\s*(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*[-–—]\s*(\d{1,2}):(\d{2})(?::(\d{2}))?)?\s*\]\s*/;
     // Accept the intended marker plus common AI variants/misspelling, in [] or {}, even
     // when Gemini puts it after a quote. The marker is metadata and must never reach subtitles/TTS.
     const dialogueCaptureRegex =
@@ -6005,7 +6309,10 @@ const RecapVideoNVPage: React.FC = () => {
           text = stripDialogueMetadata(text);
         }
         // Any stray timecode left inside the line must never reach subtitles/TTS.
-        text = text.replace(TIMECODE_STRIP_RE, " ").replace(/[ \t]{2,}/g, " ").trim();
+        text = text
+          .replace(TIMECODE_STRIP_RE, " ")
+          .replace(/[ \t]{2,}/g, " ")
+          .trim();
         return { timestamp, text, isDialogue, emotion, explicitEndSec };
       });
       // Source slot = explicit [start-end] range when the AI gave one (dialogue lock),
@@ -6310,7 +6617,9 @@ const RecapVideoNVPage: React.FC = () => {
       }
       videoDurationRef.current = duration;
       if (duration > 1320) {
-        toast.warning("Source ၂၂ မိနစ်ကျော်နေလို့ script က ရည်မှန်းချက်ထက် တိုနိုင်ပါတယ်။ ၂၀ မိနစ်အောက် အကောင်းဆုံးပါ။");
+        toast.warning(
+          "Source ၂၂ မိနစ်ကျော်နေလို့ script က ရည်မှန်းချက်ထက် တိုနိုင်ပါတယ်။ ၂၀ မိနစ်အောက် အကောင်းဆုံးပါ။",
+        );
       }
       const videoBlob = URL.createObjectURL(file);
       setVideoUrl(videoBlob);
@@ -6566,6 +6875,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
       // Finds the most viral/dramatic segment: highest emotional intensity + climax position
       (() => {
         try {
+          if (seriesEnabled) return; // SURGICAL FIX: Series mode ON → no viral hook
           if (segments.length < 2) return;
           // TIER 1: Ultra-high drama (Ã—5) â€” twists, reveals, deaths, betrayals
           const ultraKw = [
@@ -7007,7 +7317,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                     onValueChange={(v) => {
                       setSeriesName(v);
                       const row = seriesList.find((s) => s.series_name === v);
-                      setSeriesPart((row?.last_part || 0) + 1);
+                      setSeriesPart(String((row?.last_part || 0) + 1));
                     }}
                   >
                     <SelectTrigger className="w-full bg-background border-border text-foreground text-xs h-9">
@@ -7016,7 +7326,11 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                     <SelectContent className="max-h-[220px] z-50">
                       {seriesList.map((s) => (
                         <SelectItem key={s.series_name} value={s.series_name} className="text-xs">
-                          {s.series_name} (Part {s.last_part})
+                          {s.series_name} (Part
+                          {s.series_name === seriesName && /^\d+$/.test(seriesPart.trim())
+                            ? ` ${Math.max(1, Number(seriesPart.trim()) - 1)}`
+                            : ` ${s.last_part}`}
+                          )
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -7031,16 +7345,19 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                     className="flex-1 h-9 rounded-md border border-border bg-background px-3 text-sm text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                   <input
-                    type="number"
-                    min={1}
+                    type="text"
+                    inputMode="text"
                     value={seriesPart}
-                    onChange={(e) => setSeriesPart(Math.max(1, Number(e.target.value) || 1))}
-                    className="w-20 h-9 rounded-md border border-border bg-background px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-ring"
+                    onChange={(e) => setSeriesPart(e.target.value)}
+                    placeholder="အပိုင်းနံပါတ် (ဥပမာ 12 / ဇာတ်သိမ်း)"
+                    className="w-32 h-9 rounded-md border border-border bg-background px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </div>
                 <p className="text-[11px] text-muted-foreground">
                   နာမည်ကွက်လပ်ထားရင် AI က မူရင်း video ရဲ့ ဇာတ်ကားနာမည်/အကြောင်းအရာအပေါ် အခြေခံပြီး ဆွဲဆောင်မှုရှိတဲ့
-                  Series နာမည်ကို auto ရေးပေးပါမယ်။ အပိုင်းနံပါတ်ကိုတော့ ကိုယ်တိုင် ထည့်ပါ။
+                  Series နာမည်ကို auto ရေးပေးပါမယ်။ အပိုင်းနံပါတ်ကိုတော့ ကိုယ်တိုင် ထည့်ပါ။ နောက်ဆုံးအပိုင်းဆိုရင်
+                  အပိုင်းနံပါတ် ကွက်လပ်မှာ "ဇာတ်သိမ်း" လို့ရေးပါ — ဇာတ်လမ်းပြီးဆုံးကြောင်း အနှစ်ချုပ်နဲ့ ကျေးဇူးတင်စကား
+                  auto ပါလာပါမယ်။
                 </p>
               </div>
             )}
@@ -7441,6 +7758,10 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
             onVoiceModeChange={setVoiceMode}
             sourceFileUriRef={sourceFileUriRef}
             videoFileRef={videoFileRef}
+            targetLanguageName={selectedLangName}
+            targetLanguageCode={selectedLanguage}
+            onTranslateScript={handleTranslateScript}
+            isTranslatingScript={isTranslatingScript}
           />
         )}
 

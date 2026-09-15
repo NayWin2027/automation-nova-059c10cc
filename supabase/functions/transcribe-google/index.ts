@@ -10,7 +10,7 @@ const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 // Google Files API base URL
 const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1beta/files";
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
-const DEFAULT_TRANSCRIBE_MODEL = "gemini-2.5-flash";
+const DEFAULT_TRANSCRIBE_MODEL = "gemini-3.5-transcribe";
 
 function tryParseGoogleApiError(errorText: string): {
   status?: string;
@@ -70,7 +70,7 @@ async function preflightGenerateCheck(apiKey: string): Promise<void> {
 
 async function uploadToGoogleFiles(apiKey: string, file: File, mimeType: string): Promise<string> {
   console.log("Uploading file to Google Files API...", file.name, file.size, mimeType);
-  
+
   const startResponse = await fetch(`${GOOGLE_FILES_API}?key=${apiKey}`, {
     method: "POST",
     headers: {
@@ -129,10 +129,10 @@ async function waitForFileProcessing(apiKey: string, fileName: string): Promise<
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${apiKey}`);
-    
+
     if (!response.ok) {
       console.log(`File status check failed, attempt ${attempt + 1}`);
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await new Promise((resolve) => setTimeout(resolve, delay));
       continue;
     }
 
@@ -145,15 +145,20 @@ async function waitForFileProcessing(apiKey: string, fileName: string): Promise<
       throw new Error("File processing failed");
     }
 
-    await new Promise(resolve => setTimeout(resolve, delay));
+    await new Promise((resolve) => setTimeout(resolve, delay));
   }
 
   throw new Error("File processing timeout");
 }
 
-async function transcribeWithGemini(apiKey: string, fileUri: string, mimeType: string, languageName: string): Promise<string> {
+async function transcribeWithGemini(
+  apiKey: string,
+  fileUri: string,
+  mimeType: string,
+  languageName: string,
+): Promise<string> {
   const isBurmese = languageName.toUpperCase() === "BURMESE";
-  
+
   const transcriptionPrompt = isBurmese
     ? `ဤ audio/video ဖိုင်ထဲရှိ ပြောဆိုချက်အားလုံးကို ဗမာစာဖြင့် အစအဆုံး တစ်လုံးမကျန် တိကျစွာ ရေးချပါ။
 
@@ -209,7 +214,7 @@ CRITICAL RULES — ZERO OMISSION POLICY:
     const errorText = await response.text();
     console.error("Gemini API error:", response.status, errorText);
     const info = tryParseGoogleApiError(errorText);
-    
+
     if (response.status === 429) {
       if (info.quotaLimitZero) throw new Error("GOOGLE_QUOTA_NOT_ENABLED");
       throw new Error("RATE_LIMIT");
@@ -217,20 +222,20 @@ CRITICAL RULES — ZERO OMISSION POLICY:
     if (response.status === 403 || response.status === 401) {
       throw new Error("API_KEY_INVALID");
     }
-    
+
     throw new Error(`Transcription failed: ${response.status}`);
   }
 
   const data = await response.json();
   const transcription = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-  
+
   console.log("Transcription successful, length:", transcription.length);
   return transcription;
 }
 
 function getMimeType(file: File): string {
   if (file.type) return file.type;
-  
+
   const ext = file.name.split(".").pop()?.toLowerCase();
   const mimeMap: Record<string, string> = {
     mp3: "audio/mpeg",
@@ -247,7 +252,7 @@ function getMimeType(file: File): string {
     mov: "video/quicktime",
     "3gp": "video/3gpp",
   };
-  
+
   return mimeMap[ext || ""] || "audio/mpeg";
 }
 
@@ -261,25 +266,28 @@ serve(async (req) => {
     // ===== AUTHENTICATION =====
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Authentication required", retryable: false }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Authentication required", retryable: false }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    
+
     const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } }
+      global: { headers: { Authorization: authHeader } },
     });
 
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseClient.auth.getUser();
     if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Invalid or expired token", retryable: false }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Invalid or expired token", retryable: false }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     console.log(`[transcribe-google] Authenticated user: ${user.id}`);
@@ -315,10 +323,10 @@ serve(async (req) => {
 
     // ===== INPUT VALIDATION =====
     if (!audioData && !fileObj) {
-      return new Response(
-        JSON.stringify({ error: "ဖိုင်မပေးထားပါ", retryable: false }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "ဖိုင်မပေးထားပါ", retryable: false }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // For App API mode (no user apiKey), use GEMINI_API_KEY directly
@@ -326,10 +334,10 @@ serve(async (req) => {
     if (!isOwnApi) {
       const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
       if (!GEMINI_API_KEY) {
-        return new Response(
-          JSON.stringify({ error: "Server API key not configured", retryable: false }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Server API key not configured", retryable: false }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       // Credit check
@@ -346,16 +354,16 @@ serve(async (req) => {
 
       if (creditError) {
         console.error("[transcribe-google] Credit check error:", creditError);
-        return new Response(
-          JSON.stringify({ error: "Credit စစ်ဆေးမှု မအောင်မြင်ပါ", retryable: false }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Credit စစ်ဆေးမှု မအောင်မြင်ပါ", retryable: false }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       if (!creditResult.success) {
         return new Response(
           JSON.stringify({ error: creditResult.error, errorCode: "INSUFFICIENT_CREDITS", retryable: false }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
@@ -373,17 +381,17 @@ serve(async (req) => {
       }
 
       const mimeType = getMimeType(fileObj!);
-      
+
       // Upload file to Google Files API (memory-efficient, no inlineData)
       let fileUri: string;
       try {
         fileUri = await uploadToGoogleFiles(GEMINI_API_KEY, fileObj!, mimeType);
       } catch (uploadError) {
         console.error("App API file upload failed:", uploadError);
-        return new Response(
-          JSON.stringify({ error: "ဖိုင် upload မအောင်မြင်ပါ။ ပြန်စမ်းပါ။", retryable: true }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "ဖိုင် upload မအောင်မြင်ပါ။ ပြန်စမ်းပါ။", retryable: true }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       const fileName = fileUri.includes("/") ? fileUri.split("/").slice(-2).join("/") : fileUri;
@@ -393,8 +401,12 @@ serve(async (req) => {
         } catch (processingError) {
           console.error("App API file processing failed:", processingError);
           return new Response(
-            JSON.stringify({ error: "ဖိုင် processing မအောင်မြင်ပါ။ ပြန်စမ်းပါ။", retryable: true, retryAfterSeconds: 30 }),
-            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            JSON.stringify({
+              error: "ဖိုင် processing မအောင်မြင်ပါ။ ပြန်စမ်းပါ။",
+              retryable: true,
+              retryAfterSeconds: 30,
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
       }
@@ -406,19 +418,18 @@ serve(async (req) => {
       } catch (transcribeError) {
         const errorMessage = transcribeError instanceof Error ? transcribeError.message : "Unknown error";
         console.error("App API transcription failed:", errorMessage);
-        return new Response(
-          JSON.stringify({ error: "Transcription မအောင်မြင်ပါ။ ပြန်စမ်းပါ။", retryable: true }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Transcription မအောင်မြင်ပါ။ ပြန်စမ်းပါ။", retryable: true }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       console.log("[transcribe-google] App API transcription success, length:", text.length);
       logToolActivity(user.id, "transcribe", "success", { length: text.length, mode: "app" });
 
-      return new Response(
-        JSON.stringify({ text }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ text }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // ===== OWN API MODE =====
@@ -434,10 +445,10 @@ serve(async (req) => {
     }
 
     if (fileObj!.size > MAX_FILE_SIZE) {
-      return new Response(
-        JSON.stringify({ error: "ဖိုင်အရွယ်အစား 100MB ထက်မကျော်ရပါ။", retryable: false }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "ဖိုင်အရွယ်အစား 100MB ထက်မကျော်ရပါ။", retryable: false }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     console.log("Processing file (Own API):", fileObj!.name, "Size:", fileObj!.size, "bytes");
@@ -449,44 +460,44 @@ serve(async (req) => {
       } catch (preflightError) {
         const errorMessage = preflightError instanceof Error ? preflightError.message : "Unknown error";
         console.error("Preflight check failed:", errorMessage);
-        
+
         if (errorMessage === "RATE_LIMIT") {
           return new Response(
-            JSON.stringify({ 
+            JSON.stringify({
               error: "Rate limit ကျော်သွားပါပြီ။ ခဏစောင့်ပြီး ပြန်စမ်းပါ။",
               retryable: true,
-              retryAfterSeconds: 60
+              retryAfterSeconds: 60,
             }),
-            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
-        
+
         if (errorMessage === "GOOGLE_QUOTA_NOT_ENABLED") {
           return new Response(
             JSON.stringify({
               error: "Google AI API quota မဖွင့်ထားသေးပါ။ Google AI Studio မှာ Billing ဖွင့်ပြီး ပြန်စမ်းပါ။",
-              retryable: false
+              retryable: false,
             }),
-            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
-        
+
         if (errorMessage === "API_KEY_INVALID") {
-          return new Response(
-            JSON.stringify({ error: "API Key မမှန်ပါ။ ပြန်စစ်ဆေးပါ။", retryable: false }),
-            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+          return new Response(JSON.stringify({ error: "API Key မမှန်ပါ။ ပြန်စစ်ဆေးပါ။", retryable: false }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
         }
-        
-        return new Response(
-          JSON.stringify({ error: `API စစ်ဆေးမှု မအောင်မြင်ပါ`, retryable: true }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+
+        return new Response(JSON.stringify({ error: `API စစ်ဆေးမှု မအောင်မြင်ပါ`, retryable: true }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
     }
 
     const mimeType = getMimeType(fileObj!);
-    
+
     // Upload file to Google Files API
     let fileUri: string;
     try {
@@ -494,32 +505,32 @@ serve(async (req) => {
     } catch (uploadError) {
       console.error("File upload failed:", uploadError);
       return new Response(
-        JSON.stringify({ 
+        JSON.stringify({
           error: "ဖိုင် upload မအောင်မြင်ပါ။",
-          retryable: true
+          retryable: true,
         }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
-    
+
     const fileName = fileUri.includes("/") ? fileUri.split("/").slice(-2).join("/") : fileUri;
-    
+
     if (fileName.startsWith("files/")) {
       try {
         await waitForFileProcessing(apiKey!, fileName);
       } catch (processingError) {
         console.error("File processing failed:", processingError);
         return new Response(
-          JSON.stringify({ 
+          JSON.stringify({
             error: "ဖိုင် processing မအောင်မြင်ပါ။",
             retryable: true,
-            retryAfterSeconds: 30
+            retryAfterSeconds: 30,
           }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
     }
-    
+
     // Transcribe with Gemini
     let transcription: string;
     try {
@@ -527,55 +538,54 @@ serve(async (req) => {
     } catch (transcribeError) {
       const errorMessage = transcribeError instanceof Error ? transcribeError.message : "Unknown error";
       console.error("Transcription failed:", errorMessage);
-      
+
       if (errorMessage === "RATE_LIMIT") {
         return new Response(
-          JSON.stringify({ 
+          JSON.stringify({
             error: "Rate limit ကျော်သွားပါပြီ။",
             retryable: true,
-            retryAfterSeconds: 60
+            retryAfterSeconds: 60,
           }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
-      
+
       if (errorMessage === "GOOGLE_QUOTA_NOT_ENABLED") {
         return new Response(
           JSON.stringify({
             error: "Google AI API quota မဖွင့်ထားသေးပါ။",
-            retryable: false
+            retryable: false,
           }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
-      
+
       if (errorMessage === "API_KEY_INVALID") {
-        return new Response(
-          JSON.stringify({ error: "API Key မမှန်ပါ။", retryable: false }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "API Key မမှန်ပါ။", retryable: false }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
-      
-      return new Response(
-        JSON.stringify({ error: "Transcription မအောင်မြင်ပါ။ ပြန်စမ်းပါ။", retryable: true }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+
+      return new Response(JSON.stringify({ error: "Transcription မအောင်မြင်ပါ။ ပြန်စမ်းပါ။", retryable: true }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     logToolActivity(user.id, "transcribe", "success", { length: transcription.length, mode: "own" });
-    return new Response(
-      JSON.stringify({ text: transcription }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ text: transcription }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (error) {
     console.error("Unexpected transcription error:", error);
     const errMsg = error instanceof Error ? error.message : "Unknown error";
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         error: "အမျိုးအမည်မသိ အမှား ဖြစ်ပွားပါသည်။ ပြန်စမ်းပါ။",
-        retryable: true
+        retryable: true,
       }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });
