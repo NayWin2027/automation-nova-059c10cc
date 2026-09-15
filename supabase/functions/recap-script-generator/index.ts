@@ -7,36 +7,29 @@ import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts"
 
 const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1beta/files";
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
-// gemini-1.5-flash / gemini-2.5-flash are no longer served (404 NOT_FOUND).
+// gemini-2.5-flash is no longer served to newer API keys (404 NOT_FOUND).
 // Use the rolling "latest" alias which stays available for both old and new keys.
-const MODEL = "gemini-3.1-flash-lite";
-
-// SLANG-TEMP: HYBRID/VIRAL modes need a slightly higher temperature so the model
-// actually reaches for street slang instead of the safest plain wording. STORY mode
-// keeps the original 0.35 (anti-hallucination).
-let STYLE_TEMPERATURE = 0.32;
-
-// SLANG-SAFETY: without explicit safetySettings Gemini self-censors harsh/vulgar
-// source dialogue and replaces it with polite wording, which kills verbatim slang.
-const GEMINI_SAFETY_SETTINGS = [
-  { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-  { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-  { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-  { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
-];
+const MODEL = "gemini-flash-latest";
 
 function buildGenerationConfig(model: string, requestedMaxOutputTokens: number | null): Record<string, unknown> {
   // Burmese/CJK narration costs 2-3 tokens per syllable: an 8192 cap truncated
   // long recaps and dropped the middle/ending beats. Give the model real room.
   const maxOutputTokens =
-    model === "gemini-3.1-flash-lite"
-      ? Math.max(requestedMaxOutputTokens || 0, 80000)
-      : Math.max(requestedMaxOutputTokens || 0, 60000);
+    model === "gemini-flash-latest"
+      ? Math.max(requestedMaxOutputTokens || 0, 32768)
+      : Math.max(requestedMaxOutputTokens || 0, 24576);
 
   const config: Record<string, unknown> = {
-    temperature: STYLE_TEMPERATURE,
+    temperature: 0.55,
     maxOutputTokens,
   };
+
+  // NOTE: Do NOT force thinkingBudget:0 on flash/flash-lite — it causes the model
+  // to degenerate into repetitive loops ("မင်းဘာလုပ်နေတာလဲ / ဟုတ်ကဲ့...") on long
+  // multimodal video inputs. Allow Gemini's default thinking budget.
+  if (model === "gemini-2.5-flash-lite") {
+    config.thinkingConfig = { thinkingBudget: 0 };
+  }
 
   return config;
 }
@@ -65,7 +58,6 @@ async function callGeminiGenerateContent(
       system_instruction: { parts: [{ text: systemPrompt }] },
       contents: [{ parts: contentParts }],
       generationConfig: buildGenerationConfig(model, requestedMaxOutputTokens),
-      safetySettings: GEMINI_SAFETY_SETTINGS,
     }),
   });
 }
@@ -230,102 +222,6 @@ function stripTimecodes(text: string): string {
   return (text || "").replace(/\[\d{1,2}:\d{2}(?::\d{2})?\]/g, " ");
 }
 
-// Script-only quality guard. It never rewrites or moves a timecode: it only removes
-// accidental model metadata and narrator sentences/paragraphs that restate an idea
-// already delivered. Real [DIALOGUE:*] turns are preserved verbatim because a source
-// character may intentionally repeat the same words.
-function normalizeForRepetition(text: string): string {
-  return stripTimecodes(text)
-    .replace(/\[DIALOGUE:[A-Z]+\]/gi, " ")
-    .toLocaleLowerCase()
-    .replace(/[\p{P}\p{S}\s]+/gu, "")
-    .trim();
-}
-
-function charGramSimilarity(a: string, b: string): number {
-  const left = normalizeForRepetition(a);
-  const right = normalizeForRepetition(b);
-  if (!left || !right) return 0;
-  if (left === right) return 1;
-  const size = 3;
-  if (left.length < size || right.length < size) return 0;
-  const grams = (value: string) => {
-    const result = new Map<string, number>();
-    for (let i = 0; i <= value.length - size; i++) {
-      const gram = value.slice(i, i + size);
-      result.set(gram, (result.get(gram) || 0) + 1);
-    }
-    return result;
-  };
-  const aGrams = grams(left);
-  const bGrams = grams(right);
-  let overlap = 0;
-  for (const [gram, count] of aGrams) overlap += Math.min(count, bGrams.get(gram) || 0);
-  const aTotal = [...aGrams.values()].reduce((sum, count) => sum + count, 0);
-  const bTotal = [...bGrams.values()].reduce((sum, count) => sum + count, 0);
-  return (2 * overlap) / (aTotal + bTotal);
-}
-
-// AV-SYNC SAFETY: this cleanup must NEVER drop or merge a timecoded paragraph.
-// The client maps each timecoded paragraph 1:1 to a video segment and a TTS turn,
-// so removing a paragraph shifts every later segment and breaks AV sync. We only
-// strip leaked metadata and remove duplicate sentences INSIDE the same paragraph.
-function removeNarrationRepetition(script: string): string {
-  const withoutLeakedMetadata = String(script || "")
-    // Catch STORY_BIBLE plus common model misspellings such as STORY_BIBE/VIBE.
-    // Everything after this marker is internal series metadata, never narration.
-    .split(/(?:^|\n)\s*(?:===\s*)?STORY[\s_-]*BI(?:BLE|BE|VE)(?:\s*===)?\s*:?[ \t]*(?:\n|$)/im)[0]
-    .replace(
-      /(^|\n)(\s*\[\d{1,2}:\d{2}\](?:\s*\[DIALOGUE:[A-Z]+\])?\s*)?(?:STORY\s+(?:BIBLE|BIBE|VIBE)|ဇာတ်လမ်း\s*(?:မှတ်စု|အနှစ်ချုပ်))\s*[:：-]\s*/gim,
-      "$1$2",
-    )
-    .trim();
-
-  const paragraphs = withoutLeakedMetadata
-    .replace(/\n(?=\s*\[\d{1,2}:\d{2}\])/g, "\n\n")
-    .split(/\n{2,}/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean);
-  const kept: string[] = [];
-
-  for (const paragraph of paragraphs) {
-    // Dialogue turns are preserved verbatim — a source character may intentionally
-    // repeat the same words, and dropping them would break AV sync counts.
-    if (/\[DIALOGUE:[A-Z]+\]/i.test(paragraph)) {
-      kept.push(paragraph);
-      continue;
-    }
-    const prefix = paragraph.match(/^\s*(\[\d{1,2}:\d{2}(?::\d{2})?\]\s*)/)?.[1] || "";
-    const body = prefix ? paragraph.slice(prefix.length).trim() : paragraph;
-    if (!normalizeForRepetition(body)) {
-      kept.push(paragraph);
-      continue;
-    }
-
-    // Only remove sentences repeated WITHIN this same paragraph. The paragraph
-    // itself (and its timecode) is always kept so segment mapping stays intact.
-    const sentences = body.match(/[^။.!?…。！？]+[။.!?…。！？]+(?:["'”’）\)]*)?|[^။.!?…。！？]+$/g) || [body];
-    const uniqueSentences: string[] = [];
-    for (const sentenceRaw of sentences) {
-      const sentence = sentenceRaw.trim();
-      const sentenceKey = normalizeForRepetition(sentence);
-      if (!sentenceKey) continue;
-      const repeated = uniqueSentences.some((seen) => {
-        const seenKey = normalizeForRepetition(seen);
-        if (sentenceKey === seenKey) return true;
-        return sentenceKey.length >= 28 && seenKey.length >= 28 && charGramSimilarity(sentence, seen) >= 0.95;
-      });
-      if (!repeated) uniqueSentences.push(sentence);
-    }
-    if (!uniqueSentences.length) {
-      kept.push(paragraph);
-      continue;
-    }
-    kept.push(`${prefix}${uniqueSentences.join(" ").trim()}`.trim());
-  }
-  return kept.join("\n\n").trim();
-}
-
 // Mirrors gemini-tts `countSpeechWeight` so script length and TTS length agree.
 function speechWeights(text: string): { asian: number; latin: number } {
   let asian = 0;
@@ -426,7 +322,6 @@ function countMatches(text: string, pattern: RegExp): number {
 function violatesTargetLanguage(script: string, lang: string): boolean {
   const body = script.replace(/\[\d{1,2}:\d{2}(?::\d{2})?\]/g, " ");
   const target = lang.toUpperCase();
-  const latinCount = countMatches(body, /[A-Za-z]/g);
   const cjkCount = countMatches(body, /[\u3400-\u9FFF]/g);
   const myanmarCount = countMatches(body, /[\u1000-\u109F]/g);
   const japaneseKanaCount = countMatches(body, /[\u3040-\u30FF]/g);
@@ -434,18 +329,11 @@ function violatesTargetLanguage(script: string, lang: string): boolean {
   const thaiCount = countMatches(body, /[\u0E00-\u0E7F]/g);
 
   if (target === "BURMESE")
-    return (
-      myanmarCount < 12 ||
-      latinCount > Math.max(8, Math.floor(myanmarCount * 0.025)) ||
-      cjkCount > 0 ||
-      japaneseKanaCount > 0 ||
-      koreanCount > 0 ||
-      thaiCount > 0
-    );
-  if (target !== "CHINESE" && target !== "JAPANESE" && cjkCount > 0) return true;
-  if (target !== "JAPANESE" && japaneseKanaCount > 0) return true;
-  if (target !== "KOREAN" && koreanCount > 0) return true;
-  if (target !== "THAI" && thaiCount > 0) return true;
+    return myanmarCount < 12 || cjkCount > 6 || japaneseKanaCount > 3 || koreanCount > 3 || thaiCount > 3;
+  if (target !== "CHINESE" && target !== "JAPANESE" && cjkCount > 12) return true;
+  if (target !== "JAPANESE" && japaneseKanaCount > 6) return true;
+  if (target !== "KOREAN" && koreanCount > 6) return true;
+  if (target !== "THAI" && thaiCount > 6) return true;
   return false;
 }
 
@@ -468,7 +356,6 @@ const nicheStyles: Record<string, string> = {
 };
 
 serve(async (req) => {
-  const requestStart = Date.now();
   const _corsBlock = handleCorsPreflightOrReject(req);
   if (_corsBlock) return _corsBlock;
 
@@ -503,149 +390,7 @@ serve(async (req) => {
 
     console.log(`[recap-script-generator] Authenticated user: ${user.id}`);
 
-    // ===== TRANSLATE MODE (additive branch — does NOT touch the generation path) =====
-    // Takes an already-generated script and re-renders it in the target language,
-    // preserving segment/timecode structure exactly. Free: no credit deduction.
-    if (!(req.headers.get("content-type") || "").includes("multipart/form-data")) {
-      const peek = await req
-        .clone()
-        .json()
-        .catch(() => null);
-      if (peek && peek.translateMode && typeof peek.script === "string" && peek.script.trim()) {
-        const srcScript: string = peek.script;
-        const tgtLang: string = (peek.targetLanguage || peek.language || "BURMESE").toString().slice(0, 60);
-        const tKey = (peek.ownApiKey || peek.apiKey || req.headers.get("x-own-api-key") || "").trim();
-        const tIsOwnApi = !!tKey;
-        let tActiveKey = tIsOwnApi ? tKey : getGeminiKey();
-
-        const burmeseStyle = /BURMESE|MYANMAR/i.test(tgtLang)
-          ? `\n- Burmese must be MODERN SPOKEN style (တယ်/တာ/လဲ). NEVER literary endings (သည်/၏/၍).\n- Keep street slang, harsh words and uncensored dialogue exactly as strong as the source. Do not soften or censor.`
-          : "";
-
-        const translateSystemPrompt = `You are a professional subtitle/recap script translator.
-
-TASK: Translate the script below into ${tgtLang}. Output the translated script ONLY — no preamble, no notes, no explanations.
-
-ABSOLUTE STRUCTURE LOCK:
-- Keep EVERY line, paragraph and blank line in the SAME order and the SAME count.
-- Keep ALL timecodes, timestamps, segment markers, numbering and bracketed tags byte-identical. Translate ONLY the human-readable narration/dialogue text.
-- When a line uses "SEG_0001 00:12 | text", copy everything before and including the | byte-identically and translate only the text after |.
-- Never merge two lines into one. Never split one line into two. Never add or drop a line.
-
-LANGUAGE LOCK:
-- 100% of the output text must be written in ${tgtLang} using ${tgtLang}'s own writing system.
-- No Chinese, Latin, or other foreign glyphs may remain inside the narration text. Transliterate names and brands phonetically into the target script (e.g. Facebook → the target-script spelling, CEO → the target-script spelling) so TTS reads them naturally. Character names must be the REAL names from this source video only — never invented, never carried over from any example.
-- Spoken, natural, conversational register — never bookish or machine-translated wording.${burmeseStyle}`;
-
-        const tModels = [
-          MODEL,
-          "gemini-2.5-flash",
-          "gemini-flash-lite-latest",
-          "gemini-flash-latest",
-          "gemini-2.5-flash-lite",
-          "gemini-3.5-flash-lite",
-          "gemini-3.1-flash-lite",
-          "gemini-3.7-flash",
-          "gemini-3.6-flash",
-          "gemini-3.5-flash",
-          "gemini-3.1-flash",
-        ];
-        const tShouldFallback = (s?: number) => s === 404 || s === 429 || s === 503 || s === 504;
-
-        let tRes: Response | null = null;
-        let tLastError = "";
-        let tLastStatus = 0;
-        for (const m of tModels) {
-          if (tRes && tRes.ok) break;
-          if (tRes && !tShouldFallback(tRes.status)) break;
-          if (tRes && !tIsOwnApi && tRes.status === 429) tActiveKey = rotateKey("script") || tActiveKey;
-          const ctrl = new AbortController();
-          const to = setTimeout(() => ctrl.abort(), 110000);
-          try {
-            tRes = await callGeminiGenerateContent(
-              m,
-              tActiveKey,
-              tIsOwnApi,
-              ctrl.signal,
-              translateSystemPrompt,
-              [{ text: srcScript }],
-              null,
-            );
-            if (!tRes.ok) {
-              tLastStatus = tRes.status;
-              tLastError = await tRes.clone().text();
-              console.warn(`[recap-script-generator][translate] ${m} failed ${tRes.status}`);
-            }
-          } catch (e) {
-            tRes = null;
-            tLastError = e instanceof Error ? e.message : "network error";
-          } finally {
-            clearTimeout(to);
-          }
-        }
-
-        if (!tRes || !tRes.ok) {
-          return new Response(
-            JSON.stringify({
-              error: "Translation failed",
-              detail: tLastError.slice(0, 500),
-              upstreamStatus: tLastStatus,
-            }),
-            { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-          );
-        }
-
-        const tData = await tRes.json();
-        const translated = (tData?.candidates?.[0]?.content?.parts || [])
-          .map((p: any) => p?.text || "")
-          .join("")
-          .trim();
-
-        if (!translated) {
-          return new Response(JSON.stringify({ error: "Translation returned empty output" }), {
-            status: 502,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-
-        const srcLines = srcScript.split("\n").filter((l) => l.trim()).length;
-        const outLines = translated.split("\n").filter((l) => l.trim()).length;
-        const sourceSegmentPrefixes = srcScript
-          .split("\n")
-          .map((line) => line.match(/^\s*(SEG_\d{4}\s+\d{1,2}:\d{2}(?::\d{2})?)\s*\|/)?.[1] || null)
-          .filter((prefix): prefix is string => !!prefix);
-        const outputSegmentPrefixes = translated
-          .split("\n")
-          .map((line) => line.match(/^\s*(SEG_\d{4}\s+\d{1,2}:\d{2}(?::\d{2})?)\s*\|/)?.[1] || null)
-          .filter((prefix): prefix is string => !!prefix);
-        if (
-          sourceSegmentPrefixes.length > 0 &&
-          (sourceSegmentPrefixes.length !== outputSegmentPrefixes.length ||
-            sourceSegmentPrefixes.some((prefix, index) => prefix !== outputSegmentPrefixes[index]))
-        ) {
-          return new Response(JSON.stringify({ error: "Translation changed timestamp or segment mapping" }), {
-            status: 422,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-
-        logToolActivity(user.id, "narration-script-translate", "success", { targetLanguage: tgtLang });
-        return new Response(
-          JSON.stringify({
-            script: translated,
-            translated: true,
-            targetLanguage: tgtLang,
-            structureMatch: Math.abs(srcLines - outLines) <= Math.max(2, Math.round(srcLines * 0.1)),
-            sourceLines: srcLines,
-            outputLines: outLines,
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      }
-    }
-
     // ===== PARSE REQUEST =====
-
     let fileObj: File | null = null;
     let niche = "GENERAL";
     let language = "BURMESE";
@@ -709,10 +454,6 @@ LANGUAGE LOCK:
       if (body.narrationStyle === "HYBRID" || body.narrationStyle === "VIRAL" || body.narrationStyle === "STORY") {
         narrationStyle = body.narrationStyle;
       }
-      // SLANG-TEMP: dialogue-heavy modes get a slightly warmer temperature so slang
-      // actually surfaces; STORY keeps the strict 0.35 anti-hallucination setting.
-      STYLE_TEMPERATURE = narrationStyle === "HYBRID" || narrationStyle === "VIRAL" ? 0.55 : 0.35;
-
       // SEO mode: accept a raw seoPrompt as transcript input (used by client SEO metadata generator)
       if (body.seoMode && typeof body.seoPrompt === "string" && body.seoPrompt.trim()) {
         transcript = body.seoPrompt;
@@ -765,47 +506,15 @@ DIALOGUE COMPLETENESS (mandatory for ${narrationStyle} mode):
 - EVERY spoken line in the source must appear in the script as a real translated [DIALOGUE:EMOTION] line. Do NOT sample or pick "only the important ones".
 - It is FORBIDDEN to replace a spoken line with a description of it. BAD: "သူက ဒေါသတကြီး ပြောလိုက်တယ်" — GOOD: the actual translated words the character said.
 - For back-and-forth exchanges, write EACH speaker's line as its own separate paragraph with its own timecode range and its own emotion tag. Never merge two speakers into one paragraph.
-- Balance dialogue with narration: dialogue is the star (~100%), but narrator/action lines (~7%) are ESSENTIAL for story flow and professional quality.
-- Narrator paragraphs exist to bridge scenes, describe actions, establish character roles and relationships, and explain what dialogue alone cannot. A viewer who never saw the source must follow the plot from start to finish; never sacrifice story coherence for brevity.
+- Dialogue has priority over narration. Total script length does NOT change: to make room for the full dialogue, cut narrator sentences down to short connective lines only.
+- Narrator paragraphs exist to bridge, set context, and explain what dialogue cannot — keep them short but ALWAYS keep the story understandable. A viewer who never saw the source must follow the plot from start to finish; never sacrifice story coherence for brevity.
 
 ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
 - In moments with no speech, the narrator line must state the CONCRETE physical action with a precise verb: what was picked up, swung, kicked, stomped, thrown, grabbed, pushed. Example style: "စက်ဘီးကို ဘေ့စ်ဘောတုတ်နဲ့ ရိုက်ချလိုက်တယ်၊ ပြီးတော့ ခြေနဲ့ တက်နင်းလိုက်တယ်".
 - Never replace an action with a vague summary like "ဒေါသထွက်သွားတယ်" or "အခြေအနေ ဆိုးသွားတယ်".
 - Add the character's FACE and BODY reaction where it is visible: eyes widening, hands shaking, jaw clenching, tears welling, stepping back, head dropping.
 - Keep each action/expression line SHORT (1-2 sentences). They must never crowd out dialogue.
-- Goal: the viewer feels pity, anger, tension, or satisfaction as it happens — because they hear the real words and see the described reaction, not a summary.
-
-UNCENSORED VERBATIM DIALOGUE (mandatory for ${narrationStyle} mode — 100% of spoken lines):
-- LANGUAGE LOCK (HIGHEST PRIORITY): "verbatim" means verbatim in MEANING and TONE only. Every dialogue line MUST be written in ${lang} using ONLY the native ${lang} script. NEVER copy or quote the source-language words (Chinese/Japanese/Korean/Thai/English) into the script — not even one word, not even inside quotes.
-- If the source characters speak Chinese (or any other language), you MUST fully translate their lines into ${lang}. A script containing source-language characters is REJECTED.
-- 100% of the spoken lines must appear. Zero skipping, zero merging, zero replacing a line with a summary. Narrator/action lines stay at ~7% only.
-- NEVER soften, censor, bleep, or clean up harsh speech. If a character curses, insults, threatens, or talks vulgarly/sexually, translate it EXACTLY as harsh and raw as the source (written in ${lang}). Never write "ဆဲလိုက်တယ်", "***", or a polite substitute.
-- Faithfulness to the source outweighs politeness: explicit, crude, sexual and offensive lines are kept as-is — but always rendered in ${lang} script.
-
-STREET-SPOKEN STYLE & MODERN SLANG (mandatory for ${narrationStyle} mode):
-- Write 100% the way real people talk today. Literary/bookish forms are FORBIDDEN (for BURMESE: no သည်, ၏, ၍, နေသည်, လုပ်နေသည် — use တယ်/တာ/လဲ/ကွာ/ပဲ).
-- Prefer current street slang and trend words over plain wording. BURMESE examples: လှတယ် → လန်းတယ်; လိင်ဆက်ဆံနေတယ် → မူစကူဒူးနေကြတယ်;ဒီလူကြီး/ဒီအမျိုးသားကြီး → ဒီဘဲကြီး;ကောင်မလေး → ဆော်; တင်ပါးလှတယ် → စစ်ကိုင်းအိုးကြီးလို တင်းနေတယ်; ပါးစပ်ပိတ်ထား → စောက်ပေါက်ပိတ်ထား;စကားသိပ်မများနဲ့ → အီးသိပ်မပေါက်နဲ့; ဂဂျီဂဂျောင်ကျတယ်/ရစ်တယ် → ချီးထုပ်ကျတယ်; လိုရင်းမရောက်ဘဲ ဝေ့ဝိုက်နေတယ် → တိုင်ပတ်နေတယ်; မဟုတ်တာတွေလျှောက်မပြောနဲ့ → စောက်ပိုတွေမပြောနဲ့; ပြည့်တန်ဆာ → ဖာသည်မ; ဆဲစကား → မအေလိုး/သူတောင်းစား/ ခွေးမသား။ သို့သော် ဆရာတပည့်ဆက်ဆံရေး၊မိဘနဲ့သားသမီးဆက်ဆံရေးတွေမှာဆိုရင် ဒီဗန်းစကားတွေ မသုံးရ။
-- SLANG QUOTA (HARD REQUIREMENT): the finished script MUST actually contain AT LEAST 6-10 real slang/street expressions from the list above (or equally current Burmese street slang), spread across the whole script — not just in the hook. A script written entirely in plain polite wording is REJECTED.
-- Whenever a plain word has a street equivalent above, you MUST write the street version. Example: never write "ပါးစပ်ပိတ်ထား" — write "စောက်ပေါက်ပိတ်ထား" or "အီးသိပ်မပေါက်နဲ့". Never write "လှတယ်" — write "လန်းတယ်". Never write "ပြည့်တန်ဆာ" — write "ဖာသည်မ".
-- These slang and vulgar words are ALLOWED and REQUIRED here. No politeness filter, no softening, no self-censoring, no asterisks. This rule OVERRIDES every earlier "avoid profanity / keep it clean / avoid derogatory words" style instruction anywhere in this prompt.
-- Slang must fit the moment naturally — never force it into a sad or serious beat where it kills the emotion, and never in teacher-student or parent-child interactions.`
-        : "";
-
-    const viralBalanceBlock =
-      narrationStyle === "VIRAL"
-        ? `\n\nVIRAL MODE BALANCE (mandatory — dialogue-heavy, but NEVER dialogue-only):
-- Keep ALL the real dialogue (this is the backbone), but the script must NOT read like a bare dialogue transcript.
-- MAXIMUM 2-3 DIALOGUES RULE: You must NEVER write more than 2 or 3 consecutive [DIALOGUE] lines without inserting a [MM:SS] Narrator line.
-- CONTINUOUS CONVERSATION RULE: Even during a continuous back-and-forth conversation with no silent gaps, you MUST pause the dialogue after every 2-3 speaker turns and insert a 1-sentence narrator line describing their face expressions, body language, or the emotional tension of the argument.
-- NARRATOR'S ROLE (PLOT BRIDGES, ACTION & RELATIONSHIPS - 7%): Narrator lines are NOT optional filler — they are essential story glue. Insert narrator paragraphs to:
-  * Describe WHO the characters are and their RELATIONSHIP to each other (e.g. husband-wife, boss-employee, childhood friends) — especially on first appearance.
-  * Bridge between scenes: explain where, when, why, and what changed.
-  * Describe physical actions, fights, chases, embraces — concrete verbs, not summaries.
-  * Show face/body reactions: tears, trembling, jaw clenching, stepping back.
-- STORY-CONNECTION REQUIREMENT: The narrator lines must make the PLOT understandable on their own — who did what to whom, where, and why it matters right now. A viewer who never saw the source must follow the story from the script alone.
-- If two consecutive dialogue blocks come from different scenes, different speakers' situations, or after a time jump, you MUST place a connective narrator/action line between them.
-- Never invent facts in these narrator lines: describe only actions, expressions and relationships that are visible or audible in the source.
-- TONE & VOCABULARY: Use modern, trendy internet slang, popular pop-culture lingo, and highly engaging humorous expressions naturally (e.g., if ${lang} is BURMESE, use modern daily spoken Burmese, NOT formal/literary Myanmar text).`
+- Goal: the viewer feels pity, anger, tension, or satisfaction as it happens — because they hear the real words and see the described reaction, not a summary.`
         : "";
 
     console.log(`[recap-script-generator] Language: ${lang}, Niche: ${nicheLabel}, isOwnApi: ${isOwnApi}`);
@@ -830,16 +539,21 @@ STREET-SPOKEN STYLE & MODERN SLANG (mandatory for ${narrationStyle} mode):
       BURMESE: "မြန်မာ (Burmese)",
     };
     const langLabel = langNativeMap[lang] || lang;
-    const targetLanguageLock = `TARGET LANGUAGE LOCK: The target output language is strictly ${langLabel}. The source video might be in Chinese or another language, but you MUST translate EVERYTHING (including all character dialogues, signs, and story details) directly into modern, conversational ${langLabel}. NEVER output the original source language. NEVER mix languages in a single sentence.`;
+    const targetLanguageLock = `TARGET LANGUAGE LOCK: Output narration language is ${lang} / ${langLabel}. The source video's spoken language is only INPUT; translate ALL dialogue, signs, captions, and story details into ${langLabel}. Never copy the source language into the final script. If the source is Chinese but target is Burmese, write Burmese only. If target is English/Thai/Korean/Japanese/Hindi/etc., write only that selected target language.`;
 
     const systemPrompt = `You are a world-class professional scriptwriter. You write premium narration scripts at Netflix/BBC/HBO broadcast standard.
 
 ###############################################################
-# MANDATORY TARGET LANGUAGE: ${langLabel}
-# YOU MUST WRITE 100% OF YOUR OUTPUT IN ${langLabel} ONLY.
+# LANGUAGE: ${langLabel}
+# YOU MUST WRITE 100% OF YOUR OUTPUT IN ${lang} LANGUAGE.
 # ${targetLanguageLock}
-# Ensure the writing style is natural, modern CONVERSATIONAL spoken language (e.g., if ${lang} is BURMESE, use modern daily spoken Burmese, NOT formal/literary Myanmar text. If THAI, use natural spoken Thai).
-# NEVER mix multiple languages. The entire script must be cleanly written in ${langLabel}.
+# IF ${lang} IS "ENGLISH" → WRITE IN ENGLISH.
+# IF ${lang} IS "JAPANESE" → WRITE IN JAPANESE (日本語).
+# IF ${lang} IS "KOREAN" → WRITE IN KOREAN (한국어).  
+# IF ${lang} IS "THAI" → WRITE IN THAI (ภาษาไทย).
+# IF ${lang} IS "HINDI" → WRITE IN HINDI (हिन्दी).
+# DO NOT WRITE IN BURMESE/MYANMAR UNLESS ${lang} IS "BURMESE".
+# ZERO BURMESE WORDS IF ${lang} IS NOT "BURMESE".
 # THIS IS THE #1 HIGHEST PRIORITY RULE. IT OVERRIDES EVERYTHING.
 ###############################################################
 
@@ -856,20 +570,12 @@ ABSOLUTE RULES:
 1. Write ONLY in ${lang} language
 2. Use modern spoken style, NOT formal/literary
 3. Each paragraph = natural spoken segment (2-4 sentences)
-4. The script must be READY TO READ as narration. The required leading [MM:SS] timecode and [DIALOGUE:EMOTION] marker are the ONLY allowed metadata; never omit them where required and add no other stage directions or formatting marks.
+4. The script must be READY TO READ as narration (no stage directions, no brackets, no formatting marks, no timestamps)
 5. Fully embody the "${nicheLabel}" niche style described above
 6. ${targetLanguageLock}
-7. ZERO HALLUCINATION POLICY (CRITICAL): Write ONLY what is visibly or audibly present. DO NOT invent, assume, or fabricate any dialogue, actions, names, or events. If you cannot hear or see it in the source, DO NOT write it.
-8. CRITICAL LENGTH RULE: To maintain correct audio-visual sync, write natural complete sentences about REAL visible actions, dialogue, emotions and consequences. Reach the needed length only with distinct source beats; never stretch one event through paraphrases, repeated names, repeated reactions or filler.
-9. TONE & VOCABULARY: Use modern, trendy internet slang, popular pop-culture lingo, and highly engaging humorous expressions naturally to make the recap entertaining and relatable for young audiences. Keep the vibe highly energetic and cool. In HYBRID/VIRAL dialogue modes, harsh, vulgar and street slang words ARE allowed and expected whenever the source speaks that way — never soften or censor them.
-10. NATIVE SCRIPT TRANSLITERATION (TTS FRIENDLY): NEVER leave foreign words, brand names, or English words in the Latin (A-Z) alphabet. If you must include them, you MUST transliterate and spell them out phonetically using ONLY the native alphabet of ${langLabel}. For example, if ${lang} is BURMESE, write "Facebook" as "ဖေ့စ်ဘွတ်(ခ်)", "Apple" as "အက်ပဲလ်", NOT "Facebook" or "Apple". This ensures the Text-to-Speech engine reads them smoothly in the native accent.
-11. ZERO REPETITION LOCK: State each fact, action, emotion, relationship, name introduction, plan, and consequence ONCE only. Never repeat it later with synonyms or slightly different wording. Every new sentence must advance to a new source event or add genuinely new information.
-12. NAME NATURALNESS: Introduce a character's name/role once, then use natural pronouns or relationship terms when the subject remains clear. Never begin several consecutive sentences with the same name or “သူ/သူမ”. Reuse the name only when needed to prevent confusion after a speaker/scene change.
-13. COHERENCE LOCK: Before writing, internally build a chronological beat ledger (do NOT print it). Each paragraph must cover the next uncovered beat and clearly preserve cause → action → consequence. A viewer who has never seen the source must understand who acted, why it happened, and what changed.
-14. NARRATION-ONLY OUTPUT: Never print internal labels or planning terms such as “story bible”, “story bibe”, “story vibe”, “beat ledger”, “hook”, “character list”, “analysis”, or any heading. Output only timestamped narration/dialogue.
 
 CRITICAL - DIALOGUE TRANSLATION RULE (MOST IMPORTANT):
-- If characters speak ANY dialogue (in Chinese, English, etc.), you MUST translate their EXACT words 100% into ${langLabel}. NEVER output original Chinese characters (တရုတ်စာ) or foreign text.
+- If characters or people in the video/audio SPEAK any dialogue — in ANY language (English, Thai, Korean, Chinese, Japanese, etc.) — you MUST translate and include what they actually said
 - Do NOT just describe that they "spoke" or "said something" — translate their EXACT words into ${lang} and weave it naturally into the narration
 - Preserve the EMOTIONAL TONE of the original dialogue: if it was funny, translate it funny; if it was sad, translate it heartbreakingly; if it was shocking, make it shocking in ${lang}
 - For animals, sounds, or non-verbal emotional expressions — describe them vividly so the audience FEELS the emotion
@@ -905,20 +611,17 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - Identify the subject matter, the niche, and the story being told through visuals/actions/music
 - Write a complete, engaging narration script based on your visual/audio analysis
 
-###############################################################
-# SCRIPT LENGTH & FULL COVERAGE RULE (STRICT)
-###############################################################
-- MANDATORY: YOU MUST NARRATE THE ENTIRE VIDEO FROM 00:00 TO THE VERY END.
-- DO NOT SUMMARIZE. DO NOT SKIP. DO NOT STOP EARLY.
-- YOU MUST WRITE A COMPLETE NARRATION THAT FOLLOWS THE STORY UNFOLDING AS IT HAPPENS.
-- Cover the beginning, middle, climax and ending through distinct essential beats; compress routine or duplicate moments.
-- PARAGRAPH COUNT: Use only as many paragraphs as the source has distinct useful beats. Never create extra paragraphs merely to satisfy a count or duration target.
-- SPREAD: Evenly distribute these paragraphs across the entire video timeline (e.g., for a 4-minute video, you must have content for the 0:00, 1:00, 2:00, 3:00, and 4:00 minute marks).
-- IF YOU OMIT THE SECOND HALF OF THE VIDEO, YOUR OUTPUT IS REJECTED.
-- TOKEN MANAGEMENT: If you find yourself writing too much detail at the start, STOP and COMPRESS the beginning so you have enough space to finish the entire story.
-- FINAL PARAGRAPH: The final paragraph must have a timecode [MM:SS] that is very close to the actual end of the video.
-- THIS IS THE #2 HIGHEST PRIORITY RULE (after TARGET LANGUAGE).
-###############################################################
+SCRIPT LENGTH RULE (CRITICAL — TRUE 70% RECAP / SUMMARY):
+ - This is a RECAP, but it MUST be detailed enough to occupy the full 70% spoken-time target while covering the complete STORY ARC end-to-end.
+- HARD length target: the narration MUST take about 70% of the source duration when read aloud at a normal narration pace. This is a FIXED target, not a suggestion. Do not stop early.
+- Duration targets: 3-min source → about 2 min recap; 5-min → about 3.5 min; 6-min → about 4.2 min; 10-min → about 7 min; 30-min → about 21 min.
+- Judge length by SPOKEN TIME, not by word or character count.
+ - You MUST include the ending. Cut only genuine filler and repetition; never cut a scene that introduces a decision, conflict, relationship change, reveal, consequence, climax, or resolution.
+ - Keep every connected essential beat and the highest-tension/climax scenes in a tightly-linked narrative. If the draft is short, expand coverage with omitted source scenes, never with repeated wording.
+- The FINAL paragraph MUST correspond to the FINAL scene of the source video (its timecode should be near the source's ending)
+- Every important beat from beginning, middle, AND end must appear — no part of the video may be skipped or left out
+- Avoid padding/repetition, but DO write enough paragraphs to truly cover the full duration end-to-end.
+- The final sentence MUST be complete and end with sentence-ending punctuation. Never stop mid-sentence.
 
 VIRAL HOOK RULE (MANDATORY — FIRST 3 SECONDS):
 - The VERY FIRST sentence MUST be a 3-second viral hook designed to stop the scroll instantly
@@ -947,45 +650,12 @@ STRUCTURE:
 - Climax: The single most shocking/dramatic moment at peak intensity
 - Resolution: Short, punchy ending that leaves viewers wanting more
 
-${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYLE/LENGTH DETAILS ABOVE WHEN CONFLICTING):\n${callerInstructionsBlock}\n` : ""}${dialogueTimingLockBlock}${viralBalanceBlock}
+${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYLE/LENGTH DETAILS ABOVE WHEN CONFLICTING):\n${callerInstructionsBlock}\n` : ""}${dialogueTimingLockBlock}
 
 ###############################################################
 # FINAL ENFORCEMENT: YOUR ENTIRE OUTPUT MUST BE IN ${lang}.
 # NOT BURMESE. NOT MYANMAR. ONLY ${lang}. EVERY SINGLE WORD.
-###############################################################
-
-###############################################################
-# NATIVE-SCRIPT TRANSLITERATION (MANDATORY — TTS DEPENDS ON IT)
-# Every single character in the script must be written in the
-# ${lang} writing system. NO Chinese/Japanese/Korean characters,
-# NO Latin letters, NO other alphabets anywhere — not even for
-# names, places, brands, or borrowed words.
-# Transliterate them phonetically into ${lang} letters so the
-# text-to-speech voice reads them with a natural ${lang} accent.
-# If ${lang} is BURMESE: Facebook → ဖေ့ဘုတ် ; TikTok → တစ်တော့ ;
-#   CEO → စီအီးအို ; hotel → ဟိုတယ် ; police → ပိုလိစ် ; OK → အိုကေ.
-# CHARACTER NAMES: use ONLY the real names spoken/shown in THIS source
-# video, transliterated into ${lang} letters. NEVER invent a name and
-# NEVER reuse any example name from this prompt. If a name is unclear,
-# use the character's role/relationship instead of a made-up name.
-# A name left in Chinese characters or Latin letters is SKIPPED
-# by the voice engine, so this is a hard failure — never do it.
-###############################################################${
-      narrationStyle === "HYBRID" || narrationStyle === "VIRAL"
-        ? `
-
-###############################################################
-# FINAL SLANG ENFORCEMENT (HIGHEST PRIORITY AFTER LANGUAGE)
-# Write 100% street-spoken ${lang}. Use the REQUIRED slang list above
-# (လန်းတယ်, မူစကူဒူး, စစ်ကိုင်းအိုးကြီးလို တင်းနေတယ်, စောက်ပေါက်ပိတ်ထား,
-#  အီးသိပ်မပေါက်နဲ့, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး, ခွေးမသား)
-# at least 6-10 times across the script, and keep every harsh/vulgar
-# source line uncensored and verbatim. Polite substitutes are REJECTED.
-# Exception: no slang/vulgarity in teacher-student or parent-child scenes,
-# or in genuinely sad/serious emotional beats.
-###############################################################`
-        : ""
-    }`;
+###############################################################`;
 
     // ===== SERIES CONTINUITY BLOCK (appended only when the caller opts in) =====
     const seriesBlock =
@@ -997,19 +667,21 @@ ${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYL
 ###############################################################
 ${
   seriesContext
-    ? `PREVIOUS PARTS MEMORY (STORY BIBLE) — reference for name and fact consistency only, NOT a source of new content:
+    ? `PREVIOUS PARTS MEMORY (STORY BIBLE) — treat as absolute truth:
 ${seriesContext}
 
 CONTINUITY RULES:
-- The SOURCE VIDEO attached to this request is your ONLY source of content. Watch it from start to finish and narrate ONLY what you see and hear in it.
-- Use the story bible ONLY to keep character names, spellings, and established facts consistent. Do NOT use it to generate new scenes or events.
-- Do NOT repeat anything listed under TOPICS ALREADY COVERED.
+- This series may be ANY niche (movie/drama, documentary, news, tutorial, tech, health, business, sport, vlog, history, true-crime, etc.). Read SERIES TYPE / SERIES FOCUS above and continue in that same lane.
+- Use EXACTLY the same names, terms, numbers and facts as the memory above (characters, key entities, key facts). Never rename or re-describe a known name/term with a new generic label, and never contradict a stated fact.
+- Do NOT repeat anything listed under TOPICS ALREADY COVERED. Move the series forward.
+- Where relevant, pay off or advance the OPEN THREADS.
 - Begin the script with a short, natural 1-2 sentence bridge in ${lang} that reconnects to where the previous part stopped. It MUST still start with a [MM:SS] timecode like every other paragraph, and it must feel organic — not a formal summary.
   * If SERIES TYPE is a story/drama/film: a "previously" story bridge.
   * Otherwise: a knowledge bridge like "last part we covered X — now we continue with Y", in natural ${lang}.
 - Do NOT re-tell the whole previous part. Only the minimum needed to reconnect.
+- End this part with a hook that pulls the audience into the next part: a cliffhanger for stories, an open curiosity question for non-fiction.
 - Keep the same narration tone and style as a continuing series.`
-    : `This is PART 1 of a series. Write it as a self-contained recap. Your ONLY source of content is the attached source video — narrate ONLY what you see and hear in it.`
+    : `This is PART 1 of a series. Write it as a self-contained recap, but end with a hook toward the next part.`
 }
 ${
   emitStoryBible
@@ -1103,18 +775,27 @@ AFTER the complete narration script, output a final line containing exactly ===S
 
       // ---- Long source: split into 2 (12-20 min) or 3 (>20 min) windows so one
       // model call never has to produce the whole 70% narration.
-      // Window mode အားလုံးကို အပြီးပိတ်လိုက်ပါပြီ
-      const windowMode = false;
-      const windowCount = 1;
-
+      const windowCount = !sourceDurationSec ? 1 : sourceDurationSec > 1200 ? 3 : sourceDurationSec > 720 ? 2 : 1;
+      const windowMode = windowCount > 1;
+      const windowSplitSec = windowMode ? Math.floor((sourceDurationSec as number) / windowCount) : 0;
       const fmtTc = (sec: number) =>
         `${String(Math.floor(Math.max(0, sec) / 60)).padStart(2, "0")}:${String(Math.round(Math.max(0, sec)) % 60).padStart(2, "0")}`;
-
-      const windowOneSec = sourceDurationSec || 0;
+      const windowOneSec = windowMode ? windowSplitSec : sourceDurationSec || 0;
 
       const durationHint = sourceDurationSec
         ? `\nSOURCE VIDEO DURATION: ${Math.floor(sourceDurationSec / 60)} minutes ${Math.round(sourceDurationSec % 60)} seconds` +
-          `\nCRITICAL: YOU MUST ANALYZE THE ENTIRE VIDEO FROM 00:00 TO THE VERY END. DO NOT STOP EARLY.`
+          (windowMode
+            ? `\n\n*** PART 1 OF ${windowCount} — COVER ONLY 00:00 to ${fmtTc(windowSplitSec)} ***` +
+              `\nThis is a long source, so you are writing PART 1 only. Cover the source from 00:00 up to ${fmtTc(windowSplitSec)} and STOP there.` +
+              `\nDo NOT narrate anything after ${fmtTc(windowSplitSec)}. Do NOT write an ending, conclusion, moral or wrap-up line — the ENDING belongs ONLY to the LAST part.` +
+              `\nStop mid-story on an unresolved beat (a character still moving, a question still open) so the next part can continue the same arc seamlessly.` +
+              `\nAll timecodes must be between [00:00] and [${fmtTc(windowSplitSec)}].` +
+              `\nREQUIRED NARRATION LENGTH for PART 1 (spoken aloud): ${Math.floor((windowOneSec * LENGTH_TARGET_RATIO) / 60)} minutes ${Math.round(
+                (windowOneSec * LENGTH_TARGET_RATIO) % 60,
+              )} seconds (= 70% of this part). Shorter than this is a FAILED output.`
+            : `\nREQUIRED NARRATION LENGTH (spoken aloud): ${Math.floor((sourceDurationSec * LENGTH_TARGET_RATIO) / 60)} minutes ${Math.round(
+                (sourceDurationSec * LENGTH_TARGET_RATIO) % 60,
+              )} seconds (= 70% of the source). Shorter than this is a FAILED output.`)
         : "";
 
       const userPrompt = `[LANGUAGE: ${lang} — ${langLabel}]
@@ -1127,8 +808,8 @@ Below is a source video/audio file. Your job is to:
 2. Analyze ALL content: dialogue, actions, emotions, settings, visual elements, audio cues
 3. If there is NO spoken dialogue, analyze visual elements, actions, music, settings, body language
 4. Identify ALL key moments, especially dramatic/shocking ones (confrontations, revelations, emotional scenes, physical actions like kisses/fights/tears)
-5. Write a complete professional ${nicheLabel} narration script that covers only the essential story beats and script must be fullcoverage on source video
-6. A viewer reading your script aloud MUST finish in about 100% of the original source duration (see REQUIRED NARRATION LENGTH above) and must cover the full source from beginning to end.
+5. Write a complete professional ${nicheLabel} narration script that covers only the essential story beats
+6. A viewer reading your script aloud MUST finish in about 70% of the original source duration (see REQUIRED NARRATION LENGTH above) and must cover the full source from beginning to end.
 7. Hook the audience immediately
 8. Use vivid, engaging ${lang} appropriate for "${nicheLabel}" content
 9. Be perfectly paced for voice narration
@@ -1149,8 +830,6 @@ FULL COVERAGE RULE (MANDATORY):
 - Never cover the first half in detail and compress or skip the second half. The last third of the source is just as important.
 - ENDING COVERAGE (HARD RULE): the LAST 15% of the source duration MUST have its own paragraphs. The final confrontation/fight, the climax, its outcome and the closing scene must each be narrated in full detail — never compressed into one rushed sentence and never summarised away. Your last paragraph's timecode must fall inside that final 15%.
 - Never pad with repeated or restated sentences to reach the length — add MISSING scenes instead.
-- ONE-BEAT-ONE-MENTION: Once a source event has been narrated, mark it covered internally and never mention it again unless a later source scene adds a genuinely new consequence. Repeating a plan, a character name, tears, a reaction, or the same explanation in different words is a hard failure.
-- PARAGRAPH PROGRESSION: Before accepting each paragraph, compare it with all earlier paragraphs. If its core meaning is already present, delete it and move to the next uncovered source event.
 
 OUTPUT FORMAT:
 - Each paragraph MUST start with [MM:SS] — the source video timecode of the best matching scene
@@ -1209,10 +888,8 @@ ${transcript}
 
     // Total wall budget must stay under Supabase's 150s idle limit.
     // Reserve ~10s for post-processing, credit deduction, and response send.
-    // Measured from the START OF THE REQUEST (not after file-activation polling),
-    // otherwise upload/ACTIVE waiting time is invisible and the 150s idle limit is hit.
-    const WALL_BUDGET_MS = 132000;
-    const wallStart = requestStart;
+    const WALL_BUDGET_MS = 140000;
+    const wallStart = Date.now();
     const remainingBudget = () => Math.max(0, WALL_BUDGET_MS - (Date.now() - wallStart));
 
     const controller = new AbortController();
@@ -1250,31 +927,10 @@ ${transcript}
       );
     }
 
-    // Own API: model-level fallback is allowed, but ONLY on the user's own key.
-    // Key rotation into the paid App pool stays App-API-only.
-    const fallbackModels = isOwnApi
-      ? [
-          "gemini-2.5-flash",
-          "gemini-flash-lite-latest",
-          "gemini-flash-latest",
-          "gemini-2.5-flash-lite",
-          "gemini-3.5-flash-lite",
-          "gemini-3.1-flash-lite",
-          "gemini-3.7-flash",
-          "gemini-3.6-flash",
-          "gemini-3.5-flash",
-          "gemini-3.1-flash",
-        ]
-      : [
-          "gemini-3.7-flash",
-          "gemini-3.6-flash",
-          "gemini-3.5-flash",
-          "gemini-3.1-flash",
-          "gemini-2.5-flash",
-          "gemini-flash-latest",
-          "gemini-flash-lite-latest",
-        ];
-    const shouldFallback = (status?: number) => status === 404 || status === 429 || status === 503 || status === 504;
+    // Own API must fail fast on its own key. Fallback and key rotation belong to App API only.
+    const fallbackModels = isOwnApi ? [] : ["gemini-pro-latest", "gemini-2.5-flash", "gemini-2.5-pro"];
+    const shouldFallback = (status?: number) =>
+      !isOwnApi && (status === 404 || status === 429 || status === 503 || status === 504);
 
     for (const fallbackModel of fallbackModels) {
       // Fallback if: no response (timeout/abort/network) OR response not ok and status warrants fallback
@@ -1377,14 +1033,11 @@ ${transcript}
     // ===== SERIES: split off the optional story bible before any script validation =====
     let storyBible: unknown = null;
     let rawScript = rawModelText;
-    const storyBibleMarker = rawModelText.match(
-      /(?:^|\n)\s*(?:===\s*)?STORY[\s_-]*BI(?:BLE|BE|VE)(?:\s*===)?\s*:?[ \t]*(?:\n|$)/im,
-    );
-    if (storyBibleMarker?.index !== undefined) {
-      const idx = storyBibleMarker.index;
+    if (rawModelText.includes("===STORY_BIBLE===")) {
+      const idx = rawModelText.indexOf("===STORY_BIBLE===");
       rawScript = rawModelText.slice(0, idx).trim();
       const bibleRaw = rawModelText
-        .slice(idx + storyBibleMarker[0].length)
+        .slice(idx + "===STORY_BIBLE===".length)
         .replace(/```[a-zA-Z]*/g, "")
         .trim();
       try {
@@ -1423,7 +1076,7 @@ ${transcript}
       }
       return s.trim();
     };
-    let normalizedRawScript = removeNarrationRepetition(stripHookPreamble(rawScript));
+    const normalizedRawScript = stripHookPreamble(rawScript);
 
     if (!normalizedRawScript || normalizedRawScript.length < 10) {
       console.error("[recap-script-generator] Empty or invalid script output");
@@ -1434,134 +1087,33 @@ ${transcript}
     }
 
     if (sourceDurationSec && !endsAtCompleteSentence(normalizedRawScript)) {
-      console.warn("[recap-script-generator] Incomplete sentence detected — auto-completing");
-      if (remainingBudget() > 12000) {
-        const lastLines = normalizedRawScript.split("\n").slice(-5).join("\n");
-        const completePrompt = `The narration script below was cut off mid-sentence. Continue EXACTLY from where it stopped and finish the sentence, then keep writing until the source video's ending is fully covered.
-
-Rules:
-- Your first word must be the direct continuation of the last incomplete sentence below — no gap, no restart.
-- After completing that sentence, continue narrating any remaining source content.
-- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, စောက်ပေါက်ပိတ်ထား, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
-- Same language (${lang}), same tone, same [MM:SS] format.
-- Do NOT repeat anything already written.
-
-LAST LINES (continue from here):
-${lastLines}`;
-        const completeCtrl = new AbortController();
-        const completeTimer = setTimeout(
-          () => completeCtrl.abort(),
-          Math.max(5000, Math.min(40000, remainingBudget() - 8000)),
-        );
-        try {
-          const completeRes = await callGeminiGenerateContent(
-            activeModel,
-            activeApiKey,
-            isOwnApi,
-            completeCtrl.signal,
-            finalSystemPrompt,
-            [{ text: completePrompt }, ...contentParts.slice(1)],
-            requestedMaxOutputTokens,
-          );
-          if (completeRes.ok) {
-            const completeData = await completeRes.json();
-            const continuation = (completeData.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
-            if (continuation.length > 2) {
-              const existingTimecodes = [...normalizedRawScript.matchAll(/\[(\d{1,2}):(\d{2})\]/g)].map(
-                (m) => Number(m[1]) * 60 + Number(m[2]),
-              );
-              const lastExistingTimecode = existingTimecodes.length ? Math.max(...existingTimecodes) : -1;
-              const continuationTimecode = continuation.match(/^\s*\[(\d{1,2}):(\d{2})\]/);
-              const continuationStartsAt = continuationTimecode
-                ? Number(continuationTimecode[1]) * 60 + Number(continuationTimecode[2])
-                : null;
-              const normalizedExistingStart = stripTimecodes(normalizedRawScript).replace(/\s+/g, " ").slice(0, 100);
-              const normalizedContinuationStart = stripTimecodes(continuation).replace(/\s+/g, " ").slice(0, 100);
-              const restartedFromBeginning =
-                normalizedExistingStart.length >= 40 && normalizedContinuationStart === normalizedExistingStart;
-              if (
-                !restartedFromBeginning &&
-                (continuationStartsAt === null || continuationStartsAt > lastExistingTimecode)
-              ) {
-                normalizedRawScript = normalizedRawScript + " " + continuation;
-                console.log(`[recap-script-generator] Auto-complete succeeded (${continuation.length} chars added)`);
-              } else {
-                console.warn("[recap-script-generator] Rejected duplicate/restarted auto-complete output");
-              }
-            }
-          }
-        } catch (completeErr) {
-          console.warn(
-            `[recap-script-generator] Auto-complete error: ${completeErr instanceof Error ? completeErr.message : String(completeErr)}`,
-          );
-        } finally {
-          clearTimeout(completeTimer);
-        }
-      }
+      console.error("[recap-script-generator] Incomplete script output detected before length enforcement");
+      return new Response(
+        JSON.stringify({
+          error: "AI script က ဝါကျမဆုံးခင် တန်းလန်းရပ်သွားပါသည်။ Retry Script ကိုနှိပ်ပြီး ပြန် Generate လုပ်ပါ။",
+          retryable: true,
+          incompleteOutput: true,
+          retryAfterSeconds: 5,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     if (violatesTargetLanguage(normalizedRawScript, lang)) {
-      console.warn(`[recap-script-generator] Target language violation for ${lang} — auto-retrying up to 5 times`);
-      let langFixed = false;
-      for (let langAttempt = 1; langAttempt <= 5 && !langFixed && remainingBudget() > 15000; langAttempt++) {
-        const langRetryCtrl = new AbortController();
-        const langRetryTimer = setTimeout(
-          () => langRetryCtrl.abort(),
-          Math.max(5000, Math.min(50000, remainingBudget() - 8000)),
-        );
-        try {
-          const langRetryRes = await callGeminiGenerateContent(
-            activeModel,
-            activeApiKey,
-            isOwnApi,
-            langRetryCtrl.signal,
-            finalSystemPrompt,
-            contentParts,
-            requestedMaxOutputTokens,
-          );
-          if (langRetryRes.ok) {
-            const langRetryData = await langRetryRes.json();
-            let retryScript = langRetryData.candidates?.[0]?.content?.parts?.[0]?.text || "";
-            const retryStoryBibleMarker = retryScript.match(
-              /(?:^|\n)\s*(?:===\s*)?STORY[\s_-]*BI(?:BLE|BE|VE)(?:\s*===)?\s*:?[ \t]*(?:\n|$)/im,
-            );
-            if (retryStoryBibleMarker?.index !== undefined) {
-              const sbIdx = retryStoryBibleMarker.index;
-              const sbRaw = retryScript
-                .slice(sbIdx + retryStoryBibleMarker[0].length)
-                .replace(/```[a-zA-Z]*/g, "")
-                .trim();
-              try {
-                const s = sbRaw.indexOf("{");
-                const e = sbRaw.lastIndexOf("}");
-                if (s !== -1 && e > s) storyBible = JSON.parse(sbRaw.slice(s, e + 1));
-              } catch {}
-              retryScript = retryScript.slice(0, sbIdx).trim();
-            }
-            retryScript = removeNarrationRepetition(stripHookPreamble(retryScript));
-            if (retryScript.length > 10 && !violatesTargetLanguage(retryScript, lang)) {
-              normalizedRawScript = retryScript;
-              langFixed = true;
-              console.log(`[recap-script-generator] Language auto-retry ${langAttempt}/5 succeeded for ${lang}`);
-            } else {
-              console.warn(`[recap-script-generator] Language auto-retry ${langAttempt}/5 still violated for ${lang}`);
-            }
-          }
-        } catch (langRetryErr) {
-          console.warn(
-            `[recap-script-generator] Language auto-retry ${langAttempt}/5 error: ${langRetryErr instanceof Error ? langRetryErr.message : String(langRetryErr)}`,
-          );
-        } finally {
-          clearTimeout(langRetryTimer);
-        }
-      }
-      if (!langFixed) {
-        console.warn(`[recap-script-generator] All language retries failed — proceeding with script anyway`);
-      }
+      console.error(`[recap-script-generator] Target language validation failed for ${lang}`);
+      return new Response(
+        JSON.stringify({
+          error: "AI က ရွေးထားတဲ့ target language အတိုင်း script မထုတ်ပေးလို့ credit မဖြတ်ပါ။ ပြန် Generate လုပ်ပါ။",
+          retryable: true,
+          languageMismatch: true,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
-    // Skip premature trimming — let continuation passes complete first, trim at the end only
-    let lengthAdjustedScript = normalizedRawScript;
+    // Apply the 75% ceiling before any missing-middle/ending paragraphs are merged.
+    // Final trimming must never remove the repaired ending from a chronologically complete script.
+    let lengthAdjustedScript = enforcefullScriptCoverage(normalizedRawScript, sourceDurationSec);
     const rawSpokenSec = estimateSpokenSeconds(normalizedRawScript);
     let toppedUp = false;
 
@@ -1569,7 +1121,7 @@ ${lastLines}`;
     // the accepted 65% floor, make one media-grounded full rewrite while enough wall
     // time remains. Rewriting (rather than appending after the final timecode) lets the
     // model restore important scenes skipped anywhere in the beginning/middle/end.
-    const initialWindowTotal = 0; // Disabled: use continuation pass instead of full rewrite to save tokens
+    const initialWindowTotal = !sourceDurationSec ? 1 : sourceDurationSec > 1200 ? 3 : sourceDurationSec > 720 ? 2 : 1;
     if (
       sourceDurationSec &&
       initialWindowTotal === 1 &&
@@ -1647,27 +1199,14 @@ ${normalizedRawScript}`;
       if (!m) return null;
       return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
     };
-    const windowTotal = 1;
+    const windowTotal = !sourceDurationSec ? 1 : sourceDurationSec > 1200 ? 3 : sourceDurationSec > 720 ? 2 : 1;
     const isWindowMode = windowTotal > 1;
     const tc = (sec: number) =>
       `${String(Math.floor(Math.max(0, sec) / 60)).padStart(2, "0")}:${String(Math.round(Math.max(0, sec)) % 60).padStart(2, "0")}`;
     const stripTc = (s: string) => s.replace(/^\s*\[\d{1,2}:\d{2}\]\s*/, "").trim();
-    // Check if script coverage is incomplete by examining the last written timecode
-    const _preCheckParas = lengthAdjustedScript
-      .split(/\n{2,}/)
-      .map((p) => p.trim())
-      .filter(Boolean);
-    let _preCheckLastTc = 0;
-    for (const p of _preCheckParas) {
-      const t = paraTimecodeSec(p);
-      if (t !== null && t > _preCheckLastTc) _preCheckLastTc = t;
-    }
-    const coverageIncomplete = sourceDurationSec ? _preCheckLastTc < sourceDurationSec * 0.85 : false;
     if (
       sourceDurationSec &&
-      (isWindowMode ||
-        estimateSpokenSeconds(lengthAdjustedScript) < sourceDurationSec * LENGTH_MIN_RATIO ||
-        coverageIncomplete) &&
+      (isWindowMode || estimateSpokenSeconds(lengthAdjustedScript) < sourceDurationSec * LENGTH_MIN_RATIO) &&
       endsAtCompleteSentence(lengthAdjustedScript) &&
       remainingBudget() > 22000
     ) {
@@ -1695,9 +1234,13 @@ ${normalizedRawScript}`;
           if (t !== null && t > lastTc) lastTc = t;
         }
         const boundaryStart = isWindowMode ? Math.floor((sourceDurationSec * (partNo - 1)) / windowTotal) : lastTc;
+        // Resume from the last scene actually written. Using max(lastTc, boundaryStart)
+        // silently skipped the whole gap whenever an earlier part stopped short of its
+        // planned boundary, which is exactly where important middle scenes disappeared.
         const windowStart = isWindowMode ? lastTc : boundaryStart;
         const windowEnd = isLastWindow ? sourceDurationSec : Math.floor((sourceDurationSec * partNo) / windowTotal);
         if (windowEnd - windowStart < 20) break;
+        // Small overlap so the model sees the exact moment the previous part stopped on.
         const watchFrom = Math.max(0, windowStart - 5);
         const workingSpokenSec = estimateSpokenSeconds(workingScript);
         const missingSec = isWindowMode
@@ -1714,7 +1257,7 @@ ${normalizedRawScript}`;
                   .pop() || ""
               ).trim();
               const nameCounts = new Map<string, number>();
-              for (const m of workingScript.matchAll(/\b[A-Z][\p{L}''-]{1,}\b/gu)) {
+              for (const m of workingScript.matchAll(/\b[A-Z][\p{L}'’-]{1,}\b/gu)) {
                 const w = m[0];
                 nameCounts.set(w, (nameCounts.get(w) || 0) + 1);
               }
@@ -1752,7 +1295,6 @@ ${
     ? "- This is the FINAL part: cover every remaining beat including the ENDING/climax."
     : "- This is a MIDDLE part: do NOT write an ending or conclusion — stop mid-story on an unresolved beat."
 }
-- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, စောက်ပေါက်ပိတ်ထား, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
 - Same language (${lang}), same tone, same [MM:SS] format. Never [HH:MM:SS], never ranges.
 - Target about ${missingSec} seconds of spoken narration. Finish with complete sentences.
 
@@ -1765,7 +1307,6 @@ CONTINUE the script. Rules:
 - Write ONLY the new paragraphs. Do NOT repeat or rewrite anything already written.
 - Every new paragraph MUST start with a timecode [MM:SS] that is STRICTLY LATER than [${tc(lastTc)}] and must keep increasing.
 - Cover the remaining source content through to the ENDING. Include the beats that were skipped.
-- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, စောက်ပေါက်ပိတ်ထား, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
 - Same language (${lang}), same tone and same [MM:SS] format. Never use [HH:MM:SS] or ranges.
 - Finish with complete sentences. Add roughly ${missingSec} seconds of spoken narration.
 
@@ -1795,9 +1336,6 @@ ${workingScript}`;
             const contData = await contRes.json();
             const contText: string = contData.candidates?.[0]?.content?.parts?.[0]?.text || "";
             const accepted: string[] = [];
-            const seenParagraphBodies = new Set(
-              existingParas.map((p) => stripTc(p).replace(/\s+/g, " ").trim().toLocaleLowerCase()),
-            );
             let cursor = isWindowMode ? Math.max(lastTc, windowStart - 1) : lastTc;
             // Seam guard: a part that opens with a restart/hook instead of continuing
             // is dropped so the merged script reads as one continuous arc.
@@ -1817,10 +1355,7 @@ ${workingScript}`;
               const t = paraTimecodeSec(p);
               if (t === null || t <= cursor) continue;
               if (sourceDurationSec && t > sourceDurationSec + 5) continue;
-              const paragraphBody = stripTc(p).replace(/\s+/g, " ").trim().toLocaleLowerCase();
-              if (!paragraphBody || seenParagraphBodies.has(paragraphBody)) continue;
               accepted.push(p);
-              seenParagraphBodies.add(paragraphBody);
               cursor = t;
             }
             if (isWindowMode && accepted.length > 1 && !seamChecked) {
@@ -1828,7 +1363,7 @@ ${workingScript}`;
               if (looksLikeRestart(accepted[0])) accepted.shift();
             }
             if (accepted.length) {
-              const merged = removeNarrationRepetition(`${workingScript}\n\n${accepted.join("\n\n")}`.trim());
+              const merged = `${workingScript}\n\n${accepted.join("\n\n")}`.trim();
               if (endsAtCompleteSentence(merged)) {
                 workingScript = merged;
                 lengthAdjustedScript = merged;
@@ -1891,7 +1426,6 @@ Rules:
 - Every paragraph MUST start with [MM:SS] STRICTLY LATER than [${tc(lastTc)}] and keep increasing. Nothing after [${tc(sourceDurationSec)}].
 - The final fight/climax must get its own paragraphs — never compressed into one sentence.
 - The LAST paragraph must correspond to the source's final scene and end the story properly.
-- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, စောက်ပေါက်ပိတ်ထား, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
 - Same language (${lang}), same tone, same narrator voice and same [MM:SS] format. Never [HH:MM:SS], never ranges.
 - Finish with a complete sentence.
 
@@ -1929,7 +1463,7 @@ ${lengthAdjustedScript}`;
               cursor = t;
             }
             if (acceptedEnd.length) {
-              const merged = removeNarrationRepetition(`${lengthAdjustedScript}\n\n${acceptedEnd.join("\n\n")}`.trim());
+              const merged = `${lengthAdjustedScript}\n\n${acceptedEnd.join("\n\n")}`.trim();
               if (endsAtCompleteSentence(merged) && !violatesTargetLanguage(merged, lang)) {
                 lengthAdjustedScript = merged;
                 toppedUp = true;
@@ -1955,8 +1489,10 @@ ${lengthAdjustedScript}`;
       }
     }
 
-    // No trimming — full content coverage is the priority
-    const script = removeNarrationRepetition(lengthAdjustedScript);
+    // Preserve the chronology through the source ending. The old length trimmer kept
+    // paragraphs from the beginning until 70% and then stopped, which could delete the
+    // newly repaired climax/ending even though total spoken length looked correct.
+    const script = lengthAdjustedScript;
     const finalWordCount = script.split(/\s+/).filter(Boolean).length;
     const finalSpokenSec = estimateSpokenSeconds(script);
     if (sourceDurationSec) {
