@@ -742,38 +742,14 @@ export default function App() {
         : `Generate a very short, viral shock title (max 5-7 words) and a very short subtitle/hook (max 6-8 words) in Burmese for a generic movie thumbnail. The title should be extremely catchy, dramatic and "clickbaity". Output MUST be a valid JSON object with "title" and "description" keys (use "description" key for the short hook).`;
 
       if (apiMode === "own" && ownApiKey.trim()) {
-        // Own API: direct client-side call with fallback chain
+        // Own API: direct client-side call
         const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
-        // SURGICAL FIX: 11 verified active models (Sep 2026). gemini-2.5-flash is deprecated (404).
-        const mktModels = [
-          "gemini-3.1-flash-lite",
-          "gemini-3.8-flash",
-          "gemini-3.7-flash",
-          "gemini-3.6-flash",
-          "gemini-3.5-flash",
-          "gemini-3.5-flash-lite",
-          "gemini-3.1-flash-lite",
-          "gemini-3.8-flash",
-          "gemini-3.7-flash",
-          "gemini-3.6-flash",
-          "gemini-3.5-flash",
-        ];
-        let mktResult: any = null;
-        for (const m of mktModels) {
-          try {
-            mktResult = await ai.models.generateContent({
-              model: m,
-              contents: mktPrompt,
-              config: { temperature: 0.9, maxOutputTokens: 2048, responseMimeType: "application/json" },
-            });
-            if (mktResult?.text) break; // success
-          } catch (mktErr: any) {
-            const status = mktErr?.status || mktErr?.httpStatusCode || 0;
-            if (status !== 429 && status !== 404 && status !== 503 && status !== 504) throw mktErr;
-            console.warn(`[translate] Marketing model ${m} failed (${status}), trying next...`);
-          }
-        }
-        const resultText = mktResult?.text || "{}";
+        const result = await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: mktPrompt,
+          config: { temperature: 0.9, maxOutputTokens: 2048, responseMimeType: "application/json" },
+        });
+        const resultText = result.text || "{}";
         const jsonMatch = resultText.match(/\{[\s\S]*\}/);
         const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : "{}");
         title = parsed.title || "Untitled";
@@ -1730,7 +1706,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
               let text = "[]";
 
               if (apiMode === "own" && ownApiKey.trim()) {
-                // === OWN API MODE: Direct client-side Gemini call with fallback chain ===
+                // === OWN API MODE: Direct client-side Gemini call ===
                 const ai = new GoogleGenAI({ apiKey: ownApiKey.trim() });
                 const ownParts: any[] = [{ inlineData: { mimeType: "audio/wav", data: chunk.base64 } }];
                 if (frameBase64) {
@@ -1738,40 +1714,16 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                 }
                 ownParts.push(parts[parts.length - 1]); // The prompt text part
 
-                // SURGICAL FIX: 11 verified active models (Sep 2026). gemini-2.5-flash is deprecated (404).
-                const subModels = [
-                  "gemini-3.1-flash-lite",
-                  "gemini-3.8-flash",
-                  "gemini-3.7-flash",
-                  "gemini-3.6-flash",
-                  "gemini-3.5-flash",
-                  "gemini-3.5-flash-lite",
-                  "gemini-3.1-flash-lite",
-                  "gemini-3.8-flash",
-                  "gemini-3.7-flash",
-                  "gemini-3.6-flash",
-                  "gemini-3.5-flash",
-                ];
-                let subResult: any = null;
-                for (const m of subModels) {
-                  try {
-                    subResult = await ai.models.generateContent({
-                      model: m,
-                      contents: [{ role: "user", parts: ownParts }],
-                      config: {
-                        temperature: attempt === 1 ? 0 : 0.2,
-                        maxOutputTokens: 8192,
-                        responseMimeType: "application/json",
-                      },
-                    });
-                    if (subResult?.text) break; // success
-                  } catch (subErr: any) {
-                    const status = subErr?.status || subErr?.httpStatusCode || 0;
-                    if (status !== 429 && status !== 404 && status !== 503 && status !== 504) throw subErr;
-                    console.warn(`[translate] Subtitle model ${m} failed (${status}), trying next...`);
-                  }
-                }
-                text = subResult?.text || "[]";
+                const ownResult = await ai.models.generateContent({
+                  model: "gemini-2.5-flash",
+                  contents: [{ role: "user", parts: ownParts }],
+                  config: {
+                    temperature: attempt === 1 ? 0 : 0.2,
+                    maxOutputTokens: 8192,
+                    responseMimeType: "application/json",
+                  },
+                });
+                text = ownResult.text || "[]";
               } else {
                 // === APP API MODE: Server-side edge function (secure) ===
                 text = await invokeSubtitleTranslationChunk({
