@@ -1938,8 +1938,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
   // ===== AI VOICE OVER (DUB) — generate one TTS clip per translated subtitle line =====
   const resolveDubLanguageCode = () => {
     const match = ALL_LANGUAGES.find(
-      (l) =>
-        l.name.toLowerCase() === targetLang.toLowerCase() || l.nativeName.toLowerCase() === targetLang.toLowerCase(),
+      (l) => l.name.toLowerCase() === targetLang.toLowerCase() || l.nativeName.toLowerCase() === targetLang.toLowerCase(),
     );
     return match?.bcp47 || "en-US";
   };
@@ -3597,9 +3596,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-100">
-                            <SelectItem value="it-IT-GiuseppeMultilingualNeural">
-                              Giuseppe — Multilingual Male (Default)
-                            </SelectItem>
+                            <SelectItem value="it-IT-GiuseppeMultilingualNeural">Giuseppe — Multilingual Male (Default)</SelectItem>
                             <SelectItem value="en-US-AndrewMultilingualNeural">Andrew — Multilingual Male</SelectItem>
                             <SelectItem value="en-US-AvaMultilingualNeural">Ava — Multilingual Female</SelectItem>
                             <SelectItem value="en-US-EmmaMultilingualNeural">Emma — Multilingual Female</SelectItem>
@@ -4375,8 +4372,7 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                   {!marketingContent && !isGeneratingMarketing && (
                     <div className="bg-zinc-800/30 border border-zinc-800 rounded-3xl p-8 text-center">
                       <p className="text-zinc-400 font-medium">
-                        Viral title နဲ့ thumbnail က optional ပါ။ လိုချင်မှသာ အပေါ်က "Generate Marketing Kit" ကို
-                        နှိပ်ပါ။
+                        Viral title နဲ့ thumbnail က optional ပါ။ လိုချင်မှသာ အပေါ်က "Generate Marketing Kit" ကို နှိပ်ပါ။
                       </p>
                       <p className="text-zinc-600 text-xs mt-2">Costs 4 CR (App API mode only)</p>
                     </div>

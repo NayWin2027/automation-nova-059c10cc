@@ -86,11 +86,9 @@ async function computeSecMsGec(): Promise<string> {
 
 function buildSsml(text: string, voice: string, rate: string, pitch: string, volume: string): string {
   const locale = voice.split("-").slice(0, 2).join("-") || "my-MM";
-  return (
-    `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='${locale}'>` +
+  return `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='${locale}'>` +
     `<voice name='${voice}'><prosody pitch='${pitch}' rate='${rate}' volume='${volume}'>` +
-    `${escapeXml(text)}</prosody></voice></speak>`
-  );
+    `${escapeXml(text)}</prosody></voice></speak>`;
 }
 
 async function synthesize(
@@ -108,8 +106,7 @@ async function synthesize(
     const url = `${WSS_URL}&Sec-MS-GEC=${secMsGec}&Sec-MS-GEC-Version=${SEC_MS_GEC_VERSION}&ConnectionId=${requestId}`;
     const ws = new WebSocket(url, {
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0",
         "Accept-Encoding": "gzip, deflate, br",
         "Accept-Language": "en-US,en;q=0.9",
         Origin: "chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold",
@@ -126,11 +123,7 @@ async function synthesize(
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
-      try {
-        ws.close();
-      } catch {
-        /* already closed */
-      }
+      try { ws.close(); } catch { /* already closed */ }
       if (error) {
         reject(error);
         return;
@@ -153,14 +146,10 @@ async function synthesize(
 
     ws.on("open", () => {
       const timestamp = new Date().toISOString();
-      ws.send(
-        `X-Timestamp:${timestamp}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n` +
-          `{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}`,
-      );
-      ws.send(
-        `X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${timestamp}Z\r\nPath:ssml\r\n\r\n` +
-          buildSsml(speakText, voice, rate, pitch, volume),
-      );
+      ws.send(`X-Timestamp:${timestamp}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n` +
+        `{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}`);
+      ws.send(`X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${timestamp}Z\r\nPath:ssml\r\n\r\n` +
+        buildSsml(speakText, voice, rate, pitch, volume));
     });
 
     ws.on("message", (data: Uint8Array, isBinary: boolean) => {
@@ -330,7 +319,9 @@ Deno.serve(async (req) => {
     const timedOut = msg.includes("TTS_TIMEOUT");
     return new Response(
       JSON.stringify({
-        error: timedOut ? "အသံထုတ်ချိန် ကြာလွန်းလို့ ရပ်လိုက်ပါတယ်။ Script ကို အပိုင်းခွဲပြီး ပြန်ကြိုးစားပါ။" : msg,
+        error: timedOut
+          ? "အသံထုတ်ချိန် ကြာလွန်းလို့ ရပ်လိုက်ပါတယ်။ Script ကို အပိုင်းခွဲပြီး ပြန်ကြိုးစားပါ။"
+          : msg,
         errorCode: timedOut ? "TTS_TIMEOUT" : undefined,
       }),
       { status: timedOut ? 504 : 500, headers: { ...cors, "Content-Type": "application/json" } },

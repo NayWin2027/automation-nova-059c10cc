@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { X, AlertTriangle, CheckCircle, Info, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -10,8 +10,6 @@ interface Announcement {
   action_label: string | null;
   action_url: string | null;
   custom_color: string | null;
-  is_marquee: boolean | null;
-  marquee_speed: string | null;
 }
 
 const typeConfig: Record<string, {
@@ -56,72 +54,6 @@ const typeConfig: Record<string, {
   },
 };
 
-type MarqueeSpeed = "slow" | "normal" | "fast";
-
-const tickerReferenceDurations: Record<MarqueeSpeed, number> = {
-  slow: 42,
-  normal: 26,
-  fast: 15,
-};
-
-const tickerReferenceMessage = "APP ပြန်အသုံးပြုလို့ရပါပြီ";
-
-const AnnouncementTicker = ({
-  message,
-  speed,
-  textClass,
-}: {
-  message: string;
-  speed: MarqueeSpeed;
-  textClass: string;
-}) => {
-  const trackRef = useRef<HTMLDivElement>(null);
-  const referenceRef = useRef<HTMLSpanElement>(null);
-
-  useLayoutEffect(() => {
-    const track = trackRef.current;
-    const reference = referenceRef.current;
-    if (!track || !reference) return;
-
-    const synchronizeSpeed = () => {
-      const referenceDistance = reference.getBoundingClientRect().width;
-      const messageDistance = track.scrollWidth / 2;
-      if (referenceDistance <= 0 || messageDistance <= 0) return;
-
-      const duration = (messageDistance / referenceDistance) * tickerReferenceDurations[speed];
-      track.style.setProperty("--announcement-ticker-duration", `${duration}s`);
-    };
-
-    synchronizeSpeed();
-    const observer = new ResizeObserver(synchronizeSpeed);
-    observer.observe(track);
-    observer.observe(reference);
-    void document.fonts?.ready.then(synchronizeSpeed);
-
-    return () => observer.disconnect();
-  }, [message, speed]);
-
-  return (
-    <div className={`announcement-ticker-viewport announcement-ticker-${speed}`}>
-      <span
-        ref={referenceRef}
-        className={`announcement-ticker-reference text-sm font-medium tracking-wide ${textClass} pr-16`}
-        aria-hidden="true"
-      >
-        {tickerReferenceMessage}
-      </span>
-      <div ref={trackRef} className="announcement-ticker-track">
-        <span className={`text-sm font-medium tracking-wide ${textClass} pr-16`}>
-          {message}
-        </span>
-        <span className={`text-sm font-medium tracking-wide ${textClass} pr-16`} aria-hidden="true">
-          {message}
-        </span>
-      </div>
-    </div>
-  );
-};
-
 const AnnouncementBanner = () => {
   const { isAuthenticated } = useAuth();
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -131,7 +63,7 @@ const AnnouncementBanner = () => {
     const fetchAnnouncements = async () => {
       const { data } = await supabase
         .from("site_announcements")
-        .select("id, message, type, action_label, action_url, custom_color, is_marquee, marquee_speed")
+        .select("id, message, type, action_label, action_url, custom_color")
         .eq("is_active", true)
         .order("created_at", { ascending: false });
 
@@ -177,29 +109,11 @@ const AnnouncementBanner = () => {
             className={`relative w-full ${!isCustom ? `${config.bg} ${config.border}` : "border-b border-white/10"} shadow-lg announcement-neon-glow ${!isCustom ? config.neonClass : ""}`}
             style={customStyle}
           >
-            <div className="max-w-7xl mx-auto px-4 py-2.5 pr-10 flex items-center justify-center gap-3">
+            <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center justify-center gap-3">
               <Icon className={`w-4 h-4 ${config.iconColor} shrink-0 announcement-icon-pulse`} />
-              {announcement.is_marquee ? (
-                <>
-                  <span
-                    className={`shrink-0 w-1.5 h-1.5 rounded-full ${config.iconColor} announcement-live-dot`}
-                    style={{ backgroundColor: "currentColor" }}
-                  />
-                  <AnnouncementTicker
-                    message={announcement.message}
-                    speed={
-                      announcement.marquee_speed === "slow" || announcement.marquee_speed === "fast"
-                        ? announcement.marquee_speed
-                        : "normal"
-                    }
-                    textClass={config.text}
-                  />
-                </>
-              ) : (
-                <p className={`text-sm font-medium ${config.text} text-center`}>
-                  {announcement.message}
-                </p>
-              )}
+              <p className={`text-sm font-medium ${config.text} text-center`}>
+                {announcement.message}
+              </p>
               {announcement.action_label && announcement.action_url && (
                 <a
                   href={announcement.action_url}

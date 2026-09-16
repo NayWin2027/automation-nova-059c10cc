@@ -2598,7 +2598,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           !prewarmActiveRef.current &&
           visibleLoopFrameReadyRef.current;
 
-        // (B) residual gap mask — slow micro zoom-in (max 1%) so any held frame reads as motion
+        // (B) residual gap mask — slow micro zoom-in (max 2%) so any held frame reads as motion
         {
           const _now = performance.now();
           if (seekPendingRef.current) {
