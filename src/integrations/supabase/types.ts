@@ -446,6 +446,45 @@ export type Database = {
         }
         Relationships: []
       }
+      showcase_items: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_published: boolean
+          order_index: number
+          output_path: string | null
+          source_path: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_published?: boolean
+          order_index?: number
+          output_path?: string | null
+          source_path?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_published?: boolean
+          order_index?: number
+          output_path?: string | null
+          source_path?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       site_announcements: {
         Row: {
           action_label: string | null
@@ -455,6 +494,8 @@ export type Database = {
           custom_color: string | null
           id: string
           is_active: boolean
+          is_marquee: boolean
+          marquee_speed: string
           message: string
           type: string
           updated_at: string | null
@@ -467,6 +508,8 @@ export type Database = {
           custom_color?: string | null
           id?: string
           is_active?: boolean
+          is_marquee?: boolean
+          marquee_speed?: string
           message: string
           type?: string
           updated_at?: string | null
@@ -479,6 +522,8 @@ export type Database = {
           custom_color?: string | null
           id?: string
           is_active?: boolean
+          is_marquee?: boolean
+          marquee_speed?: string
           message?: string
           type?: string
           updated_at?: string | null
