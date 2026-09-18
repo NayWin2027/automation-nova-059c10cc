@@ -2607,9 +2607,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             gapStartRef.current = 0;
           }
           let gapZoom = 1;
-          const AV_GAP_ZOOM_THRESHOLD_MS = 150;
-          // SURGICAL FIX: Restored micro-zoom for ALL gaps because the user absolutely hates freezing.
-          // By using dynamic playbackRate below, gaps will rarely happen anyway.
+          const AV_GAP_ZOOM_THRESHOLD_MS = 150; // SURGICAL FIX: only zoom when gap > 150ms (real AV sync issue)
           if (gapStartRef.current > 0 && _now - gapStartRef.current > AV_GAP_ZOOM_THRESHOLD_MS) {
             const p = Math.min(1, (_now - gapStartRef.current) / 250);
             gapZoom = 1 + 0.02 * (1 - Math.pow(1 - p, 3));
@@ -3344,19 +3342,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   lastEffectiveVEndRef.current = effectiveVEnd;
                   const vActualEnd = effectiveVEnd;
                   const sourceEnd = vActualEnd > effectiveVStart ? vActualEnd : vv.duration;
-
-                  let targetPlaybackRate = 1.0;
-                  // SURGICAL FIX: Dynamic Playback Rate to eradicate gaps, freezes, and zooms!
-                  if (_hasAudioTs && sourceEnd > effectiveVStart) {
-                    const audioDuration = audioTs[activeIndex].end - audioTs[activeIndex].start;
-                    const videoDuration = sourceEnd - effectiveVStart;
-                    if (audioDuration > 0 && videoDuration > 0) {
-                      const requiredRate = videoDuration / audioDuration;
-                      // SURGICAL FIX: User requested natural look (e.g. 0.9x to 1.5x).
-                      // If it exceeds this, it gracefully falls back to micro-zoom/looping.
-                      targetPlaybackRate = Math.max(0.9, Math.min(1.5, requiredRate));
-                    }
-                  }
+                  const targetPlaybackRate = 1.0;
 
                   if (activeIndex !== lastIndexRef.current) {
                     // TRUE RECAP: Hard cut — seek ONCE to segment start
@@ -3441,7 +3427,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   } else if (!seekPendingRef.current) {
                     // SURGICAL FIX: AV SYNC 100% — If video has overrun vEnd, hard-seek back to effectiveVStart
                     // This prevents irrelevant content (eating, dancing, walking) from leaking into the active segment.
-                    const endMargin = 0.02; // SURGICAL FIX: reduced margin so it plays fully to the end
+                    const endMargin = 0.08;
                     if (sourceEnd > effectiveVStart && vv.currentTime >= sourceEnd - endMargin) {
                       // Hard-cut seek: loop segment — never show content past vEnd
                       seekPendingRef.current = true;
@@ -3452,15 +3438,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                         vv.removeEventListener("seeked", onLoopSeeked);
                       };
                       vv.addEventListener("seeked", onLoopSeeked);
-
-                      // SURGICAL FIX: For dialogue, if it ever hits the boundary despite dynamic playback rate,
-                      // we don't loop all the way back to avoid character swap. We just loop the last 0.3s for seamless motion.
-                      const curSeg = getSeg(activeIndex);
-                      if (curSeg && curSeg.isDialogue && sourceEnd - effectiveVStart > 0.3) {
-                        vv.currentTime = sourceEnd - 0.3;
-                      } else {
-                        vv.currentTime = effectiveVStart;
-                      }
+                      vv.currentTime = effectiveVStart; // SURGICAL FIX: loop back to correct source position
                     } else if (!freezeModeRef.current) {
                       // freeze OFF = continuous motion within segment boundary
                       vv.playbackRate = targetPlaybackRate;
