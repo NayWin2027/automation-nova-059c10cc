@@ -764,8 +764,10 @@ LANGUAGE LOCK:
 DIALOGUE COMPLETENESS (mandatory for ${narrationStyle} mode):
 - EVERY spoken line in the source must appear in the script as a real translated [DIALOGUE:EMOTION] line. Do NOT sample or pick "only the important ones".
 - It is FORBIDDEN to replace a spoken line with a description of it. BAD: "သူက ဒေါသတကြီး ပြောလိုက်တယ်" — GOOD: the actual translated words the character said.
-- For back-and-forth exchanges, write EACH speaker's line as its own separate paragraph with its own timecode range and its own emotion tag. Never merge two speakers into one paragraph.
-- Balance dialogue with narration: dialogue is the star (~100%), but narrator/action lines (~7%) are ESSENTIAL for story flow and professional quality.
+- For back-and-forth exchanges, write EACH speaker's line as its own separate paragraph. Never merge two speakers into one paragraph.
+- CRITICAL - NO ROBOTIC DIALOGUE TAGS: NEVER attach repetitive narrator tags like "ပြောလိုက်တယ်", "မေးလိုက်တယ်", "ဖြေလိုက်တယ်", or "X said/replied" to the end of any dialogue line. The dialogue MUST stand completely on its own without narration tags.
+- MANDATORY SCENE & ACTION NARRATION: Because we banned robotic dialogue tags, you MUST insert a short, natural narrator line whenever: (1) The scene changes, (2) A NEW character enters or starts speaking, or (3) A notable physical action occurs (e.g., "စက်ဘီးကို တက်နင်းလိုက်တယ်", "သူဌေးက အခန်းထဲဝင်လာပြီး ဆူပူကြိမ်းမောင်းလိုက်တယ်"). This ensures the audience always knows WHO is talking and WHAT is happening.
+- Do not summarize the dialogue, just set the scene/action before the character speaks.
 - Narrator paragraphs exist to bridge scenes, describe actions, establish character roles and relationships, and explain what dialogue alone cannot. A viewer who never saw the source must follow the plot from start to finish; never sacrifice story coherence for brevity.
 
 ACTION & FACE EXPRESSION (mandatory for ${narrationStyle} mode):
@@ -783,7 +785,7 @@ UNCENSORED VERBATIM DIALOGUE (mandatory for ${narrationStyle} mode — 100% of s
 - Faithfulness to the source outweighs politeness: explicit, crude, sexual and offensive lines are kept as-is — but always rendered in ${lang} script.
 
 STREET-SPOKEN STYLE & MODERN SLANG (mandatory for ${narrationStyle} mode):
-- Write 100% the way real people talk today. Literary/bookish forms are FORBIDDEN (for BURMESE: no သည်, ၏, ၍, နေသည်, လုပ်နေသည် — use တယ်/တာ/လဲ/ကွာ/ပဲ).
+- Write 100% the way real people talk today. Literary/bookish forms and transitional words are STRICTLY FORBIDDEN (for BURMESE: NEVER use သည်, ၏, ၍, နေသည်, လုပ်နေသည်, ထို့နောက်, ထို့အပြင်, သို့သော်. Instead, use natural spoken words like တယ်, တာ, လဲ, ကွာ, ပဲ, ပြီးတော့, အဲဒီနောက်, ဒါပေမဲ့).
 - Prefer current street slang and trend words over plain wording. BURMESE examples: လှတယ် → လန်းတယ်; လိင်ဆက်ဆံနေတယ် → မူစကူဒူးနေကြတယ်;ဒီလူကြီး/ဒီအမျိုးသားကြီး → ဒီဘဲကြီး;ကောင်မလေး → ဆော်; တင်ပါးလှတယ် → စစ်ကိုင်းအိုးကြီးလို တင်းနေတယ်; ပါးစပ်ပိတ်ထား → စောက်ပေါက်ပိတ်ထား;စကားသိပ်မများနဲ့ → အီးသိပ်မပေါက်နဲ့; ဂဂျီဂဂျောင်ကျတယ်/ရစ်တယ် → ချီးထုပ်ကျတယ်; လိုရင်းမရောက်ဘဲ ဝေ့ဝိုက်နေတယ် → တိုင်ပတ်နေတယ်; မဟုတ်တာတွေလျှောက်မပြောနဲ့ → စောက်ပိုတွေမပြောနဲ့; ပြည့်တန်ဆာ → ဖာသည်မ; ဆဲစကား → မအေလိုး/သူတောင်းစား/ ခွေးမသား။ သို့သော် ဆရာတပည့်ဆက်ဆံရေး၊မိဘနဲ့သားသမီးဆက်ဆံရေးတွေမှာဆိုရင် ဒီဗန်းစကားတွေ မသုံးရ။
 - SLANG QUOTA (HARD REQUIREMENT): the finished script MUST actually contain AT LEAST 6-10 real slang/street expressions from the list above (or equally current Burmese street slang), spread across the whole script — not just in the hook. A script written entirely in plain polite wording is REJECTED.
 - Whenever a plain word has a street equivalent above, you MUST write the street version. Example: never write "ပါးစပ်ပိတ်ထား" — write "စောက်ပေါက်ပိတ်ထား" or "အီးသိပ်မပေါက်နဲ့". Never write "လှတယ်" — write "လန်းတယ်". Never write "ပြည့်တန်ဆာ" — write "ဖာသည်မ".
@@ -854,7 +856,7 @@ ${nicheStyle}
 
 ABSOLUTE RULES:
 1. Write ONLY in ${lang} language
-2. Use modern spoken style, NOT formal/literary
+2. Use modern spoken style (conversational). LITERARY WORDS ARE STRICTLY FORBIDDEN (e.g., if Burmese, NEVER use သည်, ၏, ၍, နေသည်, ထို့နောက်, ထို့အပြင်, သို့သော်, သို့ဖြစ်၍. Instead, use natural spoken words like တယ်, တာ, လဲ, ပဲ, ပြီးတော့, ဒါပေမဲ့, အဲဒီနောက်).
 3. Each paragraph = natural spoken segment (2-4 sentences)
 4. The script must be READY TO READ as narration. The required leading [MM:SS] timecode and [DIALOGUE:EMOTION] marker are the ONLY allowed metadata; never omit them where required and add no other stage directions or formatting marks.
 5. Fully embody the "${nicheLabel}" niche style described above
@@ -870,11 +872,12 @@ ABSOLUTE RULES:
 
 CRITICAL - DIALOGUE TRANSLATION RULE (MOST IMPORTANT):
 - If characters speak ANY dialogue (in Chinese, English, etc.), you MUST translate their EXACT words 100% into ${langLabel}. NEVER output original Chinese characters (တရုတ်စာ) or foreign text.
-- Do NOT just describe that they "spoke" or "said something" — translate their EXACT words into ${lang} and weave it naturally into the narration
+- NO ROBOTIC DIALOGUE TAGS: NEVER attach repetitive narrator tags like "ပြောလိုက်တယ်", "မေးလိုက်တယ်", "ဖြေလိုက်တယ်", or "X said/replied" when weaving dialogue into the narration. Let the dialogue stand on its own, or use a natural action/transition instead of a "said" tag.
+- MANDATORY SCENE & ACTION NARRATION: Because we banned robotic dialogue tags, you MUST insert a short, natural narrator line whenever: (1) The scene changes, (2) A NEW character enters or starts speaking, or (3) A notable physical action occurs (e.g., "စက်ဘီးကို တက်နင်းလိုက်တယ်", "သူဌေးက အခန်းထဲဝင်လာပြီး ဆူပူကြိမ်းမောင်းလိုက်တယ်"). This ensures the audience always knows WHO is talking and WHAT is happening, without using robotic tags.
 - Preserve the EMOTIONAL TONE of the original dialogue: if it was funny, translate it funny; if it was sad, translate it heartbreakingly; if it was shocking, make it shocking in ${lang}
 - For animals, sounds, or non-verbal emotional expressions — describe them vividly so the audience FEELS the emotion
 - Example BAD (visual-only): generic description like "Then she spoke"
-- Example GOOD (dialogue translated): Translate the actual spoken words into ${lang} and weave them naturally into the narration with emotional context
+- Example GOOD (dialogue translated): Translate the actual spoken words into ${lang} and weave them naturally into the narration without using robotic "said" tags.
 - Use Google-quality translation: natural, accurate, and emotionally faithful to the original
 - Quoted dialogue in the narration should feel ALIVE — not robotic or literal
 
@@ -1254,6 +1257,8 @@ ${transcript}
     // Key rotation into the paid App pool stays App-API-only.
     const fallbackModels = isOwnApi
       ? [
+          "gemini-3.8-flash",
+          "gemini-3.8-flash-lite",
           "gemini-2.5-flash",
           "gemini-flash-lite-latest",
           "gemini-flash-latest",
@@ -1266,6 +1271,8 @@ ${transcript}
           "gemini-3.1-flash",
         ]
       : [
+          "gemini-3.8-flash",
+          "gemini-3.8-flash-lite",
           "gemini-3.7-flash",
           "gemini-3.6-flash",
           "gemini-3.5-flash",
