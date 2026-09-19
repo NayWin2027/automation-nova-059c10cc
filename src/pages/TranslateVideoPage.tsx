@@ -1714,16 +1714,45 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                 }
                 ownParts.push(parts[parts.length - 1]); // The prompt text part
 
-                const ownResult = await ai.models.generateContent({
-                  model: "gemini-2.5-flash",
-                  contents: [{ role: "user", parts: ownParts }],
-                  config: {
-                    temperature: attempt === 1 ? 0 : 0.2,
-                    maxOutputTokens: 8192,
-                    responseMimeType: "application/json",
-                  },
-                });
-                text = ownResult.text || "[]";
+                const fallbackModels = [
+                  "gemini-2.5-flash",
+                  "gemini-flash-lite-latest",
+                  "gemini-flash-latest",
+                  "gemini-2.5-flash-lite",
+                  "gemini-3.5-flash-lite",
+                  "gemini-3.1-flash-lite",
+                  "gemini-3.7-flash",
+                  "gemini-3.6-flash",
+                  "gemini-3.5-flash",
+                  "gemini-3.1-flash",
+                  "gemini-2.0-flash",
+                  "gemini-1.5-flash",
+                  "gemini-1.5-pro",
+                  "gemini-2.5-pro",
+                ];
+                let fallbackSuccess = false;
+                let lastFallbackErr = null;
+                for (const m of fallbackModels) {
+                  try {
+                    console.log(`[TranslateVideo] Trying model ${m}...`);
+                    const ownResult = await ai.models.generateContent({
+                      model: m,
+                      contents: [{ role: "user", parts: ownParts }],
+                      config: {
+                        temperature: attempt === 1 ? 0 : 0.2,
+                        maxOutputTokens: 8192,
+                        responseMimeType: "application/json",
+                      },
+                    });
+                    text = ownResult.text || "[]";
+                    fallbackSuccess = true;
+                    break;
+                  } catch (e: any) {
+                    console.warn(`[TranslateVideo] Model ${m} failed:`, e?.message || e);
+                    lastFallbackErr = e;
+                  }
+                }
+                if (!fallbackSuccess) throw lastFallbackErr;
               } else {
                 // === APP API MODE: Server-side edge function (secure) ===
                 text = await invokeSubtitleTranslationChunk({
@@ -1796,15 +1825,15 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                 err?.message?.includes("429") ||
                 err?.message?.includes("RESOURCE_EXHAUSTED") ||
                 err?.status === "RESOURCE_EXHAUSTED";
-              if (isRateLimit) {
-                throw new Error(
-                  `API Quota Exceeded! The server API key has hit its rate limit. Please try again later.`,
-                );
-              }
               if (attempt >= MAX_CHUNK_ATTEMPTS) {
+                if (isRateLimit) {
+                  throw new Error(`API Quota Exceeded! The API key has hit its rate limit. Please try again later.`);
+                }
                 throw new Error(
                   `Failed to translate segment ${i + 1}. Subtitle မပါဘဲ render မလုပ်ပါဘူး။ ခဏနေရင် ပြန်စမ်းပါ။`,
                 );
+              } else if (isRateLimit) {
+                console.warn(`Rate limit hit on attempt ${attempt}, will wait and retry...`);
               }
             }
           }
