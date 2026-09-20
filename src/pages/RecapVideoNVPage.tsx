@@ -1570,21 +1570,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         // Use exact timestamp if present; otherwise use previous segment's vEnd (no estimation)
         const rawVStart = parseTime(seg.timestamp);
-        // SURGICAL FIX: Hybrid/Viral dialogue lines must start on the exact source
-        // speaker frame. Story mode and narrator lines keep gap-based timing unchanged.
-        const dialogueSourceStart =
-          narrationStyle !== "STORY" &&
-          seg.isDialogue &&
-          typeof seg.sourceStartSec === "number" &&
-          Number.isFinite(seg.sourceStartSec)
-            ? seg.sourceStartSec
-            : null;
-        const vStart: number =
-          dialogueSourceStart !== null
-            ? dialogueSourceStart
-            : seg.timestamp && rawVStart > 0
-              ? rawVStart
-              : lastComputedVEnd;
+        // SURGICAL FIX: Hybrid/Viral dialogue lines already carry their exact source slot.
+        // Story mode and narrator lines keep the existing gap-based timing unchanged.
+        // SURGICAL ROLLBACK: gap-based timing for all modes (exact-range override removed).
+        const dialogueSourceStart: number | null = null;
+        const vStart: number = seg.timestamp && rawVStart > 0 ? rawVStart : lastComputedVEnd;
 
         const nextSeg = scriptData.segments[i + 1];
         let vEnd: number;
@@ -1614,6 +1604,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           aStartPct: totalWords > 0 ? startWords / totalWords : 0,
           aEndPct: totalWords > 0 ? wordCursor / totalWords : 1,
           text: stripDialogueMetadata(seg.text).replace(TIMECODE_STRIP_RE, "").trim(),
+          rawText: seg.text,
+          isDialogue: !!seg.isDialogue || /\[?\s*DIALOG(?:UE|UAGE)/i.test(seg.text || ""),
         };
       });
     }, [scriptData, narrationStyle]);
@@ -2572,6 +2564,20 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // Clamp to the valid source crop bounds.
         zoomedSrcX = Math.max(srcCropX, Math.min(srcCropX + (srcCropW - zoomedSrcW), zoomedSrcX));
         zoomedSrcY = Math.max(srcCropY, Math.min(srcCropY + (srcCropH - zoomedSrcH), zoomedSrcY));
+        // MASTER ZERO-ZOOM OVERRIDE: Eradicate all zoom, pan, rotation, gapZoom, and maskZoom during dialogue
+        const activeSegIdx = lastIndexRef.current;
+        const activeSeg = syncSegmentsRef.current && activeSegIdx >= 0 ? syncSegmentsRef.current[activeSegIdx] : null;
+        const isCurrentDialogue = activeSeg
+          ? !!(activeSeg as any).isDialogue || /\[?\s*DIALOG(?:UE|UAGE)/i.test((activeSeg as any).rawText || "")
+          : false;
+        if (isCurrentDialogue) {
+          zoomedSrcX = srcCropX;
+          zoomedSrcY = srcCropY;
+          zoomedSrcW = srcCropW;
+          zoomedSrcH = srcCropH;
+          rotate = 0;
+          gapZoomHoldRef.current = 1.0;
+        }
 
         // ── SURGICAL FIX: SCENE-CUT MICRO-PAUSE KILLER (desktop) ──
         // (A) draw from the prewarm buffer while the active element re-decodes after a hard cut
@@ -2608,7 +2614,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           !prewarmActiveRef.current &&
           visibleLoopFrameReadyRef.current;
 
-        // (B) residual gap mask — slow micro zoom-in (max 1%) so any held frame reads as motion
+        // (B) residual gap mask — slow micro zoom-in (max 2%) so any held frame reads as motion
+        // SURGICAL FIX: Only zoom during NARRATION segments, never during dialogue.
+        // And only when gap > 300ms (genuine AV sync issue, not normal seek latency).
         {
           const _now = performance.now();
           if (seekPendingRef.current) {
@@ -2617,7 +2625,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             gapStartRef.current = 0;
           }
           let gapZoom = 1;
-          const AV_GAP_ZOOM_THRESHOLD_MS = 150; // SURGICAL FIX: only zoom when gap > 150ms (real AV sync issue)
+          // Check if current segment is dialogue — if so, NEVER zoom
+          const _curSegForZoom = (syncSegmentsRef.current as any[])?.[lastIndexRef.current];
+          const _isDialogueSeg = _curSegForZoom?.isDialogue === true;
+          const AV_GAP_ZOOM_THRESHOLD_MS = _isDialogueSeg ? Infinity : 300; // dialogue=never zoom, narration=300ms+
           if (gapStartRef.current > 0 && _now - gapStartRef.current > AV_GAP_ZOOM_THRESHOLD_MS) {
             const p = Math.min(1, (_now - gapStartRef.current) / 250);
             gapZoom = 1 + 0.02 * (1 - Math.pow(1 - p, 3));
@@ -3338,21 +3349,36 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     }
                     _timecodesUsable = increasing && _lastSegVStart > 0;
                   }
-                  const _needsScale = _hasAudioTs && !_timecodesUsable;
-                  const effectiveVStart = _needsScale
-                    ? Math.min((audioTs[activeIndex].start / _audioDur) * _vidDur, _vidDur - 0.5)
-                    : active.vStart;
-                  const effectiveVEnd = _needsScale
-                    ? Math.min((audioTs[activeIndex].end / _audioDur) * _vidDur, _vidDur)
-                    : active.vEnd === -1
+                  const isCurrentDialogue = !!active.isDialogue;
+                  const _needsScale = _hasAudioTs && !_timecodesUsable && !isCurrentDialogue;
+                  // Exact source timecode lock for dialogue (strictly locks to mouth movement start)
+                  const effectiveVStart = isCurrentDialogue
+                    ? active.vStart
+                    : _needsScale
+                      ? Math.min((audioTs[activeIndex].start / _audioDur) * _vidDur, _vidDur - 0.5)
+                      : active.vStart;
+                  const effectiveVEnd = isCurrentDialogue
+                    ? active.vEnd === -1
                       ? vv.duration
-                      : active.vEnd;
-                  // Persist for between-segment hold loop
+                      : active.vEnd
+                    : _needsScale
+                      ? Math.min((audioTs[activeIndex].end / _audioDur) * _vidDur, _vidDur)
+                      : active.vEnd === -1
+                        ? vv.duration
+                        : active.vEnd;
                   lastEffectiveVStartRef.current = effectiveVStart;
                   lastEffectiveVEndRef.current = effectiveVEnd;
                   const vActualEnd = effectiveVEnd;
                   const sourceEnd = vActualEnd > effectiveVStart ? vActualEnd : vv.duration;
-                  const targetPlaybackRate = 1.0;
+                  // 100% Lip-sync speed matching: aligns mouth movement duration to TTS audio duration
+                  let targetPlaybackRate = 1.0;
+                  if (isCurrentDialogue && _hasAudioTs) {
+                    const audioSegDur = audioTs[activeIndex].end - audioTs[activeIndex].start;
+                    const videoSegDur = sourceEnd - effectiveVStart;
+                    if (audioSegDur > 0 && videoSegDur > 0) {
+                      targetPlaybackRate = Math.min(1.15, Math.max(0.85, videoSegDur / audioSegDur));
+                    }
+                  }
 
                   if (activeIndex !== lastIndexRef.current) {
                     // TRUE RECAP: Hard cut — seek ONCE to segment start
