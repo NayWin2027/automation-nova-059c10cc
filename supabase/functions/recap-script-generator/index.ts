@@ -449,6 +449,20 @@ function violatesTargetLanguage(script: string, lang: string): boolean {
   return false;
 }
 
+// Preserve every timestamped paragraph while enforcing the requested modern
+// Burmese spoken register. This runs only for Hybrid/Viral Burmese output.
+function enforceBurmeseSpokenStyle(script: string): string {
+  return script
+    .replace(/ထို့အပြင်/g, "ဒါ့အပြင်")
+    .replace(/ထို့နောက်/g, "အဲဒီနောက်")
+    .replace(/နေသည်(?=\s|[၊။!?])/g, "နေတယ်")
+    .replace(/ဖြစ်သည်(?=\s|[၊။!?])/g, "ဖြစ်တယ်")
+    .replace(/ရှိသည်(?=\s|[၊။!?])/g, "ရှိတယ်")
+    .replace(/လုပ်သည်(?=\s|[၊။!?])/g, "လုပ်တယ်")
+    .replace(/တွင်(?=\s|[၊။!?])/g, "မှာ")
+    .replace(/သည်(?=\s|[၊။!?])/g, "တယ်");
+}
+
 // Niche-specific style instructions
 const nicheStyles: Record<string, string> = {
   "MOVIE RECAP": `Write like a top-tier Netflix/Hollywood movie recap narrator. Build suspense, use dramatic pauses, cliffhangers, and emotional peaks. Make viewers feel every twist, betrayal, romance, and revelation as if they're watching the movie.`,
@@ -784,6 +798,7 @@ UNCENSORED VERBATIM DIALOGUE (mandatory for ${narrationStyle} mode — 100% of s
 
 STREET-SPOKEN STYLE & MODERN SLANG (mandatory for ${narrationStyle} mode):
 - Write 100% the way real people talk today. Literary/bookish forms are FORBIDDEN (for BURMESE: no သည်, ၏, ၍, နေသည်, လုပ်နေသည် — use တယ်/တာ/လဲ/ကွာ/ပဲ).
+- For BURMESE, the words "ထို့အပြင်", "ထို့နောက်" and literary location ending "တွင်" are also FORBIDDEN. Use natural spoken connectors such as "ဒါ့အပြင်", "အဲဒီနောက်", "ပြီးတော့" and "မှာ" instead.
 - Prefer current street slang and trend words over plain wording. BURMESE examples: လှတယ် → လန်းတယ်; လိင်ဆက်ဆံနေတယ် → မူစကူဒူးနေကြတယ်;ဒီလူကြီး/ဒီအမျိုးသားကြီး → ဒီဘဲကြီး;ကောင်မလေး → ဆော်; တင်ပါးလှတယ် → စစ်ကိုင်းအိုးကြီးလို တင်းနေတယ်; ပါးစပ်ပိတ်ထား → စောက်ပေါက်ပိတ်ထား;စကားသိပ်မများနဲ့ → အီးသိပ်မပေါက်နဲ့; ဂဂျီဂဂျောင်ကျတယ်/ရစ်တယ် → ချီးထုပ်ကျတယ်; လိုရင်းမရောက်ဘဲ ဝေ့ဝိုက်နေတယ် → တိုင်ပတ်နေတယ်; မဟုတ်တာတွေလျှောက်မပြောနဲ့ → စောက်ပိုတွေမပြောနဲ့; ပြည့်တန်ဆာ → ဖာသည်မ; ဆဲစကား → မအေလိုး/သူတောင်းစား/ ခွေးမသား။ သို့သော် ဆရာတပည့်ဆက်ဆံရေး၊မိဘနဲ့သားသမီးဆက်ဆံရေးတွေမှာဆိုရင် ဒီဗန်းစကားတွေ မသုံးရ။
 - SLANG QUOTA (HARD REQUIREMENT): the finished script MUST actually contain AT LEAST 6-10 real slang/street expressions from the list above (or equally current Burmese street slang), spread across the whole script — not just in the hook. A script written entirely in plain polite wording is REJECTED.
 - Whenever a plain word has a street equivalent above, you MUST write the street version. Example: never write "ပါးစပ်ပိတ်ထား" — write "စောက်ပေါက်ပိတ်ထား" or "အီးသိပ်မပေါက်နဲ့". Never write "လှတယ်" — write "လန်းတယ်". Never write "ပြည့်တန်ဆာ" — write "ဖာသည်မ".
@@ -1956,7 +1971,11 @@ ${lengthAdjustedScript}`;
     }
 
     // No trimming — full content coverage is the priority
-    const script = removeNarrationRepetition(lengthAdjustedScript);
+    const deduplicatedScript = removeNarrationRepetition(lengthAdjustedScript);
+    const script =
+      lang === "BURMESE" && (narrationStyle === "HYBRID" || narrationStyle === "VIRAL")
+        ? enforceBurmeseSpokenStyle(deduplicatedScript)
+        : deduplicatedScript;
     const finalWordCount = script.split(/\s+/).filter(Boolean).length;
     const finalSpokenSec = estimateSpokenSeconds(script);
     if (sourceDurationSec) {
