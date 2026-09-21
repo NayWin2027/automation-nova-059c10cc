@@ -1570,11 +1570,24 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         // Use exact timestamp if present; otherwise use previous segment's vEnd (no estimation)
         const rawVStart = parseTime(seg.timestamp);
-        // SURGICAL FIX: Hybrid/Viral dialogue lines already carry their exact source slot.
-        // Story mode and narrator lines keep the existing gap-based timing unchanged.
-        // SURGICAL ROLLBACK: gap-based timing for all modes (exact-range override removed).
-        const dialogueSourceStart: number | null = null;
-        const vStart: number = seg.timestamp && rawVStart > 0 ? rawVStart : lastComputedVEnd;
+        // SURGICAL FIX: Hybrid/Viral dialogue lines carry their exact source speech slot.
+        // Bind the video start to that exact slot so the character's mouth movement lines up
+        // with the TTS line. Story mode and narrator lines keep gap-based timing unchanged.
+        const isDialogueSeg = !!seg.isDialogue || /\[?\s*DIALOG(?:UE|UAGE)/i.test(seg.text || "");
+        const dialogueSourceStart: number | null =
+          narrationStyle !== "STORY" &&
+          isDialogueSeg &&
+          typeof seg.sourceStartSec === "number" &&
+          Number.isFinite(seg.sourceStartSec) &&
+          seg.sourceStartSec >= 0
+            ? seg.sourceStartSec
+            : null;
+        const vStart: number =
+          dialogueSourceStart !== null
+            ? dialogueSourceStart
+            : seg.timestamp && rawVStart > 0
+              ? rawVStart
+              : lastComputedVEnd;
 
         const nextSeg = scriptData.segments[i + 1];
         let vEnd: number;
@@ -2627,7 +2640,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           let gapZoom = 1;
           // Check if current segment is dialogue — if so, NEVER zoom
           const _curSegForZoom = (syncSegmentsRef.current as any[])?.[lastIndexRef.current];
-          const _isDialogueSeg = _curSegForZoom?.isDialogue === true;
+          const _isDialogueSeg =
+            isCurrentDialogue ||
+            _curSegForZoom?.isDialogue === true ||
+            /\[?\s*DIALOG(?:UE|UAGE)/i.test(_curSegForZoom?.rawText || "");
+          if (_isDialogueSeg) gapZoomHoldRef.current = 1.0;
           const AV_GAP_ZOOM_THRESHOLD_MS = _isDialogueSeg ? Infinity : 300; // dialogue=never zoom, narration=300ms+
           if (gapStartRef.current > 0 && _now - gapStartRef.current > AV_GAP_ZOOM_THRESHOLD_MS) {
             const p = Math.min(1, (_now - gapStartRef.current) / 250);
@@ -2670,7 +2687,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             const maskEase = useVisibleLoopMask
               ? 1 - Math.pow(1 - maskProgress, 2) // gentle, visible ease-out (news-channel push-in)
               : 1 - Math.pow(1 - maskProgress, 3);
-            const maskZoom = 1 + (useVisibleLoopMask ? 0.3 : 0.018) * maskEase;
+            // SURGICAL FIX: dialogue segments must stay 100% zoom-free (held frame shown flat).
+            const maskZoom = isCurrentDialogue ? 1 : 1 + (useVisibleLoopMask ? 0.3 : 0.018) * maskEase;
             const maskW = Math.max(2, Math.round(heldFrame.width / maskZoom));
             const maskH = Math.max(2, Math.round(heldFrame.height / maskZoom));
             const maskX = Math.round((heldFrame.width - maskW) / 2);
