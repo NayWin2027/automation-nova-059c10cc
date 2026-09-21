@@ -2640,7 +2640,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           let gapZoom = 1;
           // Check if current segment is dialogue — if so, NEVER zoom
           const _curSegForZoom = (syncSegmentsRef.current as any[])?.[lastIndexRef.current];
-          const _isDialogueSeg = _curSegForZoom?.isDialogue === true;
+          const _isDialogueSeg =
+            isCurrentDialogue ||
+            _curSegForZoom?.isDialogue === true ||
+            /\[?\s*DIALOG(?:UE|UAGE)/i.test(_curSegForZoom?.rawText || "");
+          if (_isDialogueSeg) gapZoomHoldRef.current = 1.0;
           const AV_GAP_ZOOM_THRESHOLD_MS = _isDialogueSeg ? Infinity : 300; // dialogue=never zoom, narration=300ms+
           if (gapStartRef.current > 0 && _now - gapStartRef.current > AV_GAP_ZOOM_THRESHOLD_MS) {
             const p = Math.min(1, (_now - gapStartRef.current) / 250);
