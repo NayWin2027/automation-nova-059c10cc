@@ -2614,7 +2614,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           !prewarmActiveRef.current &&
           visibleLoopFrameReadyRef.current;
 
-        // (B) residual gap mask — slow micro zoom-in (max 0.5%) so any held frame reads as motion
+        // (B) residual gap mask — slow micro zoom-in (max 1%) so any held frame reads as motion
         // SURGICAL FIX: Only zoom during NARRATION segments, never during dialogue.
         // And only when gap > 300ms (genuine AV sync issue, not normal seek latency).
         {
