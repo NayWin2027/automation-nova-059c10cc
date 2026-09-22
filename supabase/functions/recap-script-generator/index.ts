@@ -14,7 +14,7 @@ const MODEL = "gemini-3.1-flash-lite";
 // SLANG-TEMP: HYBRID/VIRAL modes need a slightly higher temperature so the model
 // actually reaches for street slang instead of the safest plain wording. STORY mode
 // keeps the original 0.35 (anti-hallucination).
-let STYLE_TEMPERATURE = 0.3;
+let STYLE_TEMPERATURE = 0.32;
 
 // SLANG-SAFETY: without explicit safetySettings Gemini self-censors harsh/vulgar
 // source dialogue and replaces it with polite wording, which kills verbatim slang.
@@ -352,9 +352,9 @@ function estimateSpokenSeconds(text: string): number {
   return asian / 6.8 + latin / 1.9;
 }
 
-const LENGTH_TARGET_RATIO = 0.9;
-const LENGTH_MAX_RATIO = 0.95;
-const LENGTH_MIN_RATIO = 0.85;
+const LENGTH_TARGET_RATIO = 0.8;
+const LENGTH_MAX_RATIO = 0.85;
+const LENGTH_MIN_RATIO = 0.75;
 
 function enforcefullScriptCoverage(script: string, sourceDurationSec?: number | null): string {
   const normalized = script.replace(/\r\n/g, "\n").trim();
@@ -539,13 +539,16 @@ LANGUAGE LOCK:
 
         const tModels = [
           MODEL,
+          "gemini-2.5-flash",
+          "gemini-flash-lite-latest",
+          "gemini-flash-latest",
+          "gemini-2.5-flash-lite",
+          "gemini-3.5-flash-lite",
+          "gemini-3.1-flash-lite",
+          "gemini-3.7-flash",
           "gemini-3.6-flash",
           "gemini-3.5-flash",
-          "gemini-3.5-flash-lite",
-          "gemini-3.7-flash",
           "gemini-3.1-flash",
-          "gemini-flash-latest",
-          "gemini-flash-lite-latest",
         ];
         const tShouldFallback = (s?: number) => s === 404 || s === 429 || s === 503 || s === 504;
 
@@ -866,7 +869,7 @@ ABSOLUTE RULES:
 14. NARRATION-ONLY OUTPUT: Never print internal labels or planning terms such as “story bible”, “story bibe”, “story vibe”, “beat ledger”, “hook”, “character list”, “analysis”, or any heading. Output only timestamped narration/dialogue.
 
 CRITICAL - DIALOGUE TRANSLATION RULE (MOST IMPORTANT):
-- UNIVERSAL MEANING TRANSLATION (CRITICAL): You MUST translate the full semantic MEANING of all dialogue from ANY language into natural, native ${langLabel}. NEVER transcribe or sound out foreign language words phonetically using ${langLabel} script — phonetic spelling is STRICTLY reserved for proper person names and brand names only.
+- If characters speak ANY dialogue (in Chinese, English, etc.), you MUST translate their EXACT words 100% into ${langLabel}. NEVER output original Chinese characters (တရုတ်စာ) or foreign text.
 - Do NOT just describe that they "spoke" or "said something" — translate their EXACT words into ${lang} and weave it naturally into the narration
 - Preserve the EMOTIONAL TONE of the original dialogue: if it was funny, translate it funny; if it was sad, translate it heartbreakingly; if it was shocking, make it shocking in ${lang}
 - For animals, sounds, or non-verbal emotional expressions — describe them vividly so the audience FEELS the emotion
@@ -1251,20 +1254,23 @@ ${transcript}
     // Key rotation into the paid App pool stays App-API-only.
     const fallbackModels = isOwnApi
       ? [
+          "gemini-2.5-flash",
+          "gemini-flash-lite-latest",
+          "gemini-flash-latest",
+          "gemini-2.5-flash-lite",
+          "gemini-3.5-flash-lite",
+          "gemini-3.1-flash-lite",
+          "gemini-3.7-flash",
           "gemini-3.6-flash",
           "gemini-3.5-flash",
-          "gemini-3.5-flash-lite",
-          "gemini-3.7-flash",
           "gemini-3.1-flash",
-          "gemini-flash-latest",
-          "gemini-flash-lite-latest",
         ]
       : [
           "gemini-3.7-flash",
           "gemini-3.6-flash",
           "gemini-3.5-flash",
-          "gemini-3.5-flash-lite",
           "gemini-3.1-flash",
+          "gemini-2.5-flash",
           "gemini-flash-latest",
           "gemini-flash-lite-latest",
         ];
