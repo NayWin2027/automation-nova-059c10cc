@@ -449,28 +449,6 @@ function violatesTargetLanguage(script: string, lang: string): boolean {
   return false;
 }
 
-function isBurmeseLanguage(lang: string): boolean {
-  return /BURMESE|MYANMAR/i.test(lang);
-}
-
-// Final guard for occasional model drift into bookish Burmese. Keep timestamps,
-// dialogue tags, paragraph order and meaning intact; only normalize formal glue
-// words/endings when they occur as Burmese sentence forms.
-function enforceBurmeseSpokenStyle(text: string): string {
-  const ending = "(?=\\s|[၊။!?…]|$)";
-  return text
-    .replace(/ထို့အပြင်/g, "ဒါ့အပြင်")
-    .replace(/ထို့နောက်/g, "အဲဒီနောက်")
-    .replace(/(သူ|သူမ|၎င်း|ဒါ|ဤအရာ|ဒီအရာ|အဲဒီအရာ)သည်(?=\s)/g, "$1က")
-    .replace(/ဖြစ်နေသည်(?=\s|[၊။!?…]|$)/g, "ဖြစ်နေတယ်")
-    .replace(/နေသည်(?=\s|[၊။!?…]|$)/g, "နေတယ်")
-    .replace(/ဖြစ်သည်(?=\s|[၊။!?…]|$)/g, "ဖြစ်တယ်")
-    .replace(new RegExp(`တွင်${ending}`, "g"), "မှာ")
-    .replace(new RegExp(`သည်${ending}`, "g"), "တယ်")
-    .replace(/၏/g, "ရဲ့")
-    .replace(/၍/g, "ပြီး");
-}
-
 // Niche-specific style instructions
 const nicheStyles: Record<string, string> = {
   "MOVIE RECAP": `Write like a top-tier Netflix/Hollywood movie recap narrator. Build suspense, use dramatic pauses, cliffhangers, and emotional peaks. Make viewers feel every twist, betrayal, romance, and revelation as if they're watching the movie.`,
@@ -540,8 +518,8 @@ serve(async (req) => {
         const tIsOwnApi = !!tKey;
         let tActiveKey = tIsOwnApi ? tKey : getGeminiKey();
 
-        const burmeseStyle = isBurmeseLanguage(tgtLang)
-          ? `\n- BURMESE SPOKEN-STYLE LOCK: Write exactly like people speak today. The literary forms သည်, ၏, ၍, ထို့အပြင်, ထို့နောက်, တွင်, နေသည် and ဖြစ်သည် are forbidden. Use တယ်, တာ, လဲ, ရဲ့, ပြီး, ဒါ့အပြင်, အဲဒီနောက်, မှာ, နေတယ် and ဖြစ်တယ် instead.\n- Keep street slang, harsh words and uncensored dialogue exactly as strong as the source. Do not soften or censor.`
+        const burmeseStyle = /BURMESE|MYANMAR/i.test(tgtLang)
+          ? `\n- Burmese must be MODERN SPOKEN style (တယ်/တာ/လဲ). NEVER literary endings (သည်/၏/၍).\n- Keep street slang, harsh words and uncensored dialogue exactly as strong as the source. Do not soften or censor.`
           : "";
 
         const translateSystemPrompt = `You are a professional subtitle/recap script translator.
@@ -651,11 +629,10 @@ LANGUAGE LOCK:
           });
         }
 
-        const finalTranslated = isBurmeseLanguage(tgtLang) ? enforceBurmeseSpokenStyle(translated) : translated;
         logToolActivity(user.id, "narration-script-translate", "success", { targetLanguage: tgtLang });
         return new Response(
           JSON.stringify({
-            script: finalTranslated,
+            script: translated,
             translated: true,
             targetLanguage: tgtLang,
             structureMatch: Math.abs(srcLines - outLines) <= Math.max(2, Math.round(srcLines * 0.1)),
@@ -854,9 +831,6 @@ STREET-SPOKEN STYLE & MODERN SLANG (mandatory for ${narrationStyle} mode):
     };
     const langLabel = langNativeMap[lang] || lang;
     const targetLanguageLock = `TARGET LANGUAGE LOCK: The target output language is strictly ${langLabel}. The source video might be in Chinese or another language, but you MUST translate EVERYTHING (including all character dialogues, signs, and story details) directly into modern, conversational ${langLabel}. NEVER output the original source language. NEVER mix languages in a single sentence.`;
-    const burmeseSpokenStyleLock = isBurmeseLanguage(lang)
-      ? `\n# BURMESE SPOKEN-STYLE LOCK (MANDATORY IN STORY, HYBRID AND VIRAL):\n# Write exactly like real people speak today. NEVER use literary forms: သည်, ၏, ၍, ထို့အပြင်, ထို့နောက်, တွင်, နေသည်, ဖြစ်သည်.\n# Use conversational forms instead: တယ်, တာ, လဲ, ရဲ့, ပြီး, ဒါ့အပြင်, အဲဒီနောက်, မှာ, နေတယ်, ဖြစ်တယ်.\n# Any output containing those literary forms is rejected.\n`
-      : "";
 
     const systemPrompt = `You are a world-class professional scriptwriter. You write premium narration scripts at Netflix/BBC/HBO broadcast standard.
 
@@ -868,7 +842,6 @@ STREET-SPOKEN STYLE & MODERN SLANG (mandatory for ${narrationStyle} mode):
 # NEVER mix multiple languages. The entire script must be cleanly written in ${langLabel}.
 # THIS IS THE #1 HIGHEST PRIORITY RULE. IT OVERRIDES EVERYTHING.
 ###############################################################
-${burmeseSpokenStyleLock}
 
 Your writing style:
 - Natural spoken ${lang} (conversational, NOT literary/formal)
@@ -1983,10 +1956,7 @@ ${lengthAdjustedScript}`;
     }
 
     // No trimming — full content coverage is the priority
-    const normalizedFinalScript = removeNarrationRepetition(lengthAdjustedScript);
-    const script = isBurmeseLanguage(lang)
-      ? enforceBurmeseSpokenStyle(normalizedFinalScript)
-      : normalizedFinalScript;
+    const script = removeNarrationRepetition(lengthAdjustedScript);
     const finalWordCount = script.split(/\s+/).filter(Boolean).length;
     const finalSpokenSec = estimateSpokenSeconds(script);
     if (sourceDurationSec) {
