@@ -1254,7 +1254,7 @@ ${transcript}
     // Key rotation into the paid App pool stays App-API-only.
     const fallbackModels = isOwnApi
       ? [
-          "gemini-2.5-flash",
+          "gemini-3.8-flash",
           "gemini-flash-lite-latest",
           "gemini-flash-latest",
           "gemini-2.5-flash-lite",
@@ -1270,7 +1270,7 @@ ${transcript}
           "gemini-3.6-flash",
           "gemini-3.5-flash",
           "gemini-3.1-flash",
-          "gemini-2.5-flash",
+          "gemini-3.8-flash",
           "gemini-flash-latest",
           "gemini-flash-lite-latest",
         ];
