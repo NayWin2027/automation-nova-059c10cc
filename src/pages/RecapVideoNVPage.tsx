@@ -2439,17 +2439,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         let zoomedSrcH = srcCropH;
         let rotate = 0;
 
-        // Dialogue visuals must always stay live. This check deliberately sits before every
-        // freeze/zoom branch so those branches cannot return a held frame for spoken lines.
-        const activeSegIdx = lastIndexRef.current;
-        const activeSeg = syncSegmentsRef.current && activeSegIdx >= 0 ? syncSegmentsRef.current[activeSegIdx] : null;
-        const isCurrentDialogue = activeSeg
-          ? !!(activeSeg as any).isDialogue || /\[?\s*DIALOG(?:UE|UAGE)/i.test((activeSeg as any).rawText || "")
-          : false;
-
         // SURGICAL FIX: Freeze/Motion mode runs independently of isZoomEnabled
         // Previously was nested inside isZoomEnabled â€” now runs always when freezeMode is ON
-        if (freezeModeRef.current && !isCurrentDialogue) {
+        if (freezeModeRef.current) {
           const t = audioEl.currentTime;
           const FREEZE_SEC = 4; // 4s professional news-style zoom
           const MOTION_SEC = 10;
@@ -2586,6 +2578,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         zoomedSrcX = Math.max(srcCropX, Math.min(srcCropX + (srcCropW - zoomedSrcW), zoomedSrcX));
         zoomedSrcY = Math.max(srcCropY, Math.min(srcCropY + (srcCropH - zoomedSrcH), zoomedSrcY));
         // MASTER ZERO-ZOOM OVERRIDE: Eradicate all zoom, pan, rotation, gapZoom, and maskZoom during dialogue
+        const activeSegIdx = lastIndexRef.current;
+        const activeSeg = syncSegmentsRef.current && activeSegIdx >= 0 ? syncSegmentsRef.current[activeSegIdx] : null;
+        const isCurrentDialogue = activeSeg
+          ? !!(activeSeg as any).isDialogue || /\[?\s*DIALOG(?:UE|UAGE)/i.test((activeSeg as any).rawText || "")
+          : false;
         if (isCurrentDialogue) {
           zoomedSrcX = srcCropX;
           zoomedSrcY = srcCropY;
@@ -2623,24 +2620,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         }
 
         const useVisibleLoopMask =
-          !isCurrentDialogue &&
-          !freezeModeRef.current &&
-          visibleLoopCountRef.current >= 1 &&
-          visibleLoopFrameReadyRef.current;
+          !freezeModeRef.current && visibleLoopCountRef.current >= 1 && visibleLoopFrameReadyRef.current;
         const useResidualFrameMask =
-          !isCurrentDialogue &&
           !useVisibleLoopMask &&
           seekPendingRef.current &&
           !prewarmActiveRef.current &&
           visibleLoopFrameReadyRef.current;
-
-        // The prewarmed dialogue frame is already decoded at the exact source speech start.
-        // Let that visual bridge move while the main decoder completes its seek; otherwise the
-        // first mouth frame is held and appears 1–2 seconds behind the TTS on slower devices.
-        if (isCurrentDialogue && drawSrcEl === _pwEl && drawSrcEl.paused && !drawSrcEl.ended) {
-          drawSrcEl.playbackRate = videoEl.playbackRate || 1;
-          drawSrcEl.play().catch(() => {});
-        }
 
         // (B) residual gap mask — slow micro zoom-in (max 1%) so any held frame reads as motion
         // SURGICAL FIX: Only zoom during NARRATION segments, never during dialogue.
