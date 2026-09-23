@@ -461,6 +461,7 @@ function enforceBurmeseSpokenStyle(text: string): string {
   return text
     .replace(/ထို့အပြင်/g, "ဒါ့အပြင်")
     .replace(/ထို့နောက်/g, "အဲဒီနောက်")
+    .replace(/(သူ|သူမ|၎င်း|ဒါ|ဤအရာ|ဒီအရာ|အဲဒီအရာ)သည်(?=\s)/g, "$1က")
     .replace(/ဖြစ်နေသည်(?=\s|[၊။!?…]|$)/g, "ဖြစ်နေတယ်")
     .replace(/နေသည်(?=\s|[၊။!?…]|$)/g, "နေတယ်")
     .replace(/ဖြစ်သည်(?=\s|[၊။!?…]|$)/g, "ဖြစ်တယ်")
