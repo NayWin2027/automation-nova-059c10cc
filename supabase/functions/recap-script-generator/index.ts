@@ -385,7 +385,7 @@ function enforcefullScriptCoverage(script: string, sourceDurationSec?: number | 
     return (kept.length ? kept.join(" ") : completeSentences[0]).trim();
   };
 
-  // True recap: fixed 70% of source duration when read aloud; only trim above 75%.
+  // True recap: fixed 80% of source duration when read aloud; only trim above 95%.
   const maxSeconds = Math.max(8, sourceDurationSec * LENGTH_MAX_RATIO);
   const targetSeconds = Math.max(8, sourceDurationSec * LENGTH_TARGET_RATIO);
   if (estimateSpokenSeconds(normalized) <= maxSeconds) return normalized;
@@ -1965,7 +1965,7 @@ ${lengthAdjustedScript}`;
           rawSpokenSec,
         )}s final=${Math.round(finalSpokenSec)}s ratio=${((finalSpokenSec / sourceDurationSec) * 100).toFixed(
           1,
-        )}% target=70% toppedUp=${toppedUp}`,
+        )}% target=80% toppedUp=${toppedUp}`,
       );
     }
 
@@ -1977,7 +1977,7 @@ ${lengthAdjustedScript}`;
     }
 
     if (!script || script.trim().length < 10) {
-      console.error("[recap-script-generator] Script became invalid after 70% enforcement");
+      console.error("[recap-script-generator] Script became invalid after 80% enforcement");
       return new Response(JSON.stringify({ error: "Script generation failed after length enforcement" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
