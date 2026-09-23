@@ -9,12 +9,12 @@ const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1bet
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
 // gemini-1.5-flash / gemini-2.5-flash are no longer served (404 NOT_FOUND).
 // Use the rolling "latest" alias which stays available for both old and new keys.
-const MODEL = "gemini-flash-lite-latest";
+const MODEL = "gemini-3.1-flash-lite";
 
 // SLANG-TEMP: HYBRID/VIRAL modes need a slightly higher temperature so the model
 // actually reaches for street slang instead of the safest plain wording. STORY mode
 // keeps the original 0.35 (anti-hallucination).
-let STYLE_TEMPERATURE = 0.32;
+let STYLE_TEMPERATURE = 0.3;
 
 // SLANG-SAFETY: without explicit safetySettings Gemini self-censors harsh/vulgar
 // source dialogue and replaces it with polite wording, which kills verbatim slang.
@@ -29,7 +29,7 @@ function buildGenerationConfig(model: string, requestedMaxOutputTokens: number |
   // Burmese/CJK narration costs 2-3 tokens per syllable: an 8192 cap truncated
   // long recaps and dropped the middle/ending beats. Give the model real room.
   const maxOutputTokens =
-    model === "gemini-flash-lite-latest"
+    model === "gemini-3.1-flash-lite"
       ? Math.max(requestedMaxOutputTokens || 0, 80000)
       : Math.max(requestedMaxOutputTokens || 0, 60000);
 
@@ -352,9 +352,9 @@ function estimateSpokenSeconds(text: string): number {
   return asian / 6.8 + latin / 1.9;
 }
 
-const LENGTH_TARGET_RATIO = 0.8;
-const LENGTH_MAX_RATIO = 0.85;
-const LENGTH_MIN_RATIO = 0.75;
+const LENGTH_TARGET_RATIO = 0.9;
+const LENGTH_MAX_RATIO = 0.95;
+const LENGTH_MIN_RATIO = 0.85;
 
 function enforcefullScriptCoverage(script: string, sourceDurationSec?: number | null): string {
   const normalized = script.replace(/\r\n/g, "\n").trim();
@@ -449,28 +449,6 @@ function violatesTargetLanguage(script: string, lang: string): boolean {
   return false;
 }
 
-function isBurmeseLanguage(lang: string): boolean {
-  return /BURMESE|MYANMAR/i.test(lang);
-}
-
-// Final guard for occasional model drift into bookish Burmese. Keep timestamps,
-// dialogue tags, paragraph order and meaning intact; only normalize formal glue
-// words/endings when they occur as Burmese sentence forms.
-function enforceBurmeseSpokenStyle(text: string): string {
-  const ending = "(?=\\s|[၊။!?…]|$)";
-  return text
-    .replace(/ထို့အပြင်/g, "ဒါ့အပြင်")
-    .replace(/ထို့နောက်/g, "အဲဒီနောက်")
-    .replace(/(သူ|သူမ|၎င်း|ဒါ|ဤအရာ|ဒီအရာ|အဲဒီအရာ)သည်(?=\s)/g, "$1က")
-    .replace(/ဖြစ်နေသည်(?=\s|[၊။!?…]|$)/g, "ဖြစ်နေတယ်")
-    .replace(/နေသည်(?=\s|[၊။!?…]|$)/g, "နေတယ်")
-    .replace(/ဖြစ်သည်(?=\s|[၊။!?…]|$)/g, "ဖြစ်တယ်")
-    .replace(new RegExp(`တွင်${ending}`, "g"), "မှာ")
-    .replace(new RegExp(`သည်${ending}`, "g"), "တယ်")
-    .replace(/၏/g, "ရဲ့")
-    .replace(/၍/g, "ပြီး");
-}
-
 // Niche-specific style instructions
 const nicheStyles: Record<string, string> = {
   "MOVIE RECAP": `Write like a top-tier Netflix/Hollywood movie recap narrator. Build suspense, use dramatic pauses, cliffhangers, and emotional peaks. Make viewers feel every twist, betrayal, romance, and revelation as if they're watching the movie.`,
@@ -540,8 +518,8 @@ serve(async (req) => {
         const tIsOwnApi = !!tKey;
         let tActiveKey = tIsOwnApi ? tKey : getGeminiKey();
 
-        const burmeseStyle = isBurmeseLanguage(tgtLang)
-          ? `\n- BURMESE SPOKEN-STYLE LOCK: Write exactly like people speak today. The literary forms သည်, ၏, ၍, ထို့အပြင်, ထို့နောက်, တွင်, နေသည် and ဖြစ်သည် are forbidden. Use တယ်, တာ, လဲ, ရဲ့, ပြီး, ဒါ့အပြင်, အဲဒီနောက်, မှာ, နေတယ် and ဖြစ်တယ် instead.\n- Keep street slang, harsh words and uncensored dialogue exactly as strong as the source. Do not soften or censor.`
+        const burmeseStyle = /BURMESE|MYANMAR/i.test(tgtLang)
+          ? `\n- Burmese must be MODERN SPOKEN style (တယ်/တာ/လဲ). NEVER literary endings (သည်/၏/၍).\n- Keep street slang, harsh words and uncensored dialogue exactly as strong as the source. Do not soften or censor.`
           : "";
 
         const translateSystemPrompt = `You are a professional subtitle/recap script translator.
@@ -561,8 +539,8 @@ LANGUAGE LOCK:
 
         const tModels = [
           MODEL,
-          "gemini-3.8-flash",
-          "gemini-3.1-flash",
+          "gemini-2.5-flash",
+          "gemini-flash-lite-latest",
           "gemini-flash-latest",
           "gemini-2.5-flash-lite",
           "gemini-3.5-flash-lite",
@@ -570,7 +548,7 @@ LANGUAGE LOCK:
           "gemini-3.7-flash",
           "gemini-3.6-flash",
           "gemini-3.5-flash",
-          "gemini-flash-lite-latest",
+          "gemini-3.1-flash",
         ];
         const tShouldFallback = (s?: number) => s === 404 || s === 429 || s === 503 || s === 504;
 
@@ -651,11 +629,10 @@ LANGUAGE LOCK:
           });
         }
 
-        const finalTranslated = isBurmeseLanguage(tgtLang) ? enforceBurmeseSpokenStyle(translated) : translated;
         logToolActivity(user.id, "narration-script-translate", "success", { targetLanguage: tgtLang });
         return new Response(
           JSON.stringify({
-            script: finalTranslated,
+            script: translated,
             translated: true,
             targetLanguage: tgtLang,
             structureMatch: Math.abs(srcLines - outLines) <= Math.max(2, Math.round(srcLines * 0.1)),
@@ -854,9 +831,6 @@ STREET-SPOKEN STYLE & MODERN SLANG (mandatory for ${narrationStyle} mode):
     };
     const langLabel = langNativeMap[lang] || lang;
     const targetLanguageLock = `TARGET LANGUAGE LOCK: The target output language is strictly ${langLabel}. The source video might be in Chinese or another language, but you MUST translate EVERYTHING (including all character dialogues, signs, and story details) directly into modern, conversational ${langLabel}. NEVER output the original source language. NEVER mix languages in a single sentence.`;
-    const burmeseSpokenStyleLock = isBurmeseLanguage(lang)
-      ? `\n# BURMESE SPOKEN-STYLE LOCK (MANDATORY IN STORY, HYBRID AND VIRAL):\n# Write exactly like real people speak today. NEVER use literary forms: သည်, ၏, ၍, ထို့အပြင်, ထို့နောက်, တွင်, နေသည်, ဖြစ်သည်.\n# Use conversational forms instead: တယ်, တာ, လဲ, ရဲ့, ပြီး, ဒါ့အပြင်, အဲဒီနောက်, မှာ, နေတယ်, ဖြစ်တယ်.\n# Any output containing those literary forms is rejected.\n`
-      : "";
 
     const systemPrompt = `You are a world-class professional scriptwriter. You write premium narration scripts at Netflix/BBC/HBO broadcast standard.
 
@@ -868,7 +842,6 @@ STREET-SPOKEN STYLE & MODERN SLANG (mandatory for ${narrationStyle} mode):
 # NEVER mix multiple languages. The entire script must be cleanly written in ${langLabel}.
 # THIS IS THE #1 HIGHEST PRIORITY RULE. IT OVERRIDES EVERYTHING.
 ###############################################################
-${burmeseSpokenStyleLock}
 
 Your writing style:
 - Natural spoken ${lang} (conversational, NOT literary/formal)
@@ -896,7 +869,7 @@ ABSOLUTE RULES:
 14. NARRATION-ONLY OUTPUT: Never print internal labels or planning terms such as “story bible”, “story bibe”, “story vibe”, “beat ledger”, “hook”, “character list”, “analysis”, or any heading. Output only timestamped narration/dialogue.
 
 CRITICAL - DIALOGUE TRANSLATION RULE (MOST IMPORTANT):
-- If characters speak ANY dialogue (in Chinese, English, etc.), you MUST translate their EXACT words 100% into ${langLabel}. NEVER output original Chinese characters (တရုတ်စာ) or foreign text.
+- UNIVERSAL MEANING TRANSLATION (CRITICAL): You MUST translate the full semantic MEANING of all dialogue from ANY language into natural, native ${langLabel}. NEVER transcribe or sound out foreign language words phonetically using ${langLabel} script — phonetic spelling is STRICTLY reserved for proper person names and brand names only.
 - Do NOT just describe that they "spoke" or "said something" — translate their EXACT words into ${lang} and weave it naturally into the narration
 - Preserve the EMOTIONAL TONE of the original dialogue: if it was funny, translate it funny; if it was sad, translate it heartbreakingly; if it was shocking, make it shocking in ${lang}
 - For animals, sounds, or non-verbal emotional expressions — describe them vividly so the audience FEELS the emotion
@@ -1983,10 +1956,7 @@ ${lengthAdjustedScript}`;
     }
 
     // No trimming — full content coverage is the priority
-    const normalizedFinalScript = removeNarrationRepetition(lengthAdjustedScript);
-    const script = isBurmeseLanguage(lang)
-      ? enforceBurmeseSpokenStyle(normalizedFinalScript)
-      : normalizedFinalScript;
+    const script = removeNarrationRepetition(lengthAdjustedScript);
     const finalWordCount = script.split(/\s+/).filter(Boolean).length;
     const finalSpokenSec = estimateSpokenSeconds(script);
     if (sourceDurationSec) {
