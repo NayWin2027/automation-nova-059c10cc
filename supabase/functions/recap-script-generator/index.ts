@@ -1127,8 +1127,8 @@ Below is a source video/audio file. Your job is to:
 2. Analyze ALL content: dialogue, actions, emotions, settings, visual elements, audio cues
 3. If there is NO spoken dialogue, analyze visual elements, actions, music, settings, body language
 4. Identify ALL key moments, especially dramatic/shocking ones (confrontations, revelations, emotional scenes, physical actions like kisses/fights/tears)
-5. Write a complete professional ${nicheLabel} narration script that covers only the essential story beats and script must be fullcoverage on source video
-6. A viewer reading your script aloud MUST finish in about 100% of the original source duration (see REQUIRED NARRATION LENGTH above) and must cover the full source from beginning to end.
+5. Write a complete, highly detailed professional ${nicheLabel} narration script that RETAINS 80% to 90% of the original source's story, dialogue, and actions. DO NOT summarize it too much. The script must be fullcoverage on source video
+6. A viewer reading your script aloud MUST finish in about 80% to 100% of the original source duration (see REQUIRED NARRATION LENGTH above) and must cover the full source from beginning to end.
 7. Hook the audience immediately
 8. Use vivid, engaging ${lang} appropriate for "${nicheLabel}" content
 9. Be perfectly paced for voice narration
@@ -1160,7 +1160,7 @@ OUTPUT FORMAT:
 - Each paragraph = one scene cut in the final video
 - The timecode tells the video editor WHICH part of the source video to show during this narration
 
-⚠️ MANDATORY: Every word of your output (except [MM:SS] timecodes) MUST be in ${lang}. If you write even one word in Burmese/Myanmar and ${lang} is NOT "BURMESE", your output is REJECTED.`;
+⚠️ CRITICAL STRICT RULE: You MUST write the ENTIRE final output ONLY in the [${lang}] language. Do NOT use the original language of the source video/audio if it differs from [${lang}]. If ${lang} is "THAI", write everything in Thai. If ${lang} is "CHINESE", write everything in Chinese. If you write in any language other than [${lang}], YOUR OUTPUT WILL BE REJECTED!`;
       contentParts = [
         { text: userPrompt },
         fileData
@@ -1179,7 +1179,7 @@ Below is a raw transcript. Transform it into a professional recap narration scri
 CRITICAL INSTRUCTIONS:
 1. Read the ENTIRE transcript carefully — do not skim
 2. Identify ALL key moments, especially dramatic/shocking ones
-3. Write a complete recap that covers every important event
+3. Write a complete, highly detailed recap that RETAINS 80% to 90% of the original transcript. DO NOT summarize it too much.
 4. Hook the audience immediately
 5. Use vivid, engaging ${lang} appropriate for "${nicheLabel}" content
 6. Be perfectly paced for voice narration
@@ -1193,7 +1193,7 @@ OUTPUT FORMAT:
 RAW TRANSCRIPT:
 ${transcript}
 
-⚠️ MANDATORY: Every word of your output (except [MM:SS] timecodes) MUST be in ${lang}. If you write even one word in Burmese/Myanmar and ${lang} is NOT "BURMESE", your output is REJECTED.`;
+⚠️ CRITICAL STRICT RULE: You MUST write the ENTIRE final output ONLY in the [${lang}] language. Do NOT use the original language of the source video/audio if it differs from [${lang}]. If ${lang} is "THAI", write everything in Thai. If ${lang} is "CHINESE", write everything in Chinese. If you write in any language other than [${lang}], YOUR OUTPUT WILL BE REJECTED!`;
       contentParts = [{ text: userPrompt }];
     }
 
@@ -1270,7 +1270,7 @@ ${transcript}
           "gemini-3.6-flash",
           "gemini-3.5-flash",
           "gemini-3.1-flash",
-          "gemini-3.8-flash",
+          "gemini-2.5-flash",
           "gemini-flash-latest",
           "gemini-flash-lite-latest",
         ];
@@ -1285,6 +1285,14 @@ ${transcript}
         console.warn(`[recap-script-generator] Skipping remaining fallbacks — wall budget exhausted`);
         break;
       }
+
+      // SURGICAL FIX: If the previous attempt failed due to server load (503/504) or rate limit (429),
+      // pause for 2 seconds before trying the next fallback model. This prevents the loop from
+      // instantly exhausting all 10 models while Google's API is temporarily overwhelmed.
+      if (response && (response.status === 429 || response.status === 503 || response.status === 504)) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+
       activeModel = fallbackModel;
       console.warn(
         `[recap-script-generator] Previous attempt failed (${response?.status ?? "no-response"}). Falling back to ${activeModel}...`,
