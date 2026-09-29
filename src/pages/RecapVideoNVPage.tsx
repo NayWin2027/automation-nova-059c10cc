@@ -2667,12 +2667,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           // from its own start frame, so a cut never reads as a dead pause.
           if (!_isDialogueSeg && segCutTimeRef.current > 0) {
             const sceneAge = _now - segCutTimeRef.current;
-            const SCENE_PUSH_MS = 2600;
+            // Short, gentle push matched to rapid (~1s) cuts; sine ease = no abrupt start/stop.
+            const SCENE_PUSH_MS = 900;
             if (sceneAge >= 0 && sceneAge < SCENE_PUSH_MS) {
               const sp = sceneAge / SCENE_PUSH_MS;
-              gapZoom *= 1 + 0.08 * (1 - Math.pow(1 - sp, 3));
+              gapZoom *= 1 + 0.04 * (0.5 - 0.5 * Math.cos(Math.PI * sp));
             } else if (sceneAge >= SCENE_PUSH_MS) {
-              gapZoom *= 1.08;
+              gapZoom *= 1.04;
             }
           }
           if (gapZoom > 1.0001) {
@@ -2739,34 +2740,19 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           }
 
           // â”€â”€ FEATURE: Professional scene-cut transition â€” smooth cinematic sweep â”€â”€
-          const TRANSITION_MS = 320;
+          // Lightweight soft cut: short faint fade only (no dark dip / glow sweep) so rapid cuts flow smoothly.
+          const TRANSITION_MS = 140;
           const cutAge = performance.now() - segCutTimeRef.current;
           if (cutAge < TRANSITION_MS && segCutTimeRef.current > 0) {
             const t = Math.min(1, cutAge / TRANSITION_MS);
-            const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-            const shadowAlpha = Math.max(0, 0.22 * (1 - ease));
-            const highlightAlpha = Math.max(0, 0.28 * (1 - Math.abs(t - 0.45) / 0.45));
-
-            ctx.save();
-            ctx.globalAlpha = shadowAlpha;
-            ctx.fillStyle = "#07080c";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            const glow = ctx.createLinearGradient(0, 0, canvas.width, 0);
-            glow.addColorStop(0, "rgba(255,255,255,0)");
-            glow.addColorStop(0.35, "rgba(255,255,255,0)");
-            glow.addColorStop(0.45, `rgba(255,255,255,${0.15 * highlightAlpha})`);
-            glow.addColorStop(0.5, `rgba(255,255,255,${0.12 * highlightAlpha})`);
-            glow.addColorStop(0.55, `rgba(255,255,255,${0.15 * highlightAlpha})`);
-            glow.addColorStop(1, "rgba(255,255,255,0)");
-            ctx.globalAlpha = 1;
-            ctx.fillStyle = glow;
-            const sweepX = (t * 1.4 - 0.2) * canvas.width;
-            ctx.save();
-            ctx.translate(sweepX, 0);
-            ctx.fillRect(-canvas.width * 0.4, 0, canvas.width * 1.8, canvas.height);
-            ctx.restore();
-            ctx.restore();
+            const shadowAlpha = Math.max(0, 0.08 * (1 - t) * (1 - t));
+            if (shadowAlpha > 0.004) {
+              ctx.save();
+              ctx.globalAlpha = shadowAlpha;
+              ctx.fillStyle = "#07080c";
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+              ctx.restore();
+            }
           }
 
           // â”€â”€ FEATURE: AI Hook Intro â€” cinematic title card overlay for first 4s of recording â”€â”€
