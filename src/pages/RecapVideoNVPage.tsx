@@ -2447,7 +2447,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           const MOTION_SEC = 10;
           const CYCLE_SEC = FREEZE_SEC + MOTION_SEC;
           const cyclePos = t % CYCLE_SEC;
-          const isFreezeCycle = cyclePos < FREEZE_SEC;
+          // SURGICAL FIX: never freeze during a dialogue line — lips must keep moving.
+          const _segForFreeze = (syncSegmentsRef.current as any[])?.[lastIndexRef.current];
+          const _freezeIsDialogue =
+            _segForFreeze?.isDialogue === true ||
+            /\[?\s*DIALOG(?:UE|UAGE)/i.test(_segForFreeze?.rawText || "");
+          const isFreezeCycle = !_freezeIsDialogue && cyclePos < FREEZE_SEC;
           const cycleIndex = Math.floor(t / CYCLE_SEC);
 
           if (isFreezeCycle) {
