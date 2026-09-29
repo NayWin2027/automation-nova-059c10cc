@@ -2619,10 +2619,14 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           visibleLoopLastTimeRef.current = currentVisualTime;
         }
 
-        const useVisibleLoopMask =
-          !freezeModeRef.current && visibleLoopCountRef.current >= 1 && visibleLoopFrameReadyRef.current;
+        // SURGICAL FIX: the held-frame loop mask produced multi-second visible freezes
+        // (up to 24s) in the recorded output. Never hold a still frame for loops anymore —
+        // always keep the live footage moving so REC preview and MP4 output match 1:1.
+        const useVisibleLoopMask = false;
+        // Residual seek-gap mask stays, but only for narration and only for the brief
+        // decode gap. Dialogue must never show a held/frozen frame.
         const useResidualFrameMask =
-          !useVisibleLoopMask &&
+          !isCurrentDialogue &&
           seekPendingRef.current &&
           !prewarmActiveRef.current &&
           visibleLoopFrameReadyRef.current;
