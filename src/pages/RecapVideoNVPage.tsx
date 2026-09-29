@@ -2691,8 +2691,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             const maskEase = useVisibleLoopMask
               ? 1 - Math.pow(1 - maskProgress, 2) // gentle, visible ease-out (news-channel push-in)
               : 1 - Math.pow(1 - maskProgress, 3);
-            // SURGICAL FIX: dialogue segments must stay 100% zoom-free (held frame shown flat).
-            const maskZoom = isCurrentDialogue ? 1 : 1 + (useVisibleLoopMask ? 0.3 : 0.018) * maskEase;
+            // Narration-only path: keep the tiny ease-out push-in so the short decode gap
+            // reads as motion instead of a freeze. Dialogue never reaches this branch.
+            const maskZoom = 1 + 0.018 * maskEase;
             const maskW = Math.max(2, Math.round(heldFrame.width / maskZoom));
             const maskH = Math.max(2, Math.round(heldFrame.height / maskZoom));
             const maskX = Math.round((heldFrame.width - maskW) / 2);
