@@ -2654,14 +2654,26 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             _curSegForZoom?.isDialogue === true ||
             /\[?\s*DIALOG(?:UE|UAGE)/i.test(_curSegForZoom?.rawText || "");
           if (_isDialogueSeg) gapZoomHoldRef.current = 1.0;
-          const AV_GAP_ZOOM_THRESHOLD_MS = _isDialogueSeg ? Infinity : 300; // dialogue=never zoom, narration=300ms+
-          if (gapStartRef.current > 0 && _now - gapStartRef.current > AV_GAP_ZOOM_THRESHOLD_MS) {
+          const AV_GAP_ZOOM_THRESHOLD_MS = _isDialogueSeg ? Infinity : 0; // dialogue=never zoom, narration=immediate
+          if (gapStartRef.current > 0 && _now - gapStartRef.current >= AV_GAP_ZOOM_THRESHOLD_MS) {
             const p = Math.min(1, (_now - gapStartRef.current) / 250);
             gapZoom = 1 + 0.02 * (1 - Math.pow(1 - p, 3));
             gapZoomHoldRef.current = gapZoom;
           } else if (gapZoomHoldRef.current > 1.0001) {
             gapZoomHoldRef.current = Math.max(1, gapZoomHoldRef.current - 0.0015);
             gapZoom = gapZoomHoldRef.current;
+          }
+          // SCENE-START SMOOTH PUSH-IN (Ken Burns): every new narration scene eases 1.0x -> 1.08x
+          // from its own start frame, so a cut never reads as a dead pause.
+          if (!_isDialogueSeg && segCutTimeRef.current > 0) {
+            const sceneAge = _now - segCutTimeRef.current;
+            const SCENE_PUSH_MS = 2600;
+            if (sceneAge >= 0 && sceneAge < SCENE_PUSH_MS) {
+              const sp = sceneAge / SCENE_PUSH_MS;
+              gapZoom *= 1 + 0.08 * (1 - Math.pow(1 - sp, 3));
+            } else if (sceneAge >= SCENE_PUSH_MS) {
+              gapZoom *= 1.08;
+            }
           }
           if (gapZoom > 1.0001) {
             const gW = Math.max(2, Math.round(zoomedSrcW / gapZoom));
@@ -2671,6 +2683,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             zoomedSrcW = gW;
             zoomedSrcH = gH;
           }
+
         }
 
         ctx.save();
