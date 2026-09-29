@@ -2447,7 +2447,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           const MOTION_SEC = 10;
           const CYCLE_SEC = FREEZE_SEC + MOTION_SEC;
           const cyclePos = t % CYCLE_SEC;
-          const isFreezeCycle = cyclePos < FREEZE_SEC;
+          // SURGICAL FIX: never freeze during a dialogue line — lips must keep moving.
+          const _segForFreeze = (syncSegmentsRef.current as any[])?.[lastIndexRef.current];
+          const _freezeIsDialogue =
+            _segForFreeze?.isDialogue === true ||
+            /\[?\s*DIALOG(?:UE|UAGE)/i.test(_segForFreeze?.rawText || "");
+          const isFreezeCycle = !_freezeIsDialogue && cyclePos < FREEZE_SEC;
           const cycleIndex = Math.floor(t / CYCLE_SEC);
 
           if (isFreezeCycle) {
@@ -2619,10 +2624,14 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           visibleLoopLastTimeRef.current = currentVisualTime;
         }
 
-        const useVisibleLoopMask =
-          !freezeModeRef.current && visibleLoopCountRef.current >= 1 && visibleLoopFrameReadyRef.current;
+        // SURGICAL FIX: the held-frame loop mask produced multi-second visible freezes
+        // (up to 24s) in the recorded output. Never hold a still frame for loops anymore —
+        // always keep the live footage moving so REC preview and MP4 output match 1:1.
+        const useVisibleLoopMask = false;
+        // Residual seek-gap mask stays, but only for narration and only for the brief
+        // decode gap. Dialogue must never show a held/frozen frame.
         const useResidualFrameMask =
-          !useVisibleLoopMask &&
+          !isCurrentDialogue &&
           seekPendingRef.current &&
           !prewarmActiveRef.current &&
           visibleLoopFrameReadyRef.current;
@@ -2687,8 +2696,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             const maskEase = useVisibleLoopMask
               ? 1 - Math.pow(1 - maskProgress, 2) // gentle, visible ease-out (news-channel push-in)
               : 1 - Math.pow(1 - maskProgress, 3);
-            // SURGICAL FIX: dialogue segments must stay 100% zoom-free (held frame shown flat).
-            const maskZoom = isCurrentDialogue ? 1 : 1 + (useVisibleLoopMask ? 0.3 : 0.018) * maskEase;
+            // Narration-only path: keep the tiny ease-out push-in so the short decode gap
+            // reads as motion instead of a freeze. Dialogue never reaches this branch.
+            const maskZoom = 1 + 0.018 * maskEase;
             const maskW = Math.max(2, Math.round(heldFrame.width / maskZoom));
             const maskH = Math.max(2, Math.round(heldFrame.height / maskZoom));
             const maskX = Math.round((heldFrame.width - maskW) / 2);
