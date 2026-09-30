@@ -2628,13 +2628,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // (up to 24s) in the recorded output. Never hold a still frame for loops anymore —
         // always keep the live footage moving so REC preview and MP4 output match 1:1.
         const useVisibleLoopMask = false;
-        // Residual seek-gap mask stays, but only for narration and only for the brief
-        // decode gap. Dialogue must never show a held/frozen frame.
-        const useResidualFrameMask =
-          !isCurrentDialogue &&
-          seekPendingRef.current &&
-          !prewarmActiveRef.current &&
-          visibleLoopFrameReadyRef.current;
+        // SURGICAL FIX: the residual seek-gap mask held a still snapshot on every scene cut.
+        // On desktop the decoder gap is 200-400ms x 130+ cuts, so the output read as a photo
+        // slideshow. Disabled entirely — the live video element keeps drawing through the gap.
+        const useResidualFrameMask = false;
 
         // (B) residual gap mask — slow micro zoom-in (max 1%) so any held frame reads as motion
         // SURGICAL FIX: Only zoom during NARRATION segments, never during dialogue.
@@ -3312,13 +3309,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   vv.addEventListener("seeked", onHookSeeked);
                   vv.currentTime = hookSeg.vStart;
                 } else if (!seekPendingRef.current) {
-                  // Clamp at hook segment end â€” hold last frame if overrun
-                  // SURGICAL FIX: Loop back at hook segment end - no freeze/pause
-                  if (hookVEnd > 0 && vv.currentTime >= hookVEnd - 0.15) {
-                    vv.currentTime = hookSeg.vStart;
-                  }
+                  // SURGICAL FIX: NO-LOOP in hook phase. Never jump back to hookSeg.vStart —
+                  // that backward seek was the visible loop. Past the hook end we simply slow
+                  // the footage to 0.9x and keep flowing forward (no freeze, no pause).
+                  const _hookRate = hookVEnd > 0 && vv.currentTime >= hookVEnd - 0.15 ? 0.9 : 1.0;
+                  if (Math.abs(vv.playbackRate - _hookRate) > 0.02) vv.playbackRate = _hookRate;
                   if (vv.paused || vv.ended) {
-                    vv.playbackRate = 1.0;
                     vv.play().catch(() => {});
                   }
                 }
