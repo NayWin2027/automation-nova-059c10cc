@@ -3397,14 +3397,23 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   lastEffectiveVEndRef.current = effectiveVEnd;
                   const vActualEnd = effectiveVEnd;
                   const sourceEnd = vActualEnd > effectiveVStart ? vActualEnd : vv.duration;
-                  // 100% Lip-sync speed matching: aligns mouth movement duration to TTS audio duration
+                  // NO-LOOP AUTO SPEED: stretch/compress source footage to fit TTS duration
+                  // within an imperceptible 0.9x–1.2x band (all segments, dialogue included).
                   let targetPlaybackRate = 1.0;
-                  if (isCurrentDialogue && _hasAudioTs) {
+                  if (_hasAudioTs) {
                     const audioSegDur = audioTs[activeIndex].end - audioTs[activeIndex].start;
                     const videoSegDur = sourceEnd - effectiveVStart;
                     if (audioSegDur > 0 && videoSegDur > 0) {
-                      targetPlaybackRate = Math.min(1.15, Math.max(0.85, videoSegDur / audioSegDur));
+                      targetPlaybackRate = Math.min(1.2, Math.max(0.9, videoSegDur / audioSegDur));
                     }
+                  }
+                  // Live drift correction: remaining footage vs remaining audio (still clamped 0.9–1.2)
+                  let liveRate = targetPlaybackRate;
+                  if (_hasAudioTs) {
+                    const remA = audioTs[activeIndex].end - currentTime;
+                    const remV = sourceEnd - vv.currentTime;
+                    if (remA > 0.25 && remV > 0) liveRate = Math.min(1.2, Math.max(0.9, remV / remA));
+                    else if (remV <= 0) liveRate = 0.9;
                   }
 
                   if (activeIndex !== lastIndexRef.current) {
@@ -3488,66 +3497,25 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       { once: true },
                     );
                   } else if (!seekPendingRef.current) {
-                    // SURGICAL FIX: AV SYNC 100% — If video has overrun vEnd, hard-seek back to effectiveVStart
-                    // This prevents irrelevant content (eating, dancing, walking) from leaking into the active segment.
-                    const endMargin = 0.08;
-                    if (sourceEnd > effectiveVStart && vv.currentTime >= sourceEnd - endMargin) {
-                      // Hard-cut seek: loop segment — never show content past vEnd
-                      seekPendingRef.current = true;
-                      const onLoopSeeked = () => {
-                        seekPendingRef.current = false;
-                        vv.playbackRate = targetPlaybackRate;
-                        if (!vv.ended) vv.play().catch(() => {});
-                        vv.removeEventListener("seeked", onLoopSeeked);
-                      };
-                      vv.addEventListener("seeked", onLoopSeeked);
-                      vv.currentTime = effectiveVStart; // SURGICAL FIX: loop back to correct source position
-                    } else if (!freezeModeRef.current) {
-                      // freeze OFF = continuous motion within segment boundary
-                      vv.playbackRate = targetPlaybackRate;
+                    // NO-LOOP: never seek back inside a segment. Footage keeps flowing forward;
+                    // speed is auto-adjusted within 0.9x–1.2x so it lands near vEnd with the audio.
+                    if (!freezeModeRef.current) {
+                      if (Math.abs(vv.playbackRate - liveRate) > 0.02) vv.playbackRate = liveRate;
                       if (vv.paused && !vv.ended) vv.play().catch(() => {});
                     } else {
-                      // SURGICAL FIX: freezeMode ON — draw loop uses frozenFrameCanvasRef for visual freeze
-                      // Never pause video element — canvas recording needs continuous frames
+                      // freezeMode ON — draw loop uses frozenFrameCanvasRef for visual freeze
                       vv.playbackRate = 1.0;
                       if (vv.paused && !vv.ended) vv.play().catch(() => {});
                     }
                   }
                 } else {
-                  // Between segments — SURGICAL FIX: No pause. Hard-cut seek loop on last active segment.
-                  // Canvas recording requires video to keep playing — pause() would freeze canvas frames.
-                  // Instead: loop the last active segment's content so only relevant footage shows.
+                  // Between segments — NO-LOOP, NO-PAUSE: keep footage flowing forward slowly (0.9x)
                   if (videoInSegmentRef.current) {
                     videoInSegmentRef.current = false;
                   }
                   if (lastIndexRef.current >= 0 && !seekPendingRef.current) {
-                    const lastActiveSeg = getSeg(lastIndexRef.current) as any;
-                    if (lastActiveSeg) {
-                      // SURGICAL FIX: Use effective (audio-proportional) positions for hold loop
-                      const holdEnd =
-                        lastEffectiveVEndRef.current > 0
-                          ? lastEffectiveVEndRef.current
-                          : lastActiveSeg.vEnd === -1
-                            ? vv.duration
-                            : lastActiveSeg.vEnd;
-                      const holdStart =
-                        lastEffectiveVStartRef.current > 0 ? lastEffectiveVStartRef.current : lastActiveSeg.vStart;
-                      // If video has overrun the segment boundary, hard-seek back to holdStart (loop)
-                      if (vv.currentTime >= holdEnd - 0.08 || vv.currentTime < holdStart - 0.1) {
-                        seekPendingRef.current = true;
-                        const onGapSeeked = () => {
-                          seekPendingRef.current = false;
-                          vv.playbackRate = 1.0;
-                          if (!vv.ended) vv.play().catch(() => {});
-                          vv.removeEventListener("seeked", onGapSeeked);
-                        };
-                        vv.addEventListener("seeked", onGapSeeked);
-                        vv.currentTime = holdStart; // hard-cut seek back to segment start
-                      }
-                      // Keep video playing (no pause) — canvas stays active
-                      vv.playbackRate = 1.0;
-                      if (vv.paused && !vv.ended) vv.play().catch(() => {});
-                    }
+                    if (vv.playbackRate !== 0.9) vv.playbackRate = 0.9;
+                    if (vv.paused && !vv.ended) vv.play().catch(() => {});
                   }
                 }
               } else {
@@ -3563,7 +3531,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   activeText = s.text;
                   const fbVEnd = s.vEnd === -1 ? vv.duration : s.vEnd;
                   const fbSourceEnd = fbVEnd > s.vStart ? fbVEnd : vv.duration;
-                  const fbTargetRate = 1.0;
+                  // NO-LOOP AUTO SPEED (fallback): fit footage to audio slot within 0.9x–1.2x
+                  const fbAudioDur = (s.aEndPct - s.aStartPct) * av.duration;
+                  const fbVideoDur = fbSourceEnd - s.vStart;
+                  const fbTargetRate =
+                    fbAudioDur > 0 && fbVideoDur > 0 ? Math.min(1.2, Math.max(0.9, fbVideoDur / fbAudioDur)) : 1.0;
                   if (activeIndex !== lastIndexRef.current) {
                     // SURGICAL FIX: seekPending guard for AV sync + play during seek for no pause
                     seekPendingRef.current = true;
@@ -3583,51 +3555,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     videoInSegmentRef.current = true;
                     segCutTimeRef.current = performance.now();
                   } else if (!seekPendingRef.current) {
-                    // SURGICAL FIX: AV SYNC 100% fallback — loop back at segment end, no content overrun
-                    const fbEndMargin = 0.08;
-                    if (fbSourceEnd > s.vStart && vv.currentTime >= fbSourceEnd - fbEndMargin) {
-                      // Hard-cut loop: prevent irrelevant footage past vEnd
-                      seekPendingRef.current = true;
-                      const onFbLoopSeeked = () => {
-                        seekPendingRef.current = false;
-                        vv.playbackRate = fbTargetRate;
-                        if (!vv.ended) vv.play().catch(() => {});
-                        vv.removeEventListener("seeked", onFbLoopSeeked);
-                      };
-                      vv.addEventListener("seeked", onFbLoopSeeked);
-                      vv.currentTime = s.vStart;
-                    } else if (!freezeModeRef.current) {
-                      // freeze OFF = continuous motion within segment boundary
-                      vv.playbackRate = fbTargetRate;
-                      if (vv.paused && !vv.ended) vv.play().catch(() => {});
-                    } else {
-                      // SURGICAL FIX: freezeMode ON fallback — frozenFrameCanvasRef handles visual freeze
-                      // Never pause video — canvas needs continuous frames
-                      vv.playbackRate = fbTargetRate;
-                      if (vv.paused && !vv.ended) vv.play().catch(() => {});
-                    }
+                    // NO-LOOP: keep flowing forward; slow to 0.9x once past vEnd instead of seeking back
+                    const fbRate = vv.currentTime >= fbSourceEnd ? 0.9 : fbTargetRate;
+                    if (Math.abs(vv.playbackRate - fbRate) > 0.02) vv.playbackRate = fbRate;
+                    if (vv.paused && !vv.ended) vv.play().catch(() => {});
                   }
                 } else {
-                  // Between fallback segments — SURGICAL FIX: No pause. Hard-cut seek loop on last active segment.
+                  // Between fallback segments — NO-LOOP, NO-PAUSE: flow forward at 0.9x
                   if (lastIndexRef.current >= 0 && !seekPendingRef.current) {
-                    const lastFbSeg = segs[lastIndexRef.current] as any;
-                    if (lastFbSeg) {
-                      const fbHoldEnd = lastFbSeg.vEnd === -1 ? vv.duration : lastFbSeg.vEnd;
-                      const fbHoldStart = lastFbSeg.vStart;
-                      if (vv.currentTime >= fbHoldEnd - 0.08 || vv.currentTime < fbHoldStart - 0.1) {
-                        seekPendingRef.current = true;
-                        const onFbGapSeeked = () => {
-                          seekPendingRef.current = false;
-                          vv.playbackRate = 1.0;
-                          if (!vv.ended) vv.play().catch(() => {});
-                          vv.removeEventListener("seeked", onFbGapSeeked);
-                        };
-                        vv.addEventListener("seeked", onFbGapSeeked);
-                        vv.currentTime = fbHoldStart; // hard-cut seek back
-                      }
-                      vv.playbackRate = 1.0;
-                      if (vv.paused && !vv.ended) vv.play().catch(() => {});
-                    }
+                    if (vv.playbackRate !== 0.9) vv.playbackRate = 0.9;
+                    if (vv.paused && !vv.ended) vv.play().catch(() => {});
                   }
                 }
               }
