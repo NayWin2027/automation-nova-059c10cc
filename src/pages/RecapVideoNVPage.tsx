@@ -3531,7 +3531,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   activeText = s.text;
                   const fbVEnd = s.vEnd === -1 ? vv.duration : s.vEnd;
                   const fbSourceEnd = fbVEnd > s.vStart ? fbVEnd : vv.duration;
-                  const fbTargetRate = 1.0;
+                  // NO-LOOP AUTO SPEED (fallback): fit footage to audio slot within 0.9x–1.2x
+                  const fbAudioDur = (s.aEndPct - s.aStartPct) * av.duration;
+                  const fbVideoDur = fbSourceEnd - s.vStart;
+                  const fbTargetRate =
+                    fbAudioDur > 0 && fbVideoDur > 0 ? Math.min(1.2, Math.max(0.9, fbVideoDur / fbAudioDur)) : 1.0;
                   if (activeIndex !== lastIndexRef.current) {
                     // SURGICAL FIX: seekPending guard for AV sync + play during seek for no pause
                     seekPendingRef.current = true;
@@ -3551,51 +3555,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     videoInSegmentRef.current = true;
                     segCutTimeRef.current = performance.now();
                   } else if (!seekPendingRef.current) {
-                    // SURGICAL FIX: AV SYNC 100% fallback — loop back at segment end, no content overrun
-                    const fbEndMargin = 0.08;
-                    if (fbSourceEnd > s.vStart && vv.currentTime >= fbSourceEnd - fbEndMargin) {
-                      // Hard-cut loop: prevent irrelevant footage past vEnd
-                      seekPendingRef.current = true;
-                      const onFbLoopSeeked = () => {
-                        seekPendingRef.current = false;
-                        vv.playbackRate = fbTargetRate;
-                        if (!vv.ended) vv.play().catch(() => {});
-                        vv.removeEventListener("seeked", onFbLoopSeeked);
-                      };
-                      vv.addEventListener("seeked", onFbLoopSeeked);
-                      vv.currentTime = s.vStart;
-                    } else if (!freezeModeRef.current) {
-                      // freeze OFF = continuous motion within segment boundary
-                      vv.playbackRate = fbTargetRate;
-                      if (vv.paused && !vv.ended) vv.play().catch(() => {});
-                    } else {
-                      // SURGICAL FIX: freezeMode ON fallback — frozenFrameCanvasRef handles visual freeze
-                      // Never pause video — canvas needs continuous frames
-                      vv.playbackRate = fbTargetRate;
-                      if (vv.paused && !vv.ended) vv.play().catch(() => {});
-                    }
+                    // NO-LOOP: keep flowing forward; slow to 0.9x once past vEnd instead of seeking back
+                    const fbRate = vv.currentTime >= fbSourceEnd ? 0.9 : fbTargetRate;
+                    if (Math.abs(vv.playbackRate - fbRate) > 0.02) vv.playbackRate = fbRate;
+                    if (vv.paused && !vv.ended) vv.play().catch(() => {});
                   }
                 } else {
-                  // Between fallback segments — SURGICAL FIX: No pause. Hard-cut seek loop on last active segment.
+                  // Between fallback segments — NO-LOOP, NO-PAUSE: flow forward at 0.9x
                   if (lastIndexRef.current >= 0 && !seekPendingRef.current) {
-                    const lastFbSeg = segs[lastIndexRef.current] as any;
-                    if (lastFbSeg) {
-                      const fbHoldEnd = lastFbSeg.vEnd === -1 ? vv.duration : lastFbSeg.vEnd;
-                      const fbHoldStart = lastFbSeg.vStart;
-                      if (vv.currentTime >= fbHoldEnd - 0.08 || vv.currentTime < fbHoldStart - 0.1) {
-                        seekPendingRef.current = true;
-                        const onFbGapSeeked = () => {
-                          seekPendingRef.current = false;
-                          vv.playbackRate = 1.0;
-                          if (!vv.ended) vv.play().catch(() => {});
-                          vv.removeEventListener("seeked", onFbGapSeeked);
-                        };
-                        vv.addEventListener("seeked", onFbGapSeeked);
-                        vv.currentTime = fbHoldStart; // hard-cut seek back
-                      }
-                      vv.playbackRate = 1.0;
-                      if (vv.paused && !vv.ended) vv.play().catch(() => {});
-                    }
+                    if (vv.playbackRate !== 0.9) vv.playbackRate = 0.9;
+                    if (vv.paused && !vv.ended) vv.play().catch(() => {});
                   }
                 }
               }
