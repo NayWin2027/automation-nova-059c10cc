@@ -2234,7 +2234,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         const av = audioRef.current;
         let exactDurationSecs = recordingElapsedSecs;
         if (av && Number.isFinite(av.duration) && av.duration > 0) {
-          exactDurationSecs = av.duration;
+          // SURGICAL FIX: real-time duration = media duration / playbackRate (1.2x/1.4x etc.)
+          const _playRate = Number.isFinite(av.playbackRate) && av.playbackRate > 0 ? av.playbackRate : 1.0;
+          exactDurationSecs = av.duration / _playRate;
         }
         // Clamp to 3 decimal places for ffmpeg and metadata
         exactDurationSecs = Number(exactDurationSecs.toFixed(3));
@@ -3874,9 +3876,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             encCtx.drawImage(canvas, 0, 0, encW, encH);
             // Direct MP4: encode the encoder-sized canvas so frame size matches the H.264 config.
             if (webCodecsRecorder) {
-              const timeUs = Math.round(
-                (Math.max(0, audioEl.currentTime) || Math.max(0, (timestamp - recordingStartTime) / 1000)) * 1_000_000,
-              );
+              // SURGICAL FIX: scale media time by playbackRate so video frame timestamps follow
+              // the real-time audio stream at any user speed (1.2x / 1.3x / 1.4x / 1.5x).
+              const _playRate =
+                Number.isFinite(audioEl.playbackRate) && audioEl.playbackRate > 0 ? audioEl.playbackRate : 1.0;
+              const _elapsedRealSec =
+                Math.max(0, audioEl.currentTime) / _playRate || Math.max(0, (timestamp - recordingStartTime) / 1000);
+              const timeUs = Math.round(_elapsedRealSec * 1_000_000);
               webCodecsRecorder.encodeVideoFrame(encCanvas, timeUs);
             }
             if (encTrack && typeof encTrack.requestFrame === "function") encTrack.requestFrame();
