@@ -8,6 +8,7 @@ import { useApiAccess } from "@/hooks/useApiAccess";
 import { preCheckCredits } from "@/utils/creditPreCheck";
 import { trackToolVariant } from "@/utils/trackToolVariant";
 import { toast } from "sonner";
+import { convertToRealMp4 } from "@/utils/mp4Convert";
 import { useCreditDeduction } from "@/hooks/useCreditDeduction";
 import { languages } from "@/data/languages";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -141,6 +142,7 @@ interface ResultViewProps {
   targetLanguageCode?: string;
   onTranslateScript?: () => void;
   isTranslatingScript?: boolean;
+  onBatchSegmentCompleted?: () => void;
 }
 
 interface LogoSettings {
@@ -345,6 +347,240 @@ const fixWebmDuration = (buffer: ArrayBuffer, durationMs: number): ArrayBuffer |
   return result.buffer;
 };
 
+// ── SURGICAL ADDITION: 0-LATENCY DIRECT MP4 RECORDER (WebCodecs + mp4-muxer) ──
+interface WebCodecsMp4Recorder {
+  encodeVideoFrame: (canvas: HTMLCanvasElement, timestampUs: number, isKeyFrame?: boolean) => void;
+  finalize: () => Promise<Blob>;
+  cleanup: () => void;
+}
+
+const loadMp4Muxer = async () => {
+  try {
+    const mod = await import("mp4-muxer");
+    if (mod?.Muxer && mod?.ArrayBufferTarget) return mod;
+  } catch (_) {}
+  try {
+    const cdnUrl = "https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.4/+esm";
+    const mod: any = await import(/* @vite-ignore */ cdnUrl);
+    if (mod?.Muxer && mod?.ArrayBufferTarget) return mod;
+  } catch (_) {}
+  return null;
+};
+
+const createWebCodecsMp4Recorder = async (options: {
+  width: number;
+  height: number;
+  fps: number;
+  bitrate: number;
+  audioElement?: HTMLAudioElement | null;
+  /** Shared audio graph (created once by the recording pipeline) — avoids a second createMediaElementSource. */
+  sharedAudioContext?: AudioContext | null;
+  sharedAudioSource?: AudioNode | null;
+}): Promise<WebCodecsMp4Recorder | null> => {
+  if (
+    typeof window === "undefined" ||
+    typeof (window as any).VideoEncoder !== "function" ||
+    typeof (window as any).VideoFrame !== "function"
+  ) {
+    return null;
+  }
+
+  const mp4MuxerMod = await loadMp4Muxer();
+  if (!mp4MuxerMod) return null;
+  const { Muxer, ArrayBufferTarget } = mp4MuxerMod;
+
+  const width = options.width % 2 === 0 ? options.width : options.width - 1;
+  const height = options.height % 2 === 0 ? options.height : options.height - 1;
+  const fps = options.fps || 30;
+  const bitrate = options.bitrate || 6_000_000;
+
+  // Codec check - Main profile AVC / H.264
+  const videoCodec = "avc1.4d002a";
+  try {
+    const isSupported = await (window as any).VideoEncoder.isConfigSupported({
+      codec: videoCodec,
+      width,
+      height,
+      bitrate,
+      framerate: fps,
+    });
+    if (!isSupported?.supported) {
+      console.warn("[WebCodecs] H.264 profile not supported by hardware, falling back to MediaRecorder");
+      return null;
+    }
+  } catch (e) {
+    console.warn("[WebCodecs] VideoEncoder config check failed:", e);
+    return null;
+  }
+
+  let audioEncoder: any = null;
+  let scriptProcessor: ScriptProcessorNode | null = null;
+
+  const audioEl = options.audioElement;
+  // Shared graph only — never create a second MediaElementSource for the same <audio>.
+  const audioContext = options.sharedAudioContext || null;
+  const audioSource = options.sharedAudioSource || null;
+  const audioSampleRate = Math.round(audioContext?.sampleRate || 48000);
+  const canUseAudioEncoder =
+    typeof (window as any).AudioEncoder === "function" &&
+    typeof (window as any).AudioData === "function" &&
+    !!audioContext &&
+    !!audioSource;
+
+  let aacConfigSupported = false;
+  if (canUseAudioEncoder) {
+    try {
+      const aacCheck = await (window as any).AudioEncoder.isConfigSupported({
+        codec: "mp4a.40.2",
+        numberOfChannels: 2,
+        sampleRate: audioSampleRate,
+        bitrate: 128_000,
+      });
+      aacConfigSupported = !!aacCheck?.supported;
+    } catch (_) {}
+  }
+
+  // SURGICAL SAFETY: Never produce a silent MP4 — if audio exists, AAC encoding must be available
+  if (audioEl && !aacConfigSupported) {
+    console.warn("[WebCodecs] AAC AudioEncoder unavailable, falling back to MediaRecorder with audio");
+    return null;
+  }
+
+  const muxer = new Muxer({
+    target: new ArrayBufferTarget(),
+    video: {
+      codec: "avc",
+      width,
+      height,
+    },
+    audio: aacConfigSupported
+      ? {
+          codec: "aac",
+          numberOfChannels: 2,
+          sampleRate: audioSampleRate,
+        }
+      : undefined,
+    fastStart: "in-memory",
+    firstTimestampBehavior: "offset",
+  });
+
+  const videoEncoder = new (window as any).VideoEncoder({
+    output: (chunk: any, meta: any) => muxer.addVideoChunk(chunk, meta),
+    error: (e: any) => console.error("[WebCodecs VideoEncoder]:", e),
+  });
+
+  videoEncoder.configure({
+    codec: videoCodec,
+    width,
+    height,
+    bitrate,
+    framerate: fps,
+    latencyMode: "realtime",
+    hardwareAcceleration: "prefer-hardware",
+  });
+
+  if (aacConfigSupported && audioContext && audioSource) {
+    try {
+      scriptProcessor = audioContext.createScriptProcessor(4096, 2, 2);
+      audioSource.connect(scriptProcessor);
+      // Processor output stays silent; connecting it only keeps the node alive in the graph.
+      scriptProcessor.connect(audioContext.destination);
+
+      audioEncoder = new (window as any).AudioEncoder({
+        output: (chunk: any, meta: any) => muxer.addAudioChunk(chunk, meta),
+        error: (e: any) => console.error("[WebCodecs AudioEncoder]:", e),
+      });
+
+      audioEncoder.configure({
+        codec: "mp4a.40.2",
+        numberOfChannels: 2,
+        sampleRate: audioSampleRate,
+        bitrate: 128_000,
+      });
+
+      let audioTimeUs = 0;
+      scriptProcessor.onaudioprocess = (e) => {
+        if (!audioEncoder || audioEncoder.state !== "configured") return;
+        const left = e.inputBuffer.getChannelData(0);
+        const right = e.inputBuffer.numberOfChannels > 1 ? e.inputBuffer.getChannelData(1) : left;
+        const numberOfFrames = left.length;
+        const data = new Float32Array(numberOfFrames * 2);
+        data.set(left, 0);
+        data.set(right, numberOfFrames);
+
+        const audioData = new (window as any).AudioData({
+          format: "f32-planar",
+          sampleRate: audioSampleRate,
+          numberOfFrames,
+          numberOfChannels: 2,
+          timestamp: audioTimeUs,
+          data,
+        });
+        audioEncoder.encode(audioData);
+        audioData.close();
+        audioTimeUs += Math.round((numberOfFrames / audioSampleRate) * 1_000_000);
+      };
+    } catch (aErr) {
+      console.warn("[WebCodecs Audio Setup]:", aErr);
+    }
+  }
+
+  let frameCount = 0;
+  let lastTimestampUs = -1;
+
+  return {
+    encodeVideoFrame: (canvas: HTMLCanvasElement, timestampUs: number, isKeyFrame?: boolean) => {
+      if (videoEncoder.state !== "configured") return;
+      // Timestamps must strictly increase, otherwise the encoder throws and the MP4 is lost.
+      const minStep = Math.round(1_000_000 / fps / 2);
+      const ts = timestampUs > lastTimestampUs ? timestampUs : lastTimestampUs + minStep;
+      lastTimestampUs = ts;
+      frameCount++;
+      const keyFrame = isKeyFrame ?? frameCount % (fps * 2) === 1;
+      try {
+        const vf = new (window as any).VideoFrame(canvas, { timestamp: ts });
+        videoEncoder.encode(vf, { keyFrame });
+        vf.close();
+      } catch (encErr) {
+        console.warn("[WebCodecs] frame encode skipped:", encErr);
+      }
+    },
+    finalize: async (): Promise<Blob> => {
+      try {
+        if (scriptProcessor) {
+          scriptProcessor.disconnect();
+          scriptProcessor = null;
+        }
+        if (audioEncoder && audioEncoder.state === "configured") {
+          await audioEncoder.flush();
+        }
+      } catch (_) {}
+
+      try {
+        if (videoEncoder.state === "configured") {
+          await videoEncoder.flush();
+        }
+      } catch (_) {}
+
+      muxer.finalize();
+      const { buffer } = muxer.target;
+      return new Blob([buffer], { type: "video/mp4" });
+    },
+    cleanup: () => {
+      try {
+        if (scriptProcessor) {
+          scriptProcessor.onaudioprocess = null;
+          scriptProcessor.disconnect();
+          scriptProcessor = null;
+        }
+        // The AudioContext is owned by the recording pipeline — do NOT close it here.
+        if (videoEncoder && videoEncoder.state !== "closed") videoEncoder.close();
+        if (audioEncoder && audioEncoder.state !== "closed") audioEncoder.close();
+      } catch (_) {}
+    },
+  };
+};
+
 export const ResultView: React.FC<ResultViewProps> = React.memo(
   ({
     scriptData,
@@ -369,6 +605,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     targetLanguageCode = "my-MM",
     onTranslateScript,
     isTranslatingScript = false,
+    onBatchSegmentCompleted,
   }) => {
     const [activeTab, setActiveTab] = useState<"script" | "segments">("script");
 
@@ -727,8 +964,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           setEditorState((prev) => ({ ...prev, colorGrade: "GOLDEN" }));
           setLogo((prev) => ({ ...prev, spin: false }));
         } else {
-          // Higher-CPU devices can handle a higher bitrate export.
-          setExportQuality("1080p10");
+          // Computer / High-CPU: enable professional cinematic GOLDEN grade and smooth 1080p just like phone
+          setExportQuality("1080p");
+          setEditorState((prev) => ({ ...prev, colorGrade: "GOLDEN" }));
+          setLogo((prev) => ({ ...prev, spin: false }));
           setTimelineBar((prev) => ({ ...prev, thickness: 9 }));
         }
       }, 100);
@@ -1006,9 +1245,14 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       blurSettingsRef.current = blurSettings;
     }, [blurSettings]);
 
+    // SURGICAL FIX: Clear previous render result when new batch segment starts
+    useEffect(() => {
+      if (autoStartRecap && renderedBlobUrl) setRenderedBlobUrl(null);
+    }, [autoStartRecap]);
+
     // —— FIX: Auto-start — clearInterval BEFORE setIsRecapPlaying to prevent rAF overlap ——
     useEffect(() => {
-      if (!autoStartRecap || !audioUrl || !videoUrl || isRecapPlaying || isRendering || renderedBlobUrl) return;
+      if (!autoStartRecap || !audioUrl || !videoUrl || isRecapPlaying || isRendering) return; // SURGICAL FIX: removed renderedBlobUrl guard — was blocking batch segment chaining
 
       if (renderMode === "server") {
         const processServerRender = async () => {
@@ -1570,24 +1814,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         // Use exact timestamp if present; otherwise use previous segment's vEnd (no estimation)
         const rawVStart = parseTime(seg.timestamp);
-        // SURGICAL FIX: Hybrid/Viral dialogue lines carry their exact source speech slot.
-        // Bind the video start to that exact slot so the character's mouth movement lines up
-        // with the TTS line. Story mode and narrator lines keep gap-based timing unchanged.
-        const isDialogueSeg = !!seg.isDialogue || /\[?\s*DIALOG(?:UE|UAGE)/i.test(seg.text || "");
-        const dialogueSourceStart: number | null =
-          narrationStyle !== "STORY" &&
-          isDialogueSeg &&
-          typeof seg.sourceStartSec === "number" &&
-          Number.isFinite(seg.sourceStartSec) &&
-          seg.sourceStartSec >= 0
-            ? seg.sourceStartSec
-            : null;
-        const vStart: number =
-          dialogueSourceStart !== null
-            ? dialogueSourceStart
-            : seg.timestamp && rawVStart > 0
-              ? rawVStart
-              : lastComputedVEnd;
+        // SURGICAL FIX: Hybrid/Viral dialogue lines already carry their exact source slot.
+        // Story mode and narrator lines keep the existing gap-based timing unchanged.
+        // SURGICAL ROLLBACK: gap-based timing for all modes (exact-range override removed).
+        const dialogueSourceStart: number | null = null;
+        const vStart: number = seg.timestamp && rawVStart > 0 ? rawVStart : lastComputedVEnd;
 
         const nextSeg = scriptData.segments[i + 1];
         let vEnd: number;
@@ -1617,8 +1848,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           aStartPct: totalWords > 0 ? startWords / totalWords : 0,
           aEndPct: totalWords > 0 ? wordCursor / totalWords : 1,
           text: stripDialogueMetadata(seg.text).replace(TIMECODE_STRIP_RE, "").trim(),
-          rawText: seg.text,
-          isDialogue: !!seg.isDialogue || /\[?\s*DIALOG(?:UE|UAGE)/i.test(seg.text || ""),
         };
       });
     }, [scriptData, narrationStyle]);
@@ -1767,17 +1996,19 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // â”€â”€ MIME Detection: TT/TG REMUX READY â”€â”€
       const isSafari =
         /^((?!chrome|android).)*safari/i.test(navigator.userAgent) || /iPad|iPhone|iPod/.test(navigator.userAgent);
-      // We prioritize H.264 inside WebM so our ultra-fast FFmpeg pipeline can instantly copy it to MP4 without re-encoding!
-      // SURGICAL FIX: VP8+opus first - guaranteed video track on ALL Android (Snapdragon 7/8 Gen)
-      // h264 codec lies: isTypeSupported=true on Snapdragon 7 but records AUDIO-ONLY (no video track)
-      // Result: gallery/MXPlayer shows frozen photo + audio = h264 phantom video bug
+      // SURGICAL FIX: Prioritize real native MP4 (H.264/AVC) so output is genuine MP4 directly.
       const allMimeTypes = [
+        "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+        "video/mp4;codecs=avc1",
+        "video/mp4;codecs=h264,aac",
+        "video/mp4;codecs=h264",
+        "video/mp4",
+        "video/webm;codecs=h264,opus",
+        "video/webm;codecs=h264",
         "video/webm;codecs=vp8,opus",
         "video/webm;codecs=vp9,opus",
         "video/webm;codecs=vp8",
         "video/webm;codecs=vp9",
-        "video/webm;codecs=h264,opus",
-        "video/webm;codecs=h264",
         "video/webm",
       ];
       const mimeType =
@@ -1928,41 +2159,68 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       const useWorker = false;
       const renderWorker: null = null;
 
-      // Use manual frame pushing (captureStream(0) + requestFrame) for mathematically stutter-free video.
-      // 0 fps forces the encoder to ONLY record a frame precisely when we push it.
-      // This mathematically eliminates all stutter/lag exactly.
-      const canvasStream = encCanvas.captureStream(0);
-      // SURGICAL FIX: Verify video track exists - Snapdragon 7 h264 silently omits video track
-      // If no video track, the output has audio only = frozen photo in gallery/MXPlayer
+      // SURGICAL FIX FOR IOS SAFARI:
+      // iOS WebKit does not support requestFrame() and captureStream(0) produces 0 frames (inactive track error).
+      // On iOS Safari, we MUST provide a positive frame rate: captureStream(quality.fps || 24).
+      // On Chromium/Desktop, captureStream(0) + requestFrame() is kept for 100% steady manual cadence.
+      const isSafariOrIOS =
+        /iPad|iPhone|iPod/.test(navigator.userAgent) || /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+      const canvasStream = isSafariOrIOS
+        ? encCanvas.captureStream
+          ? encCanvas.captureStream(quality.fps || 24)
+          : (encCanvas as any).webkitCaptureStream(quality.fps || 24)
+        : encCanvas.captureStream(0);
+
       const videoTracks = canvasStream.getVideoTracks();
       if (videoTracks.length === 0) {
-        console.error("[RECORDING] CRITICAL: No video track in canvas stream! Codec: ${mimeType}");
-        // Force a known-good fallback stream with explicit VP8
-        const fallbackMime = "video/webm;codecs=vp8,opus";
-        if (MediaRecorder.isTypeSupported(fallbackMime)) {
-          console.warn("[RECORDING] Retrying with VP8 fallback codec");
-          // Re-init with VP8 by overriding mimeType for this session
-          (window as any).__recapFallbackMime = fallbackMime;
-        }
+        console.error("[RECORDING] CRITICAL: No video track in canvas stream!");
       }
       const encTrack = videoTracks[0] as any;
       const chunks: BlobPart[] = [];
 
       let audioCtx: AudioContext | null = null;
+      // SURGICAL: single shared MediaElementSource — reused by WebCodecs AAC encoder below.
+      let sharedAudioSource: MediaElementAudioSourceNode | null = null;
       try {
-        audioCtx = new AudioContext();
-        const source = audioCtx.createMediaElementSource(audioEl);
-        const dest = audioCtx.createMediaStreamDestination();
-        source.connect(dest);
-        source.connect(audioCtx.destination);
-        dest.stream.getAudioTracks().forEach((track: MediaStreamTrack) => canvasStream.addTrack(track));
+        const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtxClass) {
+          audioCtx = new AudioCtxClass();
+          if (audioCtx.state === "suspended") {
+            audioCtx.resume().catch(() => {});
+          }
+          // On non-iOS, connect audio stream to canvas stream
+          if (!isSafariOrIOS) {
+            const source = audioCtx.createMediaElementSource(audioEl);
+            sharedAudioSource = source;
+            const dest = audioCtx.createMediaStreamDestination();
+            source.connect(dest);
+            source.connect(audioCtx.destination);
+            dest.stream.getAudioTracks().forEach((track: MediaStreamTrack) => canvasStream.addTrack(track));
+          }
+        }
       } catch (audioErr) {
-        console.warn("Could not capture audio for recording:", audioErr);
+        console.warn("[RECORDING] AudioContext capture skipped (iOS safe):", audioErr);
       }
 
-      const recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: quality.bitrate });
+      let recorder: MediaRecorder;
+      try {
+        recorder = new MediaRecorder(canvasStream, {
+          mimeType: mimeType || undefined,
+          videoBitsPerSecond: quality.bitrate,
+        });
+      } catch (recErr) {
+        console.warn("[RECORDING] Primary MediaRecorder init failed on iOS, trying native stream fallback:", recErr);
+        try {
+          const videoOnlyStream = new MediaStream(canvasStream.getVideoTracks());
+          recorder = new MediaRecorder(videoOnlyStream);
+        } catch (_) {
+          recorder = new MediaRecorder(canvasStream);
+        }
+      }
       recapRecorderRef.current = recorder;
       const recordingStartTime = Date.now();
+      let webCodecsRecorder: WebCodecsMp4Recorder | null = null;
 
       recorder.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) chunks.push(e.data);
@@ -2004,7 +2262,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         encCanvas.width = 0;
         encCanvas.height = 0;
 
-        if (chunks.length === 0) {
+        // Direct-MP4 recording can succeed even when MediaRecorder produced nothing.
+        if (chunks.length === 0 && !webCodecsRecorder) {
           setIsRendering(false);
           isRenderingRef.current = false;
           return;
@@ -2018,114 +2277,65 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // Chrome's MediaRecorder creates WebM without Duration field â†’ gallery shows 0sec
         // This patches the binary EBML to include the actual duration.
         let finalBlob = blob;
-        if (isWebM && exactDurationSecs > 0) {
+        let isDirectMp4 = false;
+
+        // ── 0-LATENCY DIRECT MP4 FINALIZATION (WebCodecs + mp4-muxer) ──
+        if (webCodecsRecorder) {
           try {
-            const buf = await blob.arrayBuffer();
-            // Patch WebM duration to match audio duration exactly
-            const patched = fixWebmDuration(buf, exactDurationSecs * 1000);
-            if (patched) {
-              finalBlob = new Blob([patched], { type: mimeType });
-              console.log(`[RECORDING] WebM duration fixed (audio duration): ${exactDurationSecs.toFixed(3)}s`);
+            const directMp4Blob = await webCodecsRecorder.finalize();
+            if (directMp4Blob && directMp4Blob.size > 2048) {
+              finalBlob = directMp4Blob;
+              isDirectMp4 = true;
+              console.log(
+                `[RECORDING] 🚀 WebCodecs Direct MP4 finalized (0-latency): ${(finalBlob.size / 1024 / 1024).toFixed(2)} MB`,
+              );
+              toast.success("Real MP4 (H.264 + AAC) စစ်စစ် ချက်ချင်း ထွက်ပါပြီ! (0-latency)");
             }
-          } catch (fixErr) {
-            console.warn("[RECORDING] WebM duration fix failed, using original:", fixErr);
+          } catch (wcFinErr) {
+            console.warn("[RECORDING] WebCodecs finalize failed, falling back to MediaRecorder:", wcFinErr);
+          } finally {
+            webCodecsRecorder.cleanup();
+            webCodecsRecorder = null;
           }
         }
 
-        // â”€â”€ SURGICAL EDIT: NATIVE MP4 REMUXING FOR TT & TG â”€â”€
-        // Converting WebM flawlessly to a Real MP4 container so TikTok and Telegram accept it instantly.
-        try {
-          console.log("[RECORDING] Building Real MP4 for TT/TG...");
-          const loadFFmpeg = () =>
-            new Promise<any>((resolve, reject) => {
-              if ((window as any).FFmpeg) return resolve((window as any).FFmpeg);
-              const script = document.createElement("script");
-              script.src = "https://unpkg.com/@ffmpeg/ffmpeg@0.12.7/dist/umd/ffmpeg.js";
-              script.onload = () => resolve((window as any).FFmpeg);
-              script.onerror = reject;
-              document.head.appendChild(script);
-            });
-          const loadFetchFile = () =>
-            new Promise<any>((resolve, reject) => {
-              if ((window as any).FFmpegUtil) return resolve((window as any).FFmpegUtil);
-              const script = document.createElement("script");
-              script.src = "https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js";
-              script.onload = () => resolve((window as any).FFmpegUtil);
-              script.onerror = reject;
-              document.head.appendChild(script);
-            });
-
-          const FFmpegModule = await loadFFmpeg();
-          const FFmpegUtil = await loadFetchFile();
-
-          const ffmpeg = new FFmpegModule.FFmpeg();
-          await ffmpeg.load({
-            coreURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js",
-            wasmURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm",
-          });
-
-          await ffmpeg.writeFile("input.webm", await FFmpegUtil.fetchFile(finalBlob));
-
-          // SURGICAL FIX: Always re-encode to a broadly-compatible H.264 profile so low-end
-          // Android devices (Snapdragon 6 Gen, stock Gallery, MX Player) can decode the video,
-          // not just the audio. Baseline + yuv420p + even dimensions + CFR is the universal recipe.
-          await ffmpeg.exec([
-            "-i",
-            "input.webm",
-            // Force output video duration to match audio duration exactly
-            "-t",
-            exactDurationSecs.toFixed(3),
-            "-shortest",
-            // Even dimensions are mandatory for H.264
-            "-vf",
-            "scale=trunc(iw/2)*2:trunc(ih/2)*2",
-            // Constant frame rate fixes "frozen first frame, audio plays" on budget decoders
-            "-r",
-            "30",
-            "-vsync",
-            "cfr",
-            // Regular keyframes every 2s for clean seek/decode resync
-            "-g",
-            "60",
-            "-keyint_min",
-            "60",
-            "-c:v",
-            "libx264",
-            "-profile:v",
-            "baseline",
-            "-level",
-            "4.0",
-            "-pix_fmt",
-            "yuv420p",
-            "-preset",
-            "ultrafast",
-            // Universal AAC audio profile accepted by every Android player
-            "-c:a",
-            "aac",
-            "-ar",
-            "44100",
-            "-ac",
-            "2",
-            "-b:a",
-            "128k",
-            "-movflags",
-            "+faststart",
-            "output.mp4",
-          ]);
-
-          const data = await ffmpeg.readFile("output.mp4");
-          const uint8 = data as Uint8Array;
-          finalBlob = new Blob(
-            [uint8.buffer.slice(uint8.byteOffset, uint8.byteOffset + uint8.byteLength) as ArrayBuffer],
-            { type: "video/mp4" },
-          );
-          console.log("[RECORDING] Real MP4 Generation Complete");
-        } catch (e) {
-          console.error("MP4 conversion failed, using direct rename fallback:", e);
-          finalBlob = new Blob([finalBlob], { type: "video/mp4" });
+        // ── SAFETY FALLBACK: MediaRecorder + convertToRealMp4 when WebCodecs is not active ──
+        if (!isDirectMp4 && finalBlob.size === 0) {
+          toast.error("ဗီဒီယို ဖမ်းယူမှု မအောင်မြင်ပါ — ထပ်မံ ကြိုးစားပေးပါ။");
+          setIsRendering(false);
+          isRenderingRef.current = false;
+          return;
         }
 
-        const ext = "mp4";
+        if (!isDirectMp4) {
+          if (isWebM && exactDurationSecs > 0) {
+            try {
+              const buf = await blob.arrayBuffer();
+              const patched = fixWebmDuration(buf, exactDurationSecs * 1000);
+              if (patched) {
+                finalBlob = new Blob([patched], { type: mimeType });
+                console.log(`[RECORDING] WebM duration fixed (audio duration): ${exactDurationSecs.toFixed(3)}s`);
+              }
+            } catch (fixErr) {
+              console.warn("[RECORDING] WebM duration fix failed, using original:", fixErr);
+            }
+          }
+
+          const mp4ToastId = toast.loading("MP4 ပြောင်းနေသည်…");
+          const mp4Result = await convertToRealMp4(finalBlob, {
+            sourceMime: mimeType,
+            durationSec: isWebM ? exactDurationSecs : 0,
+            onProgress: (_p, msg) => toast.loading(msg, { id: mp4ToastId }),
+          });
+          finalBlob = mp4Result.blob;
+          if (mp4Result.isRealMp4) {
+            toast.success("MP4 (H.264) အစစ် ထွက်ပါပြီ", { id: mp4ToastId });
+          } else {
+            toast.error("MP4 ပြောင်းမရပါ — WebM အဖြစ် သိမ်းပေးထားပါသည်", { id: mp4ToastId });
+          }
+        }
+
+        const ext = isDirectMp4 || finalBlob.type.includes("mp4") ? "mp4" : "webm";
 
         const url = URL.createObjectURL(finalBlob);
         const a = document.createElement("a");
@@ -2149,6 +2359,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         console.log("[CREDIT] Output video duration (A/V SYNC):", exactDurationSecs, "seconds");
         // SURGICAL EDIT: Always report output video duration as audio duration for 100% AV sync
         onVideoReady?.(exactDurationSecs);
+        onBatchSegmentCompleted?.();
         setIsRendering(false);
         isRenderingRef.current = false;
         setIsRecapPlaying(false);
@@ -2251,6 +2462,25 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // â”€â”€ BONUS FIX: Reset mid-video teaser so it fires on every recording â”€â”€
       midTeaserShownRef.current = false;
       midTeaserStartRef.current = 0;
+
+      // ── SURGICAL INIT: WebCodecs + mp4-muxer for 0-latency direct MP4 generation ──
+      try {
+        webCodecsRecorder = await createWebCodecsMp4Recorder({
+          width: encW,
+          height: encH,
+          fps: quality.fps,
+          bitrate: quality.bitrate,
+          audioElement: audioEl,
+          sharedAudioContext: audioCtx,
+          sharedAudioSource: sharedAudioSource,
+        });
+        if (webCodecsRecorder) {
+          console.log("[RECORDING] 🚀 WebCodecs Direct MP4 Active! (0-latency)");
+        }
+      } catch (wcErr) {
+        console.warn("[RECORDING] WebCodecs init failed, fallback to MediaRecorder active:", wcErr);
+      }
+
       recorder.start(250);
       // Pre-load logo
       let logoImg: HTMLImageElement | null = null;
@@ -2359,7 +2589,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         const srcH = videoEl.videoHeight || rawH;
 
         // SURGICAL EDIT: Zoom toggle - when OFF, use 100% original source video
-        const isZoomEnabled = zoomEnabledRef.current;
+        const _activeSeg = (syncSegmentsRef.current?.[lastIndexRef.current] ?? {}) as any;
+        const _isDialogue = !!_activeSeg?.isDialogue;
+        const isZoomEnabled = zoomEnabledRef.current && !_isDialogue;
 
         let srcCropX: number, srcCropY: number, srcCropW: number, srcCropH: number;
 
@@ -2441,18 +2673,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         // SURGICAL FIX: Freeze/Motion mode runs independently of isZoomEnabled
         // Previously was nested inside isZoomEnabled â€” now runs always when freezeMode is ON
-        if (freezeModeRef.current) {
+        if (freezeModeRef.current && !_isDialogue) {
           const t = audioEl.currentTime;
           const FREEZE_SEC = 4; // 4s professional news-style zoom
           const MOTION_SEC = 10;
           const CYCLE_SEC = FREEZE_SEC + MOTION_SEC;
           const cyclePos = t % CYCLE_SEC;
-          // SURGICAL FIX: never freeze during a dialogue line — lips must keep moving.
-          const _segForFreeze = (syncSegmentsRef.current as any[])?.[lastIndexRef.current];
-          const _freezeIsDialogue =
-            _segForFreeze?.isDialogue === true ||
-            /\[?\s*DIALOG(?:UE|UAGE)/i.test(_segForFreeze?.rawText || "");
-          const isFreezeCycle = !_freezeIsDialogue && cyclePos < FREEZE_SEC;
+          const isFreezeCycle = cyclePos < FREEZE_SEC;
           const cycleIndex = Math.floor(t / CYCLE_SEC);
 
           if (isFreezeCycle) {
@@ -2582,20 +2809,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // Clamp to the valid source crop bounds.
         zoomedSrcX = Math.max(srcCropX, Math.min(srcCropX + (srcCropW - zoomedSrcW), zoomedSrcX));
         zoomedSrcY = Math.max(srcCropY, Math.min(srcCropY + (srcCropH - zoomedSrcH), zoomedSrcY));
-        // MASTER ZERO-ZOOM OVERRIDE: Eradicate all zoom, pan, rotation, gapZoom, and maskZoom during dialogue
-        const activeSegIdx = lastIndexRef.current;
-        const activeSeg = syncSegmentsRef.current && activeSegIdx >= 0 ? syncSegmentsRef.current[activeSegIdx] : null;
-        const isCurrentDialogue = activeSeg
-          ? !!(activeSeg as any).isDialogue || /\[?\s*DIALOG(?:UE|UAGE)/i.test((activeSeg as any).rawText || "")
-          : false;
-        if (isCurrentDialogue) {
-          zoomedSrcX = srcCropX;
-          zoomedSrcY = srcCropY;
-          zoomedSrcW = srcCropW;
-          zoomedSrcH = srcCropH;
-          rotate = 0;
-          gapZoomHoldRef.current = 1.0;
-        }
 
         // ── SURGICAL FIX: SCENE-CUT MICRO-PAUSE KILLER (desktop) ──
         // (A) draw from the prewarm buffer while the active element re-decodes after a hard cut
@@ -2624,18 +2837,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           visibleLoopLastTimeRef.current = currentVisualTime;
         }
 
-        // SURGICAL FIX: the held-frame loop mask produced multi-second visible freezes
-        // (up to 24s) in the recorded output. Never hold a still frame for loops anymore —
-        // always keep the live footage moving so REC preview and MP4 output match 1:1.
+        // SURGICAL FIX: Micro zoom-in & micro pause completely disabled.
+        // Output video now matches REC preview 100% — no held-frame zoom, no stutter masking.
+        // Live video feed always draws instead of a frozen frame with slow zoom-in.
         const useVisibleLoopMask = false;
-        // SURGICAL FIX: the residual seek-gap mask held a still snapshot on every scene cut.
-        // On desktop the decoder gap is 200-400ms x 130+ cuts, so the output read as a photo
-        // slideshow. Disabled entirely — the live video element keeps drawing through the gap.
         const useResidualFrameMask = false;
 
         // (B) residual gap mask — slow micro zoom-in (max 1%) so any held frame reads as motion
-        // SURGICAL FIX: Only zoom during NARRATION segments, never during dialogue.
-        // And only when gap > 300ms (genuine AV sync issue, not normal seek latency).
         {
           const _now = performance.now();
           if (seekPendingRef.current) {
@@ -2643,45 +2851,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           } else {
             gapStartRef.current = 0;
           }
-          let gapZoom = 1;
-          // Check if current segment is dialogue — if so, NEVER zoom
-          const _curSegForZoom = (syncSegmentsRef.current as any[])?.[lastIndexRef.current];
-          const _isDialogueSeg =
-            isCurrentDialogue ||
-            _curSegForZoom?.isDialogue === true ||
-            /\[?\s*DIALOG(?:UE|UAGE)/i.test(_curSegForZoom?.rawText || "");
-          if (_isDialogueSeg) gapZoomHoldRef.current = 1.0;
-          const AV_GAP_ZOOM_THRESHOLD_MS = _isDialogueSeg ? Infinity : 0; // dialogue=never zoom, narration=immediate
-          if (gapStartRef.current > 0 && _now - gapStartRef.current >= AV_GAP_ZOOM_THRESHOLD_MS) {
-            const p = Math.min(1, (_now - gapStartRef.current) / 250);
-            gapZoom = 1 + 0.02 * (1 - Math.pow(1 - p, 3));
-            gapZoomHoldRef.current = gapZoom;
-          } else if (gapZoomHoldRef.current > 1.0001) {
-            gapZoomHoldRef.current = Math.max(1, gapZoomHoldRef.current - 0.0015);
-            gapZoom = gapZoomHoldRef.current;
-          }
-          // SCENE-START SMOOTH PUSH-IN (Ken Burns): every new narration scene eases 1.0x -> 1.08x
-          // from its own start frame, so a cut never reads as a dead pause.
-          if (!_isDialogueSeg && segCutTimeRef.current > 0) {
-            const sceneAge = _now - segCutTimeRef.current;
-            // Short, gentle push matched to rapid (~1s) cuts; sine ease = no abrupt start/stop.
-            const SCENE_PUSH_MS = 900;
-            if (sceneAge >= 0 && sceneAge < SCENE_PUSH_MS) {
-              const sp = sceneAge / SCENE_PUSH_MS;
-              gapZoom *= 1 + 0.04 * (0.5 - 0.5 * Math.cos(Math.PI * sp));
-            } else if (sceneAge >= SCENE_PUSH_MS) {
-              gapZoom *= 1.04;
-            }
-          }
-          if (gapZoom > 1.0001) {
-            const gW = Math.max(2, Math.round(zoomedSrcW / gapZoom));
-            const gH = Math.max(2, Math.round(zoomedSrcH / gapZoom));
-            zoomedSrcX = zoomedSrcX + Math.round((zoomedSrcW - gW) / 2);
-            zoomedSrcY = zoomedSrcY + Math.round((zoomedSrcH - gH) / 2);
-            zoomedSrcW = gW;
-            zoomedSrcH = gH;
-          }
-
+          // SURGICAL FIX: Gap zoom completely disabled — no micro zoom-in on output.
+          // Gap detection tracking (gapStartRef) is preserved above for prewarm timing,
+          // but no visual zoom is applied. zoomedSrcX/Y/W/H remain unchanged.
         }
 
         ctx.save();
@@ -2707,9 +2879,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             const maskEase = useVisibleLoopMask
               ? 1 - Math.pow(1 - maskProgress, 2) // gentle, visible ease-out (news-channel push-in)
               : 1 - Math.pow(1 - maskProgress, 3);
-            // Narration-only path: keep the tiny ease-out push-in so the short decode gap
-            // reads as motion instead of a freeze. Dialogue never reaches this branch.
-            const maskZoom = 1 + 0.018 * maskEase;
+            const maskZoom = 1 + (useVisibleLoopMask ? 0.3 : 0.018) * maskEase;
             const maskW = Math.max(2, Math.round(heldFrame.width / maskZoom));
             const maskH = Math.max(2, Math.round(heldFrame.height / maskZoom));
             const maskX = Math.round((heldFrame.width - maskW) / 2);
@@ -2736,20 +2906,36 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             }
           }
 
-          // â”€â”€ FEATURE: Professional scene-cut transition â€” smooth cinematic sweep â”€â”€
-          // Lightweight soft cut: short faint fade only (no dark dip / glow sweep) so rapid cuts flow smoothly.
-          const TRANSITION_MS = 140;
-          const cutAge = performance.now() - segCutTimeRef.current;
-          if (cutAge < TRANSITION_MS && segCutTimeRef.current > 0) {
+          // SURGICAL FIX: Dark flash & gradient sweep disabled for clean, smooth Hollywood hard cut
+          // The 320ms #07080c dimming and sweep bar caused scene changes to visually stutter/hitch
+          const cutAge = 0;
+          const TRANSITION_MS = 320;
+          if (false && cutAge < TRANSITION_MS && segCutTimeRef.current > 0) {
             const t = Math.min(1, cutAge / TRANSITION_MS);
-            const shadowAlpha = Math.max(0, 0.08 * (1 - t) * (1 - t));
-            if (shadowAlpha > 0.004) {
-              ctx.save();
-              ctx.globalAlpha = shadowAlpha;
-              ctx.fillStyle = "#07080c";
-              ctx.fillRect(0, 0, canvas.width, canvas.height);
-              ctx.restore();
-            }
+            const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+            const shadowAlpha = Math.max(0, 0.22 * (1 - ease));
+            const highlightAlpha = Math.max(0, 0.28 * (1 - Math.abs(t - 0.45) / 0.45));
+
+            ctx.save();
+            ctx.globalAlpha = shadowAlpha;
+            ctx.fillStyle = "#07080c";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const glow = ctx.createLinearGradient(0, 0, canvas.width, 0);
+            glow.addColorStop(0, "rgba(255,255,255,0)");
+            glow.addColorStop(0.35, "rgba(255,255,255,0)");
+            glow.addColorStop(0.45, `rgba(255,255,255,${0.15 * highlightAlpha})`);
+            glow.addColorStop(0.5, `rgba(255,255,255,${0.12 * highlightAlpha})`);
+            glow.addColorStop(0.55, `rgba(255,255,255,${0.15 * highlightAlpha})`);
+            glow.addColorStop(1, "rgba(255,255,255,0)");
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = glow;
+            const sweepX = (t * 1.4 - 0.2) * canvas.width;
+            ctx.save();
+            ctx.translate(sweepX, 0);
+            ctx.fillRect(-canvas.width * 0.4, 0, canvas.width * 1.8, canvas.height);
+            ctx.restore();
+            ctx.restore();
           }
 
           // â”€â”€ FEATURE: AI Hook Intro â€” cinematic title card overlay for first 4s of recording â”€â”€
@@ -2822,7 +3008,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           // â”€â”€ BONUS: Mid-Video Retention Teaser overlay (YouTube retention trick at 28% mark) â”€â”€
           const TEASER_MS = 2500;
           const teaserAge = midTeaserStartRef.current > 0 ? performance.now() - midTeaserStartRef.current : Infinity;
-          if (teaserAge < TEASER_MS) {
+          if (false) {
+            // SURGICAL FIX: "Coming Up" teaser completely disabled — user preference
             const tf = teaserAge < 350 ? teaserAge / 350 : teaserAge > 2000 ? 1 - (teaserAge - 2000) / 500 : 1;
             const tEased = tf * tf * (3 - 2 * tf);
             ctx.save();
@@ -3230,16 +3417,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // â”€â”€ FIX: Real-time performance monitoring â”€â”€
         monitorPerformance(timestamp);
 
-        // â”€â”€ SURGICAL FIX: frame skip must NOT bypass AV sync / playback resume â”€â”€
-        // Canvas+encoder FPS is already throttled below (adaptiveFrameInterval), so we only
-        // record the skip decision here and keep the AV-sync block running every frame.
-        const _skipDraw = shouldSkipFrame(timestamp);
-
+        // SURGICAL FIX: AV sync must run every frame — no early return to prevent missing scene cuts
 
         // â”€â”€ ADAPTIVE FPS: Monitor frame budget â”€â”€
         const frameDelta = timestamp - lastDrawTime;
-        // SURGICAL FIX: Remove !isHighEndDevice guard — 7gen/i5 also need adaptive throttle during CPU spikes
-        if (lastDrawTime > 0 && frameDelta > adaptiveFrameInterval * 1.5) {
+        // SURGICAL FIX: Allow 2.2x headroom so routine scene seeks don't trigger false throttle
+        if (lastDrawTime > 0 && frameDelta > adaptiveFrameInterval * 2.2) {
           slowFrameCount++;
           if (slowFrameCount >= SLOW_THRESHOLD) {
             adaptiveFrameInterval = Math.max(adaptiveFrameInterval, MIN_FRAME_INTERVAL);
@@ -3267,8 +3450,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 seekPendingRef.current = false;
                 prewarmActiveRef.current = false;
                 seekPendingSinceRef.current = 0;
-                // SURGICAL FIX: PC Chrome leaves <video> paused after a slow seek — resume it
-                if (!vv.ended && vv.paused) vv.play().catch(() => {});
               }
             } else {
               seekPendingSinceRef.current = 0;
@@ -3311,12 +3492,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   vv.addEventListener("seeked", onHookSeeked);
                   vv.currentTime = hookSeg.vStart;
                 } else if (!seekPendingRef.current) {
-                  // SURGICAL FIX: NO-LOOP in hook phase. Never jump back to hookSeg.vStart —
-                  // that backward seek was the visible loop. Past the hook end we simply slow
-                  // the footage to 0.9x and keep flowing forward (no freeze, no pause).
-                  const _hookRate = hookVEnd > 0 && vv.currentTime >= hookVEnd - 0.15 ? 0.9 : 1.0;
-                  if (Math.abs(vv.playbackRate - _hookRate) > 0.02) vv.playbackRate = _hookRate;
+                  // Clamp at hook segment end â€” hold last frame if overrun
+                  // SURGICAL FIX: Loop back at hook segment end - no freeze/pause
+                  if (hookVEnd > 0 && vv.currentTime >= hookVEnd - 0.15) {
+                    vv.currentTime = hookSeg.vStart;
+                  }
                   if (vv.paused || vv.ended) {
+                    vv.playbackRate = 1.0;
                     vv.play().catch(() => {});
                   }
                 }
@@ -3374,44 +3556,28 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     }
                     _timecodesUsable = increasing && _lastSegVStart > 0;
                   }
-                  const isCurrentDialogue = !!active.isDialogue;
-                  const _needsScale = _hasAudioTs && !_timecodesUsable && !isCurrentDialogue;
-                  // Exact source timecode lock for dialogue (strictly locks to mouth movement start)
-                  const effectiveVStart = isCurrentDialogue
-                    ? active.vStart
-                    : _needsScale
-                      ? Math.min((audioTs[activeIndex].start / _audioDur) * _vidDur, _vidDur - 0.5)
-                      : active.vStart;
-                  const effectiveVEnd = isCurrentDialogue
-                    ? active.vEnd === -1
+                  const _needsScale = _hasAudioTs && !_timecodesUsable;
+                  const effectiveVStart = _needsScale
+                    ? Math.min((audioTs[activeIndex].start / _audioDur) * _vidDur, _vidDur - 0.5)
+                    : active.vStart;
+                  const effectiveVEnd = _needsScale
+                    ? Math.min((audioTs[activeIndex].end / _audioDur) * _vidDur, _vidDur)
+                    : active.vEnd === -1
                       ? vv.duration
-                      : active.vEnd
-                    : _needsScale
-                      ? Math.min((audioTs[activeIndex].end / _audioDur) * _vidDur, _vidDur)
-                      : active.vEnd === -1
-                        ? vv.duration
-                        : active.vEnd;
+                      : active.vEnd;
+                  // Persist for between-segment hold loop
                   lastEffectiveVStartRef.current = effectiveVStart;
                   lastEffectiveVEndRef.current = effectiveVEnd;
                   const vActualEnd = effectiveVEnd;
                   const sourceEnd = vActualEnd > effectiveVStart ? vActualEnd : vv.duration;
-                  // NO-LOOP AUTO SPEED: stretch/compress source footage to fit TTS duration
-                  // within an imperceptible 0.9x–1.2x band (all segments, dialogue included).
+                  // SURGICAL FIX: Auto adjust playback rate (0.9x - 1.3x) only where loop would occur
+                  const segVideoDur = sourceEnd - effectiveVStart;
+                  const segAudioDur = _hasAudioTs ? audioTs[activeIndex].end - audioTs[activeIndex].start : 0;
                   let targetPlaybackRate = 1.0;
-                  if (_hasAudioTs) {
-                    const audioSegDur = audioTs[activeIndex].end - audioTs[activeIndex].start;
-                    const videoSegDur = sourceEnd - effectiveVStart;
-                    if (audioSegDur > 0 && videoSegDur > 0) {
-                      targetPlaybackRate = Math.min(1.2, Math.max(0.9, videoSegDur / audioSegDur));
-                    }
-                  }
-                  // Live drift correction: remaining footage vs remaining audio (still clamped 0.9–1.2)
-                  let liveRate = targetPlaybackRate;
-                  if (_hasAudioTs) {
-                    const remA = audioTs[activeIndex].end - currentTime;
-                    const remV = sourceEnd - vv.currentTime;
-                    if (remA > 0.25 && remV > 0) liveRate = Math.min(1.2, Math.max(0.9, remV / remA));
-                    else if (remV <= 0) liveRate = 0.9;
+                  if (segAudioDur > 0 && segVideoDur > 0 && segVideoDur < segAudioDur) {
+                    // Video is shorter than audio narration (would loop at 1.0x)
+                    // Auto-adjust playback rate within 0.9x - 1.3x to fill the audio duration smoothly
+                    targetPlaybackRate = Math.max(0.9, Math.min(1.3, segVideoDur / segAudioDur));
                   }
 
                   if (activeIndex !== lastIndexRef.current) {
@@ -3430,11 +3596,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                           vv.playbackRate = targetPlaybackRate;
                           if (vv.paused) vv.play().catch(() => {});
                         } else {
-                          const isFreezeCycle = av.currentTime % (2 + 12) < 2;
-                          if (!isFreezeCycle) {
-                            vv.playbackRate = targetPlaybackRate;
-                            vv.play().catch(() => {});
-                          }
+                          // SURGICAL FIX: Never pause underlying video to preserve 100% AV Sync
+                          vv.playbackRate = targetPlaybackRate;
+                          vv.play().catch(() => {});
                         }
                       }
                       vv.removeEventListener("seeked", onSeeked);
@@ -3495,25 +3659,66 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       { once: true },
                     );
                   } else if (!seekPendingRef.current) {
-                    // NO-LOOP: never seek back inside a segment. Footage keeps flowing forward;
-                    // speed is auto-adjusted within 0.9x–1.2x so it lands near vEnd with the audio.
-                    if (!freezeModeRef.current) {
-                      if (Math.abs(vv.playbackRate - liveRate) > 0.02) vv.playbackRate = liveRate;
+                    // SURGICAL FIX: AV SYNC 100% — If video has overrun vEnd, hard-seek back to effectiveVStart
+                    // This prevents irrelevant content (eating, dancing, walking) from leaking into the active segment.
+                    const endMargin = 0.08;
+                    if (sourceEnd > effectiveVStart && vv.currentTime >= sourceEnd - endMargin) {
+                      // Hard-cut seek: loop segment — never show content past vEnd
+                      seekPendingRef.current = true;
+                      const onLoopSeeked = () => {
+                        seekPendingRef.current = false;
+                        vv.playbackRate = targetPlaybackRate;
+                        if (!vv.ended) vv.play().catch(() => {});
+                        vv.removeEventListener("seeked", onLoopSeeked);
+                      };
+                      vv.addEventListener("seeked", onLoopSeeked);
+                      vv.currentTime = effectiveVStart; // SURGICAL FIX: loop back to correct source position
+                    } else if (!freezeModeRef.current) {
+                      // freeze OFF = continuous motion within segment boundary
+                      vv.playbackRate = targetPlaybackRate;
                       if (vv.paused && !vv.ended) vv.play().catch(() => {});
                     } else {
-                      // freezeMode ON — draw loop uses frozenFrameCanvasRef for visual freeze
+                      // SURGICAL FIX: freezeMode ON — draw loop uses frozenFrameCanvasRef for visual freeze
+                      // Never pause video element — canvas recording needs continuous frames
                       vv.playbackRate = 1.0;
                       if (vv.paused && !vv.ended) vv.play().catch(() => {});
                     }
                   }
                 } else {
-                  // Between segments — NO-LOOP, NO-PAUSE: keep footage flowing forward slowly (0.9x)
+                  // Between segments — SURGICAL FIX: No pause. Hard-cut seek loop on last active segment.
+                  // Canvas recording requires video to keep playing — pause() would freeze canvas frames.
+                  // Instead: loop the last active segment's content so only relevant footage shows.
                   if (videoInSegmentRef.current) {
                     videoInSegmentRef.current = false;
                   }
                   if (lastIndexRef.current >= 0 && !seekPendingRef.current) {
-                    if (vv.playbackRate !== 0.9) vv.playbackRate = 0.9;
-                    if (vv.paused && !vv.ended) vv.play().catch(() => {});
+                    const lastActiveSeg = getSeg(lastIndexRef.current) as any;
+                    if (lastActiveSeg) {
+                      // SURGICAL FIX: Use effective (audio-proportional) positions for hold loop
+                      const holdEnd =
+                        lastEffectiveVEndRef.current > 0
+                          ? lastEffectiveVEndRef.current
+                          : lastActiveSeg.vEnd === -1
+                            ? vv.duration
+                            : lastActiveSeg.vEnd;
+                      const holdStart =
+                        lastEffectiveVStartRef.current > 0 ? lastEffectiveVStartRef.current : lastActiveSeg.vStart;
+                      // If video has overrun the segment boundary, hard-seek back to holdStart (loop)
+                      if (vv.currentTime >= holdEnd - 0.08 || vv.currentTime < holdStart - 0.1) {
+                        seekPendingRef.current = true;
+                        const onGapSeeked = () => {
+                          seekPendingRef.current = false;
+                          vv.playbackRate = 1.0;
+                          if (!vv.ended) vv.play().catch(() => {});
+                          vv.removeEventListener("seeked", onGapSeeked);
+                        };
+                        vv.addEventListener("seeked", onGapSeeked);
+                        vv.currentTime = holdStart; // hard-cut seek back to segment start
+                      }
+                      // Keep video playing (no pause) — canvas stays active
+                      vv.playbackRate = 1.0;
+                      if (vv.paused && !vv.ended) vv.play().catch(() => {});
+                    }
                   }
                 }
               } else {
@@ -3529,11 +3734,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   activeText = s.text;
                   const fbVEnd = s.vEnd === -1 ? vv.duration : s.vEnd;
                   const fbSourceEnd = fbVEnd > s.vStart ? fbVEnd : vv.duration;
-                  // NO-LOOP AUTO SPEED (fallback): fit footage to audio slot within 0.9x–1.2x
-                  const fbAudioDur = (s.aEndPct - s.aStartPct) * av.duration;
                   const fbVideoDur = fbSourceEnd - s.vStart;
-                  const fbTargetRate =
-                    fbAudioDur > 0 && fbVideoDur > 0 ? Math.min(1.2, Math.max(0.9, fbVideoDur / fbAudioDur)) : 1.0;
+                  const fbAudioDur = (s.aEndPct - s.aStartPct) * av.duration;
+                  let fbTargetRate = 1.0;
+                  if (fbAudioDur > 0 && fbVideoDur > 0 && fbVideoDur < fbAudioDur) {
+                    fbTargetRate = Math.max(0.9, Math.min(1.3, fbVideoDur / fbAudioDur));
+                  }
                   if (activeIndex !== lastIndexRef.current) {
                     // SURGICAL FIX: seekPending guard for AV sync + play during seek for no pause
                     seekPendingRef.current = true;
@@ -3553,16 +3759,51 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     videoInSegmentRef.current = true;
                     segCutTimeRef.current = performance.now();
                   } else if (!seekPendingRef.current) {
-                    // NO-LOOP: keep flowing forward; slow to 0.9x once past vEnd instead of seeking back
-                    const fbRate = vv.currentTime >= fbSourceEnd ? 0.9 : fbTargetRate;
-                    if (Math.abs(vv.playbackRate - fbRate) > 0.02) vv.playbackRate = fbRate;
-                    if (vv.paused && !vv.ended) vv.play().catch(() => {});
+                    // SURGICAL FIX: AV SYNC 100% fallback — loop back at segment end, no content overrun
+                    const fbEndMargin = 0.08;
+                    if (fbSourceEnd > s.vStart && vv.currentTime >= fbSourceEnd - fbEndMargin) {
+                      // Hard-cut loop: prevent irrelevant footage past vEnd
+                      seekPendingRef.current = true;
+                      const onFbLoopSeeked = () => {
+                        seekPendingRef.current = false;
+                        vv.playbackRate = fbTargetRate;
+                        if (!vv.ended) vv.play().catch(() => {});
+                        vv.removeEventListener("seeked", onFbLoopSeeked);
+                      };
+                      vv.addEventListener("seeked", onFbLoopSeeked);
+                      vv.currentTime = s.vStart;
+                    } else if (!freezeModeRef.current) {
+                      // freeze OFF = continuous motion within segment boundary
+                      vv.playbackRate = fbTargetRate;
+                      if (vv.paused && !vv.ended) vv.play().catch(() => {});
+                    } else {
+                      // SURGICAL FIX: freezeMode ON fallback — frozenFrameCanvasRef handles visual freeze
+                      // Never pause video — canvas needs continuous frames
+                      vv.playbackRate = fbTargetRate;
+                      if (vv.paused && !vv.ended) vv.play().catch(() => {});
+                    }
                   }
                 } else {
-                  // Between fallback segments — NO-LOOP, NO-PAUSE: flow forward at 0.9x
+                  // Between fallback segments — SURGICAL FIX: No pause. Hard-cut seek loop on last active segment.
                   if (lastIndexRef.current >= 0 && !seekPendingRef.current) {
-                    if (vv.playbackRate !== 0.9) vv.playbackRate = 0.9;
-                    if (vv.paused && !vv.ended) vv.play().catch(() => {});
+                    const lastFbSeg = segs[lastIndexRef.current] as any;
+                    if (lastFbSeg) {
+                      const fbHoldEnd = lastFbSeg.vEnd === -1 ? vv.duration : lastFbSeg.vEnd;
+                      const fbHoldStart = lastFbSeg.vStart;
+                      if (vv.currentTime >= fbHoldEnd - 0.08 || vv.currentTime < fbHoldStart - 0.1) {
+                        seekPendingRef.current = true;
+                        const onFbGapSeeked = () => {
+                          seekPendingRef.current = false;
+                          vv.playbackRate = 1.0;
+                          if (!vv.ended) vv.play().catch(() => {});
+                          vv.removeEventListener("seeked", onFbGapSeeked);
+                        };
+                        vv.addEventListener("seeked", onFbGapSeeked);
+                        vv.currentTime = fbHoldStart; // hard-cut seek back
+                      }
+                      vv.playbackRate = 1.0;
+                      if (vv.paused && !vv.ended) vv.play().catch(() => {});
+                    }
                   }
                 }
               }
@@ -3611,10 +3852,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               }
               // // —— BONUS: Mid-Video Retention Teaser — trigger at 28% of audio duration ——
               const av28 = audioRef.current;
-              if (av28 && av28.duration > 0 && !midTeaserShownRef.current && av28.currentTime / av28.duration >= 0.28) {
-                midTeaserShownRef.current = true;
-                midTeaserStartRef.current = performance.now();
-              }
+              // SURGICAL FIX: "Coming Up" teaser disabled — user preference.
+              // if (av28 && av28.duration > 0 && !midTeaserShownRef.current && av28.currentTime / av28.duration >= 0.28) {
+              //   midTeaserShownRef.current = true;
+              //   midTeaserStartRef.current = performance.now();
+              // }
             } else if (currentSubtitleRef.current !== "") {
               setCurrentSubtitle("");
               currentSubtitleRef.current = "";
@@ -3624,13 +3866,19 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // End of AV sync block (runs every frame)
 
         // // —— ENCODER PUSH: Ensure encoder receives frames at steady target FPS ——
-        // SURGICAL FIX: Single steady tick — draw + encode together at target FPS (no 60fps overload, no stale frames)
-        if (!_skipDraw && timestamp - lastDrawTime >= adaptiveFrameInterval) {
+        // SURGICAL FIX: Single steady tick with 4ms jitter tolerance — draws & pushes every frame cleanly without dropping cycles
+        if (timestamp - lastDrawTime >= adaptiveFrameInterval - 4) {
           lastDrawTime = timestamp;
-          lastEncPushTime = timestamp;
           drawFrame(false);
           try {
             encCtx.drawImage(canvas, 0, 0, encW, encH);
+            // Direct MP4: encode the encoder-sized canvas so frame size matches the H.264 config.
+            if (webCodecsRecorder) {
+              const timeUs = Math.round(
+                (Math.max(0, audioEl.currentTime) || Math.max(0, (timestamp - recordingStartTime) / 1000)) * 1_000_000,
+              );
+              webCodecsRecorder.encodeVideoFrame(encCanvas, timeUs);
+            }
             if (encTrack && typeof encTrack.requestFrame === "function") encTrack.requestFrame();
           } catch (e) {
             console.warn("[RECORDING] Encoder push failed:", e);
@@ -3650,21 +3898,21 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // SURGICAL EDIT: Apply user-selected audioSpeedRate at recording start
       if (audioRef.current) {
         audioRef.current.playbackRate = audioSpeedRate;
-        audioRef.current.play().catch(console.error);
+        audioRef.current.play().catch((aErr) => {
+          console.warn("[RECORDING] iOS Audio autoplay warning:", aErr);
+          audioRef.current?.play().catch(() => {});
+        });
       }
       if (videoRef.current) {
         videoRef.current.playbackRate = 1.0;
-        // SURGICAL FIX: Only auto-play if NOT in a freeze cycle of freezeMode
-        const isFreezeCycle = freezeModeRef.current && audioRef.current!.currentTime % (2 + 12) < 2;
-        if (!isFreezeCycle) {
-          videoRef.current.play().catch((err) => {
-            // SURGICAL IOS FIX: Safely bypass the WebKit muted autoplay bug.
-            console.warn("[RECORDING] iOS Video freeze detected, applying safe hardware reload...", err);
-            videoRef.current!.muted = true;
-            videoRef.current!.load();
-            videoRef.current!.play().catch(console.error);
-          });
-        }
+        // SURGICAL FIX: ALWAYS auto-play underlying video for 100% AV Sync
+        videoRef.current.play().catch((err) => {
+          // SURGICAL IOS FIX: Safely bypass the WebKit muted autoplay bug.
+          console.warn("[RECORDING] iOS Video freeze detected, applying safe hardware reload...", err);
+          videoRef.current!.muted = true;
+          videoRef.current!.load();
+          videoRef.current!.play().catch(console.error);
+        });
       }
 
       recapAnimFrameRef.current = requestAnimationFrame(syncAndDraw);
@@ -3766,6 +4014,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           <audio
             ref={audioRef}
             src={audioUrl}
+            playsInline
+            preload="auto"
             crossOrigin={isLocalSource(audioUrl) ? undefined : "anonymous"}
             style={{ position: "absolute", opacity: 0, pointerEvents: "none" }}
             onLoadedMetadata={() => {
@@ -5195,144 +5445,24 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
                             console.log("🔄 Converting to MP4...");
 
-                            // Dynamic import for FFmpeg with better error handling
-                            const loadFFmpeg = async () => {
-                              // Check if already loaded
-                              const win = window as any;
-                              if (win.FFmpeg?.FFmpeg) return win.FFmpeg.FFmpeg;
-                              if (win.FFmpeg) return win.FFmpeg;
-
-                              return new Promise<any>((resolve, reject) => {
-                                // Check if script is already loading/loaded
-                                const existingScript = document.querySelector('script[src*="@ffmpeg/ffmpeg"]');
-                                if (!existingScript) {
-                                  const script = document.createElement("script");
-                                  script.src = "https://unpkg.com/@ffmpeg/ffmpeg@0.12.7/dist/umd/ffmpeg.js";
-                                  script.async = true;
-                                  script.onload = () => {
-                                    // Script loaded, check for FFmpeg immediately
-                                    const w = window as any;
-                                    if (w.FFmpeg?.FFmpeg) {
-                                      resolve(w.FFmpeg.FFmpeg);
-                                    } else if (w.FFmpeg) {
-                                      resolve(w.FFmpeg);
-                                    }
-                                  };
-                                  script.onerror = () => reject(new Error("Failed to load FFmpeg script"));
-                                  document.head.appendChild(script);
-                                }
-
-                                // Wait for FFmpeg to be available (check every 100ms)
-                                let attempts = 0;
-                                const maxAttempts = 300; // 30 seconds
-                                const checkFFmpeg = () => {
-                                  attempts++;
-                                  const w = window as any;
-                                  if (w.FFmpeg?.FFmpeg) {
-                                    resolve(w.FFmpeg.FFmpeg);
-                                  } else if (w.FFmpeg) {
-                                    resolve(w.FFmpeg);
-                                  } else if (attempts >= maxAttempts) {
-                                    reject(new Error("FFmpeg failed to load after 30 seconds"));
-                                  } else {
-                                    setTimeout(checkFFmpeg, 100);
-                                  }
-                                };
-                                // Start checking after a short delay if script was already there
-                                if (existingScript) {
-                                  checkFFmpeg();
-                                } else {
-                                  setTimeout(checkFFmpeg, 500);
-                                }
-                              });
-                            };
-
-                            const FFmpegModule = await loadFFmpeg();
-
-                            if (btn) btn.innerHTML = `<span class="animate-spin">⏳</span> Initializing...`;
-
-                            const ffmpeg = new FFmpegModule();
-
-                            // Load FFmpeg with progress logging
-                            await ffmpeg.load({
-                              coreURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js",
-                              wasmURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm",
-                            });
-
-                            if (btn) btn.innerHTML = `<span class="animate-spin">⏳</span> Downloading video...`;
-
-                            // Fetch video with timeout and size check
-                            const controller = new AbortController();
-                            const timeoutId = setTimeout(() => controller.abort(), 60000);
-
-                            const response = await fetch(inputVideo, { signal: controller.signal });
-                            clearTimeout(timeoutId);
-
+                            const response = await fetch(inputVideo);
                             if (!response.ok) {
                               throw new Error(`Failed to fetch video: ${response.status} ${response.statusText}`);
                             }
-
                             const videoBlob = await response.blob();
                             const videoSizeMB = videoBlob.size / (1024 * 1024);
 
-                            // Check file size (limit to 500MB for browser memory)
-                            if (videoSizeMB > 500) {
-                              throw new Error(
-                                `Video too large (${videoSizeMB.toFixed(1)}MB). Maximum is 500MB. Use the online converter instead.`,
-                              );
+                            const result = await convertToRealMp4(videoBlob, {
+                              sourceMime: videoBlob.type,
+                              onProgress: (_p, msg) => {
+                                if (btn) btn.innerHTML = `<span class="animate-spin">⏳</span> ${msg}`;
+                              },
+                            });
+                            if (!result.isRealMp4) {
+                              throw new Error(result.error || "MP4 conversion failed");
                             }
 
-                            if (btn)
-                              btn.innerHTML = `<span class="animate-spin">⏳</span> Processing (${videoSizeMB.toFixed(1)}MB)...`;
-
-                            // Write file to FFmpeg virtual filesystem
-                            const videoArrayBuffer = await videoBlob.arrayBuffer();
-                            await ffmpeg.writeFile("input.webm", new Uint8Array(videoArrayBuffer));
-
-                            if (btn) btn.innerHTML = `<span class="animate-spin">⏳</span> Converting to MP4...`;
-
-                            // Run conversion with better codec settings
-                            const result = await ffmpeg.exec([
-                              "-i",
-                              "input.webm",
-                              "-c:v",
-                              "libx264",
-                              "-preset",
-                              "ultrafast",
-                              "-crf",
-                              "23",
-                              "-c:a",
-                              "aac",
-                              "-b:a",
-                              "128k",
-                              "-movflags",
-                              "+faststart",
-                              "-pix_fmt",
-                              "yuv420p",
-                              "-vsync",
-                              "vfr",
-                              "output.mp4",
-                            ]);
-
-                            if (result !== 0) {
-                              throw new Error(`FFmpeg conversion failed with code ${result}`);
-                            }
-
-                            if (btn) btn.innerHTML = `<span class="animate-spin">⏳</span> Finalizing...`;
-
-                            // Read output file
-                            const data = await ffmpeg.readFile("output.mp4");
-
-                            // Clean up FFmpeg filesystem
-                            try {
-                              await ffmpeg.deleteFile("input.webm");
-                              await ffmpeg.deleteFile("output.mp4");
-                            } catch (_) {
-                              // Ignore cleanup errors
-                            }
-
-                            // Create download
-                            const mp4Blob = new Blob([data.buffer], { type: "video/mp4" });
+                            const mp4Blob = result.blob;
                             const mp4Url = URL.createObjectURL(mp4Blob);
                             const outputSizeMB = mp4Blob.size / (1024 * 1024);
 
@@ -5343,12 +5473,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                             a.click();
                             document.body.removeChild(a);
 
-                            // Cleanup URL after delay
                             setTimeout(() => URL.revokeObjectURL(mp4Url), 300000);
 
-                            console.log("✅ MP4 conversion complete!");
                             alert(
-                              `✅ Conversion complete!\nInput: ${videoSizeMB.toFixed(1)}MB\nOutput: ${outputSizeMB.toFixed(1)}MB`,
+                              `✅ MP4 (H.264) ပြောင်းပြီးပါပြီ!\nInput: ${videoSizeMB.toFixed(1)}MB\nOutput: ${outputSizeMB.toFixed(1)}MB`,
                             );
                           } catch (e: any) {
                             console.error("Conversion failed:", e);
@@ -5458,56 +5586,64 @@ interface RecapHistoryItem {
 }
 
 const VOICE_OPTIONS = [
+  // ── VOICE CLONE (user-uploaded custom voice) ──
+  // { value: "clone:USER_VOICE_ID", label: "🎤 My Cloned Voice", gender: "Custom", ttsModel: "gemini-3.8-flash-tts" },
+
+  // ── GEMINI 3.8 FLASH TTS — Studio Voices (30 prebuilt, best quality) ──
+  { value: "Kore", label: "🌟 Kore (Studio — Female)", gender: "Female", ttsModel: "gemini-3.8-flash-tts" },
+  { value: "Zephyr", label: "🌟 Zephyr (Studio — Female)", gender: "Female", ttsModel: "gemini-3.8-flash-tts" },
+  { value: "Puck", label: "🌟 Puck (Studio — Male)", gender: "Male", ttsModel: "gemini-3.8-flash-tts" },
+  { value: "Charon", label: "🌟 Charon (Studio — Male)", gender: "Male", ttsModel: "gemini-3.8-flash-tts" },
+  { value: "Fenrir", label: "🌟 Fenrir (Studio — Male)", gender: "Male", ttsModel: "gemini-3.8-flash-tts" },
+  { value: "Leda", label: "🌟 Leda (Studio — Female)", gender: "Female", ttsModel: "gemini-3.8-flash-tts" },
+  { value: "Orus", label: "🌟 Orus (Studio — Male)", gender: "Male", ttsModel: "gemini-3.8-flash-tts" },
+  { value: "Aoede", label: "🌟 Aoede (Studio — Female)", gender: "Female", ttsModel: "gemini-3.8-flash-tts" },
+
+  // ── GEMINI 3.8 FLASH TTS — Extended Library ──
+  { value: "Enceladus", label: "Enceladus (Male)", gender: "Male", ttsModel: "gemini-3.8-flash-tts" },
+  { value: "Iapetus", label: "Iapetus (Male)", gender: "Male", ttsModel: "gemini-3.8-flash-tts" },
+  { value: "Umbriel", label: "Umbriel (Male)", gender: "Male", ttsModel: "gemini-3.8-flash-tts" },
+  { value: "Algieba", label: "Algieba (Male)", gender: "Male", ttsModel: "gemini-3.8-flash-tts" },
+  { value: "Despina", label: "Despina (Female)", gender: "Female", ttsModel: "gemini-3.8-flash-tts" },
+  { value: "Erinome", label: "Erinome (Female)", gender: "Female", ttsModel: "gemini-3.8-flash-tts" },
+  { value: "Algenib", label: "Algenib (Male)", gender: "Male", ttsModel: "gemini-3.8-flash-tts" },
+  { value: "Rasalgethi", label: "Rasalgethi (Male)", gender: "Male", ttsModel: "gemini-3.8-flash-tts" },
+  { value: "Laomedeia", label: "Laomedeia (Female)", gender: "Female", ttsModel: "gemini-3.8-flash-tts" },
+  { value: "Achernar", label: "Achernar (Male)", gender: "Male", ttsModel: "gemini-3.8-flash-tts" },
+  { value: "Alnilam", label: "Alnilam (Male)", gender: "Male", ttsModel: "gemini-3.8-flash-tts" },
+  { value: "Schedar", label: "Schedar (Male)", gender: "Male", ttsModel: "gemini-3.8-flash-tts" },
+  { value: "Gacrux", label: "Gacrux (Male)", gender: "Male", ttsModel: "gemini-3.8-flash-tts" },
+  { value: "Pulcherrima", label: "Pulcherrima (Female)", gender: "Female", ttsModel: "gemini-3.8-flash-tts" },
+  { value: "Achird", label: "Achird (Male)", gender: "Male", ttsModel: "gemini-3.8-flash-tts" },
+  { value: "Zubenelgenubi", label: "Zubenelgenubi (Male)", gender: "Male", ttsModel: "gemini-3.8-flash-tts" },
+  { value: "Vindemiatrix", label: "Vindemiatrix (Female)", gender: "Female", ttsModel: "gemini-3.8-flash-tts" },
+  { value: "Sadachbia", label: "Sadachbia (Male)", gender: "Male", ttsModel: "gemini-3.8-flash-tts" },
+  { value: "Sadaltager", label: "Sadaltager (Male)", gender: "Male", ttsModel: "gemini-3.8-flash-tts" },
+  { value: "Sulafat", label: "Sulafat (Female)", gender: "Female", ttsModel: "gemini-3.8-flash-tts" },
+
+  // ── GEMINI 3.8 FLASH-LITE TTS — Fast/Cost-efficient ──
+  { value: "Kore", label: "Kore Lite (Female — Fast)", gender: "Female", ttsModel: "gemini-3.8-flash-lite-tts" },
+  { value: "Puck", label: "Puck Lite (Male — Fast)", gender: "Male", ttsModel: "gemini-3.8-flash-lite-tts" },
+  { value: "Charon", label: "Charon Lite (Male — Fast)", gender: "Male", ttsModel: "gemini-3.8-flash-lite-tts" },
+  { value: "Zephyr", label: "Zephyr Lite (Female — Fast)", gender: "Female", ttsModel: "gemini-3.8-flash-lite-tts" },
+  { value: "Aoede", label: "Aoede Lite (Female — Fast)", gender: "Female", ttsModel: "gemini-3.8-flash-lite-tts" },
+
+  // ── EDGE TTS — Microsoft Neural Voices (free, no API key needed) ──
   { value: "edge:my-MM-ThihaNeural", label: "⭐ Thiha (Burmese Native — Male)", gender: "Male" },
   { value: "edge:my-MM-NilarNeural", label: "⭐ Nilar (Burmese Native — Female)", gender: "Female" },
-  { value: "edge:it-IT-GiuseppeMultilingualNeural", label: "Giuseppe (Multilingual — Male 🇮🇹)", gender: "Male" },
-  { value: "edge:en-US-AndrewMultilingualNeural", label: "Andrew (Multilingual — Male 🇺🇸)", gender: "Male" },
-  { value: "edge:en-US-AvaMultilingualNeural", label: "Ava (Multilingual — Female 🇺🇸)", gender: "Female" },
-  { value: "edge:en-US-BrianMultilingualNeural", label: "Brian (Multilingual — Male 🇺🇸)", gender: "Male" },
-  { value: "edge:en-US-EmmaMultilingualNeural", label: "Emma (Multilingual — Female 🇺🇸)", gender: "Female" },
-  { value: "edge:en-AU-WilliamMultilingualNeural", label: "William (Multilingual — Male 🇦🇺)", gender: "Male" },
-  { value: "edge:de-DE-FlorianMultilingualNeural", label: "Florian (Multilingual — Male 🇩🇪)", gender: "Male" },
-  { value: "edge:de-DE-SeraphinaMultilingualNeural", label: "Seraphina (Multilingual — Female 🇩🇪)", gender: "Female" },
-  { value: "edge:fr-FR-RemyMultilingualNeural", label: "Remy (Multilingual — Male 🇫🇷)", gender: "Male" },
-  { value: "edge:fr-FR-VivienneMultilingualNeural", label: "Vivienne (Multilingual — Female 🇫🇷)", gender: "Female" },
-  { value: "edge:ko-KR-HyunsuMultilingualNeural", label: "Hyunsu (Multilingual — Male 🇰🇷)", gender: "Male" },
-  { value: "edge:pt-BR-ThalitaMultilingualNeural", label: "Thalita (Multilingual — Female 🇧🇷)", gender: "Female" },
-  { value: "Zephyr", label: "Zephyr (Female)", gender: "Female" },
-  { value: "Puck", label: "Puck (Male)", gender: "Male" },
-  { value: "Charon", label: "Charon (Male)", gender: "Male" },
-  { value: "Kore", label: "Kore (Female)", gender: "Female" },
-  { value: "Fenrir", label: "Fenrir (Male)", gender: "Male" },
-  { value: "Leda", label: "Leda (Male)", gender: "ale" },
-  { value: "Orus", label: "Orus (Male)", gender: "Male" },
-  { value: "Aoede", label: "Aoede (Female)", gender: "Female" },
-  { value: "Enceladus", label: "Enceladus (Male)", gender: "Male" },
-  { value: "Iapetus", label: "Iapetus (Male)", gender: "Male" },
-  { value: "Umbriel", label: "Umbriel (Male)", gender: "Male" },
-  { value: "Algieba", label: "Algieba (Male)", gender: "Male" },
-  { value: "Despina", label: "Despina (Male)", gender: "Male" },
-  { value: "Erinome", label: "Erinome (Male)", gender: "Male" },
-  { value: "Algenib", label: "Algenib (Male)", gender: "Male" },
-  { value: "Rasalgethi", label: "Rasalgethi (Male)", gender: "Male" },
-  { value: "Laomedeia", label: "Laomedeia (Male)", gender: "Male" },
-  { value: "Achernar", label: "Achernar (Male)", gender: "Male" },
-  { value: "Alnilam", label: "Alnilam (Male)", gender: "Male" },
-  { value: "Schedar", label: "Schedar (Male)", gender: "Male" },
-  { value: "Gacrux", label: "Gacrux (Male)", gender: "Male" },
-  { value: "Pulcherrima", label: "Pulcherrima (Male)", gender: "Male" },
-  { value: "Achird", label: "Achird (Male)", gender: "Male" },
-  { value: "Zubenelgenubi", label: "Zubenelgenubi (Male)", gender: "Male" },
-  { value: "Vindemiatrix", label: "Vindemiatrix (Male)", gender: "Male" },
-  { value: "Sadachbia", label: "Sadachbia (Male)", gender: "Male" },
-  { value: "Sadaltager", label: "Sadaltager (Male)", gender: "Male" },
-  { value: "Sulafat", label: "Sulafat (Male)", gender: "Male" },
-  { value: "Emily", label: "Emily (Male)", gender: "Male" },
-  { value: "Sarah", label: "Sarah (Male)", gender: "Male" },
-  { value: "Michael", label: "Michael (Male)", gender: "Male" },
-  { value: "Emma", label: "Emma (Male)", gender: "Male" },
-  { value: "James", label: "James (Male)", gender: "Male" },
-  { value: "Charlotte", label: "Charlotte (Male)", gender: "Male" },
-  { value: "William", label: "William (Male)", gender: "Male" },
-];
+  { value: "edge:it-IT-GiuseppeMultilingualNeural", label: "Giuseppe (Multilingual — Male)", gender: "Male" },
+  { value: "edge:en-US-AndrewMultilingualNeural", label: "Andrew (Multilingual — Male)", gender: "Male" },
+  { value: "edge:en-US-AvaMultilingualNeural", label: "Ava (Multilingual — Female)", gender: "Female" },
+  { value: "edge:en-US-BrianMultilingualNeural", label: "Brian (Multilingual — Male)", gender: "Male" },
+  { value: "edge:en-US-EmmaMultilingualNeural", label: "Emma (Multilingual — Female)", gender: "Female" },
+  { value: "edge:en-AU-WilliamMultilingualNeural", label: "William (Multilingual — Male)", gender: "Male" },
+  { value: "edge:de-DE-FlorianMultilingualNeural", label: "Florian (Multilingual — Male)", gender: "Male" },
+  { value: "edge:de-DE-SeraphinaMultilingualNeural", label: "Seraphina (Multilingual — Female)", gender: "Female" },
+  { value: "edge:fr-FR-RemyMultilingualNeural", label: "Remy (Multilingual — Male)", gender: "Male" },
+  { value: "edge:fr-FR-VivienneMultilingualNeural", label: "Vivienne (Multilingual — Female)", gender: "Female" },
+  { value: "edge:ko-KR-HyunsuMultilingualNeural", label: "Hyunsu (Multilingual — Male)", gender: "Male" },
+  { value: "edge:pt-BR-ThalitaMultilingualNeural", label: "Thalita (Multilingual — Female)", gender: "Female" },
+] as const;
 
 // ===== NARRATION STYLE PRESETS (niche-agnostic, prompt-only) =====
 const NARRATION_STYLE_OPTIONS: Record<"STORY" | "HYBRID" | "VIRAL", { emoji: string; label: string; hint: string }> = {
@@ -5594,8 +5730,8 @@ STREET-SPOKEN STYLE & MODERN SLANG (HYBRID/VIRAL only):
 - THIS OVERRIDES any earlier instruction that says to avoid quoting dialogue: quoting real spoken lines is REQUIRED in this style.${timingLockBlock}${translitBlock}`;
   }
   return `\n\nNARRATION STYLE — STORY (full narrative, long-form):
-- Keep the classic complete narrator style: clear beginning-to-end storytelling with smooth flow and emotional depth.
-- Translate what people actually said when it matters, but stay primarily in narrator voice.${translitBlock}`;
+  - Keep the classic complete narrator style: clear beginning-to-end storytelling with smooth flow and emotional depth.
+  - Translate what people actually said when it matters, but stay primarily in narrator voice.${translitBlock}`;
 }
 
 const RecapVideoNVPage: React.FC = () => {
@@ -5637,6 +5773,13 @@ const RecapVideoNVPage: React.FC = () => {
   const hookSegmentIdxRef = useRef<number>(-1);
   const hookTitleRef = useRef<string>("");
   const [autoStartRecap, setAutoStartRecap] = useState(false);
+  // SURGICAL EDIT: Auto Batch Segmenter states
+  const [autoBatchActive, setAutoBatchActive] = useState(false);
+  const [batchIntervalMin, setBatchIntervalMin] = useState<number>(5);
+  const [isBatchPaused, setIsBatchPaused] = useState(false);
+  const autoBatchActiveRef = useRef<boolean>(false);
+  const isBatchPausedRef = useRef<boolean>(false);
+  const batchCurrentChunkRef = useRef<number>(0);
   const [voiceMode, setVoiceMode] = useState<"modern" | "normal">("normal");
   const [recapHistory, setRecapHistory] = useState<RecapHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -5644,6 +5787,8 @@ const RecapVideoNVPage: React.FC = () => {
   // ===== NARRATION STYLE (additive — prompt-only, does not touch render/AV-sync) =====
   const [narrationStyle, setNarrationStyle] = useState<"STORY" | "HYBRID" | "VIRAL">("STORY");
   const [selectedVoice, setSelectedVoice] = useState("edge:my-MM-ThihaNeural");
+  const [customVoiceId, setCustomVoiceId] = useState("");
+  const [showCloneVoiceBox, setShowCloneVoiceBox] = useState(false);
 
   // Auto-update selected voice when selected language changes
   useEffect(() => {
@@ -6396,12 +6541,17 @@ const RecapVideoNVPage: React.FC = () => {
       const langCode = selectedLanguage.split("-")[0];
       const NATIVE_VOICE_INSTRUCTIONS: Record<string, string> = {
         my:
-          "You MUST speak in 100% authentic professional native Burmese (á€—á€™á€¬á€…á€€á€¬á€¸) with a modern Yangon-standard accent. " +
+          "You MUST speak in 100% authentic professional native Burmese (ဗမာစကား) with a modern Yangon-standard accent. " +
           "Speak exactly like a real professional native Burmese person in their 20s-30s speaking naturally in everyday modern Burmese. " +
           "DO NOT mix any Chinese tone, Kachin accent, Shan accent, European accent, or any ethnic minority accent whatsoever. " +
-          "Pure á€—á€™á€¬á€œá€±á€žá€¶á€…á€…á€ºá€…á€…á€º only â€” natural, fluent, warm, and confident modern Burmese speaking voice. " +
+          "Pure ဗမာလေသံစစ်စစ် only — natural, fluent, warm, and confident modern Burmese speaking voice. " +
           "Pronounce every Burmese syllable, consonant cluster, and tone with perfect native Burmese phonology. " +
-          "Human-like delivery: natural intonation and light breathing; NEVER robotic cadence.",
+          "Human-like delivery: natural intonation and light breathing; NEVER robotic cadence. " +
+          "CRITICAL QUALITY RULES: " +
+          "1. Voice MUST sound like a real human living in modern Yangon — authentic native pronunciation without foreign or ethnic accent. " +
+          "2. Delivery MUST be natural and grounded — STRICTLY NO over-emotion, no cartoonish acting, no melodrama. " +
+          "3. Voice quality MUST NOT degrade, crack, or fade — maintain full volume, studio clarity, and crispness throughout. " +
+          "4. Timbre, tone, volume, pitch, gender, age, and character role MUST stay 100% CONSISTENT from the first word to the last.",
         en:
           "Speak in 100% natural native English with a clear, modern, professional American or British accent. " +
           "Sound like a real native English-speaking human â€” warm, confident, and naturally fluent.",
@@ -6420,26 +6570,36 @@ const RecapVideoNVPage: React.FC = () => {
         `Speak in 100% authentic native ${langCode} language. Sound like a real native human speaker â€” natural, fluent, warm, and confident. ` +
           `Do NOT mix any foreign accent. Use perfect native pronunciation and modern standard speaking style.`;
 
+      // SURGICAL FIX: Resolve ttsModel and custom voice ID (Gemini 3.8 Flash TTS / Lite TTS)
+      const isCustomClonedVoice =
+        typeof selectedVoice === "string" &&
+        (selectedVoice.startsWith("custom:") || selectedVoice.startsWith("voice_"));
+      const rawCustomVoiceId = isCustomClonedVoice ? selectedVoice.replace(/^custom:/, "") : "";
+      const selectedVoiceOption = VOICE_OPTIONS.find((v) => v.value === selectedVoice);
+      const resolvedTtsModel = (selectedVoiceOption as any)?.ttsModel || "gemini-3.8-flash-tts";
+
       const bodyPayload: Record<string, unknown> = {
         text: speechTextForAPI,
-        voiceName: selectedVoice,
+        voiceName: isCustomClonedVoice ? rawCustomVoiceId : selectedVoice,
+        ...(isCustomClonedVoice ? { isCustomVoice: true, voiceId: rawCustomVoiceId } : {}),
         languageCode: langCode,
         skipCreditDeduction: true,
+        ttsModel: resolvedTtsModel,
         speedMode: voiceMode === "normal" ? "modern" : voiceMode,
         nativeVoiceInstructions:
           nativeInstructions +
           " CRITICAL: You MUST narrate the COMPLETE text from BEGINNING to END without skipping any part. Start from the very first word and continue to the very last word. Do NOT truncate or summarize.",
-        // â”€â”€ PACING & EMOTION: compelling continuous storytelling, zero dead air, international recap channel quality â”€â”€
+        // ── PACING & CONSISTENCY: studio-grade clarity, zero dead air, 100% voice stability ──
         styleInstructions:
           nativeInstructions +
           ` CINEMATIC STORYTELLING VOICE: You are the voice of a world-class movie recap channel. ` +
-          ` Your voice must be GRIPPING, COMPELLING, and CONTINUOUS â€” like MrBallen, Daniel Gonzalez, or StoryRecapped narrators. ` +
-          ` NEVER leave dead air or long pauses between sentences. Each sentence must flow IMMEDIATELY into the next with momentum. ` +
-          ` Build tension, suspense, and curiosity in your voice. Make the listener NEED to hear what happens next. ` +
-          ` Automatically adapt emotional intensity to match the scene: whisper for horror, urgency for action, warmth for romance, shock for twists. ` +
+          ` Your voice must be GRIPPING, COMPELLING, and CONTINUOUS with natural forward momentum. ` +
+          ` NEVER leave dead air or awkward pauses between sentences. Each sentence must flow smoothly into the next. ` +
+          ` Grounded realism: speak naturally like a real human. STRICTLY AVOID over-emotion, melodrama, or cartoonish delivery. ` +
+          ` Keep voice quality, studio clarity, volume, timbre, and character tone 100% consistent throughout the entire narration without fading or cracking. ` +
           (voiceMode === "modern"
-            ? ` Pace: FAST and high-energy like a thriller narrator. Sentences connect rapidly with NO gaps. Only allow the tiniest breath at major story beats. Sound urgent, exciting, and unrelenting. Keep the audience on the edge of their seat.`
-            : ` Pace: Confident, clear, and steadily flowing like a professional documentary narrator. Sentences connect smoothly with minimal pauses. Sound authoritative and engaging. Never drag or slow down between sentences.`),
+            ? ` Pace: FAST and energetic like a modern recap narrator. Sentences connect rapidly with minimal gaps.`
+            : ` Pace: Confident, clear, and steadily flowing like a professional documentary narrator.`),
         voiceConfig: {
           speakingStyle: "natural_conversational",
           pronunciationStrictness: "native_only",
@@ -6579,7 +6739,25 @@ const RecapVideoNVPage: React.FC = () => {
     }
   };
 
-  const startAutoPipeline = async (file: File) => {
+  // SURGICAL EDIT: Auto Batch Orchestrator
+  const runAutoBatchStep = async (file: File, chunkIndex: number) => {
+    if (!autoBatchActiveRef.current || isBatchPausedRef.current) return;
+    const intervalSecs = batchIntervalMin * 60;
+    const startSec = chunkIndex * intervalSecs;
+    const endSec = startSec + intervalSecs;
+    const totalDuration = videoDurationRef.current || 120;
+    if (startSec >= totalDuration) {
+      setProgressMsg("✅ Auto Batch ပြီးဆုံးပါပြီ။");
+      setAutoBatchActive(false);
+      autoBatchActiveRef.current = false;
+      return;
+    }
+    setSeriesEnabled(true);
+    setSeriesPart(String(chunkIndex + 1));
+    await startAutoPipeline(file, startSec, endSec);
+  };
+
+  const startAutoPipeline = async (file: File, batchStartSec?: number, batchEndSec?: number) => {
     const resolvedApiMode = apiMode;
     const resolvedOwnKey = apiMode === "own" ? ownApiKey.trim() : "";
     activePipelineApiModeRef.current = resolvedApiMode;
@@ -6608,11 +6786,7 @@ const RecapVideoNVPage: React.FC = () => {
         };
         v.src = tempUrl;
       });
-      if (duration > 1800) {
-        throw new Error(
-          "ဒီ app မှာ 30 မိနစ်ထက်ကျော်တဲ့ video ကို recap မလုပ်နိုင်သေးပါ။ 30 မိနစ်အောက် video ကိုရွေးပေးပါ။",
-        );
-      }
+      // SURGICAL FIX: Removed 30-min duration cap to allow Long Video Auto Batch Recap
       videoDurationRef.current = duration;
       if (duration > 1320) {
         toast.warning(
@@ -6637,46 +6811,49 @@ const RecapVideoNVPage: React.FC = () => {
       };
       const mimeType = file.type || mimeMap[ext] || "video/mp4";
 
-      setProgressMsg("📤 Google AI ဆီ video upload လုပ်နေပါသည်...");
+      // SURGICAL FIX: Batch mode — reuse existing Gemini file URI, skip redundant re-upload
+      let fileUri = batchStartSec !== undefined && sourceFileUriRef?.current ? sourceFileUriRef.current : "";
+      if (!fileUri) {
+        setProgressMsg("📤 Google AI ဆီ video upload လုပ်နေပါသည်...");
 
-      const { data: urlData, error: urlError } = await supabase.functions.invoke(
-        resolvedOwnKey ? "get-upload-url" : "video-recap",
-        {
-          body: {
-            ...(resolvedOwnKey ? { ownApiKey: resolvedOwnKey, apiKey: resolvedOwnKey } : { action: "initUpload" }),
-            fileName: file.name,
-            fileSize: file.size,
-            mimeType,
+        const { data: urlData, error: urlError } = await supabase.functions.invoke(
+          resolvedOwnKey ? "get-upload-url" : "video-recap",
+          {
+            body: {
+              ...(resolvedOwnKey ? { ownApiKey: resolvedOwnKey, apiKey: resolvedOwnKey } : { action: "initUpload" }),
+              fileName: file.name,
+              fileSize: file.size,
+              mimeType,
+            },
+            headers: resolvedOwnKey ? { "x-own-api-key": resolvedOwnKey } : undefined,
           },
-          headers: resolvedOwnKey ? { "x-own-api-key": resolvedOwnKey } : undefined,
-        },
-      );
-      if (urlError || urlData?.error || !urlData?.uploadUrl)
-        throw new Error(urlData?.error || urlError?.message || "Upload URL ရယူ၍ မအောင်မြင်ပါ");
-      const uploadUrl = urlData.uploadUrl;
+        );
+        if (urlError || urlData?.error || !urlData?.uploadUrl)
+          throw new Error(urlData?.error || urlError?.message || "Upload URL ရယူ၍ မအောင်မြင်ပါ");
+        const uploadUrl = urlData.uploadUrl;
 
-      const CHUNK_SIZE = 8 * 1024 * 1024;
-      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-      let fileUri = "";
-      for (let i = 0; i < totalChunks; i++) {
-        const start = i * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, file.size);
-        const chunk = file.slice(start, end);
-        const isLastChunk = i === totalChunks - 1;
-        setProgressMsg(`📤 Uploading... (${i + 1}/${totalChunks})`);
+        const CHUNK_SIZE = 8 * 1024 * 1024;
+        const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+        for (let i = 0; i < totalChunks; i++) {
+          const start = i * CHUNK_SIZE;
+          const end = Math.min(start + CHUNK_SIZE, file.size);
+          const chunk = file.slice(start, end);
+          const isLastChunk = i === totalChunks - 1;
+          setProgressMsg(`📤 Uploading... (${i + 1}/${totalChunks})`);
 
-        const formData = new FormData();
-        formData.append("uploadUrl", uploadUrl);
-        formData.append("offset", String(start));
-        formData.append("command", isLastChunk ? "upload, finalize" : "upload");
-        formData.append("chunk", chunk);
+          const formData = new FormData();
+          formData.append("uploadUrl", uploadUrl);
+          formData.append("offset", String(start));
+          formData.append("command", isLastChunk ? "upload, finalize" : "upload");
+          formData.append("chunk", chunk);
 
-        const { data, error } = await supabase.functions.invoke("upload-chunk", { body: formData });
-        if (error || data?.error) throw new Error(data?.error || error?.message || `Chunk ${i + 1} upload failed`);
-        if (isLastChunk && data?.file?.uri) fileUri = data.file.uri;
-      }
-      if (!fileUri) throw new Error("File URI ရယူ၍ မအောင်မြင်ပါ");
-      sourceFileUriRef.current = fileUri;
+          const { data, error } = await supabase.functions.invoke("upload-chunk", { body: formData });
+          if (error || data?.error) throw new Error(data?.error || error?.message || `Chunk ${i + 1} upload failed`);
+          if (isLastChunk && data?.file?.uri) fileUri = data.file.uri;
+        }
+        if (!fileUri) throw new Error("File URI ရယူ၍ မအောင်မြင်ပါ");
+        sourceFileUriRef.current = fileUri;
+      } // end of upload block (skipped in batch mode when URI cached)
 
       setProgressMsg("🧠 AI is watching the video and writing script...");
       const {
@@ -6792,7 +6969,7 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
         apiMode: resolvedApiMode,
         extraInstructions: `CRITICAL:
 - Output language MUST be ${selectedLangName} ONLY. Do NOT switch to any other language even if the video's spoken dialogue is in a different language.
-- Script must cover the story arc from beginning to end, condensed to about 70% of the source duration (never below 65%, never above 75%).
+${batchEndSec ? `- THIS IS A BATCH SEGMENT. You MUST ONLY watch and recap events from ${Math.floor(batchStartSec! / 60)}:${String(Math.floor(batchStartSec! % 60)).padStart(2, "0")} to ${Math.floor(batchEndSec / 60)}:${String(Math.floor(batchEndSec % 60)).padStart(2, "0")}. Ignore everything outside this time window. Do not summarize the ending if it hasn't happened yet in this time window. VERY IMPORTANT: Your script MUST match the duration of this specific batch chunk (approx 70% of the chunk duration). Do not output a 5-minute summary for a 3-minute chunk!` : `- Script must cover the story arc from beginning to end, condensed to about 70% of the source duration (never below 65%, never above 75%).`}
   * For a 30-minute source, aim for about 21 minutes.
   * For a 20-minute source, aim for about 14 minutes.
   * For a 10-minute source, aim for about 7 minutes.
@@ -7307,6 +7484,80 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                 {seriesEnabled ? "ON" : "OFF"}
               </button>
             </div>
+
+            {/* SURGICAL EDIT: Auto Segmenter UI */}
+            <div className="flex items-center justify-between mt-4 border-t border-border/50 pt-4">
+              <div className="flex flex-col">
+                <label className="text-sm font-medium text-neon-yellow">🤖 Auto Batch Segmenter</label>
+                <span className="text-[10px] text-muted-foreground">
+                  ရှည်လျားသော video များကို အပိုင်းခွဲ၍ အလိုအလျောက်ထုတ်ပေးပါမည်
+                </span>
+              </div>
+              <div className="flex gap-2 items-center">
+                <select
+                  value={batchIntervalMin}
+                  onChange={(e) => setBatchIntervalMin(Number(e.target.value))}
+                  disabled={autoBatchActive}
+                  className="px-2 py-1 bg-secondary text-xs rounded border border-border"
+                >
+                  <option value={3}>3 mins</option>
+                  <option value={5}>5 mins</option>
+                  <option value={7}>7 mins</option>
+                  <option value={8}>8 mins</option>
+                  <option value={10}>10 mins</option>
+                  <option value={15}>15 mins</option>
+                </select>
+                {!autoBatchActive ? (
+                  <button
+                    onClick={() => {
+                      if (!videoFileRef.current) {
+                        showSolveToFixBox("Video အရင်ရွေးပေးပါ");
+                        return;
+                      }
+                      setAutoBatchActive(true);
+                      autoBatchActiveRef.current = true;
+                      setIsBatchPaused(false);
+                      isBatchPausedRef.current = false;
+                      batchCurrentChunkRef.current = 0;
+                      runAutoBatchStep(videoFileRef.current, 0);
+                    }}
+                    className="px-3 py-1 bg-neon-yellow text-black text-xs font-bold rounded hover:opacity-90 transition"
+                  >
+                    START BATCH
+                  </button>
+                ) : (
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => {
+                        const nextPaused = !isBatchPaused;
+                        setIsBatchPaused(nextPaused);
+                        isBatchPausedRef.current = nextPaused;
+                        if (!nextPaused) {
+                          runAutoBatchStep(videoFileRef.current!, batchCurrentChunkRef.current);
+                        }
+                      }}
+                      className="px-2 py-1 bg-orange-600 text-white text-xs font-bold rounded hover:opacity-90 transition"
+                    >
+                      {isBatchPaused ? "▶ RESUME" : "⏸ PAUSE"}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setAutoBatchActive(false);
+                        autoBatchActiveRef.current = false;
+                        setIsBatchPaused(false);
+                        isBatchPausedRef.current = false;
+                        batchCurrentChunkRef.current = 0;
+                        setProgressMsg("⏹ Batch ရပ်ပြီးပါပြီ။");
+                      }}
+                      className="px-2 py-1 bg-red-700 text-white text-xs font-bold rounded hover:opacity-90 transition"
+                    >
+                      ⏹ STOP
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {seriesEnabled && (
               <div className="space-y-2">
                 {seriesList.length > 0 && (
@@ -7361,25 +7612,121 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
             )}
           </div>
 
-          {/* Voice */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-neon-cyan">🎙️ အသံ (Voice)</label>
-            <Select value={selectedVoice} onValueChange={setSelectedVoice}>
-              <SelectTrigger className="w-full bg-background border-border text-foreground">
-                <SelectValue placeholder="အသံ ရွေးပါ" />
-              </SelectTrigger>
-              <SelectContent
-                className="max-h-[250px] z-50 overflow-y-auto scroll-smooth"
-                position="popper"
-                sideOffset={4}
-              >
-                {VOICE_OPTIONS.map((v) => (
-                  <SelectItem key={v.value} value={v.value}>
-                    {v.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {/* Voice Selection & Clone Control */}
+          <div className="space-y-3 p-3 bg-slate-900/60 border border-slate-800 rounded-xl">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-semibold text-neon-cyan flex items-center gap-1.5">
+                🎙️ အသံ ရွေးချယ်မှု (Voice Mode)
+              </label>
+              <div className="flex bg-slate-800/80 p-0.5 rounded-lg border border-slate-700/60">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCloneVoiceBox(false);
+                    if (selectedVoice.startsWith("custom:")) {
+                      setSelectedVoice("edge:my-MM-ThihaNeural");
+                    }
+                  }}
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${
+                    !showCloneVoiceBox && !selectedVoice.startsWith("custom:")
+                      ? "bg-neon-cyan text-black shadow"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  🌟 Studio အသံများ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCloneVoiceBox(true)}
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${
+                    showCloneVoiceBox || selectedVoice.startsWith("custom:")
+                      ? "bg-neon-yellow text-black shadow"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  🎤 Voice Clone
+                </button>
+              </div>
+            </div>
+
+            {/* Mode 1: Studio / Prebuilt Voices */}
+            {!showCloneVoiceBox && !selectedVoice.startsWith("custom:") ? (
+              <div className="space-y-2">
+                <Select value={selectedVoice} onValueChange={setSelectedVoice}>
+                  <SelectTrigger className="w-full bg-background border-border text-foreground">
+                    <SelectValue placeholder="အသံ ရွေးပါ" />
+                  </SelectTrigger>
+                  <SelectContent
+                    className="max-h-[250px] z-50 overflow-y-auto scroll-smooth"
+                    position="popper"
+                    sideOffset={4}
+                  >
+                    {VOICE_OPTIONS.map((v) => (
+                      <SelectItem key={v.value} value={v.value}>
+                        {v.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              /* Mode 2: Voice Clone Mode */
+              <div className="p-3 bg-slate-950/80 border border-neon-yellow/40 rounded-lg space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-neon-yellow flex items-center gap-1">
+                    🎤 မိမိစိတ်ကြိုက် Voice Clone ID ထည့်ပါ
+                  </span>
+                  {selectedVoice.startsWith("custom:") && (
+                    <span className="text-[10px] text-neon-green font-bold bg-neon-green/10 px-2 py-0.5 rounded border border-neon-green/30">
+                      ✓ Active: {selectedVoice.replace(/^custom:/, "")}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="ဥပမာ voice_abc123... (Google Studio Voice ID)"
+                    value={customVoiceId}
+                    onChange={(e) => setCustomVoiceId(e.target.value)}
+                    className="flex-1 px-3 py-2 bg-slate-900 text-xs border border-slate-700 rounded-md text-foreground focus:outline-none focus:border-neon-yellow"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!customVoiceId.trim()) {
+                        toast.error("ကျေးဇူးပြု၍ Voice ID ထည့်ပေးပါ");
+                        return;
+                      }
+                      const vId = customVoiceId.trim();
+                      setSelectedVoice(vId.startsWith("custom:") ? vId : `custom:${vId}`);
+                      toast.success(`✅ Cloned Voice အသုံးပြုမည်: ${vId}`);
+                    }}
+                    className="px-4 py-2 bg-neon-yellow hover:bg-yellow-400 text-black text-xs font-bold rounded-md transition shrink-0"
+                  >
+                    Apply Voice
+                  </button>
+                </div>
+
+                <div className="text-[11px] text-slate-300 bg-slate-900/60 p-2.5 rounded border border-slate-800/80 space-y-1">
+                  <p className="font-semibold text-slate-200">📌 Voice ID မရှိသေးပါက ဘယ်လိုယူရမလဲ -</p>
+                  <p className="text-slate-400">
+                    ၁။ <span className="text-neon-cyan font-mono">aistudio.google.com</span> သို့ သွားပါ (Google Login
+                    ဝင်ပါ)။
+                  </p>
+                  <p className="text-slate-400">
+                    ၂။ ဘယ်ဘက် Menu မှ <b>"Tune / Voices"</b> သို့မဟုတ် <b>"Create Voice"</b> ကို နှိပ်ပါ။
+                  </p>
+                  <p className="text-slate-400">
+                    ၃။ မိမိအသံဖိုင် (၁၀ ~ ၃၀ စက္ကန့်) ကို upload တင်ပြီး Save လုပ်လိုက်ပါက Google မှ <b>voice_...</b>{" "}
+                    နံပါတ် ထုတ်ပေးပါမည်။
+                  </p>
+                  <p className="text-slate-400">
+                    ၄။ ထို Voice ID ကို ကူးယူပြီး ဤအကွက်တွင် ထည့်ကာ <b>Apply Voice</b> နှိပ်လိုက်ရုံပါပဲ။
+                  </p>
+                </div>
+              </div>
+            )}
             <button
               type="button"
               onClick={async (event) => {
@@ -7526,24 +7873,29 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                         voice: selectedVoice.slice("edge:".length),
                         skipCreditDeduction: true,
                       }
-                    : {
-                        text: "Automation Nova မှ ကြိုဆိုပါတယ်",
-                        voiceName: selectedVoice,
-                        languageCode: "my",
-                        skipCreditDeduction: true,
-                        nativeVoiceInstructions:
-                          "You MUST speak in 100% authentic native Burmese (á€—á€™á€¬á€…á€€á€¬á€¸) with a modern Yangon-standard accent. " +
-                          "Speak exactly like a real native Burmese person in their 20s-30s speaking naturally in everyday modern Burmese. " +
-                          "DO NOT mix any Chinese tone, Kachin accent, Shan accent, European accent, or any ethnic minority accent whatsoever. " +
-                          "Pure á€—á€™á€¬á€œá€±á€žá€¶á€…á€…á€ºá€…á€…á€º only â€” natural, fluent, warm, and confident modern Burmese speaking voice. " +
-                          "Match the quality of Google Producer AI's Burmese human voice output â€” indistinguishable from a real Burmese human speaker.",
-                        voiceConfig: {
-                          speakingStyle: "natural_conversational",
-                          pronunciationStrictness: "native_only",
-                          accentPurity: 100,
-                          targetQuality: "producer_ai_level",
-                        },
-                      };
+                    : (() => {
+                        const previewVoiceOpt = VOICE_OPTIONS.find((v) => v.value === selectedVoice);
+                        const previewTtsModel = (previewVoiceOpt as any)?.ttsModel || "gemini-3.8-flash-tts";
+                        return {
+                          text: "Automation Nova မှ ကြိုဆိုပါတယ်",
+                          voiceName: selectedVoice,
+                          languageCode: "my",
+                          skipCreditDeduction: true,
+                          ttsModel: previewTtsModel,
+                          nativeVoiceInstructions:
+                            "You MUST speak in 100% authentic native Burmese (á€—á€™á€¬á€…á€€á€¬á€¸) with a modern Yangon-standard accent. " +
+                            "Speak exactly like a real native Burmese person in their 20s-30s speaking naturally in everyday modern Burmese. " +
+                            "DO NOT mix any Chinese tone, Kachin accent, Shan accent, European accent, or any ethnic minority accent whatsoever. " +
+                            "Pure á€—á€™á€¬á€œá€±á€žá€¶á€…á€…á€ºá€…á€…á€º only â€” natural, fluent, warm, and confident modern Burmese speaking voice. " +
+                            "Match the quality of Google Producer AI's Burmese human voice output â€” indistinguishable from a real Burmese human speaker.",
+                          voiceConfig: {
+                            speakingStyle: "natural_conversational",
+                            pronunciationStrictness: "native_only",
+                            accentPurity: 100,
+                            targetQuality: "producer_ai_level",
+                          },
+                        };
+                      })();
                   const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${previewFn}`, {
                     method: "POST",
                     headers,
@@ -7744,6 +8096,12 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
             onGenerateVoice={handleGenerateVoice}
             onRecapSaved={loadRecapHistory}
             renderMode={renderMode}
+            onBatchSegmentCompleted={() => {
+              if (autoBatchActiveRef.current && !isBatchPausedRef.current && videoFileRef.current) {
+                batchCurrentChunkRef.current++;
+                setTimeout(() => runAutoBatchStep(videoFileRef.current!, batchCurrentChunkRef.current), 3000);
+              }
+            }}
             onVideoReady={handleVideoReady}
             creditPerMinRate={creditPerMinRate}
             audioUrl={audioUrl}
