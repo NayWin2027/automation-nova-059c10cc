@@ -3230,11 +3230,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // â”€â”€ FIX: Real-time performance monitoring â”€â”€
         monitorPerformance(timestamp);
 
-        // â”€â”€ FIX: Frame skip for extreme low-end devices â”€â”€
-        if (shouldSkipFrame(timestamp)) {
-          recapAnimFrameRef.current = requestAnimationFrame(syncAndDraw);
-          return; // Skip rendering this frame but continue loop
-        }
+        // â”€â”€ SURGICAL FIX: frame skip must NOT bypass AV sync / playback resume â”€â”€
+        // Canvas+encoder FPS is already throttled below (adaptiveFrameInterval), so we only
+        // record the skip decision here and keep the AV-sync block running every frame.
+        const _skipDraw = shouldSkipFrame(timestamp);
+
 
         // â”€â”€ ADAPTIVE FPS: Monitor frame budget â”€â”€
         const frameDelta = timestamp - lastDrawTime;
@@ -3267,6 +3267,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 seekPendingRef.current = false;
                 prewarmActiveRef.current = false;
                 seekPendingSinceRef.current = 0;
+                // SURGICAL FIX: PC Chrome leaves <video> paused after a slow seek — resume it
+                if (!vv.ended && vv.paused) vv.play().catch(() => {});
               }
             } else {
               seekPendingSinceRef.current = 0;
@@ -3623,7 +3625,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         // // —— ENCODER PUSH: Ensure encoder receives frames at steady target FPS ——
         // SURGICAL FIX: Single steady tick — draw + encode together at target FPS (no 60fps overload, no stale frames)
-        if (timestamp - lastDrawTime >= adaptiveFrameInterval) {
+        if (!_skipDraw && timestamp - lastDrawTime >= adaptiveFrameInterval) {
           lastDrawTime = timestamp;
           lastEncPushTime = timestamp;
           drawFrame(false);
