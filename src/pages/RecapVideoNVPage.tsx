@@ -2234,7 +2234,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         const av = audioRef.current;
         let exactDurationSecs = recordingElapsedSecs;
         if (av && Number.isFinite(av.duration) && av.duration > 0) {
-          exactDurationSecs = av.duration;
+          // SURGICAL FIX: real-time duration = media duration / playbackRate (1.2x/1.4x etc.)
+          const _playRate = Number.isFinite(av.playbackRate) && av.playbackRate > 0 ? av.playbackRate : 1.0;
+          exactDurationSecs = av.duration / _playRate;
         }
         // Clamp to 3 decimal places for ffmpeg and metadata
         exactDurationSecs = Number(exactDurationSecs.toFixed(3));
