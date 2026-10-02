@@ -303,7 +303,46 @@ Deno.serve(async (req) => {
       rpcResult = data;
     }
 
-    const audio = await synthesize(text, voice, rate, pitch, volume);
+    // SURGICAL: long scripts timed out as one 30s WebSocket request.
+    // Split into sentence-bounded chunks, synthesize in parallel (limited), concat MP3 frames.
+    const chunksText: string[] = [];
+    {
+      const MAX = 1200;
+      const parts = text.split(/(?<=[။.!?\n])/);
+      let cur = "";
+      for (const p of parts) {
+        if ((cur + p).length > MAX && cur.trim()) {
+          chunksText.push(cur.trim());
+          cur = "";
+        }
+        if (p.length > MAX) {
+          for (let i = 0; i < p.length; i += MAX) chunksText.push(p.slice(i, i + MAX).trim());
+        } else cur += p;
+      }
+      if (cur.trim()) chunksText.push(cur.trim());
+    }
+    const results: Uint8Array[] = new Array(chunksText.length);
+    let next = 0;
+    const worker = async () => {
+      while (next < chunksText.length) {
+        const i = next++;
+        try {
+          results[i] = await synthesize(chunksText[i], voice, rate, pitch, volume);
+        } catch (_e) {
+          results[i] = await synthesize(chunksText[i], voice, rate, pitch, volume);
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, chunksText.length) }, worker));
+    const totalLen = results.reduce((s, c) => s + c.length, 0);
+    const audio = new Uint8Array(totalLen);
+    {
+      let off = 0;
+      for (const c of results) {
+        audio.set(c, off);
+        off += c.length;
+      }
+    }
     // Edge TTS returns MP3. MPEG-1 Layer III at the service's 48 kbps output rate is
     // 6000 bytes/sec, so the encoded payload gives a stable duration for segment boundaries.
     // The final segment is forced to the exact calculated end to prevent hook-slot overrun.
