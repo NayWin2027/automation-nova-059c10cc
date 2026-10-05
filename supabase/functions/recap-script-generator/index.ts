@@ -9,11 +9,11 @@ const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1bet
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
 // gemini-1.5-flash / gemini-2.5-flash are no longer served (404 NOT_FOUND).
 // Use the rolling "latest" alias which stays available for both old and new keys.
-const MODEL = "gemini-3.1-flash-lite";
+const MODEL = "gemini-flash-lite-latest";
 
 // SLANG-TEMP: HYBRID/VIRAL modes need a slightly higher temperature so the model
 // actually reaches for street slang instead of the safest plain wording. STORY mode
-// keeps the original 0.3 (anti-hallucination).
+// keeps the original 0.35 (anti-hallucination).
 let STYLE_TEMPERATURE = 0.3;
 
 // SLANG-SAFETY: without explicit safetySettings Gemini self-censors harsh/vulgar
@@ -28,10 +28,10 @@ const GEMINI_SAFETY_SETTINGS = [
 function buildGenerationConfig(model: string, requestedMaxOutputTokens: number | null): Record<string, unknown> {
   // Burmese/CJK narration costs 2-3 tokens per syllable: an 8192 cap truncated
   // long recaps and dropped the middle/ending beats. Give the model real room.
-  const maxOutputTokens =
-    model === "gemini-3.1-flash-lite"
-      ? Math.max(requestedMaxOutputTokens || 0, 80000)
-      : Math.max(requestedMaxOutputTokens || 0, 60000);
+  // Unified spec (matches frontend): 64,000 output tokens for every model.
+  void model;
+  void requestedMaxOutputTokens;
+  const maxOutputTokens = 64000;
 
   const config: Record<string, unknown> = {
     temperature: STYLE_TEMPERATURE,
@@ -542,6 +542,7 @@ LANGUAGE LOCK:
           "gemini-3.8-flash",
           "gemini-3.1-flash",
           "gemini-flash-latest",
+          "gemini-2.5-flash-lite",
           "gemini-3.5-flash-lite",
           "gemini-3.1-flash-lite",
           "gemini-3.7-flash",
@@ -722,7 +723,7 @@ LANGUAGE LOCK:
       }
       const bodyMaxOutputTokens = Number(body.generationConfig?.maxOutputTokens);
       if (Number.isFinite(bodyMaxOutputTokens) && bodyMaxOutputTokens > 0) {
-        requestedMaxOutputTokens = Math.min(12288, Math.max(2048, Math.floor(bodyMaxOutputTokens)));
+        requestedMaxOutputTokens = Math.min(64000, Math.max(8192, Math.floor(bodyMaxOutputTokens)));
       }
 
       const parsedDuration = Number(body.sourceDurationSec);
@@ -884,8 +885,8 @@ CRITICAL - RECAP COMPLETENESS (ZERO FILLER POLICY):
 - NEVER censor, skip, or tone down intimate/romantic/physical/18+/21+ scenes. Describe them vividly and naturally as they happened in the source. Audiences LOVE these moments — they are the main attraction
 - If two characters kiss, embrace, touch intimately, or have any physical/romantic interaction, you MUST describe it with vivid sensory detail (what they felt, the tension, the emotions, the physical sensations)
 - DO NOT use vague euphemisms. Be specific and descriptive about physical actions and emotional reactions
-- DO NOT translate or retell every scene. Skip filler and compress secondary scenes into brief linking lines
-- Think of it this way: if a viewer watches your recap, they should feel the same core story impact in half the time
+- Bridge pure filler with smooth linking lines, but narrate every story-relevant scene; never shorten high-stakes scenes
+- The viewer must follow the full story clearly and feel the same impact as watching the source
 
 CHARACTER IDENTITY RULES (CRITICAL — READ CAREFULLY):
 - NEVER use generic labels like "man", "woman", or surface-level guesses
@@ -910,11 +911,12 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - MANDATORY: YOU MUST NARRATE THE ENTIRE VIDEO FROM 00:00 TO THE VERY END.
 - DO NOT SUMMARIZE. DO NOT SKIP. DO NOT STOP EARLY.
 - YOU MUST WRITE A COMPLETE NARRATION THAT FOLLOWS THE STORY UNFOLDING AS IT HAPPENS.
-- Cover the beginning, middle, climax and ending through distinct essential beats; compress routine or duplicate moments.
-- PARAGRAPH COUNT: Use only as many paragraphs as the source has distinct useful beats. Never create extra paragraphs merely to satisfy a count or duration target.
+- Cover the beginning, middle, climax and ending. Bridge only truly routine moments; expand high-stakes scenes (arguments, romance, fights, climax) as continuous scenes matching their source length.
+- SPOKEN LENGTH FLOOR (HARD RULE): the narration must be long enough to be spoken for about 70–80% of the source duration — roughly 110 spoken ${lang} words (or ~380 Myanmar characters) per minute of narration. A 5-minute source needs ~3.5–4 minutes of narration. Never deliver a 1–2 minute script for a 5+ minute source. Length must come ONLY from real source events — never invent content.
+- PARAGRAPH COUNT: about one paragraph per 15–25 seconds of source, each tied to real source events.
 - SPREAD: Evenly distribute these paragraphs across the entire video timeline (e.g., for a 4-minute video, you must have content for the 0:00, 1:00, 2:00, 3:00, and 4:00 minute marks).
 - IF YOU OMIT THE SECOND HALF OF THE VIDEO, YOUR OUTPUT IS REJECTED.
-- TOKEN MANAGEMENT: If you find yourself writing too much detail at the start, STOP and COMPRESS the beginning so you have enough space to finish the entire story.
+- TOKEN BUDGET: you have a very large output budget (64k tokens) — use it; keep detail consistent from start to finish.
 - FINAL PARAGRAPH: The final paragraph must have a timecode [MM:SS] that is very close to the actual end of the video.
 - THIS IS THE #2 HIGHEST PRIORITY RULE (after TARGET LANGUAGE).
 ###############################################################
@@ -1253,9 +1255,10 @@ ${transcript}
     // Key rotation into the paid App pool stays App-API-only.
     const fallbackModels = isOwnApi
       ? [
-          "gemini-3.8-flash",
+          "gemini-2.5-flash",
           "gemini-flash-lite-latest",
           "gemini-flash-latest",
+          "gemini-2.5-flash-lite",
           "gemini-3.5-flash-lite",
           "gemini-3.1-flash-lite",
           "gemini-3.7-flash",
@@ -1268,6 +1271,7 @@ ${transcript}
           "gemini-3.6-flash",
           "gemini-3.5-flash",
           "gemini-3.1-flash",
+          "gemini-2.5-flash",
           "gemini-flash-latest",
           "gemini-flash-lite-latest",
         ];
@@ -1358,6 +1362,20 @@ ${transcript}
             billingRequired: true,
           }),
           { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      if (response?.status === 404) {
+        // 404 = uploaded video file expired/not found on Google, or model unavailable.
+        // Return 200 with a clear, retryable message so the client doesn't crash.
+        return new Response(
+          JSON.stringify({
+            error: "Video ဖိုင် (သို့) AI model ကို Google မှာ ရှာမတွေ့တော့ပါ။ Video ကို ပြန်တင်ပြီး ထပ်စမ်းပါ။",
+            fallback: true,
+            upstreamStatus: 404,
+            retryable: false,
+            reuploadRequired: true,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
       return new Response(
@@ -1574,7 +1592,7 @@ ${lastLines}`;
     // the accepted 65% floor, make one media-grounded full rewrite while enough wall
     // time remains. Rewriting (rather than appending after the final timecode) lets the
     // model restore important scenes skipped anywhere in the beginning/middle/end.
-    const initialWindowTotal = 0; // Disabled: use continuation pass instead of full rewrite to save tokens
+    const initialWindowTotal = 1; // Re-enabled: full-length repair when draft is under the duration floor
     if (
       sourceDurationSec &&
       initialWindowTotal === 1 &&
