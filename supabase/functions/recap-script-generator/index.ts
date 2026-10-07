@@ -1508,8 +1508,10 @@ ${lastLines}`;
       }
     }
 
-        if (violatesTargetLanguage(normalizedRawScript, lang)) {
-      console.warn(`[recap-script-generator] Foreign text detected for ${lang} — performing instant fast text translation pass`);
+    if (violatesTargetLanguage(normalizedRawScript, lang)) {
+      console.warn(
+        `[recap-script-generator] Foreign text detected for ${lang} — performing instant fast text translation pass`,
+      );
       try {
         const transPrompt = `You are an expert movie recap translator.
 The script below contains foreign characters or phonetic transcriptions of foreign speech.
@@ -1543,62 +1545,6 @@ ${normalizedRawScript}`;
         }
       } catch (fastTransErr) {
         console.warn(`[recap-script-generator] Fast translation pass error:`, fastTransErr);
-      }
-    }
-
-        const langRetryCtrl = new AbortController();
-        const langRetryTimer = setTimeout(
-          () => langRetryCtrl.abort(),
-          Math.max(5000, Math.min(50000, remainingBudget() - 8000)),
-        );
-        try {
-          const langRetryRes = await callGeminiGenerateContent(
-            activeModel,
-            activeApiKey,
-            isOwnApi,
-            langRetryCtrl.signal,
-            finalSystemPrompt,
-            contentParts,
-            requestedMaxOutputTokens,
-          );
-          if (langRetryRes.ok) {
-            const langRetryData = await langRetryRes.json();
-            let retryScript = langRetryData.candidates?.[0]?.content?.parts?.[0]?.text || "";
-            const retryStoryBibleMarker = retryScript.match(
-              /(?:^|\n)\s*(?:===\s*)?STORY[\s_-]*BI(?:BLE|BE|VE)(?:\s*===)?\s*:?[ \t]*(?:\n|$)/im,
-            );
-            if (retryStoryBibleMarker?.index !== undefined) {
-              const sbIdx = retryStoryBibleMarker.index;
-              const sbRaw = retryScript
-                .slice(sbIdx + retryStoryBibleMarker[0].length)
-                .replace(/```[a-zA-Z]*/g, "")
-                .trim();
-              try {
-                const s = sbRaw.indexOf("{");
-                const e = sbRaw.lastIndexOf("}");
-                if (s !== -1 && e > s) storyBible = JSON.parse(sbRaw.slice(s, e + 1));
-              } catch {}
-              retryScript = retryScript.slice(0, sbIdx).trim();
-            }
-            retryScript = removeNarrationRepetition(stripHookPreamble(retryScript));
-            if (retryScript.length > 10 && !violatesTargetLanguage(retryScript, lang)) {
-              normalizedRawScript = retryScript;
-              langFixed = true;
-              console.log(`[recap-script-generator] Language auto-retry ${langAttempt}/5 succeeded for ${lang}`);
-            } else {
-              console.warn(`[recap-script-generator] Language auto-retry ${langAttempt}/5 still violated for ${lang}`);
-            }
-          }
-        } catch (langRetryErr) {
-          console.warn(
-            `[recap-script-generator] Language auto-retry ${langAttempt}/5 error: ${langRetryErr instanceof Error ? langRetryErr.message : String(langRetryErr)}`,
-          );
-        } finally {
-          clearTimeout(langRetryTimer);
-        }
-      }
-      if (!langFixed) {
-        console.warn(`[recap-script-generator] All language retries failed — proceeding with script anyway`);
       }
     }
 
