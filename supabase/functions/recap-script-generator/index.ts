@@ -949,9 +949,12 @@ STRUCTURE:
 ${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYLE/LENGTH DETAILS ABOVE WHEN CONFLICTING):\n${callerInstructionsBlock}\n` : ""}${dialogueTimingLockBlock}${viralBalanceBlock}
 
 ###############################################################
-# FINAL ENFORCEMENT: YOUR ENTIRE OUTPUT MUST BE IN ${lang}.
-# NOT BURMESE. NOT MYANMAR. ONLY ${lang}. EVERY SINGLE WORD.
+# FINAL ENFORCEMENT: 100% PURE ${langLabel} OUTPUT ONLY
+# Every narration and dialogue sentence MUST be written in modern conversational ${langLabel}.
+# NEVER output Chinese, Thai, Korean, or foreign characters.
+# NEVER phonetically transcribe foreign speech sounds into ${langLabel} letters — TRANSLATE THE MEANING DIRECTLY.
 ###############################################################
+
 
 ###############################################################
 # NATIVE-SCRIPT TRANSLITERATION (MANDATORY — TTS DEPENDS ON IT)
@@ -1505,10 +1508,44 @@ ${lastLines}`;
       }
     }
 
-    if (violatesTargetLanguage(normalizedRawScript, lang)) {
-      console.warn(`[recap-script-generator] Target language violation for ${lang} — auto-retrying up to 5 times`);
-      let langFixed = false;
-      for (let langAttempt = 1; langAttempt <= 5 && !langFixed && remainingBudget() > 15000; langAttempt++) {
+        if (violatesTargetLanguage(normalizedRawScript, lang)) {
+      console.warn(`[recap-script-generator] Foreign text detected for ${lang} — performing instant fast text translation pass`);
+      try {
+        const transPrompt = `You are an expert movie recap translator.
+The script below contains foreign characters or phonetic transcriptions of foreign speech.
+Translate EVERY sentence (both narration and [DIALOGUE] lines) into 100% natural, modern spoken BURMESE (စကားပြောဟန် မြန်မာစကားစစ်စစ်).
+
+CRITICAL RULES:
+1. Keep all timecodes [MM:SS] and tags like [DIALOGUE:EMOTION] exactly intact byte-for-byte.
+2. Translate the actual MEANING of dialogue lines into modern Burmese (do NOT keep foreign phonetic sounds like နီဟောင်/ခေါပ်ခုန်).
+3. Do NOT use formal/literary Burmese: NO "သည်", "ထို့အပြင်", "ကာ", "သကဲ့သို့", "ထို့ကြောင့်". Use modern spoken: "ဒါ့အပြင်", "ဒါကြောင့်", "သလို", "ပြီး", "တယ်/တာ/လဲ/ဟာ".
+4. Output ONLY the translated script. No explanations, no notes.
+
+SCRIPT TO TRANSLATE:
+${normalizedRawScript}`;
+
+        const transRes = await callGeminiGenerateContent(
+          activeModel,
+          activeApiKey,
+          isOwnApi,
+          abortController.signal,
+          "You are a professional subtitle translator. Output only the translated text.",
+          [{ text: transPrompt }],
+          requestedMaxOutputTokens,
+        );
+        if (transRes.ok) {
+          const transData = await transRes.json();
+          const cleanTrans = (transData.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
+          if (cleanTrans.length > 10 && !violatesTargetLanguage(cleanTrans, lang)) {
+            normalizedRawScript = cleanTrans;
+            console.log(`[recap-script-generator] Fast translation pass successfully converted script to 100% ${lang}`);
+          }
+        }
+      } catch (fastTransErr) {
+        console.warn(`[recap-script-generator] Fast translation pass error:`, fastTransErr);
+      }
+    }
+
         const langRetryCtrl = new AbortController();
         const langRetryTimer = setTimeout(
           () => langRetryCtrl.abort(),
