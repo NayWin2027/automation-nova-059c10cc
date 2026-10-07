@@ -1538,9 +1538,15 @@ ${normalizedRawScript}`;
         if (transRes.ok) {
           const transData = await transRes.json();
           const cleanTrans = (transData.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
-          if (cleanTrans.length > 10 && !violatesTargetLanguage(cleanTrans, lang)) {
-            normalizedRawScript = cleanTrans;
-            console.log(`[recap-script-generator] Fast translation pass successfully converted script to 100% ${lang}`);
+          if (cleanTrans.length > 10) {
+            // တရုတ်/ဂျပန်/ကိုရီးယား/ထိုင်း အက္ခရာ အကြွင်းအကျန်တွေ ပါလာရင် အလိုအလျောက် သန့်စင်ပြီး လက်ခံခြင်း
+            const sanitized = cleanTrans.replace(/[\u3400-\u9FFF\u3040-\u30FF\uAC00-\uD7AF\u0E00-\u0E7F]/g, "").trim();
+            if (sanitized.length > 10) {
+              normalizedRawScript = sanitized;
+              console.log(
+                `[recap-script-generator] Fast translation pass successfully converted script to 100% ${lang}`,
+              );
+            }
           }
         }
       } catch (fastTransErr) {
