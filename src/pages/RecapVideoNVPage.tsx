@@ -5671,14 +5671,12 @@ const NARRATION_STYLE_OPTIONS: Record<"STORY" | "HYBRID" | "VIRAL", { emoji: str
 };
 
 function buildNarrationStyleBlock(style: "STORY" | "HYBRID" | "VIRAL", langName: string): string {
-  // SURGICAL: TTS skips foreign glyphs (Chinese names, Latin words), so every
-  // character must be transliterated into the target language's own script.
-  const translitBlock = `\n\nNATIVE-SCRIPT TRANSLITERATION (MANDATORY — the voice engine skips foreign glyphs):
-- EVERY character of the script must be written in the ${langName} writing system. No Chinese/Japanese/Korean characters, no Latin letters, no other alphabets anywhere — including names, places, brands and borrowed words.
-- Transliterate them phonetically into ${langName} letters so the voice reads them with a natural ${langName} accent.
-- If ${langName} is BURMESE: Facebook → ဖေ့ဘုတ် ; TikTok → တစ်တော့ ; CEO → စီအီးအို ; hotel → ဟိုတယ် ; police → ပိုလိစ် ; OK → အိုကေ.
-- CHARACTER NAMES: use ONLY the real names spoken or shown in THIS source video, transliterated into ${langName} letters. NEVER invent a name and NEVER reuse any example name from this prompt. If a name is unclear, use the character's role or relationship instead.
-- A name left in Chinese characters or Latin letters is read as silence — that is a hard failure, never do it.`;
+  const translitBlock = `\n\nLANGUAGE & DIALOGUE TRANSLATION LOCK (CRITICAL):
+- MEANING TRANSLATION ONLY (NOT PHONETIC SOUNDS): All dialogues, conversations, and speeches MUST be FULLY TRANSLATED into natural conversational ${langName} (စကားပြောဟန် အဓိပ္ပာယ်ပြန်ရမည်).
+- ABSOLUTE PROHIBITION: NEVER write out foreign language sounds phonetically in ${langName} script (e.g., if source is Chinese, do NOT write "နီဟောင်" or "ဝေါ်အိုက်နီ" — translate the actual meaning: "မင်္ဂလာပါ", "မင်းကိုချစ်တယ်"). Phonetic transliteration is STRICTLY reserved for English brand names and real person names only!
+- ZERO FOREIGN CHARACTERS: No Chinese, Thai, or Latin characters anywhere in the output.
+- CHARACTER NAMES: Use only real character names transliterated into ${langName} or use their natural roles (ဥပမာ- ဒီကောင်လေး, ဒီဆရာမ).`;
+
   const timingLockBlock = `\n\nDIALOGUE TIMING LOCK (HYBRID/VIRAL only):
 - For each real spoken line, inspect the source carefully and use the EXACT source frame where the speaker's first audible syllable begins (normally the first mouth movement). Do not use a nearby reaction shot, an earlier establishing shot, or an approximate scene time.
 - Keep each speaker turn separate. When the speaker changes, start a new paragraph at that new speaker's exact source start time.
@@ -6373,6 +6371,33 @@ const RecapVideoNVPage: React.FC = () => {
       showSolveToFixBox(err?.message || "Script retry failed");
     }
   };
+  // DETERMINISTIC CONVERSATIONAL BURMESE CLEANER
+  // စာပေအရေးအသား (သည်/ကာ/သကဲ့သို့/ထို့အပြင်/ထို့ကြောင့်) များကို ခေတ်ပေါ် စကားပြောဟန်အဖြစ် အလိုအလျောက် ပြောင်းပေးခြင်း
+  const sanitizeToModernSpokenBurmese = (text: string): string => {
+    if (!text) return "";
+    return (
+      text
+        // ဆက်စပ်စကားလုံးများ
+        .replace(/ထို့အပြင်/g, "ဒါ့အပြင်")
+        .replace(/ထို့ကြောင့်/g, "ဒါကြောင့်")
+        .replace(/သကဲ့သို့/g, "သလို")
+        .replace(/ဥပမာအားဖြင့်/g, "ဥပမာ")
+        // ကြိယာဆက် "ကာ" ကို "ပြီး" ပြောင်းခြင်း (ဥပမာ- စီးကာ -> စီးပြီး၊ သွားကာ -> သွားပြီး)
+        .replace(/([\u1000-\u1021](?:[\u102B-\u103E]*[\u103A-\u103E]*)?)ကာ([\s၊။])/g, "$1ပြီး$2")
+        // စာအုပ်အသုံးအနှုန်း ကြိယာအဆုံးများ
+        .replace(/လျက်ရှိသည်/g, "နေတယ်")
+        .replace(/လျက်ရှိသော/g, "နေတဲ့")
+        .replace(/လုပ်ဆောင်နေသည်/g, "လုပ်နေတယ်")
+        .replace(/နေသည်/g, "နေတယ်")
+        .replace(/ခဲ့သည်/g, "ခဲ့တယ်")
+        .replace(/ဖြစ်သည်/g, "ဖြစ်တယ်")
+        .replace(/ရှိသည်/g, "ရှိတယ်")
+        .replace(/ရသည်/g, "ရတယ်")
+        .replace(/ပါသည်။/g, "ပါတယ်။")
+        .replace(/သည်။/g, "တယ်။")
+        .replace(/သည်([၊\s])/g, "ဟာ$1")
+    );
+  };
 
   const stripRecapScriptPreamble = (rawScript: string): string => {
     let cleaned = String(rawScript || "")
@@ -7040,7 +7065,9 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
         );
       }
       if (scriptResult.error) throw new Error(scriptResult.error);
-      const scriptText = stripRecapScriptPreamble(scriptResult.script || "");
+      const rawScriptText = stripRecapScriptPreamble(scriptResult.script || "");
+      const scriptText = selectedLangName === "BURMESE" ? sanitizeToModernSpokenBurmese(rawScriptText) : rawScriptText;
+
       if (!scriptText || scriptText.trim().length < 10) throw new Error("AI script generation returned empty result");
 
       const segments = scriptToSegments(scriptText, duration);
