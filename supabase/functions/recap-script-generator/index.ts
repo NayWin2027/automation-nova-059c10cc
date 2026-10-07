@@ -1530,7 +1530,7 @@ ${normalizedRawScript}`;
           activeModel,
           activeApiKey,
           isOwnApi,
-          abortController.signal,
+          controller.signal,
           "You are a professional subtitle translator. Output only the translated text.",
           [{ text: transPrompt }],
           requestedMaxOutputTokens,
