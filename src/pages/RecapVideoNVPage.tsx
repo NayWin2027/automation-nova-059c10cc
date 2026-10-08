@@ -5678,7 +5678,8 @@ function buildNarrationStyleBlock(style: "STORY" | "HYBRID" | "VIRAL", langName:
 - CHARACTER IDENTITY & ROLES (STRICT):
   * Distinct Identity: Never call all characters by one person's name. Each person on screen is distinct.
   * Known Names: If a character's name is spoken/shown in the video, use it only for that specific person.
-  * Unknown Names -> Role/Relationship: If a person's name is unknown, NEVER reuse another character's name. Identify them by their exact family relationship or social role (ဥပမာ- အဖေ, အမေ, သား, သမီး, ဇနီး, ခင်ပွန်း, အဖိုး, အဖွား, ဆရာ, တပည့်, ဆရာဝန်, ချွေးမ, သူငယ်ချင်း, ရဲ).
+  * Unknown Names -> Role/Relationship: If a person's name is unknown, NEVER reuse another character's name. Identify them by their exact family relationship or social role (ဥပမာ- အဖေ, အမေ, သား, သမီး, ဇနီး, ခင်ပွန်း, အဖိုး, အဖွား, ဆရာ, တပည့်, ဆရာဝန်, ချွေးမ, သူငယ်ချင်း, ရဲ).`;
+
 
 
   const timingLockBlock = `\n\nDIALOGUE TIMING LOCK (HYBRID/VIRAL only):
