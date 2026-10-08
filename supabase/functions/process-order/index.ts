@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
+import { notifyAdminNewOrder, sendCustomerCredentials, sendCustomerApprovedNotice, sendCustomerRejected } from "../_shared/telegram.ts";
 
 // Generate a cryptographically secure random password with ~55% symbols
 function generateSecurePassword(length = 18): string {
@@ -29,8 +30,8 @@ function generateSecurePassword(length = 18): string {
 const RUNNING_ID_REGEX = /^(nw|kys)(\d+)$/i;
 const PAGE_SIZE = 1000;
 
-const getPrefixFromPaymentMethod = (paymentMethod: string) =>
-  paymentMethod === "thai_bank" ? "kys" : "nw";
+// All new IDs now use the single "nw" prefix (next = highest existing number + 1)
+const getPrefixFromPaymentMethod = (_paymentMethod: string) => "nw";
 
 const extractRunningSequence = (value: string | null | undefined) => {
   if (!value) return null;
@@ -157,6 +158,8 @@ serve(async (req) => {
         throw insertError;
       }
 
+      await notifyAdminNewOrder(supabaseAdmin, order, "Web");
+
       return new Response(
         JSON.stringify({ success: true, order }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -271,7 +274,7 @@ serve(async (req) => {
       }
 
       case "approve_order": {
-        const { orderId, creditAmount, bonusAmount, generatedPassword, referrerDisplayId, adminNotes } = params;
+        const { orderId, creditAmount, bonusAmount, generatedPassword, referrerDisplayId, adminNotes, customerName, cashAmount } = params;
 
         if (!orderId) {
           return new Response(
@@ -671,6 +674,28 @@ serve(async (req) => {
           resultData = { newBalance: newCredits };
         }
 
+        // Store admin-entered name / cash amount
+        {
+          const extra: Record<string, any> = {};
+          if (typeof customerName === "string" && customerName.trim()) extra.customer_name = customerName.trim().substring(0, 100);
+          if (cashAmount !== undefined && cashAmount !== null && cashAmount !== "" && Number.isFinite(Number(cashAmount))) extra.cash_amount = Number(cashAmount);
+          if (Object.keys(extra).length) {
+            await supabaseAdmin.from("payment_orders").update(extra).eq("id", orderId);
+          }
+          if (customerName && resultData.newUserId) {
+            await supabaseAdmin.from("profiles").update({ display_name: String(customerName).trim().substring(0, 100) }).eq("user_id", resultData.newUserId);
+          }
+        }
+
+        // Deliver result to customer via Telegram bot when the order came from there
+        if (order.telegram_chat_id) {
+          if (resultData.password) {
+            await sendCustomerCredentials(order.telegram_chat_id, resultData.userId, resultData.password);
+          } else {
+            await sendCustomerApprovedNotice(order.telegram_chat_id, order.order_number);
+          }
+        }
+
         return new Response(
           JSON.stringify({ success: true, ...resultData }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -689,7 +714,7 @@ serve(async (req) => {
 
         const { data: order } = await supabaseAdmin
           .from("payment_orders")
-          .select("status")
+          .select("status, telegram_chat_id")
           .eq("id", orderId)
           .single();
 
@@ -709,6 +734,8 @@ serve(async (req) => {
             approved_at: new Date().toISOString()
           })
           .eq("id", orderId);
+
+        if (order?.telegram_chat_id) await sendCustomerRejected(order.telegram_chat_id);
 
         return new Response(
           JSON.stringify({ success: true }),
