@@ -5674,8 +5674,12 @@ function buildNarrationStyleBlock(style: "STORY" | "HYBRID" | "VIRAL", langName:
   const translitBlock = `\n\nLANGUAGE & DIALOGUE TRANSLATION LOCK (CRITICAL):
 - MEANING TRANSLATION ONLY (NOT PHONETIC SOUNDS): All dialogues, conversations, and speeches MUST be FULLY TRANSLATED into natural conversational ${langName} (စကားပြောဟန် အဓိပ္ပာယ်ပြန်ရမည်).
 - ABSOLUTE PROHIBITION: NEVER write out foreign language sounds phonetically in ${langName} script (e.g., if source is Chinese, do NOT write "နီဟောင်" or "ဝေါ်အိုက်နီ" — translate the actual meaning: "မင်္ဂလာပါ", "မင်းကိုချစ်တယ်"). Phonetic transliteration is STRICTLY reserved for English brand names and real person names only!
-- ZERO FOREIGN CHARACTERS: No Chinese, Thai, or Latin characters anywhere in the output.
-- CHARACTER NAMES: Use only real character names transliterated into ${langName} or use their natural roles (ဥပမာ- ဒီကောင်လေး, ဒီဆရာမ).`;
+- - ZERO FOREIGN CHARACTERS: No Chinese, Thai, or Latin characters anywhere in the output.
+- CHARACTER IDENTITY & ROLES (STRICT):
+  * Distinct Identity: Never call all characters by one person's name. Each person on screen is distinct.
+  * Known Names: If a character's name is spoken/shown in the video, use it only for that specific person.
+  * Unknown Names -> Role/Relationship: If a person's name is unknown, NEVER reuse another character's name. Identify them by their exact family relationship or social role (ဥပမာ- အဖေ, အမေ, သား, သမီး, ဇနီး, ခင်ပွန်း, အဖိုး, အဖွား, ဆရာ, တပည့်, ဆရာဝန်, ချွေးမ, သူငယ်ချင်း, ရဲ).
+
 
   const timingLockBlock = `\n\nDIALOGUE TIMING LOCK (HYBRID/VIRAL only):
 - For each real spoken line, inspect the source carefully and use the EXACT source frame where the speaker's first audible syllable begins (normally the first mouth movement). Do not use a nearby reaction shot, an earlier establishing shot, or an approximate scene time.
