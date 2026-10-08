@@ -192,9 +192,11 @@ export type Database = {
           admin_notes: string | null
           approved_at: string | null
           approved_by: string | null
+          cash_amount: number | null
           contact_method: string | null
           contact_value: string | null
           created_at: string
+          customer_name: string | null
           id: string
           order_number: string
           order_type: string
@@ -203,6 +205,7 @@ export type Database = {
           referrer_display_id: string | null
           slip_image_path: string | null
           status: string
+          telegram_chat_id: number | null
           updated_at: string
           user_email: string
           user_id: string | null
@@ -213,9 +216,11 @@ export type Database = {
           admin_notes?: string | null
           approved_at?: string | null
           approved_by?: string | null
+          cash_amount?: number | null
           contact_method?: string | null
           contact_value?: string | null
           created_at?: string
+          customer_name?: string | null
           id?: string
           order_number: string
           order_type: string
@@ -224,6 +229,7 @@ export type Database = {
           referrer_display_id?: string | null
           slip_image_path?: string | null
           status?: string
+          telegram_chat_id?: number | null
           updated_at?: string
           user_email: string
           user_id?: string | null
@@ -234,9 +240,11 @@ export type Database = {
           admin_notes?: string | null
           approved_at?: string | null
           approved_by?: string | null
+          cash_amount?: number | null
           contact_method?: string | null
           contact_value?: string | null
           created_at?: string
+          customer_name?: string | null
           id?: string
           order_number?: string
           order_type?: string
@@ -245,6 +253,7 @@ export type Database = {
           referrer_display_id?: string | null
           slip_image_path?: string | null
           status?: string
+          telegram_chat_id?: number | null
           updated_at?: string
           user_email?: string
           user_id?: string | null
