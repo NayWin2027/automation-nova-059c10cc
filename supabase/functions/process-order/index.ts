@@ -234,6 +234,8 @@ serve(async (req) => {
         throw insertError;
       }
 
+      await notifyAdminNewOrder(supabaseAdmin, order, "Web");
+
       return new Response(
         JSON.stringify({ success: true, order }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
