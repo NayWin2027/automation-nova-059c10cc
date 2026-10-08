@@ -1730,7 +1730,7 @@ LAST SENTENCE ALREADY WRITTEN:
 
 HANDOFF CONTRACT (most important rule):
 - Your very FIRST sentence must be the direct next action of that LAST SENTENCE — same scene, same characters, no gap.
-- Example of the required feel: if the last sentence was "Maung Maung rode his bicycle to school", your first sentence must be what happens when he ARRIVES at school (e.g. he walks straight into the classroom) — NOT a new scene, NOT a re-introduction, NOT a summary.
+- Example of the required feel: if the last sentence was "[Character] rode a bicycle to school", your first sentence must be what happens when he ARRIVES at school (e.g. he walks straight into the classroom) — NOT a new scene, NOT a re-introduction, NOT a summary.
 - Whatever characters or actions were still in motion at the cut must be continued/resolved first.
 
 Rules:
