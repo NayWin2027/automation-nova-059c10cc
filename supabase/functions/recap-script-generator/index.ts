@@ -887,16 +887,14 @@ CRITICAL - RECAP COMPLETENESS (ZERO FILLER POLICY):
 - DO NOT translate or retell every scene. Skip filler and compress secondary scenes into brief linking lines
 - Think of it this way: if a viewer watches your recap, they should feel the same core story impact in half the time
 
-CHARACTER IDENTITY RULES (CRITICAL — READ CAREFULLY):
-- NEVER use generic labels like "man", "woman", or surface-level guesses
-- ALWAYS identify characters by their ACTUAL role, relationship, or name based on ALL contextual clues
-- Before assigning any role, analyze the ENTIRE source for clues: dialogue keywords, settings, actions, objects
-- COMMON MISIDENTIFICATION TO AVOID:
-  * If "tuition", "class", "lesson", "homework", "study" are mentioned → the relationship is Teacher/Student, NOT Boss/Employee
-  * If "office", "salary", "project", "meeting" are mentioned → Boss/Employee is appropriate
-  * If "cooking", "cleaning", "house chores" in a home setting → could be family members or domestic help, NOT colleagues
-- State character relationships explicitly early in the script using ${lang} language
-- Use character NAMES if mentioned in the source; otherwise use their specific ROLE in ${lang}
+CHARACTER IDENTITY & MULTI-CHARACTER SEPARATION (CRITICAL — STRICT ENFORCEMENT):
+- STRICT CHARACTER ISOLATION: Each individual in the video is a DISTINCT person. NEVER call multiple different characters by the SAME person's name!
+- PROTAGONIST NAME OVERUSE FORBIDDEN: If you discover the main protagonist's name, use it ONLY for that specific person. NEVER refer to friends, opponents, family, or strangers using the protagonist's name.
+- EXPLICIT REAL NAMES: Use a character's personal name ONLY when that specific person is directly called by that name in the source video.
+- RELATIONSHIP & SOCIAL ROLE FALLBACK: Whenever a character's personal name is not clearly mentioned in the source, you MUST identify them by their specific relationship, family role, or profession in ${lang}.
+  * Examples for BURMESE: အဖေ/ဖခင်, အမေ/မိခင်, သား, သမီး, ဇနီး/မယား, ခင်ပွန်း/ယောက်ျား, အဖိုး, အဖွား, ချွေးမ, သမက်, ယောက္ခမ, ဆရာ, တပည့်, ဆရာဝန်, ကျောင်းသား, မန်နေဂျာ, သူငယ်ချင်း, လုပ်ဖော်ကိုင်ဖက်, ရဲ, လူဆိုး, ဘေးလူ.
+- NEVER assume two different people are the same person. When a new person appears or speaks, immediately establish their relationship to the other characters.
+
 
 SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - If the source video/audio has NO spoken dialogue (documentary footage, music video, silent scenes, etc.), you MUST still analyze ALL visual/audio elements carefully
