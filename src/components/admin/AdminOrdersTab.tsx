@@ -33,6 +33,8 @@ interface PaymentOrder {
   approved_by: string | null;
   approved_at: string | null;
   created_at: string;
+  customer_name?: string | null;
+  cash_amount?: number | null;
 }
 
 const AdminOrdersTab: React.FC = () => {
@@ -54,6 +56,8 @@ const AdminOrdersTab: React.FC = () => {
     bonusAmount: 0,
     referrerDisplayId: "",
     adminNotes: "",
+    customerName: "",
+    cashAmount: "",
   });
   const [approving, setApproving] = useState(false);
 
@@ -139,7 +143,9 @@ const AdminOrdersTab: React.FC = () => {
       creditAmount: 0,
       bonusAmount: 0,
       referrerDisplayId: order.referrer_display_id || "",
-      adminNotes: "",
+      adminNotes: order.admin_notes || "",
+      customerName: order.customer_name || "",
+      cashAmount: order.cash_amount != null ? String(order.cash_amount) : "",
     });
     // Auto-generate password for new_user orders
     if (order.order_type === "new_user") {
@@ -163,6 +169,8 @@ const AdminOrdersTab: React.FC = () => {
           generatedPassword: selectedOrder.order_type === "new_user" ? generatedPassword : undefined,
           referrerDisplayId: approvalData.referrerDisplayId || null,
           adminNotes: approvalData.adminNotes || null,
+          customerName: approvalData.customerName || null,
+          cashAmount: approvalData.cashAmount === "" ? null : Number(approvalData.cashAmount),
         }
       });
 
@@ -356,6 +364,12 @@ const AdminOrdersTab: React.FC = () => {
                     {getStatusBadge(order.status)}
                     <Badge variant="secondary" className="text-3xs">{getPaymentMethodLabel(order.payment_method)}</Badge>
                   </div>
+                  {(order.customer_name || order.cash_amount != null) && (
+                    <div className="flex items-center gap-3 text-xs flex-wrap">
+                      {order.customer_name && <span className="font-semibold text-foreground">🙍 {order.customer_name}</span>}
+                      {order.cash_amount != null && <span className="text-amber-400">💵 {Number(order.cash_amount).toLocaleString()}</span>}
+                    </div>
+                  )}
                   <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                     <span>👤 {order.user_email}</span>
                     {order.payment_ref && <span>📋 {order.payment_ref}</span>}
@@ -492,6 +506,32 @@ const AdminOrdersTab: React.FC = () => {
                     </Button>
                   </div>
                 )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs">ID No</Label>
+                <Input value={selectedOrder.order_number} readOnly className="h-8 text-sm font-bold text-primary" />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs">Name (ဝယ်သူနာမည်)</Label>
+                <Input
+                  value={approvalData.customerName}
+                  onChange={(e) => setApprovalData(prev => ({ ...prev, customerName: e.target.value }))}
+                  placeholder="Customer name"
+                  className="h-8 text-sm"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs">Cash Amt (ငွေပမာဏ)</Label>
+                <Input
+                  type="number"
+                  value={approvalData.cashAmount}
+                  onChange={(e) => setApprovalData(prev => ({ ...prev, cashAmount: e.target.value }))}
+                  placeholder="45000"
+                  className="h-8 text-sm"
+                />
               </div>
 
               <div className="space-y-1.5">
