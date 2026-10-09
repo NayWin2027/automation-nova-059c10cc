@@ -15,6 +15,13 @@
       "when": 1789180569313,
       "tag": "0001_showcase_videos_storage_policies",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791513542933,
+      "tag": "0002_cash_revenue_and_tg_draft",
+      "breakpoints": true
     }
   ]
 }

@@ -149,6 +149,7 @@ export type Database = {
       credit_topups: {
         Row: {
           amount: number
+          cash_amount: number | null
           created_at: string | null
           created_by: string | null
           deleted_at: string | null
@@ -161,6 +162,7 @@ export type Database = {
         }
         Insert: {
           amount: number
+          cash_amount?: number | null
           created_at?: string | null
           created_by?: string | null
           deleted_at?: string | null
@@ -173,6 +175,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          cash_amount?: number | null
           created_at?: string | null
           created_by?: string | null
           deleted_at?: string | null
@@ -206,6 +209,7 @@ export type Database = {
           slip_image_path: string | null
           status: string
           telegram_chat_id: number | null
+          tg_draft: Json | null
           updated_at: string
           user_email: string
           user_id: string | null
@@ -230,6 +234,7 @@ export type Database = {
           slip_image_path?: string | null
           status?: string
           telegram_chat_id?: number | null
+          tg_draft?: Json | null
           updated_at?: string
           user_email: string
           user_id?: string | null
@@ -254,6 +259,7 @@ export type Database = {
           slip_image_path?: string | null
           status?: string
           telegram_chat_id?: number | null
+          tg_draft?: Json | null
           updated_at?: string
           user_email?: string
           user_id?: string | null
