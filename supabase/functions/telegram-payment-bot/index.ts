@@ -3,7 +3,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   tg, esc, TELEGRAM_ADMIN_CHAT_ID, notifyAdminNewOrder,
-  sendCustomerCredentials, sendCustomerRejected,
+  sendCustomerCredentials, sendCustomerRejected, sendCustomerApprovedNotice, orderButtons,
 } from "../_shared/telegram.ts";
 
 const WELCOME =
@@ -11,7 +11,6 @@ const WELCOME =
   "Facebook Messenger (သို့မဟုတ်) Web မှ ဝယ်ယူထားသော ငွေလွှဲစလစ်ဓာတ်ပုံ နှင့် ဝယ်ယူသည့် Plan အမည် ကို ဤနေရာတွင် ပေးပို့ပေးပါရှင်။\n" +
   "Admin မှ စလစ်ကို စစ်ဆေးအတည်ပြုပြီးသည်နှင့် မိမိအသုံးပြုရမည့် User ID & Password ကို ဤ Bot ထဲတွင် တိုက်ရိုက် ထုတ်ပေးသွားပါမည်။";
 
-const DEFAULT_CREDITS = 450;
 const PAGE = 1000;
 
 // Webhook secret derived from the bot token (Telegram only allows [A-Za-z0-9_-])
@@ -128,28 +127,126 @@ async function handleSlip(db: any, msg: any) {
   await notifyAdminNewOrder(db, order, "Telegram");
 }
 
-async function approveNewUser(db: any, order: any) {
-  const password = generateSecurePassword(18);
-  const displayId = order.order_number;
-  const email = `${displayId}@internal.user`;
-  const { data: created, error } = await db.auth.admin.createUser({ email, password, email_confirm: true });
-  if (error || !created?.user) throw error || new Error("create failed");
-  const uid = created.user.id;
-  await db.from("profiles").update({
-    plan: "premium",
-    credits: DEFAULT_CREDITS,
-    credits_started_at: new Date().toISOString(),
-    ...(order.customer_name ? { display_name: order.customer_name } : {}),
-  }).eq("user_id", uid);
-  await db.from("credit_topups").insert({
-    user_id: uid, amount: DEFAULT_CREDITS, topup_type: "original",
-    note: `New user order (Telegram): ${displayId}`,
+// ===== Admin approval wizard (no presets — admin enters every value) =====
+const TYPE_LABEL: Record<string, string> = { new_user: "🆕 New User", renew: "🔄 Renew", topup: "💰 Top-up" };
+const PLAN_LABEL: Record<string, string> = { premium: "💎 Premium", pro: "⭐ Pro", free: "🆓 Free" };
+const WIZ_TEXT_STEPS = ["uid", "credit", "cash", "name"];
+
+const adminSay = (text: string, reply_markup?: unknown) =>
+  tg("sendMessage", {
+    chat_id: TELEGRAM_ADMIN_CHAT_ID, text, parse_mode: "HTML", disable_notification: true,
+    ...(reply_markup ? { reply_markup } : {}),
   });
+
+async function saveDraft(db: any, orderId: string, draft: Record<string, unknown> | null) {
+  await db.from("payment_orders").update({ tg_draft: draft }).eq("id", orderId);
+}
+
+const cancelBtn = (id: string) => [{ text: "✖️ Cancel", callback_data: `cx:${id}` }];
+
+async function askStep(db: any, order: any, draft: any) {
+  const id = order.id;
+  const no = esc(order.order_number);
+  await saveDraft(db, id, draft);
+  switch (draft.step) {
+    case "type":
+      return adminSay(`📝 <b>${no}</b> — Account Type ရွေးပါ`, { inline_keyboard: [[
+        { text: TYPE_LABEL.new_user, callback_data: `ty:${id}:new_user` },
+        { text: TYPE_LABEL.renew, callback_data: `ty:${id}:renew` },
+        { text: TYPE_LABEL.topup, callback_data: `ty:${id}:topup` },
+      ], cancelBtn(id)] });
+    case "uid":
+      return adminSay(`👤 <b>${no}</b> — Customer ရဲ့ လက်ရှိ User ID ကို ရိုက်ပို့ပါ (ဥပမာ nw0123)`, { inline_keyboard: [cancelBtn(id)] });
+    case "plan":
+      return adminSay(`📦 <b>${no}</b> — Plan ရွေးပါ`, { inline_keyboard: [[
+        { text: PLAN_LABEL.premium, callback_data: `pl:${id}:premium` },
+        { text: PLAN_LABEL.pro, callback_data: `pl:${id}:pro` },
+        { text: PLAN_LABEL.free, callback_data: `pl:${id}:free` },
+      ], cancelBtn(id)] });
+    case "credit":
+      return adminSay(`🪙 <b>${no}</b> — ထည့်ပေးမယ့် Credit ပမာဏ ရိုက်ပို့ပါ (ဥပမာ 450)`, { inline_keyboard: [cancelBtn(id)] });
+    case "cash":
+      return adminSay(`💵 <b>${no}</b> — ရရှိတဲ့ Cash Amount (Ks) ရိုက်ပို့ပါ (ဥပမာ 45000)`, { inline_keyboard: [cancelBtn(id)] });
+    case "name": {
+      const rows: any[] = [];
+      if (order.customer_name) rows.push([{ text: `✔️ "${String(order.customer_name).substring(0, 30)}" သုံးမယ်`, callback_data: `nm:${id}:keep` }]);
+      else rows.push([{ text: "⏭ နာမည်မထည့်ဘူး", callback_data: `nm:${id}:skip` }]);
+      rows.push(cancelBtn(id));
+      return adminSay(`✍️ <b>${no}</b> — Customer Name ရိုက်ပို့ပါ`, { inline_keyboard: rows });
+    }
+    case "confirm":
+      return adminSay(
+        `📋 <b>${no}</b> — စစ်ဆေးပါ\n` +
+        `Type: ${TYPE_LABEL[draft.type]}\n` +
+        (draft.uid ? `User ID: <code>${esc(draft.uid)}</code>\n` : "") +
+        `Plan: ${PLAN_LABEL[draft.plan]}\n` +
+        `Credit: <b>${draft.credit}</b> CR\n` +
+        `Cash: <b>${Number(draft.cash).toLocaleString("en-US")}</b> Ks\n` +
+        `Name: ${esc(draft.name || "-")}`,
+        { inline_keyboard: [[{ text: "✅ Confirm Approve", callback_data: `cf:${id}` }], cancelBtn(id)] },
+      );
+  }
+}
+
+async function finalizeApproval(db: any, order: any, d: any) {
+  const now = new Date().toISOString();
+  const credit = Number(d.credit) || 0;
+  const cash = Number(d.cash) || 0;
+  const name = d.name ? String(d.name).substring(0, 100) : null;
+  let creds: { userId: string; password: string } | null = null;
+  let uid: string;
+
+  if (d.type === "new_user") {
+    const password = generateSecurePassword(18);
+    const displayId = order.order_number;
+    const { data: created, error } = await db.auth.admin.createUser({
+      email: `${displayId}@internal.user`, password, email_confirm: true,
+    });
+    if (error || !created?.user) throw error || new Error("create failed");
+    uid = created.user.id;
+    await db.from("profiles").update({
+      plan: d.plan, credits: credit, credits_started_at: now,
+      ...(name ? { display_name: name } : {}),
+    }).eq("user_id", uid);
+    if (credit > 0 || cash > 0) {
+      await db.from("credit_topups").insert({
+        user_id: uid, amount: credit, cash_amount: cash || null, topup_type: "original",
+        note: `New user order (Telegram): ${displayId}`,
+      });
+    }
+    creds = { userId: displayId, password };
+  } else {
+    const { data: prof } = await db.from("profiles").select("user_id, credits, credits_started_at")
+      .eq("email", `${String(d.uid).toLowerCase()}@internal.user`).maybeSingle();
+    if (!prof) throw new Error(`User ${d.uid} not found`);
+    uid = prof.user_id;
+    const upd: Record<string, unknown> = { credits: (prof.credits || 0) + credit, plan: d.plan };
+    if (d.type === "renew") {
+      if (prof.credits_started_at) {
+        const n = new Date(prof.credits_started_at); n.setMonth(n.getMonth() + 1);
+        upd.credits_started_at = n.toISOString();
+      } else upd.credits_started_at = now;
+    } else if (!prof.credits_started_at) upd.credits_started_at = now;
+    if (name) upd.display_name = name;
+    await db.from("profiles").update(upd).eq("user_id", uid);
+    if (credit > 0 || cash > 0) {
+      await db.from("credit_topups").insert({
+        user_id: uid, amount: credit, cash_amount: cash || null, topup_type: d.type,
+        note: `${d.type === "renew" ? "Renew" : "Top-up"} order (Telegram): ${order.order_number}`,
+      });
+    }
+  }
+
   await db.from("payment_orders").update({
-    user_id: uid, admin_credit_amount: DEFAULT_CREDITS, admin_bonus_amount: 0,
-    approved_at: new Date().toISOString(), status: "approved",
+    user_id: uid, order_type: d.type, admin_credit_amount: credit, admin_bonus_amount: 0,
+    cash_amount: cash, customer_name: name, approved_at: now, status: "approved", tg_draft: null,
   }).eq("id", order.id);
-  return { userId: displayId, password };
+
+  if (order.telegram_chat_id) {
+    if (creds) await sendCustomerCredentials(order.telegram_chat_id, creds.userId, creds.password);
+    else await sendCustomerApprovedNotice(order.telegram_chat_id, order.order_number);
+  }
+  return creds;
 }
 
 async function handleCallback(db: any, cq: any) {
@@ -158,46 +255,75 @@ async function handleCallback(db: any, cq: any) {
     await tg("answerCallbackQuery", { callback_query_id: cq.id, text: "Admin only" });
     return;
   }
-  const [kind, orderId] = String(cq.data || "").split(":");
+  await tg("answerCallbackQuery", { callback_query_id: cq.id });
+  // Remove buttons from the message that was tapped
+  if (cq.message) {
+    await tg("editMessageReplyMarkup", {
+      chat_id: cq.message.chat.id, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] },
+    });
+  }
+  const [kind, orderId, val] = String(cq.data || "").split(":");
   const { data: order } = await db.from("payment_orders").select("*").eq("id", orderId).maybeSingle();
-  const done = async (text: string) => {
-    await tg("answerCallbackQuery", { callback_query_id: cq.id });
-    if (cq.message) {
-      await tg("editMessageReplyMarkup", {
-        chat_id: cq.message.chat.id, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] },
-      });
-      await tg("sendMessage", {
-        chat_id: cq.message.chat.id, reply_to_message_id: cq.message.message_id,
-        text, parse_mode: "HTML", disable_notification: true,
-      });
-    }
-  };
-  if (!order) return done("Order မတွေ့ပါ");
-  if (order.status !== "pending") return done(`${esc(order.order_number)} ကို ${esc(order.status)} လုပ်ပြီးသားပါ`);
+  if (!order) return adminSay("Order မတွေ့ပါ");
+  if (order.status !== "pending") return adminSay(`${esc(order.order_number)} ကို ${esc(order.status)} လုပ်ပြီးသားပါ`);
+  const d: any = order.tg_draft || {};
 
   if (kind === "rj") {
-    await db.from("payment_orders").update({ status: "rejected", approved_at: new Date().toISOString() }).eq("id", order.id);
+    await db.from("payment_orders").update({ status: "rejected", approved_at: new Date().toISOString(), tg_draft: null }).eq("id", order.id);
     if (order.telegram_chat_id) await sendCustomerRejected(order.telegram_chat_id);
-    return done(`❌ ${esc(order.order_number)} Reject လုပ်ပြီးပါပြီ`);
+    return adminSay(`❌ ${esc(order.order_number)} Reject လုပ်ပြီးပါပြီ`);
   }
-
-  if (kind === "ap") {
-    if (order.order_type !== "new_user") {
-      return done(`ℹ️ ${esc(order.order_number)} က ${esc(order.order_type)} ဖြစ်လို့ Admin Panel မှာ Credit ဖြည့်ပြီး Approve လုပ်ပေးပါ`);
-    }
+  if (kind === "cx") {
+    await saveDraft(db, order.id, null);
+    return adminSay(`✖️ ${esc(order.order_number)} Approve ကို ရပ်လိုက်ပါပြီ (Pending အဖြစ် ကျန်ပါတယ်)`, orderButtons(order.id));
+  }
+  if (kind === "ap") return askStep(db, order, { step: "type" });
+  if (kind === "ty" && TYPE_LABEL[val]) return askStep(db, order, { step: val === "new_user" ? "plan" : "uid", type: val });
+  if (kind === "pl" && PLAN_LABEL[val] && d.type) return askStep(db, order, { ...d, step: "credit", plan: val });
+  if (kind === "nm" && d.step === "name") {
+    return askStep(db, order, { ...d, step: "confirm", name: val === "keep" ? order.customer_name : null });
+  }
+  if (kind === "cf" && d.step === "confirm") {
     try {
-      const r = await approveNewUser(db, order);
-      if (order.telegram_chat_id) await sendCustomerCredentials(order.telegram_chat_id, r.userId, r.password);
-      return done(
-        `✅ <b>${esc(order.order_number)}</b> အတည်ပြုပြီးပါပြီ (${DEFAULT_CREDITS} CR)\n` +
-        `User ID: <code>${esc(r.userId)}</code>\nPassword: <code>${esc(r.password)}</code>` +
+      const creds = await finalizeApproval(db, order, d);
+      return adminSay(
+        `✅ <b>${esc(order.order_number)}</b> အတည်ပြုပြီးပါပြီ — ${d.credit} CR / ${Number(d.cash).toLocaleString("en-US")} Ks` +
+        (creds ? `\nUser ID: <code>${esc(creds.userId)}</code>\nPassword: <code>${esc(creds.password)}</code>` : `\nUser: <code>${esc(d.uid)}</code>`) +
         (order.telegram_chat_id ? "\n(Customer ဆီ ပို့ပြီးပါပြီ)" : "\n(Web order ဖြစ်လို့ Customer ဆီ ကိုယ်တိုင်ပို့ပေးပါ)"),
       );
     } catch (e) {
       console.error("Approve failed:", e);
-      return done(`⚠️ Approve မအောင်မြင်ပါ — Admin Panel မှာ ပြန်လုပ်ပေးပါ`);
+      await saveDraft(db, order.id, { ...d, step: d.type === "new_user" ? "plan" : "uid" });
+      return adminSay(`⚠️ Approve မအောင်မြင်ပါ: ${esc((e as Error)?.message || "error")}\nပြန်စစ်ပြီး ဆက်ဖြည့်ပါ`, { inline_keyboard: [cancelBtn(order.id)] });
     }
   }
+}
+
+/** Admin typed a value for the current wizard step. Returns true if consumed. */
+async function handleAdminText(db: any, text: string): Promise<boolean> {
+  const { data: rows } = await db.from("payment_orders").select("*")
+    .eq("status", "pending").not("tg_draft", "is", null)
+    .order("updated_at", { ascending: false }).limit(5);
+  const order = (rows || []).find((r: any) => WIZ_TEXT_STEPS.includes(r.tg_draft?.step));
+  if (!order) return false;
+  const d: any = order.tg_draft;
+  const num = Number(text.replace(/[,\s]/g, "").replace(/ks|mmk|cr/gi, ""));
+  if (d.step === "uid") {
+    const v = text.trim().toLowerCase().split("@")[0];
+    if (!/^[a-z]{2,4}\d+$/.test(v)) { await adminSay("User ID ပုံစံ မမှန်ပါ (ဥပမာ nw0123)"); return true; }
+    const { data: p } = await db.from("profiles").select("user_id").eq("email", `${v}@internal.user`).maybeSingle();
+    if (!p) { await adminSay(`<code>${esc(v)}</code> ဆိုတဲ့ User မတွေ့ပါ — ပြန်ရိုက်ပါ`); return true; }
+    await askStep(db, order, { ...d, step: "plan", uid: v });
+  } else if (d.step === "credit") {
+    if (!Number.isFinite(num) || num < 0 || !Number.isInteger(num)) { await adminSay("Credit ကို ကိန်းဂဏန်းနဲ့ ရိုက်ပါ (ဥပမာ 450)"); return true; }
+    await askStep(db, order, { ...d, step: "cash", credit: num });
+  } else if (d.step === "cash") {
+    if (!Number.isFinite(num) || num < 0) { await adminSay("Cash ကို ကိန်းဂဏန်းနဲ့ ရိုက်ပါ (ဥပမာ 45000)"); return true; }
+    await askStep(db, order, { ...d, step: "name", cash: num });
+  } else if (d.step === "name") {
+    await askStep(db, order, { ...d, step: "confirm", name: text.trim().substring(0, 100) });
+  }
+  return true;
 }
 
 Deno.serve(async (req) => {
@@ -228,7 +354,10 @@ Deno.serve(async (req) => {
       const msg = update.message;
       if (msg.chat?.type !== "private") return new Response("ok");
       const text = String(msg.text || "").trim();
-      if (msg.photo || msg.document) {
+      const isAdmin = String(msg.from?.id) === String(TELEGRAM_ADMIN_CHAT_ID);
+      if (isAdmin && text && !text.startsWith("/") && await handleAdminText(db, text)) {
+        // consumed by approval wizard
+      } else if (msg.photo || msg.document) {
         await handleSlip(db, msg);
       } else if (text.startsWith("/start") || text === "/help") {
         await tg("sendMessage", { chat_id: msg.chat.id, text: WELCOME });
