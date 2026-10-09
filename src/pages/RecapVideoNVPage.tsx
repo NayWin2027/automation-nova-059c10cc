@@ -4442,6 +4442,25 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   />
                 )}
 
+                {timelineBar.enabled && audioRef.current && (
+                  <div
+                    className="absolute bottom-0 left-0 right-0 z-30 pointer-events-none"
+                    style={{ height: `${timelineBar.thickness}px` }}
+                  >
+                    <div className="absolute inset-0 bg-black/30" />
+                    <div
+                      className="absolute inset-y-0 left-0 transition-none"
+                      style={{
+                        width: audioRef.current?.duration
+                          ? `${Math.min(100, (audioRef.current.currentTime / audioRef.current.duration) * 100)}%`
+                          : "0%",
+                        backgroundColor: timelineBar.color,
+                        boxShadow: "none",
+                      }}
+                    />
+                  </div>
+                )}
+
                 {/* No. 5: iPad / Safari Autoplay Blocked - Tap to Start Overlay */}
                 {autoplayBlocked && (
                   <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm p-4 text-center">
