@@ -622,6 +622,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const [serverRenderProgress, setServerRenderProgress] = useState<string>("");
     const subNeonHueRef = useRef(0);
     const [exportQuality, setExportQuality] = useState<string>("720p");
+    // iPad / Safari Autoplay Block ကာကွယ်ရေး State
+    const [autoplayBlocked, setAutoplayBlocked] = useState(false);
 
     // Cinematic movie poster generation removed (feature disabled).
 
@@ -1994,8 +1996,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       }
 
       // â”€â”€ MIME Detection: TT/TG REMUX READY â”€â”€
-      const isSafari =
-        /^((?!chrome|android).)*safari/i.test(navigator.userAgent) || /iPad|iPhone|iPod/.test(navigator.userAgent);
+      const isIPad =
+        /iPad/.test(navigator.userAgent) ||
+        (typeof navigator !== "undefined" && navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      const isSafari = isIOS || /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
       // SURGICAL FIX: Prioritize real native MP4 (H.264/AVC) so output is genuine MP4 directly.
       const allMimeTypes = [
         "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
@@ -2163,8 +2167,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // iOS WebKit does not support requestFrame() and captureStream(0) produces 0 frames (inactive track error).
       // On iOS Safari, we MUST provide a positive frame rate: captureStream(quality.fps || 24).
       // On Chromium/Desktop, captureStream(0) + requestFrame() is kept for 100% steady manual cadence.
-      const isSafariOrIOS =
-        /iPad|iPhone|iPod/.test(navigator.userAgent) || /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+      const isSafariOrIOS = isIOS || isSafari;
 
       const canvasStream = isSafariOrIOS
         ? encCanvas.captureStream
@@ -3904,10 +3907,19 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // SURGICAL EDIT: Apply user-selected audioSpeedRate at recording start
       if (audioRef.current) {
         audioRef.current.playbackRate = audioSpeedRate;
-        audioRef.current.play().catch((aErr) => {
-          console.warn("[RECORDING] iOS Audio autoplay warning:", aErr);
-          audioRef.current?.play().catch(() => {});
-        });
+        const playPromise = audioRef.current.play();
+        if (playPromise !== undefined) {
+          playPromise.catch((aErr) => {
+            console.warn("[RECORDING] iOS / Safari Audio autoplay blocked:", aErr);
+            setAutoplayBlocked(true);
+          });
+        }
+        // 300ms ကြာပြီးနောက် အသံမထွက်ဘဲ ရပ်နေပါက ခလုတ်ထုတ်ပြပေးခြင်း
+        setTimeout(() => {
+          if (audioRef.current && audioRef.current.paused && isRenderingRef.current) {
+            setAutoplayBlocked(true);
+          }
+        }, 300);
       }
       if (videoRef.current) {
         videoRef.current.playbackRate = 1.0;
