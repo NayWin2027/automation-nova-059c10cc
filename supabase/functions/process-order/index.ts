@@ -684,6 +684,12 @@ serve(async (req) => {
           if (Object.keys(extra).length) {
             await supabaseAdmin.from("payment_orders").update(extra).eq("id", orderId);
           }
+          // Cash becomes the revenue for this sale (replaces credits×100, never added to it)
+          if (extra.cash_amount !== undefined && extra.cash_amount > 0) {
+            await supabaseAdmin.from("credit_topups").update({ cash_amount: extra.cash_amount })
+              .in("topup_type", ["original", "topup", "renew"])
+              .ilike("note", `%${order.order_number}%`);
+          }
           if (customerName && resultData.newUserId) {
             await supabaseAdmin.from("profiles").update({ display_name: String(customerName).trim().substring(0, 100) }).eq("user_id", resultData.newUserId);
           }

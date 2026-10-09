@@ -70,13 +70,14 @@ function useRevenueData(): DataState {
 
       const { data: tData } = await supabase
         .from("credit_topups")
-        .select("id, user_id, amount, topup_type, created_at, is_deleted")
+        .select("id, user_id, amount, cash_amount, topup_type, created_at, is_deleted")
         .order("created_at", { ascending: true });
       const clean = (tData ?? []).filter((t: any) => !t.is_deleted);
       setTopups(clean.map((t: any) => ({
         id: t.id,
         user_id: t.user_id,
-        amount: Number(t.amount) || 0,
+        // Revenue rule: real cash (when entered) replaces credits×100 — never both
+        amount: Number(t.cash_amount) > 0 ? Number(t.cash_amount) / MMK_PER_CREDIT : (Number(t.amount) || 0),
         topup_type: String(t.topup_type || "topup"),
         created_at: t.created_at,
       })));

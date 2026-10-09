@@ -28,7 +28,7 @@ export const esc = (s: unknown) =>
 export function orderButtons(orderId: string) {
   return {
     inline_keyboard: [[
-      { text: "✅ Approve (450 CR)", callback_data: `ap:${orderId}` },
+      { text: "📝 Approve (အချက်အလက်ဖြည့်မည်)", callback_data: `ap:${orderId}` },
       { text: "❌ Reject", callback_data: `rj:${orderId}` },
     ]],
   };
@@ -43,7 +43,7 @@ export async function notifyAdminNewOrder(supabaseAdmin: any, order: any, source
     `Type: ${esc(order.order_type)} | Pay: ${esc(order.payment_method)}\n` +
     (order.payment_ref ? `Txn: ${esc(order.payment_ref)}\n` : "") +
     (order.contact_value ? `Contact: ${esc(order.contact_method)} - ${esc(order.contact_value)}\n` : "") +
-    `\nCredit စိတ်ကြိုက်ဖြည့်ချင်ရင် Admin Panel မှာ Approve လုပ်ပါ။`;
+    `\nApprove နှိပ်ပြီး Type / Plan / Credit / Cash / Name ကို ဒီမှာတင် ဖြည့်လို့ရပါတယ်။`;
   const reply_markup = orderButtons(order.id);
   let photoUrl: string | null = null;
   if (order.slip_image_path) {
