@@ -4442,22 +4442,31 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   />
                 )}
 
-                {timelineBar.enabled && audioRef.current && (
-                  <div
-                    className="absolute bottom-0 left-0 right-0 z-30 pointer-events-none"
-                    style={{ height: `${timelineBar.thickness}px` }}
-                  >
-                    <div className="absolute inset-0 bg-black/30" />
-                    <div
-                      className="absolute inset-y-0 left-0 transition-none"
-                      style={{
-                        width: audioRef.current?.duration
-                          ? `${Math.min(100, (audioRef.current.currentTime / audioRef.current.duration) * 100)}%`
-                          : "0%",
-                        backgroundColor: timelineBar.color,
-                        boxShadow: "none",
+                {/* No. 5: iPad / Safari Autoplay Blocked - Tap to Start Overlay */}
+                {autoplayBlocked && (
+                  <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm p-4 text-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (audioRef.current) {
+                          audioRef.current
+                            .play()
+                            .then(() => {
+                              setAutoplayBlocked(false);
+                            })
+                            .catch(console.warn);
+                        } else {
+                          setAutoplayBlocked(false);
+                        }
                       }}
-                    />
+                      className="px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-xl text-sm shadow-xl flex items-center gap-2 transform active:scale-95 transition-all"
+                    >
+                      <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                      <span>▶ Video Editing စတင်ရန် နှိပ်ပါ (Tap to Start)</span>
+                    </button>
+                    <p className="text-xs text-amber-200/80 mt-2">iPad / Safari တွင် အသံဖွင့်ခွင့်ပေးရန် နှိပ်ပေးပါ</p>
                   </div>
                 )}
               </div>
