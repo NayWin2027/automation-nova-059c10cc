@@ -1999,6 +1999,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       const isIPad =
         /iPad/.test(navigator.userAgent) ||
         (typeof navigator !== "undefined" && navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || isIPad;
       const isSafari = isIOS || /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
       // SURGICAL FIX: Prioritize real native MP4 (H.264/AVC) so output is genuine MP4 directly.
       const allMimeTypes = [
@@ -2051,7 +2052,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // Detect device capability BEFORE selecting quality to ensure 100% smooth performance
       const cores = navigator.hardwareConcurrency || 4;
       const mem = (navigator as any).deviceMemory || 4;
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
       // iPhone 8/X and Snapdragon 400 series (2-3GB RAM) â†’ force 480p for 100% smoothness
       const force480p =
         (cores <= 4 && mem <= 2) ||
