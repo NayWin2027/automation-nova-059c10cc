@@ -2421,7 +2421,18 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         // ── SURGICAL FIX: create scene-cut prewarm buffer (decode-gap killer) ──
         try {
-          if (!prewarmVideoRef.current) {
+          // SURGICAL FIX (i5/mid PC stutter in Viral/Hybrid): a 2nd decoder seeking on every
+          // short dialogue cut overloads integrated GPUs. Only strong CPUs (12+ threads) get it.
+          // Timing/seek logic is untouched — draw loop already falls back to the main video.
+          const allowPrewarm = cores >= 12 && !isIOS;
+          if (!allowPrewarm && prewarmVideoRef.current) {
+            try {
+              prewarmVideoRef.current.removeAttribute("src");
+              prewarmVideoRef.current.load();
+            } catch (_) {}
+            prewarmVideoRef.current = null;
+          }
+          if (allowPrewarm && !prewarmVideoRef.current) {
             const pw = document.createElement("video");
             pw.muted = true;
             pw.playsInline = true;
