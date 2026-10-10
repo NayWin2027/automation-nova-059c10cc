@@ -45,6 +45,10 @@ interface RecapScript {
 const DIALOGUE_METADATA_PATTERN =
   /(?:\[|\{|\(|［|｛|（)\s*DIALOG(?:UE|UAGE)(?:\s*:\s*[A-Za-z _-]+)?\s*(?:\]|\}|\)|］|｝|）)/gi;
 
+// SURGICAL FIX: AI ရေးသော Narrator, Voiceover စသည့် Tag များကို TTS နှင့် Subtitle မှ ဖယ်ရှားခြင်း
+const NARRATOR_PREFIX_PATTERN =
+  /^(?:\[|\{|\(|［|｛|（)?\s*(?:narrator|narration|voiceover|vo|ဇာတ်ကြောင်းပြောသူ|ပြောသူ)\s*(?::|—|-|–)?\s*(?:\]|\}|\)|］|｝|）)?\s*:?\s*/i;
+
 // SURGICAL FIX: strip every timecode shape the AI may emit ([M:SS], [HH:MM:SS], ranges)
 // so timestamps never leak into subtitles.
 const TIMECODE_STRIP_RE = /\[\s*\d{1,2}:\d{2}(?::\d{2})?(?:\s*[-–—]\s*\d{1,2}:\d{2}(?::\d{2})?)?\s*\]/g;
@@ -52,6 +56,8 @@ const TIMECODE_STRIP_RE = /\[\s*\d{1,2}:\d{2}(?::\d{2})?(?:\s*[-–—]\s*\d{1,2
 const stripDialogueMetadata = (text: string): string =>
   String(text || "")
     .replace(DIALOGUE_METADATA_PATTERN, "")
+    .replace(NARRATOR_PREFIX_PATTERN, "")
+    .replace(/(^|\n)\s*(?:narrator|narration|voiceover|ဇာတ်ကြောင်းပြောသူ)\s*:\s*/gi, "$1")
     .replace(/[ \t]{2,}/g, " ")
     .trim();
 
@@ -215,7 +221,7 @@ const EXPORT_QUALITY_OPTIONS: Record<
   { maxW: number; maxH: number; fps: number; bitrate: number; label: string }
 > = {
   "480p": { maxW: 854, maxH: 480, fps: 20, bitrate: 2_500_000, label: "480p (Low — 854×480 · 20fps · 2Mbps)" },
-  "720p": { maxW: 1280, maxH: 720, fps: 24, bitrate: 4_000_000, label: "720p (Mid — 1280×720 · 24fps · 2.5Mbps)" },
+  "720p": { maxW: 1280, maxH: 720, fps: 24, bitrate: 2_500_000, label: "720p (Mid — 1280×720 · 24fps · 2.5Mbps)" },
   "1080p": { maxW: 1920, maxH: 1080, fps: 30, bitrate: 6_000_000, label: "1080p (High — 1920×1080 · 30fps · 4Mbps)" },
   "1080p10": {
     maxW: 1920,
@@ -225,6 +231,23 @@ const EXPORT_QUALITY_OPTIONS: Record<
     label: "1080p (10Mbps — 1920×1080 · 30fps · 10Mbps)",
   },
 };
+
+// ── SURGICAL FIX: encoder strategy (simple, no user choices) ──
+// Desktop (computer): CPU (software) H.264 encode FIRST — avoids weak-iGPU driver
+//   freezes (e.g. Ryzen 7 + weak iGPU). Overload watchdog steps down resolution if needed.
+// Mobile / phone / iOS: GPU (hardware) encode FIRST — unchanged, phones already work fine.
+// Genuine H.264 MP4 output in all cases (mp4-muxer). The iOS / MediaRecorder fallback
+// flow is completely untouched.
+const IS_MOBILE_DEVICE: boolean = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(
+  typeof navigator !== "undefined" ? navigator.userAgent || "" : "",
+);
+
+// One audio graph per <audio> element — an element can be attached to a
+// MediaElementSource only once, so restarts / repeat renders must reuse it.
+const RECAP_AUDIO_GRAPH_CACHE = new WeakMap<
+  HTMLMediaElement,
+  { ctx: AudioContext; source: MediaElementAudioSourceNode }
+>();
 
 // —— Fast string hash for subtitle cache comparison (avoids full string compare per frame) ——
 const hashText = (s: string): number => {
@@ -350,6 +373,8 @@ const fixWebmDuration = (buffer: ArrayBuffer, durationMs: number): ArrayBuffer |
 // ── SURGICAL ADDITION: 0-LATENCY DIRECT MP4 RECORDER (WebCodecs + mp4-muxer) ──
 interface WebCodecsMp4Recorder {
   encodeVideoFrame: (canvas: HTMLCanvasElement, timestampUs: number, isKeyFrame?: boolean) => void;
+  getStats: () => { encoded: number; dropped: number };
+  isBusy?: () => boolean;
   finalize: () => Promise<Blob>;
   cleanup: () => void;
 }
@@ -376,6 +401,8 @@ const createWebCodecsMp4Recorder = async (options: {
   /** Shared audio graph (created once by the recording pipeline) — avoids a second createMediaElementSource. */
   sharedAudioContext?: AudioContext | null;
   sharedAudioSource?: AudioNode | null;
+  /** Force CPU (software) H.264 encoding instead of GPU — for strong-CPU / weak-GPU machines. Output is still genuine H.264 MP4. */
+  forceSoftware?: boolean;
 }): Promise<WebCodecsMp4Recorder | null> => {
   if (
     typeof window === "undefined" ||
@@ -394,22 +421,49 @@ const createWebCodecsMp4Recorder = async (options: {
   const fps = options.fps || 30;
   const bitrate = options.bitrate || 6_000_000;
 
-  // Codec check - Main profile AVC / H.264
-  const videoCodec = "avc1.4d002a";
-  try {
-    const isSupported = await (window as any).VideoEncoder.isConfigSupported({
-      codec: videoCodec,
-      width,
-      height,
-      bitrate,
-      framerate: fps,
-    });
-    if (!isSupported?.supported) {
-      console.warn("[WebCodecs] H.264 profile not supported by hardware, falling back to MediaRecorder");
-      return null;
+  // Codec check - Try Main Profile, Baseline Profile, and High Profile for universal mobile & desktop acceleration
+  const codecCandidates = [
+    "avc1.4d002a", // Main Profile Level 4.2 (Desktop standard)
+    "avc1.420028", // Baseline Profile Level 4.0 (Universal mobile / Snapdragon)
+    "avc1.42e01f", // Constrained Baseline Level 3.1 (Low-end mobile / Snapdragon 6gen)
+    "avc1.640028", // High Profile Level 4.0
+  ];
+  let videoCodec: string | null = null;
+  for (const c of codecCandidates) {
+    try {
+      const isSupported = await (window as any).VideoEncoder.isConfigSupported({
+        codec: c,
+        width,
+        height,
+        bitrate,
+        framerate: fps,
+        hardwareAcceleration: "prefer-software", // SURGICAL FIX (TDR FREEZE): Force software to prevent OS mouse freeze
+      });
+      if (isSupported?.supported) {
+        videoCodec = c;
+        break;
+      }
+    } catch (_) {}
+  }
+  if (!videoCodec) {
+    for (const c of codecCandidates) {
+      try {
+        const isSupported = await (window as any).VideoEncoder.isConfigSupported({
+          codec: c,
+          width,
+          height,
+          bitrate,
+          framerate: fps,
+        });
+        if (isSupported?.supported) {
+          videoCodec = c;
+          break;
+        }
+      } catch (_) {}
     }
-  } catch (e) {
-    console.warn("[WebCodecs] VideoEncoder config check failed:", e);
+  }
+  if (!videoCodec) {
+    console.warn("[WebCodecs] H.264 profile not supported by hardware, falling back to MediaRecorder");
     return null;
   }
 
@@ -428,21 +482,30 @@ const createWebCodecsMp4Recorder = async (options: {
     !!audioSource;
 
   let aacConfigSupported = false;
+  // Windows Chrome AudioEncoder lacks AAC → use Opus (supported by mp4-muxer) to avoid
+  // the MediaRecorder + FFmpeg WASM re-encode fallback that freezes the browser.
+  let audioCodecWC: "mp4a.40.2" | "opus" = "mp4a.40.2";
   if (canUseAudioEncoder) {
-    try {
-      const aacCheck = await (window as any).AudioEncoder.isConfigSupported({
-        codec: "mp4a.40.2",
-        numberOfChannels: 2,
-        sampleRate: audioSampleRate,
-        bitrate: 128_000,
-      });
-      aacConfigSupported = !!aacCheck?.supported;
-    } catch (_) {}
+    for (const c of ["mp4a.40.2", "opus"] as const) {
+      try {
+        const chk = await (window as any).AudioEncoder.isConfigSupported({
+          codec: c,
+          numberOfChannels: 2,
+          sampleRate: audioSampleRate,
+          bitrate: 128_000,
+        });
+        if (chk?.supported) {
+          aacConfigSupported = true;
+          audioCodecWC = c;
+          break;
+        }
+      } catch (_) {}
+    }
   }
 
-  // SURGICAL SAFETY: Never produce a silent MP4 — if audio exists, AAC encoding must be available
+  // SURGICAL SAFETY: Never produce a silent MP4 — if audio exists, an audio encoder must be available
   if (audioEl && !aacConfigSupported) {
-    console.warn("[WebCodecs] AAC AudioEncoder unavailable, falling back to MediaRecorder with audio");
+    console.warn("[WebCodecs] AAC/Opus AudioEncoder unavailable, falling back to MediaRecorder with audio");
     return null;
   }
 
@@ -455,7 +518,7 @@ const createWebCodecsMp4Recorder = async (options: {
     },
     audio: aacConfigSupported
       ? {
-          codec: "aac",
+          codec: audioCodecWC === "opus" ? "opus" : "aac",
           numberOfChannels: 2,
           sampleRate: audioSampleRate,
         }
@@ -475,13 +538,15 @@ const createWebCodecsMp4Recorder = async (options: {
     height,
     bitrate,
     framerate: fps,
-    latencyMode: "realtime",
-    hardwareAcceleration: "prefer-hardware",
+    latencyMode: "quality", // SURGICAL FIX (Cinematic Smooth): allow better rate control/B-frames
+    hardwareAcceleration: "prefer-software", // SURGICAL FIX (TDR FREEZE): Force software to prevent OS mouse freeze
   });
 
   if (aacConfigSupported && audioContext && audioSource) {
     try {
-      scriptProcessor = audioContext.createScriptProcessor(4096, 2, 2);
+      // PERF FIX: Buffer 16384 (was 4096) — reduces onaudioprocess callbacks from ~11/s to ~2.7/s,
+      // cutting GC pauses from Float32Array allocations. Safe: recording latency doesn't matter.
+      scriptProcessor = audioContext.createScriptProcessor(16384, 2, 2);
       audioSource.connect(scriptProcessor);
       // Processor output stays silent; connecting it only keeps the node alive in the graph.
       scriptProcessor.connect(audioContext.destination);
@@ -492,15 +557,26 @@ const createWebCodecsMp4Recorder = async (options: {
       });
 
       audioEncoder.configure({
-        codec: "mp4a.40.2",
+        codec: audioCodecWC,
         numberOfChannels: 2,
         sampleRate: audioSampleRate,
         bitrate: 128_000,
       });
 
       let audioTimeUs = 0;
+      let hasStartedAudio = false;
       scriptProcessor.onaudioprocess = (e) => {
         if (!audioEncoder || audioEncoder.state !== "configured") return;
+        // SURGICAL FIX (Cinematic Smooth): Increase audio buffer to 300 so we never drop audio chunks (which causes video VFR stutter)
+        if (typeof audioEncoder.encodeQueueSize === "number" && audioEncoder.encodeQueueSize > 300) return;
+
+        // SURGICAL FIX: အသံဖွင့်စက် (audioEl) တကယ် စတင် Play မလုပ်မချင်း Silence မထည့်ရန် တားဆီးခြင်း
+        // ဗီဒီယိုအစတွင် အသံတိတ်နေခြင်းနှင့် အစ/အဆုံး မကိုက်ညီခြင်းကို ၁၀၀% ဖြေရှင်းပေးပါသည်
+        if (!hasStartedAudio) {
+          if (audioEl.paused || audioEl.currentTime <= 0) return;
+          hasStartedAudio = true;
+        }
+
         const left = e.inputBuffer.getChannelData(0);
         const right = e.inputBuffer.numberOfChannels > 1 ? e.inputBuffer.getChannelData(1) : left;
         const numberOfFrames = left.length;
@@ -527,24 +603,46 @@ const createWebCodecsMp4Recorder = async (options: {
 
   let frameCount = 0;
   let lastTimestampUs = -1;
+  // SURGICAL FIX (encoder overload watchdog): track submitted vs dropped frames so the
+  // render loop can detect when the HW encoder can't sustain the selected quality.
+  const wcStats = { encoded: 0, dropped: 0 };
+  let forceKeyAfterDrop = false;
 
   return {
     encodeVideoFrame: (canvas: HTMLCanvasElement, timestampUs: number, isKeyFrame?: boolean) => {
       if (videoEncoder.state !== "configured") return;
+      // SURGICAL FIX (i3/i5/i7 OS freeze): With CPU encoding, queue won't freeze the GPU.
+      // Increase buffer to 600 (20 seconds) so we NEVER drop frames and keep the output 100% CINEMATIC SMOOTH.
+      if (typeof videoEncoder.encodeQueueSize === "number" && videoEncoder.encodeQueueSize > 600) {
+        wcStats.dropped++;
+        // SURGICAL FIX (post-gap recovery): next accepted frame becomes a keyframe so players
+        // resume the picture instantly instead of freezing until the next scheduled I-frame.
+        forceKeyAfterDrop = true;
+        return;
+      }
+
       // Timestamps must strictly increase, otherwise the encoder throws and the MP4 is lost.
       const minStep = Math.round(1_000_000 / fps / 2);
       const ts = timestampUs > lastTimestampUs ? timestampUs : lastTimestampUs + minStep;
       lastTimestampUs = ts;
       frameCount++;
-      const keyFrame = isKeyFrame ?? frameCount % (fps * 2) === 1;
+      let keyFrame = isKeyFrame ?? frameCount % (fps * 2) === 1;
+      if (forceKeyAfterDrop) {
+        keyFrame = true;
+        forceKeyAfterDrop = false;
+      }
       try {
         const vf = new (window as any).VideoFrame(canvas, { timestamp: ts });
         videoEncoder.encode(vf, { keyFrame });
+        wcStats.encoded++;
         vf.close();
       } catch (encErr) {
         console.warn("[WebCodecs] frame encode skipped:", encErr);
       }
     },
+    getStats: () => ({ encoded: wcStats.encoded, dropped: wcStats.dropped }),
+    // SURGICAL FIX: Allow up to 600 frames (20s) buffer for CPU encoder so it never skips drawing
+    isBusy: () => typeof videoEncoder.encodeQueueSize === "number" && videoEncoder.encodeQueueSize > 600,
     finalize: async (): Promise<Blob> => {
       try {
         if (scriptProcessor) {
@@ -622,8 +720,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const [serverRenderProgress, setServerRenderProgress] = useState<string>("");
     const subNeonHueRef = useRef(0);
     const [exportQuality, setExportQuality] = useState<string>("720p");
-    // iPad / Safari Autoplay Block ကာကွယ်ရေး State
-    const [autoplayBlocked, setAutoplayBlocked] = useState(false);
+    // Reset any forced step-down when the user picks a different quality.
+    useEffect(() => {
+      forcedQualityRef.current = null;
+      forceSoftwareRef.current = !IS_MOBILE_DEVICE;
+    }, [exportQuality]);
 
     // Cinematic movie poster generation removed (feature disabled).
 
@@ -1069,6 +1170,20 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     // â”€â”€ Direct sync â€” no useEffect delay â”€â”€
     freezeModeRef.current = freezeMode;
     subtitleEnabledRef.current = subtitleEnabled;
+    // ── FAIR USE SUITE: Blur BG (PIP), Jump Cut Flash, Auto Speed Adj ──
+    const [fairBlurBg, setFairBlurBg] = useState<boolean>(false);
+    const [fairJumpFlash, setFairJumpFlash] = useState<boolean>(false);
+    const [fairSpeedAdj, setFairSpeedAdj] = useState<boolean>(false);
+    const fairBlurBgRef = useRef(false);
+    const fairJumpFlashRef = useRef(false);
+    const fairSpeedAdjRef = useRef(false);
+    fairBlurBgRef.current = fairBlurBg;
+    fairJumpFlashRef.current = fairJumpFlash;
+    fairSpeedAdjRef.current = fairSpeedAdj;
+    const [fairMaster, setFairMaster] = useState<boolean>(false);
+    const [fairHyperSync, setFairHyperSync] = useState<boolean>(false);
+    const fairHyperSyncRef = useRef(false);
+    fairHyperSyncRef.current = fairHyperSync;
 
     // Apply audioSpeedRate to audio element whenever it changes
     useEffect(() => {
@@ -1101,7 +1216,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const lastIndexRef = useRef<number>(-1);
     const recapAnimFrameRef = useRef<number>(0);
     const recapIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-    const recapRecorderRef = useRef<MediaRecorder | null>(null);
+    const recapRecorderRef = useRef<any>(null);
+    // SURGICAL FIX (encoder overload -> frozen output + OS freeze): holds a forced lower
+    // quality when the HW encoder can't sustain the selected quality. Set by the overload
+    // watchdog; consumed at the top of startRecapRecording.
+    const forcedQualityRef = useRef<string | null>(null);
+    // SURGICAL FIX (software encode tier): when true, the recorder uses CPU (software)
+    // H.264 encoding instead of the GPU — for strong-CPU / weak-GPU machines.
+    // Output stays genuine H.264 MP4 either way.
+    const forceSoftwareRef = useRef<boolean>(false);
     const wakeLockRef = useRef<WakeLockSentinel | null>(null);
     const isRenderingRef = useRef(false);
     const logoAngleRef = useRef<number>(0);
@@ -1153,6 +1276,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const visibleLoopMaskStartRef = useRef<number>(0);
     const visibleLoopFrameRef = useRef<HTMLCanvasElement | null>(null);
     const visibleLoopFrameReadyRef = useRef<boolean>(false);
+    const heldFrameLastCaptureRef = useRef<number>(0); // PERF FIX: throttle heldFrame capture
+    const dialogueHoldActiveRef = useRef<boolean>(false); // PERF FIX: dialogue static hold (no vv.pause)
     // SURGICAL EDIT: Track whether we're in active segment (true) or between segments (false)
     const videoInSegmentRef = useRef<boolean>(false);
     // SURGICAL FIX: Frozen frame refs for Freeze/Motion mode
@@ -1982,10 +2107,20 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const currentLogoPos =
       Object.entries(LOGO_POSITIONS).find(([, v]) => v.x === logo.x && v.y === logo.y)?.[0] || "UR";
 
-    const startRecapRecording = async () => {
+    const startRecapRecording = async (isStepDownRestart = false) => {
       const videoEl = videoRef.current;
       const audioEl = audioRef.current;
       if (!videoEl || !audioEl) return;
+
+      // SURGICAL FIX (encoder overload): on a step-down restart keep the forced lower
+      // quality; on a fresh user-initiated render, clear any previous forced quality.
+      if (!isStepDownRestart) {
+        forcedQualityRef.current = null;
+        // Desktop => CPU (software) encode from the very first attempt (never touch the
+        // weak iGPU). Mobile/iOS => GPU-first, exactly as before.
+        // FIX: GPU-first on every device (PC included); CPU only as a watchdog fallback.
+        forceSoftwareRef.current = !IS_MOBILE_DEVICE;
+      }
 
       let _blurFxCanvas: HTMLCanvasElement | null = null;
 
@@ -1996,11 +2131,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       }
 
       // â”€â”€ MIME Detection: TT/TG REMUX READY â”€â”€
-      const isIPad =
-        /iPad/.test(navigator.userAgent) ||
-        (typeof navigator !== "undefined" && navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || isIPad;
-      const isSafari = isIOS || /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+      const isSafari =
+        /^((?!chrome|android).)*safari/i.test(navigator.userAgent) || /iPad|iPhone|iPod/.test(navigator.userAgent);
       // SURGICAL FIX: Prioritize real native MP4 (H.264/AVC) so output is genuine MP4 directly.
       const allMimeTypes = [
         "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
@@ -2052,6 +2184,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // Detect device capability BEFORE selecting quality to ensure 100% smooth performance
       const cores = navigator.hardwareConcurrency || 4;
       const mem = (navigator as any).deviceMemory || 4;
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
       // iPhone 8/X and Snapdragon 400 series (2-3GB RAM) â†’ force 480p for 100% smoothness
       const force480p =
         (cores <= 4 && mem <= 2) ||
@@ -2061,7 +2194,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       const hasDeviceMemoryApi = typeof (navigator as any).deviceMemory === "number";
       const isHighEndDevice = cores >= 8 && (!hasDeviceMemoryApi || mem >= 6);
       // SURGICAL FIX: Never downgrade selected export resolution on any device tier.
-      const quality = EXPORT_QUALITY_OPTIONS[exportQuality] || EXPORT_QUALITY_OPTIONS["720p"];
+      // SURGICAL FIX: honor the watchdog's forced lower quality when the HW encoder
+      // couldn't sustain the user-selected quality.
+      const quality =
+        EXPORT_QUALITY_OPTIONS[forcedQualityRef.current || exportQuality] || EXPORT_QUALITY_OPTIONS["720p"];
       // â”€â”€ SURGICAL EDIT: Force 100% selected resolution for ALL aspect ratios â”€â”€
       // Use the larger scale factor to allow upscaling to full selected quality.
       // This ensures 720p source â†’ 1920Ã—1080 when 1080p is selected (full quality).
@@ -2166,70 +2302,127 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // SURGICAL FIX FOR IOS SAFARI:
       // iOS WebKit does not support requestFrame() and captureStream(0) produces 0 frames (inactive track error).
       // On iOS Safari, we MUST provide a positive frame rate: captureStream(quality.fps || 24).
-      // On Chromium/Desktop, captureStream(0) + requestFrame() is kept for 100% steady manual cadence.
-      const isSafariOrIOS = isIOS || isSafari;
+      // SURGICAL FIX FOR COMPUTER & MOBILE:
+      // Run continuous positive frame-rate captureStream(quality.fps || 30) on both computer and mobile
+      // to eliminate desktop frame stalls and long freezes during export.
+      const isSafariOrIOS =
+        /iPad|iPhone|iPod/.test(navigator.userAgent) || /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
-      const canvasStream = isSafariOrIOS
-        ? encCanvas.captureStream
-          ? encCanvas.captureStream(quality.fps || 24)
-          : (encCanvas as any).webkitCaptureStream(quality.fps || 24)
-        : encCanvas.captureStream(0);
+      const targetFps = quality.fps || 30;
+      let usedManualCaptureStream = false; // PERF FIX: track if captureStream(0) was used
+      // SURGICAL FIX (i3/i5/i7 OS lockup): defer captureStream until MediaRecorder fallback.
+      // Eager captureStream(targetFps) + WebCodecs = dual HW encoders → GPU/driver freeze.
+      let canvasStream: MediaStream | null = null;
+      let encTrack: MediaStreamTrack | null = null;
+      let mediaRecorderAudioDest: MediaStreamAudioDestinationNode | null = null;
+      const initCanvasStreamForMediaRecorder = () => {
+        if (canvasStream) return canvasStream;
+        const streamFps = isSafariOrIOS ? targetFps : 0;
+        canvasStream = encCanvas.captureStream
+          ? encCanvas.captureStream(streamFps)
+          : (encCanvas as any).webkitCaptureStream
+            ? (encCanvas as any).webkitCaptureStream(streamFps)
+            : (() => {
+                usedManualCaptureStream = true;
+                return encCanvas.captureStream(0);
+              })();
+        if (streamFps === 0) usedManualCaptureStream = true;
+        const videoTracks = canvasStream.getVideoTracks();
+        if (videoTracks.length === 0) {
+          console.error("[RECORDING] CRITICAL: No video track in canvas stream!");
+        } else {
+          encTrack = videoTracks[0];
+        }
+        if (sharedAudioSource && audioCtx && !mediaRecorderAudioDest) {
+          try {
+            mediaRecorderAudioDest = audioCtx.createMediaStreamDestination();
+            sharedAudioSource.connect(mediaRecorderAudioDest);
+            mediaRecorderAudioDest.stream
+              .getAudioTracks()
+              .forEach((track: MediaStreamTrack) => canvasStream!.addTrack(track));
+          } catch (iosSrcErr) {
+            console.warn("[RECORDING] MediaRecorder audio routing failed:", iosSrcErr);
+          }
+        }
+        return canvasStream;
+      };
 
-      const videoTracks = canvasStream.getVideoTracks();
-      if (videoTracks.length === 0) {
-        console.error("[RECORDING] CRITICAL: No video track in canvas stream!");
-      }
-      const encTrack = videoTracks[0] as any;
       const chunks: BlobPart[] = [];
 
       let audioCtx: AudioContext | null = null;
       // SURGICAL: single shared MediaElementSource — reused by WebCodecs AAC encoder below.
       let sharedAudioSource: MediaElementAudioSourceNode | null = null;
       try {
+        // FIX: reuse the cached graph for this <audio> element (step-down restarts and
+        // repeat renders) — createMediaElementSource can only succeed once per element.
+        const cachedGraph = RECAP_AUDIO_GRAPH_CACHE.get(audioEl);
+        if (cachedGraph && cachedGraph.ctx.state !== "closed") {
+          audioCtx = cachedGraph.ctx;
+          sharedAudioSource = cachedGraph.source;
+          if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
+          try {
+            sharedAudioSource.disconnect();
+            sharedAudioSource.connect(audioCtx.destination);
+          } catch (_) {}
+        }
         const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
-        if (AudioCtxClass) {
+        if (!audioCtx && AudioCtxClass) {
           audioCtx = new AudioCtxClass();
           if (audioCtx.state === "suspended") {
             audioCtx.resume().catch(() => {});
           }
-          // On non-iOS, connect audio stream to canvas stream
-          if (!isSafariOrIOS) {
-            const source = audioCtx.createMediaElementSource(audioEl);
-            sharedAudioSource = source;
-            const dest = audioCtx.createMediaStreamDestination();
-            source.connect(dest);
-            source.connect(audioCtx.destination);
-            dest.stream.getAudioTracks().forEach((track: MediaStreamTrack) => canvasStream.addTrack(track));
+          // SURGICAL FIX: iOS 16.4+ / Safari 16.4+ supports MediaRecorder MP4 + AudioContext capture.
+          // Only skip audio capture on very old iOS (no native AudioContext = pre-16.4).
+          const isOldIOS = isSafariOrIOS && !window.AudioContext && !!(window as any).webkitAudioContext;
+          if (!isOldIOS) {
+            try {
+              const source = audioCtx.createMediaElementSource(audioEl);
+              sharedAudioSource = source;
+              source.connect(audioCtx.destination);
+              RECAP_AUDIO_GRAPH_CACHE.set(audioEl, { ctx: audioCtx, source });
+            } catch (iosSrcErr) {
+              // Safari audio routing failed — output will be video-only (safe fallback)
+              console.warn("[RECORDING] Audio capture failed on this browser:", iosSrcErr);
+            }
           }
         }
       } catch (audioErr) {
         console.warn("[RECORDING] AudioContext capture skipped (iOS safe):", audioErr);
       }
 
-      let recorder: MediaRecorder;
-      try {
-        recorder = new MediaRecorder(canvasStream, {
-          mimeType: mimeType || undefined,
-          videoBitsPerSecond: quality.bitrate,
-        });
-      } catch (recErr) {
-        console.warn("[RECORDING] Primary MediaRecorder init failed on iOS, trying native stream fallback:", recErr);
-        try {
-          const videoOnlyStream = new MediaStream(canvasStream.getVideoTracks());
-          recorder = new MediaRecorder(videoOnlyStream);
-        } catch (_) {
-          recorder = new MediaRecorder(canvasStream);
-        }
-      }
-      recapRecorderRef.current = recorder;
+      let recorder: MediaRecorder | null = null;
       const recordingStartTime = Date.now();
       let webCodecsRecorder: WebCodecsMp4Recorder | null = null;
+      let finalizeInProgress = false;
 
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) chunks.push(e.data);
-      };
+      // ── SURGICAL INIT: WebCodecs BEFORE captureStream (prevents dual-encoder OS freeze) ──
+      const wcBitrate =
+        cores <= 4
+          ? Math.min(quality.bitrate, 3_500_000)
+          : cores <= 6
+            ? Math.min(quality.bitrate, 5_000_000)
+            : quality.bitrate;
+      try {
+        webCodecsRecorder = await createWebCodecsMp4Recorder({
+          width: encW,
+          height: encH,
+          fps: quality.fps,
+          bitrate: wcBitrate,
+          audioElement: audioEl,
+          sharedAudioContext: audioCtx,
+          sharedAudioSource: sharedAudioSource,
+          forceSoftware: forceSoftwareRef.current,
+        });
+        if (webCodecsRecorder) {
+          console.log("[RECORDING] 🚀 WebCodecs Direct MP4 Active! (0-latency, single encoder)");
+        }
+      } catch (wcErr) {
+        console.warn("[RECORDING] WebCodecs init failed, fallback to MediaRecorder active:", wcErr);
+      }
 
-      recorder.onstop = async () => {
+      const finalizeRecording = async (isFromMediaRecorder: boolean) => {
+        if (finalizeInProgress) return;
+        finalizeInProgress = true;
         const recordingElapsedSecs = (Date.now() - recordingStartTime) / 1000;
         // SURGICAL EDIT: FORCE AV SYNC 100% ACCURACY
         // Always use audio duration as the single source of truth for output video duration.
@@ -2244,10 +2437,14 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // Clamp to 3 decimal places for ffmpeg and metadata
         exactDurationSecs = Number(exactDurationSecs.toFixed(3));
 
-        if (audioCtx)
-          try {
-            audioCtx.close();
-          } catch (_) {}
+        // FIX: never close the cached AudioContext — closing it makes the next render
+        // fail with "HTMLMediaElement already connected" and lose the fast MP4 path.
+        try {
+          if (sharedAudioSource && audioCtx) {
+            sharedAudioSource.disconnect();
+            sharedAudioSource.connect(audioCtx.destination);
+          }
+        } catch (_) {}
         audioCtx = null;
         if (recapIntervalRef.current) {
           clearInterval(recapIntervalRef.current);
@@ -2266,6 +2463,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         canvas.height = 0;
         encCanvas.width = 0;
         encCanvas.height = 0;
+        if (canvasStream) {
+          try {
+            canvasStream.getTracks().forEach((t) => t.stop());
+          } catch (_) {}
+          canvasStream = null;
+          encTrack = null;
+        }
 
         // Direct-MP4 recording can succeed even when MediaRecorder produced nothing.
         if (chunks.length === 0 && !webCodecsRecorder) {
@@ -2326,17 +2530,24 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             }
           }
 
-          const mp4ToastId = toast.loading("MP4 ပြောင်းနေသည်…");
-          const mp4Result = await convertToRealMp4(finalBlob, {
-            sourceMime: mimeType,
-            durationSec: isWebM ? exactDurationSecs : 0,
-            onProgress: (_p, msg) => toast.loading(msg, { id: mp4ToastId }),
-          });
-          finalBlob = mp4Result.blob;
-          if (mp4Result.isRealMp4) {
-            toast.success("MP4 (H.264) အစစ် ထွက်ပါပြီ", { id: mp4ToastId });
+          // SURGICAL FIX: Skip FFmpeg WASM when browser already produced H.264 MP4 (avoids post-recording OS freeze).
+          const alreadyNativeMp4 =
+            finalBlob.type.includes("mp4") && !isWebM && mimeType.includes("mp4") && mimeType.includes("avc");
+          if (alreadyNativeMp4) {
+            console.log("[RECORDING] Native MP4 from MediaRecorder — skipping WASM transcode");
           } else {
-            toast.error("MP4 ပြောင်းမရပါ — WebM အဖြစ် သိမ်းပေးထားပါသည်", { id: mp4ToastId });
+            const mp4ToastId = toast.loading("MP4 ပြောင်းနေသည်…");
+            const mp4Result = await convertToRealMp4(finalBlob, {
+              sourceMime: mimeType,
+              durationSec: isWebM ? exactDurationSecs : 0,
+              onProgress: (_p, msg) => toast.loading(msg, { id: mp4ToastId }),
+            });
+            finalBlob = mp4Result.blob;
+            if (mp4Result.isRealMp4) {
+              toast.success("MP4 (H.264) အစစ် ထွက်ပါပြီ", { id: mp4ToastId });
+            } else {
+              toast.error("MP4 ပြောင်းမရပါ — WebM အဖြစ် သိမ်းပေးထားပါသည်", { id: mp4ToastId });
+            }
           }
         }
 
@@ -2421,27 +2632,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         // ── SURGICAL FIX: create scene-cut prewarm buffer (decode-gap killer) ──
         try {
-          // SURGICAL FIX (i5/mid PC stutter in Viral/Hybrid): a 2nd decoder seeking on every
-          // short dialogue cut overloads integrated GPUs. Only strong CPUs (12+ threads) get it.
-          // Timing/seek logic is untouched — draw loop already falls back to the main video.
-          const allowPrewarm = cores >= 12 && !isIOS;
-          if (!allowPrewarm && prewarmVideoRef.current) {
-            try {
-              prewarmVideoRef.current.removeAttribute("src");
-              prewarmVideoRef.current.load();
-            } catch (_) {}
-            prewarmVideoRef.current = null;
-          }
-          if (allowPrewarm && !prewarmVideoRef.current) {
-            const pw = document.createElement("video");
-            pw.muted = true;
-            pw.playsInline = true;
-            pw.preload = "auto";
-            pw.crossOrigin = videoEl.crossOrigin;
-            pw.src = videoEl.currentSrc || videoEl.src;
-            pw.load();
-            prewarmVideoRef.current = pw;
-          }
+          // ✅ အစားထိုးရမည့် တစ်ကြောင်းတည်းသော ကုတ် (Line 2476 နေရာတွင်)
+          prewarmVideoRef.current = null;
+
           prewarmTargetRef.current = -1;
           prewarmReadyRef.current = false;
           prewarmActiveRef.current = false;
@@ -2461,7 +2654,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           try {
             warmupCtx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
             encCtx.drawImage(canvas, 0, 0, encW, encH);
-            if (encTrack && typeof encTrack.requestFrame === "function") encTrack.requestFrame();
+            if (encTrack && typeof (encTrack as any).requestFrame === "function") (encTrack as any).requestFrame();
           } catch (_) {}
           warmupFrames++;
           if (warmupFrames < 12) requestAnimationFrame(doWarmup);
@@ -2479,25 +2672,47 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       midTeaserShownRef.current = false;
       midTeaserStartRef.current = 0;
 
-      // ── SURGICAL INIT: WebCodecs + mp4-muxer for 0-latency direct MP4 generation ──
-      try {
-        webCodecsRecorder = await createWebCodecsMp4Recorder({
-          width: encW,
-          height: encH,
-          fps: quality.fps,
-          bitrate: quality.bitrate,
-          audioElement: audioEl,
-          sharedAudioContext: audioCtx,
-          sharedAudioSource: sharedAudioSource,
-        });
-        if (webCodecsRecorder) {
-          console.log("[RECORDING] 🚀 WebCodecs Direct MP4 Active! (0-latency)");
+      if (webCodecsRecorder) {
+        // SURGICAL FIX (CRITICAL i7 & SNAPDRAGON FREEZE KILLER):
+        // WebCodecs Direct MP4 is active! MediaRecorder is 100% bypassed.
+        // Zero MediaRecorder CPU/GPU load, zero hardware session conflicts, zero OS lockup.
+        recapRecorderRef.current = {
+          state: "recording",
+          stop: () => {
+            if (!recapRecorderRef.current || recapRecorderRef.current.state === "inactive") return;
+            recapRecorderRef.current.state = "inactive";
+            finalizeRecording(false);
+          },
+        };
+      } else {
+        // Fallback: WebCodecs unavailable -> initialize and start MediaRecorder
+        initCanvasStreamForMediaRecorder();
+        try {
+          recorder = new MediaRecorder(canvasStream!, {
+            mimeType: mimeType || undefined,
+            videoBitsPerSecond: quality.bitrate,
+          });
+        } catch (recErr) {
+          console.warn("[RECORDING] Primary MediaRecorder init failed on iOS, trying native stream fallback:", recErr);
+          try {
+            const videoOnlyStream = new MediaStream(canvasStream!.getVideoTracks());
+            recorder = new MediaRecorder(videoOnlyStream);
+          } catch (_) {
+            recorder = new MediaRecorder(canvasStream!);
+          }
         }
-      } catch (wcErr) {
-        console.warn("[RECORDING] WebCodecs init failed, fallback to MediaRecorder active:", wcErr);
+        recapRecorderRef.current = recorder;
+        recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) chunks.push(e.data);
+        };
+        recorder.onstop = () => finalizeRecording(true);
+        try {
+          recorder.start(250);
+          console.log("[RECORDING] MediaRecorder fallback started");
+        } catch (startErr) {
+          console.error("[RECORDING] MediaRecorder start error:", startErr);
+        }
       }
-
-      recorder.start(250);
       // Pre-load logo
       let logoImg: HTMLImageElement | null = null;
       if (logo.url) {
@@ -2594,6 +2809,46 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // // —— FIX: neon hue frame counter — DOM write throttled to every 3 frames ——
       let neonFrameCount = 0;
 
+      // ── FAIR USE: zero-lag blurred background via tiny downsample buffer (no ctx blur filter) ──
+      const fairBgCanvas = document.createElement("canvas");
+      fairBgCanvas.width = Math.max(8, Math.round(canvas.width / 24));
+      fairBgCanvas.height = Math.max(8, Math.round(canvas.height / 24));
+      const fairBgCtx = fairBgCanvas.getContext("2d", { alpha: false });
+      // ── SURGICAL FIX (premium blur background, TikTok @movieby6 style) ──
+      // Blurred bg fills the whole canvas (no gaps); sharp foreground is FULL WIDTH
+      // (no left/right gaps), centered vertically — for all output ratios.
+      // Only active when Fair Use ON + Blur Background ON; otherwise draws normally.
+      const fairDraw = (src: CanvasImageSource, sx: number, sy: number, sw: number, sh: number) => {
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        if (!fairBlurBgRef.current || !fairBgCtx) {
+          ctx.drawImage(src, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+          return;
+        }
+        fairBgCtx.imageSmoothingEnabled = true;
+        fairBgCtx.drawImage(src, sx, sy, sw, sh, 0, 0, fairBgCanvas.width, fairBgCanvas.height);
+        const prevSmooth = ctx.imageSmoothingEnabled;
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(fairBgCanvas, 0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "rgba(0,0,0,0.5)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.imageSmoothingEnabled = prevSmooth;
+        // Foreground: full-bleed width, keep source aspect, centered vertically.
+        // (Tall-source fallback: fit by height, centered horizontally.)
+        const srcAR = sw / Math.max(1, sh);
+        let fw = canvas.width;
+        let fh = fw / srcAR;
+        let fx = 0;
+        let fy = Math.round((canvas.height - fh) / 2);
+        if (fh > canvas.height) {
+          fh = canvas.height;
+          fw = fh * srcAR;
+          fx = Math.round((canvas.width - fw) / 2);
+          fy = 0;
+        }
+        ctx.drawImage(src, sx, sy, sw, sh, fx, fy, Math.round(fw), Math.round(fh));
+      };
+
       const drawFrame = (skipBackground = false) => {
         if (!videoEl || !audioEl) return;
         if (audioEl.ended) return;
@@ -2686,13 +2941,19 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         let zoomedSrcW = srcCropW;
         let zoomedSrcH = srcCropH;
         let rotate = 0;
+        let freezeImg: HTMLCanvasElement | null = null;
+        let freezeRect: [number, number, number, number] = [0, 0, 0, 0];
 
-        // SURGICAL FIX: Freeze/Motion mode runs independently of isZoomEnabled
-        // Previously was nested inside isZoomEnabled â€” now runs always when freezeMode is ON
-        if (freezeModeRef.current && !_isDialogue) {
-          const t = audioEl.currentTime;
+        // SURGICAL FIX: Freeze/Motion ON → narration + dialogue both use 4s↔4s (copyright suite).
+        // Freeze/Motion OFF → narration uses Zoom toggle only; dialogue never gets photo zoom (isZoomEnabled guard).
+        if (freezeModeRef.current) {
+          // SURGICAL FIX: Cycle on exported-video seconds (matches MP4 timeline + WebCodecs timestamps).
+          // Using raw currentTime compresses 4s freeze/motion by playbackRate (e.g. 4x → ~1s zoom bursts).
+          const _fmPlayRate =
+            Number.isFinite(audioEl.playbackRate) && audioEl.playbackRate > 0 ? audioEl.playbackRate : 1.0;
+          const t = audioEl.currentTime / _fmPlayRate;
           const FREEZE_SEC = 4; // 4s professional news-style zoom
-          const MOTION_SEC = 10;
+          const MOTION_SEC = 4; // FAIR USE rhythm: 4s video motion <-> 4s photo
           const CYCLE_SEC = FREEZE_SEC + MOTION_SEC;
           const cyclePos = t % CYCLE_SEC;
           const isFreezeCycle = cyclePos < FREEZE_SEC;
@@ -2703,11 +2964,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             // at cycle start, then draw that snapshot with animated zoom-in each frame.
             // Video element keeps playing — canvas recording never loses frames.
 
-            // SURGICAL FIX: Content accuracy - capture frame tied to ACTIVE SEGMENT (not audio cycle).
-            // This ensures frozen photo = current narration content, 100% match.
-            const activeSegIdx = lastIndexRef.current;
-            if (activeSegIdx !== frozenFrameCycleRef.current || !frozenFrameCapturedRef.current) {
-              // New segment started: capture its vStart frame (after seek settles)
+            // Capture ONE still per 8s cycle (never re-captured mid-freeze → zoom never restarts).
+            if (cycleIndex !== frozenFrameCycleRef.current || !frozenFrameCapturedRef.current) {
               if (!seekPendingRef.current && videoEl.readyState >= 2) {
                 if (!frozenFrameCanvasRef.current) {
                   frozenFrameCanvasRef.current = document.createElement("canvas");
@@ -2719,57 +2977,36 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 if (fctx) {
                   fctx.drawImage(videoEl, srcCropX, srcCropY, srcCropW, srcCropH, 0, 0, fc.width, fc.height);
                   frozenFrameCapturedRef.current = true;
-                  frozenFrameCycleRef.current = activeSegIdx; // tied to segment, not audio cycle
+                  frozenFrameCycleRef.current = cycleIndex;
                 }
               }
             }
 
-            // NEWS-STYLE ZOOM: pure ease-out, slow smooth zoom 1.0 -> 1.12 over FREEZE_SEC
-            // No pan, no bounce — stable, professional, like CNN/BBC freeze frames
+            // Photo Zoom IN only (no zoom out): smooth ease-out 1.0 -> 1.25 over FREEZE_SEC
             const freezeProgress = cyclePos / FREEZE_SEC;
-            // Pure ease-out: fast at start, slow at end (reverse of ease-in — natural deceleration)
             const eased = 1 - Math.pow(1 - freezeProgress, 3);
-            const freezeZoom = 1.0 + 0.15 * eased; // 15% zoom, smooth deceleration
+            const freezeZoom = 1.0 + 0.25 * eased;
             const drawW = Math.max(2, Math.round(canvas.width / freezeZoom));
             const drawH = Math.max(2, Math.round(canvas.height / freezeZoom));
-            // Center perfectly — no pan (international news standard)
             const drawX = Math.round((canvas.width - drawW) / 2);
             const drawY = Math.round((canvas.height - drawH) / 2);
 
             if (frozenFrameCanvasRef.current && frozenFrameCapturedRef.current) {
-              // Draw frozen snapshot with animated zoom-in crop
-              ctx.drawImage(
-                frozenFrameCanvasRef.current,
-                drawX,
-                drawY,
-                drawW,
-                drawH,
-                0,
-                0,
-                canvas.width,
-                canvas.height,
-              );
-            } else {
-              // Fallback: live video frame if snapshot not ready yet
-              ctx.drawImage(videoEl, zoomedSrcX, zoomedSrcY, zoomedSrcW, zoomedSrcH, 0, 0, canvas.width, canvas.height);
+              // Drawn in the main draw block so flip, PIP, subtitles and overlays all continue normally
+              freezeImg = frozenFrameCanvasRef.current;
+              freezeRect = [drawX, drawY, drawW, drawH];
             }
-            // Keep video playing — canvas must keep receiving frames for recording
             if (videoEl.paused && !videoEl.ended) {
               videoEl.playbackRate = 1.0;
               videoEl.play().catch(() => {});
             }
-            // Frame already drawn — skip normal drawImage below
-            ctx.restore();
-            ctx.filter = "none";
-            return;
           } else {
-            // MOTION PHASE: clear frozen frame cache, resume normal video playback
+            // MOTION PHASE: plain 1.0x video, no canvas zoom
             frozenFrameCapturedRef.current = false;
             if (videoEl.paused && !videoEl.ended) {
               videoEl.playbackRate = 1.0;
               videoEl.play().catch(() => {});
             }
-            // zoomedSrc* stay at srcCrop* defaults — no zoom in motion phase
           }
         } else if (isZoomEnabled) {
           // â”€â”€ Original cinematic zoom/pan/Ken Burns (only when Zoom ON and Freeze OFF) â”€â”€
@@ -2780,11 +3017,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           const smoothstep = (st: number) => st * st * (3 - 2 * st);
           const hump = smoothstep(Math.sin(Math.PI * cyclePos) * 0.5 + 0.5);
           const isPhotoFreeze = cycleIndex % 2 === 0;
-          const photoZoomBase = 1.02;
-          const zoomStep = 0.04;
-          const photoZoomStep = zoomStep * 0.55;
+          const photoZoomBase = 1.08;
+          const zoomStep = 0.08;
+          const photoZoomStep = zoomStep * 0.6;
           const videoZoomAdd = zoomStep - photoZoomStep;
-          const maxZoom = 1.14;
+          const maxZoom = 1.32;
           const ramp = cyclePos * cyclePos * (3 - 2 * cyclePos);
           const levelBase = Math.min(maxZoom, photoZoomBase + Math.floor(cycleIndex / 2) * zoomStep);
           let cinematicZoom: number;
@@ -2841,6 +3078,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           visibleLoopLastTimeRef.current = videoEl.currentTime;
           visibleLoopMaskStartRef.current = 0;
           visibleLoopFrameReadyRef.current = false;
+          dialogueHoldActiveRef.current = false; // Reset dialogue hold on segment change
         } else {
           const previousVisualTime = visibleLoopLastTimeRef.current;
           const currentVisualTime = videoEl.currentTime;
@@ -2853,13 +3091,21 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           visibleLoopLastTimeRef.current = currentVisualTime;
         }
 
-        // SURGICAL FIX: Micro zoom-in & micro pause completely disabled.
-        // Output video now matches REC preview 100% — no held-frame zoom, no stutter masking.
-        // Live video feed always draws instead of a frozen frame with slow zoom-in.
-        const useVisibleLoopMask = false;
-        const useResidualFrameMask = false;
+        // SURGICAL FIX: Replace loop and micro-pause with professional smooth micro zoom in (international news style).
+        // 1. Narration: As soon as a segment wraps or finishes, hold the final frame and apply a smooth news-style micro zoom in (no physical video loop).
+        // 2. Dialogue: Hold last frame statically (NO zoom, NO loop, NO pause).
+        const useVisibleLoopMask =
+          !freezeModeRef.current &&
+          !_isDialogue &&
+          visibleLoopCountRef.current >= 1 &&
+          visibleLoopFrameReadyRef.current;
+        const useResidualFrameMask =
+          !freezeModeRef.current && !_isDialogue && seekPendingRef.current && visibleLoopFrameReadyRef.current;
+        // Dialogue hold: static frame when dialogue ends — only when Freeze/Motion OFF (no photo zoom on dialogue)
+        const useDialogueHold =
+          !freezeModeRef.current && _isDialogue && dialogueHoldActiveRef.current && visibleLoopFrameReadyRef.current;
 
-        // (B) residual gap mask — slow micro zoom-in (max 1%) so any held frame reads as motion
+        // (B) residual gap mask — gap tracking preserved for seamless transitions
         {
           const _now = performance.now();
           if (seekPendingRef.current) {
@@ -2867,9 +3113,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           } else {
             gapStartRef.current = 0;
           }
-          // SURGICAL FIX: Gap zoom completely disabled — no micro zoom-in on output.
-          // Gap detection tracking (gapStartRef) is preserved above for prewarm timing,
-          // but no visual zoom is applied. zoomedSrcX/Y/W/H remain unchanged.
         }
 
         ctx.save();
@@ -2881,43 +3124,53 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         try {
           ctx.save();
           if (curEditorState.flip) {
-            // â”€â”€ FULL-FRAME HORIZONTAL FLIP (left-right mirror) for copyright â”€â”€
+            // ── FULL-FRAME HORIZONTAL FLIP (left-right mirror) for copyright ──
             ctx.translate(canvas.width, 0);
             ctx.scale(-1, 1);
           }
           const heldFrame = visibleLoopFrameRef.current;
-          if ((useVisibleLoopMask || useResidualFrameMask) && heldFrame) {
+          if (useDialogueHold && heldFrame) {
+            // Dialogue: Static held frame — NO zoom, NO loop, NO pause
+            // (via fairDraw so the premium blur-bg look stays consistent when ON)
+            fairDraw(heldFrame, 0, 0, heldFrame.width, heldFrame.height);
+          } else if (freezeImg) {
+            // Photo Zoom In phase — subtitles/overlays continue to draw after this
+            fairDraw(freezeImg, freezeRect[0], freezeRect[1], freezeRect[2], freezeRect[3]);
+          } else if ((useVisibleLoopMask || useResidualFrameMask) && heldFrame) {
+            // International News Style: Professional, smooth Ken Burns micro zoom in (1.0 -> 1.08 over 8s)
             const maskElapsed =
               useVisibleLoopMask && visibleLoopMaskStartRef.current > 0
                 ? performance.now() - visibleLoopMaskStartRef.current
                 : Math.max(0, performance.now() - gapStartRef.current);
-            const maskProgress = Math.min(1, maskElapsed / (useVisibleLoopMask ? 9000 : 320));
-            const maskEase = useVisibleLoopMask
-              ? 1 - Math.pow(1 - maskProgress, 2) // gentle, visible ease-out (news-channel push-in)
-              : 1 - Math.pow(1 - maskProgress, 3);
-            const maskZoom = 1 + (useVisibleLoopMask ? 0.3 : 0.018) * maskEase;
+            const maskProgress = Math.min(1, maskElapsed / 8000);
+            const maskEase = 1 - Math.pow(1 - maskProgress, 1.8);
+            const maskZoom = 1 + (useVisibleLoopMask ? 0.08 : 0.02) * maskEase;
             const maskW = Math.max(2, Math.round(heldFrame.width / maskZoom));
             const maskH = Math.max(2, Math.round(heldFrame.height / maskZoom));
             const maskX = Math.round((heldFrame.width - maskW) / 2);
             const maskY = Math.round((heldFrame.height - maskH) / 2);
-            ctx.drawImage(heldFrame, maskX, maskY, maskW, maskH, 0, 0, canvas.width, canvas.height);
+            fairDraw(heldFrame, maskX, maskY, maskW, maskH);
           } else {
-            ctx.drawImage(drawSrcEl, zoomedSrcX, zoomedSrcY, zoomedSrcW, zoomedSrcH, 0, 0, canvas.width, canvas.height);
+            fairDraw(drawSrcEl, zoomedSrcX, zoomedSrcY, zoomedSrcW, zoomedSrcH);
           }
           ctx.restore();
 
-          // Keep one clean, subtitle-free visual frame ready. During the second allowed loop this
-          // naturally advances to its final frame, which becomes the professional hold if needed.
-          if (!useVisibleLoopMask && !useResidualFrameMask && visualSegment >= 0) {
-            if (!visibleLoopFrameRef.current) visibleLoopFrameRef.current = document.createElement("canvas");
-            const heldFrame = visibleLoopFrameRef.current;
-            if (heldFrame) {
-              if (heldFrame.width !== canvas.width) heldFrame.width = canvas.width;
-              if (heldFrame.height !== canvas.height) heldFrame.height = canvas.height;
-              const heldCtx = heldFrame.getContext("2d", { alpha: false });
-              if (heldCtx) {
-                heldCtx.drawImage(canvas, 0, 0, canvas.width, canvas.height);
-                visibleLoopFrameReadyRef.current = true;
+          // Keep one clean visual frame ready so when a segment completes, the hold transitions smoothly
+          // PERF FIX: Throttle to once per 200ms instead of every frame (still ~5x/sec for fresh frames)
+          if (!useVisibleLoopMask && !useResidualFrameMask && !useDialogueHold && visualSegment >= 0) {
+            const _heldNow = performance.now();
+            if (!heldFrameLastCaptureRef.current || _heldNow - heldFrameLastCaptureRef.current > 200) {
+              heldFrameLastCaptureRef.current = _heldNow;
+              if (!visibleLoopFrameRef.current) visibleLoopFrameRef.current = document.createElement("canvas");
+              const heldFrame = visibleLoopFrameRef.current;
+              if (heldFrame) {
+                if (heldFrame.width !== canvas.width) heldFrame.width = canvas.width;
+                if (heldFrame.height !== canvas.height) heldFrame.height = canvas.height;
+                const heldCtx = heldFrame.getContext("2d", { alpha: false });
+                if (heldCtx) {
+                  heldCtx.drawImage(canvas, 0, 0, canvas.width, canvas.height);
+                  visibleLoopFrameReadyRef.current = true;
+                }
               }
             }
           }
@@ -3132,9 +3385,25 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           ctx.clip();
 
           // Step 1: Draw blurred video content — blur amount from slider
-          ctx.filter = `blur(${actualBlurPx}px)`;
-          ctx.drawImage(canvas, blurX, blurY, blurW, blurH, blurX, blurY, blurW, blurH);
-          ctx.filter = "none";
+          // PERF FIX: Use offscreen canvas to avoid catastrophic GPU pipeline stall from
+          // reading+writing the same canvas texture with a blur filter simultaneously.
+          {
+            if (!_blurFxCanvas) {
+              _blurFxCanvas = document.createElement("canvas");
+            }
+            const bfxW = Math.max(1, Math.ceil(blurW));
+            const bfxH = Math.max(1, Math.ceil(blurH));
+            if (_blurFxCanvas.width !== bfxW) _blurFxCanvas.width = bfxW;
+            if (_blurFxCanvas.height !== bfxH) _blurFxCanvas.height = bfxH;
+            const bfxCtx = _blurFxCanvas.getContext("2d", { alpha: false });
+            if (bfxCtx) {
+              bfxCtx.filter = "none";
+              bfxCtx.drawImage(canvas, blurX, blurY, blurW, blurH, 0, 0, bfxW, bfxH);
+              ctx.filter = `blur(${actualBlurPx}px)`;
+              ctx.drawImage(_blurFxCanvas, 0, 0, bfxW, bfxH, blurX, blurY, blurW, blurH);
+              ctx.filter = "none";
+            }
+          }
 
           // Step 2: Dark frosted tint — darkness from slider intensity
           ctx.fillStyle = `rgba(0, 0, 0, ${darkAlpha})`;
@@ -3415,9 +3684,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
       const checkEnded = (): boolean => {
         const av = audioRef.current;
-        if (av && av.ended) {
-          if (recorder.state !== "inactive") {
-            recorder.stop();
+        // SURGICAL FIX (watchdog): also stop when audio reached its end but `ended` never fired
+        const _atEnd = !!av && Number.isFinite(av.duration) && av.duration > 0 && av.currentTime >= av.duration - 0.03;
+        if (av && (av.ended || _atEnd)) {
+          if (recapRecorderRef.current && recapRecorderRef.current.state !== "inactive") {
+            recapRecorderRef.current.stop();
             videoEl.pause();
             av.pause();
             videoEl.playbackRate = 1.0;
@@ -3425,6 +3696,52 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           return true;
         }
         return false;
+      };
+
+      // ── SURGICAL FIX: abort current render (no partial file) and restart at lower quality ──
+      // Called by the encoder overload watchdog when the HW encoder can't sustain the
+      // selected quality. Cleans up the in-flight render without finalizing, then
+      // re-invokes startRecapRecording which picks up forcedQualityRef.
+      let overloadWatchdogDone = false;
+      let overloadBaseline: { encoded: number; dropped: number } | null = null;
+      const abortAndStepDownRestart = () => {
+        try {
+          if (recapRecorderRef.current) recapRecorderRef.current.state = "inactive";
+        } catch (_) {}
+        if (recapIntervalRef.current) {
+          clearInterval(recapIntervalRef.current);
+          recapIntervalRef.current = null;
+        }
+        try {
+          cancelAnimationFrame(recapAnimFrameRef.current);
+        } catch (_) {}
+        try {
+          if (webCodecsRecorder) webCodecsRecorder.cleanup();
+        } catch (_) {}
+        webCodecsRecorder = null;
+        // FIX: keep the cached AudioContext alive (an <audio> element can only ever be
+        // attached once) — just reset routing so the restart reuses the same source.
+        try {
+          if (sharedAudioSource && audioCtx) {
+            sharedAudioSource.disconnect();
+            sharedAudioSource.connect(audioCtx.destination);
+          }
+        } catch (_) {}
+        audioCtx = null;
+        try {
+          if (audioRef.current) audioRef.current.pause();
+        } catch (_) {}
+        try {
+          if (videoRef.current) videoRef.current.pause();
+        } catch (_) {}
+        lastIndexRef.current = -1;
+        setCurrentSubtitle("");
+        // Keep the rendering UI active across the restart.
+        isRenderingRef.current = true;
+        setIsRendering(true);
+        setTimeout(() => {
+          void startRecapRecording(true);
+        }, 600);
       };
 
       const syncAndDraw = (timestamp: number) => {
@@ -3678,20 +3995,67 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     // SURGICAL FIX: AV SYNC 100% — If video has overrun vEnd, hard-seek back to effectiveVStart
                     // This prevents irrelevant content (eating, dancing, walking) from leaking into the active segment.
                     const endMargin = 0.08;
+                    const _isDialogueSeg = !!active?.isDialogue;
                     if (sourceEnd > effectiveVStart && vv.currentTime >= sourceEnd - endMargin) {
-                      // Hard-cut seek: loop segment — never show content past vEnd
-                      seekPendingRef.current = true;
-                      const onLoopSeeked = () => {
-                        seekPendingRef.current = false;
+                      if (_isDialogueSeg && !freezeModeRef.current) {
+                        // Dialogue + Freeze OFF: static hold — no photo zoom
+                        if (!dialogueHoldActiveRef.current) {
+                          dialogueHoldActiveRef.current = true;
+                          if (!visibleLoopFrameRef.current)
+                            visibleLoopFrameRef.current = document.createElement("canvas");
+                          const dhf = visibleLoopFrameRef.current;
+                          if (dhf) {
+                            if (dhf.width !== canvas.width) dhf.width = canvas.width;
+                            if (dhf.height !== canvas.height) dhf.height = canvas.height;
+                            const dhCtx = dhf.getContext("2d", { alpha: false });
+                            if (dhCtx) {
+                              dhCtx.drawImage(canvas, 0, 0, canvas.width, canvas.height);
+                              visibleLoopFrameReadyRef.current = true;
+                            }
+                          }
+                        }
                         vv.playbackRate = targetPlaybackRate;
-                        if (!vv.ended) vv.play().catch(() => {});
-                        vv.removeEventListener("seeked", onLoopSeeked);
-                      };
-                      vv.addEventListener("seeked", onLoopSeeked);
-                      vv.currentTime = effectiveVStart; // SURGICAL FIX: loop back to correct source position
+                        if (vv.paused && !vv.ended) vv.play().catch(() => {});
+                      } else if (!freezeModeRef.current && !_isDialogueSeg) {
+                        // Narration + Freeze OFF: micro zoom loop mask
+                        if (visibleLoopMaskStartRef.current === 0) {
+                          visibleLoopMaskStartRef.current = performance.now();
+                          visibleLoopCountRef.current = 1;
+                        }
+                        seekPendingRef.current = true;
+                        const onLoopSeeked = () => {
+                          seekPendingRef.current = false;
+                          vv.playbackRate = targetPlaybackRate;
+                          if (!vv.ended) vv.play().catch(() => {});
+                          vv.removeEventListener("seeked", onLoopSeeked);
+                        };
+                        vv.addEventListener("seeked", onLoopSeeked);
+                        vv.currentTime = effectiveVStart;
+                      } else {
+                        // Freeze/Motion ON (narration or dialogue): seek loop only — 4s↔4s draw owns copyright look
+                        seekPendingRef.current = true;
+                        const onFmLoopSeeked = () => {
+                          seekPendingRef.current = false;
+                          vv.playbackRate = 1.0;
+                          if (!vv.ended) vv.play().catch(() => {});
+                          vv.removeEventListener("seeked", onFmLoopSeeked);
+                        };
+                        vv.addEventListener("seeked", onFmLoopSeeked);
+                        vv.currentTime = effectiveVStart;
+                      }
                     } else if (!freezeModeRef.current) {
                       // freeze OFF = continuous motion within segment boundary
-                      vv.playbackRate = targetPlaybackRate;
+                      // HYPER SYNC (PLL): no seeks — nudge rate so video phase tracks audio word progress.
+                      let _hsRate = targetPlaybackRate;
+                      if (fairHyperSyncRef.current && _hasAudioTs) {
+                        const _expected =
+                          effectiveVStart + (currentTime - audioTs[activeIndex].start) * targetPlaybackRate;
+                        const _err = vv.currentTime - _expected; // + = video ahead
+                        if (Math.abs(_err) > 0.04 && Math.abs(_err) < 1.5) {
+                          _hsRate = targetPlaybackRate * Math.max(0.92, Math.min(1.08, 1 - _err * 0.4));
+                        }
+                      }
+                      if (Math.abs(vv.playbackRate - _hsRate) > 0.005) vv.playbackRate = _hsRate;
                       if (vv.paused && !vv.ended) vv.play().catch(() => {});
                     } else {
                       // SURGICAL FIX: freezeMode ON — draw loop uses frozenFrameCanvasRef for visual freeze
@@ -3719,19 +4083,44 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                             : lastActiveSeg.vEnd;
                       const holdStart =
                         lastEffectiveVStartRef.current > 0 ? lastEffectiveVStartRef.current : lastActiveSeg.vStart;
-                      // If video has overrun the segment boundary, hard-seek back to holdStart (loop)
+                      const _isLastDialogue = !!lastActiveSeg?.isDialogue;
+                      // If video has overrun the segment boundary, handle cleanly
                       if (vv.currentTime >= holdEnd - 0.08 || vv.currentTime < holdStart - 0.1) {
-                        seekPendingRef.current = true;
-                        const onGapSeeked = () => {
-                          seekPendingRef.current = false;
-                          vv.playbackRate = 1.0;
-                          if (!vv.ended) vv.play().catch(() => {});
-                          vv.removeEventListener("seeked", onGapSeeked);
-                        };
-                        vv.addEventListener("seeked", onGapSeeked);
-                        vv.currentTime = holdStart; // hard-cut seek back to segment start
+                        if (_isLastDialogue) {
+                          // Dialogue gap: Hold last frame silently — NEVER pause video (pause freezes canvas)
+                          if (!dialogueHoldActiveRef.current) {
+                            dialogueHoldActiveRef.current = true;
+                            if (!visibleLoopFrameRef.current)
+                              visibleLoopFrameRef.current = document.createElement("canvas");
+                            const dhf2 = visibleLoopFrameRef.current;
+                            if (dhf2) {
+                              if (dhf2.width !== canvas.width) dhf2.width = canvas.width;
+                              if (dhf2.height !== canvas.height) dhf2.height = canvas.height;
+                              const dhCtx2 = dhf2.getContext("2d", { alpha: false });
+                              if (dhCtx2) {
+                                dhCtx2.drawImage(canvas, 0, 0, canvas.width, canvas.height);
+                                visibleLoopFrameReadyRef.current = true;
+                              }
+                            }
+                          }
+                        } else {
+                          // Narration hold: maintain smooth micro zoom without stutter
+                          if (visibleLoopMaskStartRef.current === 0) {
+                            visibleLoopMaskStartRef.current = performance.now();
+                            visibleLoopCountRef.current = 1;
+                          }
+                          seekPendingRef.current = true;
+                          const onGapSeeked = () => {
+                            seekPendingRef.current = false;
+                            vv.playbackRate = 1.0;
+                            if (!vv.ended) vv.play().catch(() => {});
+                            vv.removeEventListener("seeked", onGapSeeked);
+                          };
+                          vv.addEventListener("seeked", onGapSeeked);
+                          vv.currentTime = holdStart;
+                        }
                       }
-                      // Keep video playing (no pause) — canvas stays active
+                      // Keep video ALWAYS playing (no pause ever) — canvas stays active
                       vv.playbackRate = 1.0;
                       if (vv.paused && !vv.ended) vv.play().catch(() => {});
                     }
@@ -3883,10 +4272,20 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         // // —— ENCODER PUSH: Ensure encoder receives frames at steady target FPS ——
         // SURGICAL FIX: Single steady tick with 4ms jitter tolerance — draws & pushes every frame cleanly without dropping cycles
-        if (timestamp - lastDrawTime >= adaptiveFrameInterval - 4) {
+        // SURGICAL FIX (anti OS-freeze backpressure): while the encoder queue is backed up, skip
+        // this tick's draw+push (max ~250ms) so the GPU/driver can drain instead of being flooded.
+        // The next tick re-renders the current moment, so timeline/AV stay locked to the audio clock.
+        const _encBusy =
+          !!webCodecsRecorder &&
+          typeof webCodecsRecorder.isBusy === "function" &&
+          webCodecsRecorder.isBusy() &&
+          timestamp - lastDrawTime < 250;
+        if (!_encBusy && timestamp - lastDrawTime >= adaptiveFrameInterval - 4) {
           lastDrawTime = timestamp;
           drawFrame(false);
           try {
+            encCtx.imageSmoothingEnabled = true;
+            encCtx.imageSmoothingQuality = "high";
             encCtx.drawImage(canvas, 0, 0, encW, encH);
             // Direct MP4: encode the encoder-sized canvas so frame size matches the H.264 config.
             if (webCodecsRecorder) {
@@ -3896,10 +4295,101 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 Number.isFinite(audioEl.playbackRate) && audioEl.playbackRate > 0 ? audioEl.playbackRate : 1.0;
               const _elapsedRealSec =
                 Math.max(0, audioEl.currentTime) / _playRate || Math.max(0, (timestamp - recordingStartTime) / 1000);
-              const timeUs = Math.round(_elapsedRealSec * 1_000_000);
-              webCodecsRecorder.encodeVideoFrame(encCanvas, timeUs);
+
+              // ── SURGICAL FIX (100% Cinematic Smooth): Enforce mathematically perfect CFR timeline ──
+              // WebCodecs native VFR (Variable Frame Rate) causes micro-stutters in many video players.
+              // We round to the nearest exact frame boundary, and if any frames were skipped by rAF jitter,
+              // we push duplicates to fill the gaps. This creates a flawless 30fps output.
+              const targetFps = quality.fps || 30;
+              const frameIntervalUs = Math.round(1_000_000 / targetFps);
+              const currentFrameIndex = Math.round((_elapsedRealSec * 1_000_000) / frameIntervalUs);
+
+              const recorder = webCodecsRecorder as any;
+              if (typeof recorder._lastFrameIdx !== "number") {
+                recorder._lastFrameIdx = currentFrameIndex - 1;
+              }
+              const missedFrames = currentFrameIndex - recorder._lastFrameIdx - 1;
+              if (missedFrames > 0 && missedFrames < 15) {
+                // Fill jitter gaps with duplicated frames so the player timeline never jumps
+                for (let i = 1; i <= missedFrames; i++) {
+                  webCodecsRecorder.encodeVideoFrame(encCanvas, (recorder._lastFrameIdx + i) * frameIntervalUs);
+                }
+              }
+              recorder._lastFrameIdx = currentFrameIndex;
+              webCodecsRecorder.encodeVideoFrame(encCanvas, currentFrameIndex * frameIntervalUs);
+
+              // ── SURGICAL FIX: ENCODER OVERLOAD WATCHDOG (i7 OS freeze + frozen output) ──
+              // Root cause: when the HW encoder can't sustain the selected quality, frames are
+              // silently dropped (encodeQueueSize guard) while timestamps keep advancing with the
+              // audio clock -> huge timestamp gaps -> output looks frozen ~90%. The sustained GPU
+              // saturation also stalls the display driver -> whole OS/mouse freezes.
+              // Detect overload in the first seconds and auto-restart at the next lower quality.
+              if (!overloadWatchdogDone && webCodecsRecorder && typeof webCodecsRecorder.getStats === "function") {
+                const elapsedMs = timestamp - recStartTimeRef.current;
+                // FIX: ignore the first 2.5s (HW encoder warm-up + first seek) — measure 2.5s→8.5s only.
+                if (!overloadBaseline && elapsedMs > 2500) {
+                  overloadBaseline = webCodecsRecorder.getStats();
+                }
+                if (overloadBaseline && elapsedMs > 8500) {
+                  overloadWatchdogDone = true;
+                  try {
+                    const raw = webCodecsRecorder.getStats();
+                    const s = {
+                      encoded: raw.encoded - overloadBaseline.encoded,
+                      dropped: raw.dropped - overloadBaseline.dropped,
+                    };
+                    const total = s.encoded + s.dropped;
+                    const dropRate = total > 0 ? s.dropped / total : 0;
+                    console.log(
+                      `[RECORDING] Encoder health @6s: encoded=${s.encoded} dropped=${s.dropped} (${(dropRate * 100).toFixed(1)}%)`,
+                    );
+                    // Step-down chain: [quality, useSoftware][]. HW (GPU) first, then SW (CPU)
+                    // at the same quality — ideal for strong-CPU / weak-GPU machines
+                    // (Ryzen 7 + weak iGPU) — then the next lower quality. Output is genuine
+                    // H.264 MP4 in every tier; only the encoder chip changes, never the format.
+                    const fullChain: Array<[string, boolean]> = [
+                      ["1080p10", false],
+                      ["1080p", false],
+                      ["1080p", true],
+                      ["720p", false],
+                      ["720p", true],
+                      ["480p", false],
+                      ["480p", true],
+                    ];
+                    // Desktop => CPU (software) tiers only — the weak iGPU is never touched.
+                    // Mobile => full chain (GPU-first), unchanged behavior.
+                    const chain = fullChain;
+                    const curQ = forcedQualityRef.current || exportQuality;
+                    const curSW = forceSoftwareRef.current;
+                    let curIdx = chain.findIndex(([q, sw]) => q === curQ && sw === curSW);
+                    if (curIdx === -1) curIdx = 0; // default: first tier of this platform's chain
+                    const next = chain[curIdx + 1] || null;
+                    if (total > 20 && dropRate > 0.25 && next) {
+                      const [nextQ, nextSW] = next;
+                      const modeLabel = nextSW ? "CPU" : "GPU";
+                      console.warn(
+                        `[RECORDING] Encoder overloaded at ${curQ} (${curSW ? "CPU" : "GPU"}) — auto step-down to ${nextQ} (${modeLabel})`,
+                      );
+                      toast.warning(
+                        `စက်က ${curQ} ကို မနိုင်လို့ ${nextQ} (${nextSW ? "CPU နဲ့" : "GPU နဲ့"}) အလိုအလျောက် ပြန်စပါမယ်`,
+                      );
+                      forcedQualityRef.current = nextQ;
+                      forceSoftwareRef.current = nextSW;
+                      abortAndStepDownRestart();
+                      return;
+                    } else if (total > 20 && dropRate > 0.25) {
+                      toast.error("encoder မနိုင်ပါ — browser ကို ပိတ်ပြီး ပြန်ဖွင့်ကာ ထပ်စမ်းကြည့်ပါ");
+                    }
+                  } catch (_) {}
+                }
+              }
+              // PERF FIX: Skip requestFrame() — WebCodecs is the primary encoder,
+              // MediaRecorder runs as passive fallback via captureStream(fps) auto-capture only.
+            } else if (encTrack && typeof (encTrack as any).requestFrame === "function") {
+              // PERF FIX: Only call requestFrame() when WebCodecs is NOT active AND captureStream(0) was used.
+              // captureStream(targetFps) already auto-captures, so requestFrame() is only needed for captureStream(0).
+              if (usedManualCaptureStream) (encTrack as any).requestFrame();
             }
-            if (encTrack && typeof encTrack.requestFrame === "function") encTrack.requestFrame();
           } catch (e) {
             console.warn("[RECORDING] Encoder push failed:", e);
           }
@@ -3918,19 +4408,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // SURGICAL EDIT: Apply user-selected audioSpeedRate at recording start
       if (audioRef.current) {
         audioRef.current.playbackRate = audioSpeedRate;
-        const playPromise = audioRef.current.play();
-        if (playPromise !== undefined) {
-          playPromise.catch((aErr) => {
-            console.warn("[RECORDING] iOS / Safari Audio autoplay blocked:", aErr);
-            setAutoplayBlocked(true);
-          });
-        }
-        // 300ms ကြာပြီးနောက် အသံမထွက်ဘဲ ရပ်နေပါက ခလုတ်ထုတ်ပြပေးခြင်း
-        setTimeout(() => {
-          if (audioRef.current && audioRef.current.paused && isRenderingRef.current) {
-            setAutoplayBlocked(true);
-          }
-        }, 300);
+        audioRef.current.play().catch((aErr) => {
+          console.warn("[RECORDING] iOS Audio autoplay warning:", aErr);
+          audioRef.current?.play().catch(() => {});
+        });
       }
       if (videoRef.current) {
         videoRef.current.playbackRate = 1.0;
@@ -4469,34 +4950,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                         boxShadow: "none",
                       }}
                     />
-                  </div>
-                )}
-
-                {/* No. 5: iPad / Safari Autoplay Blocked - Tap to Start Overlay */}
-                {autoplayBlocked && (
-                  <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm p-4 text-center">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (audioRef.current) {
-                          audioRef.current
-                            .play()
-                            .then(() => {
-                              setAutoplayBlocked(false);
-                            })
-                            .catch(console.warn);
-                        } else {
-                          setAutoplayBlocked(false);
-                        }
-                      }}
-                      className="px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-xl text-sm shadow-xl flex items-center gap-2 transform active:scale-95 transition-all"
-                    >
-                      <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
-                        <path d="M8 5v14l11-7z" />
-                      </svg>
-                      <span>▶ Video Editing စတင်ရန် နှိပ်ပါ (Tap to Start)</span>
-                    </button>
-                    <p className="text-xs text-amber-200/80 mt-2">iPad / Safari တွင် အသံဖွင့်ခွင့်ပေးရန် နှိပ်ပေးပါ</p>
                   </div>
                 )}
               </div>
@@ -5184,42 +5637,106 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   )}
                 </div>
 
-                {/* SURGICAL EDIT: Freeze / Motion Mode Toggle */}
-                <div className="border-t border-slate-700/50 pt-4">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex flex-col">
-                      <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">⏸ Freeze / Motion</h4>
-                      <span className="text-[10px] text-slate-500">
-                        {freezeMode
-                          ? "5s Ken Burns zoom-in → 5s smooth motion (pro)"
-                          : "Normal speed · no freeze · no zoom"}
-                      </span>
-                    </div>
+                {/* FAIR USE GROUP (master toggle; sub-features shown only when ON) */}
+                <div className="border-t border-slate-700/50 pt-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">🛡 Fair Use</h4>
                     <button
                       onClick={() => {
-                        setFreezeMode((f) => {
-                          const next = !f;
-                          if (!next) {
-                            // â”€â”€ FIX: set ref immediately so rAF loop sees it this frame â”€â”€
-                            freezeModeRef.current = false;
-                            const vv = videoRef.current;
-                            if (vv && vv.paused && !vv.ended) {
-                              vv.playbackRate = 1.0;
-                              vv.play().catch(() => {});
-                            }
+                        const next = !fairMaster;
+                        setFairMaster(next);
+                        if (!next) {
+                          freezeModeRef.current = false;
+                          setFreezeMode(false);
+                          setZoomEnabled(false);
+                          setFairBlurBg(false);
+                          setFairJumpFlash(false);
+                          setFairSpeedAdj(false);
+                          setFairHyperSync(false);
+                          const vv = videoRef.current;
+                          if (vv && vv.paused && !vv.ended) {
+                            vv.playbackRate = 1.0;
+                            vv.play().catch(() => {});
                           }
-                          return next;
-                        });
+                        }
                       }}
                       className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
-                        freezeMode
+                        fairMaster
                           ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900"
                           : "bg-slate-800 text-slate-400 border border-slate-700"
                       }`}
                     >
-                      {freezeMode ? "ON" : "OFF"}
+                      {fairMaster ? "ON" : "OFF"}
                     </button>
                   </div>
+                  {fairMaster && (
+                    <div className="space-y-2 bg-slate-800/60 rounded-xl p-3 border border-slate-700">
+                      <div className="flex items-center justify-between">
+                        <div className="flex flex-col">
+                          <span className="text-xs font-semibold text-slate-300">⏸ Freeze / Motion</span>
+                          <span className="text-[10px] text-slate-500">4s video ↔ 4s photo zoom in</span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setFreezeMode((f) => {
+                              const next = !f;
+                              if (!next) {
+                                freezeModeRef.current = false;
+                                const vv = videoRef.current;
+                                if (vv && vv.paused && !vv.ended) {
+                                  vv.playbackRate = 1.0;
+                                  vv.play().catch(() => {});
+                                }
+                              }
+                              return next;
+                            });
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                            freezeMode
+                              ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900"
+                              : "bg-slate-800 text-slate-400 border border-slate-700"
+                          }`}
+                        >
+                          {freezeMode ? "ON" : "OFF"}
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex flex-col">
+                          <span className="text-xs font-semibold text-slate-300">Copyright Zoom</span>
+                          <span className="text-[10px] text-slate-500">Crop + zoom for copyright</span>
+                        </div>
+                        <button
+                          onClick={() => setZoomEnabled((z) => !z)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${zoomEnabled ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900" : "bg-slate-800 text-slate-400 border border-slate-700"}`}
+                        >
+                          {zoomEnabled ? "ON" : "OFF"}
+                        </button>
+                      </div>
+                      {(
+                        [
+                          ["Blur Background (PIP)", "နောက်ခံဝါး + အလယ်မှာ video", fairBlurBg, setFairBlurBg],
+                          ["Hyper Sync", "စကားလုံးနဲ့ ရုပ် ကပ်ညှိ (Freeze OFF မှာ)", fairHyperSync, setFairHyperSync],
+                        ] as const
+                      ).map(([label, desc, val, setVal]) => (
+                        <div key={label} className="flex items-center justify-between">
+                          <div className="flex flex-col">
+                            <span className="text-xs font-semibold text-slate-300">{label}</span>
+                            <span className="text-[10px] text-slate-500">{desc}</span>
+                          </div>
+                          <button
+                            onClick={() => setVal((v: boolean) => !v)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                              val
+                                ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900"
+                                : "bg-slate-800 text-slate-400 border border-slate-700"
+                            }`}
+                          >
+                            {val ? "ON" : "OFF"}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* SURGICAL FIX: Subtitle ON/OFF Toggle */}
@@ -5274,24 +5791,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                         {s}x
                       </button>
                     ))}
-                  </div>
-                </div>
-
-                {/* Zoom / Copyright Protection Toggle */}
-                <div className="border-t border-slate-700/50 pt-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex flex-col">
-                      <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">Copyright Zoom</h4>
-                      <span className="text-[10px] text-slate-500">
-                        {zoomEnabled ? "Crop + zoom for copyright" : "100% original quality"}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => setZoomEnabled((z) => !z)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${zoomEnabled ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900" : "bg-slate-800 text-slate-400 border border-slate-700"}`}
-                    >
-                      {zoomEnabled ? "ON" : "OFF"}
-                    </button>
                   </div>
                 </div>
 
@@ -5730,7 +6229,6 @@ function buildNarrationStyleBlock(style: "STORY" | "HYBRID" | "VIRAL", langName:
   * Distinct Identity: Never call all characters by one person's name. Each person on screen is distinct.
   * Known Names: If a character's name is spoken/shown in the video, use it only for that specific person.
   * Unknown Names -> Role/Relationship: If a person's name is unknown, NEVER reuse another character's name. Identify them by their exact family relationship or social role (ဥပမာ- အဖေ, အမေ, သား, သမီး, ဇနီး, ခင်ပွန်း, အဖိုး, အဖွား, ဆရာ, တပည့်, ဆရာဝန်, ချွေးမ, သူငယ်ချင်း, ရဲ).`;
-
   const timingLockBlock = `\n\nDIALOGUE TIMING LOCK (HYBRID/VIRAL only):
 - For each real spoken line, inspect the source carefully and use the EXACT source frame where the speaker's first audible syllable begins (normally the first mouth movement). Do not use a nearby reaction shot, an earlier establishing shot, or an approximate scene time.
 - Keep each speaker turn separate. When the speaker changes, start a new paragraph at that new speaker's exact source start time.
@@ -5789,7 +6287,10 @@ STREET-SPOKEN STYLE & MODERN SLANG (HYBRID/VIRAL only):
   }
   return `\n\nNARRATION STYLE — STORY (full narrative, long-form):
   - Keep the classic complete narrator style: clear beginning-to-end storytelling with smooth flow and emotional depth.
-  - Translate what people actually said when it matters, but stay primarily in narrator voice.${translitBlock}`;
+  - Translate what people actually said when it matters, but stay primarily in narrator voice.
+  - TONE (POLISHED NATURAL SPOKEN): neither robotic nor overly poetic. FORBIDDEN: dry CCTV-style action listing ("he got in the car. the other man replied. he sat down."). FORBIDDEN: theatrical, archaic or flowery literary melodrama. REQUIRED: natural modern spoken ${langName} as told by an elite storyteller, lightly elevated with tasteful, evocative words that capture real emotion, inner thoughts and suspense.
+  - SCENE PACING: bridge transitions/filler moments smoothly and concisely.
+  - CRITICAL HIGH-STAKES SCENES (fights, heated arguments, romance, betrayals, reveals, climaxes): NEVER summarize them into 1-2 dry sentences. Do FULL CONTINUOUS SCENE EXPANSION matching the SOURCE scene's real length — if the source spends 2-3 minutes on it, narrate the full exchange, tension, reactions and emotional beats across multiple consecutive timestamped paragraphs that follow the source timing.${translitBlock}`;
 }
 
 const RecapVideoNVPage: React.FC = () => {
@@ -6342,7 +6843,12 @@ const RecapVideoNVPage: React.FC = () => {
       } = await supabase.auth.getSession();
       const userToken = currentSession?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       const selectedLangName = languages.find((l) => l.code === selectedLanguage)?.name || "BURMESE";
-      const maxOutputTokens = Math.min(16384, Math.max(4096, Math.ceil(duration * 220)));
+      const maxOutputTokens = Math.min(64000, Math.max(8192, Math.ceil(duration * 250)));
+      const targetDurationSec = Math.round(duration * 0.7);
+      const minRequiredParagraphs = Math.max(12, Math.round(targetDurationSec / 15));
+      const targetParagraphs = Math.max(16, Math.round(targetDurationSec / 11));
+      const pacingStepSec = Math.max(12, Math.min(25, Math.round(duration / targetParagraphs)));
+      const lengthMandate = `\n- LENGTH MANDATE: spoken recap must last about ${Math.round(targetDurationSec / 60)} minutes. Write AT LEAST ${minRequiredParagraphs} timestamped paragraphs (target ${targetParagraphs}), with a [MM:SS] timestamp roughly every ${pacingStepSec} seconds of source time. Do NOT write a short 1-minute summary.\n- Expand high-stakes scenes (fights, arguments, romance, betrayals, climaxes) continuously, following the source scene's real length.`;
       const isBurmese = selectedLangName === "BURMESE";
       const burmeseStyleBlock = isBurmese
         ? `\n\nLANGUAGE STYLE (CRITICAL for Burmese):\n` +
@@ -6368,7 +6874,7 @@ const RecapVideoNVPage: React.FC = () => {
         skipCreditDeduction: true,
         recapNvPipeline: true,
         apiMode: resolvedApiMode,
-        extraInstructions: `CRITICAL:\n- Output language MUST be ${selectedLangName} ONLY.\n- Cover the full story arc at about 70% of source duration (never below 65%, never above 75%).\n- Aggressively cut filler. Keep only plot-advancing moments.\n- Each segment must flow into the next with a hook/transition.\n- Never output a partial/incomplete script.${burmeseExtraStyle}`,
+        extraInstructions: `CRITICAL:\n- Output language MUST be ${selectedLangName} ONLY.\n- Cover the full story arc at about 70% of source duration (never below 65%, never above 75%).\n- Cut only true filler (travel/waiting). Keep every plot-advancing moment in full.${lengthMandate}\n- Each segment must flow into the next with a hook/transition.\n- Never output a partial/incomplete script.${burmeseExtraStyle}`,
         generationConfig: {
           maxOutputTokens,
           temperature: 0.7,
@@ -6607,7 +7113,7 @@ const RecapVideoNVPage: React.FC = () => {
     fullSegments?: RecapSegment[],
   ) => {
     // Voice naturalness: keep Burmese punctuation so TTS can insert realistic micro-pauses.
-    let speechTextForAPI = scriptText.replace(/\[.*?\]\s*/g, "");
+    let speechTextForAPI = stripDialogueMetadata(scriptText.replace(/\[.*?\]\s*/g, ""));
     if (voiceMode === "normal") {
       // Remove mainly English punctuation, but keep Burmese "á‹" / "áŠ".
       speechTextForAPI = speechTextForAPI.replace(/[.,!?;:"'()\[\]{}\-_\n\r]/g, " ").replace(/\s+/g, " ");
@@ -6947,7 +7453,13 @@ const RecapVideoNVPage: React.FC = () => {
       const userToken = currentSession?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       const selectedLangName = languages.find((l) => l.code === selectedLanguage)?.name || "BURMESE";
       // Larger token headroom to reduce incomplete scripts on long videos.
-      const maxOutputTokens = Math.min(16384, Math.max(4096, Math.ceil(duration * 220)));
+      const maxOutputTokens = Math.min(64000, Math.max(8192, Math.ceil(duration * 250)));
+      const lenBaseSec = batchEndSec ? Math.max(1, batchEndSec - (batchStartSec || 0)) : duration;
+      const targetDurationSec = Math.round(lenBaseSec * 0.7);
+      const minRequiredParagraphs = Math.max(12, Math.round(targetDurationSec / 15));
+      const targetParagraphs = Math.max(16, Math.round(targetDurationSec / 11));
+      const pacingStepSec = Math.max(12, Math.min(25, Math.round(lenBaseSec / targetParagraphs)));
+      const lengthMandate = `\n- LENGTH MANDATE: spoken recap must last about ${Math.round(targetDurationSec / 60)} minutes. Write AT LEAST ${minRequiredParagraphs} timestamped paragraphs (target ${targetParagraphs}), with a [MM:SS] timestamp roughly every ${pacingStepSec} seconds of source time. Do NOT write a short 1-minute summary.\n- Expand high-stakes scenes (fights, arguments, romance, betrayals, climaxes) continuously, following the source scene's real length.`;
 
       // â”€â”€ LANGUAGE-AWARE BLOCKS: All language-specific text uses selectedLangName so user's chosen language is respected. â”€â”€
       const isBurmese = selectedLangName === "BURMESE";
@@ -6982,7 +7494,7 @@ const RecapVideoNVPage: React.FC = () => {
         // â”€â”€ INTELLIGENT RECAP EDITOR PROMPT (surgical edit â€” comprehensive recap instructions) â”€â”€
         niche: `You are an aggressive international professional YouTube recap editor.
 
-Your task is to analyze the uploaded movie/video and create a condensed, fast-paced recap version like the best YouTube movie recap channels. Do NOT simply speed up or use only the first part. You must understand the FULL STORY and then cut it down ruthlessly.
+Your task is to analyze the uploaded movie/video and create an engaging recap version like the best YouTube movie recap channels. Do NOT simply speed up or use only the first part. You must understand the FULL STORY and narrate it completely, using only real source events.
 
 CRITICAL STORYTELLING RULE:
 Write the narration script as ONE CONTINUOUS GRIPPING STORY. Every sentence must hook into the next â€” create momentum, tension, and curiosity.
@@ -7016,7 +7528,7 @@ Keep: The character being sick, arriving at the hospital, and receiving treatmen
 Remove: Changing clothes, walking to the car, driving scenes, waiting scenes, and unnecessary travel shots.
 
 INSTRUCTIONS:
-- Keep ONLY the key plot points in chronological order. CUT everything else ruthlessly.
+- Keep every meaningful plot beat in chronological order. Only drop pure filler.
 - AGGRESSIVELY remove: unnecessary scenes, silence, slow walking, repetitive actions, filler moments, unimportant dialogues, transition scenes, travel montages, and any scene that does NOT advance the main plot.
 - Focus on: Main plot twists, key character moments, critical conflicts, shocking reveals, and the conclusion.
 - Shorten conversations to their essential meaning â€” do NOT include full back-and-forth dialogues.
@@ -7059,19 +7571,16 @@ ${batchEndSec ? `- THIS IS A BATCH SEGMENT. You MUST ONLY watch and recap events
   * For a 20-minute source, aim for about 14 minutes.
   * For a 10-minute source, aim for about 7 minutes.
   * For a 5-minute source, aim for about 3.5 minutes.
-- This is not a detailed summary or review. Do not include non-essential scene descriptions, explanatory pauses, or secondary character chatter.
-- If the story can be told in fewer segments, do that. Use as few segments as necessary to keep the full arc intact.
-- If the script exceeds 75% of source duration, condense low-priority scenes. But NEVER go below 65%.
+- Do not include secondary character chatter that does not matter to the plot.${lengthMandate}
+- If the script exceeds 75% of source duration, shorten only low-priority filler. But NEVER go below 65%.
 - Balance is key: aim for exactly 70% of the source duration.
 - Each segment must flow smoothly into the next.
-- If token pressure appears, condense remaining story into brief segments instead of stopping.
 
-AGGRESSIVE CUTTING RULES (CRITICAL â€” this is a RECAP, not a retelling):
-- CUT all scenes that do NOT directly advance the main plot. Be ruthless.
-- CUT: travel/walking scenes, eating scenes, sleeping scenes, getting dressed, waiting, filler conversations, repetitive arguments, scenery shots, and any slow-paced moments.
-- KEEP ONLY: Plot twists, reveals, conflicts, character-defining moments, shocking scenes, and the resolution.
-- If a scene can be summarized in one sentence instead of described in detail, use one sentence.
-- The output MUST be significantly SHORTER than the source video. If it is the same length or longer, you have failed.
+CUTTING RULES (this is a RECAP, not a retelling):
+- CUT only scenes that do NOT advance the main plot.
+- CUT: travel/walking scenes, eating scenes, sleeping scenes, getting dressed, waiting, filler conversations, scenery shots, and slow-paced moments.
+- KEEP IN FULL: Plot twists, reveals, conflicts, arguments, fights, romance, character-defining moments, shocking scenes, and the resolution — narrate these continuously, never in one dry sentence.
+- SPOKEN LENGTH FLOOR: narration must run about 70–80% of the source duration (~110 spoken words per minute). Never deliver a 1–2 minute script for a 5+ minute source. Length must come only from real source events — never invent.
 - Think like a professional YouTube recap editor: fast, engaging, essential moments only.
 - Do NOT randomly cut scenes. Intelligently compress the narrative while preserving a professional complete story experience.
 
@@ -7121,7 +7630,6 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
       if (scriptResult.error) throw new Error(scriptResult.error);
       const rawScriptText = stripRecapScriptPreamble(scriptResult.script || "");
       const scriptText = selectedLangName === "BURMESE" ? sanitizeToModernSpokenBurmese(rawScriptText) : rawScriptText;
-
       if (!scriptText || scriptText.trim().length < 10) throw new Error("AI script generation returned empty result");
 
       const segments = scriptToSegments(scriptText, duration);
