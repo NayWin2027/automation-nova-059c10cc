@@ -888,11 +888,12 @@ CRITICAL - RECAP COMPLETENESS (ZERO FILLER POLICY):
 - Think of it this way: if a viewer watches your recap, they should feel the same core story impact in half the time
 
 CHARACTER IDENTITY & MULTI-CHARACTER SEPARATION (CRITICAL — STRICT ENFORCEMENT):
+- NO TWO-CHARACTER BINARY COLLAPSE (STRICT): NEVER reduce the entire cast of the video to only two people (e.g., guy and girl / hero and villain / husband and wife)! Real stories feature many distinct people. You MUST recognize and portray every separate character appearing in the video.
 - STRICT CHARACTER ISOLATION: Each individual in the video is a DISTINCT person. NEVER call multiple different characters by the SAME person's name!
-- PROTAGONIST NAME OVERUSE FORBIDDEN: If you discover the main protagonist's name, use it ONLY for that specific person. NEVER refer to friends, opponents, family, or strangers using the protagonist's name.
+- PROTAGONIST NAME OVERUSE FORBIDDEN: If you discover the main protagonist's name, use it ONLY for that specific person. NEVER refer to parents, relatives, doctors, police, friends, bosses, or opponents using the protagonist's name.
 - EXPLICIT REAL NAMES: Use a character's personal name ONLY when that specific person is directly called by that name in the source video.
 - RELATIONSHIP & SOCIAL ROLE FALLBACK: Whenever a character's personal name is not clearly mentioned in the source, you MUST identify them by their specific relationship, family role, or profession in ${lang}.
-  * Examples for BURMESE: အဖေ/ဖခင်, အမေ/မိခင်, သား, သမီး, ဇနီး/မယား, ခင်ပွန်း/ယောက်ျား, အဖိုး, အဖွား, ချွေးမ, သမက်, ယောက္ခမ, ဆရာ, တပည့်, ဆရာဝန်, ကျောင်းသား, မန်နေဂျာ, သူငယ်ချင်း, လုပ်ဖော်ကိုင်ဖက်, ရဲ, လူဆိုး, ဘေးလူ.
+  * Examples for BURMESE: အဖေ/ဖခင်, အမေ/မိခင်, သား, သမီး, ဇနီး/မယား, ခင်ပွန်း/ယောက်ျား, အဖိုး, အဖွား, ချွေးမ, သမက်, ယောက္ခမ, ဆရာ, တပည့်, ဆရာဝန်, သူနာပြု, ကျောင်းသား, မန်နေဂျာ, သူငယ်ချင်း, လုပ်ဖော်ကိုင်ဖက်, ရဲ, လူဆိုး, ရန်သူ, ဘေးလူ.
 - NEVER assume two different people are the same person. When a new person appears or speaks, immediately establish their relationship to the other characters.
 
 
@@ -1130,8 +1131,12 @@ Below is a source video/audio file. Your job is to:
 5. Write a complete, highly detailed professional ${nicheLabel} narration script that RETAINS 80% to 90% of the original source's story, dialogue, and actions. DO NOT summarize it too much. The script must be fullcoverage on source video
 6. A viewer reading your script aloud MUST finish in about 80% to 100% of the original source duration (see REQUIRED NARRATION LENGTH above) and must cover the full source from beginning to end.
 7. Hook the audience immediately
-8. Use vivid, engaging ${lang} appropriate for "${nicheLabel}" content
-9. Be perfectly paced for voice narration
+8. STRICT MULTI-CHARACTER CAST IDENTIFICATION (MANDATORY):
+   - NEVER collapse all people into just 2 characters!
+   - Identify every distinct person in the video. If their personal name is not spoken, you MUST refer to them by their role/relationship in ${langLabel} (e.g., အဖေ, အမေ, သား, သမီး, ဇနီး, ခင်ပွန်း, အဖိုး, အဖွား, ချွေးမ, သမက်, ဆရာ, တပည့်, ဆရာဝန်, သူနာပြု, ရဲ, မန်နေဂျာ, သူငယ်ချင်း, လူဆိုး).
+   - NEVER call other family members or strangers by the main character's name!
+9. Use vivid, engaging ${lang} appropriate for "${nicheLabel}" content
+10. Be perfectly paced for voice narration
 
 YOU ARE A PROFESSIONAL HOLLYWOOD VIDEO EDITOR:
 - For EACH paragraph, identify which scene/moment in the SOURCE VIDEO best matches the narration content
