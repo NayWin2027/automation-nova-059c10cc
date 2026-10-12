@@ -6907,7 +6907,7 @@ const RecapVideoNVPage: React.FC = () => {
         skipCreditDeduction: true,
         recapNvPipeline: true,
         apiMode: resolvedApiMode,
-        extraInstructions: `CRITICAL:\n- Output language MUST be ${selectedLangName} ONLY.\n- Cover the full story arc at about 70% of source duration (never below 65%, never above 75%).\n- Cut only true filler (travel/waiting). Keep every plot-advancing moment in full.${lengthMandate}\n- Each segment must flow into the next with a hook/transition.\n- Never output a partial/incomplete script.${burmeseExtraStyle}`,
+        extraInstructions: `CRITICAL:\n- Output language MUST be ${selectedLangName} ONLY.\n- STRICT MULTI-CHARACTER RULE: NEVER reduce the story to only 2 people! Accurately identify each distinct person by their source name or relationship in ${selectedLangName} (အဖေ, အမေ, သား, သမီး, ဇနီး, ခင်ပွန်း, အဖိုး, အဖွား, ချွေးမ, ဆရာ, ဆရာဝန်, ရဲ, သူငယ်ချင်း). NEVER merge multiple different characters into the 2 main leads!\n- Cover the full story arc at about 70% of source duration (never below 65%, never above 75%).\n- Cut only true filler (travel/waiting). Keep every plot-advancing moment in full.${lengthMandate}\n- Each segment must flow into the next with a hook/transition.\n- Never output a partial/incomplete script.${burmeseExtraStyle}`,
         generationConfig: {
           maxOutputTokens,
           temperature: 0.7,
@@ -7599,12 +7599,13 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
         apiMode: resolvedApiMode,
         extraInstructions: `CRITICAL:
 - Output language MUST be ${selectedLangName} ONLY. Do NOT switch to any other language even if the video's spoken dialogue is in a different language.
+- STRICT MULTI-CHARACTER RULE: NEVER reduce the whole story to only 2 characters! A movie has many people. Each person is a distinct character. Identify every appearing character by their real name (if known) or by their explicit role/relationship in ${selectedLangName} (အဖေ, အမေ, သား, သမီး, ဇနီး, ခင်ပွန်း, အဖိုး, အဖွား, ချွေးမ, သမက်, ဆရာ, တပည့်, ဆရာဝန်, သူနာပြု, မန်နေဂျာ, ရဲ, လူဆိုး, ရန်သူ, သူငယ်ချင်း). NEVER merge multiple different people into the main 2 leads!
 ${batchEndSec ? `- THIS IS A BATCH SEGMENT. You MUST ONLY watch and recap events from ${Math.floor(batchStartSec! / 60)}:${String(Math.floor(batchStartSec! % 60)).padStart(2, "0")} to ${Math.floor(batchEndSec / 60)}:${String(Math.floor(batchEndSec % 60)).padStart(2, "0")}. Ignore everything outside this time window. Do not summarize the ending if it hasn't happened yet in this time window. VERY IMPORTANT: Your script MUST match the duration of this specific batch chunk (approx 70% of the chunk duration). Do not output a 5-minute summary for a 3-minute chunk!` : `- Script must cover the story arc from beginning to end, condensed to about 70% of the source duration (never below 65%, never above 75%).`}
   * For a 30-minute source, aim for about 21 minutes.
   * For a 20-minute source, aim for about 14 minutes.
   * For a 10-minute source, aim for about 7 minutes.
   * For a 5-minute source, aim for about 3.5 minutes.
-- Do not include secondary character chatter that does not matter to the plot.${lengthMandate}
+- Keep all plot-relevant dialogues and interactions of all family members, colleagues, and secondary characters.${lengthMandate}
 - If the script exceeds 75% of source duration, shorten only low-priority filler. But NEVER go below 65%.
 - Balance is key: aim for exactly 70% of the source duration.
 - Each segment must flow smoothly into the next.
