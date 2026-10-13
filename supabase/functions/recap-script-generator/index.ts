@@ -365,9 +365,9 @@ function estimateSpokenSeconds(text: string): number {
   return asian / 6.8 + latin / 1.9;
 }
 
-const LENGTH_TARGET_RATIO = 0.7;
-const LENGTH_MAX_RATIO = 0.75;
-const LENGTH_MIN_RATIO = 0.65;
+const LENGTH_TARGET_RATIO = 0.9;
+const LENGTH_MAX_RATIO = 0.95;
+const LENGTH_MIN_RATIO = 0.85;
 
 function enforcefullScriptCoverage(script: string, sourceDurationSec?: number | null): string {
   const normalized = script.replace(/\r\n/g, "\n").trim();
