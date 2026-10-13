@@ -1109,6 +1109,64 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       y: 8,
     });
 
+    // SURGICAL: App watermark only for free users. Pro/Premium/Admin → no app logo (custom logo still allowed)
+    const { user: wmUser, profile: wmProfile } = useAuth();
+    const [wmIsAdmin, setWmIsAdmin] = useState(false);
+    useEffect(() => {
+      if (!wmUser?.id) { setWmIsAdmin(false); return; }
+      (supabase as any).rpc("has_role", { _user_id: wmUser.id, _role: "admin" })
+        .then(({ data }: any) => setWmIsAdmin(!!data)).catch(() => {});
+    }, [wmUser?.id]);
+    const hideAppLogo = wmIsAdmin || (!!wmProfile?.plan && wmProfile.plan !== "free");
+
+    // SURGICAL: Direct drag + pinch/corner resize for logo overlay (preview only)
+    const logoDragRef = useRef<{ mode: "move" | "resize"; sx: number; sy: number; ox: number; oy: number; os: number; w: number; h: number } | null>(null);
+    const startLogoDrag = (e: React.PointerEvent, mode: "move" | "resize") => {
+      e.stopPropagation();
+      e.preventDefault();
+      const host = (e.currentTarget as HTMLElement).closest("[data-logo-host]")?.parentElement as HTMLElement | null;
+      const rect = host?.getBoundingClientRect();
+      if (!rect) return;
+      logoDragRef.current = { mode, sx: e.clientX, sy: e.clientY, ox: logo.x, oy: logo.y, os: logo.size, w: rect.width, h: rect.height };
+      const onMove = (ev: PointerEvent) => {
+        const d = logoDragRef.current;
+        if (!d) return;
+        const dx = ((ev.clientX - d.sx) / d.w) * 100;
+        const dy = ((ev.clientY - d.sy) / d.h) * 100;
+        if (d.mode === "move") {
+          setLogo((l) => ({ ...l, x: Math.min(100, Math.max(0, d.ox + dx)), y: Math.min(100, Math.max(0, d.oy + dy)) }));
+        } else {
+          setLogo((l) => ({ ...l, size: Math.min(60, Math.max(4, d.os + Math.max(dx, dy) * 2)) }));
+        }
+      };
+      const onUp = () => {
+        logoDragRef.current = null;
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onUp);
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onUp);
+    };
+    const logoPinchRef = useRef<{ dist: number; size: number } | null>(null);
+    const onLogoTouchStart = (e: React.TouchEvent) => {
+      e.stopPropagation();
+      if (e.touches.length === 2) {
+        const [a, b] = [e.touches[0], e.touches[1]];
+        logoPinchRef.current = { dist: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), size: logo.size };
+      }
+    };
+    const onLogoTouchMove = (e: React.TouchEvent) => {
+      e.stopPropagation();
+      const p = logoPinchRef.current;
+      if (p && e.touches.length === 2) {
+        const [a, b] = [e.touches[0], e.touches[1]];
+        const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+        setLogo((l) => ({ ...l, size: Math.min(60, Math.max(4, p.size * (dist / p.dist))) }));
+      }
+    };
+
     const [subSettings, setSubSettings] = useState<SubtitleSettings>({
       x: 50,
       y: 85,
@@ -2745,7 +2803,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           logoImg!.onload = () => res();
           logoImg!.onerror = () => res();
         });
-      } else {
+      } else if (!hideAppLogo) {
         try {
           const svgSize = 256;
           const svgStr = `<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" width="${svgSize}" height="${svgSize}"><defs><radialGradient id="bg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#1a0b2e"/><stop offset="100%" stop-color="#050505"/></radialGradient><linearGradient id="ch" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#ffffff"/><stop offset="40%" stop-color="#e8eff5"/><stop offset="100%" stop-color="#556270"/></linearGradient><filter id="gl" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="8" result="blur"/><feComposite in="SourceGraphic" in2="blur" operator="over"/></filter></defs><rect width="512" height="512" rx="80" fill="url(#bg)"/><g transform="translate(40,40) skewX(-10)"><path d="M60 320 C60 320 120 100 180 120 C240 140 150 350 280 320 C350 300 380 180 420 180 M280 320 C320 320 400 250 440 100" stroke="#00ffff" stroke-width="28" fill="none" stroke-linecap="round" filter="url(#gl)" opacity="0.35"/><path d="M60 320 C60 320 120 100 180 120 C240 140 150 350 280 320 C350 300 380 180 420 180 M280 320 C320 320 400 250 440 100" stroke="url(#ch)" stroke-width="24" fill="none" stroke-linecap="round"/></g></svg>`;
@@ -4749,15 +4807,21 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 onTouchMove={handleDragMove}
                 onTouchEnd={handleDragEnd}
               >
-                {/* Logo Layer */}
+                {/* Logo Layer — draggable / resizable (hidden for paid/admin when no custom logo) */}
+                {(logo.url || !hideAppLogo) && (
                 <div
-                  className="absolute z-30 pointer-events-none"
+                  data-logo-host
+                  className="absolute z-30 pointer-events-auto cursor-move touch-none select-none group"
+                  onPointerDown={(e) => startLogoDrag(e, "move")}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onTouchStart={onLogoTouchStart}
+                  onTouchMove={onLogoTouchMove}
+                  onTouchEnd={(e) => { e.stopPropagation(); logoPinchRef.current = null; }}
                   style={{
                     left: `${logo.x}%`,
                     top: `${logo.y}%`,
                     transform: "translate(-50%, -50%)",
                     width: `${logo.size}%`,
-                    transition: "all 0.4s ease",
                   }}
                 >
                   {logo.url ? (
@@ -4782,7 +4846,12 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       <AppLogo size={64} />
                     </div>
                   )}
+                  <div
+                    className="absolute -right-2 -bottom-2 w-5 h-5 rounded-full bg-primary border-2 border-background cursor-nwse-resize opacity-80 group-hover:opacity-100"
+                    onPointerDown={(e) => startLogoDrag(e, "resize")}
+                  />
                 </div>
+                )}
 
                 {/* SURGICAL EDIT: Blur Box Layer â€” pure blur region, NO subtitle inside */}
                 {!isRenderingRef.current && blurSettings.enabled && (
