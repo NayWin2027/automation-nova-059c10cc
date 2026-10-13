@@ -287,6 +287,12 @@ function removeNarrationRepetition(script: string): string {
     .map((paragraph) => paragraph.trim())
     .filter(Boolean);
   const kept: string[] = [];
+  // Cross-paragraph history: a sentence already said in an earlier paragraph is
+  // dropped from later narration paragraphs (same fact re-stated with new wording).
+  // The paragraph itself and its timecode are always kept so segment/AV mapping
+  // never shifts — if every sentence in a paragraph is a repeat, the original
+  // paragraph is kept unchanged rather than deleting it.
+  const globalSeen: string[] = [];
 
   for (const paragraph of paragraphs) {
     // Dialogue turns are preserved verbatim — a source character may intentionally
@@ -314,6 +320,10 @@ function removeNarrationRepetition(script: string): string {
         const seenKey = normalizeForRepetition(seen);
         if (sentenceKey === seenKey) return true;
         return sentenceKey.length >= 28 && seenKey.length >= 28 && charGramSimilarity(sentence, seen) >= 0.95;
+      }) || globalSeen.some((seen) => {
+        const seenKey = normalizeForRepetition(seen);
+        if (sentenceKey === seenKey) return true;
+        return sentenceKey.length >= 28 && seenKey.length >= 28 && charGramSimilarity(sentence, seen) >= 0.92;
       });
       if (!repeated) uniqueSentences.push(sentence);
     }
@@ -321,6 +331,7 @@ function removeNarrationRepetition(script: string): string {
       kept.push(paragraph);
       continue;
     }
+    globalSeen.push(...uniqueSentences);
     kept.push(`${prefix}${uniqueSentences.join(" ").trim()}`.trim());
   }
   return kept.join("\n\n").trim();
