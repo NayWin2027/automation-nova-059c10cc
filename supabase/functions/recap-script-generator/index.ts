@@ -331,6 +331,7 @@ function removeNarrationRepetition(script: string): string {
       kept.push(paragraph);
       continue;
     }
+    globalSeen.push(...uniqueSentences);
     kept.push(`${prefix}${uniqueSentences.join(" ").trim()}`.trim());
   }
   return kept.join("\n\n").trim();
