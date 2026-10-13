@@ -320,6 +320,10 @@ function removeNarrationRepetition(script: string): string {
         const seenKey = normalizeForRepetition(seen);
         if (sentenceKey === seenKey) return true;
         return sentenceKey.length >= 28 && seenKey.length >= 28 && charGramSimilarity(sentence, seen) >= 0.95;
+      }) || globalSeen.some((seen) => {
+        const seenKey = normalizeForRepetition(seen);
+        if (sentenceKey === seenKey) return true;
+        return sentenceKey.length >= 28 && seenKey.length >= 28 && charGramSimilarity(sentence, seen) >= 0.92;
       });
       if (!repeated) uniqueSentences.push(sentence);
     }
