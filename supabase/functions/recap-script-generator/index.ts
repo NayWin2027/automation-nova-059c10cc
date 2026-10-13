@@ -316,15 +316,17 @@ function removeNarrationRepetition(script: string): string {
       const sentence = sentenceRaw.trim();
       const sentenceKey = normalizeForRepetition(sentence);
       if (!sentenceKey) continue;
-      const repeated = uniqueSentences.some((seen) => {
-        const seenKey = normalizeForRepetition(seen);
-        if (sentenceKey === seenKey) return true;
-        return sentenceKey.length >= 28 && seenKey.length >= 28 && charGramSimilarity(sentence, seen) >= 0.95;
-      }) || globalSeen.some((seen) => {
-        const seenKey = normalizeForRepetition(seen);
-        if (sentenceKey === seenKey) return true;
-        return sentenceKey.length >= 28 && seenKey.length >= 28 && charGramSimilarity(sentence, seen) >= 0.92;
-      });
+      const repeated =
+        uniqueSentences.some((seen) => {
+          const seenKey = normalizeForRepetition(seen);
+          if (sentenceKey === seenKey) return true;
+          return sentenceKey.length >= 28 && seenKey.length >= 28 && charGramSimilarity(sentence, seen) >= 0.95;
+        }) ||
+        globalSeen.some((seen) => {
+          const seenKey = normalizeForRepetition(seen);
+          if (sentenceKey === seenKey) return true;
+          return sentenceKey.length >= 28 && seenKey.length >= 28 && charGramSimilarity(sentence, seen) >= 0.92;
+        });
       if (!repeated) uniqueSentences.push(sentence);
     }
     if (!uniqueSentences.length) {
@@ -363,9 +365,9 @@ function estimateSpokenSeconds(text: string): number {
   return asian / 6.8 + latin / 1.9;
 }
 
-const LENGTH_TARGET_RATIO = 0.9;
-const LENGTH_MAX_RATIO = 0.95;
-const LENGTH_MIN_RATIO = 0.85;
+const LENGTH_TARGET_RATIO = 0.7;
+const LENGTH_MAX_RATIO = 0.75;
+const LENGTH_MIN_RATIO = 0.65;
 
 function enforcefullScriptCoverage(script: string, sourceDurationSec?: number | null): string {
   const normalized = script.replace(/\r\n/g, "\n").trim();
