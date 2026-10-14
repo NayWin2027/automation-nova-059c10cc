@@ -4019,11 +4019,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   // SURGICAL FIX: Auto adjust playback rate (0.9x - 1.3x) only where loop would occur
                   const segVideoDur = sourceEnd - effectiveVStart;
                   const segAudioDur = _hasAudioTs ? audioTs[activeIndex].end - audioTs[activeIndex].start : 0;
+                  // SURGICAL FIX (AV parity): audio timestamps are media-time; at 1.4x TTS speed the
+                  // real (wall-clock) audio duration is shorter. Use real duration so video keeps pace.
+                  const _arRaw = audioRef.current?.playbackRate;
+                  const _audioRate = Number.isFinite(_arRaw) && (_arRaw as number) > 0 ? (_arRaw as number) : 1.0;
+                  const segAudioRealDur = segAudioDur / _audioRate;
+                  const _isDlgForRate = !!(active as any)?.isDialogue;
                   let targetPlaybackRate = 1.0;
-                  if (segAudioDur > 0 && segVideoDur > 0 && segVideoDur < segAudioDur) {
-                    // Video is shorter than audio narration (would loop at 1.0x)
-                    // Auto-adjust playback rate within 0.9x - 1.3x to fill the audio duration smoothly
-                    targetPlaybackRate = Math.max(0.9, Math.min(1.3, segVideoDur / segAudioDur));
+                  if (segAudioRealDur > 0 && segVideoDur > 0 && (segVideoDur < segAudioRealDur || _isDlgForRate)) {
+                    // Narration: only speed-fill when video is shorter. Dialogue: match mouth pace to voice.
+                    targetPlaybackRate = Math.max(0.9, Math.min(1.3, segVideoDur / segAudioRealDur));
                   }
 
                   if (activeIndex !== lastIndexRef.current) {
@@ -4166,7 +4171,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       let _hsRate = targetPlaybackRate;
                       if (fairHyperSyncRef.current && _hasAudioTs) {
                         const _expected =
-                          effectiveVStart + (currentTime - audioTs[activeIndex].start) * targetPlaybackRate;
+                          effectiveVStart +
+                          ((currentTime - audioTs[activeIndex].start) / _audioRate) * targetPlaybackRate;
                         const _err = vv.currentTime - _expected; // + = video ahead
                         if (Math.abs(_err) > 0.04 && Math.abs(_err) < 1.5) {
                           _hsRate = targetPlaybackRate * Math.max(0.92, Math.min(1.08, 1 - _err * 0.4));
