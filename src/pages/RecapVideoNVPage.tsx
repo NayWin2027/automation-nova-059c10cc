@@ -1114,28 +1114,55 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     const { user: wmUser, profile: wmProfile } = useAuth();
     const [wmIsAdmin, setWmIsAdmin] = useState(false);
     useEffect(() => {
-      if (!wmUser?.id) { setWmIsAdmin(false); return; }
-      (supabase as any).rpc("has_role", { _user_id: wmUser.id, _role: "admin" })
-        .then(({ data }: any) => setWmIsAdmin(!!data)).catch(() => {});
+      if (!wmUser?.id) {
+        setWmIsAdmin(false);
+        return;
+      }
+      (supabase as any)
+        .rpc("has_role", { _user_id: wmUser.id, _role: "admin" })
+        .then(({ data }: any) => setWmIsAdmin(!!data))
+        .catch(() => {});
     }, [wmUser?.id]);
     const hideAppLogo = wmIsAdmin || (!!wmProfile?.plan && wmProfile.plan !== "free");
 
     // SURGICAL: Direct drag + pinch/corner resize for logo overlay (preview only)
-    const logoDragRef = useRef<{ mode: "move" | "resize"; sx: number; sy: number; ox: number; oy: number; os: number; w: number; h: number } | null>(null);
+    const logoDragRef = useRef<{
+      mode: "move" | "resize";
+      sx: number;
+      sy: number;
+      ox: number;
+      oy: number;
+      os: number;
+      w: number;
+      h: number;
+    } | null>(null);
     const startLogoDrag = (e: React.PointerEvent, mode: "move" | "resize") => {
       e.stopPropagation();
       e.preventDefault();
       const host = (e.currentTarget as HTMLElement).closest("[data-logo-host]")?.parentElement as HTMLElement | null;
       const rect = host?.getBoundingClientRect();
       if (!rect) return;
-      logoDragRef.current = { mode, sx: e.clientX, sy: e.clientY, ox: logo.x, oy: logo.y, os: logo.size, w: rect.width, h: rect.height };
+      logoDragRef.current = {
+        mode,
+        sx: e.clientX,
+        sy: e.clientY,
+        ox: logo.x,
+        oy: logo.y,
+        os: logo.size,
+        w: rect.width,
+        h: rect.height,
+      };
       const onMove = (ev: PointerEvent) => {
         const d = logoDragRef.current;
         if (!d) return;
         const dx = ((ev.clientX - d.sx) / d.w) * 100;
         const dy = ((ev.clientY - d.sy) / d.h) * 100;
         if (d.mode === "move") {
-          setLogo((l) => ({ ...l, x: Math.min(100, Math.max(0, d.ox + dx)), y: Math.min(100, Math.max(0, d.oy + dy)) }));
+          setLogo((l) => ({
+            ...l,
+            x: Math.min(100, Math.max(0, d.ox + dx)),
+            y: Math.min(100, Math.max(0, d.oy + dy)),
+          }));
         } else {
           setLogo((l) => ({ ...l, size: Math.min(60, Math.max(4, d.os + Math.max(dx, dy) * 2)) }));
         }
@@ -3023,16 +3050,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         let freezeImg: HTMLCanvasElement | null = null;
         let freezeRect: [number, number, number, number] = [0, 0, 0, 0];
 
-        // SURGICAL FIX: Freeze/Motion ON → narration + dialogue both use 4s↔4s (copyright suite).
+        // SURGICAL FIX: Freeze/Motion ON → narration + dialogue both use 4s Motion ↔ 2s Freeze Zoom (copyright suite).
         // Freeze/Motion OFF → narration uses Zoom toggle only; dialogue never gets photo zoom (isZoomEnabled guard).
         if (freezeModeRef.current) {
           // SURGICAL FIX: Cycle on exported-video seconds (matches MP4 timeline + WebCodecs timestamps).
-          // Using raw currentTime compresses 4s freeze/motion by playbackRate (e.g. 4x → ~1s zoom bursts).
+          // Using raw currentTime compresses freeze/motion by playbackRate (e.g. 4x → ~1s zoom bursts).
           const _fmPlayRate =
             Number.isFinite(audioEl.playbackRate) && audioEl.playbackRate > 0 ? audioEl.playbackRate : 1.0;
           const t = audioEl.currentTime / _fmPlayRate;
-          const FREEZE_SEC = 4; // 4s professional news-style zoom
-          const MOTION_SEC = 4; // FAIR USE rhythm: 4s video motion <-> 4s photo
+          const FREEZE_SEC = 2; // 2s smooth news-style micro zoom in
+          const MOTION_SEC = 4; // FAIR USE rhythm: 4s video motion <-> 2s photo zoom
           const CYCLE_SEC = FREEZE_SEC + MOTION_SEC;
           const cyclePos = t % CYCLE_SEC;
           const isFreezeCycle = cyclePos < FREEZE_SEC;
@@ -4812,48 +4839,51 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               >
                 {/* Logo Layer — draggable / resizable (hidden for paid/admin when no custom logo) */}
                 {(logo.url || !hideAppLogo) && (
-                <div
-                  data-logo-host
-                  className="absolute z-30 pointer-events-auto cursor-move touch-none select-none group"
-                  onPointerDown={(e) => startLogoDrag(e, "move")}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onTouchStart={onLogoTouchStart}
-                  onTouchMove={onLogoTouchMove}
-                  onTouchEnd={(e) => { e.stopPropagation(); logoPinchRef.current = null; }}
-                  style={{
-                    left: `${logo.x}%`,
-                    top: `${logo.y}%`,
-                    transform: "translate(-50%, -50%)",
-                    width: `${logo.size}%`,
-                  }}
-                >
-                  {logo.url ? (
-                    <div
-                      className={`relative w-full aspect-square ${logo.isCircle ? "rounded-full" : "rounded-none"} overflow-hidden`}
-                      style={{
-                        boxShadow: "none",
-                        border: "none",
-                      }}
-                    >
-                      <img
-                        src={logo.url}
-                        className={`w-full h-full object-cover ${logo.spin ? "animate-[spin_8s_linear_infinite]" : ""}`}
-                        alt="Logo"
-                        draggable={false}
-                      />
-                    </div>
-                  ) : (
-                    <div
-                      className={`relative w-full aspect-square flex items-center justify-center ${logo.spin ? "animate-[spin_8s_linear_infinite]" : ""}`}
-                    >
-                      <AppLogo size={64} />
-                    </div>
-                  )}
                   <div
-                    className="absolute -right-2 -bottom-2 w-5 h-5 rounded-full bg-primary border-2 border-background cursor-nwse-resize opacity-80 group-hover:opacity-100"
-                    onPointerDown={(e) => startLogoDrag(e, "resize")}
-                  />
-                </div>
+                    data-logo-host
+                    className="absolute z-30 pointer-events-auto cursor-move touch-none select-none group"
+                    onPointerDown={(e) => startLogoDrag(e, "move")}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onTouchStart={onLogoTouchStart}
+                    onTouchMove={onLogoTouchMove}
+                    onTouchEnd={(e) => {
+                      e.stopPropagation();
+                      logoPinchRef.current = null;
+                    }}
+                    style={{
+                      left: `${logo.x}%`,
+                      top: `${logo.y}%`,
+                      transform: "translate(-50%, -50%)",
+                      width: `${logo.size}%`,
+                    }}
+                  >
+                    {logo.url ? (
+                      <div
+                        className={`relative w-full aspect-square ${logo.isCircle ? "rounded-full" : "rounded-none"} overflow-hidden`}
+                        style={{
+                          boxShadow: "none",
+                          border: "none",
+                        }}
+                      >
+                        <img
+                          src={logo.url}
+                          className={`w-full h-full object-cover ${logo.spin ? "animate-[spin_8s_linear_infinite]" : ""}`}
+                          alt="Logo"
+                          draggable={false}
+                        />
+                      </div>
+                    ) : (
+                      <div
+                        className={`relative w-full aspect-square flex items-center justify-center ${logo.spin ? "animate-[spin_8s_linear_infinite]" : ""}`}
+                      >
+                        <AppLogo size={64} />
+                      </div>
+                    )}
+                    <div
+                      className="absolute -right-2 -bottom-2 w-5 h-5 rounded-full bg-primary border-2 border-background cursor-nwse-resize opacity-80 group-hover:opacity-100"
+                      onPointerDown={(e) => startLogoDrag(e, "resize")}
+                    />
+                  </div>
                 )}
 
                 {/* SURGICAL EDIT: Blur Box Layer â€” pure blur region, NO subtitle inside */}
@@ -5779,7 +5809,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       <div className="flex items-center justify-between">
                         <div className="flex flex-col">
                           <span className="text-xs font-semibold text-slate-300">⏸ Freeze / Motion</span>
-                          <span className="text-[10px] text-slate-500">4s video ↔ 4s photo zoom in</span>
+                          <span className="text-[10px] text-slate-500">4s video ↔ 2s photo zoom in</span>
                         </div>
                         <button
                           onClick={() => {
