@@ -802,18 +802,17 @@ STREET-SPOKEN STYLE & MODERN SLANG (mandatory for ${narrationStyle} mode):
 
     const viralBalanceBlock =
       narrationStyle === "VIRAL"
-        ? `\n\nVIRAL MODE BALANCE (mandatory — dialogue-heavy, but NEVER dialogue-only):
-- Keep ALL the real dialogue (this is the backbone), but the script must NOT read like a bare dialogue transcript.
-- MAXIMUM 2-3 DIALOGUES RULE: You must NEVER write more than 2 or 3 consecutive [DIALOGUE] lines without inserting a [MM:SS] Narrator line.
-- CONTINUOUS CONVERSATION RULE: Even during a continuous back-and-forth conversation with no silent gaps, you MUST pause the dialogue after every 2-3 speaker turns and insert a 1-sentence narrator line describing their face expressions, body language, or the emotional tension of the argument.
-- NARRATOR'S ROLE (PLOT BRIDGES, ACTION & RELATIONSHIPS - 5%): Narrator lines are NOT optional filler — they are essential story glue. Insert narrator paragraphs to:
-  * Describe WHO the characters are and their RELATIONSHIP to each other (e.g. husband-wife, boss-employee, childhood friends) — especially on first appearance.
-  * Bridge between scenes: explain where, when, why, and what changed.
-  * Describe physical actions, fights, chases, embraces — concrete verbs, not summaries.
-  * Show face/body reactions: tears, trembling, jaw clenching, stepping back.
-- STORY-CONNECTION REQUIREMENT: The narrator lines must make the PLOT understandable on their own — who did what to whom, where, and why it matters right now. A viewer who never saw the source must follow the story from the script alone.
-- If two consecutive dialogue blocks come from different scenes, different speakers' situations, or after a time jump, you MUST place a connective narrator/action line between them.
-- Never invent facts in these narrator lines: describe only actions, expressions and relationships that are visible or audible in the source.
+        ? `\n\nVIRAL MODE BALANCE (mandatory — dialogue-first, but NEVER dialogue-only; narration ONLY where needed):
+- Keep ALL the real dialogue (this is the backbone). Let continuous back-and-forth conversations flow WITHOUT interrupting them.
+- NO REDUNDANT SPEAKER ATTRIBUTION: Never insert narration just to say who spoke or who replied (e.g. "သူက ပြန်ပြောလိုက်တယ်", "သူမက မေးလိုက်တယ်" is FORBIDDEN). No filler narration describing faces during an ordinary two-person exchange.
+- INSERT A SHORT (1-sentence) NARRATOR LINE ONLY WHEN:
+  * A notable physical action happens (hitting, smashing something, running away, a fight, an embrace).
+  * The scene/location/time changes.
+  * The plot takes a significant turn (a secret revealed, a betrayal, a shock).
+  * A new person or group enters the conversation.
+  * A character appears for the first time — briefly state who they are and their RELATIONSHIP to others.
+- STORY CONTINUITY (mandatory, beginning to end): A viewer who never saw the source must follow the full story from the script alone — who, where, why, what changed. If two dialogue blocks come from different scenes or after a time jump, a connective narrator line is REQUIRED between them. Opening must set up the situation; ending must resolve/close the arc.
+- Never invent facts in narrator lines: describe only actions, expressions and relationships visible or audible in the source.
 - TONE & VOCABULARY: Use modern, trendy internet slang, popular pop-culture lingo, and highly engaging humorous expressions naturally (e.g., if ${lang} is BURMESE, use modern daily spoken Burmese, NOT formal/literary Myanmar text).`
         : "";
 
