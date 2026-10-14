@@ -2048,6 +2048,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           aStartPct: totalWords > 0 ? startWords / totalWords : 0,
           aEndPct: totalWords > 0 ? wordCursor / totalWords : 1,
           text: stripDialogueMetadata(seg.text).replace(TIMECODE_STRIP_RE, "").trim(),
+          // SURGICAL FIX: pass dialogue flag so Freeze/Motion OFF never zooms dialogue (display-only, no timing change)
+          isDialogue: !!(seg as any).isDialogue,
         };
       });
     }, [scriptData, narrationStyle]);
