@@ -3236,24 +3236,41 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             fairDraw(freezeImg, freezeRect[0], freezeRect[1], freezeRect[2], freezeRect[3]);
           } else if (useVisibleLoopMask && heldFrame) {
             // Noticeable Cinematic Push-in: 1.0 -> 1.30 over 4.5s
-            // ကြည့်ရှုသူများ သိသိသာသာ မြင်တွေ့နိုင်သော Camera Push-in (Freeze မဟုတ်၊ Loop အစပြန်မပတ်)
+            // ဗီဒီယို ကုန်သွားပါက 1.0x မှ 1.30x သို့ သိသာထင်ရှားသော Camera Push-in
             const maskElapsed =
               visibleLoopMaskStartRef.current > 0
                 ? performance.now() - visibleLoopMaskStartRef.current
                 : Math.max(0, performance.now() - gapStartRef.current);
             const maskProgress = Math.min(1, maskElapsed / 4500);
             const maskEase = 1 - Math.pow(1 - maskProgress, 1.8);
-            const maskZoom = 1.0 + 0.3 * maskEase; // Peak 1.30x (သိသာထင်ရှားသော Zoom In)
+            const maskZoom = 1.0 + 0.3 * maskEase; // Peak 1.30x
             const maskW = Math.max(2, Math.round(heldFrame.width / maskZoom));
             const maskH = Math.max(2, Math.round(heldFrame.height / maskZoom));
             const maskX = Math.round((heldFrame.width - maskW) / 2);
             const maskY = Math.round((heldFrame.height - maskH) / 2);
-            fairDraw(heldFrame, maskX, maskY, maskW, maskH);
+
+            // FLIP FIX: heldFrame ထဲတွင် flip pixels ပါပြီးသားဖြစ်၍ double-flip (-1 x -1 = +1) မဖြစ်စေရန် un-invert လုပ်ပေးသည်
+            if (curEditorState.flip) {
+              ctx.save();
+              ctx.translate(canvas.width, 0);
+              ctx.scale(-1, 1);
+              fairDraw(heldFrame, maskX, maskY, maskW, maskH);
+              ctx.restore();
+            } else {
+              fairDraw(heldFrame, maskX, maskY, maskW, maskH);
+            }
           } else if (useResidualFrameMask && heldFrame) {
-            // Hard-cut seek gap: Clean static frame hold — NO zoom
-            fairDraw(heldFrame, 0, 0, heldFrame.width, heldFrame.height);
+            if (curEditorState.flip) {
+              ctx.save();
+              ctx.translate(canvas.width, 0);
+              ctx.scale(-1, 1);
+              fairDraw(heldFrame, 0, 0, heldFrame.width, heldFrame.height);
+              ctx.restore();
+            } else {
+              fairDraw(heldFrame, 0, 0, heldFrame.width, heldFrame.height);
+            }
           } else {
-            // NORMAL MOTION: 100% Original framing (Zero Zoom, Zero Crop when Zoom OFF)
+            // NORMAL MOTION: 100% Original framing (Zero Zoom, မူရင်းအတိုင်း ဘက်မပြောင်းဘဲ ပြေးမည်)
             fairDraw(drawSrcEl, zoomedSrcX, zoomedSrcY, zoomedSrcW, zoomedSrcH);
           }
           ctx.restore();
