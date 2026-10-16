@@ -3260,7 +3260,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
           // Keep one clean visual frame ready so when a segment completes, the hold transitions smoothly
           // PERF FIX: Throttle to once per 200ms instead of every frame (still ~5x/sec for fresh frames)
-          if (!useVisibleLoopMask && !useResidualFrameMask && !useDialogueHold && visualSegment >= 0) {
+          if (!useVisibleLoopMask && !useResidualFrameMask && visualSegment >= 0) {
             const _heldNow = performance.now();
             if (!heldFrameLastCaptureRef.current || _heldNow - heldFrameLastCaptureRef.current > 200) {
               heldFrameLastCaptureRef.current = _heldNow;
