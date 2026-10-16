@@ -4128,9 +4128,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     // This prevents irrelevant content (eating, dancing, walking) from leaking into the active segment.
                     const endMargin = 0.08;
                     const _isDialogueSeg = !!active?.isDialogue;
-                    if (sourceEnd > effectiveVStart && vv.currentTime >= sourceEnd - endMargin) {
-                      if (_isDialogueSeg && !freezeModeRef.current) {
-                        // Dialogue + Freeze OFF: cinematic zoom push-in (no static pause freeze)
+if (sourceEnd > effectiveVStart && vv.currentTime >= sourceEnd - endMargin) {
+                      if (!freezeModeRef.current) {
+                        // FREEZE OFF (Dialogue ရော Narration ပါ): Loop အစပြန်မခုန်ဘဲ နောက်ဆုံး Frame အား 1.30x Push-In ဖြင့် ချောမွေ့စွာ ထိန်းထားမည်
                         if (!dialogueHoldActiveRef.current) {
                           dialogueHoldActiveRef.current = true;
                           if (visibleLoopMaskStartRef.current === 0) {
@@ -4152,20 +4152,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                         }
                         vv.playbackRate = targetPlaybackRate;
                         if (vv.paused && !vv.ended) vv.play().catch(() => {});
-                      } else if (!freezeModeRef.current && !_isDialogueSeg) {
-                        // Narration + Freeze OFF: micro zoom loop mask
-                        if (visibleLoopMaskStartRef.current === 0) {
-                          visibleLoopMaskStartRef.current = performance.now();
-                          visibleLoopCountRef.current = 1;
-                        }
+                      } else {
+                        // Freeze/Motion ON: seek loop only
                         seekPendingRef.current = true;
-                        const onLoopSeeked = () => {
+                        const onFmLoopSeeked = () => {
                           seekPendingRef.current = false;
-                          vv.playbackRate = targetPlaybackRate;
+                          vv.playbackRate = 1.0;
                           if (!vv.ended) vv.play().catch(() => {});
-                          vv.removeEventListener("seeked", onLoopSeeked);
+                          vv.removeEventListener("seeked", onFmLoopSeeked);
                         };
-                        vv.addEventListener("seeked", onLoopSeeked);
+                        vv.addEventListener("seeked", onFmLoopSeeked);
                         vv.currentTime = effectiveVStart;
                       } else {
                         // Freeze/Motion ON (narration or dialogue): seek loop only — 4s↔4s draw owns copyright look
