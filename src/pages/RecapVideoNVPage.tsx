@@ -6413,18 +6413,16 @@ STREET-SPOKEN STYLE & MODERN SLANG (HYBRID/VIRAL only):
   }
   if (style === "VIRAL") {
     return `\n\nNARRATION STYLE — VIRAL (short-form, TikTok/Reels):
-- Fast pacing. Short punchy sentences. No slow setup, no filler, no throat-clearing.
-- Dialogue-first: whenever people speak on screen, use their translated words directly in ${langName} instead of describing them.
-- Keep tension continuous — every ~20 seconds of narration must land a new question, conflict, or surprise.
-- Emotion must be raw and natural, exactly how real people talk when angry, shocked, or excited — not literary.
-- Match the words to the on-screen action at that moment.
-- NEVER invent dialogue that does not exist in the source.
-- For non-story niches (tech, news, health, business, educational), "conflict" means the myth being busted, the surprising number, the mistake people make — hit those hard and fast.
-- STORY-CONNECTION LINES (mandatory): dialogue alone is NOT enough. Between dialogue blocks, add SHORT narrator lines (1-2 sentences) that state the concrete physical action, who is doing it to whom, and the visible reaction/expression — so a viewer who never saw the source still understands the plot.
-- Add one such connective line whenever the scene/location/time changes, a new character appears, a fight/chase/physical action happens, or a relationship/motive must be clear for the next dialogue to make sense.
-- Overall mix: roughly 70-80% real dialogue, 20-30% short narrator/action lines. NEVER produce a bare dialogue transcript with no connective lines.
-- Narrator lines must be connective glue only: short, punchy, describing action/reaction — never re-summarising dialogue that was already spoken, never invented facts.
-- THIS OVERRIDES any earlier instruction that says to avoid quoting dialogue: quoting real spoken lines is REQUIRED in this style.${timingLockBlock}${translitBlock}`;
+- Fast pacing. Short punchy sentences. Dialogue-first: all direct speech must be quoted "..." with [DIALOGUE:EMOTION].
+- NO REDUNDANT SPEAKER ATTRIBUTION: NEVER insert narration to explain who spoke or replied ("သူက ပြောတယ်", "သူမက မေးတယ်" strictly forbidden).
+- NO PASSIVE ACTION FILLER: During dialogue, do not narrate obvious actions like sitting, standing, or facial changes.
+- STRICT NARRATION RULES (1-sentence connective glue ONLY when strictly needed):
+  * Dramatic physical action (smashing, fighting, snatching, escaping).
+  * Scene, location, or time transitions.
+  * Major turning points or secret reveals not obvious from dialogue.
+  * When a new person or group enters an ongoing conversation.
+  * Introducing a new character's identity and relationship for first-time viewers.
+- Story continuity must remain 100% coherent from start to finish without gaps.${timingLockBlock}${translitBlock}`;
   }
   return `\n\nNARRATION STYLE — STORY (full narrative, long-form):
   - Keep the classic complete narrator style: clear beginning-to-end storytelling with smooth flow and emotional depth.
