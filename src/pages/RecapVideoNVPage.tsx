@@ -4226,20 +4226,24 @@ if (sourceEnd > effectiveVStart && vv.currentTime >= sourceEnd - endMargin) {
                             }
                           }
                         } else {
-                          // Narration hold: maintain smooth micro zoom without stutter
-                          if (visibleLoopMaskStartRef.current === 0) {
-                            visibleLoopMaskStartRef.current = performance.now();
-                            visibleLoopCountRef.current = 1;
+                          // Narration hold: Freeze OFF တွင် Loop မပတ်ဘဲ 1.30x Push-in ကို ဆက်လက် ထိန်းထားမည်
+                          if (!freezeModeRef.current) {
+                            if (visibleLoopMaskStartRef.current === 0) {
+                              visibleLoopMaskStartRef.current = performance.now();
+                              visibleLoopCountRef.current = 1;
+                            }
+                          } else {
+                            // Freeze ON သာလျှင် seek loop လုပ်မည်
+                            seekPendingRef.current = true;
+                            const onGapSeeked = () => {
+                              seekPendingRef.current = false;
+                              vv.playbackRate = 1.0;
+                              if (!vv.ended) vv.play().catch(() => {});
+                              vv.removeEventListener("seeked", onGapSeeked);
+                            };
+                            vv.addEventListener("seeked", onGapSeeked);
+                            vv.currentTime = holdStart;
                           }
-                          seekPendingRef.current = true;
-                          const onGapSeeked = () => {
-                            seekPendingRef.current = false;
-                            vv.playbackRate = 1.0;
-                            if (!vv.ended) vv.play().catch(() => {});
-                            vv.removeEventListener("seeked", onGapSeeked);
-                          };
-                          vv.addEventListener("seeked", onGapSeeked);
-                          vv.currentTime = holdStart;
                         }
                       }
                       // Keep video ALWAYS playing (no pause ever) — canvas stays active
