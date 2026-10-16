@@ -755,20 +755,19 @@ LANGUAGE LOCK:
       nicheLabel.length <= 80 && nicheStyles[nicheLabel] ? nicheStyles[nicheLabel] : nicheStyles["MOVIE RECAP"];
     const callerInstructionsBlock = [extraInstructions, editorRules].filter(Boolean).join("\n\n").trim();
 
-    const dialogueTimingLockBlock =
+    c    const dialogueTimingLockBlock =
       narrationStyle === "HYBRID" || narrationStyle === "VIRAL"
-        ? `\n\nDIALOGUE TIMING LOCK (mandatory for ${narrationStyle} mode):
-- For each real spoken line, inspect the source frame-by-frame and use the EXACT source time where the speaker's first audible syllable begins (normally the first mouth movement). Never use a nearby reaction shot, an earlier establishing shot, or an approximate scene time.
+        ? `\n\nDIALOGUE TIMING & FORMAT LOCK (mandatory for ${narrationStyle} mode):
+- For each real spoken line, inspect the source frame-by-frame and use the EXACT source time where the speaker's first audible syllable begins (normally the first mouth movement).
 - Keep every speaker turn separate. When the speaker changes, begin a new paragraph at that new speaker's exact source start time.
-- For EVERY direct-speech paragraph, output the source start timecode, then prefix the paragraph with [DIALOGUE:EMOTION].
-- EMOTION must be exactly ONE of: ANGRY, SHOUTING, SAD, CRYING, HAPPY, EXCITED, FEARFUL, NERVOUS, SHOCKED, MOCKING, DISGUSTED, PLEADING, WHISPER, PROUD, RELIEVED, CALM — pick the one that matches how the character actually sounds in that moment.
-- Example format: [02:15] [DIALOGUE:ANGRY] translated spoken line here...
-- Never write the emotion word inside the spoken line itself; it belongs only in the tag.
-- Put the [DIALOGUE:EMOTION] tag immediately after [MM:SS], exactly once. Never put it at the end or middle of the spoken text, and never use braces such as {DIALOGUE}.
-- Narrator (non-dialogue) paragraphs keep the normal single-timecode format: [02:15] narrator text...
-- Write the full natural translation of what was said — never truncate a line to fit a time slot. Clarity and story flow come first.
-- If the source has no spoken dialogue at that moment, do NOT use [DIALOGUE]; stay in narrator voice.
-- This is dub-style alignment, NOT generative lip-sync: the syllables do not need to match.
+- DIALOGUE QUOTE LOCK (STRICT): EVERY direct-speech sentence MUST be enclosed in double quotation marks "..." immediately following [DIALOGUE:EMOTION].
+  * Format: [MM:SS] [DIALOGUE:EMOTION] "တိုက်ရိုက်ပြောသော စကားသံ..."
+  * Example: [02:15] [DIALOGUE:ANGRY] "ဒီကနေ ချက်ချင်းထွက်သွားစမ်း!"
+- NEVER put narrator explanations inside dialogue lines. The text inside "..." must be 100% pure translated character speech only.
+- EMOTION must be exactly ONE of: ANGRY, SHOUTING, SAD, CRYING, HAPPY, EXCITED, FEARFUL, NERVOUS, SHOCKED, MOCKING, DISGUSTED, PLEADING, WHISPER, PROUD, RELIEVED, CALM.
+- Put the [DIALOGUE:EMOTION] tag immediately after [MM:SS], exactly once.
+- Narrator (non-dialogue) paragraphs keep the normal single-timecode format WITHOUT quotes: [02:15] ဇာတ်ကြောင်းစာသား... (Narrator lines MUST NEVER use quotation marks "...").
+- If the source has no spoken dialogue at that moment, do NOT use [DIALOGUE]; stay in narrator voice.`
 
 DIALOGUE COMPLETENESS (mandatory for ${narrationStyle} mode):
 - EVERY spoken line in the source must appear in the script as a real translated [DIALOGUE:EMOTION] line. Do NOT sample or pick "only the important ones".
@@ -802,18 +801,24 @@ STREET-SPOKEN STYLE & MODERN SLANG (mandatory for ${narrationStyle} mode):
 
     const viralBalanceBlock =
       narrationStyle === "VIRAL"
-        ? `\n\nVIRAL MODE BALANCE (mandatory — dialogue-first, but NEVER dialogue-only; narration ONLY where needed):
-- Keep ALL the real dialogue (this is the backbone). Let continuous back-and-forth conversations flow WITHOUT interrupting them.
-- NO REDUNDANT SPEAKER ATTRIBUTION: Never insert narration just to say who spoke or who replied (e.g. "သူက ပြန်ပြောလိုက်တယ်", "သူမက မေးလိုက်တယ်" is FORBIDDEN). No filler narration describing faces during an ordinary two-person exchange.
-- INSERT A SHORT (1-sentence) NARRATOR LINE ONLY WHEN:
-  * A notable physical action happens (hitting, smashing something, running away, a fight, an embrace).
-  * The scene/location/time changes.
-  * The plot takes a significant turn (a secret revealed, a betrayal, a shock).
-  * A new person or group enters the conversation.
-  * A character appears for the first time — briefly state who they are and their RELATIONSHIP to others.
-- STORY CONTINUITY (mandatory, beginning to end): A viewer who never saw the source must follow the full story from the script alone — who, where, why, what changed. If two dialogue blocks come from different scenes or after a time jump, a connective narrator line is REQUIRED between them. Opening must set up the situation; ending must resolve/close the arc.
-- Never invent facts in narrator lines: describe only actions, expressions and relationships visible or audible in the source.
-- TONE & VOCABULARY: Use modern, trendy internet slang, popular pop-culture lingo, and highly engaging humorous expressions naturally (e.g., if ${lang} is BURMESE, use modern daily spoken Burmese, NOT formal/literary Myanmar text).`
+        ? `\n\nVIRAL MODE HARD LOCK (STRICT DIALOGUE-FIRST & ESSENTIAL NARRATION ONLY):
+1. PURE DIALOGUE FLOW:
+   - Keep ALL real dialogue continuous. When two or more people are talking back-and-forth, let their dialogue flow directly without interrupting narration.
+   - ABSOLUTELY FORBIDDEN SPEAKER ATTRIBUTION: NEVER insert narration to state who spoke, asked, or replied (e.g., "သူက ပြောလိုက်တယ်", "သူမက ပြန်ဖြေတယ်", "ဒါကိုကြားတော့ ပြန်ပြောတယ်" are STRICTLY PROHIBITED). Viewers already see who is talking.
+   - NO PASSIVE ACTION FILLER: During dialogue, NEVER add narration for obvious passive actions (e.g., "ထိုင်နေတယ်", "ရပ်နေတယ်", "ကြည့်နေတယ်", "လမ်းလျှောက်နေတယ်", "မျက်နှာပျက်သွားတယ်").
+
+2. STRICT NARRATION PERMISSION (ONLY 5 ESSENTIAL SITUATIONS):
+   Narration is ONLY permitted when viewer comprehension would fail without it:
+   (a) CRITICAL PHYSICAL ACTION: A significant, dramatic physical action occurs (ဥပမာ- ရိုက်ခွဲလိုက်တာ၊ ထိုးကြိတ်တာ၊ လုယူထွက်ပြေးတာ၊ ပစ္စည်းကောက်ယူတာ၊ ဖမ်းဆီးတာ).
+   (b) SCENE / TIME JUMP: The location, setting, or time jump changes (နေရာ၊ အခန်း သို့မဟုတ် အချိန် ပြောင်းလဲသွားချိန်).
+   (c) MAJOR PLOT TURN / REVEAL: A major twist, secret revelation, or dramatic turning point that dialogue alone cannot explain.
+   (d) NEW ENTRANCE: A new character or group walks in or interrupts an ongoing conversation (စကားပြောနေချိန် နောက်လူတစ်ယောက် သို့မဟုတ် လူတစ်စု ဝင်လာချိန်).
+   (e) CHARACTER INTRODUCTION: A character appears for the very first time — concisely state who they are and their relation to others (e.g., "ဒီလူကတော့ မင်းသမီးရဲ့ ဦးလေးဖြစ်သူ...") so a first-time viewer fully understands the story.
+
+3. STORY CONTINUITY & PACING:
+   - Narration lines must be short, punchy (1 sentence), and act purely as connective glue.
+   - NEVER summarize dialogue that was already spoken.
+   - A viewer who has never seen the source video must follow the beginning, middle, and end smoothly without confusion.`
         : "";
 
     console.log(`[recap-script-generator] Language: ${lang}, Niche: ${nicheLabel}, isOwnApi: ${isOwnApi}`);
