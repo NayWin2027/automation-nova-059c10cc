@@ -755,7 +755,7 @@ LANGUAGE LOCK:
       nicheLabel.length <= 80 && nicheStyles[nicheLabel] ? nicheStyles[nicheLabel] : nicheStyles["MOVIE RECAP"];
     const callerInstructionsBlock = [extraInstructions, editorRules].filter(Boolean).join("\n\n").trim();
 
-    c    const dialogueTimingLockBlock =
+    const dialogueTimingLockBlock =
       narrationStyle === "HYBRID" || narrationStyle === "VIRAL"
         ? `\n\nDIALOGUE TIMING & FORMAT LOCK (mandatory for ${narrationStyle} mode):
 - For each real spoken line, inspect the source frame-by-frame and use the EXACT source time where the speaker's first audible syllable begins (normally the first mouth movement).
@@ -767,7 +767,7 @@ LANGUAGE LOCK:
 - EMOTION must be exactly ONE of: ANGRY, SHOUTING, SAD, CRYING, HAPPY, EXCITED, FEARFUL, NERVOUS, SHOCKED, MOCKING, DISGUSTED, PLEADING, WHISPER, PROUD, RELIEVED, CALM.
 - Put the [DIALOGUE:EMOTION] tag immediately after [MM:SS], exactly once.
 - Narrator (non-dialogue) paragraphs keep the normal single-timecode format WITHOUT quotes: [02:15] ဇာတ်ကြောင်းစာသား... (Narrator lines MUST NEVER use quotation marks "...").
-- If the source has no spoken dialogue at that moment, do NOT use [DIALOGUE]; stay in narrator voice.`
+- If the source has no spoken dialogue at that moment, do NOT use [DIALOGUE]; stay in narrator voice.
 
 DIALOGUE COMPLETENESS (mandatory for ${narrationStyle} mode):
 - EVERY spoken line in the source must appear in the script as a real translated [DIALOGUE:EMOTION] line. Do NOT sample or pick "only the important ones".
