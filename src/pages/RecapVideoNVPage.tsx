@@ -3197,19 +3197,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           visibleLoopLastTimeRef.current = currentVisualTime;
         }
 
-        // SURGICAL FIX: Replace loop and micro-pause with professional smooth micro zoom in (international news style).
-        // 1. Narration: As soon as a segment wraps or finishes, hold the final frame and apply a smooth news-style micro zoom in (no physical video loop).
-        // 2. Dialogue: Hold last frame statically (NO zoom, NO loop, NO pause).
+        // SURGICAL FIX: Loop-Only Cinematic Zoom In (1.0 -> 1.30x Peak)
+        // 1. Normal Motion: 100% Original framing, Zero Zoom (သဘာဝကျကျ အပြည့်ပြေးမည်).
+        // 2. Loop/Overrun Point: အသံမပြီးမီ ဗီဒီယိုကုန်သွားပါက 1.0x မှ 1.30x သို့ သိသာထင်ရှားသော Smooth Push-in ဆွဲမည် (Pause လုံးဝမဖြစ်).
         const useVisibleLoopMask =
           !freezeModeRef.current &&
-          !_isDialogue &&
-          visibleLoopCountRef.current >= 1 &&
+          (visibleLoopCountRef.current >= 1 || dialogueHoldActiveRef.current) &&
           visibleLoopFrameReadyRef.current;
         const useResidualFrameMask =
-          !freezeModeRef.current && !_isDialogue && seekPendingRef.current && visibleLoopFrameReadyRef.current;
-        // Dialogue hold: static frame when dialogue ends — only when Freeze/Motion OFF (no photo zoom on dialogue)
-        const useDialogueHold =
-          !freezeModeRef.current && _isDialogue && dialogueHoldActiveRef.current && visibleLoopFrameReadyRef.current;
+          !freezeModeRef.current && seekPendingRef.current && visibleLoopFrameReadyRef.current && !useVisibleLoopMask;
 
         // (B) residual gap mask — gap tracking preserved for seamless transitions
         {
@@ -3235,32 +3231,29 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             ctx.scale(-1, 1);
           }
           const heldFrame = visibleLoopFrameRef.current;
-          if (useDialogueHold && heldFrame) {
-            // Dialogue: Static held frame — NO zoom, NO loop, NO pause
-            // (via fairDraw so the premium blur-bg look stays consistent when ON)
-            fairDraw(heldFrame, 0, 0, heldFrame.width, heldFrame.height);
-          } else if (freezeImg) {
-            // Photo Zoom In phase — subtitles/overlays continue to draw after this
+          if (freezeImg) {
+            // Photo Zoom In phase — Freeze/Motion ON ဖြစ်ချိန်သာ သုံးသည်
             fairDraw(freezeImg, freezeRect[0], freezeRect[1], freezeRect[2], freezeRect[3]);
           } else if (useVisibleLoopMask && heldFrame) {
-            // Noticeable Dynamic Zoom-in (International YouTube Recap Style): 1.0 -> 1.20 over 4.5s
-            // Smooth, clearly visible camera glide so viewers distinctly see dynamic motion (never looks frozen)
+            // Noticeable Cinematic Push-in: 1.0 -> 1.30 over 4.5s
+            // ကြည့်ရှုသူများ သိသိသာသာ မြင်တွေ့နိုင်သော Camera Push-in (Freeze မဟုတ်၊ Loop အစပြန်မပတ်)
             const maskElapsed =
               visibleLoopMaskStartRef.current > 0
                 ? performance.now() - visibleLoopMaskStartRef.current
                 : Math.max(0, performance.now() - gapStartRef.current);
             const maskProgress = Math.min(1, maskElapsed / 4500);
-            const maskEase = 1 - Math.pow(1 - maskProgress, 1.5);
-            const maskZoom = 1 + 0.2 * maskEase;
+            const maskEase = 1 - Math.pow(1 - maskProgress, 1.8);
+            const maskZoom = 1.0 + 0.3 * maskEase; // Peak 1.30x (သိသာထင်ရှားသော Zoom In)
             const maskW = Math.max(2, Math.round(heldFrame.width / maskZoom));
             const maskH = Math.max(2, Math.round(heldFrame.height / maskZoom));
             const maskX = Math.round((heldFrame.width - maskW) / 2);
             const maskY = Math.round((heldFrame.height - maskH) / 2);
             fairDraw(heldFrame, maskX, maskY, maskW, maskH);
           } else if (useResidualFrameMask && heldFrame) {
-            // Hard-cut seek gap: Clean static frame hold — NO zoom (prevents accidental zoom during normal cuts)
+            // Hard-cut seek gap: Clean static frame hold — NO zoom
             fairDraw(heldFrame, 0, 0, heldFrame.width, heldFrame.height);
           } else {
+            // NORMAL MOTION: 100% Original framing (Zero Zoom, Zero Crop when Zoom OFF)
             fairDraw(drawSrcEl, zoomedSrcX, zoomedSrcY, zoomedSrcW, zoomedSrcH);
           }
           ctx.restore();
@@ -4120,9 +4113,13 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     const _isDialogueSeg = !!active?.isDialogue;
                     if (sourceEnd > effectiveVStart && vv.currentTime >= sourceEnd - endMargin) {
                       if (_isDialogueSeg && !freezeModeRef.current) {
-                        // Dialogue + Freeze OFF: static hold — no photo zoom
+                        // Dialogue + Freeze OFF: cinematic zoom push-in (no static pause freeze)
                         if (!dialogueHoldActiveRef.current) {
                           dialogueHoldActiveRef.current = true;
+                          if (visibleLoopMaskStartRef.current === 0) {
+                            visibleLoopMaskStartRef.current = performance.now();
+                            visibleLoopCountRef.current = 1;
+                          }
                           if (!visibleLoopFrameRef.current)
                             visibleLoopFrameRef.current = document.createElement("canvas");
                           const dhf = visibleLoopFrameRef.current;
