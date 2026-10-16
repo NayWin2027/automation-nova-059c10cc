@@ -4163,17 +4163,6 @@ if (sourceEnd > effectiveVStart && vv.currentTime >= sourceEnd - endMargin) {
                         };
                         vv.addEventListener("seeked", onFmLoopSeeked);
                         vv.currentTime = effectiveVStart;
-                      } else {
-                        // Freeze/Motion ON (narration or dialogue): seek loop only — 4s↔4s draw owns copyright look
-                        seekPendingRef.current = true;
-                        const onFmLoopSeeked = () => {
-                          seekPendingRef.current = false;
-                          vv.playbackRate = 1.0;
-                          if (!vv.ended) vv.play().catch(() => {});
-                          vv.removeEventListener("seeked", onFmLoopSeeked);
-                        };
-                        vv.addEventListener("seeked", onFmLoopSeeked);
-                        vv.currentTime = effectiveVStart;
                       }
                     } else if (!freezeModeRef.current) {
                       // freeze OFF = continuous motion within segment boundary
