@@ -3264,7 +3264,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             const _heldNow = performance.now();
             if (!heldFrameLastCaptureRef.current || _heldNow - heldFrameLastCaptureRef.current > 200) {
               heldFrameLastCaptureRef.current = _heldNow;
-              if (!visibleLoopFrameReadyRef.current && vv && vv.readyState >= 2) {
+              if (drawSrcEl && drawSrcEl.readyState >= 2) {
                 if (!visibleLoopFrameRef.current) visibleLoopFrameRef.current = document.createElement("canvas");
                 const dhf = visibleLoopFrameRef.current;
                 if (dhf) {
@@ -3272,7 +3272,17 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   if (dhf.height !== canvas.height) dhf.height = canvas.height;
                   const dhCtx = dhf.getContext("2d", { alpha: false });
                   if (dhCtx) {
-                    dhCtx.drawImage(vv, 0, 0, dhf.width, dhf.height);
+                    dhCtx.drawImage(
+                      drawSrcEl,
+                      zoomedSrcX,
+                      zoomedSrcY,
+                      zoomedSrcW,
+                      zoomedSrcH,
+                      0,
+                      0,
+                      dhf.width,
+                      dhf.height,
+                    );
                     visibleLoopFrameReadyRef.current = true;
                   }
                 }
