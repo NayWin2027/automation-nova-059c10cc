@@ -74,7 +74,6 @@ const getNextRunningUserId = async (supabaseAdmin: any, paymentMethod: string) =
     const { data, error } = await supabaseAdmin
       .from("payment_orders")
       .select("order_number")
-      .eq("status", "pending")
       .order("order_number", { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
 

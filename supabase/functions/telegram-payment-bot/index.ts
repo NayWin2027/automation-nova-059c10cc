@@ -333,7 +333,8 @@ async function finalizeApproval(db: any, order: any, d: any) {
 
   if (d.type === "new_user") {
     const password = generateSecurePassword(18);
-    const displayId = order.order_number;
+    // Only New Users consume a running ID (legacy pending orders may already hold one)
+    const displayId = /^(nw|kys)\d+$/i.test(order.order_number) ? order.order_number : await nextNwId(db);
     const { data: created, error } = await db.auth.admin.createUser({
       email: `${displayId}@internal.user`, password, email_confirm: true,
     });
@@ -372,14 +373,19 @@ async function finalizeApproval(db: any, order: any, d: any) {
     }
   }
 
+  // New user → order number = new nw ID. Renew/Top-up → existing customer ID (no new running number).
+  const finalNo = creds
+    ? creds.userId
+    : `${String(d.uid).toLowerCase()}-${d.type === "renew" ? "RN" : "TU"}-${Date.now().toString(36).toUpperCase()}`;
   await db.from("payment_orders").update({
+    order_number: finalNo,
     user_id: uid, order_type: d.type, admin_credit_amount: credit, admin_bonus_amount: 0,
     cash_amount: cash, customer_name: name, approved_at: now, status: "approved", tg_draft: null,
   }).eq("id", order.id);
 
   if (order.telegram_chat_id) {
     if (creds) await sendCustomerCredentials(order.telegram_chat_id, creds.userId, creds.password);
-    else await sendCustomerApprovedNotice(order.telegram_chat_id, order.order_number);
+    else await sendCustomerApprovedNotice(order.telegram_chat_id, String(d.uid).toLowerCase());
   }
   return creds;
 }
