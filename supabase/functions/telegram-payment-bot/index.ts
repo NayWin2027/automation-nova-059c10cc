@@ -62,8 +62,72 @@ async function nextNwId(db: any): Promise<string> {
     }
   };
   await scan("profiles", "email", false);
-  await scan("payment_orders", "order_number", true);
+  // Scan ALL orders (approved/rejected too) so a used number is never reissued
+  await scan("payment_orders", "order_number", false);
   return `nw${String(max + 1).padStart(4, "0")}`;
+}
+
+// Temporary order reference — does NOT consume an nw running ID.
+// A real nw ID is only assigned when admin approves as New User.
+const tempOrderNo = () =>
+  `TG-${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random() * 36 ** 2).toString(36).toUpperCase()}`;
+
+type SlipCheck = { is_receipt: boolean; transaction_id: string | null; provider: string | null; amount: string | null };
+
+/** Uses AI vision to confirm the photo is a real transfer receipt and read its transaction number. */
+async function verifySlip(bytes: ArrayBuffer, mime: string): Promise<SlipCheck | null> {
+  const key = Deno.env.get("LOVABLE_API_KEY");
+  if (!key) return null;
+  let bin = "";
+  const u8 = new Uint8Array(bytes);
+  for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode(...u8.subarray(i, i + 0x8000));
+  const dataUrl = `data:${mime};base64,${btoa(bin)}`;
+  try {
+    const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [{
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text:
+                "Is this image a genuine completed money-transfer receipt screenshot from a mobile banking/wallet app " +
+                "(KBZPay/KPay, Wave, AYA, CB, KBZ Bank, K PLUS/KBank, Krungthai, SCB, Bangkok Bank, TrueMoney, PromptPay etc.)? " +
+                "Random photos, chat screenshots, product images or edited/blank templates are NOT receipts. " +
+                "If it is a receipt, read the transaction / reference number exactly (Transaction No, Transaction ID, Ref No, เลขที่รายการ, รหัสอ้างอิง). " +
+                'Reply ONLY JSON: {"is_receipt":bool,"transaction_id":string|null,"provider":string|null,"amount":string|null}',
+            },
+            { type: "image_url", image_url: { url: dataUrl } },
+          ],
+        }],
+      }),
+    });
+    if (!r.ok) { console.error("Slip verify HTTP", r.status); return null; }
+    const j = await r.json();
+    const txt = String(j?.choices?.[0]?.message?.content || "");
+    const m = txt.match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    const p = JSON.parse(m[0]);
+    return {
+      is_receipt: !!p.is_receipt,
+      transaction_id: p.transaction_id ? String(p.transaction_id).replace(/[\s-]/g, "").toUpperCase().substring(0, 80) : null,
+      provider: p.provider ? String(p.provider).substring(0, 50) : null,
+      amount: p.amount ? String(p.amount).substring(0, 50) : null,
+    };
+  } catch (e) {
+    console.error("Slip verify failed:", e);
+    return null;
+  }
+}
+
+function methodFromProvider(p: string | null): string {
+  const s = (p || "").toLowerCase();
+  if (/wave/.test(s)) return "wave";
+  if (/kbank|k ?plus|krungthai|scb|bangkok|truemoney|promptpay|krungsri|ttb|thai/.test(s)) return "thai_bank";
+  return "kpay";
 }
 
 async function handleSlip(db: any, msg: any) {
