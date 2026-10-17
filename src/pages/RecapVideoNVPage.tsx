@@ -3249,26 +3249,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             const maskX = Math.round((heldFrame.width - maskW) / 2);
             const maskY = Math.round((heldFrame.height - maskH) / 2);
 
-            // FLIP FIX: heldFrame ထဲတွင် flip pixels ပါပြီးသားဖြစ်၍ double-flip (-1 x -1 = +1) မဖြစ်စေရန် un-invert လုပ်ပေးသည်
-            if (curEditorState.flip) {
-              ctx.save();
-              ctx.translate(canvas.width, 0);
-              ctx.scale(-1, 1);
-              fairDraw(heldFrame, maskX, maskY, maskW, maskH);
-              ctx.restore();
-            } else {
-              fairDraw(heldFrame, maskX, maskY, maskW, maskH);
-            }
+            fairDraw(heldFrame, maskX, maskY, maskW, maskH);
           } else if (useResidualFrameMask && heldFrame) {
-            if (curEditorState.flip) {
-              ctx.save();
-              ctx.translate(canvas.width, 0);
-              ctx.scale(-1, 1);
-              fairDraw(heldFrame, 0, 0, heldFrame.width, heldFrame.height);
-              ctx.restore();
-            } else {
-              fairDraw(heldFrame, 0, 0, heldFrame.width, heldFrame.height);
-            }
+            fairDraw(heldFrame, 0, 0, heldFrame.width, heldFrame.height);
           } else {
             // NORMAL MOTION: 100% Original framing (Zero Zoom, မူရင်းအတိုင်း ဘက်မပြောင်းဘဲ ပြေးမည်)
             fairDraw(drawSrcEl, zoomedSrcX, zoomedSrcY, zoomedSrcW, zoomedSrcH);
@@ -3281,15 +3264,17 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             const _heldNow = performance.now();
             if (!heldFrameLastCaptureRef.current || _heldNow - heldFrameLastCaptureRef.current > 200) {
               heldFrameLastCaptureRef.current = _heldNow;
-              if (!visibleLoopFrameRef.current) visibleLoopFrameRef.current = document.createElement("canvas");
-              const heldFrame = visibleLoopFrameRef.current;
-              if (heldFrame) {
-                if (heldFrame.width !== canvas.width) heldFrame.width = canvas.width;
-                if (heldFrame.height !== canvas.height) heldFrame.height = canvas.height;
-                const heldCtx = heldFrame.getContext("2d", { alpha: false });
-                if (heldCtx) {
-                  heldCtx.drawImage(canvas, 0, 0, canvas.width, canvas.height);
-                  visibleLoopFrameReadyRef.current = true;
+              if (!visibleLoopFrameReadyRef.current && vv && vv.readyState >= 2) {
+                if (!visibleLoopFrameRef.current) visibleLoopFrameRef.current = document.createElement("canvas");
+                const dhf = visibleLoopFrameRef.current;
+                if (dhf) {
+                  if (dhf.width !== canvas.width) dhf.width = canvas.width;
+                  if (dhf.height !== canvas.height) dhf.height = canvas.height;
+                  const dhCtx = dhf.getContext("2d", { alpha: false });
+                  if (dhCtx) {
+                    dhCtx.drawImage(vv, 0, 0, dhf.width, dhf.height);
+                    visibleLoopFrameReadyRef.current = true;
+                  }
                 }
               }
             }
@@ -4128,7 +4113,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     // This prevents irrelevant content (eating, dancing, walking) from leaking into the active segment.
                     const endMargin = 0.08;
                     const _isDialogueSeg = !!active?.isDialogue;
-if (sourceEnd > effectiveVStart && vv.currentTime >= sourceEnd - endMargin) {
+                    if (sourceEnd > effectiveVStart && vv.currentTime >= sourceEnd - endMargin) {
                       if (!freezeModeRef.current) {
                         // FREEZE OFF (Dialogue ရော Narration ပါ): Loop အစပြန်မခုန်ဘဲ နောက်ဆုံး Frame အား 1.30x Push-In ဖြင့် ချောမွေ့စွာ ထိန်းထားမည်
                         if (!dialogueHoldActiveRef.current) {
@@ -4212,16 +4197,18 @@ if (sourceEnd > effectiveVStart && vv.currentTime >= sourceEnd - endMargin) {
                           // Dialogue gap: Hold last frame silently — NEVER pause video (pause freezes canvas)
                           if (!dialogueHoldActiveRef.current) {
                             dialogueHoldActiveRef.current = true;
-                            if (!visibleLoopFrameRef.current)
-                              visibleLoopFrameRef.current = document.createElement("canvas");
-                            const dhf2 = visibleLoopFrameRef.current;
-                            if (dhf2) {
-                              if (dhf2.width !== canvas.width) dhf2.width = canvas.width;
-                              if (dhf2.height !== canvas.height) dhf2.height = canvas.height;
-                              const dhCtx2 = dhf2.getContext("2d", { alpha: false });
-                              if (dhCtx2) {
-                                dhCtx2.drawImage(canvas, 0, 0, canvas.width, canvas.height);
-                                visibleLoopFrameReadyRef.current = true;
+                            if (!visibleLoopFrameReadyRef.current && vv && vv.readyState >= 2) {
+                              if (!visibleLoopFrameRef.current)
+                                visibleLoopFrameRef.current = document.createElement("canvas");
+                              const dhf2 = visibleLoopFrameRef.current;
+                              if (dhf2) {
+                                if (dhf2.width !== canvas.width) dhf2.width = canvas.width;
+                                if (dhf2.height !== canvas.height) dhf2.height = canvas.height;
+                                const dhCtx2 = dhf2.getContext("2d", { alpha: false });
+                                if (dhCtx2) {
+                                  dhCtx2.drawImage(vv, 0, 0, dhf2.width, dhf2.height);
+                                  visibleLoopFrameReadyRef.current = true;
+                                }
                               }
                             }
                           }
