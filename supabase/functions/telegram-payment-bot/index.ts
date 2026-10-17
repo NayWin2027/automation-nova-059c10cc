@@ -62,8 +62,107 @@ async function nextNwId(db: any): Promise<string> {
     }
   };
   await scan("profiles", "email", false);
-  await scan("payment_orders", "order_number", true);
+  // Scan ALL orders (approved/rejected too) so a used number is never reissued
+  await scan("payment_orders", "order_number", false);
   return `nw${String(max + 1).padStart(4, "0")}`;
+}
+
+// Temporary order reference — does NOT consume an nw running ID.
+// A real nw ID is only assigned when admin approves as New User.
+const tempOrderNo = () =>
+  `TG-${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random() * 36 ** 2).toString(36).toUpperCase()}`;
+
+type SlipCheck = { is_receipt: boolean; transaction_id: string | null; provider: string | null; amount: string | null };
+
+/** Uses AI vision to confirm the photo is a real transfer receipt and read its transaction number. */
+async function verifySlip(bytes: ArrayBuffer, mime: string): Promise<SlipCheck | null> {
+  const key = Deno.env.get("LOVABLE_API_KEY");
+  if (!key) return null;
+  let bin = "";
+  const u8 = new Uint8Array(bytes);
+  for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode(...u8.subarray(i, i + 0x8000));
+  const dataUrl = `data:${mime};base64,${btoa(bin)}`;
+  try {
+    const r = await fetch("https://ai.gateway.lovable.dev/v1/responses", {
+      method: "POST",
+      headers: { "Lovable-API-Key": key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", "X-Lovable-AIG-SDK": "fetch" },
+      body: JSON.stringify({
+        model: "openai/gpt-6-astra",
+        stream: true,
+        store: false,
+        reasoning: { effort: "low" },
+        input: [{
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text:
+                "Is this image a genuine completed money-transfer receipt screenshot from a mobile banking/wallet app " +
+                "(KBZPay/KPay, Wave, AYA, CB, KBZ Bank, K PLUS/KBank, Krungthai, SCB, Bangkok Bank, TrueMoney, PromptPay etc.)? " +
+                "Random photos, chat screenshots, product images or edited/blank templates are NOT receipts. " +
+                "If it is a receipt, read the transaction / reference number exactly (Transaction No, Transaction ID, Ref No, เลขที่รายการ, รหัสอ้างอิง). Return json.",
+            },
+            { type: "input_image", image_url: dataUrl },
+          ],
+        }],
+        text: {
+          format: {
+            type: "json_schema", name: "slip", strict: true,
+            schema: {
+              type: "object", additionalProperties: false,
+              required: ["is_receipt", "transaction_id", "provider", "amount"],
+              properties: {
+                is_receipt: { type: "boolean" },
+                transaction_id: { type: ["string", "null"] },
+                provider: { type: ["string", "null"] },
+                amount: { type: ["string", "null"] },
+              },
+            },
+          },
+        },
+      }),
+    });
+    if (!r.ok || !r.body) { console.error("Slip verify HTTP", r.status); return null; }
+    let txt = "";
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop() || "";
+      for (const line of lines) {
+        if (!line.startsWith("data:")) continue;
+        const d = line.slice(5).trim();
+        if (!d || d === "[DONE]") continue;
+        try {
+          const ev = JSON.parse(d);
+          if (ev.type === "response.output_text.delta" && ev.delta) txt += ev.delta;
+        } catch { /* ignore partial */ }
+      }
+    }
+    const m = txt.match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    const p = JSON.parse(m[0]);
+    return {
+      is_receipt: !!p.is_receipt,
+      transaction_id: p.transaction_id ? String(p.transaction_id).replace(/[\s-]/g, "").toUpperCase().substring(0, 80) : null,
+      provider: p.provider ? String(p.provider).substring(0, 50) : null,
+      amount: p.amount ? String(p.amount).substring(0, 50) : null,
+    };
+  } catch (e) {
+    console.error("Slip verify failed:", e);
+    return null;
+  }
+}
+
+function methodFromProvider(p: string | null): string {
+  const s = (p || "").toLowerCase();
+  if (/wave/.test(s)) return "wave";
+  if (/kbank|k ?plus|krungthai|scb|bangkok|truemoney|promptpay|krungsri|ttb|thai/.test(s)) return "thai_bank";
+  return "kpay";
 }
 
 async function handleSlip(db: any, msg: any) {
@@ -79,14 +178,37 @@ async function handleSlip(db: any, msg: any) {
   const fileInfo = await tg("getFile", { file_id: fileId });
   const filePath = fileInfo?.result?.file_path;
   let slipPath: string | null = null;
+  let check: SlipCheck | null = null;
   if (filePath) {
     const res = await fetch(`https://api.telegram.org/file/bot${Deno.env.get("TELEGRAM_BOT_TOKEN")}/${filePath}`);
     if (res.ok) {
       const ext = (filePath.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+      const mime = ext === "png" ? "image/png" : "image/jpeg";
+      const bytes = await res.arrayBuffer();
+
+      // 1) Is it a real receipt? 2) Read its transaction number
+      check = await verifySlip(bytes, mime);
+      if (check && !check.is_receipt) {
+        await tg("sendMessage", {
+          chat_id: chatId,
+          text: "⚠️ ပို့ပေးတဲ့ ဓာတ်ပုံက ငွေလွှဲပြေစာ မဟုတ်သလိုပဲရှင်။\nKPay / Wave / Bank App ထဲက ငွေလွှဲပြီးကြောင်း ပြေစာ (Transaction No ပါတဲ့) Screenshot ကို ပို့ပေးပါနော် 💐",
+        });
+        return;
+      }
+      if (check?.transaction_id) {
+        const { data: dup } = await db.from("payment_orders").select("id")
+          .eq("payment_ref", check.transaction_id).limit(1).maybeSingle();
+        if (dup) {
+          await tg("sendMessage", {
+            chat_id: chatId,
+            text: "⚠️ ဤ Transaction နံပါတ်ဖြင့် အော်ဒါ လက်ခံပြီးဖြစ်ပါသဖြင့် ထပ်မံပေးပို့၍ မရပါရှင်။\nအသစ်ငွေလွှဲထားတာဆိုရင် ပြေစာအသစ်ကို ပို့ပေးပါနော် 💐",
+          });
+          return;
+        }
+      }
+
       const name = `${crypto.randomUUID()}.${ext}`;
-      const { error } = await db.storage.from("payment-slips").upload(name, await res.arrayBuffer(), {
-        contentType: ext === "png" ? "image/png" : "image/jpeg",
-      });
+      const { error } = await db.storage.from("payment-slips").upload(name, bytes, { contentType: mime });
       if (!error) slipPath = name;
       else console.error("Slip upload failed:", error.message);
     }
@@ -98,20 +220,33 @@ async function handleSlip(db: any, msg: any) {
   const lc = caption.toLowerCase();
   const orderType = /top ?up|ငွေဖြည့်/.test(lc) ? "topup" : /renew|သက်တမ်း/.test(lc) ? "renew" : "new_user";
 
-  const orderNumber = await nextNwId(db);
+  const notes = [
+    caption ? `Plan: ${caption}` : "",
+    check ? `Slip: ${check.provider || "?"} ${check.amount || ""} Txn ${check.transaction_id || "မဖတ်နိုင်"}`.trim()
+      : "Slip: AI စစ်မရပါ — ကိုယ်တိုင်စစ်ပါ",
+  ].filter(Boolean).join(" | ");
+
+  // Temporary number — real nw ID is assigned only on New User approval
+  const orderNumber = tempOrderNo();
   const { data: order, error } = await db.from("payment_orders").insert({
     order_number: orderNumber,
     order_type: orderType,
-    payment_method: "kpay",
+    payment_method: methodFromProvider(check?.provider ?? null),
     user_email: `tg${chatId}@telegram.user`,
     slip_image_path: slipPath,
+    payment_ref: check?.transaction_id || null,
     contact_method: "telegram",
     contact_value: username,
     customer_name: fullName || null,
-    admin_notes: caption ? `Plan: ${caption}` : null,
+    admin_notes: notes || null,
     telegram_chat_id: chatId,
     status: "pending",
   }).select().single();
+
+  if (error && String(error.message).includes("idx_payment_orders_payment_ref")) {
+    await tg("sendMessage", { chat_id: chatId, text: "⚠️ ဤ Transaction နံပါတ်ဖြင့် အော်ဒါ လက်ခံပြီးဖြစ်ပါသဖြင့် ထပ်မံပေးပို့၍ မရပါရှင်။" });
+    return;
+  }
 
   if (error) {
     console.error("Order insert failed:", error.message);
@@ -198,7 +333,8 @@ async function finalizeApproval(db: any, order: any, d: any) {
 
   if (d.type === "new_user") {
     const password = generateSecurePassword(18);
-    const displayId = order.order_number;
+    // Only New Users consume a running ID (legacy pending orders may already hold one)
+    const displayId = /^(nw|kys)\d+$/i.test(order.order_number) ? order.order_number : await nextNwId(db);
     const { data: created, error } = await db.auth.admin.createUser({
       email: `${displayId}@internal.user`, password, email_confirm: true,
     });
@@ -237,14 +373,19 @@ async function finalizeApproval(db: any, order: any, d: any) {
     }
   }
 
+  // New user → order number = new nw ID. Renew/Top-up → existing customer ID (no new running number).
+  const finalNo = creds
+    ? creds.userId
+    : `${String(d.uid).toLowerCase()}-${d.type === "renew" ? "RN" : "TU"}-${Date.now().toString(36).toUpperCase()}`;
   await db.from("payment_orders").update({
+    order_number: finalNo,
     user_id: uid, order_type: d.type, admin_credit_amount: credit, admin_bonus_amount: 0,
     cash_amount: cash, customer_name: name, approved_at: now, status: "approved", tg_draft: null,
   }).eq("id", order.id);
 
   if (order.telegram_chat_id) {
     if (creds) await sendCustomerCredentials(order.telegram_chat_id, creds.userId, creds.password);
-    else await sendCustomerApprovedNotice(order.telegram_chat_id, order.order_number);
+    else await sendCustomerApprovedNotice(order.telegram_chat_id, String(d.uid).toLowerCase());
   }
   return creds;
 }
