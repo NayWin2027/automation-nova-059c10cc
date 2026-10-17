@@ -83,31 +83,66 @@ async function verifySlip(bytes: ArrayBuffer, mime: string): Promise<SlipCheck |
   for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode(...u8.subarray(i, i + 0x8000));
   const dataUrl = `data:${mime};base64,${btoa(bin)}`;
   try {
-    const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const r = await fetch("https://ai.gateway.lovable.dev/v1/responses", {
       method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      headers: { "Lovable-API-Key": key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", "X-Lovable-AIG-SDK": "fetch" },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [{
+        model: "openai/gpt-6-astra",
+        stream: true,
+        store: false,
+        reasoning: { effort: "low" },
+        input: [{
           role: "user",
           content: [
             {
-              type: "text",
+              type: "input_text",
               text:
                 "Is this image a genuine completed money-transfer receipt screenshot from a mobile banking/wallet app " +
                 "(KBZPay/KPay, Wave, AYA, CB, KBZ Bank, K PLUS/KBank, Krungthai, SCB, Bangkok Bank, TrueMoney, PromptPay etc.)? " +
                 "Random photos, chat screenshots, product images or edited/blank templates are NOT receipts. " +
-                "If it is a receipt, read the transaction / reference number exactly (Transaction No, Transaction ID, Ref No, เลขที่รายการ, รหัสอ้างอิง). " +
-                'Reply ONLY JSON: {"is_receipt":bool,"transaction_id":string|null,"provider":string|null,"amount":string|null}',
+                "If it is a receipt, read the transaction / reference number exactly (Transaction No, Transaction ID, Ref No, เลขที่รายการ, รหัสอ้างอิง). Return json.",
             },
-            { type: "image_url", image_url: { url: dataUrl } },
+            { type: "input_image", image_url: dataUrl },
           ],
         }],
+        text: {
+          format: {
+            type: "json_schema", name: "slip", strict: true,
+            schema: {
+              type: "object", additionalProperties: false,
+              required: ["is_receipt", "transaction_id", "provider", "amount"],
+              properties: {
+                is_receipt: { type: "boolean" },
+                transaction_id: { type: ["string", "null"] },
+                provider: { type: ["string", "null"] },
+                amount: { type: ["string", "null"] },
+              },
+            },
+          },
+        },
       }),
     });
-    if (!r.ok) { console.error("Slip verify HTTP", r.status); return null; }
-    const j = await r.json();
-    const txt = String(j?.choices?.[0]?.message?.content || "");
+    if (!r.ok || !r.body) { console.error("Slip verify HTTP", r.status); return null; }
+    let txt = "";
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop() || "";
+      for (const line of lines) {
+        if (!line.startsWith("data:")) continue;
+        const d = line.slice(5).trim();
+        if (!d || d === "[DONE]") continue;
+        try {
+          const ev = JSON.parse(d);
+          if (ev.type === "response.output_text.delta" && ev.delta) txt += ev.delta;
+        } catch { /* ignore partial */ }
+      }
+    }
     const m = txt.match(/\{[\s\S]*\}/);
     if (!m) return null;
     const p = JSON.parse(m[0]);
