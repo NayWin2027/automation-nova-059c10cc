@@ -178,14 +178,37 @@ async function handleSlip(db: any, msg: any) {
   const fileInfo = await tg("getFile", { file_id: fileId });
   const filePath = fileInfo?.result?.file_path;
   let slipPath: string | null = null;
+  let check: SlipCheck | null = null;
   if (filePath) {
     const res = await fetch(`https://api.telegram.org/file/bot${Deno.env.get("TELEGRAM_BOT_TOKEN")}/${filePath}`);
     if (res.ok) {
       const ext = (filePath.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+      const mime = ext === "png" ? "image/png" : "image/jpeg";
+      const bytes = await res.arrayBuffer();
+
+      // 1) Is it a real receipt? 2) Read its transaction number
+      check = await verifySlip(bytes, mime);
+      if (check && !check.is_receipt) {
+        await tg("sendMessage", {
+          chat_id: chatId,
+          text: "⚠️ ပို့ပေးတဲ့ ဓာတ်ပုံက ငွေလွှဲပြေစာ မဟုတ်သလိုပဲရှင်။\nKPay / Wave / Bank App ထဲက ငွေလွှဲပြီးကြောင်း ပြေစာ (Transaction No ပါတဲ့) Screenshot ကို ပို့ပေးပါနော် 💐",
+        });
+        return;
+      }
+      if (check?.transaction_id) {
+        const { data: dup } = await db.from("payment_orders").select("id")
+          .eq("payment_ref", check.transaction_id).limit(1).maybeSingle();
+        if (dup) {
+          await tg("sendMessage", {
+            chat_id: chatId,
+            text: "⚠️ ဤ Transaction နံပါတ်ဖြင့် အော်ဒါ လက်ခံပြီးဖြစ်ပါသဖြင့် ထပ်မံပေးပို့၍ မရပါရှင်။\nအသစ်ငွေလွှဲထားတာဆိုရင် ပြေစာအသစ်ကို ပို့ပေးပါနော် 💐",
+          });
+          return;
+        }
+      }
+
       const name = `${crypto.randomUUID()}.${ext}`;
-      const { error } = await db.storage.from("payment-slips").upload(name, await res.arrayBuffer(), {
-        contentType: ext === "png" ? "image/png" : "image/jpeg",
-      });
+      const { error } = await db.storage.from("payment-slips").upload(name, bytes, { contentType: mime });
       if (!error) slipPath = name;
       else console.error("Slip upload failed:", error.message);
     }
@@ -197,20 +220,33 @@ async function handleSlip(db: any, msg: any) {
   const lc = caption.toLowerCase();
   const orderType = /top ?up|ငွေဖြည့်/.test(lc) ? "topup" : /renew|သက်တမ်း/.test(lc) ? "renew" : "new_user";
 
-  const orderNumber = await nextNwId(db);
+  const notes = [
+    caption ? `Plan: ${caption}` : "",
+    check ? `Slip: ${check.provider || "?"} ${check.amount || ""} Txn ${check.transaction_id || "မဖတ်နိုင်"}`.trim()
+      : "Slip: AI စစ်မရပါ — ကိုယ်တိုင်စစ်ပါ",
+  ].filter(Boolean).join(" | ");
+
+  // Temporary number — real nw ID is assigned only on New User approval
+  const orderNumber = tempOrderNo();
   const { data: order, error } = await db.from("payment_orders").insert({
     order_number: orderNumber,
     order_type: orderType,
-    payment_method: "kpay",
+    payment_method: methodFromProvider(check?.provider ?? null),
     user_email: `tg${chatId}@telegram.user`,
     slip_image_path: slipPath,
+    payment_ref: check?.transaction_id || null,
     contact_method: "telegram",
     contact_value: username,
     customer_name: fullName || null,
-    admin_notes: caption ? `Plan: ${caption}` : null,
+    admin_notes: notes || null,
     telegram_chat_id: chatId,
     status: "pending",
   }).select().single();
+
+  if (error && String(error.message).includes("idx_payment_orders_payment_ref")) {
+    await tg("sendMessage", { chat_id: chatId, text: "⚠️ ဤ Transaction နံပါတ်ဖြင့် အော်ဒါ လက်ခံပြီးဖြစ်ပါသဖြင့် ထပ်မံပေးပို့၍ မရပါရှင်။" });
+    return;
+  }
 
   if (error) {
     console.error("Order insert failed:", error.message);
