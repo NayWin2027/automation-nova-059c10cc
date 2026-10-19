@@ -720,7 +720,7 @@ LANGUAGE LOCK:
       }
       // SLANG-TEMP: dialogue-heavy modes get a slightly warmer temperature so slang
       // actually surfaces; STORY keeps the strict 0.35 anti-hallucination setting.
-      STYLE_TEMPERATURE = narrationStyle === "HYBRID" || narrationStyle === "VIRAL" ? 0.55 : 0.35;
+      STYLE_TEMPERATURE = narrationStyle === "HYBRID" || narrationStyle === "VIRAL" ? 0.55 : 0.55;
 
       // SEO mode: accept a raw seoPrompt as transcript input (used by client SEO metadata generator)
       if (body.seoMode && typeof body.seoPrompt === "string" && body.seoPrompt.trim()) {
