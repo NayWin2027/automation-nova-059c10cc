@@ -6426,12 +6426,22 @@ STREET-SPOKEN STYLE & MODERN SLANG (HYBRID/VIRAL only):
   * Introducing a new character's identity and relationship for first-time viewers.
 - Story continuity must remain 100% coherent from start to finish without gaps.${timingLockBlock}${translitBlock}`;
   }
-  return `\n\nNARRATION STYLE — STORY (full narrative, long-form):
-  - Keep the classic complete narrator style: clear beginning-to-end storytelling with smooth flow and emotional depth.
-  - Translate what people actually said when it matters, but stay primarily in narrator voice.
-  - TONE (POLISHED NATURAL SPOKEN): neither robotic nor overly poetic. FORBIDDEN: dry CCTV-style action listing ("he got in the car. the other man replied. he sat down."). FORBIDDEN: theatrical, archaic or flowery literary melodrama. REQUIRED: natural modern spoken ${langName} as told by an elite storyteller, lightly elevated with tasteful, evocative words that capture real emotion, inner thoughts and suspense.
-  - SCENE PACING: bridge transitions/filler moments smoothly and concisely.
-  - CRITICAL HIGH-STAKES SCENES (fights, heated arguments, romance, betrayals, reveals, climaxes): NEVER summarize them into 1-2 dry sentences. Do FULL CONTINUOUS SCENE EXPANSION matching the SOURCE scene's real length — if the source spends 2-3 minutes on it, narrate the full exchange, tension, reactions and emotional beats across multiple consecutive timestamped paragraphs that follow the source timing.${translitBlock}`;
+  return `\n\nNARRATION STYLE — STORY (ELITE INTERNATIONAL RECAP — ZERO REPETITION LOCK):
+  - BILLION-VIEW YOUTUBE RECAP STANDARD (Mystery Recaps / Movie Recaps style): Write like a master storyteller who hooks the audience and keeps them glued to the screen until the very last second.
+  - STRICT PROGRESSION & ZERO LOOP LOCK (CRITICAL):
+    * NEVER repeat the exact same sentence, status, preparation, or thought across multiple timestamps (e.g., repeatedly writing "ပြင်ဆင်နေကြဆဲပါပဲ / စီစဉ်နေကြတာပါ" across several minutes is STRICTLY FORBIDDEN).
+    * Every single timestamped paragraph MUST introduce genuinely NEW plot progression, new tension, or a new psychological angle.
+    * If a single scene continues for 2-3 minutes, NEVER repeat what was already stated! Instead, evolve the narrative across each timestamp:
+      - Beat 1: The immediate action and surface atmosphere.
+      - Beat 2: What the characters are whispering/arguing, their real motives, and hidden facial expressions.
+      - Beat 3: The underlying stakes, psychological tension, and what could go wrong next.
+      - Beat 4: A sudden turn, reaction, or consequence that shifts the momentum.
+  - TONE & STORYTELLING FLOW:
+    * Natural, modern spoken ${langName} with gripping cinematic cadence (e.g. "ဒါပေမဲ့ အခြေအနေတွေက သူတို့ထင်သလောက် အေးဆေးမနေပါဘူး...", "တစ်ဖက်မှာလည်း သမီးဖြစ်သူရဲ့ စိတ်ထဲမှာတော့...", "တကယ်တော့ ဒီကိစ္စရဲ့ နောက်ကွယ်မှာ...").
+    * FORBIDDEN: robotic CCTV surveillance reporting or monotonous sentence structures.
+    * Vary your sentence endings and sentence lengths naturally so the voice reading sounds lively, dramatic, and human.
+  - DIALOGUE INTEGRATION: Weave the characters' crucial spoken lines, arguments, and emotional words directly into the narrative with vivid translated quotes or indirect speech, so viewers understand exactly what is happening between the characters.
+  - SUSPENSE & RETENTION: End each paragraph with subtle narrative tension or curiosity that pulls the viewer irresistibly into the next scene.${translitBlock}`;
 }
 
 const RecapVideoNVPage: React.FC = () => {
