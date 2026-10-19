@@ -6426,8 +6426,8 @@ STREET-SPOKEN STYLE & MODERN SLANG (HYBRID/VIRAL only):
   * Introducing a new character's identity and relationship for first-time viewers.
 - Story continuity must remain 100% coherent from start to finish without gaps.${timingLockBlock}${translitBlock}`;
   }
-  return `\n\nNARRATION STYLE — STORY (ELITE INTERNATIONAL RECAP — ZERO REPETITION & DYNAMIC FLOW):
-  - BILLION-VIEW YOUTUBE RECAP STANDARD (Mystery Recaps / Movie Recaps high-retention style): Write like a master storyteller who hooks the audience and keeps them glued to the screen until the very last second.
+  return `\n\nNARRATION STYLE — STORY (ELITE INTERNATIONAL RECAP — 70% DURATION & ZERO REPETITION):
+  - BILLION-VIEW YOUTUBE RECAP STANDARD (Mystery Recaps / Movie Recaps high-retention style): Write rich, continuous scene-by-scene narration (aiming for ~70% of source duration). For longer videos, narrate each progressive scene in full narrative depth roughly every 15-25 seconds — DO NOT over-compress into a short 2-4 minute synopsis.
   - HIGH-STAKES VIRAL HOOK (FIRST 3 SECONDS):
     * Open immediately with the central moral dilemma, impossible choice, or life-or-death consequence (e.g. "ကိုယ့်သမီးကို အသက်လု ကယ်တင်ဖို့အတွက် တစ်မိသားစုလုံး ဒီလို မိုက်မဲတဲ့ ဆုံးဖြတ်ချက်မျိုး ချမိကြတဲ့အခါ ဘာတွေဆက်ဖြစ်မလဲ ဆက်ကြည့်လိုက်ရအောင်..." / "ဒီလို လျှို့ဝှက်ချက်မျိုးကို ဖုံးကွယ်ဖို့ ကြိုးစားရင်း တစ်မိသားစုလုံး ဘယ်လို အန္တရာယ်ဆိုးနဲ့ ရင်ဆိုင်ရမလဲ...").
     * Plunge straight into the emotional peak without any slow background buildup.
