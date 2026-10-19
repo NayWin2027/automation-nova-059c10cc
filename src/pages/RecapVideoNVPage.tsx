@@ -6426,22 +6426,33 @@ STREET-SPOKEN STYLE & MODERN SLANG (HYBRID/VIRAL only):
   * Introducing a new character's identity and relationship for first-time viewers.
 - Story continuity must remain 100% coherent from start to finish without gaps.${timingLockBlock}${translitBlock}`;
   }
-  return `\n\nNARRATION STYLE — STORY (ELITE INTERNATIONAL RECAP — ZERO REPETITION LOCK):
-  - BILLION-VIEW YOUTUBE RECAP STANDARD (Mystery Recaps / Movie Recaps style): Write like a master storyteller who hooks the audience and keeps them glued to the screen until the very last second.
+  return `\n\nNARRATION STYLE — STORY (ELITE INTERNATIONAL RECAP — ZERO REPETITION & DYNAMIC FLOW):
+  - BILLION-VIEW YOUTUBE RECAP STANDARD (Mystery Recaps / Movie Recaps high-retention style): Write like a master storyteller who hooks the audience and keeps them glued to the screen until the very last second.
+  - HIGH-STAKES VIRAL HOOK (FIRST 3 SECONDS):
+    * Open immediately with the central moral dilemma, impossible choice, or life-or-death consequence (e.g. "ကိုယ့်သမီးကို အသက်လု ကယ်တင်ဖို့အတွက် တစ်မိသားစုလုံး ဒီလို မိုက်မဲတဲ့ ဆုံးဖြတ်ချက်မျိုး ချမိကြတဲ့အခါ ဘာတွေဆက်ဖြစ်မလဲ ဆက်ကြည့်လိုက်ရအောင်..." / "ဒီလို လျှို့ဝှက်ချက်မျိုးကို ဖုံးကွယ်ဖို့ ကြိုးစားရင်း တစ်မိသားစုလုံး ဘယ်လို အန္တရာယ်ဆိုးနဲ့ ရင်ဆိုင်ရမလဲ...").
+    * Plunge straight into the emotional peak without any slow background buildup.
+  - DYNAMIC CHARACTER & PRONOUN FLOW (NO MONOTONOUS REPETITION):
+    * Pronouns and character references are ESSENTIAL, but must alternate naturally and smoothly.
+    * NEVER repeat "သူတို့... သူတို့..." or "သူ... သူ..." in consecutive sentences like a broken record.
+    * Alternate fluently between:
+      1. Specific names/roles when setting context ("ဖခင်ဖြစ်သူက", "သမီးလေးက", "ဂျိုးန်က").
+      2. Natural pronouns when reference is already clear ("သူ", "သူမ", "သူတို့").
+      3. Collective relationship terms ("တစ်မိသားစုလုံး", "ဒီလူတွေအားလုံး", "နှစ်ယောက်စလုံး").
+      4. Natural subject ellipsis in Burmese where the action flow naturally implies who is acting without restating the pronoun.
   - STRICT PROGRESSION & ZERO LOOP LOCK (CRITICAL):
-    * NEVER repeat the exact same sentence, status, preparation, or thought across multiple timestamps (e.g., repeatedly writing "ပြင်ဆင်နေကြဆဲပါပဲ / စီစဉ်နေကြတာပါ" across several minutes is STRICTLY FORBIDDEN).
-    * Every single timestamped paragraph MUST introduce genuinely NEW plot progression, new tension, or a new psychological angle.
-    * If a single scene continues for 2-3 minutes, NEVER repeat what was already stated! Instead, evolve the narrative across each timestamp:
-      - Beat 1: The immediate action and surface atmosphere.
-      - Beat 2: What the characters are whispering/arguing, their real motives, and hidden facial expressions.
-      - Beat 3: The underlying stakes, psychological tension, and what could go wrong next.
-      - Beat 4: A sudden turn, reaction, or consequence that shifts the momentum.
-  - TONE & STORYTELLING FLOW:
-    * Natural, modern spoken ${langName} with gripping cinematic cadence (e.g. "ဒါပေမဲ့ အခြေအနေတွေက သူတို့ထင်သလောက် အေးဆေးမနေပါဘူး...", "တစ်ဖက်မှာလည်း သမီးဖြစ်သူရဲ့ စိတ်ထဲမှာတော့...", "တကယ်တော့ ဒီကိစ္စရဲ့ နောက်ကွယ်မှာ...").
-    * FORBIDDEN: robotic CCTV surveillance reporting or monotonous sentence structures.
-    * Vary your sentence endings and sentence lengths naturally so the voice reading sounds lively, dramatic, and human.
-  - DIALOGUE INTEGRATION: Weave the characters' crucial spoken lines, arguments, and emotional words directly into the narrative with vivid translated quotes or indirect speech, so viewers understand exactly what is happening between the characters.
-  - SUSPENSE & RETENTION: End each paragraph with subtle narrative tension or curiosity that pulls the viewer irresistibly into the next scene.${translitBlock}`;
+    * NEVER repeat the exact same sentence, status, or preparation across multiple timestamps.
+    * Every single timestamped paragraph MUST introduce genuinely NEW plot progression, dialogue exchanges, or escalating tension.
+    * If a single scene continues for 2-3 minutes, evolve the narrative across each timestamp:
+      - Beat 1: The immediate action, dialogue, and surface atmosphere.
+      - Beat 2: Hidden motives, whispering, and secret reactions.
+      - Beat 3: The underlying stakes and impending danger.
+      - Beat 4: A sudden turn or consequence shifting the momentum.
+  - TONE & STORYTELLING CADENCE:
+    * Natural, modern spoken ${langName} with gripping cinematic flow.
+    * FORBIDDEN: robotic CCTV action logging.
+    * Vary sentence lengths and emotional cadence so the voiceover sounds human, passionate, and deeply engaging.
+  - DIALOGUE INTEGRATION: Weave the characters' crucial spoken lines, arguments, and emotional words directly into the narrative with vivid quotes or indirect speech.
+  - CLIFFHANGERS & RETENTION: End each paragraph with subtle narrative tension or curiosity that pulls the viewer irresistibly into the next scene.${translitBlock}`;
 }
 
 const RecapVideoNVPage: React.FC = () => {
