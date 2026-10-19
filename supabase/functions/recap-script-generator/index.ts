@@ -1882,8 +1882,8 @@ ${workingScript}`;
       // 100% TIMELINE COVERAGE ENFORCEMENT:
       // နောက်ဆုံး ဇာတ်သိမ်းခန်း မရောက်မချင်း (နောက်ဆုံး ၁၅ စက္ကန့်အထိ မရောက်မချင်း)
       // Ending Pass ကို မဖြစ်မနေ run ပြီး ဇာတ်လမ်းတစ်ခုလုံး အစအဆုံး ၁၀၀% ဖုံးအုပ်စေခြင်း
-      const endThreshold = Math.max(0, sourceDurationSec - 15);
-      if (lastTc > 0 && lastTc < endThreshold && sourceDurationSec - lastTc >= 12) {
+      const endThreshold = Math.max(0, sourceDurationSec - 5);
+      if (lastTc > 0 && lastTc < endThreshold && sourceDurationSec - lastTc > 4) {
         const tail = tailParas.slice(-2).join("\n\n");
         const endPrompt = `*** ENDING COVERAGE PASS — COVER ONLY ${tc(lastTc)} to ${tc(sourceDurationSec)} ***
 
