@@ -6426,8 +6426,8 @@ STREET-SPOKEN STYLE & MODERN SLANG (HYBRID/VIRAL only):
   * Introducing a new character's identity and relationship for first-time viewers.
 - Story continuity must remain 100% coherent from start to finish without gaps.${timingLockBlock}${translitBlock}`;
   }
-  return `\n\nNARRATION STYLE — STORY (ELITE INTERNATIONAL RECAP — 70% DURATION & ZERO REPETITION):
-  - BILLION-VIEW YOUTUBE RECAP STANDARD (Mystery Recaps / Movie Recaps high-retention style): Write rich, continuous scene-by-scene narration (aiming for ~70% of source duration). For longer videos, narrate each progressive scene in full narrative depth roughly every 15-25 seconds — DO NOT over-compress into a short 2-4 minute synopsis.
+  return `\n\nNARRATION STYLE — STORY (ELITE INTERNATIONAL RECAP — 75-80% DURATION & ZERO REPETITION):
+  - TOP-TIER INTERNATIONAL RECAP STANDARD: Write rich, continuous scene-by-scene narration (aiming for ~75% to 80% of source duration). For longer videos, narrate each progressive scene in full narrative depth roughly every 14-20 seconds — DO NOT over-compress into a short synopsis.
   - HIGH-STAKES VIRAL HOOK (FIRST 3 SECONDS):
     * Open immediately with the central moral dilemma, impossible choice, or life-or-death consequence (e.g. "ကိုယ့်သမီးကို အသက်လု ကယ်တင်ဖို့အတွက် တစ်မိသားစုလုံး ဒီလို မိုက်မဲတဲ့ ဆုံးဖြတ်ချက်မျိုး ချမိကြတဲ့အခါ ဘာတွေဆက်ဖြစ်မလဲ ဆက်ကြည့်လိုက်ရအောင်..." / "ဒီလို လျှို့ဝှက်ချက်မျိုးကို ဖုံးကွယ်ဖို့ ကြိုးစားရင်း တစ်မိသားစုလုံး ဘယ်လို အန္တရာယ်ဆိုးနဲ့ ရင်ဆိုင်ရမလဲ...").
     * Plunge straight into the emotional peak without any slow background buildup.
@@ -7006,7 +7006,7 @@ const RecapVideoNVPage: React.FC = () => {
       const userToken = currentSession?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       const selectedLangName = languages.find((l) => l.code === selectedLanguage)?.name || "BURMESE";
       const maxOutputTokens = Math.min(64000, Math.max(8192, Math.ceil(duration * 250)));
-      const targetDurationSec = Math.round(duration * 0.7);
+      const targetDurationSec = Math.round(duration * 0.78);
       const minRequiredParagraphs = Math.max(12, Math.round(targetDurationSec / 15));
       const targetParagraphs = Math.max(16, Math.round(targetDurationSec / 11));
       const pacingStepSec = Math.max(12, Math.min(25, Math.round(duration / targetParagraphs)));
@@ -7029,14 +7029,14 @@ const RecapVideoNVPage: React.FC = () => {
       const scriptBody: Record<string, unknown> = {
         fileUri,
         fileMimeType: mimeType,
-        niche: `You are an aggressive international professional YouTube recap editor. Analyze the uploaded movie/video and produce a condensed, fast-paced recap script in ${selectedLangName}. Length must be approximately 70% of the original duration when read aloud (band 65-75%, never below 65%). ${seriesEnabled ? "SERIES CONTINUATION: Do NOT include any opening viral hook or scene from the middle/end; start strictly in chronological sequence from the beginning of this episode." : "Start with a shocking hook, build mystery, escalate tension, finish with a climactic payoff."} Aggressively cut filler/travel/waiting scenes. Keep only plot twists, key character moments, conflicts, reveals, and the resolution. Write as ONE continuous gripping story with hook transitions between segments. Output each paragraph prefixed by [MM:SS] starting at [00:00] and ending close to the full duration. Use original wording — do NOT quote distinctive dialogue.${burmeseStyleBlock}${buildNarrationStyleBlock(narrationStyle, selectedLangName)}`,
+        niche: `You are a top-tier international movie recap scriptwriter. Analyze the uploaded movie/video and produce a rich, cinematic, highly engaging recap script in ${selectedLangName}. Length must be approximately 75% to 80% of the original duration when read aloud (band 70-85%, never below 70%). ${seriesEnabled ? "SERIES CONTINUATION: Do NOT include any opening viral hook or scene from the middle/end; start strictly in chronological sequence from the beginning of this episode." : "Start with a shocking hook, build mystery, escalate tension, finish with a climactic payoff."} ZERO COMPRESSION ON KEY SCENES: Give full dramatic weight and emotional depth to every confrontation, turning point, and character conflict. Cut only empty dead air (silent staring/purposeless travel). Write as ONE continuous gripping story with hook transitions between segments. Output each paragraph prefixed by [MM:SS] starting at [00:00] and ending close to the full duration. Use original wording — do NOT quote distinctive dialogue.${burmeseStyleBlock}${buildNarrationStyleBlock(narrationStyle, selectedLangName)}`,
         language: selectedLangName,
         sourceDurationSec: duration,
         narrationStyle,
         skipCreditDeduction: true,
         recapNvPipeline: true,
         apiMode: resolvedApiMode,
-        extraInstructions: `CRITICAL:\n- Output language MUST be ${selectedLangName} ONLY.\n- STRICT MULTI-CHARACTER RULE: NEVER reduce the story to only 2 people! Accurately identify each distinct person by their source name or relationship in ${selectedLangName} (အဖေ, အမေ, သား, သမီး, ဇနီး, ခင်ပွန်း, အဖိုး, အဖွား, ချွေးမ, ဆရာ, ဆရာဝန်, ရဲ, သူငယ်ချင်း). NEVER merge multiple different characters into the 2 main leads!\n- Cover the full story arc at about 70% of source duration (never below 65%, never above 75%).\n- Cut only true filler (travel/waiting). Keep every plot-advancing moment in full.${lengthMandate}\n- Each segment must flow into the next with a hook/transition.\n- Never output a partial/incomplete script.${burmeseExtraStyle}`,
+        extraInstructions: `CRITICAL:\n- Output language MUST be ${selectedLangName} ONLY.\n- STRICT MULTI-CHARACTER RULE: NEVER reduce the story to only 2 people! Accurately identify each distinct person by their source name or relationship in ${selectedLangName} (အဖေ, အမေ, သား, သမီး, ဇနီး, ခင်ပွန်း, အဖိုး, အဖွား, ချွေးမ, ဆရာ, ဆရာဝန်, ရဲ, သူငယ်ချင်း). NEVER merge multiple different characters into the 2 main leads!\n- Cover the full story arc at about 75% to 80% of source duration (never below 70%, never above 85%).\n- Cut only true dead air. Keep every key scene, dialogue exchange, and emotional moment in rich detail.${lengthMandate}\n- Each segment must flow into the next with a hook/transition.\n- Never output a partial/incomplete script.${burmeseExtraStyle}`,
         generationConfig: {
           maxOutputTokens,
           temperature: 0.7,
@@ -7665,17 +7665,17 @@ Do NOT write isolated disconnected paragraphs. Each segment must END with a hook
 Examples of good transitions: "But what she didn't know was..." / "And that's when everything changed." / "Just when he thought it was over..."
 The narration must feel like a non-stop thriller story, NOT a boring lecture, documentary, or news report.
 
-STRICT LENGTH RULE:
-This is a surgical recap, not a summary. Do NOT retain most of the source or produce a detailed retelling.
-The output script MUST be approximately 70% of the original video duration when read aloud (acceptable band: 65-75%).
-MINIMUM WORD COUNT (CRITICAL â€” DO NOT GO BELOW THIS):
-  * Source 5 min â†’ minimum 500 words, target ~700 words
-  * Source 10 min â†’ minimum 1000 words, target ~1400 words
-  * Source 15 min â†’ minimum 1500 words, target ~2100 words
-  * Source 20 min â†’ minimum 2000 words, target ~2800 words
-  * Source 30 min â†’ minimum 3000 words, target ~4200 words
-If your script is shorter than the MINIMUM, you MUST add more story detail until you reach it.
-A 20-minute source producing only 2 minutes of narration = FAILURE.
+STRICT LENGTH RULE (75% to 80% COVERAGE):
+This is an elite international narrative recap. You MUST produce a rich, detailed cinematic storytelling experience.
+The output script MUST be approximately 75% to 80% of the original video duration when read aloud (acceptable band: 70-85%).
+MINIMUM WORD COUNT (CRITICAL — STRICT DEPTH):
+  * Source 5 min → minimum 600 words, target ~800 words
+  * Source 10 min → minimum 1200 words, target ~1600 words
+  * Source 15 min → minimum 1800 words, target ~2400 words
+  * Source 20 min → minimum 2400 words, target ~3200 words
+  * Source 30 min → minimum 3600 words, target ~4800 words
+If your script is shorter than the MINIMUM, you MUST expand character emotions, dialogues, and crucial scenes until you reach it.
+A 20-minute source producing only 2-4 minutes of narration = STRICT FAILURE.
 
 STRUCTURE RULE:
 ${seriesEnabled ? "1. SERIES CONTINUATION: Do NOT include any opening viral hook or scene from the middle/end; start strictly in chronological sequence from the beginning of this episode." : "1. Start with a SHOCKING HOOK from the middle or end that immediately raises a why-did-this-happen question."}
