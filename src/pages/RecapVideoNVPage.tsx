@@ -7689,22 +7689,21 @@ Example: If a character is sick and goes to the hospital,
 Keep: The character being sick, arriving at the hospital, and receiving treatment.
 Remove: Changing clothes, walking to the car, driving scenes, waiting scenes, and unnecessary travel shots.
 
-INSTRUCTIONS:
-- Keep every meaningful plot beat in chronological order. Only drop pure filler.
-- AGGRESSIVELY remove: unnecessary scenes, silence, slow walking, repetitive actions, filler moments, unimportant dialogues, transition scenes, travel montages, and any scene that does NOT advance the main plot.
-- Focus on: Main plot twists, key character moments, critical conflicts, shocking reveals, and the conclusion.
-- Shorten conversations to their essential meaning â€” do NOT include full back-and-forth dialogues.
-- Skip over setup/buildup scenes and jump straight to the payoff.
+INSTRUCTIONS (INTERNATIONAL SCRIPTWRITER STANDARD):
+- Keep every meaningful plot beat, emotional progression, and character interaction in chronological order.
+- ZERO COMPRESSION ON KEY SCENES: For critical scenes, high-stakes conflicts, dramatic arguments, intense actions, emotional breakdowns, secret reveals, and climactic moments, DO NOT CONDENSE OR RUSH! Write them out in FULL, RICH NARRATIVE DETAIL just like a top-tier international movie scriptwriter (describe character motives, expressions, micro-reactions, dialogue exchanges, and emotional stakes in vivid detail).
+- CUT ONLY MEANINGLESS DEAD AIR: Drop only empty filler moments with zero narrative value (e.g., character walking down the road alone with no thoughts, driving silently, empty waiting, or purposeless silence). NEVER skip emotional setup, buildup, or character conversations that drive the story!
+- PRESERVE FULL SCENE BUILDUP: Do NOT jump straight to the payoff. The tension and anticipation of the buildup are what keep viewers glued to the screen.
 
-PACING & DURATION RULE (CRITICAL):
-- The recap MUST be approximately 70% of the original video duration (band 65-75%). NOT shorter, NOT longer.
-  * Source 30 min â†’ recap about 21 min.
-  * Source 20 min â†’ recap about 14 min.
-  * Source 10 min â†’ recap about 7 min.
-  * Source 5 min â†’ recap about 3.5 min.
-- IMPORTANT: Going BELOW 65% is just as bad as exceeding 75%. A recap that is too short feels incomplete.
-- If your narration word count falls below the MINIMUM, ADD more story details until you reach it.
-- The viewer should feel like they watched a complete, exciting, condensed version â€” NOT a 30-second summary.
+PACING & DURATION RULE (CRITICAL — 75% to 80% COVERAGE):
+- The recap MUST be approximately 75% to 80% of the original video duration (band 70-85%). Proportional to whatever the source length is:
+  * For 30 min source → output approx 23 to 24 minutes.
+  * For 20 min source → output approx 15 to 16 minutes.
+  * For 10 min source → output approx 7.5 to 8 minutes.
+  * For 5 min source → output approx 3.8 to 4 minutes.
+- IMPORTANT: Going below 70% is STRICTLY FORBIDDEN. A recap that skips scenes or summarizes too briefly feels rushed and cheap.
+- Maintain consistent narrative depth across all timestamps from 00:00 to the very last second.
+- The viewer must experience a rich, deeply captivating, cinematic storytelling journey.
 
 IMPORTANT:
 Do NOT summarize using text only.
@@ -7729,14 +7728,11 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
         extraInstructions: `CRITICAL:
 - Output language MUST be ${selectedLangName} ONLY. Do NOT switch to any other language even if the video's spoken dialogue is in a different language.
 - STRICT MULTI-CHARACTER RULE: NEVER reduce the whole story to only 2 characters! A movie has many people. Each person is a distinct character. Identify every appearing character by their real name (if known) or by their explicit role/relationship in ${selectedLangName} (အဖေ, အမေ, သား, သမီး, ဇနီး, ခင်ပွန်း, အဖိုး, အဖွား, ချွေးမ, သမက်, ဆရာ, တပည့်, ဆရာဝန်, သူနာပြု, မန်နေဂျာ, ရဲ, လူဆိုး, ရန်သူ, သူငယ်ချင်း). NEVER merge multiple different people into the main 2 leads!
-${batchEndSec ? `- THIS IS A BATCH SEGMENT. You MUST ONLY watch and recap events from ${Math.floor(batchStartSec! / 60)}:${String(Math.floor(batchStartSec! % 60)).padStart(2, "0")} to ${Math.floor(batchEndSec / 60)}:${String(Math.floor(batchEndSec % 60)).padStart(2, "0")}. Ignore everything outside this time window. Do not summarize the ending if it hasn't happened yet in this time window. VERY IMPORTANT: Your script MUST match the duration of this specific batch chunk (approx 70% of the chunk duration). Do not output a 5-minute summary for a 3-minute chunk!` : `- Script must cover the story arc from beginning to end, condensed to about 70% of the source duration (never below 65%, never above 75%).`}
-  * For a 30-minute source, aim for about 21 minutes.
-  * For a 20-minute source, aim for about 14 minutes.
-  * For a 10-minute source, aim for about 7 minutes.
-  * For a 5-minute source, aim for about 3.5 minutes.
-- Keep all plot-relevant dialogues and interactions of all family members, colleagues, and secondary characters.${lengthMandate}
-- If the script exceeds 75% of source duration, shorten only low-priority filler. But NEVER go below 65%.
-- Balance is key: aim for exactly 70% of the source duration.
+${batchEndSec ? `- THIS IS A BATCH SEGMENT. You MUST ONLY watch and recap events from ${Math.floor(batchStartSec! / 60)}:${String(Math.floor(batchStartSec! % 60)).padStart(2, "0")} to ${Math.floor(batchEndSec / 60)}:${String(Math.floor(batchEndSec % 60)).padStart(2, "0")}. Ignore everything outside this time window. Do not summarize the ending if it hasn't happened yet in this time window. VERY IMPORTANT: Your script MUST match the duration of this specific batch chunk (approx 75-80% of the chunk duration).` : `- Script must cover the full story arc from 00:00 to the end, timed to approximately 75% to 80% of the source duration (never below 70%).`}
+  * Aim for ~75% to 80% proportional to source length (e.g. 30m → ~25m, 20m → ~15m, 10m → ~8m).
+- Keep all plot-relevant dialogues, emotional confrontations, and key character moments in rich detail.${lengthMandate}
+- Only cut true dead air (staring/silent travel). Never compress or rush emotional conflicts or climax.
+- Aim for a high-retention 75%-80% duration band.
 - Each segment must flow smoothly into the next.
 
 CUTTING RULES (this is a RECAP, not a retelling):
