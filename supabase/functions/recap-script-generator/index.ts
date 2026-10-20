@@ -219,6 +219,33 @@ function getMimeType(file: File): string {
 
 const SENTENCE_END_RE = /[။.!?…。！？]$/;
 
+// Final guard: if two consecutive narration sentences both open with "သူတို့ဟာ/သူတို့က/သူတို့",
+// drop the repeated subject from the second one (natural Burmese subject omission).
+// Lines containing [DIALOGUE:...] or timecodes-only are left untouched.
+function reduceRepeatedPronounSubjects(text: string): string {
+  const OPEN_RE = /^(\s*)သူတို့(?:ဟာ|က)?\s+/;
+  return text
+    .split("\n")
+    .map((line) => {
+      if (line.includes("[DIALOGUE")) return line;
+      const parts = line.split(/(?<=။)/);
+      let prevStarts = false;
+      return parts
+        .map((s) => {
+          const starts = OPEN_RE.test(s);
+          if (starts && prevStarts) {
+            const stripped = s.replace(OPEN_RE, "$1");
+            prevStarts = false;
+            return stripped.trim().length > 4 ? stripped : s;
+          }
+          prevStarts = starts;
+          return s;
+        })
+        .join("");
+    })
+    .join("\n");
+}
+
 function endsAtCompleteSentence(text: string): boolean {
   return SENTENCE_END_RE.test(text.trim().replace(/["'”’）\)]*$/, ""));
 }
@@ -1964,7 +1991,9 @@ ${lengthAdjustedScript}`;
     }
 
     // No trimming — full content coverage is the priority
-    const script = removeNarrationRepetition(lengthAdjustedScript);
+    const script = lang === "my"
+      ? reduceRepeatedPronounSubjects(removeNarrationRepetition(lengthAdjustedScript))
+      : removeNarrationRepetition(lengthAdjustedScript);
     const finalWordCount = script.split(/\s+/).filter(Boolean).length;
     const finalSpokenSec = estimateSpokenSeconds(script);
     if (sourceDurationSec) {
