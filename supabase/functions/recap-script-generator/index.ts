@@ -945,10 +945,10 @@ VIRAL HOOK RULE (MANDATORY — FIRST 3 SECONDS):
 - FORBIDDEN OPENERS include (but not limited to): "ဟုတ်ကဲ့", "ကောင်းပါပြီ", "ရပါပြီ", "အောက်မှာ ဖော်ပြပေး", "ဒီ ... ဗီဒီယိုလေးကို အခြေခံပြီး", "Here is", "Here's", "Below is", "Sure", "Okay", "Of course", or any sentence wrapped in ( ) / （ ） that describes what you are about to write.
 - The very FIRST character of your output MUST be the FIRST WORD of the viral hook itself. No labels like "Hook:", no headings, no parentheses, no markdown — just the hook sentence.
 
-RECAP WRITING STYLE (BILLION-VIEW YOUTUBE STANDARD):
-- Write like a billion-view YouTube narrator: MrBeast energy for drama, Coffeezilla tension for exposés, Mark Rober precision for tech
-- Key-point summary ONLY — NOT micro-detailed play-by-play
-- Hit ONLY the dramatic peaks: shocking moments, confrontations, betrayals, intimate scenes, revelations
+RECAP WRITING STYLE (INTERNATIONAL HIGH-RETENTION SCRIPTWRITER):
+- Write like a top-tier international movie recap narrator (immersive, vivid, and deeply engaging storytelling)
+- ZERO RUSH ON KEY BEATS: Give full dramatic weight and emotional depth to every confrontation, revelation, argument, and turning point — do NOT rush or reduce them to a 1-sentence summary.
+- Capture visible facial expressions, tense dialogues, high-stakes decisions, and intimate feelings in detail.
 - Every sentence must create curiosity for the next — use cliffhangers between paragraphs
 - Cut all filler: no "and then", no "after that", no "meanwhile" — go straight to the punch
 - Each paragraph = one explosive beat, 2-3 sentences max, designed to keep viewers locked in
@@ -1127,12 +1127,12 @@ AFTER the complete narration script, output a final line containing exactly ===S
 
       const windowOneSec = sourceDurationSec || 0;
 
-      const targetSec = sourceDurationSec ? Math.round(sourceDurationSec * 0.7) : 0;
-      const targetParas = sourceDurationSec ? Math.max(12, Math.round(targetSec / 15)) : 16;
+      const targetSec = sourceDurationSec ? Math.round(sourceDurationSec * 0.78) : 0;
+      const targetParas = sourceDurationSec ? Math.max(14, Math.round(targetSec / 14)) : 18;
       const durationHint = sourceDurationSec
         ? `\nSOURCE VIDEO DURATION: ${Math.floor(sourceDurationSec / 60)} minutes ${Math.round(sourceDurationSec % 60)} seconds` +
-          `\nTARGET RECAP DURATION: ~${Math.round(targetSec / 60)} minutes (70% of source duration). You MUST write AT LEAST ${targetParas} detailed timestamped paragraphs covering scenes continuously. NEVER output a short 2-4 minute summary for a longer video!` +
-          `\nCRITICAL: YOU MUST ANALYZE THE ENTIRE VIDEO FROM 00:00 TO THE VERY END. DO NOT STOP EARLY.`
+          `\nTARGET RECAP DURATION: ~${Math.round(targetSec / 60)} minutes (~75-80% of source duration). You MUST write AT LEAST ${targetParas} rich, detailed timestamped paragraphs covering scenes with deep storytelling. NEVER compress or summarize into a short synopsis!` +
+          `\nCRITICAL: YOU MUST ANALYZE AND NARRATE THE ENTIRE TIMELINE FROM 00:00 TO THE VERY END WITH FULL SCENE DETAIL.`
         : "";
 
       const userPrompt = `[LANGUAGE: ${lang} — ${langLabel}]
