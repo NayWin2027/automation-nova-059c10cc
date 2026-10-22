@@ -581,7 +581,6 @@ LANGUAGE LOCK:
           MODEL,
           "gemini-3.8-flash",
           "gemini-3.6-flash",
-          "gemini-3.1-flash",
           "gemini-flash-latest",
           "gemini-3.5-flash-lite",
           "gemini-flash-lite-latest",
@@ -1308,12 +1307,18 @@ ${transcript}
       ? [
           "gemini-3.8-flash",
           "gemini-3.6-flash",
-          "gemini-3.1-flash",
           "gemini-flash-latest",
           "gemini-3.5-flash-lite",
           "gemini-flash-lite-latest",
         ]
-      : ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.1-flash", "gemini-flash-latest", "gemini-flash-lite-latest"];
+      : [
+          "gemini-3.8-flash",
+          "gemini-3.6-flash",
+          "gemini-3.5-flash-lite",
+          "gemini-3.1-flash-lite",
+          "gemini-flash-latest",
+          "gemini-flash-lite-latest",
+        ];
     const shouldFallback = (status?: number) => status === 404 || status === 429 || status === 503 || status === 504;
 
     for (const fallbackModel of fallbackModels) {
