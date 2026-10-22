@@ -6429,7 +6429,7 @@ STREET-SPOKEN STYLE & MODERN SLANG (HYBRID/VIRAL only):
   return `\n\nNARRATION STYLE — STORY (ELITE INTERNATIONAL RECAP — 75-80% DURATION & ZERO REPETITION):
   - TOP-TIER INTERNATIONAL RECAP STANDARD: Write rich, continuous scene-by-scene narration (aiming for ~75% to 80% of source duration). For longer videos, narrate each progressive scene in full narrative depth roughly every 14-20 seconds — DO NOT over-compress into a short synopsis.
   - HIGH-STAKES VIRAL HOOK (FIRST 3 SECONDS):
-    * Open immediately with the central moral dilemma, impossible choice, or life-or-death consequence (e.g. "ကိုယ့်သမီးကို အသက်လု ကယ်တင်ဖို့အတွက် တစ်မိသားစုလုံး ဒီလို မိုက်မဲတဲ့ ဆုံးဖြတ်ချက်မျိုး ချမိကြတဲ့အခါ ဘာတွေဆက်ဖြစ်မလဲ ဆက်ကြည့်လိုက်ရအောင်..." / "ဒီလို လျှို့ဝှက်ချက်မျိုးကို ဖုံးကွယ်ဖို့ ကြိုးစားရင်း တစ်မိသားစုလုံး ဘယ်လို အန္တရာယ်ဆိုးနဲ့ ရင်ဆိုင်ရမလဲ...").
+    * Open immediately with the central moral dilemma, impossible choice, or life-or-death consequence in ONE short sentence (~8-12 words, ~3 seconds spoken; no filler tails like "ဆက်ကြည့်လိုက်ရအောင်") (e.g. "ဒီဆုံးဖြတ်ချက်က တစ်မိသားစုလုံးကို အဆုံးသတ်သွားစေခဲ့တယ်..." / "ဒီလျှို့ဝှက်ချက်ကြောင့် လူတိုင်း အသက်ပေးလိုက်ရတော့မယ်...").
     * Plunge straight into the emotional peak without any slow background buildup.
   - DYNAMIC CHARACTER & PRONOUN FLOW (NO MONOTONOUS REPETITION):
     * Pronouns and character references are ESSENTIAL, but must alternate naturally and smoothly.
