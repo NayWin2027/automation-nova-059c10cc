@@ -9,7 +9,7 @@ const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1bet
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
 // gemini-1.5-flash / gemini-2.5-flash are no longer served (404 NOT_FOUND).
 // Use the rolling "latest" alias which stays available for both old and new keys.
-const MODEL = "gemini-3.1-flash-lite";
+const MODEL = "gemini-3.5-flash-lite";
 
 // SLANG-TEMP: HYBRID/VIRAL modes need a slightly higher temperature so the model
 // actually reaches for street slang instead of the safest plain wording. STORY mode
@@ -29,7 +29,7 @@ function buildGenerationConfig(model: string, requestedMaxOutputTokens: number |
   // Burmese/CJK narration costs 2-3 tokens per syllable: an 8192 cap truncated
   // long recaps and dropped the middle/ending beats. Give the model real room.
   const maxOutputTokens =
-    model === "gemini-3.1-flash-lite"
+    model === "gemini-3.5-flash-lite"
       ? Math.max(requestedMaxOutputTokens || 0, 80000)
       : Math.max(requestedMaxOutputTokens || 0, 60000);
 
@@ -218,6 +218,33 @@ function getMimeType(file: File): string {
 }
 
 const SENTENCE_END_RE = /[။.!?…。！？]$/;
+
+// Final guard: if two consecutive narration sentences both open with "သူတို့ဟာ/သူတို့က/သူတို့",
+// drop the repeated subject from the second one (natural Burmese subject omission).
+// Lines containing [DIALOGUE:...] or timecodes-only are left untouched.
+function reduceRepeatedPronounSubjects(text: string): string {
+  const OPEN_RE = /^(\s*)သူတို့(?:ဟာ|က)?\s+/;
+  return text
+    .split("\n")
+    .map((line) => {
+      if (line.includes("[DIALOGUE")) return line;
+      const parts = line.split(/(?<=။)/);
+      let prevStarts = false;
+      return parts
+        .map((s) => {
+          const starts = OPEN_RE.test(s);
+          if (starts && prevStarts) {
+            const stripped = s.replace(OPEN_RE, "$1");
+            prevStarts = false;
+            return stripped.trim().length > 4 ? stripped : s;
+          }
+          prevStarts = starts;
+          return s;
+        })
+        .join("");
+    })
+    .join("\n");
+}
 
 function endsAtCompleteSentence(text: string): boolean {
   return SENTENCE_END_RE.test(text.trim().replace(/["'”’）\)]*$/, ""));
@@ -554,9 +581,9 @@ LANGUAGE LOCK:
           MODEL,
           "gemini-3.8-flash",
           "gemini-3.6-flash",
-          "gemini-3.1-flash",
-          "gemini-flash-latest",
           "gemini-3.5-flash-lite",
+          "gemini-3.1-flash-lite",
+          "gemini-flash-latest",
           "gemini-flash-lite-latest",
         ];
         const tShouldFallback = (s?: number) => s === 404 || s === 429 || s === 503 || s === 504;
@@ -878,8 +905,10 @@ ABSOLUTE RULES:
 10. NATIVE SCRIPT TRANSLITERATION (TTS FRIENDLY): NEVER leave foreign words, brand names, or English words in the Latin (A-Z) alphabet. If you must include them, you MUST transliterate and spell them out phonetically using ONLY the native alphabet of ${langLabel}. For example, if ${lang} is BURMESE, write "Facebook" as "ဖေ့စ်ဘွတ်(ခ်)", "Apple" as "အက်ပဲလ်", NOT "Facebook" or "Apple". This ensures the Text-to-Speech engine reads them smoothly in the native accent.
 11. ZERO REPETITION LOCK: State each fact, action, emotion, relationship, name introduction, plan, and consequence ONCE only. Never repeat it later with synonyms or slightly different wording. Every new sentence must advance to a new source event or add genuinely new information.
 12. DYNAMIC CHARACTER & PRONOUN NATURALNESS: Use character names, family/social roles (ဖခင်, မိခင်, သမီး, ဇနီး), and natural pronouns (သူ, သူမ, သူတို့) fluently where appropriate, but STRICTLY AVOID repetitive overuse. Never begin consecutive sentences with the same pronoun or subject (e.g. repeating "သူတို့က... သူတို့က..." is strictly forbidden). Fluidly alternate between names, specific relationship roles, natural pronouns, and contextual subject omission to ensure a smooth, professional, and immersive storytelling rhythm.
+12b. 4-PATTERN ALTERNATION (like a real native storyteller): (a) FIRST mention → the name if heard/shown in the source, otherwise the visible role/profession (ဓားသမား လူငယ်လေး, ပန်းပဲဆရာကြီး, ဆိုင်ရှင်အဒေါ်ကြီး); (b) once identified → a natural pronoun (သူ, သူမ, သူတို့); (c) then a relationship/group term (သူ့အဖော်တွေ, ဒီလူငယ်တွေ, ဆရာတပည့်နှစ်ယောက်, အဖေနဲ့သမီး); (d) subject omission when the flow already makes the subject clear. ❌ BAD: "သူတို့ဟာ တောထဲရောက်လာတယ်။ သူတို့ဟာ မီးဖိုတွေ့တယ်။ သူတို့ရဲ့ ရန်သူက ချောင်းနေတယ်။" ✅ GOOD: "ဓားသမား လူငယ်လေးနဲ့ သူ့အဖော်တွေ တောထဲရောက်လာကြတယ်။ မီးဖိုလေးတစ်ခု တွေ့တော့ ခဏနားကြတယ်။ ဒါပေမဲ့ ဒီလူငယ်တွေ မသိလိုက်တာက သစ်ပင်နောက်မှာ ရန်သူတွေ ချောင်းနေတာပဲ။" Prefer spoken "သူတို့က" over written "သူတို့ဟာ/သူတို့ရဲ့"; never use the same subject reference in 2 consecutive sentences.
 13. COHERENCE LOCK: Before writing, internally build a chronological beat ledger (do NOT print it). Each paragraph must cover the next uncovered beat and clearly preserve cause → action → consequence. A viewer who has never seen the source must understand who acted, why it happened, and what changed.
 14. NARRATION-ONLY OUTPUT: Never print internal labels or planning terms such as “story bible”, “story bibe”, “story vibe”, “beat ledger”, “hook”, “character list”, “analysis”, or any heading. Output only timestamped narration/dialogue.
+15. UNIVERSAL TRANSLATION FIDELITY (ANY SOURCE LANGUAGE → ${langLabel}): Preserve the source's exact meaning, intent, emotion, tone, subtext and context with ZERO distortion — never mistranslate, invent, or drop meaning. Never translate word-by-word; render each line as a native ${langLabel} speaker would naturally say it, using the most accurate, fluent, modern and beautiful expressions of ${langLabel} (idioms where they fit). Avoid robotic, literal or stiff bookish phrasing. Choose names, roles, relationships and pronouns according to ${langLabel}'s natural speech conventions and the scene context.
 
 CRITICAL - DIALOGUE TRANSLATION RULE (MOST IMPORTANT):
 - UNIVERSAL MEANING TRANSLATION (CRITICAL): You MUST translate the full semantic MEANING of all dialogue from ANY language into natural, native ${langLabel}. NEVER transcribe or sound out foreign language words phonetically using ${langLabel} script — phonetic spelling is STRICTLY reserved for proper person names and brand names only.
@@ -899,7 +928,7 @@ CRITICAL - RECAP COMPLETENESS (ZERO FILLER POLICY):
 - If two characters kiss, embrace, touch intimately, or have any physical/romantic interaction, you MUST describe it with vivid sensory detail (what they felt, the tension, the emotions, the physical sensations)
 - DO NOT use vague euphemisms. Be specific and descriptive about physical actions and emotional reactions
 - DO NOT translate or retell every scene. Skip filler and compress secondary scenes into brief linking lines
-- Maintain detailed, engaging narrative coverage so the recap reaches about 70% of the source duration (never a rushed 2-3 minute summary).
+- Maintain detailed, engaging narrative coverage so the recap reaches about 75% to 80% of the source duration (never a rushed or short summary).
 
 CHARACTER IDENTITY & MULTI-CHARACTER SEPARATION (CRITICAL — STRICT ENFORCEMENT):
 - NO TWO-CHARACTER BINARY COLLAPSE (STRICT): NEVER reduce the entire cast of the video to only two people (e.g., guy and girl / hero and villain / husband and wife)! Real stories feature many distinct people. You MUST recognize and portray every separate character appearing in the video.
@@ -924,7 +953,7 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - DO NOT SUMMARIZE. DO NOT SKIP. DO NOT STOP EARLY.
 - YOU MUST WRITE A COMPLETE NARRATION THAT FOLLOWS THE STORY UNFOLDING AS IT HAPPENS.
 - Cover the beginning, middle, climax and ending through distinct essential beats; compress routine or duplicate moments.
-- PARAGRAPH COUNT & PACING: For a full 70% recap duration, narrate scenes continuously with progressive timestamped paragraphs roughly every 15-25 seconds of source time. Never condense a long video into a brief summary.
+- PARAGRAPH COUNT & PACING: For a full 75-80% recap duration, narrate scenes continuously with progressive timestamped paragraphs roughly every 14-20 seconds of source time. Never condense a long video into a brief summary.
 - SPREAD: Evenly distribute these paragraphs across the entire video timeline (e.g., for a 4-minute video, you must have content for the 0:00, 1:00, 2:00, 3:00, and 4:00 minute marks).
 - IF YOU OMIT THE SECOND HALF OF THE VIDEO, YOUR OUTPUT IS REJECTED.
 - PACING BALANCE: Maintain consistent, rich scene depth from beginning to climax and ending without dropping story details.
@@ -935,7 +964,8 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 VIRAL HOOK RULE (MANDATORY — FIRST 3 SECONDS):
 - The VERY FIRST sentence MUST be a 3-second viral hook designed to stop the scroll instantly
 - It must be shocking, provocative, or emotionally magnetic — NOT a generic intro
-- Great hook examples: "ကိုယ့်သမီးကို အသက်လု ကယ်တင်ဖို့အတွက် တစ်မိသားစုလုံး ဒီလို မိုက်မဲတဲ့ ဆုံးဖြတ်ချက်မျိုး ချမိကြတဲ့အခါ ဘာတွေဆက်ဖြစ်မလဲ ဆက်ကြည့်လိုက်ရအောင်..." / "No one expected what happened next." / "This desperate decision destroyed everything they loved." / "She had no idea her whole life was about to collapse."
+- Great hook examples (SHORT — about 8-12 words, ~3 seconds spoken): "ဒီဆုံးဖြတ်ချက်က တစ်မိသားစုလုံးကို အဆုံးသတ်သွားစေခဲ့တယ်..." / "ဘယ်သူမှ မထင်ထားတဲ့ ရက်စက်မှုတစ်ခု အဲဒီညမှာ စတင်ခဲ့တယ်..." / "No one expected what happened next." / "She had no idea her whole life was about to collapse."
+- HOOK LENGTH: keep the hook to ONE short sentence that can be spoken in about 3 seconds. Do NOT add filler tails like "ဘာတွေဆက်ဖြစ်မလဲ ဆက်ကြည့်လိုက်ရအောင်".
 - HOOK SELECTION (do this internally before writing): scan the WHOLE source and list the 3 highest-impact moments — the biggest shock, conflict, reveal, betrayal, surprising fact, or emotional peak. Rank them by how strongly a stranger would react in 3 seconds, then build the hook from the #1 ranked moment ONLY.
 - NEVER build the hook from an ordinary, calm, or setup moment just because it happens early. Position in the video is irrelevant — only impact matters.
 - This is niche-agnostic: for stories use the dramatic peak; for news/documentary the most shocking revelation; for tech/health/business/educational the most counter-intuitive fact, mistake, or result.
@@ -945,10 +975,10 @@ VIRAL HOOK RULE (MANDATORY — FIRST 3 SECONDS):
 - FORBIDDEN OPENERS include (but not limited to): "ဟုတ်ကဲ့", "ကောင်းပါပြီ", "ရပါပြီ", "အောက်မှာ ဖော်ပြပေး", "ဒီ ... ဗီဒီယိုလေးကို အခြေခံပြီး", "Here is", "Here's", "Below is", "Sure", "Okay", "Of course", or any sentence wrapped in ( ) / （ ） that describes what you are about to write.
 - The very FIRST character of your output MUST be the FIRST WORD of the viral hook itself. No labels like "Hook:", no headings, no parentheses, no markdown — just the hook sentence.
 
-RECAP WRITING STYLE (BILLION-VIEW YOUTUBE STANDARD):
-- Write like a billion-view YouTube narrator: MrBeast energy for drama, Coffeezilla tension for exposés, Mark Rober precision for tech
-- Key-point summary ONLY — NOT micro-detailed play-by-play
-- Hit ONLY the dramatic peaks: shocking moments, confrontations, betrayals, intimate scenes, revelations
+RECAP WRITING STYLE (INTERNATIONAL HIGH-RETENTION SCRIPTWRITER):
+- Write like a top-tier international movie recap narrator (immersive, vivid, and deeply engaging storytelling)
+- ZERO RUSH ON KEY BEATS: Give full dramatic weight and emotional depth to every confrontation, revelation, argument, and turning point — do NOT rush or reduce them to a 1-sentence summary.
+- Capture visible facial expressions, tense dialogues, high-stakes decisions, and intimate feelings in detail.
 - Every sentence must create curiosity for the next — use cliffhangers between paragraphs
 - Cut all filler: no "and then", no "after that", no "meanwhile" — go straight to the punch
 - Each paragraph = one explosive beat, 2-3 sentences max, designed to keep viewers locked in
@@ -1127,12 +1157,12 @@ AFTER the complete narration script, output a final line containing exactly ===S
 
       const windowOneSec = sourceDurationSec || 0;
 
-      const targetSec = sourceDurationSec ? Math.round(sourceDurationSec * 0.7) : 0;
-      const targetParas = sourceDurationSec ? Math.max(12, Math.round(targetSec / 15)) : 16;
+      const targetSec = sourceDurationSec ? Math.round(sourceDurationSec * 0.78) : 0;
+      const targetParas = sourceDurationSec ? Math.max(14, Math.round(targetSec / 14)) : 18;
       const durationHint = sourceDurationSec
         ? `\nSOURCE VIDEO DURATION: ${Math.floor(sourceDurationSec / 60)} minutes ${Math.round(sourceDurationSec % 60)} seconds` +
-          `\nTARGET RECAP DURATION: ~${Math.round(targetSec / 60)} minutes (70% of source duration). You MUST write AT LEAST ${targetParas} detailed timestamped paragraphs covering scenes continuously. NEVER output a short 2-4 minute summary for a longer video!` +
-          `\nCRITICAL: YOU MUST ANALYZE THE ENTIRE VIDEO FROM 00:00 TO THE VERY END. DO NOT STOP EARLY.`
+          `\nTARGET RECAP DURATION: ~${Math.round(targetSec / 60)} minutes (~75-80% of source duration). You MUST write AT LEAST ${targetParas} rich, detailed timestamped paragraphs covering scenes with deep storytelling. NEVER compress or summarize into a short synopsis!` +
+          `\nCRITICAL: YOU MUST ANALYZE AND NARRATE THE ENTIRE TIMELINE FROM 00:00 TO THE VERY END WITH FULL SCENE DETAIL.`
         : "";
 
       const userPrompt = `[LANGUAGE: ${lang} — ${langLabel}]
@@ -1278,12 +1308,19 @@ ${transcript}
       ? [
           "gemini-3.8-flash",
           "gemini-3.6-flash",
-          "gemini-3.1-flash",
-          "gemini-flash-latest",
           "gemini-3.5-flash-lite",
+          "gemini-3.1-flash-lite",
+          "gemini-flash-latest",
           "gemini-flash-lite-latest",
         ]
-      : ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.1-flash", "gemini-flash-latest", "gemini-flash-lite-latest"];
+      : [
+          "gemini-3.8-flash",
+          "gemini-3.6-flash",
+          "gemini-3.5-flash-lite",
+          "gemini-3.1-flash-lite",
+          "gemini-flash-latest",
+          "gemini-flash-lite-latest",
+        ];
     const shouldFallback = (status?: number) => status === 404 || status === 429 || status === 503 || status === 504;
 
     for (const fallbackModel of fallbackModels) {
@@ -1963,7 +2000,10 @@ ${lengthAdjustedScript}`;
     }
 
     // No trimming — full content coverage is the priority
-    const script = removeNarrationRepetition(lengthAdjustedScript);
+    const script =
+      lang === "my"
+        ? reduceRepeatedPronounSubjects(removeNarrationRepetition(lengthAdjustedScript))
+        : removeNarrationRepetition(lengthAdjustedScript);
     const finalWordCount = script.split(/\s+/).filter(Boolean).length;
     const finalSpokenSec = estimateSpokenSeconds(script);
     if (sourceDurationSec) {
