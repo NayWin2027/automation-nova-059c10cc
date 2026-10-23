@@ -10,7 +10,6 @@ import { fetchFile, toBlobURL } from "@ffmpeg/util";
 
 const DURATION_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 25, 30];
 const FFMPEG_LOAD_TIMEOUT_MS = 45000;
-const MAX_FILE_BYTES = 1.5 * 1024 ** 3; // Browser memory limit
 
 interface CutPart {
   index: number;
@@ -40,14 +39,6 @@ const NovaCutVideoPage = () => {
     (file: File) => {
       if (!file.type.startsWith("video/")) {
         toast({ title: "Video ဖိုင်သာ ရွေးပါ", variant: "destructive" });
-        return;
-      }
-      if (file.size > MAX_FILE_BYTES) {
-        toast({
-          title: "ဖိုင်ဆိုဒ် ကြီးလွန်းနေပါသည်",
-          description: `ဒီဖိုင်က ${(file.size / 1024 ** 3).toFixed(2)} GB ရှိပါတယ်။ 1.5 GB အောက်သာ လက်ခံပါသည်။`,
-          variant: "destructive",
-        });
         return;
       }
       setVideoFile(file);
@@ -269,7 +260,6 @@ const NovaCutVideoPage = () => {
                 <Upload className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
                 <p className="text-foreground font-medium mb-1">Video ဖိုင်ရွေးပါ</p>
                 <p className="text-sm text-muted-foreground">Drag & drop သို့မဟုတ် click နှိပ်ပါ</p>
-                <p className="text-xs text-destructive font-semibold mt-3">⚠️ ဖိုင်ဆိုဒ် 1.5 GB အောက်သာ ထည့်သွင်းပါ</p>
                 <input
                   ref={fileInputRef}
                   type="file"
