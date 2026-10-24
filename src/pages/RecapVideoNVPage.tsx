@@ -3232,7 +3232,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             ctx.scale(-1, 1);
           }
           const heldFrame = visibleLoopFrameRef.current;
-          if (freezeImg) 
+          if (freezeImg) { 
             // Photo Zoom In phase — Freeze/Motion ON ဖြစ်ချိန်သာ သုံးသည်
             fairDraw(freezeImg, freezeRect[0], freezeRect[1], freezeRect[2], freezeRect[3]);
           } else if (useVisibleLoopMask && heldFrame) {
