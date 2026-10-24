@@ -3202,7 +3202,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // 2. Loop/Overrun Point: အသံမပြီးမီ ဗီဒီယိုကုန်သွားပါက 1.0x မှ 1.30x သို့ သိသာထင်ရှားသော Smooth Push-in ဆွဲမည် (Pause လုံးဝမဖြစ်).
         const useVisibleLoopMask =
           !freezeModeRef.current &&
-          (visibleLoopCountRef.current >= 1 || dialogueHoldActiveRef.current) &&
+          !seekPendingRef.current &&
+          visibleLoopCountRef.current >= 1 &&
           visibleLoopFrameReadyRef.current;
         const useResidualFrameMask =
           !freezeModeRef.current && seekPendingRef.current && visibleLoopFrameReadyRef.current && !useVisibleLoopMask;
@@ -3231,19 +3232,19 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             ctx.scale(-1, 1);
           }
           const heldFrame = visibleLoopFrameRef.current;
-          if (freezeImg) {
+          if (freezeImg) 
             // Photo Zoom In phase — Freeze/Motion ON ဖြစ်ချိန်သာ သုံးသည်
             fairDraw(freezeImg, freezeRect[0], freezeRect[1], freezeRect[2], freezeRect[3]);
           } else if (useVisibleLoopMask && heldFrame) {
-            // Noticeable Cinematic Push-in: 1.0 -> 1.30 over 4.5s
-            // ဗီဒီယို ကုန်သွားပါက 1.0x မှ 1.30x သို့ သိသာထင်ရှားသော Camera Push-in
+            // Noticeable Cinematic Push-in: 1.03x -> 1.30x over 4.5s
+            // ဗီဒီယို ကုန်သွားပါက Loop အစား 1.03x မှ 1.30x သို့ သိသာထင်ရှားသော Camera Push-in
             const maskElapsed =
               visibleLoopMaskStartRef.current > 0
                 ? performance.now() - visibleLoopMaskStartRef.current
-                : Math.max(0, performance.now() - gapStartRef.current);
+                : 0;
             const maskProgress = Math.min(1, maskElapsed / 4500);
             const maskEase = 1 - Math.pow(1 - maskProgress, 1.8);
-            const maskZoom = 1.0 + 0.3 * maskEase; // Peak 1.30x
+            const maskZoom = 1.03 + 0.27 * maskEase; // 1.03x -> Peak 1.30x
             const maskW = Math.max(2, Math.round(heldFrame.width / maskZoom));
             const maskH = Math.max(2, Math.round(heldFrame.height / maskZoom));
             const maskX = Math.round((heldFrame.width - maskW) / 2);
