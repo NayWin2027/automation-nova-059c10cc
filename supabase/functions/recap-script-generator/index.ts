@@ -928,7 +928,7 @@ CRITICAL - RECAP COMPLETENESS (ZERO FILLER POLICY):
 - If two characters kiss, embrace, touch intimately, or have any physical/romantic interaction, you MUST describe it with vivid sensory detail (what they felt, the tension, the emotions, the physical sensations)
 - DO NOT use vague euphemisms. Be specific and descriptive about physical actions and emotional reactions
 - DO NOT translate or retell every scene. Skip filler and compress secondary scenes into brief linking lines
-- Maintain detailed, engaging narrative coverage so the recap reaches about 75% to 80% of the source duration (never a rushed or short summary).
+- Maintain detailed, engaging narrative coverage so the recap reaches about 70% of the source duration(never a rushed or short summary).
 
 CHARACTER IDENTITY & MULTI-CHARACTER SEPARATION (CRITICAL — STRICT ENFORCEMENT):
 - NO TWO-CHARACTER BINARY COLLAPSE (STRICT): NEVER reduce the entire cast of the video to only two people (e.g., guy and girl / hero and villain / husband and wife)! Real stories feature many distinct people. You MUST recognize and portray every separate character appearing in the video.
@@ -953,7 +953,7 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - DO NOT SUMMARIZE. DO NOT SKIP. DO NOT STOP EARLY.
 - YOU MUST WRITE A COMPLETE NARRATION THAT FOLLOWS THE STORY UNFOLDING AS IT HAPPENS.
 - Cover the beginning, middle, climax and ending through distinct essential beats; compress routine or duplicate moments.
-- PARAGRAPH COUNT & PACING: For a full 75-80% recap duration, narrate scenes continuously with progressive timestamped paragraphs roughly every 14-20 seconds of source time. Never condense a long video into a brief summary.
+- PARAGRAPH COUNT & PACING: For a full 70% recap duration, narrate scenes continuously with progressive timestamped paragraphs roughly every 14-20 seconds of source time. Never condense a long video into a brief summary.
 - SPREAD: Evenly distribute these paragraphs across the entire video timeline (e.g., for a 4-minute video, you must have content for the 0:00, 1:00, 2:00, 3:00, and 4:00 minute marks).
 - IF YOU OMIT THE SECOND HALF OF THE VIDEO, YOUR OUTPUT IS REJECTED.
 - PACING BALANCE: Maintain consistent, rich scene depth from beginning to climax and ending without dropping story details.
@@ -1157,11 +1157,11 @@ AFTER the complete narration script, output a final line containing exactly ===S
 
       const windowOneSec = sourceDurationSec || 0;
 
-      const targetSec = sourceDurationSec ? Math.round(sourceDurationSec * 0.78) : 0;
-      const targetParas = sourceDurationSec ? Math.max(14, Math.round(targetSec / 14)) : 18;
+      const targetSec = sourceDurationSec ? Math.round(sourceDurationSec * 0.7) : 0;
+      const targetParas = sourceDurationSec ? Math.max(12, Math.round(targetSec / 14)) : 16;
       const durationHint = sourceDurationSec
         ? `\nSOURCE VIDEO DURATION: ${Math.floor(sourceDurationSec / 60)} minutes ${Math.round(sourceDurationSec % 60)} seconds` +
-          `\nTARGET RECAP DURATION: ~${Math.round(targetSec / 60)} minutes (~75-80% of source duration). You MUST write AT LEAST ${targetParas} rich, detailed timestamped paragraphs covering scenes with deep storytelling. NEVER compress or summarize into a short synopsis!` +
+          `\nTARGET RECAP DURATION: ~${Math.round(targetSec / 60)} minutes (~70% of source duration). You MUST write AT LEAST ${targetParas} rich, detailed timestamped paragraphs covering scenes with deep storytelling. NEVER compress or summarize into a short synopsis!` +
           `\nCRITICAL: YOU MUST ANALYZE AND NARRATE THE ENTIRE TIMELINE FROM 00:00 TO THE VERY END WITH FULL SCENE DETAIL.`
         : "";
 
