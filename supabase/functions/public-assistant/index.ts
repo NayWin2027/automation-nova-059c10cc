@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { getCorsHeaders, handleCorsPreflightOrReject } from "../_shared/cors.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // Rate limiting: simple in-memory store (per isolate)
 const ipRequestMap = new Map<string, { count: number; resetAt: number }>();
@@ -108,6 +109,27 @@ serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
 
   try {
+    // ===== AUTHENTICATION: signed-in users only =====
+    const authHeader = req.headers.get("Authorization") || "";
+    const bearer = authHeader.replace(/^Bearer\s+/i, "").trim();
+    if (!bearer) {
+      return new Response(
+        JSON.stringify({ error: "Authentication required", errorBurmese: "Login ဝင်ပြီးမှ မေးနိုင်ပါတယ်။" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const authClient = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      global: { headers: { Authorization: `Bearer ${bearer}` } },
+    });
+    const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(bearer);
+    const claims: any = claimsData?.claims;
+    if (claimsError || !claims?.sub || claims?.role !== "authenticated") {
+      return new Response(
+        JSON.stringify({ error: "Authentication required", errorBurmese: "Login ဝင်ပြီးမှ မေးနိုင်ပါတယ်။" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Rate limiting by IP
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || 
                req.headers.get("cf-connecting-ip") || "unknown";
