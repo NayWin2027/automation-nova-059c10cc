@@ -329,6 +329,31 @@ serve(async (req) => {
       });
     }
 
+    // File size / type limits (audio or video only)
+    const MAX_TRANSCRIBE_BYTES = 200 * 1024 * 1024;
+    const isMediaMime = (m: string | null | undefined) => !m || /^(audio|video)\/[a-z0-9.+-]+$/i.test(m);
+    const tooLarge =
+      (fileObj && typeof fileObj !== "string" && fileObj.size > MAX_TRANSCRIBE_BYTES) ||
+      (typeof audioData === "string" && audioData.length > Math.ceil(MAX_TRANSCRIBE_BYTES * 4 / 3) + 4);
+    if (tooLarge) {
+      return new Response(JSON.stringify({ error: "ဖိုင်အရွယ်အစား အရမ်းကြီးနေပါတယ် (200MB အောက်သာ)။", retryable: false }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (audioData && typeof audioData !== "string") {
+      return new Response(JSON.stringify({ error: "ဖိုင်ပုံစံ မမှန်ပါ", retryable: false }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (!isMediaMime(fileObj && typeof fileObj !== "string" ? fileObj.type : mimeTypeFromBody)) {
+      return new Response(JSON.stringify({ error: "Audio သို့မဟုတ် Video ဖိုင်သာ လက်ခံပါတယ်။", retryable: false }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // For App API mode (no user apiKey), use GEMINI_API_KEY directly
     const isOwnApi = !!apiKey;
     if (!isOwnApi) {
