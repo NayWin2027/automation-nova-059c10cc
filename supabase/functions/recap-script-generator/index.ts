@@ -1047,7 +1047,7 @@ ${seriesContext}
 
 CONTINUITY RULES:
 - The SOURCE VIDEO attached to this request is your ONLY source of content. Watch it from start to finish and narrate ONLY what you see and hear in it.
-- Use the story bible ONLY to keep character names, spellings, and established facts consistent. Do NOT use it to generate new scenes or events.
+- Use the story bible ONLY to keep character names, titles/roles (အခေါ်အဝေါ်/ရာထူး), spellings, and established facts consistent across all episodes. Never swap synonymous titles (e.g. တပ်မှူး vs စစ်သူကြီး, မိဖုရား vs ဘုရင်မ/မင်းသမီး). Do NOT use it to generate new scenes or events.
 - Do NOT repeat anything listed under TOPICS ALREADY COVERED.
 - Begin the script with a short, natural 1-2 sentence bridge in ${lang} that reconnects to where the previous part stopped. It MUST still start with a [MM:SS] timecode like every other paragraph, and it must feel organic — not a formal summary.
   * If SERIES TYPE is a story/drama/film: a "previously" story bridge.
