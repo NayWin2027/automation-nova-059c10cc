@@ -275,6 +275,31 @@ Deno.serve(async (req) => {
       });
     }
 
+    // When the caller (Voice/Recap NV) handles billing itself, still require an
+    // eligible paid account server-side: admin, or not banned with a positive,
+    // non-expired credit balance.
+    if (skipCreditDeduction) {
+      const eligClient = createClient(supabaseUrl, serviceKey);
+      const [{ data: isAdminRole }, { data: prof }] = await Promise.all([
+        eligClient.from("user_roles").select("id").eq("user_id", user.id).eq("role", "admin").maybeSingle(),
+        eligClient.from("profiles").select("credits, is_banned, credits_started_at, credits_expires_at").eq("user_id", user.id).maybeSingle(),
+      ]);
+      if (!isAdminRole) {
+        const p: any = prof || {};
+        const expiry = p.credits_expires_at
+          ? new Date(p.credits_expires_at).getTime()
+          : p.credits_started_at
+            ? new Date(p.credits_started_at).getTime() + 30 * 24 * 3600 * 1000
+            : 0;
+        if (!prof || p.is_banned || !(Number(p.credits) > 0) || expiry < Date.now()) {
+          return new Response(
+            JSON.stringify({ error: "Credits မလုံလောက်ပါ။", errorCode: "INSUFFICIENT_CREDITS", balance: Number(p.credits) || 0 }),
+            { status: 402, headers: { ...cors, "Content-Type": "application/json" } },
+          );
+        }
+      }
+    }
+
     // Credit deduction via RPC — skipped when caller (Voice/Recap NV) handles billing itself.
     let rpcResult: any = null;
     if (!skipCreditDeduction) {

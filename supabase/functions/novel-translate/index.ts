@@ -99,12 +99,15 @@ serve(async (req) => {
         );
       }
 
-      if (profile.credits < 2) {
+      // Estimate the cost from the input size (translation output is roughly the
+      // same length as the source) so balances far below the real cost are refused.
+      const estimatedCost = Math.max(2, Math.ceil(prompt.length / 2000) * 2);
+      if (profile.credits < estimatedCost) {
         return new Response(
           JSON.stringify({ 
-            error: "Credits မလုံလောက်ပါ။ အနည်းဆုံး 2 credits လိုအပ်ပါသည်။",
+            error: `Credits မလုံလောက်ပါ။ အနည်းဆုံး ${estimatedCost} credits လိုအပ်ပါသည်။`,
             balance: profile.credits,
-            required: 2,
+            required: estimatedCost,
             errorCode: "INSUFFICIENT_CREDITS"
           }),
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
