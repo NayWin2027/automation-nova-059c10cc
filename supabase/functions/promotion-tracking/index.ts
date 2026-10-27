@@ -78,7 +78,16 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const { action, ip_address, device_fingerprint, device_model, tool_id, usage_date } = await req.json();
+    const { action, ip_address: _clientIp, device_fingerprint, device_model, tool_id, usage_date } = await req.json();
+
+    // Bind usage to the IP the request actually came from — never trust a
+    // client-supplied IP (prevents reading/writing other visitors' usage).
+    const ip_address = (
+      req.headers.get("cf-connecting-ip") ||
+      (req.headers.get("x-forwarded-for") || "").split(",")[0] ||
+      req.headers.get("x-real-ip") ||
+      ""
+    ).trim().slice(0, 64);
 
     if (!action || !ip_address) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {

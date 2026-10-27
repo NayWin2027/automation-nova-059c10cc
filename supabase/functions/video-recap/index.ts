@@ -691,6 +691,19 @@ serve(async (req) => {
         });
       }
 
+      // Only forward chunks to Google's resumable upload endpoint
+      let chunkUrlOk = false;
+      try {
+        const u = new URL(String(chunkUploadUrl));
+        chunkUrlOk = u.protocol === "https:" && u.hostname === "generativelanguage.googleapis.com" && u.pathname.startsWith("/upload/");
+      } catch { chunkUrlOk = false; }
+      if (!chunkUrlOk) {
+        return new Response(JSON.stringify({ error: "Invalid upload URL" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       // 8MB binary = ~11MB base64, allow up to 12MB base64 string
       if (chunkData.length > 12 * 1024 * 1024) {
         return new Response(JSON.stringify({ error: "Chunk too large. Max 8MB binary per chunk." }), {
