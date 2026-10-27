@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { X, Send, Loader2, Bot } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Message {
   role: "user" | "assistant";
@@ -29,19 +30,28 @@ export function LoginChatBot() {
     let assistantContent = "";
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error("Login ဝင်ပြီးမှ AI Assistant ကို မေးနိုင်ပါတယ်ရှင်။ မေးချင်တာရှိရင် Messenger ကနေ Admin ကို တိုက်ရိုက် ဆက်သွယ်နိုင်ပါတယ်နော်။");
+      }
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-assistant`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({
             messages: [...messages, userMessage],
           }),
         }
       );
+
+      if (response.status === 401) {
+        throw new Error("Login ဝင်ပြီးမှ AI Assistant ကို မေးနိုင်ပါတယ်ရှင်။ မေးချင်တာရှိရင် Messenger ကနေ Admin ကို တိုက်ရိုက် ဆက်သွယ်နိုင်ပါတယ်နော်။");
+      }
 
       if (response.status === 429) {
         setIsRateLimited(true);
