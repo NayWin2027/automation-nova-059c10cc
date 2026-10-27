@@ -883,6 +883,7 @@ export type Database = {
         Args: { _session_id: string; _user_id: string }
         Returns: undefined
       }
+      showcase_file_is_viewable: { Args: { _name: string }; Returns: boolean }
       tutorials_are_public: { Args: never; Returns: boolean }
       verify_admin_secret: { Args: { secret_input: string }; Returns: boolean }
     }
