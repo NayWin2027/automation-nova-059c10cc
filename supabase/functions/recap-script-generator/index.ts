@@ -197,6 +197,22 @@ async function waitForFileProcessing(apiKey: string, fileName: string, fallbackK
   throw new Error("File processing timeout");
 }
 
+// Target language is interpolated into model instructions, so it must be a plain
+// language label only (letters/marks, spaces, hyphens, parentheses) — no newlines
+// or instruction text.
+function sanitizeLanguageLabel(raw: unknown): string {
+  const cleaned = String(raw ?? "")
+    .replace(/[^\p{L}\p{M}\s()\-]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 40);
+  return cleaned || "BURMESE";
+}
+
+const MAX_DIRECT_UPLOAD_BYTES = 200 * 1024 * 1024; // direct FormData path (small files)
+const MAX_INLINE_FILE_CHARS = 30 * 1024 * 1024; // base64 inline data
+const isAllowedMediaMime = (m: string) => /^(video|audio)\/[a-z0-9.+-]+$/i.test(m || "");
+
 function getMimeType(file: File): string {
   if (file.type) return file.type;
   const ext = file.name.split(".").pop()?.toLowerCase();
@@ -553,7 +569,7 @@ serve(async (req) => {
         .catch(() => null);
       if (peek && peek.translateMode && typeof peek.script === "string" && peek.script.trim()) {
         const srcScript: string = peek.script;
-        const tgtLang: string = (peek.targetLanguage || peek.language || "BURMESE").toString().slice(0, 60);
+        const tgtLang: string = sanitizeLanguageLabel(peek.targetLanguage || peek.language);
         const tKey = (peek.ownApiKey || peek.apiKey || req.headers.get("x-own-api-key") || "").trim();
         const tIsOwnApi = !!tKey;
         let tActiveKey = tIsOwnApi ? tKey : getGeminiKey();
@@ -707,7 +723,7 @@ LANGUAGE LOCK:
       const formData = await req.formData();
       fileObj = formData.get("file") as File;
       niche = (formData.get("niche") as string) || "GENERAL";
-      language = (formData.get("language") as string) || "BURMESE";
+      language = sanitizeLanguageLabel(formData.get("language"));
       const formCreditCost = formData.get("customCreditCost") as string;
       if (formCreditCost) customCreditCost = Number(formCreditCost);
       userApiKey =
@@ -731,7 +747,7 @@ LANGUAGE LOCK:
       fileMimeType = body.fileMimeType || null;
       fileData = body.fileData || body.inlineFileData || null;
       niche = body.niche || "GENERAL";
-      language = body.language || "BURMESE";
+      language = sanitizeLanguageLabel(body.language);
       if (body.customCreditCost !== undefined) customCreditCost = Number(body.customCreditCost);
       userApiKey = (body.ownApiKey || body.apiKey || req.headers.get("x-own-api-key") || "").trim() || null;
       isOwnApi = !!userApiKey;
@@ -764,6 +780,36 @@ LANGUAGE LOCK:
 
       const parsedDuration = Number(body.sourceDurationSec);
       if (Number.isFinite(parsedDuration) && parsedDuration > 0) sourceDurationSec = parsedDuration;
+    }
+
+    // ===== FILE SIZE / TYPE VALIDATION =====
+    if (fileObj && typeof fileObj !== "string") {
+      if (fileObj.size > MAX_DIRECT_UPLOAD_BYTES) {
+        return new Response(JSON.stringify({ error: "ဖိုင်အရွယ်အစား အရမ်းကြီးနေပါတယ် (200MB အောက်သာ)။" }), {
+          status: 413,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (!isAllowedMediaMime(getMimeType(fileObj))) {
+        return new Response(JSON.stringify({ error: "Video သို့မဟုတ် Audio ဖိုင်သာ လက်ခံပါတယ်။" }), {
+          status: 415,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+    if (fileData) {
+      if (typeof fileData !== "string" || fileData.length > MAX_INLINE_FILE_CHARS) {
+        return new Response(JSON.stringify({ error: "ဖိုင်အရွယ်အစား အရမ်းကြီးနေပါတယ်။" }), {
+          status: 413,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (fileMimeType && !isAllowedMediaMime(fileMimeType)) {
+        return new Response(JSON.stringify({ error: "Video သို့မဟုတ် Audio ဖိုင်သာ လက်ခံပါတယ်။" }), {
+          status: 415,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     if (!fileObj && !transcript && !fileUri && !fileData) {
