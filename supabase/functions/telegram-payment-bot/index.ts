@@ -175,8 +175,20 @@ async function handleSlip(db: any, msg: any) {
     return;
   }
 
+  // Reject oversized slips before downloading (receipt screenshots are small)
+  const MAX_SLIP_BYTES = 10 * 1024 * 1024;
+  const declaredSize = Number(photo?.file_size || doc?.file_size || 0);
+  if (declaredSize > MAX_SLIP_BYTES) {
+    await tg("sendMessage", { chat_id: chatId, text: "⚠️ ဓာတ်ပုံဖိုင် အရမ်းကြီးနေပါတယ်ရှင် (10MB အောက်သာ)။ Screenshot ကို ပြန်ပို့ပေးပါနော်။" });
+    return;
+  }
+
   const fileInfo = await tg("getFile", { file_id: fileId });
   const filePath = fileInfo?.result?.file_path;
+  if (Number(fileInfo?.result?.file_size || 0) > MAX_SLIP_BYTES) {
+    await tg("sendMessage", { chat_id: chatId, text: "⚠️ ဓာတ်ပုံဖိုင် အရမ်းကြီးနေပါတယ်ရှင် (10MB အောက်သာ)။ Screenshot ကို ပြန်ပို့ပေးပါနော်။" });
+    return;
+  }
   let slipPath: string | null = null;
   let check: SlipCheck | null = null;
   if (filePath) {
@@ -185,6 +197,10 @@ async function handleSlip(db: any, msg: any) {
       const ext = (filePath.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
       const mime = ext === "png" ? "image/png" : "image/jpeg";
       const bytes = await res.arrayBuffer();
+      if (bytes.byteLength > MAX_SLIP_BYTES) {
+        await tg("sendMessage", { chat_id: chatId, text: "⚠️ ဓာတ်ပုံဖိုင် အရမ်းကြီးနေပါတယ်ရှင် (10MB အောက်သာ)။ Screenshot ကို ပြန်ပို့ပေးပါနော်။" });
+        return;
+      }
 
       // 1) Is it a real receipt? 2) Read its transaction number
       check = await verifySlip(bytes, mime);
