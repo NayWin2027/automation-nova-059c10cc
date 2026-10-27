@@ -3232,16 +3232,14 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             ctx.scale(-1, 1);
           }
           const heldFrame = visibleLoopFrameRef.current;
-          if (freezeImg) { 
+          if (freezeImg) {
             // Photo Zoom In phase — Freeze/Motion ON ဖြစ်ချိန်သာ သုံးသည်
             fairDraw(freezeImg, freezeRect[0], freezeRect[1], freezeRect[2], freezeRect[3]);
           } else if (useVisibleLoopMask && heldFrame) {
             // Noticeable Cinematic Push-in: 1.03x -> 1.30x over 4.5s
             // ဗီဒီယို ကုန်သွားပါက Loop အစား 1.03x မှ 1.30x သို့ သိသာထင်ရှားသော Camera Push-in
             const maskElapsed =
-              visibleLoopMaskStartRef.current > 0
-                ? performance.now() - visibleLoopMaskStartRef.current
-                : 0;
+              visibleLoopMaskStartRef.current > 0 ? performance.now() - visibleLoopMaskStartRef.current : 0;
             const maskProgress = Math.min(1, maskElapsed / 4500);
             const maskEase = 1 - Math.pow(1 - maskProgress, 1.8);
             const maskZoom = 1.03 + 0.27 * maskEase; // 1.03x -> Peak 1.30x
@@ -6615,7 +6613,7 @@ const RecapVideoNVPage: React.FC = () => {
       rels ? `RELATIONSHIPS:\n${rels}` : "",
       ents ? `KEY ENTITIES (people, places, orgs, tools, terms):\n${ents}` : "",
       chars || ents
-        ? `NAME LOCK (CRITICAL): Use the character/entity names above EXACTLY as written — same spelling, same transliteration, every time. Never rename, shorten, translate, swap or invent a name. If someone in the source video is not in the list, describe them by role/relationship instead of inventing a name, and never reuse an existing name for a different person.`
+        ? `NAME & TITLE LOCK (CRITICAL): Use the character/entity names AND their specific titles/roles (အခေါ်အဝေါ်/ရာထူး) above EXACTLY as established — every time. Never swap synonymous titles (e.g. if someone is established as တပ်မှူး, do NOT call them စစ်သူကြီး; if မိဖုရား, do NOT switch to ဘုရင်မ or မင်းသမီး). Keep all character titles, spellings, and relationships 100% consistent across all episodes.`
         : "",
       list(bible.topics_covered) ? `TOPICS ALREADY COVERED (do NOT repeat):\n${list(bible.topics_covered)}` : "",
       list(bible.key_facts) ? `KEY FACTS / NUMBERS / TERMS (must stay consistent):\n${list(bible.key_facts)}` : "",
