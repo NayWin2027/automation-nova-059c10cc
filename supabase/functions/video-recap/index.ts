@@ -254,32 +254,54 @@ serve(async (req) => {
       "";
     const isOwnApiKey = useOwnApi && !!resolvedOwnKey;
 
-    // ===== CREDIT DEDUCTION: Only on confirmSuccess =====
-    if (confirmSuccess === true) {
-      // If using own API key, skip credit deduction but still return success
-      if (isOwnApiKey) {
-        return new Response(JSON.stringify({ success: true, message: "Own API key used, no credits deducted" }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+    // ===== SERVER-ENFORCED RECAP BILLING =====
+    // App-key recaps are charged by the server itself when generation succeeds.
+    // confirmSuccess is kept only for backward compatibility and never deducts.
+    const recapAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const recapJson = { ...corsHeaders, "Content-Type": "application/json" };
+    const recapPrecheck = async (): Promise<Response | null> => {
+      const [{ data: adminRow }, { data: prof }, { data: tool }] = await Promise.all([
+        recapAdmin.from("user_roles").select("id").eq("user_id", user.id).eq("role", "admin").maybeSingle(),
+        recapAdmin.from("profiles").select("credits, is_banned").eq("user_id", user.id).maybeSingle(),
+        recapAdmin.from("tool_settings").select("credit_cost").eq("tool_id", "video-recap").maybeSingle(),
+      ]);
+      if (adminRow) return null;
+      const cost = Number((tool as any)?.credit_cost ?? 10);
+      const credits = Number((prof as any)?.credits ?? 0);
+      if (!prof || (prof as any).is_banned || credits < cost) {
+        return new Response(
+          JSON.stringify({ error: "Credits မလုံလောက်ပါ။", errorCode: "INSUFFICIENT_CREDITS", balance: credits, required: cost }),
+          { status: 402, headers: recapJson },
+        );
       }
-      const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-
-      const { data: creditResult, error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", {
+      return null;
+    };
+    const recapChargeAndReturn = async (normalizedRecap: unknown): Promise<Response> => {
+      const { data: creditResult, error: creditError } = await recapAdmin.rpc("deduct_user_credits", {
         _user_id: user.id,
         _tool_id: "video-recap",
         _is_own_api: false,
       });
-
-      if (creditError) {
-        console.error("[video-recap] Credit deduction error:", creditError);
-      } else {
-        console.log(`[video-recap] Credits deducted on success. New balance: ${creditResult.balance}`);
+      if (creditError || !(creditResult as any)?.success) {
+        console.error("[video-recap] Server-side credit deduction failed:", creditError?.message || (creditResult as any)?.errorCode);
+        return new Response(
+          JSON.stringify({
+            error: (creditResult as any)?.error || "Credit ဖြတ်၍ မရပါ။",
+            errorCode: (creditResult as any)?.errorCode || "CREDIT_ERROR",
+            balance: (creditResult as any)?.balance,
+          }),
+          { status: 402, headers: recapJson },
+        );
       }
+      return new Response(JSON.stringify({ recap: normalizedRecap, balance: (creditResult as any)?.balance }), {
+        headers: recapJson,
+      });
+    };
 
-      return new Response(
-        JSON.stringify({ success: true, message: "Credits deducted", balance: creditResult?.balance }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+    if (confirmSuccess === true) {
+      return new Response(JSON.stringify({ success: true, message: "Credits are charged by the server on success" }), {
+        headers: recapJson,
+      });
     }
 
     // Handle different actions
@@ -919,6 +941,9 @@ serve(async (req) => {
         });
       }
 
+      const recapDenied = await recapPrecheck();
+      if (recapDenied) return recapDenied;
+
       console.log(`Analyzing file: ${fileUri}`);
 
       // Wait for file to be ready
@@ -1023,9 +1048,7 @@ serve(async (req) => {
         );
       }
 
-      return new Response(JSON.stringify({ recap: normalized }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return await recapChargeAndReturn(normalized);
     }
 
     // ===== CLOUD RUN SERVER RENDER PROXY =====
@@ -1349,6 +1372,8 @@ serve(async (req) => {
       });
     } else {
       // App Mode - use backend GEMINI_API_KEY
+      const recapDeniedApp = await recapPrecheck();
+      if (recapDeniedApp) return recapDeniedApp;
       if (isBase64 && BACKEND_GEMINI_KEY) {
         console.log("App Mode: Processing video with backend GEMINI_API_KEY");
 
@@ -1434,9 +1459,7 @@ serve(async (req) => {
           );
         }
 
-        return new Response(JSON.stringify({ recap: normalized }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return await recapChargeAndReturn(normalized);
       }
 
       // Fallback: use GEMINI_API_KEY for URL-only mode
@@ -1508,9 +1531,7 @@ serve(async (req) => {
         );
       }
 
-      return new Response(JSON.stringify({ recap: normalized }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return await recapChargeAndReturn(normalized);
     }
   } catch (error) {
     console.error("Video recap error:", error);
