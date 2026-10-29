@@ -6828,6 +6828,30 @@ const RecapVideoNVPage: React.FC = () => {
     setScriptData((prev) => ({ ...prev, full_script: stripDialogueMetadata(newScript) }));
   };
 
+  // ── SURGICAL ADD: Script Review Gate (pauses before TTS; resumes full pipeline) ──
+  const [scriptReviewOpen, setScriptReviewOpen] = useState(false);
+  const [scriptEditing, setScriptEditing] = useState(false);
+  const scriptReviewArgsRef = useRef<{ ownKey?: string; duration: number } | null>(null);
+  const continueFromScriptReview = (edited: boolean) => {
+    const args = scriptReviewArgsRef.current;
+    setScriptReviewOpen(false);
+    setScriptEditing(false);
+    if (!args) return;
+    scriptReviewArgsRef.current = null;
+    const finalScript = scriptData.full_script || "";
+    const finalSegments = edited ? scriptToSegments(finalScript, args.duration) : scriptData.segments;
+    if (edited) setScriptData((prev) => ({ ...prev, segments: finalSegments }));
+    setStatus("processing");
+    setProgressMsg("🎙️ Script ဖြင့် AI အသံ ထုတ်နေပါပြီ...");
+    const ttsText = stripDialogueMetadata(finalScript).replace(/\[.*?\]\s*/g, "");
+    void generateVoice(
+      ttsText,
+      args.ownKey,
+      finalSegments.map((s) => ({ text: s.text })),
+      finalSegments,
+    );
+  };
+
   // ── TARGET-LANGUAGE TRANSLATE GATE (additive; does not touch AV sync / seek / fallback) ──
   const [isTranslatingScript, setIsTranslatingScript] = useState(false);
   const selectedLangName = languages.find((l) => l.code === selectedLanguage)?.name || "BURMESE";
@@ -7967,6 +7991,13 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
         }
       })();
       const scriptTextForTTS = stripDialogueMetadata(scriptText).replace(/\[.*?\]\s*/g, "");
+      // SURGICAL ADD: Script Review Gate — ask user before TTS (skipped during Auto Batch)
+      if (!autoBatchActiveRef.current) {
+        scriptReviewArgsRef.current = { ownKey: resolvedOwnKey || undefined, duration: videoDurationRef.current };
+        setProgressMsg("📝 Script ထွက်လာပါပြီ။ ပြင်မလား၊ ဆက်လုပ်မလား ရွေးပေးပါ။");
+        setScriptReviewOpen(true);
+        return;
+      }
       await generateVoice(
         scriptTextForTTS,
         resolvedOwnKey || undefined,
@@ -8840,6 +8871,52 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
             </div>
           )}
         </div>
+
+        {scriptReviewOpen && !scriptEditing && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+            <div className="w-full max-w-md rounded-2xl border border-amber-400/50 bg-slate-950 p-6 shadow-[0_0_40px_rgba(251,191,36,0.25)] text-center space-y-4">
+              <div className="text-4xl">📝</div>
+              <h2 className="text-lg font-extrabold text-amber-400">Script ထွက်လာပါပြီ / Script Ready</h2>
+              <p className="text-sm text-slate-300 leading-relaxed">
+                Script ကို ပြန်ပြင်ချင်ပါသလား?
+                <br />
+                <span className="text-slate-400 text-xs">Do you want to edit the script before recording?</span>
+              </p>
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button
+                  onClick={() => setScriptEditing(true)}
+                  className="py-3 rounded-xl border border-amber-400 text-amber-400 font-bold text-sm hover:bg-amber-400/10 transition-all"
+                >
+                  ✏️ ပြင်မယ်
+                  <div className="text-[10px] font-normal opacity-80">Edit Script</div>
+                </button>
+                <button
+                  onClick={() => continueFromScriptReview(false)}
+                  className="py-3 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-900 font-extrabold text-sm shadow-[0_0_16px_rgba(251,191,36,0.5)] transition-all"
+                >
+                  ▶️ မပြင်ဘူး
+                  <div className="text-[10px] font-semibold opacity-80">Continue Auto</div>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {scriptReviewOpen && scriptEditing && (
+          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] w-[92%] max-w-md rounded-2xl border border-amber-400/60 bg-slate-950/95 p-3 shadow-[0_0_30px_rgba(251,191,36,0.35)] flex items-center gap-3">
+            <p className="flex-1 text-[11px] text-slate-300 leading-snug">
+              ✏️ Script ကို ပြင်ပြီးရင် ခလုတ်နှိပ်ပါ။
+              <br />
+              <span className="text-slate-500">Edit the script, then continue.</span>
+            </p>
+            <button
+              onClick={() => continueFromScriptReview(true)}
+              className="shrink-0 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-900 font-extrabold text-xs shadow-[0_0_16px_rgba(251,191,36,0.6)] animate-pulse"
+            >
+              🎬 Continue / Generate Recap
+            </button>
+          </div>
+        )}
 
         {(scriptData.segments.length > 0 || videoUrl) && (
           <ResultView
