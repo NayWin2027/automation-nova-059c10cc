@@ -6430,14 +6430,10 @@ STREET-SPOKEN STYLE & MODERN SLANG (HYBRID/VIRAL only):
   - HIGH-STAKES VIRAL HOOK (FIRST 3 SECONDS):
     * Open immediately with the central moral dilemma, impossible choice, or life-or-death consequence in ONE short sentence (~8-12 words, ~3 seconds spoken; no filler tails like "ဆက်ကြည့်လိုက်ရအောင်") (e.g. "ဒီဆုံးဖြတ်ချက်က တစ်မိသားစုလုံးကို အဆုံးသတ်သွားစေခဲ့တယ်..." / "ဒီလျှို့ဝှက်ချက်ကြောင့် လူတိုင်း အသက်ပေးလိုက်ရတော့မယ်...").
     * Plunge straight into the emotional peak without any slow background buildup.
-  - DYNAMIC CHARACTER & PRONOUN FLOW (NO MONOTONOUS REPETITION):
-    * Pronouns and character references are ESSENTIAL, but must alternate naturally and smoothly.
-    * NEVER repeat "သူတို့... သူတို့..." or "သူ... သူ..." in consecutive sentences like a broken record.
-    * Alternate fluently between:
-      1. Specific names/roles when setting context ("ဖခင်ဖြစ်သူက", "သမီးလေးက", "ဂျိုးန်က").
-      2. Natural pronouns when reference is already clear ("သူ", "သူမ", "သူတို့").
-      3. Collective relationship terms ("တစ်မိသားစုလုံး", "ဒီလူတွေအားလုံး", "နှစ်ယောက်စလုံး").
-      4. Natural subject ellipsis in Burmese where the action flow naturally implies who is acting without restating the pronoun.
+  - PERMANENT IDENTITY LOCK & NATURAL PRONOUN FLOW:
+    * Once a character is introduced by name or role/title, NEVER swap or change it across timestamps or episodes (e.g. if "ကင်", keep "ကင်" throughout; never change to "ဥက္ကဌ" or "သူဌေး").
+    * Avoid repeating names or "သူတို့... သူတို့..." in consecutive sentences. Link sentences smoothly using spoken connectors (တာကြောင့်, ပြီး, ဒါပေမဲ့, နောက်တော့) and appropriate pronouns (သူ, သူမ, သူတို့, သူတို့မိသားစု, သူတို့တစ်ဖွဲ့လုံး), or natural subject omission.
+    * Example: "ကိုနိုင်ဟာ မနေ့ညက အမူးလွန်သွားတာကြောင့် ကားလမ်းဘေးမှာ မှောက်လျက်လဲနေခဲ့ပြီး တစ်ညလုံး လုံးဝမနိုးဘဲ အိပ်ပျော်သွားခဲ့တယ်။ ဒါပေမဲ့ သူဟာ မနက်နိုးလာတော့ ညကအဖြစ်အပျက်ကို ဘာမှမမှတ်မိတော့ပါဘူး။"
   - STRICT PROGRESSION & ZERO LOOP LOCK (CRITICAL):
     * NEVER repeat the exact same sentence, status, or preparation across multiple timestamps.
     * Every single timestamped paragraph MUST introduce genuinely NEW plot progression, dialogue exchanges, or escalating tension.
