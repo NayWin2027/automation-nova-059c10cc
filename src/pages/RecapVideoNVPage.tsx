@@ -6828,6 +6828,30 @@ const RecapVideoNVPage: React.FC = () => {
     setScriptData((prev) => ({ ...prev, full_script: stripDialogueMetadata(newScript) }));
   };
 
+  // ── SURGICAL ADD: Script Review Gate (pauses before TTS; resumes full pipeline) ──
+  const [scriptReviewOpen, setScriptReviewOpen] = useState(false);
+  const [scriptEditing, setScriptEditing] = useState(false);
+  const scriptReviewArgsRef = useRef<{ ownKey?: string; duration: number } | null>(null);
+  const continueFromScriptReview = (edited: boolean) => {
+    const args = scriptReviewArgsRef.current;
+    setScriptReviewOpen(false);
+    setScriptEditing(false);
+    if (!args) return;
+    scriptReviewArgsRef.current = null;
+    const finalScript = scriptData.full_script || "";
+    const finalSegments = edited ? scriptToSegments(finalScript, args.duration) : scriptData.segments;
+    if (edited) setScriptData((prev) => ({ ...prev, segments: finalSegments }));
+    setStatus("processing");
+    setProgressMsg("🎙️ Script ဖြင့် AI အသံ ထုတ်နေပါပြီ...");
+    const ttsText = stripDialogueMetadata(finalScript).replace(/\[.*?\]\s*/g, "");
+    void generateVoice(
+      ttsText,
+      args.ownKey,
+      finalSegments.map((s) => ({ text: s.text })),
+      finalSegments,
+    );
+  };
+
   // ── TARGET-LANGUAGE TRANSLATE GATE (additive; does not touch AV sync / seek / fallback) ──
   const [isTranslatingScript, setIsTranslatingScript] = useState(false);
   const selectedLangName = languages.find((l) => l.code === selectedLanguage)?.name || "BURMESE";
@@ -7967,6 +7991,13 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
         }
       })();
       const scriptTextForTTS = stripDialogueMetadata(scriptText).replace(/\[.*?\]\s*/g, "");
+      // SURGICAL ADD: Script Review Gate — ask user before TTS (skipped during Auto Batch)
+      if (!autoBatchActiveRef.current) {
+        scriptReviewArgsRef.current = { ownKey: resolvedOwnKey || undefined, duration: videoDurationRef.current };
+        setProgressMsg("📝 Script ထွက်လာပါပြီ။ ပြင်မလား၊ ဆက်လုပ်မလား ရွေးပေးပါ။");
+        setScriptReviewOpen(true);
+        return;
+      }
       await generateVoice(
         scriptTextForTTS,
         resolvedOwnKey || undefined,
