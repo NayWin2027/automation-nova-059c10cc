@@ -1010,8 +1010,8 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 VIRAL HOOK RULE (MANDATORY — FIRST 3 SECONDS):
 - The VERY FIRST sentence MUST be a 3-second viral hook designed to stop the scroll instantly
 - It must be shocking, provocative, or emotionally magnetic — NOT a generic intro
-- Great hook examples (SHORT — about 8-12 words, ~3 seconds spoken): "ဒီဆုံးဖြတ်ချက်က တစ်မိသားစုလုံးကို အဆုံးသတ်သွားစေခဲ့တယ်..." / "ဘယ်သူမှ မထင်ထားတဲ့ ရက်စက်မှုတစ်ခု အဲဒီညမှာ စတင်ခဲ့တယ်..." / "No one expected what happened next." / "She had no idea her whole life was about to collapse."
-- HOOK LENGTH: keep the hook to ONE short sentence that can be spoken in about 3 seconds. Do NOT add filler tails like "ဘာတွေဆက်ဖြစ်မလဲ ဆက်ကြည့်လိုက်ရအောင်".
+- Great hook examples (SHORT — about 8-12 words, ~3 seconds spoken): "ဒီဆုံးဖြတ်ချက်က တစ်မိသားစုလုံးကို အဆုံးသတ်သွားစေခဲ့တယ်..." / "ဒီလျှို့ဝှက်ချက်ကြောင့် လူတိုင်း အသက်ပေးလိုက်ရတော့မယ်..." / "This single choice ended their entire family."
+- HOOK LENGTH: keep the hook to ONE short punchy sentence stating the core crisis directly. STRICTLY PROHIBITED: NEVER use cliché openers like "ဘယ်သူမှ မထင်မှတ်ထားတဲ့...", "ဘယ်သူမှ မထင်ထားတဲ့...", or filler endings like "ဆက်ကြည့်လိုက်ရအောင် / စောင့်ကြည့်ရအောင်".
 - HOOK SELECTION (do this internally before writing): scan the WHOLE source and list the 3 highest-impact moments — the biggest shock, conflict, reveal, betrayal, surprising fact, or emotional peak. Rank them by how strongly a stranger would react in 3 seconds, then build the hook from the #1 ranked moment ONLY.
 - NEVER build the hook from an ordinary, calm, or setup moment just because it happens early. Position in the video is irrelevant — only impact matters.
 - This is niche-agnostic: for stories use the dramatic peak; for news/documentary the most shocking revelation; for tech/health/business/educational the most counter-intuitive fact, mistake, or result.
