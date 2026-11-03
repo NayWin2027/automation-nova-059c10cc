@@ -865,7 +865,7 @@ UNCENSORED VERBATIM DIALOGUE (mandatory for ${narrationStyle} mode — 100% of s
 
 STREET-SPOKEN STYLE & MODERN SLANG (mandatory for ${narrationStyle} mode):
 - Write 100% the way real people talk today. Literary/bookish forms are FORBIDDEN (for BURMESE: no သည်, ၏, ၍, နေသည်, လုပ်နေသည် — use တယ်/တာ/လဲ/ကွာ/ပဲ).
-- Prefer current street slang and trend words over plain wording. BURMESE examples: လှတယ် → လန်းတယ်; လိင်ဆက်ဆံနေတယ် → မူစကူဒူးနေကြတယ်;ဒီလူကြီး/ဒီအမျိုးသားကြီး → ဒီဘဲကြီး;ကောင်မလေး → ဆော်; တင်ပါးလှတယ် → စစ်ကိုင်းအိုးကြီးလို တင်းနေတယ်; ပါးစပ်ပိတ်ထား → စောက်ပေါက်ပိတ်ထား;စကားသိပ်မများနဲ့ → အီးသိပ်မပေါက်နဲ့; ဂဂျီဂဂျောင်ကျတယ်/ရစ်တယ် → ချီးထုပ်ကျတယ်; လိုရင်းမရောက်ဘဲ ဝေ့ဝိုက်နေတယ် → တိုင်ပတ်နေတယ်; မဟုတ်တာတွေလျှောက်မပြောနဲ့ → စောက်ပိုတွေမပြောနဲ့; ပြည့်တန်ဆာ → ဖာသည်မ; ဆဲစကား → မအေလိုး/သူတောင်းစား/ ခွေးမသား။ သို့သော် ဆရာတပည့်ဆက်ဆံရေး၊မိဘနဲ့သားသမီးဆက်ဆံရေးတွေမှာဆိုရင် ဒီဗန်းစကားတွေ မသုံးရ။
+- Prefer current street slang and trend words over plain wording. BURMESE examples: လှတယ် → လန်းတယ်; လိင်ဆက်ဆံနေတယ် → မူစကူဒူးနေကြတယ်;ဒီလူကြီး/ဒီအမျိုးသားကြီး → ဒီဘဲကြီး;ကောင်မလေး → ဆော်; တင်ပါးလှတယ် → စစ်ကိုင်းအိုးကြီးလို တင်းနေတယ်; ပါးစပ်ပိတ်ထား → စောက်ပေါက်ပိတ်ထား;စကားသိပ်မများနဲ့ → အီးသိပ်မပေါက်နဲ့; ဂဂျီဂဂျောင်ကျတယ်/ရစ်တယ် → ချီးထုပ်ကျတယ်; လိုရင်းမရောက်ဘဲ ဝေ့ဝိုက်နေတယ် → တိုင်ပတ်နေတယ်။
 - SLANG QUOTA (HARD REQUIREMENT): the finished script MUST actually contain AT LEAST 6-10 real slang/street expressions from the list above (or equally current Burmese street slang), spread across the whole script — not just in the hook. A script written entirely in plain polite wording is REJECTED.
 - Whenever a plain word has a street equivalent above, you MUST write the street version. Example: never write "ပါးစပ်ပိတ်ထား" — write "စောက်ပေါက်ပိတ်ထား" or "အီးသိပ်မပေါက်နဲ့". Never write "လှတယ်" — write "လန်းတယ်". Never write "ပြည့်တန်ဆာ" — write "ဖာသည်မ".
 - These slang and vulgar words are ALLOWED and REQUIRED here. No politeness filter, no softening, no self-censoring, no asterisks. This rule OVERRIDES every earlier "avoid profanity / keep it clean / avoid derogatory words" style instruction anywhere in this prompt.
@@ -1068,8 +1068,7 @@ ${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYL
 ###############################################################
 # FINAL SLANG ENFORCEMENT (HIGHEST PRIORITY AFTER LANGUAGE)
 # Write 100% street-spoken ${lang}. Use the REQUIRED slang list above
-# (လန်းတယ်, မူစကူဒူး, စစ်ကိုင်းအိုးကြီးလို တင်းနေတယ်, စောက်ပေါက်ပိတ်ထား,
-#  အီးသိပ်မပေါက်နဲ့, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး, ခွေးမသား)
+# (လန်းတယ်, မူစကူဒူး, စစ်ကိုင်းအိုးကြီးလို တင်းနေတယ်,အီးသိပ်မပေါက်နဲ့, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်)
 # at least 6-10 times across the script, and keep every harsh/vulgar
 # source line uncensored and verbatim. Polite substitutes are REJECTED.
 # Exception: no slang/vulgarity in teacher-student or parent-child scenes,
@@ -1546,7 +1545,7 @@ ${transcript}
 Rules:
 - Your first word must be the direct continuation of the last incomplete sentence below — no gap, no restart.
 - After completing that sentence, continue narrating any remaining source content.
-- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, စောက်ပေါက်ပိတ်ထား, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
+- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ် ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
 - Same language (${lang}), same tone, same [MM:SS] format.
 - Do NOT repeat anything already written.
 
@@ -1842,7 +1841,7 @@ ${
     ? "- This is the FINAL part: cover every remaining beat including the ENDING/climax."
     : "- This is a MIDDLE part: do NOT write an ending or conclusion — stop mid-story on an unresolved beat."
 }
-- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, စောက်ပေါက်ပိတ်ထား, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
+- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ် ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
 - Same language (${lang}), same tone, same [MM:SS] format. Never [HH:MM:SS], never ranges.
 - Target about ${missingSec} seconds of spoken narration. Finish with complete sentences.
 
@@ -1855,7 +1854,7 @@ CONTINUE the script. Rules:
 - Write ONLY the new paragraphs. Do NOT repeat or rewrite anything already written.
 - Every new paragraph MUST start with a timecode [MM:SS] that is STRICTLY LATER than [${tc(lastTc)}] and must keep increasing.
 - Cover the remaining source content through to the ENDING. Include the beats that were skipped.
-- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, စောက်ပေါက်ပိတ်ထား, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
+- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
 - Same language (${lang}), same tone and same [MM:SS] format. Never use [HH:MM:SS] or ranges.
 - Finish with complete sentences. Add roughly ${missingSec} seconds of spoken narration.
 
@@ -1984,7 +1983,7 @@ Rules:
 - Every paragraph MUST start with [MM:SS] STRICTLY LATER than [${tc(lastTc)}] and keep increasing. Nothing after [${tc(sourceDurationSec)}].
 - The final fight/climax must get its own paragraphs — never compressed into one sentence.
 - The LAST paragraph must correspond to the source's final scene and end the story properly.
-- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, စောက်ပေါက်ပိတ်ထား, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
+- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်,ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
 - Same language (${lang}), same tone, same narrator voice and same [MM:SS] format. Never [HH:MM:SS], never ranges.
 - Finish with a complete sentence.
 
