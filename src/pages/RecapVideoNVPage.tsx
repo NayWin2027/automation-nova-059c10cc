@@ -7764,7 +7764,7 @@ CUTTING RULES (this is a RECAP, not a retelling):
 - KEEP IN FULL: Plot twists, reveals, conflicts, arguments, fights, romance, character-defining moments, shocking scenes, and the resolution — narrate these continuously, never in one dry sentence.
 - SPOKEN LENGTH FLOOR: narration must run about 70–80% of the source duration (~110 spoken words per minute). Never deliver a 1–2 minute script for a 5+ minute source. Length must come only from real source events — never invent.
 - Think like a professional YouTube recap editor: fast, engaging, essential moments only.
-- Do NOT randomly cut scenes. Narrate every scene continuously with full character dialogue, emotions, and actions. NEVER compress secondary scenes into brief summaries.
+- DYNAMIC PACING: Narrate high-impact scenes (conflicts, fights, action, emotional peaks, twists) in full cinematic detail with dialogue. Summarize secondary/transition moments quickly in 1-2 linking sentences so pacing stays engaging without dragging.
 
 STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
 - Write narration as a CONTINUOUS FLOWING STORY. Never write isolated disconnected paragraphs.
