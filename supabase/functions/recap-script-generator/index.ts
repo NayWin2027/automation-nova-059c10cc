@@ -973,7 +973,7 @@ CRITICAL - RECAP COMPLETENESS (ZERO FILLER POLICY):
 - NEVER censor, skip, or tone down intimate/romantic/physical/18+/21+ scenes. Describe them vividly and naturally as they happened in the source. Audiences LOVE these moments — they are the main attraction
 - If two characters kiss, embrace, touch intimately, or have any physical/romantic interaction, you MUST describe it with vivid sensory detail (what they felt, the tension, the emotions, the physical sensations)
 - DO NOT use vague euphemisms. Be specific and descriptive about physical actions and emotional reactions
-- DO NOT translate or retell every scene. Skip filler and compress secondary scenes into brief linking lines
+- FULL SCENE-BY-SCENE NARRATION: Narrate every scene continuously with full character dialogue, emotions, and actions. NEVER compress or skip secondary scenes into brief summaries.
 - Maintain detailed, engaging narrative coverage so the recap reaches about 70% of the source duration(never a rushed or short summary).
 
 CHARACTER IDENTITY & MULTI-CHARACTER SEPARATION (CRITICAL — STRICT ENFORCEMENT):
@@ -1205,9 +1205,12 @@ AFTER the complete narration script, output a final line containing exactly ===S
 
       const targetSec = sourceDurationSec ? Math.round(sourceDurationSec * 0.7) : 0;
       const targetParas = sourceDurationSec ? Math.max(12, Math.round(targetSec / 14)) : 16;
+      const minWordCount = Math.round((targetSec / 60) * 120);
+      const targetWordCount = Math.round((targetSec / 60) * 130);
       const durationHint = sourceDurationSec
         ? `\nSOURCE VIDEO DURATION: ${Math.floor(sourceDurationSec / 60)} minutes ${Math.round(sourceDurationSec % 60)} seconds` +
-          `\nTARGET RECAP DURATION: ~${Math.round(targetSec / 60)} minutes (~70% of source duration). You MUST write AT LEAST ${targetParas} rich, detailed timestamped paragraphs covering scenes with deep storytelling. NEVER compress or summarize into a short synopsis!` +
+          `\nTARGET RECAP DURATION: ~${Math.round(targetSec / 60)} minutes (strictly ~70% of source duration).` +
+          `\nMANDATORY WORD COUNT: You MUST write AT LEAST ${minWordCount} words (target ~${targetWordCount} words) across AT LEAST ${targetParas} timestamped paragraphs. (E.g. 15 min source = min 1,200 words; 30 min source = min 2,500 words). DO NOT write a short synopsis!` +
           `\nCRITICAL: YOU MUST ANALYZE AND NARRATE THE ENTIRE TIMELINE FROM 00:00 TO THE VERY END WITH FULL SCENE DETAIL.`
         : "";
 
