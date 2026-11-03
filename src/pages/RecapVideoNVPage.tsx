@@ -7028,8 +7028,10 @@ const RecapVideoNVPage: React.FC = () => {
       const targetDurationSec = Math.round(duration * 0.7);
       const minRequiredParagraphs = Math.max(12, Math.round(targetDurationSec / 15));
       const targetParagraphs = Math.max(16, Math.round(targetDurationSec / 11));
+      const minWordCount = Math.round((targetDurationSec / 60) * 120);
+      const targetWordCount = Math.round((targetDurationSec / 60) * 130);
       const pacingStepSec = Math.max(12, Math.min(25, Math.round(duration / targetParagraphs)));
-      const lengthMandate = `\n- LENGTH MANDATE: spoken recap must last about ${Math.round(targetDurationSec / 60)} minutes. Write AT LEAST ${minRequiredParagraphs} timestamped paragraphs (target ${targetParagraphs}), with a [MM:SS] timestamp roughly every ${pacingStepSec} seconds of source time. Do NOT write a short 1-minute summary.\n- Expand high-stakes scenes (fights, arguments, romance, betrayals, climaxes) continuously, following the source scene's real length.`;
+      const lengthMandate = `\n- LENGTH MANDATE: spoken recap must last about ${Math.round(targetDurationSec / 60)} minutes (MANDATORY: AT LEAST ${minWordCount} words, target ~${targetWordCount} words). Write AT LEAST ${minRequiredParagraphs} timestamped paragraphs (target ${targetParagraphs}), with a [MM:SS] timestamp roughly every ${pacingStepSec} seconds of source time. Do NOT write a short 1-minute summary.\n- Expand high-stakes scenes (fights, arguments, romance, betrayals, climaxes) continuously, following the source scene's real length.`;
       const isBurmese = selectedLangName === "BURMESE";
       const burmeseStyleBlock = isBurmese
         ? `\n\nLANGUAGE STYLE (CRITICAL for Burmese):\n` +
@@ -7639,8 +7641,10 @@ const RecapVideoNVPage: React.FC = () => {
       const targetDurationSec = Math.round(lenBaseSec * 0.7);
       const minRequiredParagraphs = Math.max(12, Math.round(targetDurationSec / 15));
       const targetParagraphs = Math.max(16, Math.round(targetDurationSec / 11));
+      const minWordCount = Math.round((targetDurationSec / 60) * 120);
+      const targetWordCount = Math.round((targetDurationSec / 60) * 130);
       const pacingStepSec = Math.max(12, Math.min(25, Math.round(lenBaseSec / targetParagraphs)));
-      const lengthMandate = `\n- LENGTH MANDATE: spoken recap must last about ${Math.round(targetDurationSec / 60)} minutes. Write AT LEAST ${minRequiredParagraphs} timestamped paragraphs (target ${targetParagraphs}), with a [MM:SS] timestamp roughly every ${pacingStepSec} seconds of source time. Do NOT write a short 1-minute summary.\n- Expand high-stakes scenes (fights, arguments, romance, betrayals, climaxes) continuously, following the source scene's real length.`;
+      const lengthMandate = `\n- LENGTH MANDATE: spoken recap must last about ${Math.round(targetDurationSec / 60)} minutes (MANDATORY: AT LEAST ${minWordCount} words, target ~${targetWordCount} words). Write AT LEAST ${minRequiredParagraphs} timestamped paragraphs (target ${targetParagraphs}), with a [MM:SS] timestamp roughly every ${pacingStepSec} seconds of source time. Do NOT write a short 1-minute summary.\n- Expand high-stakes scenes (fights, arguments, romance, betrayals, climaxes) continuously, following the source scene's real length.`;
 
       // â”€â”€ LANGUAGE-AWARE BLOCKS: All language-specific text uses selectedLangName so user's chosen language is respected. â”€â”€
       const isBurmese = selectedLangName === "BURMESE";
@@ -7760,7 +7764,7 @@ CUTTING RULES (this is a RECAP, not a retelling):
 - KEEP IN FULL: Plot twists, reveals, conflicts, arguments, fights, romance, character-defining moments, shocking scenes, and the resolution — narrate these continuously, never in one dry sentence.
 - SPOKEN LENGTH FLOOR: narration must run about 70–80% of the source duration (~110 spoken words per minute). Never deliver a 1–2 minute script for a 5+ minute source. Length must come only from real source events — never invent.
 - Think like a professional YouTube recap editor: fast, engaging, essential moments only.
-- Do NOT randomly cut scenes. Intelligently compress the narrative while preserving a professional complete story experience.
+- Do NOT randomly cut scenes. Narrate every scene continuously with full character dialogue, emotions, and actions. NEVER compress secondary scenes into brief summaries.
 
 STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
 - Write narration as a CONTINUOUS FLOWING STORY. Never write isolated disconnected paragraphs.
