@@ -973,7 +973,7 @@ CRITICAL - RECAP COMPLETENESS (ZERO FILLER POLICY):
 - NEVER censor, skip, or tone down intimate/romantic/physical/18+/21+ scenes. Describe them vividly and naturally as they happened in the source. Audiences LOVE these moments — they are the main attraction
 - If two characters kiss, embrace, touch intimately, or have any physical/romantic interaction, you MUST describe it with vivid sensory detail (what they felt, the tension, the emotions, the physical sensations)
 - DO NOT use vague euphemisms. Be specific and descriptive about physical actions and emotional reactions
-- FULL SCENE-BY-SCENE NARRATION: Narrate every scene continuously with full character dialogue, emotions, and actions. NEVER compress or skip secondary scenes into brief summaries.
+- DYNAMIC PACING: Narrate high-impact scenes (conflicts, fights, action, emotional peaks, shocking twists) in full cinematic detail with character dialogue and reactions. For mundane/transition scenes (walking, waiting, routine), summarize quickly in 1-2 linking sentences so pacing stays fast and engaging. Maintain total target duration.
 - Maintain detailed, engaging narrative coverage so the recap reaches about 70% of the source duration(never a rushed or short summary).
 
 CHARACTER IDENTITY & MULTI-CHARACTER SEPARATION (CRITICAL — STRICT ENFORCEMENT):
