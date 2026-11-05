@@ -6427,9 +6427,11 @@ STREET-SPOKEN STYLE & MODERN SLANG (HYBRID/VIRAL only):
   }
   return `\n\nNARRATION STYLE — STORY (ELITE INTERNATIONAL RECAP — 75-80% DURATION & ZERO REPETITION):
   - TOP-TIER INTERNATIONAL RECAP STANDARD: Write rich, continuous scene-by-scene narration (aiming for ~75% to 80% of source duration). For longer videos, narrate each progressive scene in full narrative depth roughly every 14-20 seconds — DO NOT over-compress into a short synopsis.
-  - HIGH-STAKES VIRAL HOOK (FIRST 3 SECONDS):
-    * Open immediately with the central moral dilemma, impossible choice, or life-or-death consequence in ONE short sentence (~8-12 words, ~3 seconds spoken; no filler tails like "ဆက်ကြည့်လိုက်ရအောင်") (e.g. "ဒီဆုံးဖြတ်ချက်က တစ်မိသားစုလုံးကို အဆုံးသတ်သွားစေခဲ့တယ်..." / "ဒီလျှို့ဝှက်ချက်ကြောင့် လူတိုင်း အသက်ပေးလိုက်ရတော့မယ်...").
-    * Plunge straight into the emotional peak without any slow background buildup.
+  - NATURAL STORY OPENING (FIRST 3 SECONDS):
+    * Open naturally with the protagonist's current situation, atmospheric mood, or immediate dilemma specific to THIS movie in one compelling sentence.
+    * STRICTLY FORBID repetitive template openers (e.g. "ဒီဆုံးဖြတ်ချက်က...", "ဒီလျှို့ဝှက်ချက်ကြောင့်...") and filler tails ("ဆက်ကြည့်လိုက်ရအောင်").
+  - HUMAN NARRATOR VOICE & COMMENTARY:
+    * Narrate like an engaged storyteller conversing with a friend — seamlessly add insightful commentary on characters' motives, choices, and reactions instead of robotically reciting event lists.
   - PERMANENT IDENTITY LOCK & NATURAL PRONOUN FLOW:
     * Once a character is introduced by name or role/title, NEVER swap or change it across timestamps or episodes (e.g. if "ကင်", keep "ကင်" throughout; never change to "ဥက္ကဌ" or "သူဌေး").
     * Avoid repeating names or "သူတို့... သူတို့..." in consecutive sentences. Link sentences smoothly using spoken connectors (တာကြောင့်, ပြီး, ဒါပေမဲ့, နောက်တော့) and appropriate pronouns (သူ, သူမ, သူတို့, သူတို့မိသားစု, သူတို့တစ်ဖွဲ့လုံး), or natural subject omission.
@@ -7050,7 +7052,7 @@ const RecapVideoNVPage: React.FC = () => {
       const scriptBody: Record<string, unknown> = {
         fileUri,
         fileMimeType: mimeType,
-        niche: `You are a top-tier international movie recap scriptwriter. Analyze the uploaded movie/video and produce a rich, cinematic, highly engaging recap script in ${selectedLangName}. Length must be approximately 70% of the original duration when read aloud (band 70-85%, never below 70%). ${seriesEnabled ? "SERIES CONTINUATION: Do NOT include any opening viral hook or scene from the middle/end; start strictly in chronological sequence from the beginning of this episode." : "Start with a shocking hook, build mystery, escalate tension, finish with a climactic payoff."} ZERO COMPRESSION ON KEY SCENES: Give full dramatic weight and emotional depth to every confrontation, turning point, and character conflict. Cut only empty dead air (silent staring/purposeless travel). Write as ONE continuous gripping story with hook transitions between segments. Output each paragraph prefixed by [MM:SS] starting at [00:00] and ending close to the full duration. Use original wording — do NOT quote distinctive dialogue.${burmeseStyleBlock}${buildNarrationStyleBlock(narrationStyle, selectedLangName)}`,
+        niche: `You are a top-tier international movie recap scriptwriter. Analyze the uploaded movie/video and produce a rich, cinematic, highly engaging recap script in ${selectedLangName}. Length must be approximately 70% of the original duration when read aloud (band 70-85%, never below 70%). ${seriesEnabled ? "SERIES CONTINUATION: Start strictly in chronological sequence from the beginning of this episode." : "Open naturally with the character's core dilemma and the film's authentic mood."} ZERO COMPRESSION ON KEY SCENES: Give full dramatic weight and emotional depth to every confrontation, turning point, and character conflict. Cut only empty dead air. Narrate as a fluid, human-narrated story with natural conversational commentary and seamless scene-to-scene progression without forced cliffhangers.Output each paragraph prefixed by [MM:SS] starting at [00:00] and ending close to the full duration. Use original wording — do NOT quote distinctive dialogue.${burmeseStyleBlock}${buildNarrationStyleBlock(narrationStyle, selectedLangName)}`,
         language: selectedLangName,
         sourceDurationSec: duration,
         narrationStyle,
@@ -7701,10 +7703,10 @@ If your script is shorter than the MINIMUM, you MUST expand character emotions, 
 A 20-minute source producing only 2-4 minutes of narration = STRICT FAILURE.
 
 STRUCTURE RULE:
-${seriesEnabled ? "1. SERIES CONTINUATION: Do NOT include any opening viral hook or scene from the middle/end; start strictly in chronological sequence from the beginning of this episode." : "1. Start with a SHOCKING HOOK from the middle or end that immediately raises a why-did-this-happen question."}
-2. Then build a MYSTERY-DRIVEN buildup while preserving the core plot logic and revealing hidden stakes.
-3. Increase tension step-by-step with shorter, sharper narration as the conflict intensifies.
-4. Finish with an ULTIMATE CLIMAX PEAK: the twist or payoff must land hard and leave the viewer breathless.
+${seriesEnabled ? "1. SERIES CONTINUATION: Start strictly in chronological sequence from the beginning of this episode." : "1. Open with a natural, atmosphere-driven scene establishing the character's situation and inner conflict."}
+2. Develop the plot through realistic cause-and-effect, highlighting meaningful character choices.
+3. Incorporate thoughtful, conversational human commentary on characters' decisions rather than just listing occurrences.
+4. Let the climax and resolution unfold naturally from the story's emotional peak without artificial twist gimmicks.
 
 IMPORTANT EDITING RULE:
 Keep the important story moments, but remove unnecessary transition actions, filler activities, and dead air between them.
@@ -7768,8 +7770,8 @@ CUTTING RULES (this is a RECAP, not a retelling):
 
 STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
 - Write narration as a CONTINUOUS FLOWING STORY. Never write isolated disconnected paragraphs.
-- Each segment MUST end with a hook or transition line that creates MOMENTUM into the next segment.
-- Use cliffhanger-style transitions: "But that was just the beginning..." / "And then, everything went wrong."
+- Advance from one scene to the next with natural, fluid narrative momentum.
+- STRICTLY FORBID repetitive robotic cliffhangers (e.g. NEVER force lines like "ဒါဟာ အစပဲရှိသေးတယ်" or "ဒါပေမဲ့ အရာအားလုံး ပြောင်းလဲသွားခဲ့တယ်") — let the story's real events and human curiosity sustain the interest.
 - Keep sentence density HIGH. No filler words, no unnecessary repetition, no padding.
 - When the TTS reads this script, there should be ZERO moments where the audience wants to skip.${burmeseExtraStyle}`,
         generationConfig: {
