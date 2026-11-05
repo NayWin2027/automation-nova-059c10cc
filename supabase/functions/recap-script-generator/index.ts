@@ -1006,19 +1006,14 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - THIS IS THE #2 HIGHEST PRIORITY RULE (after TARGET LANGUAGE).
 ###############################################################
 
-NATURAL STORY OPENING (FIRST 3 SECONDS):
-- Open immediately by introducing the movie's authentic atmosphere, the protagonist's immediate situation, or the central dilemma naturally.
-- Match the true mood of the film — do NOT invent fake shocking clickbait hooks or forced drama.
+NATURAL STORY OPENING:
+- Open directly with the story's authentic situation, the protagonist's immediate dilemma, or the scene's real atmosphere as depicted in the source.
 - STRICTLY FORBIDDEN CLICHÉS: NEVER use formulaic lines like "ဒီဆုံးဖြတ်ချက်က...", "ဒီလျှို့ဝှက်ချက်ကြောင့်...", "ဘယ်သူမှ မထင်မှတ်ထားတဲ့...", or filler endings like "ဆက်ကြည့်လိုက်ရအောင် / စောင့်ကြည့်ရအောင်".
-- Dive straight into the scene with an organic, captivating hook born out of the character's real crisis.
-- HOOK SELECTION (do this internally before writing): scan the WHOLE source and list the 3 highest-impact moments — the biggest shock, conflict, reveal, betrayal, surprising fact, or emotional peak. Rank them by how strongly a stranger would react in 3 seconds, then build the hook from the #1 ranked moment ONLY.
-- NEVER build the hook from an ordinary, calm, or setup moment just because it happens early. Position in the video is irrelevant — only impact matters.
-- This is niche-agnostic: for stories use the dramatic peak; for news/documentary the most shocking revelation; for tech/health/business/educational the most counter-intuitive fact, mistake, or result.
-- IF the source genuinely has no high-impact peak (calm tutorial, plain vlog, routine explainer), do NOT force a fake shocking hook. Instead open with the single most useful or curiosity-driving line of real substance from the content, and never invent drama that is not in the source.
-- After the hook, transition naturally into the story recap
-- ABSOLUTELY FORBIDDEN: Do NOT write ANY preamble, intro, acknowledgement, meta-comment, or framing sentence before the hook.
+- Dive straight into the story chronologically or from the opening scene's genuine tension — do NOT fabricate out-of-context shock bait or forced viral hooks.
+- Base every opening line strictly on what is visible and audible in the source content.
+- ABSOLUTELY FORBIDDEN: Do NOT write ANY preamble, intro, acknowledgement, meta-comment, or framing sentence.
 - FORBIDDEN OPENERS include (but not limited to): "ဟုတ်ကဲ့", "ကောင်းပါပြီ", "ရပါပြီ", "အောက်မှာ ဖော်ပြပေး", "ဒီ ... ဗီဒီယိုလေးကို အခြေခံပြီး", "Here is", "Here's", "Below is", "Sure", "Okay", "Of course", or any sentence wrapped in ( ) / （ ） that describes what you are about to write.
-- The very FIRST character of your output MUST be the FIRST WORD of the viral hook itself. No labels like "Hook:", no headings, no parentheses, no markdown — just the hook sentence.
+- The very FIRST character of your output MUST be the timecode [00:00] followed by the opening narration sentence. No labels, headings, parentheses, or markdown.
 
 RECAP WRITING STYLE (INTERNATIONAL HIGH-RETENTION SCRIPTWRITER):
 - Write like a top-tier international movie recap narrator (immersive, vivid, and deeply engaging storytelling)
@@ -1029,7 +1024,7 @@ RECAP WRITING STYLE (INTERNATIONAL HIGH-RETENTION SCRIPTWRITER):
 - Cut repetitive transitional filler and robotic recap formulas.
 
 STRUCTURE:
-- HOOK (1 viral sentence — 3-second scroll-stopper)
+- Opening: Natural introduction to the scene and the character's immediate situation
 - Rising tension: Build with only the most gripping beats in chronological order
 - Climax: The single most shocking/dramatic moment at peak intensity
 - Resolution: Short, punchy ending that leaves viewers wanting more
@@ -1224,7 +1219,7 @@ Below is a source video/audio file. Your job is to:
 4. Identify ALL key moments, especially dramatic/shocking ones (confrontations, revelations, emotional scenes, physical actions like kisses/fights/tears)
 5. Write a complete, highly detailed professional ${nicheLabel} narration script that RETAINS 80% to 90% of the original source's story, dialogue, and actions. DO NOT summarize it too much. The script must be fullcoverage on source video
 6. A viewer reading your script aloud MUST finish in about 80% to 100% of the original source duration (see REQUIRED NARRATION LENGTH above) and must cover the full source from beginning to end.
-7. Hook the audience immediately
+7. Engage the audience naturally through genuine source drama and authentic character stakes
 8. STRICT MULTI-CHARACTER CAST IDENTIFICATION (MANDATORY):
    - NEVER collapse all people into just 2 characters!
    - Identify every distinct person in the video. If their personal name is not spoken, you MUST refer to them by their role/relationship in ${langLabel} (e.g., အဖေ, အမေ, သား, သမီး, ဇနီး, ခင်ပွန်း, အဖိုး, အဖွား, ချွေးမ, သမက်, ဆရာ, တပည့်, ဆရာဝန်, သူနာပြု, ရဲ, မန်နေဂျာ, သူငယ်ချင်း, လူဆိုး).
