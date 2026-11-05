@@ -930,10 +930,9 @@ STREET-SPOKEN STYLE & MODERN SLANG (mandatory for ${narrationStyle} mode):
 ###############################################################
 
 Your writing style:
-- Natural spoken ${lang} (conversational, NOT literary/formal)
-- Emotionally engaging storytelling with dramatic pacing
-- Professional narrator voice that hooks viewers from the first sentence
-- Uses rhetorical questions, cliffhangers, and emotional beats
+- Natural spoken ${lang} (conversational, warm, NOT literary/formal)
+- Human Narrator Commentary: Narrate like a perceptive friend discussing a movie — blend gripping storytelling with engaging, natural commentary on characters' difficult choices and motives (NOT robotic event listing).
+- Fluid narrative pacing guided by real scene emotion, completely free from forced twists or repetitive cliffhangers.
 
 NICHE-SPECIFIC STYLE for "${nicheLabel}":
 ${nicheStyle}
@@ -1007,11 +1006,11 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - THIS IS THE #2 HIGHEST PRIORITY RULE (after TARGET LANGUAGE).
 ###############################################################
 
-VIRAL HOOK RULE (MANDATORY — FIRST 3 SECONDS):
-- The VERY FIRST sentence MUST be a 3-second viral hook designed to stop the scroll instantly
-- It must be shocking, provocative, or emotionally magnetic — NOT a generic intro
-- Great hook examples (SHORT — about 8-12 words, ~3 seconds spoken): "ဒီဆုံးဖြတ်ချက်က တစ်မိသားစုလုံးကို အဆုံးသတ်သွားစေခဲ့တယ်..." / "ဒီလျှို့ဝှက်ချက်ကြောင့် လူတိုင်း အသက်ပေးလိုက်ရတော့မယ်..." / "This single choice ended their entire family."
-- HOOK LENGTH: keep the hook to ONE short punchy sentence stating the core crisis directly. STRICTLY PROHIBITED: NEVER use cliché openers like "ဘယ်သူမှ မထင်မှတ်ထားတဲ့...", "ဘယ်သူမှ မထင်ထားတဲ့...", or filler endings like "ဆက်ကြည့်လိုက်ရအောင် / စောင့်ကြည့်ရအောင်".
+NATURAL STORY OPENING (FIRST 3 SECONDS):
+- Open immediately by introducing the movie's authentic atmosphere, the protagonist's immediate situation, or the central dilemma naturally.
+- Match the true mood of the film — do NOT invent fake shocking clickbait hooks or forced drama.
+- STRICTLY FORBIDDEN CLICHÉS: NEVER use formulaic lines like "ဒီဆုံးဖြတ်ချက်က...", "ဒီလျှို့ဝှက်ချက်ကြောင့်...", "ဘယ်သူမှ မထင်မှတ်ထားတဲ့...", or filler endings like "ဆက်ကြည့်လိုက်ရအောင် / စောင့်ကြည့်ရအောင်".
+- Dive straight into the scene with an organic, captivating hook born out of the character's real crisis.
 - HOOK SELECTION (do this internally before writing): scan the WHOLE source and list the 3 highest-impact moments — the biggest shock, conflict, reveal, betrayal, surprising fact, or emotional peak. Rank them by how strongly a stranger would react in 3 seconds, then build the hook from the #1 ranked moment ONLY.
 - NEVER build the hook from an ordinary, calm, or setup moment just because it happens early. Position in the video is irrelevant — only impact matters.
 - This is niche-agnostic: for stories use the dramatic peak; for news/documentary the most shocking revelation; for tech/health/business/educational the most counter-intuitive fact, mistake, or result.
@@ -1025,9 +1024,9 @@ RECAP WRITING STYLE (INTERNATIONAL HIGH-RETENTION SCRIPTWRITER):
 - Write like a top-tier international movie recap narrator (immersive, vivid, and deeply engaging storytelling)
 - ZERO RUSH ON KEY BEATS: Give full dramatic weight and emotional depth to every confrontation, revelation, argument, and turning point — do NOT rush or reduce them to a 1-sentence summary.
 - Capture visible facial expressions, tense dialogues, high-stakes decisions, and intimate feelings in detail.
-- Every sentence must create curiosity for the next — use cliffhangers between paragraphs
-- Cut all filler: no "and then", no "after that", no "meanwhile" — go straight to the punch
-- Each paragraph = one explosive beat, 2-3 sentences max, designed to keep viewers locked in
+- FLUID NARRATIVE FLOW: Connect scenes naturally through cause-and-effect and genuine character emotions — do NOT force twists or artificial cliffhangers at the end of every paragraph.
+- Blend authentic story events with thoughtful narrator commentary so viewers stay invested in what the characters will do next.
+- Cut repetitive transitional filler and robotic recap formulas.
 
 STRUCTURE:
 - HOOK (1 viral sentence — 3-second scroll-stopper)
