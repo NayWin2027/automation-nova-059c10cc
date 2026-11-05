@@ -6449,7 +6449,7 @@ STREET-SPOKEN STYLE & MODERN SLANG (HYBRID/VIRAL only):
     * FORBIDDEN: robotic CCTV action logging.
     * Vary sentence lengths and emotional cadence so the voiceover sounds human, passionate, and deeply engaging.
   - DIALOGUE INTEGRATION: Weave the characters' crucial spoken lines, arguments, and emotional words directly into the narrative with vivid quotes or indirect speech.
-  - CLIFFHANGERS & RETENTION: End each paragraph with subtle narrative tension or curiosity that pulls the viewer irresistibly into the next scene.${translitBlock}`;
+  - FLUID NARRATIVE FLOW: Let each paragraph flow naturally into the next based on cause-and-effect and genuine character emotions — do NOT force twists or artificial cliffhanger lines.${translitBlock}`;
 }
 
 const RecapVideoNVPage: React.FC = () => {
@@ -7059,7 +7059,7 @@ const RecapVideoNVPage: React.FC = () => {
         skipCreditDeduction: true,
         recapNvPipeline: true,
         apiMode: resolvedApiMode,
-        extraInstructions: `CRITICAL:\n- Output language MUST be ${selectedLangName} ONLY.\n- STRICT MULTI-CHARACTER RULE: NEVER reduce the story to only 2 people! Accurately identify each distinct person by their source name or relationship in ${selectedLangName} (အဖေ, အမေ, သား, သမီး, ဇနီး, ခင်ပွန်း, အဖိုး, အဖွား, ချွေးမ, ဆရာ, ဆရာဝန်, ရဲ, သူငယ်ချင်း). NEVER merge multiple different characters into the 2 main leads!\n- Cover the full story arc at about 70% of source duration (never below 70%, never above 85%).\n- Cut only true dead air. Keep every key scene, dialogue exchange, and emotional moment in rich detail.${lengthMandate}\n- Each segment must flow into the next with a hook/transition.\n- Never output a partial/incomplete script.${burmeseExtraStyle}`,
+        extraInstructions: `CRITICAL:\n- Output language MUST be ${selectedLangName} ONLY.\n- STRICT MULTI-CHARACTER RULE: NEVER reduce the story to only 2 people! Accurately identify each distinct person by their source name or relationship in ${selectedLangName} (အဖေ, အမေ, သား, သမီး, ဇနီး, ခင်ပွန်း, အဖိုး, အဖွား, ချွေးမ, ဆရာ, ဆရာဝန်, ရဲ, သူငယ်ချင်း). NEVER merge multiple different characters into the 2 main leads!\n- Cover the full story arc at about 70% of source duration (never below 70%, never above 85%).\n- Cut only true dead air. Keep every key scene, dialogue exchange, and emotional moment in rich detail.${lengthMandate}\n- - Fluid storytelling flow driven purely by real source events — no forced cliffhangers.\n- Never output a partial/incomplete script.${burmeseExtraStyle}`,
         generationConfig: {
           maxOutputTokens,
           temperature: 0.7,
@@ -7684,11 +7684,10 @@ const RecapVideoNVPage: React.FC = () => {
 Your task is to analyze the uploaded movie/video and create an engaging recap version like the best YouTube movie recap channels. Do NOT simply speed up or use only the first part. You must understand the FULL STORY and narrate it completely, using only real source events.
 
 CRITICAL STORYTELLING RULE:
-Write the narration script as ONE CONTINUOUS GRIPPING STORY. Every sentence must hook into the next â€” create momentum, tension, and curiosity.
-Use short, punchy sentences, action verbs, and high-energy transitions.
-Do NOT write isolated disconnected paragraphs. Each segment must END with a hook or transition that PULLS the listener into the next segment.
-Examples of good transitions: "But what she didn't know was..." / "And that's when everything changed." / "Just when he thought it was over..."
-The narration must feel like a non-stop thriller story, NOT a boring lecture, documentary, or news report.
+Write the narration script as ONE CONTINUOUS NATURAL STORY. Ground every line in real source events, character motives, and genuine emotions.
+Use clear, engaging conversational language with natural cause-and-effect transitions.
+Do NOT force formulaic twists or repetitive cliffhanger lines like "ဒါဟာ အစပဲရှိသေးတယ်", "ဒါပေမဲ့ အရာအားလုံး ပြောင်းလဲသွားခဲ့တယ်", or "သူမ မသိခဲ့တာက".
+The narration must feel like an authentic human storyteller sharing a compelling movie with a friend, driven purely by the real actions and drama inside the source.
 
 STRICT LENGTH RULE (70% COVERAGE):
 This is an elite international narrative recap. You MUST produce a rich, detailed cinematic storytelling experience.
