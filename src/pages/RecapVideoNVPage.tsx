@@ -6430,8 +6430,10 @@ STREET-SPOKEN STYLE & MODERN SLANG (HYBRID/VIRAL only):
   - NATURAL STORY OPENING (FIRST 3 SECONDS):
     * Open naturally with the protagonist's current situation, atmospheric mood, or immediate dilemma specific to THIS movie in one compelling sentence.
     * STRICTLY FORBID repetitive template openers (e.g. "ဒီဆုံးဖြတ်ချက်က...", "ဒီလျှို့ဝှက်ချက်ကြောင့်...") and filler tails ("ဆက်ကြည့်လိုက်ရအောင်").
-  - HUMAN NARRATOR VOICE & COMMENTARY:
-    * Narrate like an engaged storyteller conversing with a friend — seamlessly add insightful commentary on characters' motives, choices, and reactions instead of robotically reciting event lists.
+  - SELECTIVE HUMAN COMMENTARY (REALISTIC & ZERO-PREACHY):
+    * Narrate like an emotionally perceptive friend discussing a film — NOT a detached reporter or moralizing preacher.
+    * DO NOT force commentary onto every paragraph. Only at key turning points, difficult decisions, or intense emotional peaks, weave in ONE brief line of relatable human empathy or insight into the character's dilemma.
+    * STRICTLY FORBID generic philosophical preaching or canned moral lessons (e.g. NEVER use lines like "ဘဝဆိုတာ...", "လူသားတွေဟာ..."). Ground every observation strictly in the scene's immediate emotional reality to make the recap genuinely transformative and organic.
   - PERMANENT IDENTITY LOCK & NATURAL PRONOUN FLOW:
     * Once a character is introduced by name or role/title, NEVER swap or change it across timestamps or episodes (e.g. if "ကင်", keep "ကင်" throughout; never change to "ဥက္ကဌ" or "သူဌေး").
     * Avoid repeating names or "သူတို့... သူတို့..." in consecutive sentences. Link sentences smoothly using spoken connectors (တာကြောင့်, ပြီး, ဒါပေမဲ့, နောက်တော့) and appropriate pronouns (သူ, သူမ, သူတို့, သူတို့မိသားစု, သူတို့တစ်ဖွဲ့လုံး), or natural subject omission.
