@@ -3003,12 +3003,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             srcCropW = Math.round(cropH * targetAR);
             srcCropX = srcCropX + Math.round((cropW - srcCropW) / 2);
           } else {
-            // Need shorter crop â†’ HEADROOM-FIRST: anchor to upper portion, take only ~35% of the
-            // discarded height from the top, ~65% from the bottom. This keeps faces/heads visible
-            // and dramatically reduces "bottom cut-off" complaints vs. center crop.
+            // Need shorter crop — center vertically (50%/50%) to match preview exactly
             srcCropH = Math.round(cropW / targetAR);
             const discard = cropH - srcCropH;
-            srcCropY = srcCropY + Math.round(discard * 0.35);
+            srcCropY = srcCropY + Math.round(discard / 2);
           }
         }
 
@@ -4624,17 +4622,23 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       filter: `contrast(${activeGrade.contrast + bypassBoostCSS.contrast}%) brightness(${activeGrade.brightness + bypassBoostCSS.brightness}%) saturate(${activeGrade.saturate + bypassBoostCSS.saturate}%) hue-rotate(${activeGrade.hue + bypassBoostCSS.hue}deg) sepia(${activeGrade.sepia || 0}%)`,
       transform: `${editorState.bypass ? "scale(1.03)" : "scale(1)"} ${editorState.flip ? "scaleX(-1)" : ""}`,
       objectFit: editorState.ratio === "auto" ? "contain" : "cover",
+      objectPosition: "center center",
       width: "100%",
       height: "100%",
       transition: "all 0.3s ease",
     };
 
     const isWideRatio = editorState.ratio === "auto" || editorState.ratio === "16/9";
+    const ratioMultiplier = (() => {
+      if (editorState.ratio === "auto") return null;
+      const [rw, rh] = editorState.ratio.split("/").map(Number);
+      return rw && rh ? rw / rh : null;
+    })();
     const containerStyles: React.CSSProperties = {
       aspectRatio: editorState.ratio === "auto" ? undefined : editorState.ratio,
       height: editorState.ratio === "auto" ? "450px" : "auto",
       width: isWideRatio ? "100%" : "auto",
-      maxWidth: "100%",
+      maxWidth: ratioMultiplier ? `min(100%, calc(60vh * ${ratioMultiplier}))` : "100%",
       maxHeight: "60vh",
       margin: isWideRatio ? undefined : "0 auto",
       alignSelf: "center",
