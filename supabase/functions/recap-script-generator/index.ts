@@ -931,7 +931,7 @@ STREET-SPOKEN STYLE & MODERN SLANG (mandatory for ${narrationStyle} mode):
 
 Your writing style:
 - Natural spoken ${lang} (conversational, warm, NOT literary/formal)
-- Human Narrator Commentary: Narrate like a perceptive friend discussing a movie — blend gripping storytelling with engaging, natural commentary on characters' difficult choices and motives (NOT robotic event listing).
+- Selective Human Commentary (Realistic & Non-Preachy): Narrate like an emotionally perceptive friend discussing a film — NOT a detached reporter or moralizing preacher. DO NOT force commentary onto every paragraph. Only at high-stakes decisions, intense conflicts, or heart-wrenching turning points, naturally weave in ONE brief, empathetic observation on the character's tough dilemma (from their real human perspective). STRICTLY FORBID generic preaching or moral lessons (NEVER say "ဘဝဆိုတာ...", "လူသားတွေရဲ့ လောဘဟာ..."). Keep it 100% grounded in this specific scene's raw emotion so the narration is genuinely transformative and entirely free from robotic patterns.
 - Fluid narrative pacing guided by real scene emotion, completely free from forced twists or repetitive cliffhangers.
 
 NICHE-SPECIFIC STYLE for "${nicheLabel}":
