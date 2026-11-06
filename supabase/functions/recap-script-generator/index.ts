@@ -507,7 +507,7 @@ function violatesTargetLanguage(script: string, lang: string): boolean {
 
 // Niche-specific style instructions
 const nicheStyles: Record<string, string> = {
-  "MOVIE RECAP": `Write like a top-tier Netflix/Hollywood movie recap narrator. Build suspense, use dramatic pauses, cliffhangers, and emotional peaks. Make viewers feel every twist, betrayal, romance, and revelation as if they're watching the movie.`,
+  "MOVIE RECAP": `Write like a top-tier Netflix/Hollywood movie recap narrator. Build genuine emotional depth, natural pacing, and authentic dramatic peaks. Make viewers feel every authentic conflict, betrayal, romance, and revelation as if they're experiencing the story firsthand.`,
   "TECH / AI": `Write like MKBHD or Linus Tech Tips — sharp, informative, exciting. Use punchy tech jargon naturally, explain complex concepts simply, and build hype around innovations and breakthroughs.`,
   DOCUMENTARY: `Write like David Attenborough or a BBC World documentary narrator — authoritative, insightful, thought-provoking. Layer facts with storytelling to create a compelling narrative arc.`,
   "TRUE CRIME": `Write like a true crime podcast host — suspenseful, gripping, investigative. Build tension slowly, reveal clues dramatically, and keep the audience on edge with every detail.`,
