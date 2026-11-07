@@ -8099,14 +8099,38 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
           {/* API Mode */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-neon-cyan">🔑 API Mode</label>
+            {/* SURGICAL ADD: Admin Notice for Own API Guidance */}
+            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs leading-relaxed">
+              ⚠️ Aug,2026 ကတည်းက Free Own API Key ကိုသုံးပြီး Unlimited ထုတ်ခွင့်စနစ်ကို ပြောင်းထားပါသဖြင့် Google API
+              KEY ကို မဖြစ်မနေထည့်ပေးရပါမယ်။API KEY ယူနည်းကို Tutorial Videos ထဲတွင်ကြည့်ပါ
+            </div>
+
             <div className="flex gap-2">
               <button
-                onClick={() => setApiMode("app")}
-                className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${apiMode === "app" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
+                type="button"
+                onClick={() => {
+                  if (!appApiAllowed) {
+                    toast.error("⚠️ App API ကို ယာယီပိတ်ထားပါသည် — Own API Key ကိုသာ အသုံးပြုပေးပါရန်");
+                    return;
+                  }
+                  setApiMode("app");
+                }}
+                disabled={!appApiAllowed}
+                className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${
+                  !appApiAllowed
+                    ? "opacity-40 cursor-not-allowed bg-secondary/50 text-muted-foreground border-border/40"
+                    : apiMode === "app"
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-secondary text-secondary-foreground border-border hover:opacity-80"
+                }`}
               >
-                🖥️ App API<span className="block text-xs font-normal opacity-70">Admin · Premium · Pro</span>
+                🖥️ App API
+                <span className="block text-xs font-normal opacity-70">
+                  {!appApiAllowed ? "⚠️ ယာယီပိတ်ထားပါသည်" : "Admin · Premium · Pro"}
+                </span>
               </button>
               <button
+                type="button"
                 onClick={() => setApiMode("own")}
                 className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${apiMode === "own" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
               >
