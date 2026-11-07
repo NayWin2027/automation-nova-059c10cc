@@ -8797,20 +8797,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
             />
           </div>
 
-          {/* Video Link Input */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-neon-cyan">
-              Video Link (YouTube, TikTok, Instagram, Facebook)
-            </label>
-            <input
-              type="text"
-              value={videoLink}
-              onChange={(e) => setVideoLink(e.target.value)}
-              placeholder="https://youtube.com/watch?v=..."
-              disabled={status === "processing"}
-              className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
-            />
-          </div>
+          {/* Video Link Input — removed from UI (platform links blocked); file upload only */}
 
           {/* SURGICAL EDIT: Generate Recap Button â€” user must click to start pipeline */}
           {(videoFile || videoLink) && status !== "processing" && !audioUrl && (
