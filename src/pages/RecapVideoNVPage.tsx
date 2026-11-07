@@ -8179,7 +8179,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                 <button
                   onClick={() => {
                     setDeviceTier("slow");
-                    setRenderMode("server");
+                    setRenderMode("browser");
                   }}
                   className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${deviceTier === "slow" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
                 >
@@ -8202,19 +8202,20 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                 </button>
                 <button
                   type="button"
+                  aria-disabled="true"
                   onClick={() => {
-                    setRenderMode("server");
-                    toast.error("⚠️ Server Render သည် လက်ရှိတွင် အသုံးပြုလို့မရပါ — Error တက်ပါမည်");
+                    setRenderMode("browser");
+                    toast.error("⚠️ Server Render ကို ယာယီပိတ်ထားပါတယ် — Browser Render ကိုသာ အသုံးပြုပေးပါ");
                   }}
-                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${renderMode === "server" ? "bg-destructive/20 text-destructive border-destructive" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
+                  className="flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all bg-secondary text-secondary-foreground border-border opacity-50 cursor-not-allowed"
                 >
                   ☁️ Server Render
-                  <span className="block text-xs font-normal opacity-70">{serverCreditPerMinRate} CR / min</span>
+                  <span className="block text-xs font-normal opacity-70">⚠️ ယာယီပိတ်ထားပါတယ်</span>
                 </button>
               </div>
 
               {/* Server Render ရွေးမိပါက ပေါ်လာမည့် သတိပေးချက် Banner */}
-              {renderMode === "server" && (
+              {false && (
                 <div className="p-3 rounded-lg bg-destructive/15 border border-destructive/40 text-destructive text-xs leading-relaxed animate-pulse">
                   ⚠️ <strong>သတိပေးချက်:</strong> Server Render က လက်ရှိတွင် အသုံးပြုလို့မရတာကြောင့် Server Render
                   ရွေးရင် Error တက်ပါမည်။ ကျေးဇူးပြု၍ <strong>🖥️ Browser Render</strong> ကိုသာ ရွေးချယ်အသုံးပြုပေးပါရန်။
