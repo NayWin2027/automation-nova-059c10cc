@@ -1,5 +1,5 @@
-import { useToolSettings } from './useToolSettings';
-import { useAuth } from './useAuth';
+import { useToolSettings } from "./useToolSettings";
+import { useAuth } from "./useAuth";
 
 interface ApiAccessResult {
   appApiAllowed: boolean;
@@ -7,14 +7,14 @@ interface ApiAccessResult {
   appApiReason?: string;
   ownApiReason?: string;
   anyApiAvailable: boolean;
-  defaultApiMode: 'app' | 'own';
+  defaultApiMode: "app" | "own";
   isLoading: boolean;
   isFreeMode: boolean;
 }
 
 /**
  * Hook to check which API modes are available for the current user based on admin settings.
- * 
+ *
  * Logic:
  * - If ALL toggle is OFF for an API mode, that mode is completely blocked
  * - Individual tier toggles (Premium/Pro/Free) control access per user plan
@@ -34,26 +34,26 @@ export function useApiAccess(): ApiAccessResult {
       appApiAllowed: true,
       ownApiAllowed: true,
       anyApiAvailable: true,
-      defaultApiMode: 'app',
+      defaultApiMode: "app",
       isLoading: true,
       isFreeMode,
     };
   }
-  
+
   // PROMOTION MODE: Both API modes available for ANY user
   if (accessControl.promotionMode) {
     return {
       appApiAllowed: true,
       ownApiAllowed: true,
       anyApiAvailable: true,
-      defaultApiMode: 'app',
+      defaultApiMode: "app",
       isLoading,
       isFreeMode: false,
     };
   }
 
   // Determine user plan - guest users are treated as 'free'
-  const userPlan: 'free' | 'pro' | 'premium' = profile?.plan || 'free';
+  const userPlan: "free" | "pro" | "premium" = profile?.plan || "free";
   const isGuest = !isAuthenticated;
 
   // Check App API access
@@ -62,30 +62,38 @@ export function useApiAccess(): ApiAccessResult {
 
     // Check if blockFreeAppApi is enabled (default true if undefined)
     const blockFreeAppApi = accessControl.blockFreeAppApi !== false;
-    
+
     // Block Free/Guest users from App API if toggle is ON
-    if (blockFreeAppApi && (isGuest || userPlan === 'free')) {
-      return { allowed: false, reason: 'Free/Guest users များသည် App API သုံးခွင့်မရှိပါ။ Own API ကိုသာ သုံးနိုင်ပါသည်။' };
+    if (blockFreeAppApi && (isGuest || userPlan === "free")) {
+      return {
+        allowed: false,
+        reason: "Free/Guest users များသည် App API သုံးခွင့်မရှိပါ။ Own API ကိုသာ သုံးနိုင်ပါသည်။",
+      };
     }
-    
+
     if (!apiAccess) {
       return { allowed: true };
     }
 
+    // Admin Master Switch OFF လိုက်ပါက User အားလုံးအတွက် App API ပိတ်သိမ်းခြင်း
+    if (apiAccess.all === false) {
+      return { allowed: false, reason: "App API ကို Admin မှ ယာယီပိတ်ထားပါသည်" };
+    }
+
     // Check plan-specific access
-    if (userPlan === 'premium' && apiAccess.premium === false) {
-      return { allowed: false, reason: 'Premium users အတွက် App API ပိတ်ထားပါသည်' };
+    if (userPlan === "premium" && apiAccess.premium === false) {
+      return { allowed: false, reason: "Premium users အတွက် App API ပိတ်ထားပါသည်" };
     }
-    if (userPlan === 'pro' && apiAccess.pro === false) {
-      return { allowed: false, reason: 'Pro users အတွက် App API ပိတ်ထားပါသည်' };
+    if (userPlan === "pro" && apiAccess.pro === false) {
+      return { allowed: false, reason: "Pro users အတွက် App API ပိတ်ထားပါသည်" };
     }
-    if (userPlan === 'free' && apiAccess.free === false) {
-      return { allowed: false, reason: 'Free users အတွက် App API ပိတ်ထားပါသည်' };
+    if (userPlan === "free" && apiAccess.free === false) {
+      return { allowed: false, reason: "Free users အတွက် App API ပိတ်ထားပါသည်" };
     }
 
     // Guest users - check free tier setting
     if (isGuest && apiAccess.free === false) {
-      return { allowed: false, reason: 'Guest users အတွက် App API ပိတ်ထားပါသည်' };
+      return { allowed: false, reason: "Guest users အတွက် App API ပိတ်ထားပါသည်" };
     }
 
     return { allowed: true };
@@ -94,25 +102,25 @@ export function useApiAccess(): ApiAccessResult {
   // Check Own API access
   const checkOwnApiAccess = (): { allowed: boolean; reason?: string } => {
     const apiAccess = accessControl.ownApiAccess;
-    
+
     if (!apiAccess) {
       return { allowed: true };
     }
 
     // Check plan-specific access
-    if (userPlan === 'premium' && apiAccess.premium === false) {
-      return { allowed: false, reason: 'Premium users အတွက် Own API ပိတ်ထားပါသည်' };
+    if (userPlan === "premium" && apiAccess.premium === false) {
+      return { allowed: false, reason: "Premium users အတွက် Own API ပိတ်ထားပါသည်" };
     }
-    if (userPlan === 'pro' && apiAccess.pro === false) {
-      return { allowed: false, reason: 'Pro users အတွက် Own API ပိတ်ထားပါသည်' };
+    if (userPlan === "pro" && apiAccess.pro === false) {
+      return { allowed: false, reason: "Pro users အတွက် Own API ပိတ်ထားပါသည်" };
     }
-    if (userPlan === 'free' && apiAccess.free === false) {
-      return { allowed: false, reason: 'Free users အတွက် Own API ပိတ်ထားပါသည်' };
+    if (userPlan === "free" && apiAccess.free === false) {
+      return { allowed: false, reason: "Free users အတွက် Own API ပိတ်ထားပါသည်" };
     }
 
     // Guest users - check free tier setting
     if (isGuest && apiAccess.free === false) {
-      return { allowed: false, reason: 'Guest users အတွက် Own API ပိတ်ထားပါသည်' };
+      return { allowed: false, reason: "Guest users အတွက် Own API ပိတ်ထားပါသည်" };
     }
 
     return { allowed: true };
@@ -122,13 +130,13 @@ export function useApiAccess(): ApiAccessResult {
   const ownApiCheck = checkOwnApiAccess();
 
   const anyApiAvailable = appApiCheck.allowed || ownApiCheck.allowed;
-  
+
   // Determine default API mode - prefer app if available, otherwise own
-  let defaultApiMode: 'app' | 'own' = 'app';
+  let defaultApiMode: "app" | "own" = "app";
   if (!appApiCheck.allowed && ownApiCheck.allowed) {
-    defaultApiMode = 'own';
+    defaultApiMode = "own";
   } else if (!ownApiCheck.allowed && appApiCheck.allowed) {
-    defaultApiMode = 'app';
+    defaultApiMode = "app";
   }
 
   return {
