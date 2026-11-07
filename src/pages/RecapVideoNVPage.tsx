@@ -8193,6 +8193,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
               <label className="text-sm font-medium text-neon-cyan">⚙️ Render Mode</label>
               <div className="flex gap-2">
                 <button
+                  type="button"
                   onClick={() => setRenderMode("browser")}
                   className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${renderMode === "browser" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
                 >
@@ -8200,13 +8201,25 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                   <span className="block text-xs font-normal opacity-70">{creditPerMinRate} CR / min</span>
                 </button>
                 <button
-                  onClick={() => setRenderMode("server")}
-                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${renderMode === "server" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
+                  type="button"
+                  onClick={() => {
+                    setRenderMode("server");
+                    toast.error("⚠️ Server Render သည် လက်ရှိတွင် အသုံးပြုလို့မရပါ — Error တက်ပါမည်");
+                  }}
+                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${renderMode === "server" ? "bg-destructive/20 text-destructive border-destructive" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
                 >
                   ☁️ Server Render
                   <span className="block text-xs font-normal opacity-70">{serverCreditPerMinRate} CR / min</span>
                 </button>
               </div>
+
+              {/* Server Render ရွေးမိပါက ပေါ်လာမည့် သတိပေးချက် Banner */}
+              {renderMode === "server" && (
+                <div className="p-3 rounded-lg bg-destructive/15 border border-destructive/40 text-destructive text-xs leading-relaxed animate-pulse">
+                  ⚠️ <strong>သတိပေးချက်:</strong> Server Render က လက်ရှိတွင် အသုံးပြုလို့မရတာကြောင့် Server Render
+                  ရွေးရင် Error တက်ပါမည်။ ကျေးဇူးပြု၍ <strong>🖥️ Browser Render</strong> ကိုသာ ရွေးချယ်အသုံးပြုပေးပါရန်။
+                </div>
+              )}
             </div>
           </div>
 
