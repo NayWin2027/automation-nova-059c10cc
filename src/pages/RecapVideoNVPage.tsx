@@ -3794,8 +3794,21 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // Timestamp of last encoder push (ms) to guarantee steady encoder frame cadence
       let lastEncPushTime = 0;
 
+      // SURGICAL FIX (start grace): for the first 1.5s, a stale "ended" state left over from a
+      // previous playback must not stop the recorder (caused 0-byte "ဖမ်းယူမှု မအောင်မြင်ပါ").
+      const _recGraceStart = performance.now();
       const checkEnded = (): boolean => {
         const av = audioRef.current;
+        if (av && performance.now() - _recGraceStart < 1500) {
+          const _stale = av.ended || (Number.isFinite(av.duration) && av.duration > 0 && av.currentTime >= av.duration - 0.03);
+          if (_stale) {
+            try {
+              av.currentTime = 0;
+              void av.play().catch(() => {});
+            } catch (_) {}
+          }
+          return false;
+        }
         // SURGICAL FIX (watchdog): also stop when audio reached its end but `ended` never fired
         const _atEnd = !!av && Number.isFinite(av.duration) && av.duration > 0 && av.currentTime >= av.duration - 0.03;
         if (av && (av.ended || _atEnd)) {
