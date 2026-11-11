@@ -142,7 +142,6 @@ interface ResultViewProps {
   audioTimestampsRef: React.MutableRefObject<{ index: number; start: number; end: number }[]>;
   autoStartRecap?: boolean;
   onAutoStartConsumed?: () => void;
-  onRecordingError?: (msg: string) => void;
   renderMode?: "browser" | "server";
   sourceFileUriRef?: React.MutableRefObject<string | null>;
   videoFileRef?: React.MutableRefObject<File | null>;
@@ -539,33 +538,8 @@ const createWebCodecsMp4Recorder = async (options: {
     firstTimestampBehavior: "offset",
   });
 
-  // SURGICAL FIX (mp4-muxer null colorSpace crash killer):
-  // Browser VideoEncoder emitted chunks without meta.decoderConfig -> mp4-muxer crashes on null.colorSpace.
-  // This fallback ensures track.info.decoderConfig is always safely initialized so finalize() succeeds 100%.
-  let hasValidDecoderConfig = false;
-
   const videoEncoder = new (window as any).VideoEncoder({
-    output: (chunk: any, meta: any) => {
-      let finalMeta = meta;
-      if (meta?.decoderConfig) {
-        hasValidDecoderConfig = true;
-      } else if (!hasValidDecoderConfig) {
-        finalMeta = {
-          ...meta,
-          decoderConfig: {
-            codec: videoCodec,
-            colorSpace: {
-              primaries: "bt709",
-              transfer: "bt709",
-              matrix: "bt709",
-              fullRange: false,
-            },
-            description: new Uint8Array([1, 100, 0, 40, 255, 225, 0, 0, 1, 0, 0]),
-          },
-        };
-      }
-      muxer.addVideoChunk(chunk, finalMeta);
-    },
+    output: (chunk: any, meta: any) => muxer.addVideoChunk(chunk, meta),
     error: (e: any) => console.error("[WebCodecs VideoEncoder]:", e),
   });
 
@@ -736,7 +710,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     audioTimestampsRef,
     autoStartRecap,
     onAutoStartConsumed,
-    onRecordingError,
     renderMode,
     sourceFileUriRef,
     videoFileRef,
@@ -2616,15 +2589,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // This patches the binary EBML to include the actual duration.
         let finalBlob = blob;
         let isDirectMp4 = false;
-        let _wcFinalizeErr = "";
-        const _wcWasActive = !!webCodecsRecorder;
-        let _wcStatsDiag = "";
-        try {
-          if (webCodecsRecorder && typeof webCodecsRecorder.getStats === "function") {
-            const st = webCodecsRecorder.getStats();
-            _wcStatsDiag = `encoded=${st.encoded}, dropped=${st.dropped}`;
-          }
-        } catch (_) {}
 
         // ── 0-LATENCY DIRECT MP4 FINALIZATION (WebCodecs + mp4-muxer) ──
         if (webCodecsRecorder) {
@@ -2639,7 +2603,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               toast.success("Real MP4 (H.264 + AAC) စစ်စစ် ချက်ချင်း ထွက်ပါပြီ! (0-latency)");
             }
           } catch (wcFinErr) {
-            _wcFinalizeErr = String((wcFinErr as any)?.message || wcFinErr);
             console.warn("[RECORDING] WebCodecs finalize failed, falling back to MediaRecorder:", wcFinErr);
           } finally {
             webCodecsRecorder.cleanup();
@@ -2650,21 +2613,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // ── SAFETY FALLBACK: MediaRecorder + convertToRealMp4 when WebCodecs is not active ──
         if (!isDirectMp4 && finalBlob.size === 0) {
           toast.error("ဗီဒီယို ဖမ်းယူမှု မအောင်မြင်ပါ — ထပ်မံ ကြိုးစားပေးပါ။");
-          // DIAGNOSTIC: show exact cause in Solve-to-fix box
-          try {
-            const _a = audioRef.current;
-            const diag = [
-              "ဗီဒီယို ဖမ်းယူမှု မအောင်မြင်ပါ (0 byte)",
-              `Encoder: ${_wcWasActive ? "WebCodecs" : "MediaRecorder"}${_wcStatsDiag ? ` (${_wcStatsDiag})` : ""}`,
-              _wcFinalizeErr ? `WebCodecs finalize error: ${_wcFinalizeErr}` : "WebCodecs finalize error: none",
-              `REC elapsed: ${recordingElapsedSecs.toFixed(1)}s / audio duration: ${_a && Number.isFinite(_a.duration) ? _a.duration.toFixed(1) : "?"}s`,
-              `Audio at stop: currentTime=${_a ? _a.currentTime.toFixed(1) : "?"}s, ended=${_a?.ended}, paused=${_a?.paused}`,
-              `Called from: ${isFromMediaRecorder ? "MediaRecorder.onstop" : "recorder.stop()"}, page hidden: ${document.hidden}`,
-              `mimeType: ${mimeType || "none"}, quality: ${forcedQualityRef.current || exportQuality}, CPU encode: ${forceSoftwareRef.current}`,
-              `Device: ${navigator.userAgent}`,
-            ].join("\n");
-            onRecordingError?.(diag);
-          } catch (_) {}
           setIsRendering(false);
           isRenderingRef.current = false;
           return;
@@ -3846,21 +3794,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // Timestamp of last encoder push (ms) to guarantee steady encoder frame cadence
       let lastEncPushTime = 0;
 
-      // SURGICAL FIX (start grace): for the first 1.5s, a stale "ended" state left over from a
-      // previous playback must not stop the recorder (caused 0-byte "ဖမ်းယူမှု မအောင်မြင်ပါ").
-      const _recGraceStart = performance.now();
       const checkEnded = (): boolean => {
         const av = audioRef.current;
-        if (av && performance.now() - _recGraceStart < 1500) {
-          const _stale = av.ended || (Number.isFinite(av.duration) && av.duration > 0 && av.currentTime >= av.duration - 0.03);
-          if (_stale) {
-            try {
-              av.currentTime = 0;
-              void av.play().catch(() => {});
-            } catch (_) {}
-          }
-          return false;
-        }
         // SURGICAL FIX (watchdog): also stop when audio reached its end but `ended` never fired
         const _atEnd = !!av && Number.isFinite(av.duration) && av.duration > 0 && av.currentTime >= av.duration - 0.03;
         if (av && (av.ended || _atEnd)) {
@@ -9041,7 +8976,6 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
             audioTimestampsRef={pageAudioTimestampsRef}
             autoStartRecap={autoStartRecap}
             onAutoStartConsumed={() => setAutoStartRecap(false)}
-            onRecordingError={showSolveToFixBox}
             voiceMode={voiceMode}
             onVoiceModeChange={setVoiceMode}
             sourceFileUriRef={sourceFileUriRef}
@@ -9117,7 +9051,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
             <AlertDialogTitle className="text-red-500">{errorBox?.title}</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3 text-left">
-                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-200 break-words whitespace-pre-wrap">
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-200 break-words">
                   {errorBox?.message}
                 </div>
                 <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
