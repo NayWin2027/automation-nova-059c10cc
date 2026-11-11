@@ -142,6 +142,7 @@ interface ResultViewProps {
   audioTimestampsRef: React.MutableRefObject<{ index: number; start: number; end: number }[]>;
   autoStartRecap?: boolean;
   onAutoStartConsumed?: () => void;
+  onRecordingError?: (msg: string) => void;
   renderMode?: "browser" | "server";
   sourceFileUriRef?: React.MutableRefObject<string | null>;
   videoFileRef?: React.MutableRefObject<File | null>;
@@ -710,6 +711,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     audioTimestampsRef,
     autoStartRecap,
     onAutoStartConsumed,
+    onRecordingError,
     renderMode,
     sourceFileUriRef,
     videoFileRef,
@@ -2589,6 +2591,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // This patches the binary EBML to include the actual duration.
         let finalBlob = blob;
         let isDirectMp4 = false;
+        let _wcFinalizeErr = "";
+        const _wcWasActive = !!webCodecsRecorder;
+        let _wcStatsDiag = "";
+        try {
+          if (webCodecsRecorder && typeof webCodecsRecorder.getStats === "function") {
+            const st = webCodecsRecorder.getStats();
+            _wcStatsDiag = `encoded=${st.encoded}, dropped=${st.dropped}`;
+          }
+        } catch (_) {}
 
         // ── 0-LATENCY DIRECT MP4 FINALIZATION (WebCodecs + mp4-muxer) ──
         if (webCodecsRecorder) {
@@ -2603,6 +2614,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               toast.success("Real MP4 (H.264 + AAC) စစ်စစ် ချက်ချင်း ထွက်ပါပြီ! (0-latency)");
             }
           } catch (wcFinErr) {
+            _wcFinalizeErr = String((wcFinErr as any)?.message || wcFinErr);
             console.warn("[RECORDING] WebCodecs finalize failed, falling back to MediaRecorder:", wcFinErr);
           } finally {
             webCodecsRecorder.cleanup();
@@ -2613,6 +2625,21 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // ── SAFETY FALLBACK: MediaRecorder + convertToRealMp4 when WebCodecs is not active ──
         if (!isDirectMp4 && finalBlob.size === 0) {
           toast.error("ဗီဒီယို ဖမ်းယူမှု မအောင်မြင်ပါ — ထပ်မံ ကြိုးစားပေးပါ။");
+          // DIAGNOSTIC: show exact cause in Solve-to-fix box
+          try {
+            const _a = audioRef.current;
+            const diag = [
+              "ဗီဒီယို ဖမ်းယူမှု မအောင်မြင်ပါ (0 byte)",
+              `Encoder: ${_wcWasActive ? "WebCodecs" : "MediaRecorder"}${_wcStatsDiag ? ` (${_wcStatsDiag})` : ""}`,
+              _wcFinalizeErr ? `WebCodecs finalize error: ${_wcFinalizeErr}` : "WebCodecs finalize error: none",
+              `REC elapsed: ${recordingElapsedSecs.toFixed(1)}s / audio duration: ${_a && Number.isFinite(_a.duration) ? _a.duration.toFixed(1) : "?"}s`,
+              `Audio at stop: currentTime=${_a ? _a.currentTime.toFixed(1) : "?"}s, ended=${_a?.ended}, paused=${_a?.paused}`,
+              `Called from: ${isFromMediaRecorder ? "MediaRecorder.onstop" : "recorder.stop()"}, page hidden: ${document.hidden}`,
+              `mimeType: ${mimeType || "none"}, quality: ${forcedQualityRef.current || exportQuality}, CPU encode: ${forceSoftwareRef.current}`,
+              `Device: ${navigator.userAgent}`,
+            ].join("\n");
+            onRecordingError?.(diag);
+          } catch (_) {}
           setIsRendering(false);
           isRenderingRef.current = false;
           return;
@@ -8989,6 +9016,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
             audioTimestampsRef={pageAudioTimestampsRef}
             autoStartRecap={autoStartRecap}
             onAutoStartConsumed={() => setAutoStartRecap(false)}
+            onRecordingError={showSolveToFixBox}
             voiceMode={voiceMode}
             onVoiceModeChange={setVoiceMode}
             sourceFileUriRef={sourceFileUriRef}
@@ -9064,7 +9092,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
             <AlertDialogTitle className="text-red-500">{errorBox?.title}</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3 text-left">
-                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-200 break-words">
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-200 break-words whitespace-pre-wrap">
                   {errorBox?.message}
                 </div>
                 <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
