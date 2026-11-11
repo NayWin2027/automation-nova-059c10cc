@@ -9092,7 +9092,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
             <AlertDialogTitle className="text-red-500">{errorBox?.title}</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3 text-left">
-                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-200 break-words">
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-200 break-words whitespace-pre-wrap">
                   {errorBox?.message}
                 </div>
                 <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
