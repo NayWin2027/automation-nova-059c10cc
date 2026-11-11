@@ -303,98 +303,51 @@ Deno.serve(async (req) => {
       rpcResult = data;
     }
 
-    let audio: Uint8Array;
-    let segmentTimestamps: { index: number; start: number; end: number }[] | undefined = undefined;
-
-    if (segments.length > 0) {
-      // 100% EXACT AUDIO-SUBTITLE SYNC:
-      // Synthesize each segment individually so each subtitle's start & end timecode
-      // matches its real generated voice audio down to the millisecond (zero estimation drift).
-      const segTexts = segments.map((s) => {
-        const raw =
-          typeof s === "object" && s !== null && "text" in s ? String((s as any).text ?? "") : String(s ?? "");
-        return raw.trim();
-      });
-
-      const segResults: Uint8Array[] = new Array(segTexts.length);
-      let nextSeg = 0;
-      const segWorker = async () => {
-        while (nextSeg < segTexts.length) {
-          const i = nextSeg++;
-          if (!segTexts[i]) {
-            segResults[i] = new Uint8Array(0);
-            continue;
-          }
-          try {
-            segResults[i] = await synthesize(segTexts[i], voice, rate, pitch, volume);
-          } catch (_e) {
-            try {
-              segResults[i] = await synthesize(segTexts[i], voice, rate, pitch, volume);
-            } catch (err) {
-              console.error(`[edge-tts] Failed to synthesize segment ${i}:`, err);
-              segResults[i] = new Uint8Array(0);
-            }
-          }
+    // SURGICAL: long scripts timed out as one 30s WebSocket request.
+    // Split into sentence-bounded chunks, synthesize in parallel (limited), concat MP3 frames.
+    const chunksText: string[] = [];
+    {
+      const MAX = 1200;
+      const parts = text.split(/(?<=[။.!?\n])/);
+      let cur = "";
+      for (const p of parts) {
+        if ((cur + p).length > MAX && cur.trim()) {
+          chunksText.push(cur.trim());
+          cur = "";
         }
-      };
-      await Promise.all(Array.from({ length: Math.min(5, segTexts.length) }, segWorker));
-
-      const totalLen = segResults.reduce((s, c) => s + (c ? c.length : 0), 0);
-      audio = new Uint8Array(totalLen);
-      let byteOffset = 0;
-      segmentTimestamps = [];
-
-      for (let i = 0; i < segResults.length; i++) {
-        const c = segResults[i] || new Uint8Array(0);
-        const start = parseFloat((byteOffset / 6000).toFixed(3));
-        if (c.length > 0) {
-          audio.set(c, byteOffset);
-          byteOffset += c.length;
-        }
-        const end = parseFloat((byteOffset / 6000).toFixed(3));
-        segmentTimestamps.push({ index: i, start, end });
+        if (p.length > MAX) {
+          for (let i = 0; i < p.length; i += MAX) chunksText.push(p.slice(i, i + MAX).trim());
+        } else cur += p;
       }
-    } else {
-      // Fallback: long text scripts without segments
-      const chunksText: string[] = [];
-      {
-        const MAX = 1200;
-        const parts = text.split(/(?<=[။.!?\n])/);
-        let cur = "";
-        for (const p of parts) {
-          if ((cur + p).length > MAX && cur.trim()) {
-            chunksText.push(cur.trim());
-            cur = "";
-          }
-          if (p.length > MAX) {
-            for (let i = 0; i < p.length; i += MAX) chunksText.push(p.slice(i, i + MAX).trim());
-          } else cur += p;
+      if (cur.trim()) chunksText.push(cur.trim());
+    }
+    const results: Uint8Array[] = new Array(chunksText.length);
+    let next = 0;
+    const worker = async () => {
+      while (next < chunksText.length) {
+        const i = next++;
+        try {
+          results[i] = await synthesize(chunksText[i], voice, rate, pitch, volume);
+        } catch (_e) {
+          results[i] = await synthesize(chunksText[i], voice, rate, pitch, volume);
         }
-        if (cur.trim()) chunksText.push(cur.trim());
       }
-      const results: Uint8Array[] = new Array(chunksText.length);
-      let next = 0;
-      const worker = async () => {
-        while (next < chunksText.length) {
-          const i = next++;
-          try {
-            results[i] = await synthesize(chunksText[i], voice, rate, pitch, volume);
-          } catch (_e) {
-            results[i] = await synthesize(chunksText[i], voice, rate, pitch, volume);
-          }
-        }
-      };
-      await Promise.all(Array.from({ length: Math.min(4, chunksText.length) }, worker));
-      const totalLen = results.reduce((s, c) => s + c.length, 0);
-      audio = new Uint8Array(totalLen);
-      {
-        let off = 0;
-        for (const c of results) {
-          audio.set(c, off);
-          off += c.length;
-        }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, chunksText.length) }, worker));
+    const totalLen = results.reduce((s, c) => s + c.length, 0);
+    const audio = new Uint8Array(totalLen);
+    {
+      let off = 0;
+      for (const c of results) {
+        audio.set(c, off);
+        off += c.length;
       }
     }
+    // Edge TTS returns MP3. MPEG-1 Layer III at the service's 48 kbps output rate is
+    // 6000 bytes/sec, so the encoded payload gives a stable duration for segment boundaries.
+    // The final segment is forced to the exact calculated end to prevent hook-slot overrun.
+    const durationSec = audio.length / 6000;
+    const segmentTimestamps = segments.length > 0 ? estimateSegmentTimestamps(segments, durationSec) : undefined;
 
     const audioBase64 = toBase64(audio);
     return new Response(
