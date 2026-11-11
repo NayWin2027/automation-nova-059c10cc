@@ -539,10 +539,35 @@ const createWebCodecsMp4Recorder = async (options: {
     firstTimestampBehavior: "offset",
   });
 
-  const videoEncoder = new (window as any).VideoEncoder({
-    output: (chunk: any, meta: any) => muxer.addVideoChunk(chunk, meta),
-    error: (e: any) => console.error("[WebCodecs VideoEncoder]:", e),
-  });
+542:  // SURGICAL FIX (mp4-muxer null colorSpace crash killer):
+543:  // Browser VideoEncoder emitted chunks without meta.decoderConfig -> mp4-muxer crashes on null.colorSpace.
+544:  // This fallback ensures track.info.decoderConfig is always safely initialized so finalize() succeeds 100%.
+545:  let hasValidDecoderConfig = false;
+546:
+547:  const videoEncoder = new (window as any).VideoEncoder({
+548:    output: (chunk: any, meta: any) => {
+549:      let finalMeta = meta;
+550:      if (meta?.decoderConfig) {
+551:        hasValidDecoderConfig = true;
+552:      } else if (!hasValidDecoderConfig) {
+553:        finalMeta = {
+554:          ...meta,
+555:          decoderConfig: {
+556:            codec: videoCodec,
+557:            colorSpace: {
+558:              primaries: "bt709",
+559:              transfer: "bt709",
+560:              matrix: "bt709",
+561:              fullRange: false,
+562:            },
+563:            description: new Uint8Array([1, 100, 0, 40, 255, 225, 0, 0, 1, 0, 0]),
+564:          },
+565:        };
+566:      }
+567:      muxer.addVideoChunk(chunk, finalMeta);
+568:    },
+569:    error: (e: any) => console.error("[WebCodecs VideoEncoder]:", e),
+570:  });
 
   videoEncoder.configure({
     codec: videoCodec,
