@@ -3202,8 +3202,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // 2. Loop/Overrun Point: အသံမပြီးမီ ဗီဒီယိုကုန်သွားပါက 1.0x မှ 1.30x သို့ သိသာထင်ရှားသော Smooth Push-in ဆွဲမည် (Pause လုံးဝမဖြစ်).
         const useVisibleLoopMask =
           !freezeModeRef.current &&
-          !seekPendingRef.current &&
-          visibleLoopCountRef.current >= 1 &&
+          (visibleLoopCountRef.current >= 1 || dialogueHoldActiveRef.current) &&
           visibleLoopFrameReadyRef.current;
         const useResidualFrameMask =
           !freezeModeRef.current && seekPendingRef.current && visibleLoopFrameReadyRef.current && !useVisibleLoopMask;
@@ -3236,13 +3235,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             // Photo Zoom In phase — Freeze/Motion ON ဖြစ်ချိန်သာ သုံးသည်
             fairDraw(freezeImg, freezeRect[0], freezeRect[1], freezeRect[2], freezeRect[3]);
           } else if (useVisibleLoopMask && heldFrame) {
-            // Noticeable Cinematic Push-in: 1.03x -> 1.30x over 4.5s
-            // ဗီဒီယို ကုန်သွားပါက Loop အစား 1.03x မှ 1.30x သို့ သိသာထင်ရှားသော Camera Push-in
+            // Noticeable Cinematic Push-in: 1.0 -> 1.30 over 4.5s
+            // ဗီဒီယို ကုန်သွားပါက 1.0x မှ 1.30x သို့ သိသာထင်ရှားသော Camera Push-in
             const maskElapsed =
-              visibleLoopMaskStartRef.current > 0 ? performance.now() - visibleLoopMaskStartRef.current : 0;
+              visibleLoopMaskStartRef.current > 0
+                ? performance.now() - visibleLoopMaskStartRef.current
+                : Math.max(0, performance.now() - gapStartRef.current);
             const maskProgress = Math.min(1, maskElapsed / 4500);
             const maskEase = 1 - Math.pow(1 - maskProgress, 1.8);
-            const maskZoom = 1.03 + 0.27 * maskEase; // 1.03x -> Peak 1.30x
+            const maskZoom = 1.0 + 0.3 * maskEase; // Peak 1.30x
             const maskW = Math.max(2, Math.round(heldFrame.width / maskZoom));
             const maskH = Math.max(2, Math.round(heldFrame.height / maskZoom));
             const maskX = Math.round((heldFrame.width - maskW) / 2);
@@ -6613,7 +6614,7 @@ const RecapVideoNVPage: React.FC = () => {
       rels ? `RELATIONSHIPS:\n${rels}` : "",
       ents ? `KEY ENTITIES (people, places, orgs, tools, terms):\n${ents}` : "",
       chars || ents
-        ? `NAME & TITLE LOCK (CRITICAL): Use the character/entity names AND their specific titles/roles (အခေါ်အဝေါ်/ရာထူး) above EXACTLY as established — every time. Never swap synonymous titles (e.g. if someone is established as တပ်မှူး, do NOT call them စစ်သူကြီး; if မိဖုရား, do NOT switch to ဘုရင်မ or မင်းသမီး). Keep all character titles, spellings, and relationships 100% consistent across all episodes.`
+        ? `NAME LOCK (CRITICAL): Use the character/entity names above EXACTLY as written — same spelling, same transliteration, every time. Never rename, shorten, translate, swap or invent a name. If someone in the source video is not in the list, describe them by role/relationship instead of inventing a name, and never reuse an existing name for a different person.`
         : "",
       list(bible.topics_covered) ? `TOPICS ALREADY COVERED (do NOT repeat):\n${list(bible.topics_covered)}` : "",
       list(bible.key_facts) ? `KEY FACTS / NUMBERS / TERMS (must stay consistent):\n${list(bible.key_facts)}` : "",
@@ -7005,7 +7006,7 @@ const RecapVideoNVPage: React.FC = () => {
       const userToken = currentSession?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       const selectedLangName = languages.find((l) => l.code === selectedLanguage)?.name || "BURMESE";
       const maxOutputTokens = Math.min(64000, Math.max(8192, Math.ceil(duration * 250)));
-      const targetDurationSec = Math.round(duration * 0.7);
+      const targetDurationSec = Math.round(duration * 0.78);
       const minRequiredParagraphs = Math.max(12, Math.round(targetDurationSec / 15));
       const targetParagraphs = Math.max(16, Math.round(targetDurationSec / 11));
       const pacingStepSec = Math.max(12, Math.min(25, Math.round(duration / targetParagraphs)));
@@ -7028,14 +7029,14 @@ const RecapVideoNVPage: React.FC = () => {
       const scriptBody: Record<string, unknown> = {
         fileUri,
         fileMimeType: mimeType,
-        niche: `You are a top-tier international movie recap scriptwriter. Analyze the uploaded movie/video and produce a rich, cinematic, highly engaging recap script in ${selectedLangName}. Length must be approximately 70% of the original duration when read aloud (band 70-85%, never below 70%). ${seriesEnabled ? "SERIES CONTINUATION: Do NOT include any opening viral hook or scene from the middle/end; start strictly in chronological sequence from the beginning of this episode." : "Start with a shocking hook, build mystery, escalate tension, finish with a climactic payoff."} ZERO COMPRESSION ON KEY SCENES: Give full dramatic weight and emotional depth to every confrontation, turning point, and character conflict. Cut only empty dead air (silent staring/purposeless travel). Write as ONE continuous gripping story with hook transitions between segments. Output each paragraph prefixed by [MM:SS] starting at [00:00] and ending close to the full duration. Use original wording — do NOT quote distinctive dialogue.${burmeseStyleBlock}${buildNarrationStyleBlock(narrationStyle, selectedLangName)}`,
+        niche: `You are a top-tier international movie recap scriptwriter. Analyze the uploaded movie/video and produce a rich, cinematic, highly engaging recap script in ${selectedLangName}. Length must be approximately 75% to 80% of the original duration when read aloud (band 70-85%, never below 70%). ${seriesEnabled ? "SERIES CONTINUATION: Do NOT include any opening viral hook or scene from the middle/end; start strictly in chronological sequence from the beginning of this episode." : "Start with a shocking hook, build mystery, escalate tension, finish with a climactic payoff."} ZERO COMPRESSION ON KEY SCENES: Give full dramatic weight and emotional depth to every confrontation, turning point, and character conflict. Cut only empty dead air (silent staring/purposeless travel). Write as ONE continuous gripping story with hook transitions between segments. Output each paragraph prefixed by [MM:SS] starting at [00:00] and ending close to the full duration. Use original wording — do NOT quote distinctive dialogue.${burmeseStyleBlock}${buildNarrationStyleBlock(narrationStyle, selectedLangName)}`,
         language: selectedLangName,
         sourceDurationSec: duration,
         narrationStyle,
         skipCreditDeduction: true,
         recapNvPipeline: true,
         apiMode: resolvedApiMode,
-        extraInstructions: `CRITICAL:\n- Output language MUST be ${selectedLangName} ONLY.\n- STRICT MULTI-CHARACTER RULE: NEVER reduce the story to only 2 people! Accurately identify each distinct person by their source name or relationship in ${selectedLangName} (အဖေ, အမေ, သား, သမီး, ဇနီး, ခင်ပွန်း, အဖိုး, အဖွား, ချွေးမ, ဆရာ, ဆရာဝန်, ရဲ, သူငယ်ချင်း). NEVER merge multiple different characters into the 2 main leads!\n- Cover the full story arc at about 70% of source duration (never below 70%, never above 85%).\n- Cut only true dead air. Keep every key scene, dialogue exchange, and emotional moment in rich detail.${lengthMandate}\n- Each segment must flow into the next with a hook/transition.\n- Never output a partial/incomplete script.${burmeseExtraStyle}`,
+        extraInstructions: `CRITICAL:\n- Output language MUST be ${selectedLangName} ONLY.\n- STRICT MULTI-CHARACTER RULE: NEVER reduce the story to only 2 people! Accurately identify each distinct person by their source name or relationship in ${selectedLangName} (အဖေ, အမေ, သား, သမီး, ဇနီး, ခင်ပွန်း, အဖိုး, အဖွား, ချွေးမ, ဆရာ, ဆရာဝန်, ရဲ, သူငယ်ချင်း). NEVER merge multiple different characters into the 2 main leads!\n- Cover the full story arc at about 75% to 80% of source duration (never below 70%, never above 85%).\n- Cut only true dead air. Keep every key scene, dialogue exchange, and emotional moment in rich detail.${lengthMandate}\n- Each segment must flow into the next with a hook/transition.\n- Never output a partial/incomplete script.${burmeseExtraStyle}`,
         generationConfig: {
           maxOutputTokens,
           temperature: 0.7,
@@ -7664,9 +7665,9 @@ Do NOT write isolated disconnected paragraphs. Each segment must END with a hook
 Examples of good transitions: "But what she didn't know was..." / "And that's when everything changed." / "Just when he thought it was over..."
 The narration must feel like a non-stop thriller story, NOT a boring lecture, documentary, or news report.
 
-STRICT LENGTH RULE (70% COVERAGE):
+STRICT LENGTH RULE (75% to 80% COVERAGE):
 This is an elite international narrative recap. You MUST produce a rich, detailed cinematic storytelling experience.
-The output script MUST be approximately 70% of the original video duration when read aloud (acceptable band: 70-85%).
+The output script MUST be approximately 75% to 80% of the original video duration when read aloud (acceptable band: 70-85%).
 MINIMUM WORD COUNT (CRITICAL — STRICT DEPTH):
   * Source 5 min → minimum 600 words, target ~800 words
   * Source 10 min → minimum 1200 words, target ~1600 words
@@ -7694,8 +7695,8 @@ INSTRUCTIONS (INTERNATIONAL SCRIPTWRITER STANDARD):
 - CUT ONLY MEANINGLESS DEAD AIR: Drop only empty filler moments with zero narrative value (e.g., character walking down the road alone with no thoughts, driving silently, empty waiting, or purposeless silence). NEVER skip emotional setup, buildup, or character conversations that drive the story!
 - PRESERVE FULL SCENE BUILDUP: Do NOT jump straight to the payoff. The tension and anticipation of the buildup are what keep viewers glued to the screen.
 
-PACING & DURATION RULE (CRITICAL — 70% COVERAGE):
-- The recap MUST be approximately 70% of the original video duration (band 70-85%). Proportional to whatever the source length is:
+PACING & DURATION RULE (CRITICAL — 75% to 80% COVERAGE):
+- The recap MUST be approximately 75% to 80% of the original video duration (band 70-85%). Proportional to whatever the source length is:
   * For 30 min source → output approx 23 to 24 minutes.
   * For 20 min source → output approx 15 to 16 minutes.
   * For 10 min source → output approx 7.5 to 8 minutes.
@@ -7727,7 +7728,7 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
         extraInstructions: `CRITICAL:
 - Output language MUST be ${selectedLangName} ONLY. Do NOT switch to any other language even if the video's spoken dialogue is in a different language.
 - STRICT MULTI-CHARACTER RULE: NEVER reduce the whole story to only 2 characters! A movie has many people. Each person is a distinct character. Identify every appearing character by their real name (if known) or by their explicit role/relationship in ${selectedLangName} (အဖေ, အမေ, သား, သမီး, ဇနီး, ခင်ပွန်း, အဖိုး, အဖွား, ချွေးမ, သမက်, ဆရာ, တပည့်, ဆရာဝန်, သူနာပြု, မန်နေဂျာ, ရဲ, လူဆိုး, ရန်သူ, သူငယ်ချင်း). NEVER merge multiple different people into the main 2 leads!
-${batchEndSec ? `- THIS IS A BATCH SEGMENT. You MUST ONLY watch and recap events from ${Math.floor(batchStartSec! / 60)}:${String(Math.floor(batchStartSec! % 60)).padStart(2, "0")} to ${Math.floor(batchEndSec / 60)}:${String(Math.floor(batchEndSec % 60)).padStart(2, "0")}. Ignore everything outside this time window. Do not summarize the ending if it hasn't happened yet in this time window. VERY IMPORTANT: Your script MUST match the duration of this specific batch chunk (approx 75-80% of the chunk duration).` : `- Script must cover the full story arc from 00:00 to the end, timed to approximately 70% of the source duration (never below 70%).`}
+${batchEndSec ? `- THIS IS A BATCH SEGMENT. You MUST ONLY watch and recap events from ${Math.floor(batchStartSec! / 60)}:${String(Math.floor(batchStartSec! % 60)).padStart(2, "0")} to ${Math.floor(batchEndSec / 60)}:${String(Math.floor(batchEndSec % 60)).padStart(2, "0")}. Ignore everything outside this time window. Do not summarize the ending if it hasn't happened yet in this time window. VERY IMPORTANT: Your script MUST match the duration of this specific batch chunk (approx 75-80% of the chunk duration).` : `- Script must cover the full story arc from 00:00 to the end, timed to approximately 75% to 80% of the source duration (never below 70%).`}
   * Aim for ~75% to 80% proportional to source length (e.g. 30m → ~25m, 20m → ~15m, 10m → ~8m).
 - Keep all plot-relevant dialogues, emotional confrontations, and key character moments in rich detail.${lengthMandate}
 - Only cut true dead air (staring/silent travel). Never compress or rush emotional conflicts or climax.
