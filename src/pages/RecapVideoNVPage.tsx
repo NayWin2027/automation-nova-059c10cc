@@ -3003,12 +3003,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             srcCropW = Math.round(cropH * targetAR);
             srcCropX = srcCropX + Math.round((cropW - srcCropW) / 2);
           } else {
-            // Need shorter crop â†’ HEADROOM-FIRST: anchor to upper portion, take only ~35% of the
-            // discarded height from the top, ~65% from the bottom. This keeps faces/heads visible
-            // and dramatically reduces "bottom cut-off" complaints vs. center crop.
+            // Need shorter crop — center vertically (50%/50%) to match preview exactly
             srcCropH = Math.round(cropW / targetAR);
             const discard = cropH - srcCropH;
-            srcCropY = srcCropY + Math.round(discard * 0.35);
+            srcCropY = srcCropY + Math.round(discard / 2);
           }
         }
 
@@ -4624,17 +4622,23 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       filter: `contrast(${activeGrade.contrast + bypassBoostCSS.contrast}%) brightness(${activeGrade.brightness + bypassBoostCSS.brightness}%) saturate(${activeGrade.saturate + bypassBoostCSS.saturate}%) hue-rotate(${activeGrade.hue + bypassBoostCSS.hue}deg) sepia(${activeGrade.sepia || 0}%)`,
       transform: `${editorState.bypass ? "scale(1.03)" : "scale(1)"} ${editorState.flip ? "scaleX(-1)" : ""}`,
       objectFit: editorState.ratio === "auto" ? "contain" : "cover",
+      objectPosition: "center center",
       width: "100%",
       height: "100%",
       transition: "all 0.3s ease",
     };
 
     const isWideRatio = editorState.ratio === "auto" || editorState.ratio === "16/9";
+    const ratioMultiplier = (() => {
+      if (editorState.ratio === "auto") return null;
+      const [rw, rh] = editorState.ratio.split("/").map(Number);
+      return rw && rh ? rw / rh : null;
+    })();
     const containerStyles: React.CSSProperties = {
       aspectRatio: editorState.ratio === "auto" ? undefined : editorState.ratio,
       height: editorState.ratio === "auto" ? "450px" : "auto",
       width: isWideRatio ? "100%" : "auto",
-      maxWidth: "100%",
+      maxWidth: ratioMultiplier ? `min(100%, calc(60vh * ${ratioMultiplier}))` : "100%",
       maxHeight: "60vh",
       margin: isWideRatio ? undefined : "0 auto",
       alignSelf: "center",
@@ -6427,9 +6431,13 @@ STREET-SPOKEN STYLE & MODERN SLANG (HYBRID/VIRAL only):
   }
   return `\n\nNARRATION STYLE — STORY (ELITE INTERNATIONAL RECAP — 75-80% DURATION & ZERO REPETITION):
   - TOP-TIER INTERNATIONAL RECAP STANDARD: Write rich, continuous scene-by-scene narration (aiming for ~75% to 80% of source duration). For longer videos, narrate each progressive scene in full narrative depth roughly every 14-20 seconds — DO NOT over-compress into a short synopsis.
-  - HIGH-STAKES VIRAL HOOK (FIRST 3 SECONDS):
-    * Open immediately with the central moral dilemma, impossible choice, or life-or-death consequence in ONE short sentence (~8-12 words, ~3 seconds spoken; no filler tails like "ဆက်ကြည့်လိုက်ရအောင်") (e.g. "ဒီဆုံးဖြတ်ချက်က တစ်မိသားစုလုံးကို အဆုံးသတ်သွားစေခဲ့တယ်..." / "ဒီလျှို့ဝှက်ချက်ကြောင့် လူတိုင်း အသက်ပေးလိုက်ရတော့မယ်...").
-    * Plunge straight into the emotional peak without any slow background buildup.
+  - NATURAL STORY OPENING (FIRST 3 SECONDS):
+    * Open naturally with the protagonist's current situation, atmospheric mood, or immediate dilemma specific to THIS movie in one compelling sentence.
+    * STRICTLY FORBID repetitive template openers (e.g. "ဒီဆုံးဖြတ်ချက်က...", "ဒီလျှို့ဝှက်ချက်ကြောင့်...") and filler tails ("ဆက်ကြည့်လိုက်ရအောင်").
+  - SELECTIVE HUMAN COMMENTARY (REALISTIC & ZERO-PREACHY):
+    * Narrate like an emotionally perceptive friend discussing a film — NOT a detached reporter or moralizing preacher.
+    * DO NOT force commentary onto every paragraph. Only at key turning points, difficult decisions, or intense emotional peaks, weave in ONE brief line of relatable human empathy or insight into the character's dilemma.
+    * STRICTLY FORBID generic philosophical preaching or canned moral lessons (e.g. NEVER use lines like "ဘဝဆိုတာ...", "လူသားတွေဟာ..."). Ground every observation strictly in the scene's immediate emotional reality to make the recap genuinely transformative and organic.
   - PERMANENT IDENTITY LOCK & NATURAL PRONOUN FLOW:
     * Once a character is introduced by name or role/title, NEVER swap or change it across timestamps or episodes (e.g. if "ကင်", keep "ကင်" throughout; never change to "ဥက္ကဌ" or "သူဌေး").
     * Avoid repeating names or "သူတို့... သူတို့..." in consecutive sentences. Link sentences smoothly using spoken connectors (တာကြောင့်, ပြီး, ဒါပေမဲ့, နောက်တော့) and appropriate pronouns (သူ, သူမ, သူတို့, သူတို့မိသားစု, သူတို့တစ်ဖွဲ့လုံး), or natural subject omission.
@@ -6447,7 +6455,7 @@ STREET-SPOKEN STYLE & MODERN SLANG (HYBRID/VIRAL only):
     * FORBIDDEN: robotic CCTV action logging.
     * Vary sentence lengths and emotional cadence so the voiceover sounds human, passionate, and deeply engaging.
   - DIALOGUE INTEGRATION: Weave the characters' crucial spoken lines, arguments, and emotional words directly into the narrative with vivid quotes or indirect speech.
-  - CLIFFHANGERS & RETENTION: End each paragraph with subtle narrative tension or curiosity that pulls the viewer irresistibly into the next scene.${translitBlock}`;
+  - FLUID NARRATIVE FLOW: Let each paragraph flow naturally into the next based on cause-and-effect and genuine character emotions — do NOT force twists or artificial cliffhanger lines.${translitBlock}`;
 }
 
 const RecapVideoNVPage: React.FC = () => {
@@ -7028,8 +7036,10 @@ const RecapVideoNVPage: React.FC = () => {
       const targetDurationSec = Math.round(duration * 0.7);
       const minRequiredParagraphs = Math.max(12, Math.round(targetDurationSec / 15));
       const targetParagraphs = Math.max(16, Math.round(targetDurationSec / 11));
+      const minWordCount = Math.round((targetDurationSec / 60) * 120);
+      const targetWordCount = Math.round((targetDurationSec / 60) * 130);
       const pacingStepSec = Math.max(12, Math.min(25, Math.round(duration / targetParagraphs)));
-      const lengthMandate = `\n- LENGTH MANDATE: spoken recap must last about ${Math.round(targetDurationSec / 60)} minutes. Write AT LEAST ${minRequiredParagraphs} timestamped paragraphs (target ${targetParagraphs}), with a [MM:SS] timestamp roughly every ${pacingStepSec} seconds of source time. Do NOT write a short 1-minute summary.\n- Expand high-stakes scenes (fights, arguments, romance, betrayals, climaxes) continuously, following the source scene's real length.`;
+      const lengthMandate = `\n- LENGTH MANDATE: spoken recap must last about ${Math.round(targetDurationSec / 60)} minutes (MANDATORY: AT LEAST ${minWordCount} words, target ~${targetWordCount} words). Write AT LEAST ${minRequiredParagraphs} timestamped paragraphs (target ${targetParagraphs}), with a [MM:SS] timestamp roughly every ${pacingStepSec} seconds of source time. Do NOT write a short 1-minute summary.\n- Expand high-stakes scenes (fights, arguments, romance, betrayals, climaxes) continuously, following the source scene's real length.`;
       const isBurmese = selectedLangName === "BURMESE";
       const burmeseStyleBlock = isBurmese
         ? `\n\nLANGUAGE STYLE (CRITICAL for Burmese):\n` +
@@ -7048,14 +7058,14 @@ const RecapVideoNVPage: React.FC = () => {
       const scriptBody: Record<string, unknown> = {
         fileUri,
         fileMimeType: mimeType,
-        niche: `You are a top-tier international movie recap scriptwriter. Analyze the uploaded movie/video and produce a rich, cinematic, highly engaging recap script in ${selectedLangName}. Length must be approximately 70% of the original duration when read aloud (band 70-85%, never below 70%). ${seriesEnabled ? "SERIES CONTINUATION: Do NOT include any opening viral hook or scene from the middle/end; start strictly in chronological sequence from the beginning of this episode." : "Start with a shocking hook, build mystery, escalate tension, finish with a climactic payoff."} ZERO COMPRESSION ON KEY SCENES: Give full dramatic weight and emotional depth to every confrontation, turning point, and character conflict. Cut only empty dead air (silent staring/purposeless travel). Write as ONE continuous gripping story with hook transitions between segments. Output each paragraph prefixed by [MM:SS] starting at [00:00] and ending close to the full duration. Use original wording — do NOT quote distinctive dialogue.${burmeseStyleBlock}${buildNarrationStyleBlock(narrationStyle, selectedLangName)}`,
+        niche: `You are a top-tier international movie recap scriptwriter. Analyze the uploaded movie/video and produce a rich, cinematic, highly engaging recap script in ${selectedLangName}. Length must be approximately 70% of the original duration when read aloud (band 70-85%, never below 70%). ${seriesEnabled ? "SERIES CONTINUATION: Start strictly in chronological sequence from the beginning of this episode." : "Open naturally with the character's core dilemma and the film's authentic mood."} ZERO COMPRESSION ON KEY SCENES: Give full dramatic weight and emotional depth to every confrontation, turning point, and character conflict. Cut only empty dead air. Narrate as a fluid, human-narrated story with natural conversational commentary and seamless scene-to-scene progression without forced cliffhangers.Output each paragraph prefixed by [MM:SS] starting at [00:00] and ending close to the full duration. Use original wording — do NOT quote distinctive dialogue.${burmeseStyleBlock}${buildNarrationStyleBlock(narrationStyle, selectedLangName)}`,
         language: selectedLangName,
         sourceDurationSec: duration,
         narrationStyle,
         skipCreditDeduction: true,
         recapNvPipeline: true,
         apiMode: resolvedApiMode,
-        extraInstructions: `CRITICAL:\n- Output language MUST be ${selectedLangName} ONLY.\n- STRICT MULTI-CHARACTER RULE: NEVER reduce the story to only 2 people! Accurately identify each distinct person by their source name or relationship in ${selectedLangName} (အဖေ, အမေ, သား, သမီး, ဇနီး, ခင်ပွန်း, အဖိုး, အဖွား, ချွေးမ, ဆရာ, ဆရာဝန်, ရဲ, သူငယ်ချင်း). NEVER merge multiple different characters into the 2 main leads!\n- Cover the full story arc at about 70% of source duration (never below 70%, never above 85%).\n- Cut only true dead air. Keep every key scene, dialogue exchange, and emotional moment in rich detail.${lengthMandate}\n- Each segment must flow into the next with a hook/transition.\n- Never output a partial/incomplete script.${burmeseExtraStyle}`,
+        extraInstructions: `CRITICAL:\n- Output language MUST be ${selectedLangName} ONLY.\n- STRICT MULTI-CHARACTER RULE: NEVER reduce the story to only 2 people! Accurately identify each distinct person by their source name or relationship in ${selectedLangName} (အဖေ, အမေ, သား, သမီး, ဇနီး, ခင်ပွန်း, အဖိုး, အဖွား, ချွေးမ, ဆရာ, ဆရာဝန်, ရဲ, သူငယ်ချင်း). NEVER merge multiple different characters into the 2 main leads!\n- Cover the full story arc at about 70% of source duration (never below 70%, never above 85%).\n- Cut only true dead air. Keep every key scene, dialogue exchange, and emotional moment in rich detail.${lengthMandate}\n- - Fluid storytelling flow driven purely by real source events — no forced cliffhangers.\n- Never output a partial/incomplete script.${burmeseExtraStyle}`,
         generationConfig: {
           maxOutputTokens,
           temperature: 0.7,
@@ -7639,8 +7649,10 @@ const RecapVideoNVPage: React.FC = () => {
       const targetDurationSec = Math.round(lenBaseSec * 0.7);
       const minRequiredParagraphs = Math.max(12, Math.round(targetDurationSec / 15));
       const targetParagraphs = Math.max(16, Math.round(targetDurationSec / 11));
+      const minWordCount = Math.round((targetDurationSec / 60) * 120);
+      const targetWordCount = Math.round((targetDurationSec / 60) * 130);
       const pacingStepSec = Math.max(12, Math.min(25, Math.round(lenBaseSec / targetParagraphs)));
-      const lengthMandate = `\n- LENGTH MANDATE: spoken recap must last about ${Math.round(targetDurationSec / 60)} minutes. Write AT LEAST ${minRequiredParagraphs} timestamped paragraphs (target ${targetParagraphs}), with a [MM:SS] timestamp roughly every ${pacingStepSec} seconds of source time. Do NOT write a short 1-minute summary.\n- Expand high-stakes scenes (fights, arguments, romance, betrayals, climaxes) continuously, following the source scene's real length.`;
+      const lengthMandate = `\n- LENGTH MANDATE: spoken recap must last about ${Math.round(targetDurationSec / 60)} minutes (MANDATORY: AT LEAST ${minWordCount} words, target ~${targetWordCount} words). Write AT LEAST ${minRequiredParagraphs} timestamped paragraphs (target ${targetParagraphs}), with a [MM:SS] timestamp roughly every ${pacingStepSec} seconds of source time. Do NOT write a short 1-minute summary.\n- Expand high-stakes scenes (fights, arguments, romance, betrayals, climaxes) continuously, following the source scene's real length.`;
 
       // â”€â”€ LANGUAGE-AWARE BLOCKS: All language-specific text uses selectedLangName so user's chosen language is respected. â”€â”€
       const isBurmese = selectedLangName === "BURMESE";
@@ -7678,11 +7690,10 @@ const RecapVideoNVPage: React.FC = () => {
 Your task is to analyze the uploaded movie/video and create an engaging recap version like the best YouTube movie recap channels. Do NOT simply speed up or use only the first part. You must understand the FULL STORY and narrate it completely, using only real source events.
 
 CRITICAL STORYTELLING RULE:
-Write the narration script as ONE CONTINUOUS GRIPPING STORY. Every sentence must hook into the next â€” create momentum, tension, and curiosity.
-Use short, punchy sentences, action verbs, and high-energy transitions.
-Do NOT write isolated disconnected paragraphs. Each segment must END with a hook or transition that PULLS the listener into the next segment.
-Examples of good transitions: "But what she didn't know was..." / "And that's when everything changed." / "Just when he thought it was over..."
-The narration must feel like a non-stop thriller story, NOT a boring lecture, documentary, or news report.
+Write the narration script as ONE CONTINUOUS NATURAL STORY. Ground every line in real source events, character motives, and genuine emotions.
+Use clear, engaging conversational language with natural cause-and-effect transitions.
+Do NOT force formulaic twists or repetitive cliffhanger lines like "ဒါဟာ အစပဲရှိသေးတယ်", "ဒါပေမဲ့ အရာအားလုံး ပြောင်းလဲသွားခဲ့တယ်", or "သူမ မသိခဲ့တာက".
+The narration must feel like an authentic human storyteller sharing a compelling movie with a friend, driven purely by the real actions and drama inside the source.
 
 STRICT LENGTH RULE (70% COVERAGE):
 This is an elite international narrative recap. You MUST produce a rich, detailed cinematic storytelling experience.
@@ -7697,10 +7708,10 @@ If your script is shorter than the MINIMUM, you MUST expand character emotions, 
 A 20-minute source producing only 2-4 minutes of narration = STRICT FAILURE.
 
 STRUCTURE RULE:
-${seriesEnabled ? "1. SERIES CONTINUATION: Do NOT include any opening viral hook or scene from the middle/end; start strictly in chronological sequence from the beginning of this episode." : "1. Start with a SHOCKING HOOK from the middle or end that immediately raises a why-did-this-happen question."}
-2. Then build a MYSTERY-DRIVEN buildup while preserving the core plot logic and revealing hidden stakes.
-3. Increase tension step-by-step with shorter, sharper narration as the conflict intensifies.
-4. Finish with an ULTIMATE CLIMAX PEAK: the twist or payoff must land hard and leave the viewer breathless.
+${seriesEnabled ? "1. SERIES CONTINUATION: Start strictly in chronological sequence from the beginning of this episode." : "1. Open with a natural, atmosphere-driven scene establishing the character's situation and inner conflict."}
+2. Develop the plot through realistic cause-and-effect, highlighting meaningful character choices.
+3. Incorporate thoughtful, conversational human commentary on characters' decisions rather than just listing occurrences.
+4. Let the climax and resolution unfold naturally from the story's emotional peak without artificial twist gimmicks.
 
 IMPORTANT EDITING RULE:
 Keep the important story moments, but remove unnecessary transition actions, filler activities, and dead air between them.
@@ -7760,12 +7771,12 @@ CUTTING RULES (this is a RECAP, not a retelling):
 - KEEP IN FULL: Plot twists, reveals, conflicts, arguments, fights, romance, character-defining moments, shocking scenes, and the resolution — narrate these continuously, never in one dry sentence.
 - SPOKEN LENGTH FLOOR: narration must run about 70–80% of the source duration (~110 spoken words per minute). Never deliver a 1–2 minute script for a 5+ minute source. Length must come only from real source events — never invent.
 - Think like a professional YouTube recap editor: fast, engaging, essential moments only.
-- Do NOT randomly cut scenes. Intelligently compress the narrative while preserving a professional complete story experience.
+- DYNAMIC PACING: Narrate high-impact scenes (conflicts, fights, action, emotional peaks, twists) in full cinematic detail with dialogue. Summarize secondary/transition moments quickly in 1-2 linking sentences so pacing stays engaging without dragging.
 
 STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
 - Write narration as a CONTINUOUS FLOWING STORY. Never write isolated disconnected paragraphs.
-- Each segment MUST end with a hook or transition line that creates MOMENTUM into the next segment.
-- Use cliffhanger-style transitions: "But that was just the beginning..." / "And then, everything went wrong."
+- Advance from one scene to the next with natural, fluid narrative momentum.
+- STRICTLY FORBID repetitive robotic cliffhangers (e.g. NEVER force lines like "ဒါဟာ အစပဲရှိသေးတယ်" or "ဒါပေမဲ့ အရာအားလုံး ပြောင်းလဲသွားခဲ့တယ်") — let the story's real events and human curiosity sustain the interest.
 - Keep sentence density HIGH. No filler words, no unnecessary repetition, no padding.
 - When the TTS reads this script, there should be ZERO moments where the audience wants to skip.${burmeseExtraStyle}`,
         generationConfig: {
@@ -8088,14 +8099,38 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
           {/* API Mode */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-neon-cyan">🔑 API Mode</label>
+            {/* SURGICAL ADD: Admin Notice for Own API Guidance */}
+            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs leading-relaxed">
+              ⚠️ Aug,2026 ကတည်းက Free Own API Key ကိုသုံးပြီး Unlimited ထုတ်ခွင့်စနစ်ကို ပြောင်းထားပါသဖြင့် Google API
+              KEY ကို မဖြစ်မနေထည့်ပေးရပါမယ်။API KEY ယူနည်းကို Tutorial Videos ထဲတွင်ကြည့်ပါ
+            </div>
+
             <div className="flex gap-2">
               <button
-                onClick={() => setApiMode("app")}
-                className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${apiMode === "app" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
+                type="button"
+                onClick={() => {
+                  if (!appApiAllowed) {
+                    toast.error("⚠️ App API ကို ယာယီပိတ်ထားပါသည် — Own API Key ကိုသာ အသုံးပြုပေးပါရန်");
+                    return;
+                  }
+                  setApiMode("app");
+                }}
+                disabled={!appApiAllowed}
+                className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${
+                  !appApiAllowed
+                    ? "opacity-40 cursor-not-allowed bg-secondary/50 text-muted-foreground border-border/40"
+                    : apiMode === "app"
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-secondary text-secondary-foreground border-border hover:opacity-80"
+                }`}
               >
-                🖥️ App API<span className="block text-xs font-normal opacity-70">Admin · Premium · Pro</span>
+                🖥️ App API
+                <span className="block text-xs font-normal opacity-70">
+                  {!appApiAllowed ? "⚠️ ယာယီပိတ်ထားပါသည်" : "Admin · Premium · Pro"}
+                </span>
               </button>
               <button
+                type="button"
                 onClick={() => setApiMode("own")}
                 className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${apiMode === "own" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
               >
@@ -8144,7 +8179,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                 <button
                   onClick={() => {
                     setDeviceTier("slow");
-                    setRenderMode("server");
+                    setRenderMode("browser");
                   }}
                   className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${deviceTier === "slow" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
                 >
@@ -8158,6 +8193,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
               <label className="text-sm font-medium text-neon-cyan">⚙️ Render Mode</label>
               <div className="flex gap-2">
                 <button
+                  type="button"
                   onClick={() => setRenderMode("browser")}
                   className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${renderMode === "browser" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
                 >
@@ -8165,13 +8201,26 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                   <span className="block text-xs font-normal opacity-70">{creditPerMinRate} CR / min</span>
                 </button>
                 <button
-                  onClick={() => setRenderMode("server")}
-                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${renderMode === "server" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
+                  type="button"
+                  aria-disabled="true"
+                  onClick={() => {
+                    setRenderMode("browser");
+                    toast.error("⚠️ Server Render ကို ယာယီပိတ်ထားပါတယ် — Browser Render ကိုသာ အသုံးပြုပေးပါ");
+                  }}
+                  className="flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all bg-secondary text-secondary-foreground border-border opacity-50 cursor-not-allowed"
                 >
                   ☁️ Server Render
-                  <span className="block text-xs font-normal opacity-70">{serverCreditPerMinRate} CR / min</span>
+                  <span className="block text-xs font-normal opacity-70">⚠️ ယာယီပိတ်ထားပါတယ်</span>
                 </button>
               </div>
+
+              {/* Server Render ရွေးမိပါက ပေါ်လာမည့် သတိပေးချက် Banner */}
+              {false && (
+                <div className="p-3 rounded-lg bg-destructive/15 border border-destructive/40 text-destructive text-xs leading-relaxed animate-pulse">
+                  ⚠️ <strong>သတိပေးချက်:</strong> Server Render က လက်ရှိတွင် အသုံးပြုလို့မရတာကြောင့် Server Render
+                  ရွေးရင် Error တက်ပါမည်။ ကျေးဇူးပြု၍ <strong>🖥️ Browser Render</strong> ကိုသာ ရွေးချယ်အသုံးပြုပေးပါရန်။
+                </div>
+              )}
             </div>
           </div>
 
@@ -8748,20 +8797,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
             />
           </div>
 
-          {/* Video Link Input */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-neon-cyan">
-              Video Link (YouTube, TikTok, Instagram, Facebook)
-            </label>
-            <input
-              type="text"
-              value={videoLink}
-              onChange={(e) => setVideoLink(e.target.value)}
-              placeholder="https://youtube.com/watch?v=..."
-              disabled={status === "processing"}
-              className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
-            />
-          </div>
+          {/* Video Link Input — removed from UI (platform links blocked); file upload only */}
 
           {/* SURGICAL EDIT: Generate Recap Button â€” user must click to start pipeline */}
           {(videoFile || videoLink) && status !== "processing" && !audioUrl && (
