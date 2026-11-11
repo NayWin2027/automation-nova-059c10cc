@@ -539,35 +539,35 @@ const createWebCodecsMp4Recorder = async (options: {
     firstTimestampBehavior: "offset",
   });
 
-// SURGICAL FIX (mp4-muxer null colorSpace crash killer):
-// Browser VideoEncoder emitted chunks without meta.decoderConfig -> mp4-muxer crashes on null.colorSpace.
-// This fallback ensures track.info.decoderConfig is always safely initialized so finalize() succeeds 100%.
-let hasValidDecoderConfig = false;
-546:
-const videoEncoder = new (window as any).VideoEncoder({
-  output: (chunk: any, meta: any) => {
-    let finalMeta = meta;
-    if (meta?.decoderConfig) {
-      hasValidDecoderConfig = true;
-    } else if (!hasValidDecoderConfig) {
-      finalMeta = {
-        ...meta,
-        decoderConfig: {
-          codec: videoCodec,
-          colorSpace: {
-            primaries: "bt709",
-            transfer: "bt709",
-            matrix: "bt709",
-            fullRange: false,
+  // SURGICAL FIX (mp4-muxer null colorSpace crash killer):
+  // Browser VideoEncoder emitted chunks without meta.decoderConfig -> mp4-muxer crashes on null.colorSpace.
+  // This fallback ensures track.info.decoderConfig is always safely initialized so finalize() succeeds 100%.
+  let hasValidDecoderConfig = false;
+
+  const videoEncoder = new (window as any).VideoEncoder({
+    output: (chunk: any, meta: any) => {
+      let finalMeta = meta;
+      if (meta?.decoderConfig) {
+        hasValidDecoderConfig = true;
+      } else if (!hasValidDecoderConfig) {
+        finalMeta = {
+          ...meta,
+          decoderConfig: {
+            codec: videoCodec,
+            colorSpace: {
+              primaries: "bt709",
+              transfer: "bt709",
+              matrix: "bt709",
+              fullRange: false,
+            },
+            description: new Uint8Array([1, 100, 0, 40, 255, 225, 0, 0, 1, 0, 0]),
           },
-          description: new Uint8Array([1, 100, 0, 40, 255, 225, 0, 0, 1, 0, 0]),
-        },
-      };
-    }
-    muxer.addVideoChunk(chunk, finalMeta);
-  },
-  error: (e: any) => console.error("[WebCodecs VideoEncoder]:", e),
-});
+        };
+      }
+      muxer.addVideoChunk(chunk, finalMeta);
+    },
+    error: (e: any) => console.error("[WebCodecs VideoEncoder]:", e),
+  });
 
   videoEncoder.configure({
     codec: videoCodec,
