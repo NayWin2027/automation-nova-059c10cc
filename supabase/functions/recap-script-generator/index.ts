@@ -9,7 +9,7 @@ const GOOGLE_FILES_API = "https://generativelanguage.googleapis.com/upload/v1bet
 const GOOGLE_AI_API = "https://generativelanguage.googleapis.com/v1beta/models";
 // gemini-1.5-flash / gemini-2.5-flash are no longer served (404 NOT_FOUND).
 // Use the rolling "latest" alias which stays available for both old and new keys.
-const MODEL = "gemini-3.1-flash-lite";
+const MODEL = "gemini-3.5-flash-lite";
 
 // SLANG-TEMP: HYBRID/VIRAL modes need a slightly higher temperature so the model
 // actually reaches for street slang instead of the safest plain wording. STORY mode
@@ -29,7 +29,7 @@ function buildGenerationConfig(model: string, requestedMaxOutputTokens: number |
   // Burmese/CJK narration costs 2-3 tokens per syllable: an 8192 cap truncated
   // long recaps and dropped the middle/ending beats. Give the model real room.
   const maxOutputTokens =
-    model === "gemini-3.1-flash-lite"
+    model === "gemini-3.5-flash-lite"
       ? Math.max(requestedMaxOutputTokens || 0, 80000)
       : Math.max(requestedMaxOutputTokens || 0, 60000);
 
@@ -507,7 +507,7 @@ function violatesTargetLanguage(script: string, lang: string): boolean {
 
 // Niche-specific style instructions
 const nicheStyles: Record<string, string> = {
-  "MOVIE RECAP": `Write like a top-tier Netflix/Hollywood movie recap narrator. Build genuine emotional depth, natural pacing, and authentic dramatic peaks. Make viewers feel every authentic conflict, betrayal, romance, and revelation as if they're experiencing the story firsthand.`,
+  "MOVIE RECAP": `Write like a top-tier Netflix/Hollywood movie recap narrator. Build suspense, use dramatic pauses, cliffhangers, and emotional peaks. Make viewers feel every twist, betrayal, romance, and revelation as if they're watching the movie.`,
   "TECH / AI": `Write like MKBHD or Linus Tech Tips — sharp, informative, exciting. Use punchy tech jargon naturally, explain complex concepts simply, and build hype around innovations and breakthroughs.`,
   DOCUMENTARY: `Write like David Attenborough or a BBC World documentary narrator — authoritative, insightful, thought-provoking. Layer facts with storytelling to create a compelling narrative arc.`,
   "TRUE CRIME": `Write like a true crime podcast host — suspenseful, gripping, investigative. Build tension slowly, reveal clues dramatically, and keep the audience on edge with every detail.`,
@@ -865,7 +865,7 @@ UNCENSORED VERBATIM DIALOGUE (mandatory for ${narrationStyle} mode — 100% of s
 
 STREET-SPOKEN STYLE & MODERN SLANG (mandatory for ${narrationStyle} mode):
 - Write 100% the way real people talk today. Literary/bookish forms are FORBIDDEN (for BURMESE: no သည်, ၏, ၍, နေသည်, လုပ်နေသည် — use တယ်/တာ/လဲ/ကွာ/ပဲ).
-- Prefer current street slang and trend words over plain wording. BURMESE examples: လှတယ် → လန်းတယ်; လိင်ဆက်ဆံနေတယ် → မူစကူဒူးနေကြတယ်;ဒီလူကြီး/ဒီအမျိုးသားကြီး → ဒီဘဲကြီး;ကောင်မလေး → ဆော်; တင်ပါးလှတယ် → စစ်ကိုင်းအိုးကြီးလို တင်းနေတယ်; ပါးစပ်ပိတ်ထား → စောက်ပေါက်ပိတ်ထား;စကားသိပ်မများနဲ့ → အီးသိပ်မပေါက်နဲ့; ဂဂျီဂဂျောင်ကျတယ်/ရစ်တယ် → ချီးထုပ်ကျတယ်; လိုရင်းမရောက်ဘဲ ဝေ့ဝိုက်နေတယ် → တိုင်ပတ်နေတယ်။
+- Prefer current street slang and trend words over plain wording. BURMESE examples: လှတယ် → လန်းတယ်; လိင်ဆက်ဆံနေတယ် → မူစကူဒူးနေကြတယ်;ဒီလူကြီး/ဒီအမျိုးသားကြီး → ဒီဘဲကြီး;ကောင်မလေး → ဆော်; တင်ပါးလှတယ် → စစ်ကိုင်းအိုးကြီးလို တင်းနေတယ်; ပါးစပ်ပိတ်ထား → စောက်ပေါက်ပိတ်ထား;စကားသိပ်မများနဲ့ → အီးသိပ်မပေါက်နဲ့; ဂဂျီဂဂျောင်ကျတယ်/ရစ်တယ် → ချီးထုပ်ကျတယ်; လိုရင်းမရောက်ဘဲ ဝေ့ဝိုက်နေတယ် → တိုင်ပတ်နေတယ်; မဟုတ်တာတွေလျှောက်မပြောနဲ့ → စောက်ပိုတွေမပြောနဲ့; ပြည့်တန်ဆာ → ဖာသည်မ; ဆဲစကား → မအေလိုး/သူတောင်းစား/ ခွေးမသား။ သို့သော် ဆရာတပည့်ဆက်ဆံရေး၊မိဘနဲ့သားသမီးဆက်ဆံရေးတွေမှာဆိုရင် ဒီဗန်းစကားတွေ မသုံးရ။
 - SLANG QUOTA (HARD REQUIREMENT): the finished script MUST actually contain AT LEAST 6-10 real slang/street expressions from the list above (or equally current Burmese street slang), spread across the whole script — not just in the hook. A script written entirely in plain polite wording is REJECTED.
 - Whenever a plain word has a street equivalent above, you MUST write the street version. Example: never write "ပါးစပ်ပိတ်ထား" — write "စောက်ပေါက်ပိတ်ထား" or "အီးသိပ်မပေါက်နဲ့". Never write "လှတယ်" — write "လန်းတယ်". Never write "ပြည့်တန်ဆာ" — write "ဖာသည်မ".
 - These slang and vulgar words are ALLOWED and REQUIRED here. No politeness filter, no softening, no self-censoring, no asterisks. This rule OVERRIDES every earlier "avoid profanity / keep it clean / avoid derogatory words" style instruction anywhere in this prompt.
@@ -930,9 +930,10 @@ STREET-SPOKEN STYLE & MODERN SLANG (mandatory for ${narrationStyle} mode):
 ###############################################################
 
 Your writing style:
-- Natural spoken ${lang} (conversational, warm, NOT literary/formal)
-- Selective Human Commentary (Realistic & Non-Preachy): Narrate like an emotionally perceptive friend discussing a film — NOT a detached reporter or moralizing preacher. DO NOT force commentary onto every paragraph. Only at high-stakes decisions, intense conflicts, or heart-wrenching turning points, naturally weave in ONE brief, empathetic observation on the character's tough dilemma (from their real human perspective). STRICTLY FORBID generic preaching or moral lessons (NEVER say "ဘဝဆိုတာ...", "လူသားတွေရဲ့ လောဘဟာ..."). Keep it 100% grounded in this specific scene's raw emotion so the narration is genuinely transformative and entirely free from robotic patterns.
-- Fluid narrative pacing guided by real scene emotion, completely free from forced twists or repetitive cliffhangers.
+- Natural spoken ${lang} (conversational, NOT literary/formal)
+- Emotionally engaging storytelling with dramatic pacing
+- Professional narrator voice that hooks viewers from the first sentence
+- Uses rhetorical questions, cliffhangers, and emotional beats
 
 NICHE-SPECIFIC STYLE for "${nicheLabel}":
 ${nicheStyle}
@@ -972,7 +973,7 @@ CRITICAL - RECAP COMPLETENESS (ZERO FILLER POLICY):
 - NEVER censor, skip, or tone down intimate/romantic/physical/18+/21+ scenes. Describe them vividly and naturally as they happened in the source. Audiences LOVE these moments — they are the main attraction
 - If two characters kiss, embrace, touch intimately, or have any physical/romantic interaction, you MUST describe it with vivid sensory detail (what they felt, the tension, the emotions, the physical sensations)
 - DO NOT use vague euphemisms. Be specific and descriptive about physical actions and emotional reactions
-- DYNAMIC PACING: Narrate high-impact scenes (conflicts, fights, action, emotional peaks, shocking twists) in full cinematic detail with character dialogue and reactions. For mundane/transition scenes (walking, waiting, routine), summarize quickly in 1-2 linking sentences so pacing stays fast and engaging. Maintain total target duration.
+- DO NOT translate or retell every scene. Skip filler and compress secondary scenes into brief linking lines
 - Maintain detailed, engaging narrative coverage so the recap reaches about 70% of the source duration(never a rushed or short summary).
 
 CHARACTER IDENTITY & MULTI-CHARACTER SEPARATION (CRITICAL — STRICT ENFORCEMENT):
@@ -1006,25 +1007,30 @@ SPECIAL INSTRUCTION FOR NON-DIALOGUE SOURCES:
 - THIS IS THE #2 HIGHEST PRIORITY RULE (after TARGET LANGUAGE).
 ###############################################################
 
-NATURAL STORY OPENING:
-- Open directly with the story's authentic situation, the protagonist's immediate dilemma, or the scene's real atmosphere as depicted in the source.
-- STRICTLY FORBIDDEN CLICHÉS: NEVER use formulaic lines like "ဒီဆုံးဖြတ်ချက်က...", "ဒီလျှို့ဝှက်ချက်ကြောင့်...", "ဘယ်သူမှ မထင်မှတ်ထားတဲ့...", or filler endings like "ဆက်ကြည့်လိုက်ရအောင် / စောင့်ကြည့်ရအောင်".
-- Dive straight into the story chronologically or from the opening scene's genuine tension — do NOT fabricate out-of-context shock bait or forced viral hooks.
-- Base every opening line strictly on what is visible and audible in the source content.
-- ABSOLUTELY FORBIDDEN: Do NOT write ANY preamble, intro, acknowledgement, meta-comment, or framing sentence.
+VIRAL HOOK RULE (MANDATORY — FIRST 3 SECONDS):
+- The VERY FIRST sentence MUST be a 3-second viral hook designed to stop the scroll instantly
+- It must be shocking, provocative, or emotionally magnetic — NOT a generic intro
+- Great hook examples (SHORT — about 8-12 words, ~3 seconds spoken): "ဒီဆုံးဖြတ်ချက်က တစ်မိသားစုလုံးကို အဆုံးသတ်သွားစေခဲ့တယ်..." / "ဒီလျှို့ဝှက်ချက်ကြောင့် လူတိုင်း အသက်ပေးလိုက်ရတော့မယ်..." / "This single choice ended their entire family."
+- HOOK LENGTH: keep the hook to ONE short punchy sentence stating the core crisis directly. STRICTLY PROHIBITED: NEVER use cliché openers like "ဘယ်သူမှ မထင်မှတ်ထားတဲ့...", "ဘယ်သူမှ မထင်ထားတဲ့...", or filler endings like "ဆက်ကြည့်လိုက်ရအောင် / စောင့်ကြည့်ရအောင်".
+- HOOK SELECTION (do this internally before writing): scan the WHOLE source and list the 3 highest-impact moments — the biggest shock, conflict, reveal, betrayal, surprising fact, or emotional peak. Rank them by how strongly a stranger would react in 3 seconds, then build the hook from the #1 ranked moment ONLY.
+- NEVER build the hook from an ordinary, calm, or setup moment just because it happens early. Position in the video is irrelevant — only impact matters.
+- This is niche-agnostic: for stories use the dramatic peak; for news/documentary the most shocking revelation; for tech/health/business/educational the most counter-intuitive fact, mistake, or result.
+- IF the source genuinely has no high-impact peak (calm tutorial, plain vlog, routine explainer), do NOT force a fake shocking hook. Instead open with the single most useful or curiosity-driving line of real substance from the content, and never invent drama that is not in the source.
+- After the hook, transition naturally into the story recap
+- ABSOLUTELY FORBIDDEN: Do NOT write ANY preamble, intro, acknowledgement, meta-comment, or framing sentence before the hook.
 - FORBIDDEN OPENERS include (but not limited to): "ဟုတ်ကဲ့", "ကောင်းပါပြီ", "ရပါပြီ", "အောက်မှာ ဖော်ပြပေး", "ဒီ ... ဗီဒီယိုလေးကို အခြေခံပြီး", "Here is", "Here's", "Below is", "Sure", "Okay", "Of course", or any sentence wrapped in ( ) / （ ） that describes what you are about to write.
-- The very FIRST character of your output MUST be the timecode [00:00] followed by the opening narration sentence. No labels, headings, parentheses, or markdown.
+- The very FIRST character of your output MUST be the FIRST WORD of the viral hook itself. No labels like "Hook:", no headings, no parentheses, no markdown — just the hook sentence.
 
 RECAP WRITING STYLE (INTERNATIONAL HIGH-RETENTION SCRIPTWRITER):
 - Write like a top-tier international movie recap narrator (immersive, vivid, and deeply engaging storytelling)
 - ZERO RUSH ON KEY BEATS: Give full dramatic weight and emotional depth to every confrontation, revelation, argument, and turning point — do NOT rush or reduce them to a 1-sentence summary.
 - Capture visible facial expressions, tense dialogues, high-stakes decisions, and intimate feelings in detail.
-- FLUID NARRATIVE FLOW: Connect scenes naturally through cause-and-effect and genuine character emotions — do NOT force twists or artificial cliffhangers at the end of every paragraph.
-- Blend authentic story events with thoughtful narrator commentary so viewers stay invested in what the characters will do next.
-- Cut repetitive transitional filler and robotic recap formulas.
+- Every sentence must create curiosity for the next — use cliffhangers between paragraphs
+- Cut all filler: no "and then", no "after that", no "meanwhile" — go straight to the punch
+- Each paragraph = one explosive beat, 2-3 sentences max, designed to keep viewers locked in
 
 STRUCTURE:
-- Opening: Natural introduction to the scene and the character's immediate situation
+- HOOK (1 viral sentence — 3-second scroll-stopper)
 - Rising tension: Build with only the most gripping beats in chronological order
 - Climax: The single most shocking/dramatic moment at peak intensity
 - Resolution: Short, punchy ending that leaves viewers wanting more
@@ -1062,7 +1068,8 @@ ${callerInstructionsBlock ? `CALLER-SPECIFIC EDITING INSTRUCTIONS (OVERRIDE STYL
 ###############################################################
 # FINAL SLANG ENFORCEMENT (HIGHEST PRIORITY AFTER LANGUAGE)
 # Write 100% street-spoken ${lang}. Use the REQUIRED slang list above
-# (လန်းတယ်, မူစကူဒူး, စစ်ကိုင်းအိုးကြီးလို တင်းနေတယ်,အီးသိပ်မပေါက်နဲ့, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်)
+# (လန်းတယ်, မူစကူဒူး, စစ်ကိုင်းအိုးကြီးလို တင်းနေတယ်, စောက်ပေါက်ပိတ်ထား,
+#  အီးသိပ်မပေါက်နဲ့, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး, ခွေးမသား)
 # at least 6-10 times across the script, and keep every harsh/vulgar
 # source line uncensored and verbatim. Polite substitutes are REJECTED.
 # Exception: no slang/vulgarity in teacher-student or parent-child scenes,
@@ -1198,12 +1205,9 @@ AFTER the complete narration script, output a final line containing exactly ===S
 
       const targetSec = sourceDurationSec ? Math.round(sourceDurationSec * 0.7) : 0;
       const targetParas = sourceDurationSec ? Math.max(12, Math.round(targetSec / 14)) : 16;
-      const minWordCount = Math.round((targetSec / 60) * 120);
-      const targetWordCount = Math.round((targetSec / 60) * 130);
       const durationHint = sourceDurationSec
         ? `\nSOURCE VIDEO DURATION: ${Math.floor(sourceDurationSec / 60)} minutes ${Math.round(sourceDurationSec % 60)} seconds` +
-          `\nTARGET RECAP DURATION: ~${Math.round(targetSec / 60)} minutes (strictly ~70% of source duration).` +
-          `\nMANDATORY WORD COUNT: You MUST write AT LEAST ${minWordCount} words (target ~${targetWordCount} words) across AT LEAST ${targetParas} timestamped paragraphs. (E.g. 15 min source = min 1,200 words; 30 min source = min 2,500 words). DO NOT write a short synopsis!` +
+          `\nTARGET RECAP DURATION: ~${Math.round(targetSec / 60)} minutes (~70% of source duration). You MUST write AT LEAST ${targetParas} rich, detailed timestamped paragraphs covering scenes with deep storytelling. NEVER compress or summarize into a short synopsis!` +
           `\nCRITICAL: YOU MUST ANALYZE AND NARRATE THE ENTIRE TIMELINE FROM 00:00 TO THE VERY END WITH FULL SCENE DETAIL.`
         : "";
 
@@ -1219,7 +1223,7 @@ Below is a source video/audio file. Your job is to:
 4. Identify ALL key moments, especially dramatic/shocking ones (confrontations, revelations, emotional scenes, physical actions like kisses/fights/tears)
 5. Write a complete, highly detailed professional ${nicheLabel} narration script that RETAINS 80% to 90% of the original source's story, dialogue, and actions. DO NOT summarize it too much. The script must be fullcoverage on source video
 6. A viewer reading your script aloud MUST finish in about 80% to 100% of the original source duration (see REQUIRED NARRATION LENGTH above) and must cover the full source from beginning to end.
-7. Engage the audience naturally through genuine source drama and authentic character stakes
+7. Hook the audience immediately
 8. STRICT MULTI-CHARACTER CAST IDENTIFICATION (MANDATORY):
    - NEVER collapse all people into just 2 characters!
    - Identify every distinct person in the video. If their personal name is not spoken, you MUST refer to them by their role/relationship in ${langLabel} (e.g., အဖေ, အမေ, သား, သမီး, ဇနီး, ခင်ပွန်း, အဖိုး, အဖွား, ချွေးမ, သမက်, ဆရာ, တပည့်, ဆရာဝန်, သူနာပြု, ရဲ, မန်နေဂျာ, သူငယ်ချင်း, လူဆိုး).
@@ -1539,7 +1543,7 @@ ${transcript}
 Rules:
 - Your first word must be the direct continuation of the last incomplete sentence below — no gap, no restart.
 - After completing that sentence, continue narrating any remaining source content.
-- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ် ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
+- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, စောက်ပေါက်ပိတ်ထား, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
 - Same language (${lang}), same tone, same [MM:SS] format.
 - Do NOT repeat anything already written.
 
@@ -1835,7 +1839,7 @@ ${
     ? "- This is the FINAL part: cover every remaining beat including the ENDING/climax."
     : "- This is a MIDDLE part: do NOT write an ending or conclusion — stop mid-story on an unresolved beat."
 }
-- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ် ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
+- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, စောက်ပေါက်ပိတ်ထား, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
 - Same language (${lang}), same tone, same [MM:SS] format. Never [HH:MM:SS], never ranges.
 - Target about ${missingSec} seconds of spoken narration. Finish with complete sentences.
 
@@ -1848,7 +1852,7 @@ CONTINUE the script. Rules:
 - Write ONLY the new paragraphs. Do NOT repeat or rewrite anything already written.
 - Every new paragraph MUST start with a timecode [MM:SS] that is STRICTLY LATER than [${tc(lastTc)}] and must keep increasing.
 - Cover the remaining source content through to the ENDING. Include the beats that were skipped.
-- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
+- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, စောက်ပေါက်ပိတ်ထား, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
 - Same language (${lang}), same tone and same [MM:SS] format. Never use [HH:MM:SS] or ranges.
 - Finish with complete sentences. Add roughly ${missingSec} seconds of spoken narration.
 
@@ -1977,7 +1981,7 @@ Rules:
 - Every paragraph MUST start with [MM:SS] STRICTLY LATER than [${tc(lastTc)}] and keep increasing. Nothing after [${tc(sourceDurationSec)}].
 - The final fight/climax must get its own paragraphs — never compressed into one sentence.
 - The LAST paragraph must correspond to the source's final scene and end the story properly.
-- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်,ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
+- SLANG CONTINUITY: keep the SAME street-spoken slang level as the earlier parts (လန်းတယ်, စောက်ပေါက်ပိတ်ထား, ချီးထုပ်ကျတယ်, တိုင်ပတ်နေတယ်, ဖာသည်မ, မအေလိုး ...) and keep harsh source lines uncensored. Do NOT switch to polite/plain wording.
 - Same language (${lang}), same tone, same narrator voice and same [MM:SS] format. Never [HH:MM:SS], never ranges.
 - Finish with a complete sentence.
 
