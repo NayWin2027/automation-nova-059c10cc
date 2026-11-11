@@ -514,10 +514,15 @@ const createWebCodecsMp4Recorder = async (options: {
     }
   }
 
-  // SURGICAL SAFETY: Never produce a silent MP4 — if audio exists, an audio encoder must be available
+  // SURGICAL SAFETY: When AAC/Opus AudioEncoder is unavailable, try video-only WebCodecs MP4 first!
+  // This allows the fast hardware MP4 pipeline to still run on devices where AudioEncoder is not supported,
+  // preventing MediaRecorder fallback crashes on low-end Android / Windows machines.
+  let isVideoOnlyWC = false;
   if (audioEl && !aacConfigSupported) {
-    console.warn("[WebCodecs] AAC/Opus AudioEncoder unavailable, falling back to MediaRecorder with audio");
-    return null;
+    console.warn(
+      "[WebCodecs] AAC/Opus AudioEncoder unavailable — proceeding with video-only WebCodecs (no silent fallback crash)",
+    );
+    isVideoOnlyWC = true;
   }
 
   const muxer = new Muxer({
@@ -527,13 +532,14 @@ const createWebCodecsMp4Recorder = async (options: {
       width,
       height,
     },
-    audio: aacConfigSupported
-      ? {
-          codec: audioCodecWC === "opus" ? "opus" : "aac",
-          numberOfChannels: 2,
-          sampleRate: audioSampleRate,
-        }
-      : undefined,
+    audio:
+      aacConfigSupported && !isVideoOnlyWC
+        ? {
+            codec: audioCodecWC === "opus" ? "opus" : "aac",
+            numberOfChannels: 2,
+            sampleRate: audioSampleRate,
+          }
+        : undefined,
     fastStart: "in-memory",
     firstTimestampBehavior: "offset",
   });
@@ -2419,16 +2425,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       let mediaRecorderAudioDest: MediaStreamAudioDestinationNode | null = null;
       const initCanvasStreamForMediaRecorder = () => {
         if (canvasStream) return canvasStream;
-        const streamFps = isSafariOrIOS ? targetFps : 0;
+        const streamFps = isSafariOrIOS ? targetFps : quality.fps || 30;
         canvasStream = encCanvas.captureStream
           ? encCanvas.captureStream(streamFps)
           : (encCanvas as any).webkitCaptureStream
             ? (encCanvas as any).webkitCaptureStream(streamFps)
             : (() => {
-                usedManualCaptureStream = true;
-                return encCanvas.captureStream(0);
+                usedManualCaptureStream = false;
+                return encCanvas.captureStream(streamFps);
               })();
-        if (streamFps === 0) usedManualCaptureStream = true;
+        usedManualCaptureStream = false;
         const videoTracks = canvasStream.getVideoTracks();
         if (videoTracks.length === 0) {
           console.error("[RECORDING] CRITICAL: No video track in canvas stream!");
@@ -2799,12 +2805,19 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             videoBitsPerSecond: quality.bitrate,
           });
         } catch (recErr) {
-          console.warn("[RECORDING] Primary MediaRecorder init failed on iOS, trying native stream fallback:", recErr);
+          console.warn("[RECORDING] Primary MediaRecorder init failed, trying video-only stream fallback:", recErr);
           try {
             const videoOnlyStream = new MediaStream(canvasStream!.getVideoTracks());
-            recorder = new MediaRecorder(videoOnlyStream);
+            recorder = new MediaRecorder(videoOnlyStream, {
+              mimeType: mimeType || undefined,
+            });
           } catch (_) {
-            recorder = new MediaRecorder(canvasStream!);
+            try {
+              const videoOnlyStream = new MediaStream(canvasStream!.getVideoTracks());
+              recorder = new MediaRecorder(videoOnlyStream);
+            } catch (__t) {
+              recorder = new MediaRecorder(canvasStream!);
+            }
           }
         }
         recapRecorderRef.current = recorder;
@@ -2816,7 +2829,20 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           recorder.start(250);
           console.log("[RECORDING] MediaRecorder fallback started");
         } catch (startErr) {
-          console.error("[RECORDING] MediaRecorder start error:", startErr);
+          console.error("[RECORDING] MediaRecorder start error with audio, trying video-only stream:", startErr);
+          try {
+            const videoOnlyStream = new MediaStream(canvasStream!.getVideoTracks());
+            recorder = new MediaRecorder(videoOnlyStream);
+            recapRecorderRef.current = recorder;
+            recorder.ondataavailable = (e) => {
+              if (e.data && e.data.size > 0) chunks.push(e.data);
+            };
+            recorder.onstop = () => finalizeRecording(true);
+            recorder.start(250);
+            console.log("[RECORDING] MediaRecorder video-only fallback started successfully");
+          } catch (vErr) {
+            console.error("[RECORDING] MediaRecorder video-only start also failed:", vErr);
+          }
         }
       }
       // Pre-load logo
