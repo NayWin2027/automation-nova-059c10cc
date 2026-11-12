@@ -2658,25 +2658,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             }
           }
 
-          // SURGICAL FIX: Skip FFmpeg WASM when browser already produced H.264 MP4 (avoids post-recording OS freeze).
-          const alreadyNativeMp4 =
-            finalBlob.type.includes("mp4") && !isWebM && mimeType.includes("mp4") && mimeType.includes("avc");
-          if (alreadyNativeMp4) {
-            console.log("[RECORDING] Native MP4 from MediaRecorder — skipping WASM transcode");
-          } else {
-            const mp4ToastId = toast.loading("MP4 ပြောင်းနေသည်…");
-            const mp4Result = await convertToRealMp4(finalBlob, {
-              sourceMime: mimeType,
-              durationSec: isWebM ? exactDurationSecs : 0,
-              onProgress: (_p, msg) => toast.loading(msg, { id: mp4ToastId }),
-            });
-            finalBlob = mp4Result.blob;
-            if (mp4Result.isRealMp4) {
-              toast.success("MP4 (H.264) အစစ် ထွက်ပါပြီ", { id: mp4ToastId });
-            } else {
-              toast.error("MP4 ပြောင်းမရပါ — WebM အဖြစ် သိမ်းပေးထားပါသည်", { id: mp4ToastId });
-            }
-          }
+          // INSTANT OUTPUT: no slow FFmpeg WASM transcode — download the recording as-is (WebM or native MP4).
+          console.log("[RECORDING] Skipping WASM MP4 transcode — instant download");
         }
 
         const ext = isDirectMp4 || finalBlob.type.includes("mp4") ? "mp4" : "webm";
