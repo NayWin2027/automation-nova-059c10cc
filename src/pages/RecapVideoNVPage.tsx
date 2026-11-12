@@ -532,7 +532,7 @@ const createWebCodecsMp4Recorder = async (options: {
     },
     audio: aacConfigSupported
       ? {
-          codec: audioCodecWC === "opus" ? "opus" : "aac",
+          codec: "aac",
           numberOfChannels: 2,
           sampleRate: audioSampleRate,
         }
