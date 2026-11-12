@@ -496,30 +496,33 @@ const createWebCodecsMp4Recorder = async (options: {
     !!audioContext &&
     !!audioSource;
 
-  // SURGICAL FIX: Require real AAC ("mp4a.40.2") AudioEncoder for WebCodecs Direct MP4.
-  // Windows Chrome AudioEncoder lacks AAC (Opus in MP4 is non-standard and crashes if sampleRate !== 48000).
-  // When real AAC AudioEncoder is unavailable, WebCodecs returns null so MediaRecorder pipeline handles recording cleanly.
+  // SURGICAL FIX: Support both AAC and Opus AudioEncoder so WebCodecs Direct MP4 runs 0-latency (instant output).
+  // On Windows Chrome, AudioEncoder supports Opus. On mobile/macOS, it supports AAC.
+  // Both give instant 0-latency MP4 export without waiting 3 minutes for FFmpeg transcoding.
   let aacConfigSupported = false;
-  let audioCodecWC: "mp4a.40.2" = "mp4a.40.2";
+  let audioCodecWC: "mp4a.40.2" | "opus" = "mp4a.40.2";
   if (canUseAudioEncoder) {
-    try {
-      const chk = await (window as any).AudioEncoder.isConfigSupported({
-        codec: "mp4a.40.2",
-        numberOfChannels: 2,
-        sampleRate: audioSampleRate,
-        bitrate: 128_000,
-      });
-      if (chk?.supported) {
-        aacConfigSupported = true;
-      }
-    } catch (_) {}
+    for (const c of ["mp4a.40.2", "opus"] as const) {
+      try {
+        const chk = await (window as any).AudioEncoder.isConfigSupported({
+          codec: c,
+          numberOfChannels: 2,
+          sampleRate: audioSampleRate,
+          bitrate: 128_000,
+        });
+        if (chk?.supported) {
+          aacConfigSupported = true;
+          audioCodecWC = c;
+          break;
+        }
+      } catch (_) {}
+    }
   }
 
-  // SURGICAL SAFETY: Never produce a silent MP4 or broken stream on desktop — if narration audio exists,
-  // an AAC AudioEncoder MUST be supported. When AudioEncoder is unavailable (e.g. Windows Chrome),
-  // return null immediately so the browser cleanly falls back to the battle-tested MediaRecorder pipeline.
+  // SURGICAL SAFETY: When narration audio exists, an AudioEncoder must be available.
+  // If not supported at all, cleanly fallback to fast MediaRecorder (H.264 WebM) pipeline.
   if (audioEl && !aacConfigSupported) {
-    console.warn("[WebCodecs] AAC AudioEncoder unavailable, falling back cleanly to MediaRecorder");
+    console.warn("[WebCodecs] AudioEncoder unavailable, falling back to MediaRecorder");
     return null;
   }
 
@@ -532,7 +535,7 @@ const createWebCodecsMp4Recorder = async (options: {
     },
     audio: aacConfigSupported
       ? {
-          codec: "aac",
+          codec: audioCodecWC === "opus" ? "opus" : "aac",
           numberOfChannels: 2,
           sampleRate: audioSampleRate,
         }
@@ -2238,8 +2241,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // â”€â”€ MIME Detection: TT/TG REMUX READY â”€â”€
       const isSafari =
         /^((?!chrome|android).)*safari/i.test(navigator.userAgent) || /iPad|iPhone|iPod/.test(navigator.userAgent);
-      // SURGICAL FIX: Safari/iOS natively records MP4; Chrome/Edge/Firefox reliably records WebM (vp9/vp8/opus)
-      // which is then converted cleanly to real MP4 by convertToRealMp4 without empty chunks or audio bugs.
+      // SURGICAL FIX: Prioritize H.264 formats so MediaRecorder outputs native H.264 stream.
+      // This allows convertToRealMp4 to finish in 1-2 seconds with fast stream copy instead of 3-minute CPU transcoding!
       const allMimeTypes = isSafari
         ? [
             "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
@@ -2247,16 +2250,17 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             "video/mp4;codecs=h264,aac",
             "video/mp4;codecs=h264",
             "video/mp4",
-            "video/webm;codecs=vp8,opus",
+            "video/webm;codecs=h264,opus",
             "video/webm",
           ]
         : [
-            "video/webm;codecs=vp9,opus",
-            "video/webm;codecs=vp8,opus",
             "video/webm;codecs=h264,opus",
-            "video/webm",
+            "video/webm;codecs=h264",
             "video/mp4;codecs=avc1",
             "video/mp4",
+            "video/webm;codecs=vp9,opus",
+            "video/webm;codecs=vp8,opus",
+            "video/webm",
           ];
       const mimeType =
         allMimeTypes.find((type) => {
