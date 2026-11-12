@@ -1328,6 +1328,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     // H.264 encoding instead of the GPU — for strong-CPU / weak-GPU machines.
     // Output stays genuine H.264 MP4 either way.
     const forceSoftwareRef = useRef<boolean>(false);
+    // DUAL FALLBACK: when true, skip Direct MP4 and record with the WebM MediaRecorder path.
+    const forceWebmRef = useRef<boolean>(false);
     const wakeLockRef = useRef<WakeLockSentinel | null>(null);
     const isRenderingRef = useRef(false);
     const logoAngleRef = useRef<number>(0);
@@ -2221,6 +2223,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // quality; on a fresh user-initiated render, clear any previous forced quality.
       if (!isStepDownRestart) {
         forcedQualityRef.current = null;
+        forceWebmRef.current = false;
         // Desktop => CPU (software) encode from the very first attempt (never touch the
         // weak iGPU). Mobile/iOS => GPU-first, exactly as before.
         // FIX: GPU-first on every device (PC included); CPU only as a watchdog fallback.
@@ -2513,7 +2516,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             ? Math.min(quality.bitrate, 5_000_000)
             : quality.bitrate;
       try {
-        webCodecsRecorder = await createWebCodecsMp4Recorder({
+        if (!forceWebmRef.current) webCodecsRecorder = await createWebCodecsMp4Recorder({
           width: encW,
           height: encH,
           fps: quality.fps,
@@ -2599,6 +2602,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         let isDirectMp4 = false;
 
         // ── 0-LATENCY DIRECT MP4 FINALIZATION (WebCodecs + mp4-muxer) ──
+        const usedDirectMp4 = !!webCodecsRecorder;
         if (webCodecsRecorder) {
           try {
             const directMp4Blob = await webCodecsRecorder.finalize();
@@ -2619,6 +2623,20 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         }
 
         // ── SAFETY FALLBACK: MediaRecorder + convertToRealMp4 when WebCodecs is not active ──
+        // DUAL FALLBACK: MP4 failed on this device -> silently re-record with WebM.
+        if (!isDirectMp4 && finalBlob.size === 0 && usedDirectMp4 && !forceWebmRef.current) {
+          console.warn("[RECORDING] Direct MP4 failed — auto re-recording with WebM MediaRecorder");
+          forceWebmRef.current = true;
+          toast.info("ဒီစက်မှာ MP4 မရလို့ WebM စနစ်နဲ့ အလိုအလျောက် ပြန်ဖမ်းနေပါတယ်…");
+          lastIndexRef.current = -1;
+          setCurrentSubtitle("");
+          isRenderingRef.current = true;
+          setIsRendering(true);
+          setTimeout(() => {
+            void startRecapRecording(true);
+          }, 600);
+          return;
+        }
         if (!isDirectMp4 && finalBlob.size === 0) {
           toast.error("ဗီဒီယို ဖမ်းယူမှု မအောင်မြင်ပါ — ထပ်မံ ကြိုးစားပေးပါ။");
           setIsRendering(false);
