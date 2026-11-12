@@ -429,8 +429,12 @@ const createWebCodecsMp4Recorder = async (options: {
   const isMobileDevice =
     typeof navigator !== "undefined" &&
     /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-  const preferredHw = isMobileDevice ? "prefer-hardware" : "prefer-software";
-  const preferredLatency = isMobileDevice ? "realtime" : "quality";
+  const preferredHw = isMobileDevice
+    ? "prefer-hardware"
+    : options.forceSoftware
+      ? "prefer-software"
+      : "prefer-hardware";
+  const preferredLatency = "realtime" as const;
 
   // Codec check - Try Main Profile, Baseline Profile, and High Profile for universal mobile & desktop acceleration
   const codecCandidates = [
@@ -514,15 +518,12 @@ const createWebCodecsMp4Recorder = async (options: {
     }
   }
 
-  // SURGICAL SAFETY: When AAC/Opus AudioEncoder is unavailable, try video-only WebCodecs MP4 first!
-  // This allows the fast hardware MP4 pipeline to still run on devices where AudioEncoder is not supported,
-  // preventing MediaRecorder fallback crashes on low-end Android / Windows machines.
-  let isVideoOnlyWC = false;
+  // SURGICAL SAFETY: Never produce a silent MP4 or broken stream on desktop — if narration audio exists,
+  // an AudioEncoder MUST be supported. When AudioEncoder is unavailable (e.g. Windows Chrome),
+  // return null immediately so the browser cleanly falls back to the battle-tested MediaRecorder pipeline.
   if (audioEl && !aacConfigSupported) {
-    console.warn(
-      "[WebCodecs] AAC/Opus AudioEncoder unavailable — proceeding with video-only WebCodecs (no silent fallback crash)",
-    );
-    isVideoOnlyWC = true;
+    console.warn("[WebCodecs] AAC/Opus AudioEncoder unavailable, falling back cleanly to MediaRecorder");
+    return null;
   }
 
   const muxer = new Muxer({
@@ -532,14 +533,13 @@ const createWebCodecsMp4Recorder = async (options: {
       width,
       height,
     },
-    audio:
-      aacConfigSupported && !isVideoOnlyWC
-        ? {
-            codec: audioCodecWC === "opus" ? "opus" : "aac",
-            numberOfChannels: 2,
-            sampleRate: audioSampleRate,
-          }
-        : undefined,
+    audio: aacConfigSupported
+      ? {
+          codec: audioCodecWC === "opus" ? "opus" : "aac",
+          numberOfChannels: 2,
+          sampleRate: audioSampleRate,
+        }
+      : undefined,
     fastStart: "in-memory",
     firstTimestampBehavior: "offset",
   });
@@ -4538,9 +4538,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               // PERF FIX: Skip requestFrame() — WebCodecs is the primary encoder,
               // MediaRecorder runs as passive fallback via captureStream(fps) auto-capture only.
             } else if (encTrack && typeof (encTrack as any).requestFrame === "function") {
-              // PERF FIX: Only call requestFrame() when WebCodecs is NOT active AND captureStream(0) was used.
-              // captureStream(targetFps) already auto-captures, so requestFrame() is only needed for captureStream(0).
-              if (usedManualCaptureStream) (encTrack as any).requestFrame();
+              try {
+                (encTrack as any).requestFrame();
+              } catch (_) {}
             }
           } catch (e) {
             console.warn("[RECORDING] Encoder push failed:", e);
