@@ -2254,6 +2254,11 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             "video/webm",
           ]
         : [
+            // REAL MP4 FIRST: modern Chrome/Edge MediaRecorder records genuine H.264+AAC MP4 instantly
+            "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+            "video/mp4;codecs=avc1,mp4a.40.2",
+            "video/mp4;codecs=avc1",
+            "video/mp4",
             "video/webm;codecs=vp9,opus",
             "video/webm;codecs=vp8,opus",
             "video/webm;codecs=h264,opus",
@@ -2516,7 +2521,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             ? Math.min(quality.bitrate, 5_000_000)
             : quality.bitrate;
       try {
-        if (!forceWebmRef.current) webCodecsRecorder = await createWebCodecsMp4Recorder({
+        // Phones skip WebCodecs (GPU driver hangs on Vivo/Oppo etc.) — single-pass native recorder instead
+        if (!forceWebmRef.current && !IS_MOBILE_DEVICE) webCodecsRecorder = await createWebCodecsMp4Recorder({
           width: encW,
           height: encH,
           fps: quality.fps,
@@ -4606,6 +4612,29 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       };
 
       a.addEventListener("ended", onEnded);
+
+      // ── REC WATCHDOG: auto-resume stalled audio; stop only after the full audio length has elapsed ──
+      let wakeLock: any = null;
+      try {
+        (navigator as any).wakeLock?.request?.("screen").then((l: any) => (wakeLock = l)).catch(() => {});
+      } catch (_) {}
+      const watchStart = Date.now();
+      const recWatchdog = window.setInterval(() => {
+        const rec = recapRecorderRef.current;
+        if (!rec || rec.state === "inactive") return;
+        const dur = a.duration;
+        if (!Number.isFinite(dur) || dur <= 0) return;
+        const nearEnd = a.currentTime >= dur - 0.15;
+        if (nearEnd || a.ended) {
+          rec.stop();
+          return;
+        }
+        if (a.paused && a.currentTime > 0) a.play().catch(() => {});
+        if (v.paused && a.currentTime > 0) v.play().catch(() => {});
+        const rate = a.playbackRate || 1;
+        if ((Date.now() - watchStart) / 1000 > dur / rate + 30) rec.stop();
+      }, 1000);
+
       a.currentTime = 0;
       v.currentTime = 0;
 
@@ -4628,6 +4657,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
       return () => {
         cancelAnimationFrame(recapAnimFrameRef.current);
+        window.clearInterval(recWatchdog);
+        try { wakeLock?.release?.(); } catch (_) {}
         a.removeEventListener("ended", onEnded);
         a.pause();
         if (v) {
