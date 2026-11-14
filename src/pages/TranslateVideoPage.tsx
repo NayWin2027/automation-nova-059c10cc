@@ -495,7 +495,7 @@ export default function App() {
   const [zoomEnabled, setZoomEnabled] = useState(false);
 
   // === AI VOICE OVER (DUB) MODE — additive, default OFF ===
-  const [dubEnabled, setDubEnabled] = useState(false);
+  const [dubEnabled, setDubEnabled] = useState(() => new URLSearchParams(window.location.search).get("dub") === "1");
   const [dubVoice, setDubVoice] = useState("it-IT-GiuseppeMultilingualNeural");
   const [dubVolume, setDubVolume] = useState(100); // dub track volume %
   const [dubBgVolume, setDubBgVolume] = useState(85); // original audio volume %

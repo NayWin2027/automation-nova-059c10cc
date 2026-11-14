@@ -62,6 +62,15 @@ const defaultTools = [
   pro: true
 },
 {
+  id: "dub-recap",
+  icon: Video,
+  title: "Nova Dub Recap",
+  description: "Recap to Recap / Movie to Recap — မူရင်းအချိန်အတိုင်း မြန်မာအသံ ဒပ်ဘင်း။",
+  gradient: "neon" as const,
+  route: "/translate-video?dub=1",
+  pro: true
+},
+{
   id: "transcribe",
   icon: Mic,
   title: "Transcribe",
