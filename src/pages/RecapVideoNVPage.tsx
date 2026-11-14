@@ -429,7 +429,7 @@ const createWebCodecsMp4Recorder = async (options: {
     typeof navigator !== "undefined" &&
     /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
   const preferredHw = isMobileDevice ? "prefer-hardware" : "prefer-software";
-  const preferredLatency = "realtime";
+  const preferredLatency = isMobileDevice ? "realtime" : "quality";
 
   // Codec check - Try Main Profile, Baseline Profile, and High Profile for universal mobile & desktop acceleration
   const codecCandidates = [
@@ -542,15 +542,34 @@ const createWebCodecsMp4Recorder = async (options: {
     error: (e: any) => console.error("[WebCodecs VideoEncoder]:", e),
   });
 
-  videoEncoder.configure({
-    codec: videoCodec,
-    width,
-    height,
-    bitrate,
-    framerate: fps,
-    latencyMode: preferredLatency,
-    hardwareAcceleration: preferredHw,
-  });
+  try {
+    videoEncoder.configure({
+      codec: videoCodec,
+      width,
+      height,
+      bitrate,
+      framerate: fps,
+      latencyMode: preferredLatency,
+      hardwareAcceleration: preferredHw,
+    });
+  } catch (_) {
+    try {
+      videoEncoder.configure({
+        codec: videoCodec,
+        width,
+        height,
+        bitrate,
+        framerate: fps,
+        hardwareAcceleration: preferredHw,
+      });
+    } catch (_) {
+      videoEncoder.configure({ codec: videoCodec, width, height, bitrate, framerate: fps });
+    }
+  }
+  if (false)
+    ({
+      hardwareAcceleration: preferredHw,
+    });
 
   if (aacConfigSupported && audioContext && audioSource) {
     try {
@@ -583,7 +602,8 @@ const createWebCodecsMp4Recorder = async (options: {
         // SURGICAL FIX: အသံဖွင့်စက် (audioEl) တကယ် စတင် Play မလုပ်မချင်း Silence မထည့်ရန် တားဆီးခြင်း
         // ဗီဒီယိုအစတွင် အသံတိတ်နေခြင်းနှင့် အစ/အဆုံး မကိုက်ညီခြင်းကို ၁၀၀% ဖြေရှင်းပေးပါသည်
         if (!hasStartedAudio) {
-          if (audioEl.paused || audioEl.currentTime <= 0) return;
+          const recElapsed = (performance.now() - recStartTimeRef.current) / 1000;
+          if ((audioEl.paused || audioEl.currentTime <= 0) && recElapsed < 1.0) return;
           hasStartedAudio = true;
         }
 
@@ -2286,8 +2306,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       const ctx = canvas.getContext("2d", { alpha: false })!;
 
       // Encode canvas: Native output resolution. Hardware encoder upscales it back elegantly.
-      const encW = outW;
-      const encH = outH;
+      const encW = outW % 2 === 0 ? outW : outW - 1;
+      const encH = outH % 2 === 0 ? outH : outH - 1;
       const encCanvas = document.createElement("canvas");
       encCanvas.width = encW;
       encCanvas.height = encH;
@@ -2335,7 +2355,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       let mediaRecorderAudioDest: MediaStreamAudioDestinationNode | null = null;
       const initCanvasStreamForMediaRecorder = () => {
         if (canvasStream) return canvasStream;
-        const streamFps = isSafariOrIOS ? targetFps : 0;
+        const streamFps = targetFps;
         canvasStream = encCanvas.captureStream
           ? encCanvas.captureStream(streamFps)
           : (encCanvas as any).webkitCaptureStream
@@ -2514,7 +2534,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         if (webCodecsRecorder) {
           try {
             const directMp4Blob = await webCodecsRecorder.finalize();
-            if (directMp4Blob && directMp4Blob.size > 2048) {
+            if (directMp4Blob && directMp4Blob.size > 512) {
               finalBlob = directMp4Blob;
               isDirectMp4 = true;
               console.log(
