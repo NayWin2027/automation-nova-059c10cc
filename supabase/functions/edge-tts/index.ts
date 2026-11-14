@@ -343,7 +343,9 @@ Deno.serve(async (req) => {
         off += c.length;
       }
     }
-    // Edge TTS returns MP3 at 48 kbps = 6000 bytes/sec.
+    // Edge TTS returns MP3. MPEG-1 Layer III at the service's 48 kbps output rate is
+    // 6000 bytes/sec, so the encoded payload gives a stable duration for segment boundaries.
+    // The final segment is forced to the exact calculated end to prevent hook-slot overrun.
     const durationSec = audio.length / 6000;
     const segmentTimestamps = segments.length > 0 ? estimateSegmentTimestamps(segments, durationSec) : undefined;
 
