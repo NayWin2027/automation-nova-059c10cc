@@ -3632,6 +3632,14 @@ Return ONLY a valid JSON array. The 'text' field MUST contain ONLY pure ${target
                             <SelectItem value="en-US-AndrewMultilingualNeural">Andrew — Multilingual Male</SelectItem>
                             <SelectItem value="en-US-AvaMultilingualNeural">Ava — Multilingual Female</SelectItem>
                             <SelectItem value="en-US-EmmaMultilingualNeural">Emma — Multilingual Female</SelectItem>
+                            <SelectItem value="en-AU-WilliamMultilingualNeural">William — Multilingual Male</SelectItem>
+                            <SelectItem value="en-US-BrianMultilingualNeural">Brian — Multilingual Male</SelectItem>
+                            <SelectItem value="de-DE-FlorianMultilingualNeural">Florian — Multilingual Male</SelectItem>
+                            <SelectItem value="de-DE-SeraphinaMultilingualNeural">Seraphina — Multilingual Female</SelectItem>
+                            <SelectItem value="fr-FR-RemyMultilingualNeural">Remy — Multilingual Male</SelectItem>
+                            <SelectItem value="fr-FR-VivienneMultilingualNeural">Vivienne — Multilingual Female</SelectItem>
+                            <SelectItem value="ko-KR-HyunsuMultilingualNeural">Hyunsu — Multilingual Male</SelectItem>
+                            <SelectItem value="pt-BR-ThalitaMultilingualNeural">Thalita — Multilingual Female</SelectItem>
                             <SelectItem value="my-MM-ThihaNeural">Thiha — Burmese Male</SelectItem>
                             <SelectItem value="my-MM-NilarNeural">Nilar — Burmese Female</SelectItem>
                             <SelectItem value="th-TH-NiwatNeural">Niwat — Thai Male</SelectItem>
