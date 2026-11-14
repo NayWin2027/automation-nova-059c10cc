@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLogo } from "@/components/AppLogo";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
+import { useAuth } from "@/hooks/useAuth";
 import { useBurmeseFonts } from "@/lib/burmeseFonts";
 import { useApiAccess } from "@/hooks/useApiAccess";
 import { preCheckCredits } from "@/utils/creditPreCheck";
@@ -428,8 +429,12 @@ const createWebCodecsMp4Recorder = async (options: {
   const isMobileDevice =
     typeof navigator !== "undefined" &&
     /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-  const preferredHw = isMobileDevice ? "prefer-hardware" : "prefer-software";
-  const preferredLatency = isMobileDevice ? "realtime" : "quality";
+  const preferredHw = isMobileDevice
+    ? "prefer-hardware"
+    : options.forceSoftware
+      ? "prefer-software"
+      : "prefer-hardware";
+  const preferredLatency = "realtime" as const;
 
   // Codec check - Try Main Profile, Baseline Profile, and High Profile for universal mobile & desktop acceleration
   const codecCandidates = [
@@ -491,31 +496,30 @@ const createWebCodecsMp4Recorder = async (options: {
     !!audioContext &&
     !!audioSource;
 
+  // SURGICAL FIX: Require real AAC ("mp4a.40.2") AudioEncoder for WebCodecs Direct MP4.
+  // Windows Chrome AudioEncoder lacks AAC (Opus in MP4 is non-standard and crashes if sampleRate !== 48000).
+  // When real AAC AudioEncoder is unavailable, WebCodecs returns null so MediaRecorder pipeline handles recording cleanly.
   let aacConfigSupported = false;
-  // Windows Chrome AudioEncoder lacks AAC → use Opus (supported by mp4-muxer) to avoid
-  // the MediaRecorder + FFmpeg WASM re-encode fallback that freezes the browser.
-  let audioCodecWC: "mp4a.40.2" | "opus" = "mp4a.40.2";
+  let audioCodecWC: "mp4a.40.2" = "mp4a.40.2";
   if (canUseAudioEncoder) {
-    for (const c of ["mp4a.40.2", "opus"] as const) {
-      try {
-        const chk = await (window as any).AudioEncoder.isConfigSupported({
-          codec: c,
-          numberOfChannels: 2,
-          sampleRate: audioSampleRate,
-          bitrate: 128_000,
-        });
-        if (chk?.supported) {
-          aacConfigSupported = true;
-          audioCodecWC = c;
-          break;
-        }
-      } catch (_) {}
-    }
+    try {
+      const chk = await (window as any).AudioEncoder.isConfigSupported({
+        codec: "mp4a.40.2",
+        numberOfChannels: 2,
+        sampleRate: audioSampleRate,
+        bitrate: 128_000,
+      });
+      if (chk?.supported) {
+        aacConfigSupported = true;
+      }
+    } catch (_) {}
   }
 
-  // SURGICAL SAFETY: Never produce a silent MP4 — if audio exists, an audio encoder must be available
+  // SURGICAL SAFETY: Never produce a silent MP4 or broken stream on desktop — if narration audio exists,
+  // an AAC AudioEncoder MUST be supported. When AudioEncoder is unavailable (e.g. Windows Chrome),
+  // return null immediately so the browser cleanly falls back to the battle-tested MediaRecorder pipeline.
   if (audioEl && !aacConfigSupported) {
-    console.warn("[WebCodecs] AAC/Opus AudioEncoder unavailable, falling back to MediaRecorder with audio");
+    console.warn("[WebCodecs] AAC AudioEncoder unavailable, falling back cleanly to MediaRecorder");
     return null;
   }
 
@@ -528,7 +532,7 @@ const createWebCodecsMp4Recorder = async (options: {
     },
     audio: aacConfigSupported
       ? {
-          codec: audioCodecWC === "opus" ? "opus" : "aac",
+          codec: "aac",
           numberOfChannels: 2,
           sampleRate: audioSampleRate,
         }
@@ -1109,6 +1113,91 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       y: 8,
     });
 
+    // SURGICAL: App watermark only for free users. Pro/Premium/Admin → no app logo (custom logo still allowed)
+    const { user: wmUser, profile: wmProfile } = useAuth();
+    const [wmIsAdmin, setWmIsAdmin] = useState(false);
+    useEffect(() => {
+      if (!wmUser?.id) {
+        setWmIsAdmin(false);
+        return;
+      }
+      (supabase as any)
+        .rpc("has_role", { _user_id: wmUser.id, _role: "admin" })
+        .then(({ data }: any) => setWmIsAdmin(!!data))
+        .catch(() => {});
+    }, [wmUser?.id]);
+    const hideAppLogo = wmIsAdmin || (!!wmProfile?.plan && wmProfile.plan !== "free");
+
+    // SURGICAL: Direct drag + pinch/corner resize for logo overlay (preview only)
+    const logoDragRef = useRef<{
+      mode: "move" | "resize";
+      sx: number;
+      sy: number;
+      ox: number;
+      oy: number;
+      os: number;
+      w: number;
+      h: number;
+    } | null>(null);
+    const startLogoDrag = (e: React.PointerEvent, mode: "move" | "resize") => {
+      e.stopPropagation();
+      e.preventDefault();
+      const host = (e.currentTarget as HTMLElement).closest("[data-logo-host]")?.parentElement as HTMLElement | null;
+      const rect = host?.getBoundingClientRect();
+      if (!rect) return;
+      logoDragRef.current = {
+        mode,
+        sx: e.clientX,
+        sy: e.clientY,
+        ox: logo.x,
+        oy: logo.y,
+        os: logo.size,
+        w: rect.width,
+        h: rect.height,
+      };
+      const onMove = (ev: PointerEvent) => {
+        const d = logoDragRef.current;
+        if (!d) return;
+        const dx = ((ev.clientX - d.sx) / d.w) * 100;
+        const dy = ((ev.clientY - d.sy) / d.h) * 100;
+        if (d.mode === "move") {
+          setLogo((l) => ({
+            ...l,
+            x: Math.min(100, Math.max(0, d.ox + dx)),
+            y: Math.min(100, Math.max(0, d.oy + dy)),
+          }));
+        } else {
+          setLogo((l) => ({ ...l, size: Math.min(60, Math.max(4, d.os + Math.max(dx, dy) * 2)) }));
+        }
+      };
+      const onUp = () => {
+        logoDragRef.current = null;
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onUp);
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onUp);
+    };
+    const logoPinchRef = useRef<{ dist: number; size: number } | null>(null);
+    const onLogoTouchStart = (e: React.TouchEvent) => {
+      e.stopPropagation();
+      if (e.touches.length === 2) {
+        const [a, b] = [e.touches[0], e.touches[1]];
+        logoPinchRef.current = { dist: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), size: logo.size };
+      }
+    };
+    const onLogoTouchMove = (e: React.TouchEvent) => {
+      e.stopPropagation();
+      const p = logoPinchRef.current;
+      if (p && e.touches.length === 2) {
+        const [a, b] = [e.touches[0], e.touches[1]];
+        const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+        setLogo((l) => ({ ...l, size: Math.min(60, Math.max(4, p.size * (dist / p.dist))) }));
+      }
+    };
+
     const [subSettings, setSubSettings] = useState<SubtitleSettings>({
       x: 50,
       y: 85,
@@ -1239,6 +1328,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     // H.264 encoding instead of the GPU — for strong-CPU / weak-GPU machines.
     // Output stays genuine H.264 MP4 either way.
     const forceSoftwareRef = useRef<boolean>(false);
+    // DUAL FALLBACK: when true, skip Direct MP4 and record with the WebM MediaRecorder path.
+    const forceWebmRef = useRef<boolean>(false);
     const wakeLockRef = useRef<WakeLockSentinel | null>(null);
     const isRenderingRef = useRef(false);
     const logoAngleRef = useRef<number>(0);
@@ -1989,6 +2080,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           aStartPct: totalWords > 0 ? startWords / totalWords : 0,
           aEndPct: totalWords > 0 ? wordCursor / totalWords : 1,
           text: stripDialogueMetadata(seg.text).replace(TIMECODE_STRIP_RE, "").trim(),
+          // SURGICAL FIX: pass dialogue flag so Freeze/Motion OFF never zooms dialogue (display-only, no timing change)
+          isDialogue: !!(seg as any).isDialogue,
         };
       });
     }, [scriptData, narrationStyle]);
@@ -2130,6 +2223,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // quality; on a fresh user-initiated render, clear any previous forced quality.
       if (!isStepDownRestart) {
         forcedQualityRef.current = null;
+        forceWebmRef.current = false;
         // Desktop => CPU (software) encode from the very first attempt (never touch the
         // weak iGPU). Mobile/iOS => GPU-first, exactly as before.
         // FIX: GPU-first on every device (PC included); CPU only as a watchdog fallback.
@@ -2147,21 +2241,31 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // â”€â”€ MIME Detection: TT/TG REMUX READY â”€â”€
       const isSafari =
         /^((?!chrome|android).)*safari/i.test(navigator.userAgent) || /iPad|iPhone|iPod/.test(navigator.userAgent);
-      // SURGICAL FIX: Prioritize real native MP4 (H.264/AVC) so output is genuine MP4 directly.
-      const allMimeTypes = [
-        "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
-        "video/mp4;codecs=avc1",
-        "video/mp4;codecs=h264,aac",
-        "video/mp4;codecs=h264",
-        "video/mp4",
-        "video/webm;codecs=h264,opus",
-        "video/webm;codecs=h264",
-        "video/webm;codecs=vp8,opus",
-        "video/webm;codecs=vp9,opus",
-        "video/webm;codecs=vp8",
-        "video/webm;codecs=vp9",
-        "video/webm",
-      ];
+      // SURGICAL FIX: Safari/iOS natively records MP4; Chrome/Edge/Firefox reliably records WebM (vp9/vp8/opus)
+      // which is then converted cleanly to real MP4 by convertToRealMp4 without empty chunks or audio bugs.
+      const allMimeTypes = isSafari
+        ? [
+            "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+            "video/mp4;codecs=avc1",
+            "video/mp4;codecs=h264,aac",
+            "video/mp4;codecs=h264",
+            "video/mp4",
+            "video/webm;codecs=vp8,opus",
+            "video/webm",
+          ]
+        : [
+            // REAL MP4 FIRST: modern Chrome/Edge MediaRecorder records genuine H.264+AAC MP4 instantly
+            "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+            "video/mp4;codecs=avc1,mp4a.40.2",
+            "video/mp4;codecs=avc1",
+            "video/mp4",
+            "video/webm;codecs=vp9,opus",
+            "video/webm;codecs=vp8,opus",
+            "video/webm;codecs=h264,opus",
+            "video/webm",
+            "video/mp4;codecs=avc1",
+            "video/mp4",
+          ];
       const mimeType =
         allMimeTypes.find((type) => {
           try {
@@ -2331,16 +2435,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       let mediaRecorderAudioDest: MediaStreamAudioDestinationNode | null = null;
       const initCanvasStreamForMediaRecorder = () => {
         if (canvasStream) return canvasStream;
-        const streamFps = isSafariOrIOS ? targetFps : 0;
+        const streamFps = isSafariOrIOS ? targetFps : quality.fps || 30;
         canvasStream = encCanvas.captureStream
           ? encCanvas.captureStream(streamFps)
           : (encCanvas as any).webkitCaptureStream
             ? (encCanvas as any).webkitCaptureStream(streamFps)
             : (() => {
-                usedManualCaptureStream = true;
-                return encCanvas.captureStream(0);
+                usedManualCaptureStream = false;
+                return encCanvas.captureStream(streamFps);
               })();
-        if (streamFps === 0) usedManualCaptureStream = true;
+        usedManualCaptureStream = false;
         const videoTracks = canvasStream.getVideoTracks();
         if (videoTracks.length === 0) {
           console.error("[RECORDING] CRITICAL: No video track in canvas stream!");
@@ -2417,16 +2521,18 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             ? Math.min(quality.bitrate, 5_000_000)
             : quality.bitrate;
       try {
-        webCodecsRecorder = await createWebCodecsMp4Recorder({
-          width: encW,
-          height: encH,
-          fps: quality.fps,
-          bitrate: wcBitrate,
-          audioElement: audioEl,
-          sharedAudioContext: audioCtx,
-          sharedAudioSource: sharedAudioSource,
-          forceSoftware: forceSoftwareRef.current,
-        });
+        // Phones skip WebCodecs (GPU driver hangs on Vivo/Oppo etc.) — single-pass native recorder instead
+        if (!forceWebmRef.current && !IS_MOBILE_DEVICE)
+          webCodecsRecorder = await createWebCodecsMp4Recorder({
+            width: encW,
+            height: encH,
+            fps: quality.fps,
+            bitrate: wcBitrate,
+            audioElement: audioEl,
+            sharedAudioContext: audioCtx,
+            sharedAudioSource: sharedAudioSource,
+            forceSoftware: forceSoftwareRef.current,
+          });
         if (webCodecsRecorder) {
           console.log("[RECORDING] 🚀 WebCodecs Direct MP4 Active! (0-latency, single encoder)");
         }
@@ -2503,6 +2609,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         let isDirectMp4 = false;
 
         // ── 0-LATENCY DIRECT MP4 FINALIZATION (WebCodecs + mp4-muxer) ──
+        const usedDirectMp4 = !!webCodecsRecorder;
         if (webCodecsRecorder) {
           try {
             const directMp4Blob = await webCodecsRecorder.finalize();
@@ -2523,6 +2630,20 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         }
 
         // ── SAFETY FALLBACK: MediaRecorder + convertToRealMp4 when WebCodecs is not active ──
+        // DUAL FALLBACK: MP4 failed on this device -> silently re-record with WebM.
+        if (!isDirectMp4 && finalBlob.size === 0 && usedDirectMp4 && !forceWebmRef.current) {
+          console.warn("[RECORDING] Direct MP4 failed — auto re-recording with WebM MediaRecorder");
+          forceWebmRef.current = true;
+          toast.info("ဒီစက်မှာ MP4 မရလို့ WebM စနစ်နဲ့ အလိုအလျောက် ပြန်ဖမ်းနေပါတယ်…");
+          lastIndexRef.current = -1;
+          setCurrentSubtitle("");
+          isRenderingRef.current = true;
+          setIsRendering(true);
+          setTimeout(() => {
+            void startRecapRecording(true);
+          }, 600);
+          return;
+        }
         if (!isDirectMp4 && finalBlob.size === 0) {
           toast.error("ဗီဒီယို ဖမ်းယူမှု မအောင်မြင်ပါ — ထပ်မံ ကြိုးစားပေးပါ။");
           setIsRendering(false);
@@ -2544,25 +2665,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             }
           }
 
-          // SURGICAL FIX: Skip FFmpeg WASM when browser already produced H.264 MP4 (avoids post-recording OS freeze).
-          const alreadyNativeMp4 =
-            finalBlob.type.includes("mp4") && !isWebM && mimeType.includes("mp4") && mimeType.includes("avc");
-          if (alreadyNativeMp4) {
-            console.log("[RECORDING] Native MP4 from MediaRecorder — skipping WASM transcode");
-          } else {
-            const mp4ToastId = toast.loading("MP4 ပြောင်းနေသည်…");
-            const mp4Result = await convertToRealMp4(finalBlob, {
-              sourceMime: mimeType,
-              durationSec: isWebM ? exactDurationSecs : 0,
-              onProgress: (_p, msg) => toast.loading(msg, { id: mp4ToastId }),
-            });
-            finalBlob = mp4Result.blob;
-            if (mp4Result.isRealMp4) {
-              toast.success("MP4 (H.264) အစစ် ထွက်ပါပြီ", { id: mp4ToastId });
-            } else {
-              toast.error("MP4 ပြောင်းမရပါ — WebM အဖြစ် သိမ်းပေးထားပါသည်", { id: mp4ToastId });
-            }
-          }
+          // INSTANT OUTPUT: no slow FFmpeg WASM transcode — download the recording as-is (WebM or native MP4).
+          console.log("[RECORDING] Skipping WASM MP4 transcode — instant download");
         }
 
         const ext = isDirectMp4 || finalBlob.type.includes("mp4") ? "mp4" : "webm";
@@ -2711,12 +2815,19 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             videoBitsPerSecond: quality.bitrate,
           });
         } catch (recErr) {
-          console.warn("[RECORDING] Primary MediaRecorder init failed on iOS, trying native stream fallback:", recErr);
+          console.warn("[RECORDING] Primary MediaRecorder init failed, trying video-only stream fallback:", recErr);
           try {
             const videoOnlyStream = new MediaStream(canvasStream!.getVideoTracks());
-            recorder = new MediaRecorder(videoOnlyStream);
+            recorder = new MediaRecorder(videoOnlyStream, {
+              mimeType: mimeType || undefined,
+            });
           } catch (_) {
-            recorder = new MediaRecorder(canvasStream!);
+            try {
+              const videoOnlyStream = new MediaStream(canvasStream!.getVideoTracks());
+              recorder = new MediaRecorder(videoOnlyStream);
+            } catch (__t) {
+              recorder = new MediaRecorder(canvasStream!);
+            }
           }
         }
         recapRecorderRef.current = recorder;
@@ -2728,7 +2839,20 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           recorder.start(250);
           console.log("[RECORDING] MediaRecorder fallback started");
         } catch (startErr) {
-          console.error("[RECORDING] MediaRecorder start error:", startErr);
+          console.error("[RECORDING] MediaRecorder start error with audio, trying video-only stream:", startErr);
+          try {
+            const videoOnlyStream = new MediaStream(canvasStream!.getVideoTracks());
+            recorder = new MediaRecorder(videoOnlyStream);
+            recapRecorderRef.current = recorder;
+            recorder.ondataavailable = (e) => {
+              if (e.data && e.data.size > 0) chunks.push(e.data);
+            };
+            recorder.onstop = () => finalizeRecording(true);
+            recorder.start(250);
+            console.log("[RECORDING] MediaRecorder video-only fallback started successfully");
+          } catch (vErr) {
+            console.error("[RECORDING] MediaRecorder video-only start also failed:", vErr);
+          }
         }
       }
       // Pre-load logo
@@ -2745,7 +2869,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           logoImg!.onload = () => res();
           logoImg!.onerror = () => res();
         });
-      } else {
+      } else if (!hideAppLogo) {
         try {
           const svgSize = 256;
           const svgStr = `<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" width="${svgSize}" height="${svgSize}"><defs><radialGradient id="bg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#1a0b2e"/><stop offset="100%" stop-color="#050505"/></radialGradient><linearGradient id="ch" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#ffffff"/><stop offset="40%" stop-color="#e8eff5"/><stop offset="100%" stop-color="#556270"/></linearGradient><filter id="gl" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="8" result="blur"/><feComposite in="SourceGraphic" in2="blur" operator="over"/></filter></defs><rect width="512" height="512" rx="80" fill="url(#bg)"/><g transform="translate(40,40) skewX(-10)"><path d="M60 320 C60 320 120 100 180 120 C240 140 150 350 280 320 C350 300 380 180 420 180 M280 320 C320 320 400 250 440 100" stroke="#00ffff" stroke-width="28" fill="none" stroke-linecap="round" filter="url(#gl)" opacity="0.35"/><path d="M60 320 C60 320 120 100 180 120 C240 140 150 350 280 320 C350 300 380 180 420 180 M280 320 C320 320 400 250 440 100" stroke="url(#ch)" stroke-width="24" fill="none" stroke-linecap="round"/></g></svg>`;
@@ -2915,12 +3039,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             srcCropW = Math.round(cropH * targetAR);
             srcCropX = srcCropX + Math.round((cropW - srcCropW) / 2);
           } else {
-            // Need shorter crop â†’ HEADROOM-FIRST: anchor to upper portion, take only ~35% of the
-            // discarded height from the top, ~65% from the bottom. This keeps faces/heads visible
-            // and dramatically reduces "bottom cut-off" complaints vs. center crop.
+            // Need shorter crop — center vertically (50%/50%) to match preview exactly
             srcCropH = Math.round(cropW / targetAR);
             const discard = cropH - srcCropH;
-            srcCropY = srcCropY + Math.round(discard * 0.35);
+            srcCropY = srcCropY + Math.round(discard / 2);
           }
         }
 
@@ -2962,16 +3084,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         let freezeImg: HTMLCanvasElement | null = null;
         let freezeRect: [number, number, number, number] = [0, 0, 0, 0];
 
-        // SURGICAL FIX: Freeze/Motion ON → narration + dialogue both use 4s↔4s (copyright suite).
+        // SURGICAL FIX: Freeze/Motion ON → narration + dialogue both use 4s Motion ↔ 2s Freeze Zoom (copyright suite).
         // Freeze/Motion OFF → narration uses Zoom toggle only; dialogue never gets photo zoom (isZoomEnabled guard).
         if (freezeModeRef.current) {
           // SURGICAL FIX: Cycle on exported-video seconds (matches MP4 timeline + WebCodecs timestamps).
-          // Using raw currentTime compresses 4s freeze/motion by playbackRate (e.g. 4x → ~1s zoom bursts).
+          // Using raw currentTime compresses freeze/motion by playbackRate (e.g. 4x → ~1s zoom bursts).
           const _fmPlayRate =
             Number.isFinite(audioEl.playbackRate) && audioEl.playbackRate > 0 ? audioEl.playbackRate : 1.0;
           const t = audioEl.currentTime / _fmPlayRate;
-          const FREEZE_SEC = 4; // 4s professional news-style zoom
-          const MOTION_SEC = 4; // FAIR USE rhythm: 4s video motion <-> 4s photo
+          const FREEZE_SEC = 2; // 2s smooth news-style micro zoom in
+          const MOTION_SEC = 4; // FAIR USE rhythm: 4s video motion <-> 2s photo zoom
           const CYCLE_SEC = FREEZE_SEC + MOTION_SEC;
           const cyclePos = t % CYCLE_SEC;
           const isFreezeCycle = cyclePos < FREEZE_SEC;
@@ -3109,19 +3231,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           visibleLoopLastTimeRef.current = currentVisualTime;
         }
 
-        // SURGICAL FIX: Replace loop and micro-pause with professional smooth micro zoom in (international news style).
-        // 1. Narration: As soon as a segment wraps or finishes, hold the final frame and apply a smooth news-style micro zoom in (no physical video loop).
-        // 2. Dialogue: Hold last frame statically (NO zoom, NO loop, NO pause).
+        // SURGICAL FIX: Loop-Only Cinematic Zoom In (1.0 -> 1.30x Peak)
+        // 1. Normal Motion: 100% Original framing, Zero Zoom (သဘာဝကျကျ အပြည့်ပြေးမည်).
+        // 2. Loop/Overrun Point: အသံမပြီးမီ ဗီဒီယိုကုန်သွားပါက 1.0x မှ 1.30x သို့ သိသာထင်ရှားသော Smooth Push-in ဆွဲမည် (Pause လုံးဝမဖြစ်).
         const useVisibleLoopMask =
           !freezeModeRef.current &&
-          !_isDialogue &&
+          !seekPendingRef.current &&
           visibleLoopCountRef.current >= 1 &&
           visibleLoopFrameReadyRef.current;
         const useResidualFrameMask =
-          !freezeModeRef.current && !_isDialogue && seekPendingRef.current && visibleLoopFrameReadyRef.current;
-        // Dialogue hold: static frame when dialogue ends — only when Freeze/Motion OFF (no photo zoom on dialogue)
-        const useDialogueHold =
-          !freezeModeRef.current && _isDialogue && dialogueHoldActiveRef.current && visibleLoopFrameReadyRef.current;
+          !freezeModeRef.current && seekPendingRef.current && visibleLoopFrameReadyRef.current && !useVisibleLoopMask;
 
         // (B) residual gap mask — gap tracking preserved for seamless transitions
         {
@@ -3147,51 +3266,58 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             ctx.scale(-1, 1);
           }
           const heldFrame = visibleLoopFrameRef.current;
-          if (useDialogueHold && heldFrame) {
-            // Dialogue: Static held frame — NO zoom, NO loop, NO pause
-            // (via fairDraw so the premium blur-bg look stays consistent when ON)
-            fairDraw(heldFrame, 0, 0, heldFrame.width, heldFrame.height);
-          } else if (freezeImg) {
-            // Photo Zoom In phase — subtitles/overlays continue to draw after this
+          if (freezeImg) {
+            // Photo Zoom In phase — Freeze/Motion ON ဖြစ်ချိန်သာ သုံးသည်
             fairDraw(freezeImg, freezeRect[0], freezeRect[1], freezeRect[2], freezeRect[3]);
           } else if (useVisibleLoopMask && heldFrame) {
-            // Noticeable Dynamic Zoom-in (International YouTube Recap Style): 1.0 -> 1.20 over 4.5s
-            // Smooth, clearly visible camera glide so viewers distinctly see dynamic motion (never looks frozen)
+            // Noticeable Cinematic Push-in: 1.03x -> 1.30x over 4.5s
+            // ဗီဒီယို ကုန်သွားပါက Loop အစား 1.03x မှ 1.30x သို့ သိသာထင်ရှားသော Camera Push-in
             const maskElapsed =
-              visibleLoopMaskStartRef.current > 0
-                ? performance.now() - visibleLoopMaskStartRef.current
-                : Math.max(0, performance.now() - gapStartRef.current);
+              visibleLoopMaskStartRef.current > 0 ? performance.now() - visibleLoopMaskStartRef.current : 0;
             const maskProgress = Math.min(1, maskElapsed / 4500);
-            const maskEase = 1 - Math.pow(1 - maskProgress, 1.5);
-            const maskZoom = 1 + 0.2 * maskEase;
+            const maskEase = 1 - Math.pow(1 - maskProgress, 1.8);
+            const maskZoom = 1.03 + 0.27 * maskEase; // 1.03x -> Peak 1.30x
             const maskW = Math.max(2, Math.round(heldFrame.width / maskZoom));
             const maskH = Math.max(2, Math.round(heldFrame.height / maskZoom));
             const maskX = Math.round((heldFrame.width - maskW) / 2);
             const maskY = Math.round((heldFrame.height - maskH) / 2);
+
             fairDraw(heldFrame, maskX, maskY, maskW, maskH);
           } else if (useResidualFrameMask && heldFrame) {
-            // Hard-cut seek gap: Clean static frame hold — NO zoom (prevents accidental zoom during normal cuts)
             fairDraw(heldFrame, 0, 0, heldFrame.width, heldFrame.height);
           } else {
+            // NORMAL MOTION: 100% Original framing (Zero Zoom, မူရင်းအတိုင်း ဘက်မပြောင်းဘဲ ပြေးမည်)
             fairDraw(drawSrcEl, zoomedSrcX, zoomedSrcY, zoomedSrcW, zoomedSrcH);
           }
           ctx.restore();
 
           // Keep one clean visual frame ready so when a segment completes, the hold transitions smoothly
           // PERF FIX: Throttle to once per 200ms instead of every frame (still ~5x/sec for fresh frames)
-          if (!useVisibleLoopMask && !useResidualFrameMask && !useDialogueHold && visualSegment >= 0) {
+          if (!useVisibleLoopMask && !useResidualFrameMask && visualSegment >= 0) {
             const _heldNow = performance.now();
             if (!heldFrameLastCaptureRef.current || _heldNow - heldFrameLastCaptureRef.current > 200) {
               heldFrameLastCaptureRef.current = _heldNow;
-              if (!visibleLoopFrameRef.current) visibleLoopFrameRef.current = document.createElement("canvas");
-              const heldFrame = visibleLoopFrameRef.current;
-              if (heldFrame) {
-                if (heldFrame.width !== canvas.width) heldFrame.width = canvas.width;
-                if (heldFrame.height !== canvas.height) heldFrame.height = canvas.height;
-                const heldCtx = heldFrame.getContext("2d", { alpha: false });
-                if (heldCtx) {
-                  heldCtx.drawImage(canvas, 0, 0, canvas.width, canvas.height);
-                  visibleLoopFrameReadyRef.current = true;
+              if (drawSrcEl && drawSrcEl.readyState >= 2) {
+                if (!visibleLoopFrameRef.current) visibleLoopFrameRef.current = document.createElement("canvas");
+                const dhf = visibleLoopFrameRef.current;
+                if (dhf) {
+                  if (dhf.width !== canvas.width) dhf.width = canvas.width;
+                  if (dhf.height !== canvas.height) dhf.height = canvas.height;
+                  const dhCtx = dhf.getContext("2d", { alpha: false });
+                  if (dhCtx) {
+                    dhCtx.drawImage(
+                      drawSrcEl,
+                      zoomedSrcX,
+                      zoomedSrcY,
+                      zoomedSrcW,
+                      zoomedSrcH,
+                      0,
+                      0,
+                      dhf.width,
+                      dhf.height,
+                    );
+                    visibleLoopFrameReadyRef.current = true;
+                  }
                 }
               }
             }
@@ -3931,11 +4057,16 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                   // SURGICAL FIX: Auto adjust playback rate (0.9x - 1.3x) only where loop would occur
                   const segVideoDur = sourceEnd - effectiveVStart;
                   const segAudioDur = _hasAudioTs ? audioTs[activeIndex].end - audioTs[activeIndex].start : 0;
+                  // SURGICAL FIX (AV parity): audio timestamps are media-time; at 1.4x TTS speed the
+                  // real (wall-clock) audio duration is shorter. Use real duration so video keeps pace.
+                  const _arRaw = audioRef.current?.playbackRate;
+                  const _audioRate = Number.isFinite(_arRaw) && (_arRaw as number) > 0 ? (_arRaw as number) : 1.0;
+                  const segAudioRealDur = segAudioDur / _audioRate;
+                  const _isDlgForRate = !!(active as any)?.isDialogue;
                   let targetPlaybackRate = 1.0;
-                  if (segAudioDur > 0 && segVideoDur > 0 && segVideoDur < segAudioDur) {
-                    // Video is shorter than audio narration (would loop at 1.0x)
-                    // Auto-adjust playback rate within 0.9x - 1.3x to fill the audio duration smoothly
-                    targetPlaybackRate = Math.max(0.9, Math.min(1.3, segVideoDur / segAudioDur));
+                  if (segAudioRealDur > 0 && segVideoDur > 0 && (segVideoDur < segAudioRealDur || _isDlgForRate)) {
+                    // Narration: only speed-fill when video is shorter. Dialogue: match mouth pace to voice.
+                    targetPlaybackRate = Math.max(0.9, Math.min(1.3, segVideoDur / segAudioRealDur));
                   }
 
                   if (activeIndex !== lastIndexRef.current) {
@@ -4026,42 +4157,33 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                     const endMargin = 0.08;
                     const _isDialogueSeg = !!active?.isDialogue;
                     if (sourceEnd > effectiveVStart && vv.currentTime >= sourceEnd - endMargin) {
-                      if (_isDialogueSeg && !freezeModeRef.current) {
-                        // Dialogue + Freeze OFF: static hold — no photo zoom
+                      if (!freezeModeRef.current) {
+                        // FREEZE OFF (Dialogue ရော Narration ပါ): Loop အစပြန်မခုန်ဘဲ နောက်ဆုံး Frame အား 1.30x Push-In ဖြင့် ချောမွေ့စွာ ထိန်းထားမည်
                         if (!dialogueHoldActiveRef.current) {
                           dialogueHoldActiveRef.current = true;
-                          if (!visibleLoopFrameRef.current)
-                            visibleLoopFrameRef.current = document.createElement("canvas");
-                          const dhf = visibleLoopFrameRef.current;
-                          if (dhf) {
-                            if (dhf.width !== canvas.width) dhf.width = canvas.width;
-                            if (dhf.height !== canvas.height) dhf.height = canvas.height;
-                            const dhCtx = dhf.getContext("2d", { alpha: false });
-                            if (dhCtx) {
-                              dhCtx.drawImage(canvas, 0, 0, canvas.width, canvas.height);
-                              visibleLoopFrameReadyRef.current = true;
+                          if (visibleLoopMaskStartRef.current === 0) {
+                            visibleLoopMaskStartRef.current = performance.now();
+                            visibleLoopCountRef.current = 1;
+                          }
+                          if (!visibleLoopFrameReadyRef.current && vv && vv.readyState >= 2) {
+                            if (!visibleLoopFrameRef.current)
+                              visibleLoopFrameRef.current = document.createElement("canvas");
+                            const dhf = visibleLoopFrameRef.current;
+                            if (dhf) {
+                              if (dhf.width !== canvas.width) dhf.width = canvas.width;
+                              if (dhf.height !== canvas.height) dhf.height = canvas.height;
+                              const dhCtx = dhf.getContext("2d", { alpha: false });
+                              if (dhCtx) {
+                                dhCtx.drawImage(vv, 0, 0, dhf.width, dhf.height);
+                                visibleLoopFrameReadyRef.current = true;
+                              }
                             }
                           }
                         }
                         vv.playbackRate = targetPlaybackRate;
                         if (vv.paused && !vv.ended) vv.play().catch(() => {});
-                      } else if (!freezeModeRef.current && !_isDialogueSeg) {
-                        // Narration + Freeze OFF: micro zoom loop mask
-                        if (visibleLoopMaskStartRef.current === 0) {
-                          visibleLoopMaskStartRef.current = performance.now();
-                          visibleLoopCountRef.current = 1;
-                        }
-                        seekPendingRef.current = true;
-                        const onLoopSeeked = () => {
-                          seekPendingRef.current = false;
-                          vv.playbackRate = targetPlaybackRate;
-                          if (!vv.ended) vv.play().catch(() => {});
-                          vv.removeEventListener("seeked", onLoopSeeked);
-                        };
-                        vv.addEventListener("seeked", onLoopSeeked);
-                        vv.currentTime = effectiveVStart;
                       } else {
-                        // Freeze/Motion ON (narration or dialogue): seek loop only — 4s↔4s draw owns copyright look
+                        // Freeze/Motion ON: seek loop only
                         seekPendingRef.current = true;
                         const onFmLoopSeeked = () => {
                           seekPendingRef.current = false;
@@ -4078,7 +4200,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       let _hsRate = targetPlaybackRate;
                       if (fairHyperSyncRef.current && _hasAudioTs) {
                         const _expected =
-                          effectiveVStart + (currentTime - audioTs[activeIndex].start) * targetPlaybackRate;
+                          effectiveVStart +
+                          ((currentTime - audioTs[activeIndex].start) / _audioRate) * targetPlaybackRate;
                         const _err = vv.currentTime - _expected; // + = video ahead
                         if (Math.abs(_err) > 0.04 && Math.abs(_err) < 1.5) {
                           _hsRate = targetPlaybackRate * Math.max(0.92, Math.min(1.08, 1 - _err * 0.4));
@@ -4119,34 +4242,40 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                           // Dialogue gap: Hold last frame silently — NEVER pause video (pause freezes canvas)
                           if (!dialogueHoldActiveRef.current) {
                             dialogueHoldActiveRef.current = true;
-                            if (!visibleLoopFrameRef.current)
-                              visibleLoopFrameRef.current = document.createElement("canvas");
-                            const dhf2 = visibleLoopFrameRef.current;
-                            if (dhf2) {
-                              if (dhf2.width !== canvas.width) dhf2.width = canvas.width;
-                              if (dhf2.height !== canvas.height) dhf2.height = canvas.height;
-                              const dhCtx2 = dhf2.getContext("2d", { alpha: false });
-                              if (dhCtx2) {
-                                dhCtx2.drawImage(canvas, 0, 0, canvas.width, canvas.height);
-                                visibleLoopFrameReadyRef.current = true;
+                            if (!visibleLoopFrameReadyRef.current && vv && vv.readyState >= 2) {
+                              if (!visibleLoopFrameRef.current)
+                                visibleLoopFrameRef.current = document.createElement("canvas");
+                              const dhf2 = visibleLoopFrameRef.current;
+                              if (dhf2) {
+                                if (dhf2.width !== canvas.width) dhf2.width = canvas.width;
+                                if (dhf2.height !== canvas.height) dhf2.height = canvas.height;
+                                const dhCtx2 = dhf2.getContext("2d", { alpha: false });
+                                if (dhCtx2) {
+                                  dhCtx2.drawImage(vv, 0, 0, dhf2.width, dhf2.height);
+                                  visibleLoopFrameReadyRef.current = true;
+                                }
                               }
                             }
                           }
                         } else {
-                          // Narration hold: maintain smooth micro zoom without stutter
-                          if (visibleLoopMaskStartRef.current === 0) {
-                            visibleLoopMaskStartRef.current = performance.now();
-                            visibleLoopCountRef.current = 1;
+                          // Narration hold: Freeze OFF တွင် Loop မပတ်ဘဲ 1.30x Push-in ကို ဆက်လက် ထိန်းထားမည်
+                          if (!freezeModeRef.current) {
+                            if (visibleLoopMaskStartRef.current === 0) {
+                              visibleLoopMaskStartRef.current = performance.now();
+                              visibleLoopCountRef.current = 1;
+                            }
+                          } else {
+                            // Freeze ON သာလျှင် seek loop လုပ်မည်
+                            seekPendingRef.current = true;
+                            const onGapSeeked = () => {
+                              seekPendingRef.current = false;
+                              vv.playbackRate = 1.0;
+                              if (!vv.ended) vv.play().catch(() => {});
+                              vv.removeEventListener("seeked", onGapSeeked);
+                            };
+                            vv.addEventListener("seeked", onGapSeeked);
+                            vv.currentTime = holdStart;
                           }
-                          seekPendingRef.current = true;
-                          const onGapSeeked = () => {
-                            seekPendingRef.current = false;
-                            vv.playbackRate = 1.0;
-                            if (!vv.ended) vv.play().catch(() => {});
-                            vv.removeEventListener("seeked", onGapSeeked);
-                          };
-                          vv.addEventListener("seeked", onGapSeeked);
-                          vv.currentTime = holdStart;
                         }
                       }
                       // Keep video ALWAYS playing (no pause ever) — canvas stays active
@@ -4419,9 +4548,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
               // PERF FIX: Skip requestFrame() — WebCodecs is the primary encoder,
               // MediaRecorder runs as passive fallback via captureStream(fps) auto-capture only.
             } else if (encTrack && typeof (encTrack as any).requestFrame === "function") {
-              // PERF FIX: Only call requestFrame() when WebCodecs is NOT active AND captureStream(0) was used.
-              // captureStream(targetFps) already auto-captures, so requestFrame() is only needed for captureStream(0).
-              if (usedManualCaptureStream) (encTrack as any).requestFrame();
+              try {
+                (encTrack as any).requestFrame();
+              } catch (_) {}
             }
           } catch (e) {
             console.warn("[RECORDING] Encoder push failed:", e);
@@ -4484,6 +4613,32 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       };
 
       a.addEventListener("ended", onEnded);
+
+      // ── REC WATCHDOG: auto-resume stalled audio; stop only after the full audio length has elapsed ──
+      let wakeLock: any = null;
+      try {
+        (navigator as any).wakeLock
+          ?.request?.("screen")
+          .then((l: any) => (wakeLock = l))
+          .catch(() => {});
+      } catch (_) {}
+      const watchStart = Date.now();
+      const recWatchdog = window.setInterval(() => {
+        const rec = recapRecorderRef.current;
+        if (!rec || rec.state === "inactive") return;
+        const dur = a.duration;
+        if (!Number.isFinite(dur) || dur <= 0) return;
+        const nearEnd = a.currentTime >= dur - 0.15;
+        if (nearEnd || a.ended) {
+          rec.stop();
+          return;
+        }
+        if (a.paused && a.currentTime > 0) a.play().catch(() => {});
+        if (v.paused && a.currentTime > 0) v.play().catch(() => {});
+        const rate = a.playbackRate || 1;
+        if ((Date.now() - watchStart) / 1000 > dur / rate + 30) rec.stop();
+      }, 1000);
+
       a.currentTime = 0;
       v.currentTime = 0;
 
@@ -4506,6 +4661,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
       return () => {
         cancelAnimationFrame(recapAnimFrameRef.current);
+        window.clearInterval(recWatchdog);
+        try {
+          wakeLock?.release?.();
+        } catch (_) {}
         a.removeEventListener("ended", onEnded);
         a.pause();
         if (v) {
@@ -4529,17 +4688,23 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       filter: `contrast(${activeGrade.contrast + bypassBoostCSS.contrast}%) brightness(${activeGrade.brightness + bypassBoostCSS.brightness}%) saturate(${activeGrade.saturate + bypassBoostCSS.saturate}%) hue-rotate(${activeGrade.hue + bypassBoostCSS.hue}deg) sepia(${activeGrade.sepia || 0}%)`,
       transform: `${editorState.bypass ? "scale(1.03)" : "scale(1)"} ${editorState.flip ? "scaleX(-1)" : ""}`,
       objectFit: editorState.ratio === "auto" ? "contain" : "cover",
+      objectPosition: "center center",
       width: "100%",
       height: "100%",
       transition: "all 0.3s ease",
     };
 
     const isWideRatio = editorState.ratio === "auto" || editorState.ratio === "16/9";
+    const ratioMultiplier = (() => {
+      if (editorState.ratio === "auto") return null;
+      const [rw, rh] = editorState.ratio.split("/").map(Number);
+      return rw && rh ? rw / rh : null;
+    })();
     const containerStyles: React.CSSProperties = {
       aspectRatio: editorState.ratio === "auto" ? undefined : editorState.ratio,
       height: editorState.ratio === "auto" ? "450px" : "auto",
       width: isWideRatio ? "100%" : "auto",
-      maxWidth: "100%",
+      maxWidth: ratioMultiplier ? `min(100%, calc(60vh * ${ratioMultiplier}))` : "100%",
       maxHeight: "60vh",
       margin: isWideRatio ? undefined : "0 auto",
       alignSelf: "center",
@@ -4749,40 +4914,54 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 onTouchMove={handleDragMove}
                 onTouchEnd={handleDragEnd}
               >
-                {/* Logo Layer */}
-                <div
-                  className="absolute z-30 pointer-events-none"
-                  style={{
-                    left: `${logo.x}%`,
-                    top: `${logo.y}%`,
-                    transform: "translate(-50%, -50%)",
-                    width: `${logo.size}%`,
-                    transition: "all 0.4s ease",
-                  }}
-                >
-                  {logo.url ? (
+                {/* Logo Layer — draggable / resizable (hidden for paid/admin when no custom logo) */}
+                {(logo.url || !hideAppLogo) && (
+                  <div
+                    data-logo-host
+                    className="absolute z-30 pointer-events-auto cursor-move touch-none select-none group"
+                    onPointerDown={(e) => startLogoDrag(e, "move")}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onTouchStart={onLogoTouchStart}
+                    onTouchMove={onLogoTouchMove}
+                    onTouchEnd={(e) => {
+                      e.stopPropagation();
+                      logoPinchRef.current = null;
+                    }}
+                    style={{
+                      left: `${logo.x}%`,
+                      top: `${logo.y}%`,
+                      transform: "translate(-50%, -50%)",
+                      width: `${logo.size}%`,
+                    }}
+                  >
+                    {logo.url ? (
+                      <div
+                        className={`relative w-full aspect-square ${logo.isCircle ? "rounded-full" : "rounded-none"} overflow-hidden`}
+                        style={{
+                          boxShadow: "none",
+                          border: "none",
+                        }}
+                      >
+                        <img
+                          src={logo.url}
+                          className={`w-full h-full object-cover ${logo.spin ? "animate-[spin_8s_linear_infinite]" : ""}`}
+                          alt="Logo"
+                          draggable={false}
+                        />
+                      </div>
+                    ) : (
+                      <div
+                        className={`relative w-full aspect-square flex items-center justify-center ${logo.spin ? "animate-[spin_8s_linear_infinite]" : ""}`}
+                      >
+                        <AppLogo size={64} />
+                      </div>
+                    )}
                     <div
-                      className={`relative w-full aspect-square ${logo.isCircle ? "rounded-full" : "rounded-none"} overflow-hidden`}
-                      style={{
-                        boxShadow: "none",
-                        border: "none",
-                      }}
-                    >
-                      <img
-                        src={logo.url}
-                        className={`w-full h-full object-cover ${logo.spin ? "animate-[spin_8s_linear_infinite]" : ""}`}
-                        alt="Logo"
-                        draggable={false}
-                      />
-                    </div>
-                  ) : (
-                    <div
-                      className={`relative w-full aspect-square flex items-center justify-center ${logo.spin ? "animate-[spin_8s_linear_infinite]" : ""}`}
-                    >
-                      <AppLogo size={64} />
-                    </div>
-                  )}
-                </div>
+                      className="absolute -right-2 -bottom-2 w-5 h-5 rounded-full bg-primary border-2 border-background cursor-nwse-resize opacity-80 group-hover:opacity-100"
+                      onPointerDown={(e) => startLogoDrag(e, "resize")}
+                    />
+                  </div>
+                )}
 
                 {/* SURGICAL EDIT: Blur Box Layer â€” pure blur region, NO subtitle inside */}
                 {!isRenderingRef.current && blurSettings.enabled && (
@@ -5707,7 +5886,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                       <div className="flex items-center justify-between">
                         <div className="flex flex-col">
                           <span className="text-xs font-semibold text-slate-300">⏸ Freeze / Motion</span>
-                          <span className="text-[10px] text-slate-500">4s video ↔ 4s photo zoom in</span>
+                          <span className="text-[10px] text-slate-500">4s video ↔ 2s photo zoom in</span>
                         </div>
                         <button
                           onClick={() => {
@@ -6305,25 +6484,44 @@ STREET-SPOKEN STYLE & MODERN SLANG (HYBRID/VIRAL only):
   }
   if (style === "VIRAL") {
     return `\n\nNARRATION STYLE — VIRAL (short-form, TikTok/Reels):
-- Fast pacing. Short punchy sentences. No slow setup, no filler, no throat-clearing.
-- Dialogue-first: whenever people speak on screen, use their translated words directly in ${langName} instead of describing them.
-- Keep tension continuous — every ~20 seconds of narration must land a new question, conflict, or surprise.
-- Emotion must be raw and natural, exactly how real people talk when angry, shocked, or excited — not literary.
-- Match the words to the on-screen action at that moment.
-- NEVER invent dialogue that does not exist in the source.
-- For non-story niches (tech, news, health, business, educational), "conflict" means the myth being busted, the surprising number, the mistake people make — hit those hard and fast.
-- STORY-CONNECTION LINES (mandatory): dialogue alone is NOT enough. Between dialogue blocks, add SHORT narrator lines (1-2 sentences) that state the concrete physical action, who is doing it to whom, and the visible reaction/expression — so a viewer who never saw the source still understands the plot.
-- Add one such connective line whenever the scene/location/time changes, a new character appears, a fight/chase/physical action happens, or a relationship/motive must be clear for the next dialogue to make sense.
-- Overall mix: roughly 70-80% real dialogue, 20-30% short narrator/action lines. NEVER produce a bare dialogue transcript with no connective lines.
-- Narrator lines must be connective glue only: short, punchy, describing action/reaction — never re-summarising dialogue that was already spoken, never invented facts.
-- THIS OVERRIDES any earlier instruction that says to avoid quoting dialogue: quoting real spoken lines is REQUIRED in this style.${timingLockBlock}${translitBlock}`;
+- Fast pacing. Short punchy sentences. Dialogue-first: all direct speech must be quoted "..." with [DIALOGUE:EMOTION].
+- NO REDUNDANT SPEAKER ATTRIBUTION: NEVER insert narration to explain who spoke or replied ("သူက ပြောတယ်", "သူမက မေးတယ်" strictly forbidden).
+- NO PASSIVE ACTION FILLER: During dialogue, do not narrate obvious actions like sitting, standing, or facial changes.
+- STRICT NARRATION RULES (1-sentence connective glue ONLY when strictly needed):
+  * Dramatic physical action (smashing, fighting, snatching, escaping).
+  * Scene, location, or time transitions.
+  * Major turning points or secret reveals not obvious from dialogue.
+  * When a new person or group enters an ongoing conversation.
+  * Introducing a new character's identity and relationship for first-time viewers.
+- Story continuity must remain 100% coherent from start to finish without gaps.${timingLockBlock}${translitBlock}`;
   }
-  return `\n\nNARRATION STYLE — STORY (full narrative, long-form):
-  - Keep the classic complete narrator style: clear beginning-to-end storytelling with smooth flow and emotional depth.
-  - Translate what people actually said when it matters, but stay primarily in narrator voice.
-  - TONE (POLISHED NATURAL SPOKEN): neither robotic nor overly poetic. FORBIDDEN: dry CCTV-style action listing ("he got in the car. the other man replied. he sat down."). FORBIDDEN: theatrical, archaic or flowery literary melodrama. REQUIRED: natural modern spoken ${langName} as told by an elite storyteller, lightly elevated with tasteful, evocative words that capture real emotion, inner thoughts and suspense.
-  - SCENE PACING: bridge transitions/filler moments smoothly and concisely.
-  - CRITICAL HIGH-STAKES SCENES (fights, heated arguments, romance, betrayals, reveals, climaxes): NEVER summarize them into 1-2 dry sentences. Do FULL CONTINUOUS SCENE EXPANSION matching the SOURCE scene's real length — if the source spends 2-3 minutes on it, narrate the full exchange, tension, reactions and emotional beats across multiple consecutive timestamped paragraphs that follow the source timing.${translitBlock}`;
+  return `\n\nNARRATION STYLE — STORY (ELITE INTERNATIONAL RECAP — 75-80% DURATION & ZERO REPETITION):
+  - TOP-TIER INTERNATIONAL RECAP STANDARD: Write rich, continuous scene-by-scene narration (aiming for ~75% to 80% of source duration). For longer videos, narrate each progressive scene in full narrative depth roughly every 14-20 seconds — DO NOT over-compress into a short synopsis.
+  - NATURAL STORY OPENING (FIRST 3 SECONDS):
+    * Open naturally with the protagonist's current situation, atmospheric mood, or immediate dilemma specific to THIS movie in one compelling sentence.
+    * STRICTLY FORBID repetitive template openers (e.g. "ဒီဆုံးဖြတ်ချက်က...", "ဒီလျှို့ဝှက်ချက်ကြောင့်...") and filler tails ("ဆက်ကြည့်လိုက်ရအောင်").
+  - SELECTIVE HUMAN COMMENTARY (REALISTIC & ZERO-PREACHY):
+    * Narrate like an emotionally perceptive friend discussing a film — NOT a detached reporter or moralizing preacher.
+    * DO NOT force commentary onto every paragraph. Only at key turning points, difficult decisions, or intense emotional peaks, weave in ONE brief line of relatable human empathy or insight into the character's dilemma.
+    * STRICTLY FORBID generic philosophical preaching or canned moral lessons (e.g. NEVER use lines like "ဘဝဆိုတာ...", "လူသားတွေဟာ..."). Ground every observation strictly in the scene's immediate emotional reality to make the recap genuinely transformative and organic.
+  - PERMANENT IDENTITY LOCK & NATURAL PRONOUN FLOW:
+    * Once a character is introduced by name or role/title, NEVER swap or change it across timestamps or episodes (e.g. if "ကင်", keep "ကင်" throughout; never change to "ဥက္ကဌ" or "သူဌေး").
+    * Avoid repeating names or "သူတို့... သူတို့..." in consecutive sentences. Link sentences smoothly using spoken connectors (တာကြောင့်, ပြီး, ဒါပေမဲ့, နောက်တော့) and appropriate pronouns (သူ, သူမ, သူတို့, သူတို့မိသားစု, သူတို့တစ်ဖွဲ့လုံး), or natural subject omission.
+    * Example: "ကိုနိုင်ဟာ မနေ့ညက အမူးလွန်သွားတာကြောင့် ကားလမ်းဘေးမှာ မှောက်လျက်လဲနေခဲ့ပြီး တစ်ညလုံး လုံးဝမနိုးဘဲ အိပ်ပျော်သွားခဲ့တယ်။ ဒါပေမဲ့ သူဟာ မနက်နိုးလာတော့ ညကအဖြစ်အပျက်ကို ဘာမှမမှတ်မိတော့ပါဘူး။"
+  - STRICT PROGRESSION & ZERO LOOP LOCK (CRITICAL):
+    * NEVER repeat the exact same sentence, status, or preparation across multiple timestamps.
+    * Every single timestamped paragraph MUST introduce genuinely NEW plot progression, dialogue exchanges, or escalating tension.
+    * If a single scene continues for 2-3 minutes, evolve the narrative across each timestamp:
+      - Beat 1: The immediate action, dialogue, and surface atmosphere.
+      - Beat 2: Hidden motives, whispering, and secret reactions.
+      - Beat 3: The underlying stakes and impending danger.
+      - Beat 4: A sudden turn or consequence shifting the momentum.
+  - TONE & STORYTELLING CADENCE:
+    * Natural, modern spoken ${langName} with gripping cinematic flow.
+    * FORBIDDEN: robotic CCTV action logging.
+    * Vary sentence lengths and emotional cadence so the voiceover sounds human, passionate, and deeply engaging.
+  - DIALOGUE INTEGRATION: Weave the characters' crucial spoken lines, arguments, and emotional words directly into the narrative with vivid quotes or indirect speech.
+  - FLUID NARRATIVE FLOW: Let each paragraph flow naturally into the next based on cause-and-effect and genuine character emotions — do NOT force twists or artificial cliffhanger lines.${translitBlock}`;
 }
 
 const RecapVideoNVPage: React.FC = () => {
@@ -6485,7 +6683,7 @@ const RecapVideoNVPage: React.FC = () => {
       rels ? `RELATIONSHIPS:\n${rels}` : "",
       ents ? `KEY ENTITIES (people, places, orgs, tools, terms):\n${ents}` : "",
       chars || ents
-        ? `NAME LOCK (CRITICAL): Use the character/entity names above EXACTLY as written — same spelling, same transliteration, every time. Never rename, shorten, translate, swap or invent a name. If someone in the source video is not in the list, describe them by role/relationship instead of inventing a name, and never reuse an existing name for a different person.`
+        ? `NAME & TITLE LOCK (CRITICAL): Use the character/entity names AND their specific titles/roles (အခေါ်အဝေါ်/ရာထူး) above EXACTLY as established — every time. Never swap synonymous titles (e.g. if someone is established as တပ်မှူး, do NOT call them စစ်သူကြီး; if မိဖုရား, do NOT switch to ဘုရင်မ or မင်းသမီး). Keep all character titles, spellings, and relationships 100% consistent across all episodes.`
         : "",
       list(bible.topics_covered) ? `TOPICS ALREADY COVERED (do NOT repeat):\n${list(bible.topics_covered)}` : "",
       list(bible.key_facts) ? `KEY FACTS / NUMBERS / TERMS (must stay consistent):\n${list(bible.key_facts)}` : "",
@@ -6704,6 +6902,30 @@ const RecapVideoNVPage: React.FC = () => {
     setScriptData((prev) => ({ ...prev, full_script: stripDialogueMetadata(newScript) }));
   };
 
+  // ── SURGICAL ADD: Script Review Gate (pauses before TTS; resumes full pipeline) ──
+  const [scriptReviewOpen, setScriptReviewOpen] = useState(false);
+  const [scriptEditing, setScriptEditing] = useState(false);
+  const scriptReviewArgsRef = useRef<{ ownKey?: string; duration: number } | null>(null);
+  const continueFromScriptReview = (edited: boolean) => {
+    const args = scriptReviewArgsRef.current;
+    setScriptReviewOpen(false);
+    setScriptEditing(false);
+    if (!args) return;
+    scriptReviewArgsRef.current = null;
+    const finalScript = scriptData.full_script || "";
+    const finalSegments = edited ? scriptToSegments(finalScript, args.duration) : scriptData.segments;
+    if (edited) setScriptData((prev) => ({ ...prev, segments: finalSegments }));
+    setStatus("processing");
+    setProgressMsg("🎙️ Script ဖြင့် AI အသံ ထုတ်နေပါပြီ...");
+    const ttsText = stripDialogueMetadata(finalScript).replace(/\[.*?\]\s*/g, "");
+    void generateVoice(
+      ttsText,
+      args.ownKey,
+      finalSegments.map((s) => ({ text: s.text })),
+      finalSegments,
+    );
+  };
+
   // ── TARGET-LANGUAGE TRANSLATE GATE (additive; does not touch AV sync / seek / fallback) ──
   const [isTranslatingScript, setIsTranslatingScript] = useState(false);
   const selectedLangName = languages.find((l) => l.code === selectedLanguage)?.name || "BURMESE";
@@ -6880,8 +7102,10 @@ const RecapVideoNVPage: React.FC = () => {
       const targetDurationSec = Math.round(duration * 0.7);
       const minRequiredParagraphs = Math.max(12, Math.round(targetDurationSec / 15));
       const targetParagraphs = Math.max(16, Math.round(targetDurationSec / 11));
+      const minWordCount = Math.round((targetDurationSec / 60) * 120);
+      const targetWordCount = Math.round((targetDurationSec / 60) * 130);
       const pacingStepSec = Math.max(12, Math.min(25, Math.round(duration / targetParagraphs)));
-      const lengthMandate = `\n- LENGTH MANDATE: spoken recap must last about ${Math.round(targetDurationSec / 60)} minutes. Write AT LEAST ${minRequiredParagraphs} timestamped paragraphs (target ${targetParagraphs}), with a [MM:SS] timestamp roughly every ${pacingStepSec} seconds of source time. Do NOT write a short 1-minute summary.\n- Expand high-stakes scenes (fights, arguments, romance, betrayals, climaxes) continuously, following the source scene's real length.`;
+      const lengthMandate = `\n- LENGTH MANDATE: spoken recap must last about ${Math.round(targetDurationSec / 60)} minutes (MANDATORY: AT LEAST ${minWordCount} words, target ~${targetWordCount} words). Write AT LEAST ${minRequiredParagraphs} timestamped paragraphs (target ${targetParagraphs}), with a [MM:SS] timestamp roughly every ${pacingStepSec} seconds of source time. Do NOT write a short 1-minute summary.\n- Expand high-stakes scenes (fights, arguments, romance, betrayals, climaxes) continuously, following the source scene's real length.`;
       const isBurmese = selectedLangName === "BURMESE";
       const burmeseStyleBlock = isBurmese
         ? `\n\nLANGUAGE STYLE (CRITICAL for Burmese):\n` +
@@ -6900,14 +7124,14 @@ const RecapVideoNVPage: React.FC = () => {
       const scriptBody: Record<string, unknown> = {
         fileUri,
         fileMimeType: mimeType,
-        niche: `You are an aggressive international professional YouTube recap editor. Analyze the uploaded movie/video and produce a condensed, fast-paced recap script in ${selectedLangName}. Length must be approximately 70% of the original duration when read aloud (band 65-75%, never below 65%). ${seriesEnabled ? "SERIES CONTINUATION: Do NOT include any opening viral hook or scene from the middle/end; start strictly in chronological sequence from the beginning of this episode." : "Start with a shocking hook, build mystery, escalate tension, finish with a climactic payoff."} Aggressively cut filler/travel/waiting scenes. Keep only plot twists, key character moments, conflicts, reveals, and the resolution. Write as ONE continuous gripping story with hook transitions between segments. Output each paragraph prefixed by [MM:SS] starting at [00:00] and ending close to the full duration. Use original wording — do NOT quote distinctive dialogue.${burmeseStyleBlock}${buildNarrationStyleBlock(narrationStyle, selectedLangName)}`,
+        niche: `You are a top-tier international movie recap scriptwriter. Analyze the uploaded movie/video and produce a rich, cinematic, highly engaging recap script in ${selectedLangName}. Length must be approximately 70% of the original duration when read aloud (band 70-85%, never below 70%). ${seriesEnabled ? "SERIES CONTINUATION: Start strictly in chronological sequence from the beginning of this episode." : "Open naturally with the character's core dilemma and the film's authentic mood."} ZERO COMPRESSION ON KEY SCENES: Give full dramatic weight and emotional depth to every confrontation, turning point, and character conflict. Cut only empty dead air. Narrate as a fluid, human-narrated story with natural conversational commentary and seamless scene-to-scene progression without forced cliffhangers.Output each paragraph prefixed by [MM:SS] starting at [00:00] and ending close to the full duration. Use original wording — do NOT quote distinctive dialogue.${burmeseStyleBlock}${buildNarrationStyleBlock(narrationStyle, selectedLangName)}`,
         language: selectedLangName,
         sourceDurationSec: duration,
         narrationStyle,
         skipCreditDeduction: true,
         recapNvPipeline: true,
         apiMode: resolvedApiMode,
-        extraInstructions: `CRITICAL:\n- Output language MUST be ${selectedLangName} ONLY.\n- Cover the full story arc at about 70% of source duration (never below 65%, never above 75%).\n- Cut only true filler (travel/waiting). Keep every plot-advancing moment in full.${lengthMandate}\n- Each segment must flow into the next with a hook/transition.\n- Never output a partial/incomplete script.${burmeseExtraStyle}`,
+        extraInstructions: `CRITICAL:\n- Output language MUST be ${selectedLangName} ONLY.\n- STRICT MULTI-CHARACTER RULE: NEVER reduce the story to only 2 people! Accurately identify each distinct person by their source name or relationship in ${selectedLangName} (အဖေ, အမေ, သား, သမီး, ဇနီး, ခင်ပွန်း, အဖိုး, အဖွား, ချွေးမ, ဆရာ, ဆရာဝန်, ရဲ, သူငယ်ချင်း). NEVER merge multiple different characters into the 2 main leads!\n- Cover the full story arc at about 70% of source duration (never below 70%, never above 85%).\n- Cut only true dead air. Keep every key scene, dialogue exchange, and emotional moment in rich detail.${lengthMandate}\n- - Fluid storytelling flow driven purely by real source events — no forced cliffhangers.\n- Never output a partial/incomplete script.${burmeseExtraStyle}`,
         generationConfig: {
           maxOutputTokens,
           temperature: 0.7,
@@ -7491,8 +7715,10 @@ const RecapVideoNVPage: React.FC = () => {
       const targetDurationSec = Math.round(lenBaseSec * 0.7);
       const minRequiredParagraphs = Math.max(12, Math.round(targetDurationSec / 15));
       const targetParagraphs = Math.max(16, Math.round(targetDurationSec / 11));
+      const minWordCount = Math.round((targetDurationSec / 60) * 120);
+      const targetWordCount = Math.round((targetDurationSec / 60) * 130);
       const pacingStepSec = Math.max(12, Math.min(25, Math.round(lenBaseSec / targetParagraphs)));
-      const lengthMandate = `\n- LENGTH MANDATE: spoken recap must last about ${Math.round(targetDurationSec / 60)} minutes. Write AT LEAST ${minRequiredParagraphs} timestamped paragraphs (target ${targetParagraphs}), with a [MM:SS] timestamp roughly every ${pacingStepSec} seconds of source time. Do NOT write a short 1-minute summary.\n- Expand high-stakes scenes (fights, arguments, romance, betrayals, climaxes) continuously, following the source scene's real length.`;
+      const lengthMandate = `\n- LENGTH MANDATE: spoken recap must last about ${Math.round(targetDurationSec / 60)} minutes (MANDATORY: AT LEAST ${minWordCount} words, target ~${targetWordCount} words). Write AT LEAST ${minRequiredParagraphs} timestamped paragraphs (target ${targetParagraphs}), with a [MM:SS] timestamp roughly every ${pacingStepSec} seconds of source time. Do NOT write a short 1-minute summary.\n- Expand high-stakes scenes (fights, arguments, romance, betrayals, climaxes) continuously, following the source scene's real length.`;
 
       // â”€â”€ LANGUAGE-AWARE BLOCKS: All language-specific text uses selectedLangName so user's chosen language is respected. â”€â”€
       const isBurmese = selectedLangName === "BURMESE";
@@ -7530,29 +7756,28 @@ const RecapVideoNVPage: React.FC = () => {
 Your task is to analyze the uploaded movie/video and create an engaging recap version like the best YouTube movie recap channels. Do NOT simply speed up or use only the first part. You must understand the FULL STORY and narrate it completely, using only real source events.
 
 CRITICAL STORYTELLING RULE:
-Write the narration script as ONE CONTINUOUS GRIPPING STORY. Every sentence must hook into the next â€” create momentum, tension, and curiosity.
-Use short, punchy sentences, action verbs, and high-energy transitions.
-Do NOT write isolated disconnected paragraphs. Each segment must END with a hook or transition that PULLS the listener into the next segment.
-Examples of good transitions: "But what she didn't know was..." / "And that's when everything changed." / "Just when he thought it was over..."
-The narration must feel like a non-stop thriller story, NOT a boring lecture, documentary, or news report.
+Write the narration script as ONE CONTINUOUS NATURAL STORY. Ground every line in real source events, character motives, and genuine emotions.
+Use clear, engaging conversational language with natural cause-and-effect transitions.
+Do NOT force formulaic twists or repetitive cliffhanger lines like "ဒါဟာ အစပဲရှိသေးတယ်", "ဒါပေမဲ့ အရာအားလုံး ပြောင်းလဲသွားခဲ့တယ်", or "သူမ မသိခဲ့တာက".
+The narration must feel like an authentic human storyteller sharing a compelling movie with a friend, driven purely by the real actions and drama inside the source.
 
-STRICT LENGTH RULE:
-This is a surgical recap, not a summary. Do NOT retain most of the source or produce a detailed retelling.
-The output script MUST be approximately 70% of the original video duration when read aloud (acceptable band: 65-75%).
-MINIMUM WORD COUNT (CRITICAL â€” DO NOT GO BELOW THIS):
-  * Source 5 min â†’ minimum 500 words, target ~700 words
-  * Source 10 min â†’ minimum 1000 words, target ~1400 words
-  * Source 15 min â†’ minimum 1500 words, target ~2100 words
-  * Source 20 min â†’ minimum 2000 words, target ~2800 words
-  * Source 30 min â†’ minimum 3000 words, target ~4200 words
-If your script is shorter than the MINIMUM, you MUST add more story detail until you reach it.
-A 20-minute source producing only 2 minutes of narration = FAILURE.
+STRICT LENGTH RULE (70% COVERAGE):
+This is an elite international narrative recap. You MUST produce a rich, detailed cinematic storytelling experience.
+The output script MUST be approximately 70% of the original video duration when read aloud (acceptable band: 70-85%).
+MINIMUM WORD COUNT (CRITICAL — STRICT DEPTH):
+  * Source 5 min → minimum 600 words, target ~800 words
+  * Source 10 min → minimum 1200 words, target ~1600 words
+  * Source 15 min → minimum 1800 words, target ~2400 words
+  * Source 20 min → minimum 2400 words, target ~3200 words
+  * Source 30 min → minimum 3600 words, target ~4800 words
+If your script is shorter than the MINIMUM, you MUST expand character emotions, dialogues, and crucial scenes until you reach it.
+A 20-minute source producing only 2-4 minutes of narration = STRICT FAILURE.
 
 STRUCTURE RULE:
-${seriesEnabled ? "1. SERIES CONTINUATION: Do NOT include any opening viral hook or scene from the middle/end; start strictly in chronological sequence from the beginning of this episode." : "1. Start with a SHOCKING HOOK from the middle or end that immediately raises a why-did-this-happen question."}
-2. Then build a MYSTERY-DRIVEN buildup while preserving the core plot logic and revealing hidden stakes.
-3. Increase tension step-by-step with shorter, sharper narration as the conflict intensifies.
-4. Finish with an ULTIMATE CLIMAX PEAK: the twist or payoff must land hard and leave the viewer breathless.
+${seriesEnabled ? "1. SERIES CONTINUATION: Start strictly in chronological sequence from the beginning of this episode." : "1. Open with a natural, atmosphere-driven scene establishing the character's situation and inner conflict."}
+2. Develop the plot through realistic cause-and-effect, highlighting meaningful character choices.
+3. Incorporate thoughtful, conversational human commentary on characters' decisions rather than just listing occurrences.
+4. Let the climax and resolution unfold naturally from the story's emotional peak without artificial twist gimmicks.
 
 IMPORTANT EDITING RULE:
 Keep the important story moments, but remove unnecessary transition actions, filler activities, and dead air between them.
@@ -7560,22 +7785,21 @@ Example: If a character is sick and goes to the hospital,
 Keep: The character being sick, arriving at the hospital, and receiving treatment.
 Remove: Changing clothes, walking to the car, driving scenes, waiting scenes, and unnecessary travel shots.
 
-INSTRUCTIONS:
-- Keep every meaningful plot beat in chronological order. Only drop pure filler.
-- AGGRESSIVELY remove: unnecessary scenes, silence, slow walking, repetitive actions, filler moments, unimportant dialogues, transition scenes, travel montages, and any scene that does NOT advance the main plot.
-- Focus on: Main plot twists, key character moments, critical conflicts, shocking reveals, and the conclusion.
-- Shorten conversations to their essential meaning â€” do NOT include full back-and-forth dialogues.
-- Skip over setup/buildup scenes and jump straight to the payoff.
+INSTRUCTIONS (INTERNATIONAL SCRIPTWRITER STANDARD):
+- Keep every meaningful plot beat, emotional progression, and character interaction in chronological order.
+- ZERO COMPRESSION ON KEY SCENES: For critical scenes, high-stakes conflicts, dramatic arguments, intense actions, emotional breakdowns, secret reveals, and climactic moments, DO NOT CONDENSE OR RUSH! Write them out in FULL, RICH NARRATIVE DETAIL just like a top-tier international movie scriptwriter (describe character motives, expressions, micro-reactions, dialogue exchanges, and emotional stakes in vivid detail).
+- CUT ONLY MEANINGLESS DEAD AIR: Drop only empty filler moments with zero narrative value (e.g., character walking down the road alone with no thoughts, driving silently, empty waiting, or purposeless silence). NEVER skip emotional setup, buildup, or character conversations that drive the story!
+- PRESERVE FULL SCENE BUILDUP: Do NOT jump straight to the payoff. The tension and anticipation of the buildup are what keep viewers glued to the screen.
 
-PACING & DURATION RULE (CRITICAL):
-- The recap MUST be approximately 70% of the original video duration (band 65-75%). NOT shorter, NOT longer.
-  * Source 30 min â†’ recap about 21 min.
-  * Source 20 min â†’ recap about 14 min.
-  * Source 10 min â†’ recap about 7 min.
-  * Source 5 min â†’ recap about 3.5 min.
-- IMPORTANT: Going BELOW 65% is just as bad as exceeding 75%. A recap that is too short feels incomplete.
-- If your narration word count falls below the MINIMUM, ADD more story details until you reach it.
-- The viewer should feel like they watched a complete, exciting, condensed version â€” NOT a 30-second summary.
+PACING & DURATION RULE (CRITICAL — 70% COVERAGE):
+- The recap MUST be approximately 70% of the original video duration (band 70-85%). Proportional to whatever the source length is:
+  * For 30 min source → output approx 23 to 24 minutes.
+  * For 20 min source → output approx 15 to 16 minutes.
+  * For 10 min source → output approx 7.5 to 8 minutes.
+  * For 5 min source → output approx 3.8 to 4 minutes.
+- IMPORTANT: Going below 70% is STRICTLY FORBIDDEN. A recap that skips scenes or summarizes too briefly feels rushed and cheap.
+- Maintain consistent narrative depth across all timestamps from 00:00 to the very last second.
+- The viewer must experience a rich, deeply captivating, cinematic storytelling journey.
 
 IMPORTANT:
 Do NOT summarize using text only.
@@ -7599,14 +7823,12 @@ Use your own wording. Do NOT transcribe/quote distinctive dialogue or subtitle t
         apiMode: resolvedApiMode,
         extraInstructions: `CRITICAL:
 - Output language MUST be ${selectedLangName} ONLY. Do NOT switch to any other language even if the video's spoken dialogue is in a different language.
-${batchEndSec ? `- THIS IS A BATCH SEGMENT. You MUST ONLY watch and recap events from ${Math.floor(batchStartSec! / 60)}:${String(Math.floor(batchStartSec! % 60)).padStart(2, "0")} to ${Math.floor(batchEndSec / 60)}:${String(Math.floor(batchEndSec % 60)).padStart(2, "0")}. Ignore everything outside this time window. Do not summarize the ending if it hasn't happened yet in this time window. VERY IMPORTANT: Your script MUST match the duration of this specific batch chunk (approx 70% of the chunk duration). Do not output a 5-minute summary for a 3-minute chunk!` : `- Script must cover the story arc from beginning to end, condensed to about 70% of the source duration (never below 65%, never above 75%).`}
-  * For a 30-minute source, aim for about 21 minutes.
-  * For a 20-minute source, aim for about 14 minutes.
-  * For a 10-minute source, aim for about 7 minutes.
-  * For a 5-minute source, aim for about 3.5 minutes.
-- Do not include secondary character chatter that does not matter to the plot.${lengthMandate}
-- If the script exceeds 75% of source duration, shorten only low-priority filler. But NEVER go below 65%.
-- Balance is key: aim for exactly 70% of the source duration.
+- STRICT MULTI-CHARACTER RULE: NEVER reduce the whole story to only 2 characters! A movie has many people. Each person is a distinct character. Identify every appearing character by their real name (if known) or by their explicit role/relationship in ${selectedLangName} (အဖေ, အမေ, သား, သမီး, ဇနီး, ခင်ပွန်း, အဖိုး, အဖွား, ချွေးမ, သမက်, ဆရာ, တပည့်, ဆရာဝန်, သူနာပြု, မန်နေဂျာ, ရဲ, လူဆိုး, ရန်သူ, သူငယ်ချင်း). NEVER merge multiple different people into the main 2 leads!
+${batchEndSec ? `- THIS IS A BATCH SEGMENT. You MUST ONLY watch and recap events from ${Math.floor(batchStartSec! / 60)}:${String(Math.floor(batchStartSec! % 60)).padStart(2, "0")} to ${Math.floor(batchEndSec / 60)}:${String(Math.floor(batchEndSec % 60)).padStart(2, "0")}. Ignore everything outside this time window. Do not summarize the ending if it hasn't happened yet in this time window. VERY IMPORTANT: Your script MUST match the duration of this specific batch chunk (approx 75-80% of the chunk duration).` : `- Script must cover the full story arc from 00:00 to the end, timed to approximately 70% of the source duration (never below 70%).`}
+  * Aim for ~75% to 80% proportional to source length (e.g. 30m → ~25m, 20m → ~15m, 10m → ~8m).
+- Keep all plot-relevant dialogues, emotional confrontations, and key character moments in rich detail.${lengthMandate}
+- Only cut true dead air (staring/silent travel). Never compress or rush emotional conflicts or climax.
+- Aim for a high-retention 75%-80% duration band.
 - Each segment must flow smoothly into the next.
 
 CUTTING RULES (this is a RECAP, not a retelling):
@@ -7615,12 +7837,12 @@ CUTTING RULES (this is a RECAP, not a retelling):
 - KEEP IN FULL: Plot twists, reveals, conflicts, arguments, fights, romance, character-defining moments, shocking scenes, and the resolution — narrate these continuously, never in one dry sentence.
 - SPOKEN LENGTH FLOOR: narration must run about 70–80% of the source duration (~110 spoken words per minute). Never deliver a 1–2 minute script for a 5+ minute source. Length must come only from real source events — never invent.
 - Think like a professional YouTube recap editor: fast, engaging, essential moments only.
-- Do NOT randomly cut scenes. Intelligently compress the narrative while preserving a professional complete story experience.
+- DYNAMIC PACING: Narrate high-impact scenes (conflicts, fights, action, emotional peaks, twists) in full cinematic detail with dialogue. Summarize secondary/transition moments quickly in 1-2 linking sentences so pacing stays engaging without dragging.
 
 STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
 - Write narration as a CONTINUOUS FLOWING STORY. Never write isolated disconnected paragraphs.
-- Each segment MUST end with a hook or transition line that creates MOMENTUM into the next segment.
-- Use cliffhanger-style transitions: "But that was just the beginning..." / "And then, everything went wrong."
+- Advance from one scene to the next with natural, fluid narrative momentum.
+- STRICTLY FORBID repetitive robotic cliffhangers (e.g. NEVER force lines like "ဒါဟာ အစပဲရှိသေးတယ်" or "ဒါပေမဲ့ အရာအားလုံး ပြောင်းလဲသွားခဲ့တယ်") — let the story's real events and human curiosity sustain the interest.
 - Keep sentence density HIGH. No filler words, no unnecessary repetition, no padding.
 - When the TTS reads this script, there should be ZERO moments where the audience wants to skip.${burmeseExtraStyle}`,
         generationConfig: {
@@ -7846,6 +8068,13 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
         }
       })();
       const scriptTextForTTS = stripDialogueMetadata(scriptText).replace(/\[.*?\]\s*/g, "");
+      // SURGICAL ADD: Script Review Gate — ask user before TTS (skipped during Auto Batch)
+      if (!autoBatchActiveRef.current) {
+        scriptReviewArgsRef.current = { ownKey: resolvedOwnKey || undefined, duration: videoDurationRef.current };
+        setProgressMsg("📝 Script ထွက်လာပါပြီ။ ပြင်မလား၊ ဆက်လုပ်မလား ရွေးပေးပါ။");
+        setScriptReviewOpen(true);
+        return;
+      }
       await generateVoice(
         scriptTextForTTS,
         resolvedOwnKey || undefined,
@@ -7936,14 +8165,38 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
           {/* API Mode */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-neon-cyan">🔑 API Mode</label>
+            {/* SURGICAL ADD: Admin Notice for Own API Guidance */}
+            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs leading-relaxed">
+              ⚠️ Aug,2026 ကတည်းက Free Own API Key ကိုသုံးပြီး Unlimited ထုတ်ခွင့်စနစ်ကို ပြောင်းထားပါသဖြင့် Google API
+              KEY ကို မဖြစ်မနေထည့်ပေးရပါမယ်။API KEY ယူနည်းကို Tutorial Videos ထဲတွင်ကြည့်ပါ
+            </div>
+
             <div className="flex gap-2">
               <button
-                onClick={() => setApiMode("app")}
-                className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${apiMode === "app" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
+                type="button"
+                onClick={() => {
+                  if (!appApiAllowed) {
+                    toast.error("⚠️ App API ကို ယာယီပိတ်ထားပါသည် — Own API Key ကိုသာ အသုံးပြုပေးပါရန်");
+                    return;
+                  }
+                  setApiMode("app");
+                }}
+                disabled={!appApiAllowed}
+                className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${
+                  !appApiAllowed
+                    ? "opacity-40 cursor-not-allowed bg-secondary/50 text-muted-foreground border-border/40"
+                    : apiMode === "app"
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-secondary text-secondary-foreground border-border hover:opacity-80"
+                }`}
               >
-                🖥️ App API<span className="block text-xs font-normal opacity-70">Admin · Premium · Pro</span>
+                🖥️ App API
+                <span className="block text-xs font-normal opacity-70">
+                  {!appApiAllowed ? "⚠️ ယာယီပိတ်ထားပါသည်" : "Admin · Premium · Pro"}
+                </span>
               </button>
               <button
+                type="button"
                 onClick={() => setApiMode("own")}
                 className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${apiMode === "own" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
               >
@@ -7992,7 +8245,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                 <button
                   onClick={() => {
                     setDeviceTier("slow");
-                    setRenderMode("server");
+                    setRenderMode("browser");
                   }}
                   className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${deviceTier === "slow" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
                 >
@@ -8006,6 +8259,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
               <label className="text-sm font-medium text-neon-cyan">⚙️ Render Mode</label>
               <div className="flex gap-2">
                 <button
+                  type="button"
                   onClick={() => setRenderMode("browser")}
                   className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${renderMode === "browser" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
                 >
@@ -8013,13 +8267,26 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
                   <span className="block text-xs font-normal opacity-70">{creditPerMinRate} CR / min</span>
                 </button>
                 <button
-                  onClick={() => setRenderMode("server")}
-                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all ${renderMode === "server" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:opacity-80"}`}
+                  type="button"
+                  aria-disabled="true"
+                  onClick={() => {
+                    setRenderMode("browser");
+                    toast.error("⚠️ Server Render ကို ယာယီပိတ်ထားပါတယ် — Browser Render ကိုသာ အသုံးပြုပေးပါ");
+                  }}
+                  className="flex-1 py-2 px-3 rounded-lg text-sm font-semibold border transition-all bg-secondary text-secondary-foreground border-border opacity-50 cursor-not-allowed"
                 >
                   ☁️ Server Render
-                  <span className="block text-xs font-normal opacity-70">{serverCreditPerMinRate} CR / min</span>
+                  <span className="block text-xs font-normal opacity-70">⚠️ ယာယီပိတ်ထားပါတယ်</span>
                 </button>
               </div>
+
+              {/* Server Render ရွေးမိပါက ပေါ်လာမည့် သတိပေးချက် Banner */}
+              {false && (
+                <div className="p-3 rounded-lg bg-destructive/15 border border-destructive/40 text-destructive text-xs leading-relaxed animate-pulse">
+                  ⚠️ <strong>သတိပေးချက်:</strong> Server Render က လက်ရှိတွင် အသုံးပြုလို့မရတာကြောင့် Server Render
+                  ရွေးရင် Error တက်ပါမည်။ ကျေးဇူးပြု၍ <strong>🖥️ Browser Render</strong> ကိုသာ ရွေးချယ်အသုံးပြုပေးပါရန်။
+                </div>
+              )}
             </div>
           </div>
 
@@ -8596,20 +8863,7 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
             />
           </div>
 
-          {/* Video Link Input */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-neon-cyan">
-              Video Link (YouTube, TikTok, Instagram, Facebook)
-            </label>
-            <input
-              type="text"
-              value={videoLink}
-              onChange={(e) => setVideoLink(e.target.value)}
-              placeholder="https://youtube.com/watch?v=..."
-              disabled={status === "processing"}
-              className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
-            />
-          </div>
+          {/* Video Link Input — removed from UI (platform links blocked); file upload only */}
 
           {/* SURGICAL EDIT: Generate Recap Button â€” user must click to start pipeline */}
           {(videoFile || videoLink) && status !== "processing" && !audioUrl && (
@@ -8719,6 +8973,52 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
             </div>
           )}
         </div>
+
+        {scriptReviewOpen && !scriptEditing && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+            <div className="w-full max-w-md rounded-2xl border border-amber-400/50 bg-slate-950 p-6 shadow-[0_0_40px_rgba(251,191,36,0.25)] text-center space-y-4">
+              <div className="text-4xl">📝</div>
+              <h2 className="text-lg font-extrabold text-amber-400">Script ထွက်လာပါပြီ / Script Ready</h2>
+              <p className="text-sm text-slate-300 leading-relaxed">
+                Script ကို ပြန်ပြင်ချင်ပါသလား?
+                <br />
+                <span className="text-slate-400 text-xs">Do you want to edit the script before recording?</span>
+              </p>
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button
+                  onClick={() => setScriptEditing(true)}
+                  className="py-3 rounded-xl border border-amber-400 text-amber-400 font-bold text-sm hover:bg-amber-400/10 transition-all"
+                >
+                  ✏️ ပြင်မယ်
+                  <div className="text-[10px] font-normal opacity-80">Edit Script</div>
+                </button>
+                <button
+                  onClick={() => continueFromScriptReview(false)}
+                  className="py-3 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-900 font-extrabold text-sm shadow-[0_0_16px_rgba(251,191,36,0.5)] transition-all"
+                >
+                  ▶️ မပြင်ဘူး
+                  <div className="text-[10px] font-semibold opacity-80">Continue Auto</div>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {scriptReviewOpen && scriptEditing && (
+          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] w-[92%] max-w-md rounded-2xl border border-amber-400/60 bg-slate-950/95 p-3 shadow-[0_0_30px_rgba(251,191,36,0.35)] flex items-center gap-3">
+            <p className="flex-1 text-[11px] text-slate-300 leading-snug">
+              ✏️ Script ကို ပြင်ပြီးရင် ခလုတ်နှိပ်ပါ။
+              <br />
+              <span className="text-slate-500">Edit the script, then continue.</span>
+            </p>
+            <button
+              onClick={() => continueFromScriptReview(true)}
+              className="shrink-0 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-900 font-extrabold text-xs shadow-[0_0_16px_rgba(251,191,36,0.6)] animate-pulse"
+            >
+              🎬 Continue / Generate Recap
+            </button>
+          </div>
+        )}
 
         {(scriptData.segments.length > 0 || videoUrl) && (
           <ResultView
