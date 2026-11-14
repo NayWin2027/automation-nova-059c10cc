@@ -594,6 +594,7 @@ const createWebCodecsMp4Recorder = async (options: {
 
       let audioTimeUs = 0;
       let hasStartedAudio = false;
+      const audioCaptureStartTime = performance.now();
       scriptProcessor.onaudioprocess = (e) => {
         if (!audioEncoder || audioEncoder.state !== "configured") return;
         // SURGICAL FIX (Cinematic Smooth): Increase audio buffer to 300 so we never drop audio chunks (which causes video VFR stutter)
@@ -602,7 +603,7 @@ const createWebCodecsMp4Recorder = async (options: {
         // SURGICAL FIX: အသံဖွင့်စက် (audioEl) တကယ် စတင် Play မလုပ်မချင်း Silence မထည့်ရန် တားဆီးခြင်း
         // ဗီဒီယိုအစတွင် အသံတိတ်နေခြင်းနှင့် အစ/အဆုံး မကိုက်ညီခြင်းကို ၁၀၀% ဖြေရှင်းပေးပါသည်
         if (!hasStartedAudio) {
-          const recElapsed = (performance.now() - recStartTimeRef.current) / 1000;
+          const recElapsed = (performance.now() - audioCaptureStartTime) / 1000;
           if ((audioEl.paused || audioEl.currentTime <= 0) && recElapsed < 1.0) return;
           hasStartedAudio = true;
         }
