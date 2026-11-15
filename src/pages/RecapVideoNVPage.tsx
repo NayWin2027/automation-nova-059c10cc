@@ -2527,7 +2527,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       try {
         // Phones skip WebCodecs (GPU driver hangs on Vivo/Oppo etc.) — single-pass native recorder instead
         // Old stable file: native MediaRecorder on every device (WebCodecs disabled)
-        if (false && !forceWebmRef.current && !IS_MOBILE_DEVICE)
+        // Option 1: PC → WebCodecs instant MP4. Phones → native MediaRecorder (MP4 if supported).
+        if (!forceWebmRef.current && !IS_MOBILE_DEVICE)
           webCodecsRecorder = await createWebCodecsMp4Recorder({
             width: encW,
             height: encH,
@@ -2670,8 +2671,26 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             }
           }
 
-          // INSTANT OUTPUT: no slow FFmpeg WASM transcode — download the recording as-is (WebM or native MP4).
-          console.log("[RECORDING] Skipping WASM MP4 transcode — instant download");
+          // Options 3/4: WebM-only phone/PC → ultrafast convert to real MP4 before download.
+          if (isWebM) {
+            const convToastId = toast.loading("MP4 ပြောင်းနေတယ်… 0%");
+            try {
+              const conv = await convertToRealMp4(finalBlob, {
+                sourceMime: mimeType,
+                durationSec: exactDurationSecs,
+                onProgress: (pct) => toast.loading(`MP4 ပြောင်းနေတယ်… ${pct}%`, { id: convToastId }),
+              });
+              if (conv.isRealMp4) {
+                finalBlob = conv.blob;
+                toast.success("MP4 ရပါပြီ!", { id: convToastId });
+              } else {
+                toast.error("MP4 ပြောင်းလို့မရလို့ WebM နဲ့ပေးလိုက်ပါတယ်", { id: convToastId });
+              }
+            } catch (convErr) {
+              console.warn("[RECORDING] MP4 convert failed:", convErr);
+              toast.error("MP4 ပြောင်းလို့မရလို့ WebM နဲ့ပေးလိုက်ပါတယ်", { id: convToastId });
+            }
+          }
         }
 
         const ext = isDirectMp4 || finalBlob.type.includes("mp4") ? "mp4" : "webm";
