@@ -2526,7 +2526,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             : quality.bitrate;
       try {
         // Phones skip WebCodecs (GPU driver hangs on Vivo/Oppo etc.) — single-pass native recorder instead
-        if (!forceWebmRef.current && !IS_MOBILE_DEVICE)
+        // Old stable file: native MediaRecorder on every device (WebCodecs disabled)
+        if (false && !forceWebmRef.current && !IS_MOBILE_DEVICE)
           webCodecsRecorder = await createWebCodecsMp4Recorder({
             width: encW,
             height: encH,
