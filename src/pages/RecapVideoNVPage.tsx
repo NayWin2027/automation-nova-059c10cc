@@ -504,15 +504,13 @@ const createWebCodecsMp4Recorder = async (options: {
   if (canUseAudioEncoder) {
     try {
       const chk = await (window as any).AudioEncoder.isConfigSupported({
-        codec: c,
+        codec: audioCodecWC,
         numberOfChannels: 2,
         sampleRate: audioSampleRate,
         bitrate: 128_000,
       });
       if (chk?.supported) {
         aacConfigSupported = true;
-        audioCodecWC = c;
-        break;
       }
     } catch (_) {}
   }
