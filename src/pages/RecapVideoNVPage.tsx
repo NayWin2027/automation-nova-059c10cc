@@ -2528,7 +2528,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         // Phones skip WebCodecs (GPU driver hangs on Vivo/Oppo etc.) — single-pass native recorder instead
         // Old stable file: native MediaRecorder on every device (WebCodecs disabled)
         // Option 1: PC → WebCodecs instant MP4. Phones → native MediaRecorder (MP4 if supported).
-        if (!forceWebmRef.current && !IS_MOBILE_DEVICE)
+        if (false && !forceWebmRef.current && !IS_MOBILE_DEVICE)
           webCodecsRecorder = await createWebCodecsMp4Recorder({
             width: encW,
             height: encH,
@@ -2637,19 +2637,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         // ── SAFETY FALLBACK: MediaRecorder + convertToRealMp4 when WebCodecs is not active ──
         // DUAL FALLBACK: MP4 failed on this device -> silently re-record with WebM.
-        if (!isDirectMp4 && finalBlob.size === 0 && usedDirectMp4 && !forceWebmRef.current) {
-          console.warn("[RECORDING] Direct MP4 failed — auto re-recording with WebM MediaRecorder");
-          forceWebmRef.current = true;
-          toast.info("ဒီစက်မှာ MP4 မရလို့ WebM စနစ်နဲ့ အလိုအလျောက် ပြန်ဖမ်းနေပါတယ်…");
-          lastIndexRef.current = -1;
-          setCurrentSubtitle("");
-          isRenderingRef.current = true;
-          setIsRendering(true);
-          setTimeout(() => {
-            void startRecapRecording(true);
-          }, 600);
-          return;
-        }
+        // Single-pass only: auto re-record loop removed.
         if (!isDirectMp4 && finalBlob.size === 0) {
           toast.error("ဗီဒီယို ဖမ်းယူမှု မအောင်မြင်ပါ — ထပ်မံ ကြိုးစားပေးပါ။");
           setIsRendering(false);
