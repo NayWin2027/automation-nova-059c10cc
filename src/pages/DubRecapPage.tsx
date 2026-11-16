@@ -255,7 +255,7 @@ export default function DubRecapPage() {
       ffmpeg.off("progress", onProg);
       if (code2 !== 0) throw new Error("MP4 ပေါင်းလို့ မရပါ (ဗီဒီယို format ကို MP4 H.264 နဲ့ စမ်းပါ)");
       const out = (await ffmpeg.readFile("out.mp4")) as Uint8Array;
-      const url = URL.createObjectURL(new Blob([out], { type: "video/mp4" }));
+      const url = URL.createObjectURL(new Blob([out as unknown as BlobPart], { type: "video/mp4" }));
       setResultUrl(url); setPct(100); setStatus("ပြီးပါပြီ!");
       const a = document.createElement("a");
       a.href = url; a.download = `nova_dub_${Date.now()}.mp4`; a.click();
