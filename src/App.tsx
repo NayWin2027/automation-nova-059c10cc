@@ -6,6 +6,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import AnnouncementBanner from "./components/AnnouncementBanner";
+import { useClockSkewWarning } from "./hooks/useClockSkewWarning";
+
+const ClockSkewWarning = () => { useClockSkewWarning(); return null; };
 
 // Retry wrapper for dynamic imports (handles stale chunk errors)
 const lazyRetry = (importFn: () => Promise<any>) =>
@@ -57,6 +60,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AnnouncementBanner />
+        <ClockSkewWarning />
         <Suspense fallback={null}>
           <Routes>
             <Route path="/" element={<Index />} />
