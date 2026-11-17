@@ -79,11 +79,21 @@ export function useAuth() {
   }, []);
 
   const fetchProfile = async (userId: string) => {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('user_id', userId)
       .maybeSingle();
+
+    // One retry on transient failure so tools don't misread plan as 'free'
+    if (error || !data) {
+      await new Promise(r => setTimeout(r, 800));
+      ({ data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle());
+    }
 
     if (!error && data) {
       setProfile(data as UserProfile);

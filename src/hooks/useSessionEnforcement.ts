@@ -11,17 +11,24 @@ import { useToast } from '@/hooks/use-toast';
  */
 
 const DEVICE_ID_KEY = 'an_device_session_id';
+// Stable in-memory fallback when storage is blocked (private mode / in-app webviews).
+// Without this, every call generated a NEW id → check mismatched → forced logout loop.
+let _memoryDeviceId: string | null = null;
 
 export function getDeviceSessionId(): string {
   try {
     let id = localStorage.getItem(DEVICE_ID_KEY);
     if (!id) {
       id = (crypto?.randomUUID?.() ?? `dev_${Date.now()}_${Math.random().toString(36).slice(2)}`);
-      localStorage.setItem(DEVICE_ID_KEY, id);
+      _memoryDeviceId = id;
+      try { localStorage.setItem(DEVICE_ID_KEY, id); } catch { /* storage blocked */ }
     }
     return id;
   } catch {
-    return `dev_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    if (!_memoryDeviceId) {
+      _memoryDeviceId = `dev_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    }
+    return _memoryDeviceId;
   }
 }
 
@@ -61,6 +68,14 @@ export function useSessionEnforcement(userId: string | null, _sessionId?: string
 
       // data === false means another device took over
       if (data === false) {
+        // Confirm once more after a short delay to avoid false positives
+        // from transient races (e.g. register RPC still in flight).
+        await new Promise(r => setTimeout(r, 3000));
+        const { data: again, error: againErr } = await supabase.rpc('check_active_session', {
+          _user_id: userId,
+          _session_id: sessionId,
+        });
+        if (againErr || again !== false) return;
         isEnforcingRef.current = true;
         
         // Stop polling

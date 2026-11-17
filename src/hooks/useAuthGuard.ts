@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from './useAuth';
 import { useToolSettings } from './useToolSettings';
@@ -70,12 +71,19 @@ export function useAuthGuard(toolId?: string): AuthGuardResult {
     const requireLogin = accessControl.requireLogin && !accessControl.freeMode;
 
     if (requireLogin && !isAuthenticated) {
-      toast({
-        title: "🔐 Login Required",
-        description: "Tool ကို အသုံးပြုရန် Login ဝင်ပါ",
+      // Re-confirm with persisted storage before redirecting: prevents a
+      // login loop when in-memory auth state hasn't hydrated yet. This only
+      // affects navigation; real access is still enforced server-side (RLS).
+      let cancelled = false;
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (cancelled || session) return;
+        toast({
+          title: "🔐 Login Required",
+          description: "Tool ကို အသုံးပြုရန် Login ဝင်ပါ",
+        });
+        navigate('/login', { replace: true });
       });
-      navigate('/login', { replace: true });
-      return;
+      return () => { cancelled = true; };
     }
 
     // Tool-specific denial
