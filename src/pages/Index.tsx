@@ -158,6 +158,14 @@ const defaultTools = [
   gradient: "rose" as const,
   route: "/nova-cut"
 },
+{
+  id: "nova-mp4-converter",
+  icon: Scissors,
+  title: "Nova MP4 Converter",
+  description: "WebM ဗီဒီယိုကို MP4 အစစ်အဖြစ် အမြန်ပြောင်းပေးခြင်း။",
+  gradient: "cyan" as const,
+  route: "/mp4-converter"
+},
 ];
 
 type Tool = (typeof defaultTools)[number];
