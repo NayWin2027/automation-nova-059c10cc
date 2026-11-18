@@ -386,12 +386,11 @@ const loadMp4Muxer = async () => {
     const mod = await import("mp4-muxer");
     if (mod?.Muxer && mod?.ArrayBufferTarget) return mod;
   } catch (_) {}
-  for (const cdnUrl of ["https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.4/+esm", "https://esm.sh/mp4-muxer@5.1.4"]) {
-    try {
-      const mod: any = await import(/* @vite-ignore */ cdnUrl);
-      if (mod?.Muxer && mod?.ArrayBufferTarget) return mod;
-    } catch (_) {}
-  }
+  try {
+    const cdnUrl = "https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.4/+esm";
+    const mod: any = await import(/* @vite-ignore */ cdnUrl);
+    if (mod?.Muxer && mod?.ArrayBufferTarget) return mod;
+  } catch (_) {}
   return null;
 };
 
@@ -424,49 +423,61 @@ const createWebCodecsMp4Recorder = async (options: {
   const fps = options.fps || 30;
   const bitrate = options.bitrate || 6_000_000;
 
+  // SURGICAL FIX (Mobile Crash & Desktop Smoothness):
+  // Mobile phones (Android/iOS) MUST use hardware acceleration and realtime latency to prevent CPU 100% OOM crash.
+  // Desktop PC/laptop uses prefer-software to avoid Windows D3D11 canvas readback TDR freeze.
   const isMobileDevice =
     typeof navigator !== "undefined" &&
     /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
-  // SURGICAL FIX: Match exact hardwareAcceleration mode from isConfigSupported() into configure()
-  // and exclude Level 3.1 (avc1.42e01f) when resolution exceeds 720p.
-  const hwCandidates: Array<"prefer-hardware" | "prefer-software" | undefined> = isMobileDevice
-    ? ["prefer-hardware", undefined, "prefer-software"]
+  const preferredHw = isMobileDevice
+    ? "prefer-hardware"
     : options.forceSoftware
-      ? ["prefer-software", undefined, "prefer-hardware"]
-      : ["prefer-hardware", undefined, "prefer-software"];
+      ? "prefer-software"
+      : "prefer-hardware";
+  const preferredLatency = "realtime" as const;
 
-  const pixelCount = width * height;
+  // Codec check - Try Main Profile, Baseline Profile, and High Profile for universal mobile & desktop acceleration
   const codecCandidates = [
     "avc1.4d002a", // Main Profile Level 4.2 (Desktop standard)
     "avc1.420028", // Baseline Profile Level 4.0 (Universal mobile / Snapdragon)
-    ...(pixelCount <= 921600 ? ["avc1.42e01f"] : []), // Constrained Baseline Level 3.1 (<= 720p only)
+    "avc1.42e01f", // Constrained Baseline Level 3.1 (Low-end mobile / Snapdragon 6gen)
     "avc1.640028", // High Profile Level 4.0
   ];
-
-  let matchedVideoConfig: any = null;
-  for (const hw of hwCandidates) {
+  let videoCodec: string | null = null;
+  for (const c of codecCandidates) {
+    try {
+      const isSupported = await (window as any).VideoEncoder.isConfigSupported({
+        codec: c,
+        width,
+        height,
+        bitrate,
+        framerate: fps,
+        hardwareAcceleration: preferredHw,
+      });
+      if (isSupported?.supported) {
+        videoCodec = c;
+        break;
+      }
+    } catch (_) {}
+  }
+  if (!videoCodec) {
     for (const c of codecCandidates) {
       try {
-        const cfg: any = {
+        const isSupported = await (window as any).VideoEncoder.isConfigSupported({
           codec: c,
           width,
           height,
           bitrate,
           framerate: fps,
-          ...(hw ? { hardwareAcceleration: hw } : {}),
-        };
-        const isSupported = await (window as any).VideoEncoder.isConfigSupported(cfg);
+        });
         if (isSupported?.supported) {
-          matchedVideoConfig = cfg;
+          videoCodec = c;
           break;
         }
       } catch (_) {}
     }
-    if (matchedVideoConfig) break;
   }
-
-  if (!matchedVideoConfig) {
+  if (!videoCodec) {
     console.warn("[WebCodecs] H.264 profile not supported by hardware, falling back to MediaRecorder");
     return null;
   }
@@ -478,9 +489,6 @@ const createWebCodecsMp4Recorder = async (options: {
   // Shared graph only — never create a second MediaElementSource for the same <audio>.
   const audioContext = options.sharedAudioContext || null;
   const audioSource = options.sharedAudioSource || null;
-  if (audioContext && audioContext.state === "suspended") {
-    await audioContext.resume().catch(() => {});
-  }
   const audioSampleRate = Math.round(audioContext?.sampleRate || 48000);
   const canUseAudioEncoder =
     typeof (window as any).AudioEncoder === "function" &&
@@ -488,37 +496,32 @@ const createWebCodecsMp4Recorder = async (options: {
     !!audioContext &&
     !!audioSource;
 
+  // SURGICAL FIX: Require real AAC ("mp4a.40.2") AudioEncoder for WebCodecs Direct MP4.
+  // Windows Chrome AudioEncoder lacks AAC (Opus in MP4 is non-standard and crashes if sampleRate !== 48000).
+  // When real AAC AudioEncoder is unavailable, WebCodecs returns null so MediaRecorder pipeline handles recording cleanly.
   let aacConfigSupported = false;
-  let matchedAudioBitrate = 128_000;
-  const audioCodecWC = "mp4a.40.2" as const;
+  let audioCodecWC: "mp4a.40.2" | "opus" = "mp4a.40.2";
   if (canUseAudioEncoder) {
-    for (const ab of [128_000, 96_000, 192_000]) {
-      try {
-        const chk = await (window as any).AudioEncoder.isConfigSupported({
-          codec: audioCodecWC,
-          numberOfChannels: 2,
-          sampleRate: audioSampleRate,
-          bitrate: ab,
-        });
-        if (chk?.supported) {
-          aacConfigSupported = true;
-          matchedAudioBitrate = ab;
-          break;
-        }
-      } catch (_) {}
-    }
+    try {
+      const chk = await (window as any).AudioEncoder.isConfigSupported({
+        codec: audioCodecWC,
+        numberOfChannels: 2,
+        sampleRate: audioSampleRate,
+        bitrate: 128_000,
+      });
+      if (chk?.supported) {
+        aacConfigSupported = true;
+      }
+    } catch (_) {}
   }
 
-  // SURGICAL SAFETY: Never produce a silent MP4 or broken stream — if narration audio exists,
-  // an AAC AudioEncoder MUST be supported. When unavailable, return null so MediaRecorder runs cleanly.
+  // SURGICAL SAFETY: Never produce a silent MP4 or broken stream on desktop — if narration audio exists,
+  // an AAC AudioEncoder MUST be supported. When AudioEncoder is unavailable (e.g. Windows Chrome),
+  // return null immediately so the browser cleanly falls back to the battle-tested MediaRecorder pipeline.
   if (audioEl && !aacConfigSupported) {
     console.warn("[WebCodecs] AAC AudioEncoder unavailable, falling back cleanly to MediaRecorder");
     return null;
   }
-
-  let videoEncoderFailed = false;
-  let audioEncoderFailed = false;
-  let encodedVideoChunks = 0;
 
   const muxer = new Muxer({
     target: new ArrayBufferTarget(),
@@ -539,59 +542,52 @@ const createWebCodecsMp4Recorder = async (options: {
   });
 
   const videoEncoder = new (window as any).VideoEncoder({
-    output: (chunk: any, meta: any) => {
-      encodedVideoChunks++;
-      muxer.addVideoChunk(chunk, meta);
-    },
-    error: (e: any) => {
-      videoEncoderFailed = true;
-      console.error("[WebCodecs VideoEncoder]:", e);
-    },
+    output: (chunk: any, meta: any) => muxer.addVideoChunk(chunk, meta),
+    error: (e: any) => console.error("[WebCodecs VideoEncoder]:", e),
   });
 
-  try {
-    videoEncoder.configure({ ...matchedVideoConfig, latencyMode: "realtime" });
-  } catch (_) {
-    try {
-      videoEncoder.configure(matchedVideoConfig);
-    } catch (cfgErr) {
-      console.warn("[WebCodecs] VideoEncoder configure failed, falling back:", cfgErr);
-      try {
-        if (videoEncoder.state !== "closed") videoEncoder.close();
-      } catch (_) {}
-      return null;
-    }
-  }
+  videoEncoder.configure({
+    codec: videoCodec,
+    width,
+    height,
+    bitrate,
+    framerate: fps,
+    latencyMode: preferredLatency,
+    hardwareAcceleration: preferredHw,
+  });
 
   if (aacConfigSupported && audioContext && audioSource) {
     try {
+      // PERF FIX: Buffer 16384 (was 4096) — reduces onaudioprocess callbacks from ~11/s to ~2.7/s,
+      // cutting GC pauses from Float32Array allocations. Safe: recording latency doesn't matter.
       scriptProcessor = audioContext.createScriptProcessor(16384, 2, 2);
       audioSource.connect(scriptProcessor);
+      // Processor output stays silent; connecting it only keeps the node alive in the graph.
       scriptProcessor.connect(audioContext.destination);
 
       audioEncoder = new (window as any).AudioEncoder({
         output: (chunk: any, meta: any) => muxer.addAudioChunk(chunk, meta),
-        error: (e: any) => {
-          audioEncoderFailed = true;
-          console.error("[WebCodecs AudioEncoder]:", e);
-        },
+        error: (e: any) => console.error("[WebCodecs AudioEncoder]:", e),
       });
 
       audioEncoder.configure({
         codec: audioCodecWC,
         numberOfChannels: 2,
         sampleRate: audioSampleRate,
-        bitrate: matchedAudioBitrate,
+        bitrate: 128_000,
       });
 
       let audioTimeUs = 0;
       let hasStartedAudio = false;
       scriptProcessor.onaudioprocess = (e) => {
-        if (audioEncoderFailed || !audioEncoder || audioEncoder.state !== "configured") return;
+        if (!audioEncoder || audioEncoder.state !== "configured") return;
+        // SURGICAL FIX (Cinematic Smooth): Increase audio buffer to 300 so we never drop audio chunks (which causes video VFR stutter)
         if (typeof audioEncoder.encodeQueueSize === "number" && audioEncoder.encodeQueueSize > 300) return;
 
+        // SURGICAL FIX: အသံဖွင့်စက် (audioEl) တကယ် စတင် Play မလုပ်မချင်း Silence မထည့်ရန် တားဆီးခြင်း
+        // ဗီဒီယိုအစတွင် အသံတိတ်နေခြင်းနှင့် အစ/အဆုံး မကိုက်ညီခြင်းကို ၁၀၀% ဖြေရှင်းပေးပါသည်
         if (!hasStartedAudio) {
-          if (audioEl && (audioEl.paused || audioEl.currentTime <= 0)) return;
+          if (audioEl.paused || audioEl.currentTime <= 0) return;
           hasStartedAudio = true;
         }
 
@@ -610,43 +606,38 @@ const createWebCodecsMp4Recorder = async (options: {
           timestamp: audioTimeUs,
           data,
         });
-        try {
-          audioEncoder.encode(audioData);
-        } finally {
-          audioData.close();
-        }
+        audioEncoder.encode(audioData);
+        audioData.close();
         audioTimeUs += Math.round((numberOfFrames / audioSampleRate) * 1_000_000);
       };
     } catch (aErr) {
       console.warn("[WebCodecs Audio Setup]:", aErr);
-      try {
-        if (scriptProcessor) {
-          scriptProcessor.onaudioprocess = null;
-          scriptProcessor.disconnect();
-          scriptProcessor = null;
-        }
-        if (videoEncoder.state !== "closed") videoEncoder.close();
-        if (audioEncoder && audioEncoder.state !== "closed") audioEncoder.close();
-      } catch (_) {}
-      if (audioEl) return null;
     }
   }
 
   let frameCount = 0;
   let lastTimestampUs = -1;
+  // SURGICAL FIX (encoder overload watchdog): track submitted vs dropped frames so the
+  // render loop can detect when the HW encoder can't sustain the selected quality.
   const wcStats = { encoded: 0, dropped: 0 };
   let forceKeyAfterDrop = false;
 
   return {
     encodeVideoFrame: (canvas: HTMLCanvasElement, timestampUs: number, isKeyFrame?: boolean) => {
-      if (videoEncoderFailed || videoEncoder.state !== "configured") return;
+      if (videoEncoder.state !== "configured") return;
+      // SURGICAL FIX (Mobile OOM & Desktop Smoothness):
+      // On mobile devices, queue > 15 causes out-of-memory browser/OS crash.
+      // On desktop, queue up to 120 gives smooth headroom without OOM.
       const maxQueueLimit = isMobileDevice ? 15 : 120;
       if (typeof videoEncoder.encodeQueueSize === "number" && videoEncoder.encodeQueueSize > maxQueueLimit) {
         wcStats.dropped++;
+        // SURGICAL FIX (post-gap recovery): next accepted frame becomes a keyframe so players
+        // resume the picture instantly instead of freezing until the next scheduled I-frame.
         forceKeyAfterDrop = true;
         return;
       }
 
+      // Timestamps must strictly increase, otherwise the encoder throws and the MP4 is lost.
       const minStep = Math.round(1_000_000 / fps / 2);
       const ts = timestampUs > lastTimestampUs ? timestampUs : lastTimestampUs + minStep;
       lastTimestampUs = ts;
@@ -656,23 +647,22 @@ const createWebCodecsMp4Recorder = async (options: {
         keyFrame = true;
         forceKeyAfterDrop = false;
       }
-      const vf = new (window as any).VideoFrame(canvas, { timestamp: ts });
       try {
+        const vf = new (window as any).VideoFrame(canvas, { timestamp: ts });
         videoEncoder.encode(vf, { keyFrame });
         wcStats.encoded++;
+        vf.close();
       } catch (encErr) {
         console.warn("[WebCodecs] frame encode skipped:", encErr);
-      } finally {
-        vf.close();
       }
     },
     getStats: () => ({ encoded: wcStats.encoded, dropped: wcStats.dropped }),
+    // SURGICAL FIX: Adaptive backpressure — 8 on mobile (prevents OOM crash), 60 on desktop
     isBusy: () =>
       typeof videoEncoder.encodeQueueSize === "number" && videoEncoder.encodeQueueSize > (isMobileDevice ? 8 : 60),
     finalize: async (): Promise<Blob> => {
       try {
         if (scriptProcessor) {
-          scriptProcessor.onaudioprocess = null;
           scriptProcessor.disconnect();
           scriptProcessor = null;
         }
@@ -687,10 +677,6 @@ const createWebCodecsMp4Recorder = async (options: {
         }
       } catch (_) {}
 
-      if (videoEncoderFailed || encodedVideoChunks === 0) {
-        throw new Error("WebCodecs produced no video frames");
-      }
-
       muxer.finalize();
       const { buffer } = muxer.target;
       return new Blob([buffer], { type: "video/mp4" });
@@ -702,12 +688,14 @@ const createWebCodecsMp4Recorder = async (options: {
           scriptProcessor.disconnect();
           scriptProcessor = null;
         }
+        // The AudioContext is owned by the recording pipeline — do NOT close it here.
         if (videoEncoder && videoEncoder.state !== "closed") videoEncoder.close();
         if (audioEncoder && audioEncoder.state !== "closed") audioEncoder.close();
       } catch (_) {}
     },
   };
 };
+
 export const ResultView: React.FC<ResultViewProps> = React.memo(
   ({
     scriptData,
@@ -753,7 +741,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     // Reset any forced step-down when the user picks a different quality.
     useEffect(() => {
       forcedQualityRef.current = null;
-      forceSoftwareRef.current = false;
+      forceSoftwareRef.current = !IS_MOBILE_DEVICE;
     }, [exportQuality]);
 
     // Cinematic movie poster generation removed (feature disabled).
@@ -1953,7 +1941,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         const audioReady = a && a.src && (a.readyState >= 1 || a.duration > 0);
         const videoReady = v && v.src && (v.readyState >= 1 || v.duration > 0);
         if ((audioReady && videoReady) || attempts >= maxAttempts) {
-          clearInterval(poll); // â†  FIX: clear BEFORE triggering rAF useEffect
+          clearInterval(poll); // â† FIX: clear BEFORE triggering rAF useEffect
           onAutoStartConsumed?.();
           setTimeout(() => setIsRecapPlaying(true), 300);
         }
@@ -2225,6 +2213,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     };
     const currentLogoPos =
       Object.entries(LOGO_POSITIONS).find(([, v]) => v.x === logo.x && v.y === logo.y)?.[0] || "UR";
+
     const startRecapRecording = async (isStepDownRestart = false) => {
       const videoEl = videoRef.current;
       const audioEl = audioRef.current;
@@ -2235,8 +2224,10 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       if (!isStepDownRestart) {
         forcedQualityRef.current = null;
         forceWebmRef.current = false;
+        // Desktop => CPU (software) encode from the very first attempt (never touch the
+        // weak iGPU). Mobile/iOS => GPU-first, exactly as before.
         // FIX: GPU-first on every device (PC included); CPU only as a watchdog fallback.
-        forceSoftwareRef.current = false;
+        forceSoftwareRef.current = !IS_MOBILE_DEVICE;
       }
 
       let _blurFxCanvas: HTMLCanvasElement | null = null;
@@ -2250,8 +2241,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
       // â”€â”€ MIME Detection: TT/TG REMUX READY â”€â”€
       const isSafari =
         /^((?!chrome|android).)*safari/i.test(navigator.userAgent) || /iPad|iPhone|iPod/.test(navigator.userAgent);
-      // SURGICAL FIX: Safari/iOS natively records MP4; Chromium/Firefox MediaRecorder fallback
-      // prioritizes WebM (vp9/vp8/opus) so fallback never emits 0-byte MP4 chunks.
+      // SURGICAL FIX: Safari/iOS natively records MP4; Chrome/Edge/Firefox reliably records WebM (vp9/vp8/opus)
+      // which is then converted cleanly to real MP4 by convertToRealMp4 without empty chunks or audio bugs.
       const allMimeTypes = isSafari
         ? [
             "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
@@ -2263,12 +2254,15 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             "video/webm",
           ]
         : [
+            // REAL MP4 FIRST: modern Chrome/Edge MediaRecorder records genuine H.264+AAC MP4 instantly
+            "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+            "video/mp4;codecs=avc1,mp4a.40.2",
+            "video/mp4;codecs=avc1",
+            "video/mp4",
             "video/webm;codecs=vp9,opus",
             "video/webm;codecs=vp8,opus",
             "video/webm;codecs=h264,opus",
             "video/webm",
-            "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
-            "video/mp4;codecs=avc1,mp4a.40.2",
             "video/mp4;codecs=avc1",
             "video/mp4",
           ];
@@ -2483,7 +2477,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         if (cachedGraph && cachedGraph.ctx.state !== "closed") {
           audioCtx = cachedGraph.ctx;
           sharedAudioSource = cachedGraph.source;
-          if (audioCtx.state === "suspended") await audioCtx.resume().catch(() => {});
+          if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
           try {
             sharedAudioSource.disconnect();
             sharedAudioSource.connect(audioCtx.destination);
@@ -2497,7 +2491,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             audioCtx = new AudioCtxClass();
           }
           if (audioCtx.state === "suspended") {
-            await audioCtx.resume().catch(() => {});
+            audioCtx.resume().catch(() => {});
           }
           // SURGICAL FIX: iOS 16.4+ / Safari 16.4+ supports MediaRecorder MP4 + AudioContext capture.
           // Only skip audio capture on very old iOS (no native AudioContext = pre-16.4).
@@ -2531,8 +2525,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
             ? Math.min(quality.bitrate, 5_000_000)
             : quality.bitrate;
       try {
-        // SURGICAL FIX: Re-enable WebCodecs Direct MP4 (H.264 + AAC) whenever not forced to WebM fallback
-        if (!forceWebmRef.current)
+        // Phones skip WebCodecs (GPU driver hangs on Vivo/Oppo etc.) — single-pass native recorder instead
+        // Old stable file: native MediaRecorder on every device (WebCodecs disabled)
+        if (false && !forceWebmRef.current && !IS_MOBILE_DEVICE)
           webCodecsRecorder = await createWebCodecsMp4Recorder({
             width: encW,
             height: encH,
@@ -2603,10 +2598,8 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
 
         // Direct-MP4 recording can succeed even when MediaRecorder produced nothing.
         if (chunks.length === 0 && !webCodecsRecorder) {
-          toast.error("ဗီဒီယို ဖမ်းယူမှု မအောင်မြင်ပါ — ထပ်မံ ကြိုးစားပေးပါ။");
           setIsRendering(false);
           isRenderingRef.current = false;
-          setIsRecapPlaying(false);
           return;
         }
 
@@ -2660,7 +2653,6 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
           toast.error("ဗီဒီယို ဖမ်းယူမှု မအောင်မြင်ပါ — ထပ်မံ ကြိုးစားပေးပါ။");
           setIsRendering(false);
           isRenderingRef.current = false;
-          setIsRecapPlaying(false);
           return;
         }
 
@@ -4703,6 +4695,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
         }
       };
     }, [isRecapPlaying, isYouTube]);
+
     // Video styles
     const activeGrade = COLOR_GRADE_PRESETS[editorState.colorGrade] || COLOR_GRADE_PRESETS["OFF"];
     const bypassBoostCSS = editorState.bypass
@@ -4777,7 +4770,7 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
                 };
                 const pauseBonus = (text: string): number => {
                   const last = (text || "").trimEnd().slice(-1);
-                  if (".!?á ‹".includes(last)) return 0.25; // SURGICAL FIX: TTS pauses ~250ms at sentence end
+                  if (".!?á‹".includes(last)) return 0.25; // SURGICAL FIX: TTS pauses ~250ms at sentence end
                   if (",;:".includes(last)) return 0.12; // SURGICAL FIX: TTS pauses ~120ms at comma/semicolon
                   return 0;
                 };
@@ -6364,6 +6357,9 @@ export const ResultView: React.FC<ResultViewProps> = React.memo(
     );
   },
 );
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
 interface RecapHistoryItem {
   id: string;
   title: string;
@@ -7248,7 +7244,7 @@ const RecapVideoNVPage: React.FC = () => {
         .trim();
       cleaned = cleaned
         .replace(
-          /^\s*[([{ï¼ˆ]?[^\n]{0,260}(?:á€Ÿá€¯á€ á€ºá€€á€²á€·|Recap Script|recap script|á€™á€¼á€”á€ºá€™á€¬á€œá€­á€¯\s*Recap|á€¡á€±á€¬á€€á€ºá€™á€¾á€¬\s*á€–á€±á€¬á€ºá€•á€¼|á€–á€±á€¬á€ºá€•á€¼á€•á€±á€¸á€œá€­á€¯á€€á€ºá€•á€«á€ á€šá€º|á€›á€±á€¸á€•á€±á€¸á€œá€­á€¯á€€á€ºá€•á€«á€ á€šá€º|Here(?:'s| is)|Below is|Sure|Okay|Of course)[^\n]{0,260}[)\]}ï¼‰]?\s*\n+/i,
+          /^\s*[([{ï¼ˆ]?[^\n]{0,260}(?:á€Ÿá€¯á€á€ºá€€á€²á€·|Recap Script|recap script|á€™á€¼á€”á€ºá€™á€¬á€œá€­á€¯\s*Recap|á€¡á€±á€¬á€€á€ºá€™á€¾á€¬\s*á€–á€±á€¬á€ºá€•á€¼|á€–á€±á€¬á€ºá€•á€¼á€•á€±á€¸á€œá€­á€¯á€€á€ºá€•á€«á€á€šá€º|á€›á€±á€¸á€•á€±á€¸á€œá€­á€¯á€€á€ºá€•á€«á€á€šá€º|Here(?:'s| is)|Below is|Sure|Okay|Of course)[^\n]{0,260}[)\]}ï¼‰]?\s*\n+/i,
           "",
         )
         .trim();
@@ -7393,7 +7389,7 @@ const RecapVideoNVPage: React.FC = () => {
     // Voice naturalness: keep Burmese punctuation so TTS can insert realistic micro-pauses.
     let speechTextForAPI = stripDialogueMetadata(scriptText.replace(/\[.*?\]\s*/g, ""));
     if (voiceMode === "normal") {
-      // Remove mainly English punctuation, but keep Burmese "á ‹" / "á Š".
+      // Remove mainly English punctuation, but keep Burmese "á‹" / "áŠ".
       speechTextForAPI = speechTextForAPI.replace(/[.,!?;:"'()\[\]{}\-_\n\r]/g, " ").replace(/\s+/g, " ");
     }
 
@@ -7424,12 +7420,12 @@ const RecapVideoNVPage: React.FC = () => {
         en:
           "Speak in 100% natural native English with a clear, modern, professional American or British accent. " +
           "Sound like a real native English-speaking human â€” warm, confident, and naturally fluent.",
-        ja: "100%ãƒ ã‚¤ãƒ†ã‚£ãƒ–ã ªæ—¥æœ¬èªžã §è©±ã —ã ¦ã  ã  ã •ã „ã€‚è‡ªç„¶ã §ç ¾ä»£çš„ã ªæ¨™æº–æ—¥æœ¬èªžã‚¢ã‚¯ã‚»ãƒ³ãƒˆã §ã€ æœ¬ç‰©ã ®æ—¥æœ¬äººã ®ã‚ˆã †ã «è©±ã —ã ¦ã  ã  ã •ã „ã€‚",
-        ko: "100% ìž ì—°ìŠ¤ëŸ¬ìš´ ì› ì–´ë¯¼ í•œêµ­ì–´ë¡œ ë§ í•˜ì„¸ìš”. í˜„ëŒ€ í‘œì¤€ í•œêµ­ì–´ ì–µì–‘ìœ¼ë¡œ ì‹¤ì œ í•œêµ­ ì‚¬ëžŒì²˜ëŸ¼ ìž ì—°ìŠ¤ëŸ½ê²Œ ë§ í•˜ì„¸ìš”.",
-        th: "à¸žà¸¹à¸”à¸ à¸²à¸©à¸²à¹„à¸—à¸¢à¹ à¸šà¸šà¹€à¸ˆà¹‰à¸²à¸‚à¸­à¸‡à¸ à¸²à¸©à¸² 100% à¸”à¹‰à¸§à¸¢à¸ªà¸³à¹€à¸™à¸µà¸¢à¸‡à¹„à¸—à¸¢à¸ à¸¥à¸²à¸‡à¸¡à¸²à¸•à¸£à¸ à¸²à¸™à¸ªà¸¡à¸±à¸¢à¹ƒà¸«à¸¡à¹ˆ à¹€à¸«à¸¡à¸·à¸­à¸™à¸„à¸™à¹„à¸—à¸¢à¹ à¸—à¹‰à¹† à¸žà¸¹à¸”à¸­à¸¢à¹ˆà¸²à¸‡à¹€à¸›à¹‡à¸™à¸˜à¸£à¸£à¸¡à¸Šà¸²à¸•à¸´",
-        zh: "ç”¨100%çº¯æ­£çš„æ™®é€šè¯ è¯´è¯ ï¼Œåƒ çœŸæ­£çš„ä¸­å›½äººä¸€æ ·è‡ªç„¶æµ ç•…åœ°è¯´çŽ°ä»£æ ‡å‡†æ™®é€šè¯ ã€‚",
-        hi: "100% à¤ªà¥ à¤°à¤¾à¤•à¥ƒà¤¤à¤¿à¤• à¤®à¥‚à¤² à¤¹à¤¿à¤‚à¤¦à¥€ à¤®à¥‡à¤‚ à¤¬à¥‹à¤²à¥‡à¤‚à¥¤ à¤†à¤§à¥ à¤¨à¤¿à¤• à¤®à¤¾à¤¨à¤• à¤¹à¤¿à¤‚à¤¦à¥€ à¤‰à¤šà¥ à¤šà¤¾à¤°à¤£ à¤•à¥‡ à¤¸à¤¾à¤¥ à¤ à¤• à¤µà¤¾à¤¸à¥ à¤¤à¤µà¤¿à¤• à¤¹à¤¿à¤‚à¤¦à¥€ à¤®à¥‚à¤² à¤µà¤•à¥ à¤¤à¤¾ à¤•à¥€ à¤¤à¤°à¤¹ à¤¬à¥‹à¤²à¥‡à¤‚à¥¤",
-        vi: "NÃ³i tiáº¿ng Viá»‡t 100% tá»± nhiÃªn nhÆ° ngÆ°á» i Viá»‡t báº£n xá»©. Giá» ng HÃ  Ná»™i hoáº·c SÃ i GÃ²n chuáº©n, hiá»‡n Ä‘áº¡i vÃ  tá»± nhiÃªn.",
+        ja: "100%ãƒã‚¤ãƒ†ã‚£ãƒ–ãªæ—¥æœ¬èªžã§è©±ã—ã¦ãã ã•ã„ã€‚è‡ªç„¶ã§ç¾ä»£çš„ãªæ¨™æº–æ—¥æœ¬èªžã‚¢ã‚¯ã‚»ãƒ³ãƒˆã§ã€æœ¬ç‰©ã®æ—¥æœ¬äººã®ã‚ˆã†ã«è©±ã—ã¦ãã ã•ã„ã€‚",
+        ko: "100% ìžì—°ìŠ¤ëŸ¬ìš´ ì›ì–´ë¯¼ í•œêµ­ì–´ë¡œ ë§í•˜ì„¸ìš”. í˜„ëŒ€ í‘œì¤€ í•œêµ­ì–´ ì–µì–‘ìœ¼ë¡œ ì‹¤ì œ í•œêµ­ ì‚¬ëžŒì²˜ëŸ¼ ìžì—°ìŠ¤ëŸ½ê²Œ ë§í•˜ì„¸ìš”.",
+        th: "à¸žà¸¹à¸”à¸ à¸²à¸©à¸²à¹„à¸—à¸¢à¹à¸šà¸šà¹€à¸ˆà¹‰à¸²à¸‚à¸­à¸‡à¸ à¸²à¸©à¸² 100% à¸”à¹‰à¸§à¸¢à¸ªà¸³à¹€à¸™à¸µà¸¢à¸‡à¹„à¸—à¸¢à¸à¸¥à¸²à¸‡à¸¡à¸²à¸•à¸£à¸à¸²à¸™à¸ªà¸¡à¸±à¸¢à¹ƒà¸«à¸¡à¹ˆ à¹€à¸«à¸¡à¸·à¸­à¸™à¸„à¸™à¹„à¸—à¸¢à¹à¸—à¹‰à¹† à¸žà¸¹à¸”à¸­à¸¢à¹ˆà¸²à¸‡à¹€à¸›à¹‡à¸™à¸˜à¸£à¸£à¸¡à¸Šà¸²à¸•à¸´",
+        zh: "ç”¨100%çº¯æ­£çš„æ™®é€šè¯è¯´è¯ï¼ŒåƒçœŸæ­£çš„ä¸­å›½äººä¸€æ ·è‡ªç„¶æµç•…åœ°è¯´çŽ°ä»£æ ‡å‡†æ™®é€šè¯ã€‚",
+        hi: "100% à¤ªà¥à¤°à¤¾à¤•à¥ƒà¤¤à¤¿à¤• à¤®à¥‚à¤² à¤¹à¤¿à¤‚à¤¦à¥€ à¤®à¥‡à¤‚ à¤¬à¥‹à¤²à¥‡à¤‚à¥¤ à¤†à¤§à¥à¤¨à¤¿à¤• à¤®à¤¾à¤¨à¤• à¤¹à¤¿à¤‚à¤¦à¥€ à¤‰à¤šà¥à¤šà¤¾à¤°à¤£ à¤•à¥‡ à¤¸à¤¾à¤¥ à¤à¤• à¤µà¤¾à¤¸à¥à¤¤à¤µà¤¿à¤• à¤¹à¤¿à¤‚à¤¦à¥€ à¤®à¥‚à¤² à¤µà¤•à¥à¤¤à¤¾ à¤•à¥€ à¤¤à¤°à¤¹ à¤¬à¥‹à¤²à¥‡à¤‚à¥¤",
+        vi: "NÃ³i tiáº¿ng Viá»‡t 100% tá»± nhiÃªn nhÆ° ngÆ°á»i Viá»‡t báº£n xá»©. Giá»ng HÃ  Ná»™i hoáº·c SÃ i GÃ²n chuáº©n, hiá»‡n Ä‘áº¡i vÃ  tá»± nhiÃªn.",
         id: "Berbicara dalam bahasa Indonesia 100% asli dan alami seperti penutur asli Indonesia modern.",
         ms: "Bercakap dalam bahasa Melayu 100% asli dan semula jadi seperti penutur asli Melayu moden.",
         tl: "Magsalita sa 100% natural na katutubong Filipino/Tagalog tulad ng isang tunay na Pilipino.",
@@ -7607,6 +7603,7 @@ const RecapVideoNVPage: React.FC = () => {
       showSolveToFixBox(err?.message || String(err));
     }
   };
+
   // SURGICAL EDIT: Auto Batch Orchestrator
   const runAutoBatchStep = async (file: File, chunkIndex: number) => {
     if (!autoBatchActiveRef.current || isBatchPausedRef.current) return;
@@ -7946,12 +7943,12 @@ STORYTELLING FLOW (CRITICAL â€” eliminates dead air):
             "confessed",
             "á€žá€±á€žá€½á€¬á€¸á€•á€¼á€®",
             "á€†á€¯á€¶á€¸á€žá€½á€¬á€¸á€•á€¼á€®",
-            "á€–á€±á€¬á€ºá€‘á€¯á€ á€ºá€œá€­á€¯á€€á€ºá€•á€¼á€®",
-            "á€œá€»á€¾á€­á€¯á€·á€ á€¾á€€á€ºá€ á€»á€€á€º",
+            "á€–á€±á€¬á€ºá€‘á€¯á€á€ºá€œá€­á€¯á€€á€ºá€•á€¼á€®",
+            "á€œá€»á€¾á€­á€¯á€·á€á€¾á€€á€ºá€á€»á€€á€º",
             "á€žá€…á€¹á€…á€¬á€–á€±á€¬á€€á€º",
             "á€‘á€½á€„á€ºá€¸á€€á€­á€¯á€€á€º",
-            "á€žá€ á€ºá€œá€­á€¯á€€á€º",
-            "á€†á€­á€¯á€¸á€ á€²á€·á€œá€»á€¾á€­á€¯á€·á€ á€¾á€€á€º",
+            "á€žá€á€ºá€œá€­á€¯á€€á€º",
+            "á€†á€­á€¯á€¸á€á€²á€·á€œá€»á€¾á€­á€¯á€·á€á€¾á€€á€º",
           ];
           // TIER 2: High drama (Ã—3)
           const highKw = [
