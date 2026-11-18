@@ -3,7 +3,7 @@ import { toBlobURL } from "@ffmpeg/util";
 
 const CORE_BASE = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm";
 const MOUNT_DIR = "/mp4in";
-const LOAD_TIMEOUT_MS = 60000;
+const LOAD_TIMEOUT_MS = 180000;
 
 export interface Mp4ConvertResult {
   blob: Blob;
@@ -18,7 +18,40 @@ async function hasFtyp(blob: Blob): Promise<boolean> {
   return String.fromCharCode(head[4], head[5], head[6], head[7]) === "ftyp";
 }
 
-async function loadFFmpeg(logs: string[]): Promise<FFmpeg> {
+let cachedCore: { coreURL: string; wasmURL: string } | null = null;
+
+async function getCoreURLs(onProgress?: (pct: number, msg: string) => void) {
+  if (cachedCore) return cachedCore;
+  const coreURL = await toBlobURL(`${CORE_BASE}/ffmpeg-core.js`, "text/javascript");
+  const wasmURL = await toBlobURL(`${CORE_BASE}/ffmpeg-core.wasm`, "application/wasm", true, ({ total, received }: any) => {
+    const t = total > 0 ? total : 32 * 1024 * 1024;
+    const p = Math.min(1, received / t);
+    onProgress?.(1 + Math.round(p * 14), `အင်ဂျင် ဒေါင်းလုဒ်ဆွဲနေပါတယ်… ${Math.round(p * 100)}%`);
+  });
+  cachedCore = { coreURL, wasmURL };
+  return cachedCore;
+}
+
+/** Real duration of a browser WebM (which often reports Infinity). */
+async function getBlobDuration(blob: Blob): Promise<number> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(blob);
+    const v = document.createElement("video");
+    v.preload = "metadata";
+    v.muted = true;
+    const done = (d: number) => { URL.revokeObjectURL(url); resolve(Number.isFinite(d) && d > 0 ? d : 0); };
+    const t = setTimeout(() => done(0), 8000);
+    v.onloadedmetadata = () => {
+      if (Number.isFinite(v.duration) && v.duration > 0) { clearTimeout(t); done(v.duration); return; }
+      v.ontimeupdate = () => { v.ontimeupdate = null; clearTimeout(t); done(v.duration); };
+      v.currentTime = 1e9;
+    };
+    v.onerror = () => { clearTimeout(t); done(0); };
+    v.src = url;
+  });
+}
+
+async function loadFFmpeg(logs: string[], onProgress?: (pct: number, msg: string) => void): Promise<FFmpeg> {
   const ffmpeg = new FFmpeg();
   ffmpeg.on("log", ({ message }) => {
     logs.push(message);
@@ -26,10 +59,9 @@ async function loadFFmpeg(logs: string[]): Promise<FFmpeg> {
   });
   await Promise.race([
     (async () => {
-      await ffmpeg.load({
-        coreURL: await toBlobURL(`${CORE_BASE}/ffmpeg-core.js`, "text/javascript"),
-        wasmURL: await toBlobURL(`${CORE_BASE}/ffmpeg-core.wasm`, "application/wasm"),
-      });
+      const urls = await getCoreURLs(onProgress);
+      onProgress?.(16, "အင်ဂျင် စတင်နေပါတယ်…");
+      await ffmpeg.load(urls);
     })(),
     new Promise<never>((_, rej) => setTimeout(() => rej(new Error("FFmpeg load timeout")), LOAD_TIMEOUT_MS)),
   ]);
@@ -55,34 +87,32 @@ export async function convertToRealMp4(
   const logs: string[] = [];
   let ffmpeg: FFmpeg | null = null;
   try {
-    onProgress?.(2, "MP4 converter loading...");
-    ffmpeg = await loadFFmpeg(logs);
+    onProgress?.(1, "အင်ဂျင် ဒေါင်းလုဒ်ဆွဲနေပါတယ်…");
+    ffmpeg = await loadFFmpeg(logs, onProgress);
+    const totalSec = durationSec > 0 ? durationSec : await getBlobDuration(input);
 
     const inputName = "input.webm";
-    const file = new File([input], inputName, { type: sourceMime || "video/webm" });
-    let inputPath = inputName;
-    let mounted = false;
-    try {
-      try {
-        await ffmpeg.createDir(MOUNT_DIR);
-      } catch {
-        /* exists */
-      }
-      mounted = await ffmpeg.mount("WORKERFS" as Parameters<FFmpeg["mount"]>[0], { files: [file] }, MOUNT_DIR);
-      if (mounted) inputPath = `${MOUNT_DIR}/${inputName}`;
-    } catch {
-      mounted = false;
-    }
-    if (!mounted) {
-      await ffmpeg.writeFile(inputName, new Uint8Array(await input.arrayBuffer()));
-    }
+    const inputPath = inputName;
+    const mounted = false;
+    onProgress?.(18, "ဗီဒီယို ဖတ်နေပါတယ်…");
+    await ffmpeg.writeFile(inputName, new Uint8Array(await input.arrayBuffer()));
 
+    let lastP = 0;
+    const report = (p: number) => {
+      p = Math.max(0, Math.min(1, p));
+      if (p < lastP) return;
+      lastP = p;
+      onProgress?.(20 + Math.round(p * 78), `MP4 ပြောင်းနေပါတယ်… ${Math.round(p * 100)}%`);
+    };
     const onProg = ({ progress }: { progress: number }) => {
-      if (!Number.isFinite(progress)) return;
-      const p = Math.max(0, Math.min(1, progress));
-      onProgress?.(5 + Math.round(p * 90), `MP4 ပြောင်းနေသည်… ${Math.round(p * 100)}%`);
+      if (Number.isFinite(progress) && progress > 0 && progress <= 1) report(progress);
+    };
+    const onTimeLog = ({ message }: { message: string }) => {
+      const m = /time=(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(message);
+      if (m && totalSec > 0) report((+m[1] * 3600 + +m[2] * 60 + +m[3]) / totalSec);
     };
     ffmpeg.on("progress", onProg);
+    ffmpeg.on("log", onTimeLog);
 
     const durArgs = durationSec > 0 ? ["-t", durationSec.toFixed(3)] : [];
     const out = "output.mp4";
@@ -90,7 +120,7 @@ export async function convertToRealMp4(
 
     // 1) H.264 source → lossless copy into MP4 (fast).
     if (/h264|avc1/i.test(sourceMime)) {
-      onProgress?.(5, "MP4 ပြောင်းနေသည် (fast copy)…");
+      onProgress?.(20, "MP4 ပြောင်းနေပါတယ် (fast copy)…");
       code = await ffmpeg.exec([
         "-i",
         inputPath,
@@ -114,7 +144,7 @@ export async function convertToRealMp4(
       } catch {
         /* none */
       }
-      onProgress?.(5, "MP4 (H.264) ပြောင်းနေသည်…");
+      onProgress?.(20, "MP4 (H.264) ပြောင်းနေပါတယ်…");
       code = await ffmpeg.exec([
         "-i",
         inputPath,
@@ -137,6 +167,7 @@ export async function convertToRealMp4(
       ]);
     }
     ffmpeg.off("progress", onProg);
+    ffmpeg.off("log", onTimeLog);
     if (code !== 0) throw new Error(`FFmpeg exit code ${code}`);
 
     const data = await ffmpeg.readFile(out);
