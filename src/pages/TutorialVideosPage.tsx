@@ -10,16 +10,24 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  ArrowLeft, Plus, Trash2, Video, FileText, Upload, RefreshCw,
-  Eye, EyeOff, GripVertical, Play, BookOpen, Sparkles, ArrowUpDown, Clock, Download,
+  ArrowLeft,
+  Plus,
+  Trash2,
+  Video,
+  FileText,
+  Upload,
+  RefreshCw,
+  Eye,
+  EyeOff,
+  GripVertical,
+  Play,
+  BookOpen,
+  Sparkles,
+  ArrowUpDown,
+  Clock,
+  Download,
 } from "lucide-react";
 
 interface Tutorial {
@@ -64,7 +72,7 @@ const VideoPlayer: React.FC<{
   const playedRef = React.useRef(false);
 
   const qualities = tutorial.video_qualities || {};
-  const hasRealQualities = QUALITY_OPTIONS.some(q => qualities[q]);
+  const hasRealQualities = QUALITY_OPTIONS.some((q) => qualities[q]);
 
   // Determine video src based on selection
   const getVideoSrc = () => {
@@ -74,7 +82,7 @@ const VideoPlayer: React.FC<{
   };
 
   const videoSrc = getVideoSrc();
-  const arObj = ASPECT_RATIOS.find(a => a.value === aspectRatio) || ASPECT_RATIOS[0];
+  const arObj = ASPECT_RATIOS.find((a) => a.value === aspectRatio) || ASPECT_RATIOS[0];
 
   // When quality changes, preserve playback position
   const handleQualityChange = (q: string) => {
@@ -98,6 +106,7 @@ const VideoPlayer: React.FC<{
           ref={videoRef}
           src={videoSrc || ""}
           controls
+          playsInline
           controlsList="nodownload"
           disablePictureInPicture
           onContextMenu={(e) => e.preventDefault()}
@@ -118,7 +127,7 @@ const VideoPlayer: React.FC<{
       {/* Controls row */}
       <div className="flex items-center gap-1.5 flex-wrap">
         {/* Aspect ratio buttons */}
-        {ASPECT_RATIOS.map(ar => (
+        {ASPECT_RATIOS.map((ar) => (
           <button
             key={ar.value}
             onClick={() => setAspectRatio(ar.value)}
@@ -143,7 +152,7 @@ const VideoPlayer: React.FC<{
         >
           Auto
         </button>
-        {QUALITY_OPTIONS.map(q => {
+        {QUALITY_OPTIONS.map((q) => {
           const hasFile = !!qualities[q];
           return (
             <button
@@ -191,10 +200,18 @@ const TutorialVideosPage: React.FC = () => {
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("general");
   const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [qualityFiles, setQualityFiles] = useState<Record<string, File | null>>({ "360p": null, "720p": null, "1080p": null });
+  const [qualityFiles, setQualityFiles] = useState<Record<string, File | null>>({
+    "360p": null,
+    "720p": null,
+    "1080p": null,
+  });
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const qualityInputRefs = useRef<Record<string, HTMLInputElement | null>>({ "360p": null, "720p": null, "1080p": null });
+  const qualityInputRefs = useRef<Record<string, HTMLInputElement | null>>({
+    "360p": null,
+    "720p": null,
+    "1080p": null,
+  });
 
   // Filter
   const [filterCategory, setFilterCategory] = useState("all");
@@ -213,9 +230,7 @@ const TutorialVideosPage: React.FC = () => {
         _tutorial_id: tutorialId,
       });
       if (!error && typeof data === "number") {
-        setTutorials((prev) =>
-          prev.map((t) => (t.id === tutorialId ? { ...t, view_count: data } : t))
-        );
+        setTutorials((prev) => prev.map((t) => (t.id === tutorialId ? { ...t, view_count: data } : t)));
       }
     } catch {
       // silent — view count is non-critical
@@ -243,10 +258,7 @@ const TutorialVideosPage: React.FC = () => {
   }, [accessLoading]);
 
   const fetchTutorials = async () => {
-    const { data, error } = await supabase
-      .from("tutorials")
-      .select("*")
-      .order("order_index", { ascending: true });
+    const { data, error } = await supabase.from("tutorials").select("*").order("order_index", { ascending: true });
 
     if (!error && data) {
       // Generate signed URLs for private bucket videos
@@ -267,12 +279,14 @@ const TutorialVideosPage: React.FC = () => {
             const signedQualities: Record<string, string> = {};
             for (const [quality, path] of Object.entries(t.video_qualities)) {
               if (typeof path === "string" && path) {
-                // Extract storage path from old public URL or use as-is
+                // Extract storage path from old public URL, signed URL or use raw path
                 const storagePath = path.includes("/object/public/tutorial-videos/")
                   ? path.split("/object/public/tutorial-videos/")[1]
                   : path.includes("/tutorial-videos/")
-                  ? path.split("/tutorial-videos/").pop()!
-                  : null;
+                    ? path.split("/tutorial-videos/").pop()!
+                    : !path.startsWith("http")
+                      ? path
+                      : null;
                 if (storagePath) {
                   const { data: qSignedData } = await supabase.storage
                     .from("tutorial-videos")
@@ -288,7 +302,7 @@ const TutorialVideosPage: React.FC = () => {
             }
           }
           return updated;
-        })
+        }),
       );
       setTutorials(tutorialsWithSignedUrls);
     }
@@ -344,7 +358,9 @@ const TutorialVideosPage: React.FC = () => {
     const qualities: Record<string, string> = {};
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session) throw new Error("Not authenticated");
 
       // Upload main video (backward compat)
@@ -397,7 +413,7 @@ const TutorialVideosPage: React.FC = () => {
 
       // If no main video but has quality files, use highest as main
       if (!videoUrl && Object.keys(qualities).length > 0) {
-        const highest = (["1080p", "720p", "360p"] as const).find(q => qualities[q]);
+        const highest = (["1080p", "720p", "360p"] as const).find((q) => qualities[q]);
         if (highest) videoUrl = qualities[highest];
       }
 
@@ -445,10 +461,7 @@ const TutorialVideosPage: React.FC = () => {
   };
 
   const togglePublish = async (tutorial: Tutorial) => {
-    await supabase
-      .from("tutorials")
-      .update({ is_published: !tutorial.is_published })
-      .eq("id", tutorial.id);
+    await supabase.from("tutorials").update({ is_published: !tutorial.is_published }).eq("id", tutorial.id);
     fetchTutorials();
   };
 
@@ -456,32 +469,65 @@ const TutorialVideosPage: React.FC = () => {
   const handleDownload = async (tutorial: Tutorial) => {
     try {
       const qualities = tutorial.video_qualities || {};
-      const preferred = (["1080p", "720p", "360p"] as const).find(q => qualities[q]);
-      const url = (preferred && qualities[preferred]) || tutorial.video_url;
-      if (!url) {
+      const preferred = (["1080p", "720p", "360p"] as const).find((q) => qualities[q]);
+      const rawTarget = (preferred && qualities[preferred]) || tutorial.video_url;
+
+      if (!rawTarget) {
         toast({ title: "Video URL မရှိပါ", variant: "destructive" });
         return;
       }
+
       toast({ title: "⬇️ Downloading..." });
-      const res = await fetch(url);
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = blobUrl;
-      const safeName = tutorial.title.replace(/[^\w\-]+/g, "_").slice(0, 80) || "tutorial";
-      a.download = `${safeName}.mp4`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+
+      // Determine clean storage path
+      let storagePath: string | null = null;
+      if (rawTarget.includes("/object/public/tutorial-videos/")) {
+        storagePath = rawTarget.split("/object/public/tutorial-videos/")[1];
+      } else if (rawTarget.includes("/object/sign/tutorial-videos/")) {
+        storagePath = rawTarget.split("/object/sign/tutorial-videos/")[1]?.split("?")[0] || null;
+      } else if (rawTarget.includes("/tutorial-videos/")) {
+        storagePath = rawTarget.split("/tutorial-videos/").pop()?.split("?")[0] || null;
+      } else if (!rawTarget.startsWith("http")) {
+        storagePath = rawTarget;
+      }
+
+      const safeName = (tutorial.title.replace(/[^\w\-]+/g, "_").slice(0, 80) || "tutorial") + ".mp4";
+
+      // Cloud Storage Direct Native Download (RAM မကုန်ဘဲ MB အပြည့် စစ်စစ် ဒေါင်းလုဒ်ရရှိသည်)
+      if (storagePath) {
+        const { data: signedData, error: signErr } = await supabase.storage
+          .from("tutorial-videos")
+          .createSignedUrl(storagePath, 3600, { download: safeName });
+
+        if (!signErr && signedData?.signedUrl) {
+          const a = document.createElement("a");
+          a.href = signedData.signedUrl;
+          a.download = safeName;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          return;
+        }
+      }
+
+      // Fallback if direct link
+      if (rawTarget.startsWith("http")) {
+        const a = document.createElement("a");
+        a.href = rawTarget;
+        a.download = safeName;
+        a.target = "_blank";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      } else {
+        throw new Error("ဗီဒီယို ဖိုင်လမ်းကြောင်း မမှန်ကန်ပါ");
+      }
     } catch (err: any) {
       toast({ title: "Download failed", description: err.message, variant: "destructive" });
     }
   };
 
-  const filtered = tutorials.filter(
-    (t) => filterCategory === "all" || t.category === filterCategory
-  );
+  const filtered = tutorials.filter((t) => filterCategory === "all" || t.category === filterCategory);
 
   const visible = [...filtered].sort((a, b) => {
     if (sortBy === "newest" || sortBy === "oldest") {
@@ -522,12 +568,8 @@ const TutorialVideosPage: React.FC = () => {
                 <BookOpen className="w-4 h-4 text-white" />
               </div>
               <div>
-                <h1 className="text-sm font-bold tracking-wide text-foreground">
-                  Tutorial Videos
-                </h1>
-                <p className="text-2xs text-muted-foreground">
-                  လမ်းညွှန်ချက်များနှင့် Tutorials
-                </p>
+                <h1 className="text-sm font-bold tracking-wide text-foreground">Tutorial Videos</h1>
+                <p className="text-2xs text-muted-foreground">လမ်းညွှန်ချက်များနှင့် Tutorials</p>
               </div>
             </div>
           </div>
@@ -601,7 +643,9 @@ const TutorialVideosPage: React.FC = () => {
 
               {/* Guideline Text Box */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground tracking-wide uppercase">Guideline / Description</label>
+                <label className="text-xs font-semibold text-foreground tracking-wide uppercase">
+                  Guideline / Description
+                </label>
                 <Textarea
                   placeholder="လမ်းညွှန်ချက် / Description text ကို ဒီမှာ ရေးပါ...&#10;&#10;• အဆင့်တွေကို အစဉ်လိုက် ရေးနိုင်ပါသည်&#10;• Markdown format ကိုလည်း သုံးနိုင်ပါသည်"
                   value={description}
@@ -666,8 +710,12 @@ const TutorialVideosPage: React.FC = () => {
 
               {/* Quality Variants Upload */}
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-foreground tracking-wide uppercase">Quality Variants (Optional)</label>
-                <p className="text-2xs text-muted-foreground">Quality တစ်ခုချင်းစီအတွက် video file သီးသန့် upload လုပ်ပါ</p>
+                <label className="text-xs font-semibold text-foreground tracking-wide uppercase">
+                  Quality Variants (Optional)
+                </label>
+                <p className="text-2xs text-muted-foreground">
+                  Quality တစ်ခုချင်းစီအတွက် video file သီးသန့် upload လုပ်ပါ
+                </p>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   {QUALITY_OPTIONS.map((q) => (
                     <div key={q}>
@@ -675,8 +723,10 @@ const TutorialVideosPage: React.FC = () => {
                         type="file"
                         accept="video/*"
                         className="hidden"
-                        ref={(el) => { qualityInputRefs.current[q] = el; }}
-                        onChange={(e) => setQualityFiles(prev => ({ ...prev, [q]: e.target.files?.[0] || null }))}
+                        ref={(el) => {
+                          qualityInputRefs.current[q] = el;
+                        }}
+                        onChange={(e) => setQualityFiles((prev) => ({ ...prev, [q]: e.target.files?.[0] || null }))}
                       />
                       <button
                         type="button"
@@ -688,7 +738,9 @@ const TutorialVideosPage: React.FC = () => {
                         }`}
                       >
                         {qualityFiles[q] ? (
-                          <span>✅ {q} — {(qualityFiles[q]!.size / (1024 * 1024)).toFixed(1)}MB</span>
+                          <span>
+                            ✅ {q} — {(qualityFiles[q]!.size / (1024 * 1024)).toFixed(1)}MB
+                          </span>
                         ) : (
                           <span>📹 {q}</span>
                         )}
@@ -719,7 +771,13 @@ const TutorialVideosPage: React.FC = () => {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => { setShowForm(false); setTitle(""); setDescription(""); setVideoFile(null); setUploadProgress(0); }}
+                  onClick={() => {
+                    setShowForm(false);
+                    setTitle("");
+                    setDescription("");
+                    setVideoFile(null);
+                    setUploadProgress(0);
+                  }}
                   className="text-xs text-muted-foreground hover:text-foreground"
                 >
                   Cancel
@@ -730,9 +788,14 @@ const TutorialVideosPage: React.FC = () => {
                   className="px-6 h-10 bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-600 hover:from-violet-700 hover:via-purple-700 hover:to-fuchsia-700 text-white font-semibold text-sm shadow-lg shadow-violet-500/20"
                 >
                   {uploading ? (
-                    <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> {uploadProgress > 0 ? `${uploadProgress}%` : "Preparing..."}</>
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />{" "}
+                      {uploadProgress > 0 ? `${uploadProgress}%` : "Preparing..."}
+                    </>
                   ) : (
-                    <><Plus className="w-4 h-4 mr-2" /> Save Tutorial</>
+                    <>
+                      <Plus className="w-4 h-4 mr-2" /> Save Tutorial
+                    </>
                   )}
                 </Button>
               </div>
@@ -745,9 +808,7 @@ const TutorialVideosPage: React.FC = () => {
           <div className="text-center py-20">
             <BookOpen className="w-12 h-12 mx-auto text-muted-foreground/30 mb-3" />
             <p className="text-sm text-muted-foreground">
-              {isAdmin
-                ? "Tutorial မရှိသေးပါ။ Add Tutorial ကိုနှိပ်ပါ"
-                : "Tutorial Videos မကြာမီ ရောက်ရှိလာပါမည်"}
+              {isAdmin ? "Tutorial မရှိသေးပါ။ Add Tutorial ကိုနှိပ်ပါ" : "Tutorial Videos မကြာမီ ရောက်ရှိလာပါမည်"}
             </p>
           </div>
         ) : (
@@ -756,7 +817,9 @@ const TutorialVideosPage: React.FC = () => {
               <Card
                 key={t.id}
                 className={`group border bg-card/60 backdrop-blur-sm hover:shadow-lg hover:shadow-primary/5 transition-all duration-200 ${
-                  !t.is_published && isAdmin ? "border-amber-500/30 bg-amber-500/5" : "border-border/40 hover:border-primary/30"
+                  !t.is_published && isAdmin
+                    ? "border-amber-500/30 bg-amber-500/5"
+                    : "border-border/40 hover:border-primary/30"
                 }`}
               >
                 <CardContent className="p-4 sm:p-5">
@@ -766,9 +829,7 @@ const TutorialVideosPage: React.FC = () => {
                       <VideoPlayer
                         tutorial={t}
                         autoPlay={shouldAutoPlay && visible.indexOf(t) === 0}
-                        onDuration={(d) =>
-                          setDurations((prev) => (prev[t.id] === d ? prev : { ...prev, [t.id]: d }))
-                        }
+                        onDuration={(d) => setDurations((prev) => (prev[t.id] === d ? prev : { ...prev, [t.id]: d }))}
                         onFirstPlay={() => handleViewIncrement(t.id)}
                       />
                     ) : (
@@ -781,9 +842,7 @@ const TutorialVideosPage: React.FC = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <h3 className="font-bold text-sm text-foreground leading-tight">
-                            {t.title}
-                          </h3>
+                          <h3 className="font-bold text-sm text-foreground leading-tight">{t.title}</h3>
                           <span className="inline-block mt-1.5 text-2xs px-2.5 py-0.5 rounded-full bg-primary/10 text-primary font-semibold tracking-wide">
                             {CATEGORIES.find((c) => c.value === t.category)?.label || t.category}
                           </span>
@@ -855,7 +914,9 @@ const TutorialVideosPage: React.FC = () => {
                           </span>
                         )}
                         {isAdmin && (
-                          <span className={`ml-2 font-semibold ${t.is_published ? "text-emerald-400" : "text-amber-400"}`}>
+                          <span
+                            className={`ml-2 font-semibold ${t.is_published ? "text-emerald-400" : "text-amber-400"}`}
+                          >
                             • {t.is_published ? "Published" : "Draft"}
                           </span>
                         )}
