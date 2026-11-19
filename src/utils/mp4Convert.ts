@@ -79,10 +79,7 @@ export async function convertToRealMp4(
 ): Promise<Mp4ConvertResult> {
   const { sourceMime = input.type || "", durationSec = 0, onProgress } = opts;
 
-  // Already a real MP4 (e.g. Safari native) — verify and return.
-  if (/mp4/i.test(sourceMime) && (await hasFtyp(input))) {
-    return { blob: new Blob([input], { type: "video/mp4" }), isRealMp4: true };
-  }
+  // NOTE: never bypass by name/header — a ".mp4" may still carry Opus/VP9. Codecs are probed below.
 
   const logs: string[] = [];
   let ffmpeg: FFmpeg | null = null;
@@ -118,22 +115,23 @@ export async function convertToRealMp4(
     const out = "output.mp4";
     let code = -1;
 
-    // 1) H.264 source → lossless copy into MP4 (fast).
-    if (/h264|avc1/i.test(sourceMime)) {
-      onProgress?.(20, "MP4 ပြောင်းနေပါတယ် (fast copy)…");
+    // Probe real codecs from the stream info (instant, no encoding).
+    const probeStart = logs.length;
+    try { await ffmpeg.exec(["-hide_banner", "-i", inputPath]); } catch { /* probe exits non-zero */ }
+    const probe = logs.slice(probeStart).join("\n");
+    const vH264 = /Video: h264/i.test(probe) || (!/Video:/i.test(probe) && /h264|avc1/i.test(sourceMime));
+    const aAac = /Audio: aac/i.test(probe);
+    const noAudio = !/Audio:/i.test(probe);
+
+    // 1) H.264 source → stream copy (seconds, original quality). Audio copied if already AAC.
+    if (vH264) {
+      onProgress?.(20, "MP4 ပြောင်းနေပါတယ် (Ultrafast copy)…");
       code = await ffmpeg.exec([
-        "-i",
-        inputPath,
-        ...durArgs,
-        "-c:v",
-        "copy",
-        "-c:a",
-        "aac",
-        "-b:a",
-        "128k",
-        "-movflags",
-        "+faststart",
-        out,
+        "-i", inputPath, ...durArgs,
+        "-map", "0:v:0", "-map", "0:a:0?",
+        "-c:v", "copy",
+        ...(noAudio ? [] : aAac ? ["-c:a", "copy"] : ["-c:a", "aac", "-b:a", "192k"]),
+        "-movflags", "+faststart", out,
       ]);
     }
 
@@ -153,14 +151,16 @@ export async function convertToRealMp4(
         "libx264",
         "-preset",
         "ultrafast",
+        "-tune",
+        "zerolatency",
         "-crf",
-        "23",
+        "20",
         "-pix_fmt",
         "yuv420p",
         "-c:a",
         "aac",
         "-b:a",
-        "128k",
+        "192k",
         "-movflags",
         "+faststart",
         out,
@@ -176,7 +176,7 @@ export async function convertToRealMp4(
     const outBlob = new Blob([buf], { type: "video/mp4" });
 
     // Validate: real MP4 box + H.264 output stream.
-    const h264 = logs.some((l) => /Stream #0:\d.*Video: h264/i.test(l)) && logs.some((l) => /Output #0, mp4/i.test(l));
+    const h264 = (vH264 && code === 0) || logs.some((l) => /Stream #0:\d.*Video: h264/i.test(l));
     if (!(await hasFtyp(outBlob)) || !h264 || outBlob.size < 1024) {
       throw new Error("Output validation failed (not H.264 MP4)");
     }
