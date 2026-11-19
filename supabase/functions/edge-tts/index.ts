@@ -258,7 +258,7 @@ Deno.serve(async (req) => {
     // -2Hz pitch = warmer, more conversational tone
     const rate: string = (body.rate ?? "-8%").toString();
     const pitch: string = (body.pitch ?? "-2Hz").toString();
-    const volume: string = (body.volume ?? "+0%").toString();
+    const volume: string = (body.volume ?? "+35%").toString();
     const skipCreditDeduction: boolean = body.skipCreditDeduction === true;
     const segments: unknown[] = Array.isArray(body.segments) ? body.segments : [];
 
