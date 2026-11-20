@@ -710,6 +710,7 @@ LANGUAGE LOCK:
     let fileUri: string | null = null;
     let fileMimeType: string | null = null;
     let fileData: string | null = null;
+    let videoWindow: { start_offset: string; end_offset: string } | null = null;
     let sourceDurationSec: number | null = null;
     let extraInstructions = "";
     let editorRules = "";
@@ -746,6 +747,12 @@ LANGUAGE LOCK:
       fileUri = body.fileUri || null;
       fileMimeType = body.fileMimeType || null;
       fileData = body.fileData || body.inlineFileData || null;
+      {
+        const vs = Number(body.videoStartSec), ve = Number(body.videoEndSec);
+        if (Number.isFinite(vs) && Number.isFinite(ve) && vs >= 0 && ve > vs && ve < 6 * 3600) {
+          videoWindow = { start_offset: `${Math.floor(vs)}s`, end_offset: `${Math.ceil(ve)}s` };
+        }
+      }
       niche = body.niche || "GENERAL";
       language = sanitizeLanguageLabel(body.language);
       if (body.customCreditCost !== undefined) customCreditCost = Number(body.customCreditCost);
@@ -1259,7 +1266,11 @@ OUTPUT FORMAT:
         { text: userPrompt },
         fileData
           ? { inline_data: { mime_type: resolvedMimeType, data: fileData } }
-          : { file_data: { mime_type: resolvedMimeType, file_uri: resolvedFileUri } },
+          : {
+              file_data: { mime_type: resolvedMimeType, file_uri: resolvedFileUri },
+              // Nova Long Recap (additive, optional): only watch one part window of a long movie.
+              ...(videoWindow ? { video_metadata: videoWindow } : {}),
+            },
       ];
     } else if (transcript) {
       // Legacy transcript mode (kept for backward compatibility)

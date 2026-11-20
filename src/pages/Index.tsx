@@ -157,6 +157,14 @@ const defaultTools = [
   gradient: "cyan" as const,
   route: "/mp4-converter"
 },
+{
+  id: "nova-long-recap",
+  icon: Scissors,
+  title: "Nova Long Recap",
+  description: "၁-၂ နာရီကားတွေကို မူရင်းအရှည်အတိုင်း မြန်မာအသံနဲ့ ထုတ်ပေးခြင်း။",
+  gradient: "rose" as const,
+  route: "/long-recap"
+},
 ];
 
 type Tool = (typeof defaultTools)[number];

@@ -1,0 +1,1 @@
+- Nova Long Recap (/long-recap) is a standalone tool (src/pages/NovaLongRecapPage.tsx + src/utils/longRecapEngine.ts) using mediabunny stream-copy; never share code with RecapVideoNVPage so locked blocks stay untouched.
