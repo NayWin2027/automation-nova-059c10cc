@@ -1,8 +1,9 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Upload, Download, Loader2, Film, Square, Sparkles } from "lucide-react";
+import { ArrowLeft, Upload, Download, Loader2, Film, Square, Sparkles, ShieldCheck, Subtitles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
@@ -22,6 +23,7 @@ interface PartResult {
   start: number;
   end: number;
   url?: string;
+  srtUrl?: string;
   status: string;
 }
 
@@ -38,7 +40,6 @@ const VOICES = [
   { id: "fr-FR-VivienneMultilingualNeural", label: "Vivienne (Multilingual)" },
 ];
 
-// 0 ဆိုပါက Full Movie (မခွဲဘဲ တစ်ကားလုံးထုတ်မည်)
 const PART_OPTIONS = [
   { value: 0, label: "🌟 Full Movie (၁ ကားလုံး အစအဆုံး)" },
   { value: 10, label: "၁၀ မိနစ် တစ်ပိုင်း" },
@@ -53,6 +54,30 @@ const fmt = (s: number) => {
     x = Math.floor(s % 60);
   return (h ? `${h}:` : "") + `${String(m).padStart(h ? 2 : 1, "0")}:${String(x).padStart(2, "0")}`;
 };
+
+const srtTime = (s: number) => {
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = Math.floor(s % 60);
+  const ms = Math.floor((s % 1) * 1000);
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")},${String(ms).padStart(3, "0")}`;
+};
+
+/**
+ * AI က ရေးပေးသော Timed Script မှ Standard .SRT စာတန်းထိုးဖိုင် အလိုအလျောက် ထုတ်လုပ်ပေးခြင်း
+ */
+function createSrtBlob(items: { t: number; text: string }[], totalDur: number): Blob {
+  const srtContent = items
+    .map((it, idx) => {
+      const start = it.t;
+      const nextStart = idx < items.length - 1 ? items[idx + 1].t : totalDur;
+      const end = Math.min(start + 4.5, nextStart);
+      return `${idx + 1}\n${srtTime(start)} --> ${srtTime(end)}\n${it.text}\n`;
+    })
+    .join("\n");
+  return new Blob([srtContent], { type: "text/plain;charset=utf-8" });
+}
+
 const FN = import.meta.env.VITE_SUPABASE_URL + "/functions/v1/";
 
 async function authHeaders() {
@@ -68,8 +93,7 @@ async function authHeaders() {
 }
 
 /**
- * Browser ထဲတွင် Video ဖိုင်မှ Audio ကိုသာ သီးသန့်ဆွဲထုတ်ပြီး
- * Google AI စစ်ဆေးနိုင်ရန် 16kHz Mono WAV Blob အဖြစ် ပြောင်းလဲပေးသည့် Helper
+ * Browser ထဲတွင် Video ဖိုင်မှ Audio ကိုသာ သီးသန့်ဆွဲထုတ်ပြီး 16kHz WAV ပြောင်းခြင်း
  */
 async function extractAudioOnly(file: File, onProgress?: (msg: string) => void): Promise<Blob> {
   if (file.type.startsWith("audio/")) return file;
@@ -79,10 +103,9 @@ async function extractAudioOnly(file: File, onProgress?: (msg: string) => void):
     const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
     const decoded = await audioCtx.decodeAudioData(arrayBuffer);
 
-    // 16kHz 16-bit Mono WAV သို့ Encode ပြုလုပ်ခြင်း (Google AI အတွက် အသင့်တော်ဆုံးနှင့် အပေါ့ပါးဆုံး)
     const numChannels = 1;
     const sampleRate = 16000;
-    const format = 1; // PCM
+    const format = 1;
     const bitDepth = 16;
 
     const channelData =
@@ -131,7 +154,6 @@ async function extractAudioOnly(file: File, onProgress?: (msg: string) => void):
     return new Blob([buffer], { type: "audio/wav" });
   } catch (err) {
     console.warn("Direct audio extraction fallback:", err);
-    // Decode မရပါက fallback အနေဖြင့် မူရင်းဖိုင်ကိုပဲ သုံးမည်
     return file;
   }
 }
@@ -147,11 +169,16 @@ const NovaLongRecapPage = () => {
   const [duration, setDuration] = useState(0);
   const [mode, setMode] = useState<Mode>("movie");
   const [voice, setVoice] = useState(VOICES[0].id);
-  const [partMin, setPartMin] = useState<number>(0); // Default: Full Movie (မခွဲဘဲ ၁ ကားလုံး)
+  const [partMin, setPartMin] = useState<number>(0);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [pct, setPct] = useState(0);
   const [parts, setParts] = useState<PartResult[]>([]);
+
+  // 🛡️ Copyright & Subtitle Settings
+  const [antiCopyright, setAntiCopyright] = useState(true);
+  const [mirrorVideo, setMirrorVideo] = useState(false);
+  const [exportSubtitles, setExportSubtitles] = useState(true);
 
   if (isLoading) return null;
   if (!isAllowed) {
@@ -173,7 +200,10 @@ const NovaLongRecapPage = () => {
       return;
     }
     fileUriRef.current = null;
-    parts.forEach((p) => p.url && URL.revokeObjectURL(p.url));
+    parts.forEach((p) => {
+      p.url && URL.revokeObjectURL(p.url);
+      p.srtUrl && URL.revokeObjectURL(p.srtUrl);
+    });
     setParts([]);
     setFile(f);
     setMsg("ဗီဒီယို အရှည် စစ်နေပါတယ်…");
@@ -187,13 +217,9 @@ const NovaLongRecapPage = () => {
     }
   };
 
-  /**
-   * ဗီဒီယိုတစ်ခုလုံး မဟုတ်ဘဲ အသံဖိုင် (Audio Only) ကိုသာ Google AI ဆီသို့ တင်ပို့ခြင်း
-   */
   const uploadAudioOnlyToGoogle = async (f: File) => {
     if (fileUriRef.current) return fileUriRef.current;
 
-    // ၁။ ဗီဒီယိုထဲမှ အသံဖိုင်ကိုသာ သီးသန့်ထုတ်ယူခြင်း
     const audioBlob = await extractAudioOnly(f, (m) => setMsg(m));
     const audioFileName = `${f.name.replace(/\.[^.]+$/, "")}_audio.wav`;
     const mimeType = audioBlob.type || "audio/wav";
@@ -314,7 +340,6 @@ const NovaLongRecapPage = () => {
     stopRef.current = false;
     setBusy(true);
 
-    // Full Movie ဖြစ်ပါက partSec = duration ဖြစ်ပြီး total = 1 ဖြစ်ပါမည်
     const partSec = partMin === 0 ? duration : partMin * 60;
     const total = Math.ceil(duration / partSec);
     const plan: PartResult[] = Array.from({ length: total }, (_, i) => ({
@@ -336,7 +361,6 @@ const NovaLongRecapPage = () => {
         .maybeSingle();
       const perMin = Number((ts as any)?.credit_cost) || 1;
 
-      // အသံသီးသန့်ကိုသာ Google သို့ တင်ခြင်း
       const uri = await uploadAudioOnlyToGoogle(file);
       const mime = "audio/wav";
       const ctx = new AudioContext({ sampleRate: 48000 });
@@ -347,8 +371,8 @@ const NovaLongRecapPage = () => {
         const dur = p.end - p.start;
         const label = total === 1 ? "Full Movie (၁ ကားလုံး)" : `အပိုင်း ${p.index + 1}/${total}`;
 
-        upd(p.index, { status: "Script ရေးနေ" });
-        setMsg(`🧠 ${label} — AI က မူရင်းအသံကို နားထောင်ပြီး script ရေးနေပါတယ်…`);
+        upd(p.index, { status: "Script & စာတန်းထိုး ရေးနေ" });
+        setMsg(`🧠 ${label} — AI က စာသားနှင့် အချိန်ကိုက် တွက်ချက်နေပါတယ်…`);
         setPct(0);
 
         const script = await writeScript(uri, mime, p.start, p.end, p.index, total, prevTail);
@@ -359,7 +383,14 @@ const NovaLongRecapPage = () => {
           .join(" ")
           .slice(-600);
 
-        upd(p.index, { status: "အသံသွင်းနေ" });
+        // စာတန်းထိုး SRT ဖိုင် ဖန်တီးခြင်း
+        let srtBlobUrl: string | undefined;
+        if (exportSubtitles && items.length > 0) {
+          const srtBlob = createSrtBlob(items, dur);
+          srtBlobUrl = URL.createObjectURL(srtBlob);
+        }
+
+        upd(p.index, { status: "မြန်မာအသံ သွင်းနေ" });
         const clips: NarrationClip[] = [];
         let done = 0;
         const queue = [...items];
@@ -380,7 +411,7 @@ const NovaLongRecapPage = () => {
         const { track, active } = await buildNarrationTrack(clips, dur);
         upd(p.index, { status: "ဗီဒီယို ထုတ်နေ" });
 
-        // Browser ထဲတွင် ဗီဒီယိုကို re-encode မလုပ်ဘဲ အသံအသစ်နှင့် တွဲထုတ်ခြင်း
+        // Anti-Copyright အထောက်အပံ့ဖြင့် Render ပြုလုပ်ခြင်း
         const blob = await renderPart({
           file,
           start: p.start,
@@ -389,18 +420,23 @@ const NovaLongRecapPage = () => {
           active,
           duckDuring: mode === "movie" ? 0.22 : 0.06,
           duckIdle: mode === "movie" ? 0.9 : 0.15,
+          subtitles: items,
+          // Copyright Bypass settings
+          antiCopyright,
+          mirror: mirrorVideo,
+          speedMultiplier: antiCopyright ? 1.03 : 1.0,
           onProgress: (x) => {
             setPct(Math.round(x * 100));
             setMsg(`🎬 ${label} — MP4 ထုတ်နေပါတယ် ${Math.round(x * 100)}%`);
           },
-        });
+        } as any);
 
         const mins = Math.max(1, Math.round(dur / 60));
         const charge = await deductCredits("recap-nv", false, mins * perMin);
         if (!charge.success) throw new Error(charge.error || "Credit မလုံလောက်ပါ");
 
         const url = URL.createObjectURL(blob);
-        upd(p.index, { status: "✅ ပြီးပါပြီ", url });
+        upd(p.index, { status: "✅ ပြီးပါပြီ", url, srtUrl: srtBlobUrl });
 
         const fileNameSuffix = total === 1 ? "_dubbed_full.mp4" : `_part${p.index + 1}.mp4`;
         const a = document.createElement("a");
@@ -436,7 +472,7 @@ const NovaLongRecapPage = () => {
               Nova Full Movie Dubbing <Sparkles className="w-5 h-5 text-amber-400" />
             </h1>
             <p className="text-xs text-muted-foreground">
-              ၁ နာရီ၊ ၂ နာရီ ကားကြီးတွေကို မူရင်းအရှည်အတိုင်း မဖြတ်မတောက်ဘဲ မြန်မာအသံဖလှယ်ခြင်း
+              ၁ နာရီ၊ ၂ နာရီ ကားကြီးများကို မူရင်းအရှည်အတိုင်း မြန်မာအသံဖလှယ်ခြင်းနှင့် စာတန်းထိုးခြင်း
             </p>
           </div>
         </div>
@@ -515,6 +551,54 @@ const NovaLongRecapPage = () => {
           </label>
         </div>
 
+        {/* 🛡️ Copyright & Subtitle Controls */}
+        <div className="rounded-xl border border-border bg-card p-3.5 space-y-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+            <ShieldCheck className="w-4 h-4" /> မူပိုင်ခွင့် (Copyright) နှင့် စာတန်းထိုး ချိန်ညှိချက်
+          </div>
+
+          <div className="space-y-2 text-xs">
+            <label className="flex items-center justify-between cursor-pointer py-1">
+              <span>
+                🛡️ <strong>Copyright Bypass System</strong> (Speed 1.03x + Subtle Zoom + Audio Shift)
+              </span>
+              <input
+                type="checkbox"
+                checked={antiCopyright}
+                disabled={busy}
+                onChange={(e) => setAntiCopyright(e.target.checked)}
+                className="rounded accent-primary w-4 h-4"
+              />
+            </label>
+
+            <label className="flex items-center justify-between cursor-pointer py-1">
+              <span>
+                🪞 <strong>Mirror Video</strong> (ဗီဒီယိုကို ဘယ်/ညာ ပြောင်းပြန်လှန်မည်)
+              </span>
+              <input
+                type="checkbox"
+                checked={mirrorVideo}
+                disabled={busy}
+                onChange={(e) => setMirrorVideo(e.target.checked)}
+                className="rounded accent-primary w-4 h-4"
+              />
+            </label>
+
+            <label className="flex items-center justify-between cursor-pointer py-1">
+              <span>
+                📝 <strong>Auto SRT Subtitles</strong> (မြန်မာစာတန်းထိုး ဖိုင်ပါ တစ်ခါတည်း ထုတ်ယူမည်)
+              </span>
+              <input
+                type="checkbox"
+                checked={exportSubtitles}
+                disabled={busy}
+                onChange={(e) => setExportSubtitles(e.target.checked)}
+                className="rounded accent-primary w-4 h-4"
+              />
+            </label>
+          </div>
+        </div>
+
         {duration > 0 && (
           <p className="text-xs text-muted-foreground bg-secondary/50 p-2.5 rounded-lg border border-border">
             {partMin === 0 ? (
@@ -567,17 +651,29 @@ const NovaLongRecapPage = () => {
                 <span>
                   {parts.length === 1 ? "🌟 Full Movie" : `အပိုင်း ${p.index + 1}`} · {fmt(p.start)}–{fmt(p.end)}
                 </span>
-                {p.url ? (
-                  <a
-                    href={p.url}
-                    download={parts.length === 1 ? "full_dubbed.mp4" : `part${p.index + 1}.mp4`}
-                    className="flex items-center gap-1 text-primary font-semibold hover:underline"
-                  >
-                    <Download className="w-4 h-4" /> Download MP4
-                  </a>
-                ) : (
-                  <span className="text-muted-foreground text-xs">{p.status}</span>
-                )}
+
+                <div className="flex items-center gap-3">
+                  {p.srtUrl && (
+                    <a
+                      href={p.srtUrl}
+                      download={parts.length === 1 ? "subtitles.srt" : `part${p.index + 1}_subtitles.srt`}
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      <Subtitles className="w-3.5 h-3.5 text-amber-500" /> SRT
+                    </a>
+                  )}
+                  {p.url ? (
+                    <a
+                      href={p.url}
+                      download={parts.length === 1 ? "full_dubbed.mp4" : `part${p.index + 1}.mp4`}
+                      className="flex items-center gap-1 text-primary font-semibold hover:underline"
+                    >
+                      <Download className="w-4 h-4" /> MP4
+                    </a>
+                  ) : (
+                    <span className="text-muted-foreground text-xs">{p.status}</span>
+                  )}
+                </div>
               </div>
             ))}
           </div>
