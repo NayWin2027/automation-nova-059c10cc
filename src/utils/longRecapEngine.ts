@@ -39,7 +39,7 @@ export async function buildNarrationTrack(clips: NarrationClip[], partDur: numbe
     const at = Math.max(c.start, cursor);
     if (at >= partDur - 0.3) return;
     const room = Math.max(0.5, Math.min(nextStart, partDur) - at);
-    const rate = Math.min(1.2, Math.max(1, c.buffer.duration / room));
+    const rate = Math.min(1.35, Math.max(1, c.buffer.duration / room));
     const src = ctx.createBufferSource();
     src.buffer = c.buffer;
     src.playbackRate.value = rate;
@@ -49,7 +49,7 @@ export async function buildNarrationTrack(clips: NarrationClip[], partDur: numbe
     src.start(at);
     const end = Math.min(partDur, at + c.buffer.duration / rate);
     active.push([at, end]);
-    cursor = end + 0.15;
+    cursor = end + 0.05;
   });
   const rendered = await ctx.startRendering();
   return { track: rendered, active };
@@ -128,7 +128,7 @@ export async function renderPart(o: RenderPartOpts): Promise<Blob> {
 
 /** Parses "[MM:SS] text" / "[H:MM:SS] text" paragraphs. */
 export function parseTimedScript(script: string): { t: number; text: string }[] {
-  const re = /\[\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*\]/g;
+  const re = /\[\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(?:[-–~]\s*\d{1,2}:\d{2}(?::\d{2})?\s*)?\]/g;
   const out: { t: number; text: string }[] = [];
   const marks: { idx: number; len: number; t: number }[] = [];
   let m: RegExpExecArray | null;
@@ -137,7 +137,7 @@ export function parseTimedScript(script: string): { t: number; text: string }[] 
     marks.push({ idx: m.index, len: m[0].length, t });
   }
   marks.forEach((mk, i) => {
-    const text = script.slice(mk.idx + mk.len, marks[i + 1]?.idx ?? script.length).replace(/\s+/g, " ").trim();
+    const text = script.slice(mk.idx + mk.len, marks[i + 1]?.idx ?? script.length).replace(/\[(?:DIALOGUE|NARRATOR)[^\]]*\]/gi, "").replace(/["“”]/g, "").replace(/\s+/g, " ").trim();
     if (text.length > 1) out.push({ t: mk.t, text });
   });
   if (!out.length && script.trim()) out.push({ t: 0, text: script.trim() });

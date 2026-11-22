@@ -303,8 +303,8 @@ const NovaLongRecapPage = () => {
     const dur = end - start;
     const modeRule =
       mode === "movie"
-        ? `This is a FULL-LENGTH MOVIE DUBBING in Burmese. The output video keeps the EXACT ORIGINAL length (${fmt(dur)}), so narration must be spread across the WHOLE part without cutting video. Leave short silent gaps (2-4s) at strong emotional or musical moments.`
-        : `This source is ALREADY a recap video in another language. Faithfully translate and re-dub into BURMESE, sentence by sentence, following the original timing and timestamps so the new Burmese voice replaces the source seamlessly.`;
+        ? `This is TRUE LIP-SYNC DUBBING of a FULL-LENGTH MOVIE into Burmese — NOT a recap and NOT a summary. Translate EVERY line the characters actually speak, in order, at the exact moment they speak it. The output keeps the EXACT ORIGINAL length (${fmt(dur)}).`
+        : `This source is a video in another language (it may contain a narrator). TRUE DUBBING: translate EVERY spoken sentence (narrator and characters) into Burmese, line by line, at the exact original timing. Never summarise or skip.`;
 
     const body = {
       fileUri: uri,
@@ -317,13 +317,15 @@ const NovaLongRecapPage = () => {
       recapNvPipeline: true,
       apiMode: ownKey ? "own" : "app",
       ...(ownKey ? { ownApiKey: ownKey } : {}),
-      narrationStyle: "STORY",
-      niche: `You are a professional Burmese movie recap and dubbing narrator. ${modeRule}`,
-      extraInstructions: `${total > 1 ? `PART ${idx + 1} of ${total}. ` : ""}You MUST narrate events between ${fmt(start)} and ${fmt(end)} of the source.
-- TIMESTAMPS: Every paragraph starts with [MM:SS] measured FROM THE START OF THIS PART (first second is [00:00], last second is [${fmt(dur)}]).
-- Spread paragraphs evenly every 12-20 seconds from [00:00] to near [${fmt(dur)}]. Each paragraph should fit comfortably into spoken time.
-- Modern spoken Burmese (တယ်/တာ/လဲ), natural storytelling tone.
-- Output ONLY the timestamped paragraphs.${prevTail ? `\n- STORY SO FAR: ${prevTail}\nContinue naturally without re-introducing characters.` : ""}`,
+      narrationStyle: "HYBRID",
+      niche: `You are a professional Burmese film DUBBING translator (not a recap narrator). ${modeRule}`,
+      extraInstructions: `${total > 1 ? `PART ${idx + 1} of ${total}. ` : ""}Dub ALL speech between ${fmt(start)} and ${fmt(end)} of the source.
+- DUBBING MODE: one paragraph per spoken line / speaker turn. 100% of spoken lines translated, zero skipping, zero merging, zero summarising. Do NOT add a recap, hook, intro, outro or commentary.
+- Narrator lines are allowed ONLY when there is a long (8s+) silent stretch and must be very short. Otherwise output dialogue only.
+- TIMESTAMPS: Each paragraph starts with ONE [MM:SS] = the exact second the speaker starts, measured FROM THE START OF THIS PART (first second [00:00], last [${fmt(dur)}]). No time ranges.
+- LENGTH: each Burmese line must be speakable within the time the original speaker talks (until the next line starts). Keep it tight and natural.
+- Modern spoken Burmese (တယ်/တာ/လဲ). No source-language characters at all.
+- Output ONLY the timestamped lines.${prevTail ? `\n- PREVIOUS PART ENDED WITH: ${prevTail}` : ""}`,
       generationConfig: { maxOutputTokens: 16000, temperature: 0.6 },
     };
 
