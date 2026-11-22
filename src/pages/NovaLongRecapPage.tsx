@@ -177,6 +177,25 @@ const NovaLongRecapPage = () => {
 
   // 🛡️ Copyright & Subtitle Settings
   const [antiCopyright, setAntiCopyright] = useState(true);
+
+  // 🔑 Own Gemini API Key (session only)
+  const [ownApiKey, setOwnApiKey] = useState(() => {
+    try {
+      return sessionStorage.getItem("nova_long_recap_own_key") || "";
+    } catch {
+      return "";
+    }
+  });
+  const ownKey = ownApiKey.trim();
+  const saveOwnKey = (v: string) => {
+    setOwnApiKey(v);
+    try {
+      if (v.trim()) sessionStorage.setItem("nova_long_recap_own_key", v.trim());
+      else sessionStorage.removeItem("nova_long_recap_own_key");
+    } catch {
+      /* ignore */
+    }
+  };
   const [mirrorVideo, setMirrorVideo] = useState(false);
   const [exportSubtitles, setExportSubtitles] = useState(true);
 
@@ -220,14 +239,21 @@ const NovaLongRecapPage = () => {
   const uploadAudioOnlyToGoogle = async (f: File) => {
     if (fileUriRef.current) return fileUriRef.current;
 
-    const audioBlob = await extractAudioOnly(f, (m) => setMsg(m));
-    const audioFileName = `${f.name.replace(/\.[^.]+$/, "")}_audio.wav`;
-    const mimeType = audioBlob.type || "audio/wav";
+    // Direct 8MB chunk stream of the original video — no RAM-heavy audio decoding
+    const audioBlob: Blob = f;
+    const audioFileName = f.name;
+    const mimeType = f.type || "video/mp4";
 
-    setMsg("📤 အသံဖိုင်ကိုသာ Google AI ဆီ တင်နေပါတယ် (Data သက်သာမြန်ဆန်)…");
+    setMsg("📤 ဗီဒီယိုကို Google AI ဆီ တိုက်ရိုက် တင်နေပါတယ်…");
 
     const { data, error } = await supabase.functions.invoke("video-recap", {
-      body: { action: "initUpload", fileName: audioFileName, fileSize: audioBlob.size, mimeType },
+      body: {
+        action: "initUpload",
+        fileName: audioFileName,
+        fileSize: audioBlob.size,
+        mimeType,
+        ...(ownKey ? { useOwnApi: true, ownApiKey: ownKey } : {}),
+      },
     });
     if (error || data?.error || !data?.uploadUrl) throw new Error(data?.error || error?.message || "Upload မစနိုင်ပါ");
 
@@ -289,7 +315,8 @@ const NovaLongRecapPage = () => {
       videoEndSec: end,
       skipCreditDeduction: true,
       recapNvPipeline: true,
-      apiMode: "app",
+      apiMode: ownKey ? "own" : "app",
+      ...(ownKey ? { ownApiKey: ownKey } : {}),
       narrationStyle: "STORY",
       niche: `You are a professional Burmese movie recap and dubbing narrator. ${modeRule}`,
       extraInstructions: `${total > 1 ? `PART ${idx + 1} of ${total}. ` : ""}You MUST narrate events between ${fmt(start)} and ${fmt(end)} of the source.
@@ -362,7 +389,7 @@ const NovaLongRecapPage = () => {
       const perMin = Number((ts as any)?.credit_cost) || 1;
 
       const uri = await uploadAudioOnlyToGoogle(file);
-      const mime = "audio/wav";
+      const mime = file.type || "video/mp4";
       const ctx = new AudioContext({ sampleRate: 48000 });
       let prevTail = "";
 
@@ -432,7 +459,7 @@ const NovaLongRecapPage = () => {
         } as any);
 
         const mins = Math.max(1, Math.round(dur / 60));
-        const charge = await deductCredits("recap-nv", false, mins * perMin);
+        const charge = ownKey ? { success: true, error: "" } : await deductCredits("recap-nv", false, mins * perMin);
         if (!charge.success) throw new Error(charge.error || "Credit မလုံလောက်ပါ");
 
         const url = URL.createObjectURL(blob);
@@ -552,6 +579,22 @@ const NovaLongRecapPage = () => {
         </div>
 
         {/* 🛡️ Copyright & Subtitle Controls */}
+        <div className="rounded-xl border border-border bg-card p-3.5 space-y-2">
+          <div className="flex items-center justify-between text-sm font-semibold text-primary">
+            <span>🔑 API Mode</span>
+            <span className="text-xs text-muted-foreground">{ownKey ? "Own API (Credit မဖြတ်)" : "App Mode (Credit ဖြတ်)"}</span>
+          </div>
+          <input
+            type="password"
+            value={ownApiKey}
+            onChange={(e) => saveOwnKey(e.target.value)}
+            disabled={busy}
+            placeholder="ကိုယ်ပိုင် Gemini API Key (AIza...) — ထည့်မထားရင် App Mode"
+            autoComplete="off"
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          />
+        </div>
+
         <div className="rounded-xl border border-border bg-card p-3.5 space-y-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-primary">
             <ShieldCheck className="w-4 h-4" /> မူပိုင်ခွင့် (Copyright) နှင့် စာတန်းထိုး ချိန်ညှိချက်
