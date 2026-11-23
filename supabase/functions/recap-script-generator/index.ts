@@ -1329,7 +1329,9 @@ ${transcript}
         : sourceDurationSec && sourceDurationSec > 720
           ? 70000
           : 85000;
-    const primaryTimeout = Math.min(primaryCap, remainingBudget() - 15000);
+    // LONG-RECAP fast-fallback: windowed requests switch model quickly on slow/overloaded upstream.
+    const isLongRecapWindow = !!videoWindow;
+    const primaryTimeout = Math.min(isLongRecapWindow ? 30000 : primaryCap, remainingBudget() - 15000);
     const timeoutId = setTimeout(() => controller.abort(), Math.max(5000, primaryTimeout));
     try {
       response = await callGeminiGenerateContent(
@@ -1398,7 +1400,7 @@ ${transcript}
         `[recap-script-generator] Previous attempt failed (${response?.status ?? "no-response"}). Falling back to ${activeModel}...`,
       );
       const fbController = new AbortController();
-      const fbTimeout = Math.max(5000, Math.min(60000, remainingBudget() - 8000));
+      const fbTimeout = Math.max(5000, Math.min(isLongRecapWindow ? 30000 : 60000, remainingBudget() - 8000));
       const fbTimeoutId = setTimeout(() => fbController.abort(), fbTimeout);
       try {
         if (!isOwnApi && response?.status === 429) {

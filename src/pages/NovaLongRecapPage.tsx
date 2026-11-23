@@ -329,7 +329,7 @@ const NovaLongRecapPage = () => {
       generationConfig: { maxOutputTokens: 16000, temperature: 0.6 },
     };
 
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 5; attempt++) {
       const r = await fetch(FN + "recap-script-generator", {
         method: "POST",
         headers: await authHeaders(),
@@ -337,9 +337,9 @@ const NovaLongRecapPage = () => {
       });
       const j = await r.json().catch(() => ({}));
       if (r.ok && !j.error && !j.fallback && j.script) return String(j.script);
-      if (attempt === 2) throw new Error(j.error || `Script ရေးမရပါ (${r.status})`);
-      setMsg(`⏳ AI မအားသေးလို့ ${10 * (attempt + 1)} စက္ကန့်နေ ပြန်စမ်းပါမယ်…`);
-      await new Promise((res) => setTimeout(res, 10000 * (attempt + 1)));
+      if (attempt === 4) throw new Error(j.error || `Script ရေးမရပါ (${r.status})`);
+      setMsg(`⏳ Google AI မအားသေးလို့ Model အသစ်နဲ့ ${8 * (attempt + 1)} စက္ကန့်နေ ပြန်စမ်းပါမယ် (${attempt + 1}/4)…`);
+      await new Promise((res) => setTimeout(res, 8000 * (attempt + 1)));
     }
     return "";
   };
