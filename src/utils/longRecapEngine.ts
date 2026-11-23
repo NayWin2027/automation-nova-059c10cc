@@ -30,7 +30,7 @@ export async function getMediaDuration(file: Blob): Promise<number> {
 /** Places clips on a part-length timeline (no overlaps, speed-fit up to 1.2x). */
 export async function buildNarrationTrack(clips: NarrationClip[], partDur: number) {
   const len = Math.max(1, Math.ceil(partDur * OUT_RATE));
-  const ctx = new OfflineAudioContext(2, len, OUT_RATE);
+  const ctx = new OfflineAudioContext(1, len, OUT_RATE);
   const active: [number, number][] = [];
   const sorted = [...clips].sort((a, b) => a.start - b.start);
   let cursor = 0;

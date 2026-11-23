@@ -165,6 +165,10 @@ const NovaLongRecapPage = () => {
   const inputRef = useRef<HTMLInputElement>(null);
   const stopRef = useRef(false);
   const fileUriRef = useRef<string | null>(null);
+  // 🔄 Checkpoints: finished 10-min windows + finished parts survive errors
+  const winCacheRef = useRef(new Map<string, { items: { t: number; text: string }[]; clips: NarrationClip[] }>());
+  const donePartsRef = useRef(new Map<string, { url: string; srtUrl?: string; tail: string }>());
+  const [canResume, setCanResume] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [duration, setDuration] = useState(0);
   const [mode, setMode] = useState<Mode>("movie");
@@ -219,6 +223,9 @@ const NovaLongRecapPage = () => {
       return;
     }
     fileUriRef.current = null;
+    winCacheRef.current.clear();
+    donePartsRef.current.clear();
+    setCanResume(false);
     parts.forEach((p) => {
       p.url && URL.revokeObjectURL(p.url);
       p.srtUrl && URL.revokeObjectURL(p.srtUrl);
@@ -367,6 +374,7 @@ const NovaLongRecapPage = () => {
   const run = async () => {
     if (!file || !duration) return;
     stopRef.current = false;
+    setCanResume(false);
     setBusy(true);
 
     const partSec = partMin === 0 ? duration : partMin * 60;
@@ -399,48 +407,67 @@ const NovaLongRecapPage = () => {
         if (stopRef.current) break;
         const dur = p.end - p.start;
         const label = total === 1 ? "Full Movie (၁ ကားလုံး)" : `အပိုင်း ${p.index + 1}/${total}`;
-
-        upd(p.index, { status: "Script & စာတန်းထိုး ရေးနေ" });
-        setMsg(`🧠 ${label} — AI က စာသားနှင့် အချိန်ကိုက် တွက်ချက်နေပါတယ်…`);
-        setPct(0);
-
-        const script = await writeScript(uri, mime, p.start, p.end, p.index, total, prevTail);
-        const items = toPartRelative(parseTimedScript(script), p.start, dur);
-        prevTail = items
-          .slice(-2)
-          .map((i) => i.text)
-          .join(" ")
-          .slice(-600);
-
-        // စာတန်းထိုး SRT ဖိုင် ဖန်တီးခြင်း
-        let srtBlobUrl: string | undefined;
-        if (exportSubtitles && items.length > 0) {
-          const srtBlob = createSrtBlob(items, dur);
-          srtBlobUrl = URL.createObjectURL(srtBlob);
+        const partKey = `${voice}|${mode}|${p.start}-${p.end}`;
+        const doneP = donePartsRef.current.get(partKey);
+        if (doneP) {
+          upd(p.index, { status: "✅ ပြီးပါပြီ", url: doneP.url, srtUrl: doneP.srtUrl });
+          prevTail = doneP.tail;
+          continue;
         }
 
-        upd(p.index, { status: "မြန်မာအသံ သွင်းနေ" });
+        // 🧩 Internal 10-min windows (checkpointed) so one Google error never restarts the movie
+        const WIN = 600;
+        const wins: [number, number][] = [];
+        for (let w = p.start; w < p.end - 0.5; w += WIN) wins.push([w, Math.min(p.end, w + WIN)]);
+        const allItems: { t: number; text: string }[] = [];
         const clips: NarrationClip[] = [];
-        let done = 0;
-        const queue = [...items];
-
-        const worker = async () => {
-          while (queue.length && !stopRef.current) {
-            const it = queue.shift()!;
-            clips.push({ start: it.t, buffer: await speak(it.text, ctx) });
-            done++;
-            setPct(Math.round((done / items.length) * 100));
-            setMsg(`🎙️ ${label} — မြန်မာအသံသွင်းနေပါတယ် ${done}/${items.length}`);
+        for (let wi = 0; wi < wins.length; wi++) {
+          if (stopRef.current) break;
+          const [ws, we] = wins[wi];
+          const wKey = `${voice}|${mode}|${ws}-${we}`;
+          const wLabel = wins.length > 1 ? `${label} · ${wi + 1}/${wins.length}` : label;
+          let cached = winCacheRef.current.get(wKey);
+          if (cached) {
+            setMsg(`♻️ ${wLabel} — အရင်လုပ်ပြီးသားကို ပြန်သုံးနေပါတယ်`);
+          } else {
+            upd(p.index, { status: `Script ရေးနေ (${wi + 1}/${wins.length})` });
+            setMsg(`🧠 ${wLabel} — AI က စာသားနှင့် အချိန်ကိုက် တွက်ချက်နေပါတယ်…`);
+            setPct(0);
+            const script = await writeScript(uri, mime, ws, we, wi, wins.length, prevTail);
+            const items = toPartRelative(parseTimedScript(script), ws, we - ws);
+            upd(p.index, { status: `မြန်မာအသံ သွင်းနေ (${wi + 1}/${wins.length})` });
+            const wClips: NarrationClip[] = [];
+            let done = 0;
+            const queue = [...items];
+            const worker = async () => {
+              while (queue.length && !stopRef.current) {
+                const it = queue.shift()!;
+                wClips.push({ start: it.t, buffer: await speak(it.text, ctx) });
+                done++;
+                setPct(Math.round((done / items.length) * 100));
+                setMsg(`🎙️ ${wLabel} — မြန်မာအသံသွင်းနေပါတယ် ${done}/${items.length}`);
+              }
+            };
+            await Promise.all([worker(), worker(), worker()]);
+            if (stopRef.current) break;
+            cached = { items, clips: wClips };
+            winCacheRef.current.set(wKey, cached);
           }
-        };
-
-        await Promise.all([worker(), worker(), worker()]);
+          const off = ws - p.start;
+          cached.items.forEach((i) => allItems.push({ t: i.t + off, text: i.text }));
+          cached.clips.forEach((c) => clips.push({ start: c.start + off, buffer: c.buffer }));
+          prevTail = cached.items.slice(-2).map((i) => i.text).join(" ").slice(-600);
+        }
         if (stopRef.current) break;
+
+        let srtBlobUrl: string | undefined;
+        if (exportSubtitles && allItems.length > 0) {
+          srtBlobUrl = URL.createObjectURL(createSrtBlob(allItems, dur));
+        }
 
         const { track, active } = await buildNarrationTrack(clips, dur);
         upd(p.index, { status: "ဗီဒီယို ထုတ်နေ" });
 
-        // Anti-Copyright အထောက်အပံ့ဖြင့် Render ပြုလုပ်ခြင်း
         const blob = await renderPart({
           file,
           start: p.start,
@@ -449,8 +476,7 @@ const NovaLongRecapPage = () => {
           active,
           duckDuring: mode === "movie" ? 0.22 : 0.06,
           duckIdle: mode === "movie" ? 0.9 : 0.15,
-          subtitles: items,
-          // Copyright Bypass settings
+          subtitles: allItems,
           antiCopyright,
           mirror: mirrorVideo,
           speedMultiplier: antiCopyright ? 1.03 : 1.0,
@@ -465,6 +491,9 @@ const NovaLongRecapPage = () => {
         if (!charge.success) throw new Error(charge.error || "Credit မလုံလောက်ပါ");
 
         const url = URL.createObjectURL(blob);
+        donePartsRef.current.set(partKey, { url, srtUrl: srtBlobUrl, tail: prevTail });
+        // free window cache for this finished part
+        wins.forEach(([ws, we]) => winCacheRef.current.delete(`${voice}|${mode}|${ws}-${we}`));
         upd(p.index, { status: "✅ ပြီးပါပြီ", url, srtUrl: srtBlobUrl });
 
         const fileNameSuffix = total === 1 ? "_dubbed_full.mp4" : `_part${p.index + 1}.mp4`;
@@ -474,10 +503,12 @@ const NovaLongRecapPage = () => {
         a.click();
       }
 
+      setCanResume(false);
       setMsg(stopRef.current ? "⏹ ရပ်လိုက်ပါပြီ" : "✅ လုပ်ဆောင်ချက်အားလုံး အောင်မြင်စွာ ပြီးစီးပါပြီ");
     } catch (e: any) {
       console.error("[long-recap]", e);
-      setMsg("❌ " + (e?.message || String(e)));
+      setMsg("❌ " + (e?.message || String(e)) + " — 🔄 ရပ်သွားတဲ့နေရာကနေ ဆက်လုပ်လို့ရပါတယ်");
+      setCanResume(true);
       toast.error(e?.message || "မအောင်မြင်ပါ");
     } finally {
       setBusy(false);
@@ -663,7 +694,7 @@ const NovaLongRecapPage = () => {
         <div className="flex gap-2">
           <Button className="flex-1" disabled={!file || !duration || busy} onClick={run}>
             {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Film className="w-4 h-4 mr-2" />}
-            {busy ? "လုပ်ဆောင်နေပါသည်…" : "START DUBBING"}
+            {busy ? "လုပ်ဆောင်နေပါသည်…" : canResume ? "🔄 ရပ်သွားသည့်နေရာမှ ဆက်လုပ်မည်" : "START DUBBING"}
           </Button>
           {busy && (
             <Button
